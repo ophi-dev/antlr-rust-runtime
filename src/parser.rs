@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::atn::{Atn, Transition};
 use crate::errors::AntlrError;
@@ -7,6 +7,11 @@ use crate::recognizer::{Recognizer, RecognizerData};
 use crate::token::{TOKEN_EOF, Token, TokenSource};
 use crate::token_stream::CommonTokenStream;
 use crate::tree::{ParseTree, ParserRuleContext, RuleNode, TerminalNode};
+
+/// Upper bound for the recursive metadata recognizer before it treats a path as
+/// non-viable. Long expression-regression descriptors legitimately walk tens
+/// of thousands of ATN edges.
+const RECOGNITION_DEPTH_LIMIT: usize = 100_000;
 
 pub trait Parser: Recognizer {
     fn build_parse_trees(&self) -> bool;
@@ -20,7 +25,7 @@ pub struct BaseParser<S> {
     build_parse_trees: bool,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct RecognizeOutcome {
     index: usize,
     consumed_eof: bool,
@@ -31,7 +36,18 @@ struct RecognizeRequest {
     state_number: usize,
     stop_state: usize,
     index: usize,
+    /// Current left-recursive precedence threshold, matching ANTLR's
+    /// `precpred(_ctx, k)` check for generated precedence rules.
+    precedence: i32,
     depth: usize,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct RecognizeKey {
+    state_number: usize,
+    stop_state: usize,
+    index: usize,
+    precedence: i32,
 }
 
 impl<S> BaseParser<S>
@@ -127,16 +143,20 @@ where
 
         let start_index = self.input.index();
         let mut visiting = BTreeSet::new();
-        let Some(outcome) = self.recognize_state(
+        let mut memo = BTreeMap::new();
+        let outcomes = self.recognize_state(
             atn,
             RecognizeRequest {
                 state_number: start_state,
                 stop_state,
                 index: start_index,
+                precedence: 0,
                 depth: 0,
             },
             &mut visiting,
-        ) else {
+            &mut memo,
+        );
+        let Some(outcome) = select_best_outcome(outcomes.into_iter()) else {
             return Err(AntlrError::ParserError {
                 line: self.input.lt(1).map(Token::line).unwrap_or_default(),
                 column: self.input.lt(1).map(Token::column).unwrap_or_default(),
@@ -187,74 +207,125 @@ where
         &mut self,
         atn: &Atn,
         request: RecognizeRequest,
-        visiting: &mut BTreeSet<(usize, usize, usize)>,
-    ) -> Option<RecognizeOutcome> {
+        visiting: &mut BTreeSet<(usize, usize, usize, i32)>,
+        memo: &mut BTreeMap<RecognizeKey, Vec<RecognizeOutcome>>,
+    ) -> Vec<RecognizeOutcome> {
         let RecognizeRequest {
             state_number,
             stop_state,
             index,
+            precedence,
             depth,
         } = request;
-        if depth > 10_000 {
-            return None;
+        if depth > RECOGNITION_DEPTH_LIMIT {
+            return Vec::new();
         }
         if state_number == stop_state {
-            return Some(RecognizeOutcome {
+            return vec![RecognizeOutcome {
                 index,
                 consumed_eof: false,
-            });
+            }];
         }
-        if !visiting.insert((state_number, stop_state, index)) {
-            return None;
+        let key = RecognizeKey {
+            state_number,
+            stop_state,
+            index,
+            precedence,
+        };
+        if let Some(outcomes) = memo.get(&key) {
+            return outcomes.clone();
         }
 
-        let state = atn.state(state_number)?;
+        if !visiting.insert((state_number, stop_state, index, precedence)) {
+            return Vec::new();
+        }
+
+        let Some(state) = atn.state(state_number) else {
+            visiting.remove(&(state_number, stop_state, index, precedence));
+            return Vec::new();
+        };
+        let mut outcomes = Vec::new();
         for transition in &state.transitions {
-            let outcome = match transition {
+            match transition {
                 Transition::Epsilon { target }
                 | Transition::Predicate { target, .. }
-                | Transition::Action { target, .. }
-                | Transition::Precedence { target, .. } => self.recognize_state(
-                    atn,
-                    RecognizeRequest {
-                        state_number: *target,
-                        stop_state,
-                        index,
-                        depth: depth + 1,
-                    },
-                    visiting,
-                ),
+                | Transition::Action { target, .. } => {
+                    outcomes.extend(self.recognize_state(
+                        atn,
+                        RecognizeRequest {
+                            state_number: *target,
+                            stop_state,
+                            index,
+                            precedence,
+                            depth: depth + 1,
+                        },
+                        visiting,
+                        memo,
+                    ));
+                }
+                Transition::Precedence {
+                    target,
+                    precedence: transition_precedence,
+                } => {
+                    if *transition_precedence >= precedence {
+                        outcomes.extend(self.recognize_state(
+                            atn,
+                            RecognizeRequest {
+                                state_number: *target,
+                                stop_state,
+                                index,
+                                precedence,
+                                depth: depth + 1,
+                            },
+                            visiting,
+                            memo,
+                        ));
+                    }
+                }
                 Transition::Rule {
                     target,
                     rule_index,
                     follow_state,
+                    precedence: rule_precedence,
                     ..
                 } => {
-                    let child_stop = atn.rule_to_stop_state().get(*rule_index).copied()?;
-                    let child = self.recognize_state(
+                    let Some(child_stop) = atn.rule_to_stop_state().get(*rule_index).copied()
+                    else {
+                        continue;
+                    };
+                    let children = self.recognize_state(
                         atn,
                         RecognizeRequest {
                             state_number: *target,
                             stop_state: child_stop,
                             index,
+                            precedence: *rule_precedence,
                             depth: depth + 1,
                         },
                         visiting,
-                    )?;
-                    self.recognize_state(
-                        atn,
-                        RecognizeRequest {
-                            state_number: *follow_state,
-                            stop_state,
-                            index: child.index,
-                            depth: depth + 1,
-                        },
-                        visiting,
-                    )
-                    .map(|mut outcome| {
-                        outcome.consumed_eof |= child.consumed_eof;
-                        outcome
-                    })
+                        memo,
+                    );
+                    for child in children {
+                        outcomes.extend(
+                            self.recognize_state(
+                                atn,
+                                RecognizeRequest {
+                                    state_number: *follow_state,
+                                    stop_state,
+                                    index: child.index,
+                                    precedence,
+                                    depth: depth + 1,
+                                },
+                                visiting,
+                                memo,
+                            )
+                            .into_iter()
+                            .map(|mut outcome| {
+                                outcome.consumed_eof |= child.consumed_eof;
+                                outcome
+                            }),
+                        );
+                    }
                 }
                 Transition::Atom { target, .. }
                 | Transition::Range { target, .. }
@@ -264,34 +335,34 @@ where
                     let symbol = self.token_type_at(index);
                     if transition.matches(symbol, 1, atn.max_token_type()) {
                         let next_index = self.consume_index(index, symbol);
-                        self.recognize_state(
-                            atn,
-                            RecognizeRequest {
-                                state_number: *target,
-                                stop_state,
-                                index: next_index,
-                                depth: depth + 1,
-                            },
-                            visiting,
-                        )
-                        .map(|mut outcome| {
-                            outcome.consumed_eof |= symbol == TOKEN_EOF;
-                            outcome
-                        })
-                    } else {
-                        None
+                        outcomes.extend(
+                            self.recognize_state(
+                                atn,
+                                RecognizeRequest {
+                                    state_number: *target,
+                                    stop_state,
+                                    index: next_index,
+                                    precedence,
+                                    depth: depth + 1,
+                                },
+                                visiting,
+                                memo,
+                            )
+                            .into_iter()
+                            .map(|mut outcome| {
+                                outcome.consumed_eof |= symbol == TOKEN_EOF;
+                                outcome
+                            }),
+                        );
                     }
                 }
-            };
-
-            if let Some(outcome) = outcome {
-                visiting.remove(&(state_number, stop_state, index));
-                return Some(outcome);
             }
         }
 
-        visiting.remove(&(state_number, stop_state, index));
-        None
+        visiting.remove(&(state_number, stop_state, index, precedence));
+        dedupe_outcomes(&mut outcomes);
+        memo.insert(key, outcomes.clone());
+        outcomes
     }
 
     /// Reads the token type at an absolute token-stream index.
@@ -311,6 +382,23 @@ where
         }
         self.input.index()
     }
+}
+
+/// Chooses the outermost parse result that consumed the most input.
+///
+/// The recognizer intentionally keeps shorter endpoints available while walking
+/// nested rule transitions so callers can satisfy following tokens such as
+/// `expr 'and' expr`. Only the public rule entry commits to one endpoint.
+fn select_best_outcome(
+    outcomes: impl Iterator<Item = RecognizeOutcome>,
+) -> Option<RecognizeOutcome> {
+    outcomes.max_by_key(|outcome| (outcome.index, outcome.consumed_eof))
+}
+
+/// Sorts and removes equivalent endpoints before memoizing a state result.
+fn dedupe_outcomes(outcomes: &mut Vec<RecognizeOutcome>) {
+    outcomes.sort_unstable();
+    outcomes.dedup();
 }
 
 impl<S> Recognizer for BaseParser<S>

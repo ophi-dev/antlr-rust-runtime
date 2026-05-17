@@ -51,6 +51,7 @@ Supported now:
 - single-grammar descriptors,
 - descriptor stdout/stderr comparison,
 - grouped lexer recovery diagnostics,
+- parser precedence predicates in metadata-driven recognition,
 - `StringTemplate` backslash rendering for descriptor grammars,
 - official ANTLR `.interp` generation,
 - Rust module generation and execution through Cargo.
@@ -68,10 +69,13 @@ as failures.
 
 Current validated groups:
 
+- full descriptor sweep: `70 passed, 0 failed, 287 skipped, 70 run`
 - `LexerExec`: `29 passed, 0 failed, 13 skipped, 29 run`
 - `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
+- `LeftRecursion`: `7 passed, 0 failed, 91 skipped, 7 run`
 - `ParserExec`: `10 passed, 0 failed, 40 skipped, 10 run`
 - `ParserErrors`: `4 passed, 0 failed, 30 skipped, 4 run`
+- `Performance`: `7 passed, 0 failed, 0 skipped, 7 run`
 
 The `LexerExec` skips are descriptors that depend on target-specific action or
 member templates. Those should become runnable when the Rust target action

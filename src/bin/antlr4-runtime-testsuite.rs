@@ -376,9 +376,17 @@ fn render_st_backslash_escapes(value: &str) -> String {
     let mut out = String::with_capacity(value.len());
     let mut chars = value.chars().peekable();
     while let Some(ch) = chars.next() {
-        out.push(ch);
-        if ch == '\\' && chars.peek() == Some(&'\\') {
-            chars.next();
+        if ch == '\\' {
+            match chars.peek() {
+                Some('\\') => {
+                    chars.next();
+                    out.push('\\');
+                }
+                Some('<' | '>') => {}
+                _ => out.push(ch),
+            }
+        } else {
+            out.push(ch);
         }
     }
     out
@@ -603,7 +611,7 @@ fn parser_smoke_main(descriptor: &Descriptor) -> String {
     let parser_type = rust_type_name(&parser_grammar_name);
     let start_rule = rust_function_name(&descriptor.start_rule);
     format!(
-        "pub mod generated {{\n    pub mod {lexer_module};\n    pub mod {parser_module};\n}}\n\nuse antlr4_runtime::{{CommonTokenStream, InputStream}};\nuse generated::{lexer_module}::{lexer_type};\nuse generated::{parser_module}::{parser_type};\n\nfn main() {{\n    let lexer = {lexer_type}::new(InputStream::new(\"{}\"));\n    let tokens = CommonTokenStream::new(lexer);\n    let mut parser = {parser_type}::new(tokens);\n    if let Err(error) = parser.{start_rule}() {{\n        eprintln!(\"{{error}}\");\n    }}\n}}\n",
+        "pub mod generated {{\n    pub mod {lexer_module};\n    pub mod {parser_module};\n}}\n\nuse antlr4_runtime::{{CommonTokenStream, InputStream}};\nuse generated::{lexer_module}::{lexer_type};\nuse generated::{parser_module}::{parser_type};\n\nfn main() {{\n    let handle = std::thread::Builder::new()\n        .stack_size(128 * 1024 * 1024)\n        .spawn(|| {{\n            let lexer = {lexer_type}::new(InputStream::new(\"{}\"));\n            let tokens = CommonTokenStream::new(lexer);\n            let mut parser = {parser_type}::new(tokens);\n            if let Err(error) = parser.{start_rule}() {{\n                eprintln!(\"{{error}}\");\n            }}\n        }})\n        .expect(\"parser smoke thread should start\");\n    handle.join().expect(\"parser smoke thread should finish\");\n}}\n",
         rust_string(&descriptor.input)
     )
 }
