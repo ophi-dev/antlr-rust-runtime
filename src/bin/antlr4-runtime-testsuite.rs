@@ -171,6 +171,7 @@ struct Descriptor {
     test_type: String,
     grammar_name: String,
     grammar: String,
+    start_rule: String,
     input: String,
     output: String,
     errors: String,
@@ -290,6 +291,7 @@ fn parse_descriptor(group: String, name: String, text: &str) -> io::Result<Descr
         test_type: "Lexer".to_owned(),
         grammar_name: String::new(),
         grammar: String::new(),
+        start_rule: String::new(),
         input: String::new(),
         output: String::new(),
         errors: String::new(),
@@ -313,7 +315,8 @@ fn parse_descriptor(group: String, name: String, text: &str) -> io::Result<Descr
             "output" => descriptor.output = value,
             "errors" => descriptor.errors = value,
             "flags" => descriptor.flags = value,
-            "notes" | "skip" | "start" => {}
+            "start" => descriptor.start_rule = value,
+            "notes" | "skip" => {}
             other => {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -401,9 +404,6 @@ fn grammar_name(grammar: &str) -> io::Result<String> {
 /// Classifies descriptors that the current metadata-first harness cannot run
 /// yet while keeping them visible in summaries.
 fn unsupported_reason(descriptor: &Descriptor) -> Option<&'static str> {
-    if descriptor.test_type != "Lexer" {
-        return Some("metadata harness currently executes lexer descriptors only");
-    }
     if !descriptor.slave_grammars.is_empty() {
         return Some("composite grammars are not wired into the metadata harness yet");
     }
@@ -416,6 +416,20 @@ fn unsupported_reason(descriptor: &Descriptor) -> Option<&'static str> {
         || descriptor.grammar.contains("@definitions")
     {
         return Some("target-template semantic actions are not rendered by this harness yet");
+    }
+    if descriptor.test_type == "Parser" {
+        if !descriptor.output.is_empty() {
+            return Some("parser target actions/listeners are not wired into the Rust harness yet");
+        }
+        if !descriptor.errors.is_empty() {
+            return Some(
+                "parser error recovery diagnostics are not wired into the Rust harness yet",
+            );
+        }
+        return None;
+    }
+    if descriptor.test_type != "Lexer" {
+        return Some("descriptor type is not supported by the metadata harness yet");
     }
     None
 }
@@ -445,24 +459,7 @@ fn run_descriptor(args: &Args, descriptor: &Descriptor) -> io::Result<RunResult>
         "ANTLR tool",
     )?;
 
-    let rust_dir = case_dir.join("generated");
-    fs::create_dir_all(&rust_dir)?;
-    let interp_path = java_dir.join(format!("{}.interp", descriptor.grammar_name));
-    run_checked(
-        Command::new("cargo")
-            .arg("run")
-            .arg("--quiet")
-            .arg("--manifest-path")
-            .arg(args.runtime_crate.join("Cargo.toml"))
-            .arg("--bin")
-            .arg("antlr4-rust-gen")
-            .arg("--")
-            .arg("--lexer")
-            .arg(&interp_path)
-            .arg("--out-dir")
-            .arg(&rust_dir),
-        "Rust metadata generator",
-    )?;
+    let rust_dir = generate_rust_modules(args, descriptor, &java_dir, &case_dir)?;
 
     let smoke_dir = case_dir.join("rust");
     create_smoke_crate(args, descriptor, &rust_dir, &smoke_dir)?;
@@ -476,6 +473,44 @@ fn run_descriptor(args: &Args, descriptor: &Descriptor) -> io::Result<RunResult>
         output: String::from_utf8_lossy(&output.stdout).into_owned(),
         errors: String::from_utf8_lossy(&output.stderr).into_owned(),
     })
+}
+
+/// Runs `antlr4-rust-gen` for either a lexer descriptor or a combined parser
+/// descriptor.
+fn generate_rust_modules(
+    args: &Args,
+    descriptor: &Descriptor,
+    java_dir: &Path,
+    case_dir: &Path,
+) -> io::Result<PathBuf> {
+    let rust_dir = case_dir.join("generated");
+    fs::create_dir_all(&rust_dir)?;
+
+    let mut command = Command::new("cargo");
+    command
+        .arg("run")
+        .arg("--quiet")
+        .arg("--manifest-path")
+        .arg(args.runtime_crate.join("Cargo.toml"))
+        .arg("--bin")
+        .arg("antlr4-rust-gen")
+        .arg("--");
+    if descriptor.test_type == "Parser" {
+        command
+            .arg("--lexer")
+            .arg(java_dir.join(format!("{}Lexer.interp", descriptor.grammar_name)))
+            .arg("--parser")
+            .arg(java_dir.join(format!("{}.interp", descriptor.grammar_name)))
+            .arg("--parser-name")
+            .arg(format!("{}Parser", descriptor.grammar_name));
+    } else {
+        command
+            .arg("--lexer")
+            .arg(java_dir.join(format!("{}.interp", descriptor.grammar_name)));
+    }
+    command.arg("--out-dir").arg(&rust_dir);
+    run_checked(&mut command, "Rust metadata generator")?;
+    Ok(rust_dir)
 }
 
 fn run_checked(command: &mut Command, context: &str) -> io::Result<()> {
@@ -503,18 +538,33 @@ fn create_smoke_crate(
     smoke_dir: &Path,
 ) -> io::Result<()> {
     fs::create_dir_all(smoke_dir.join("src/generated"))?;
-    let module_name = module_name(&descriptor.grammar_name);
-    fs::copy(
-        rust_dir.join(format!("{module_name}.rs")),
-        smoke_dir.join(format!("src/generated/{module_name}.rs")),
-    )?;
+    if descriptor.test_type == "Parser" {
+        copy_generated_module(
+            smoke_dir,
+            rust_dir,
+            &format!("{}Lexer", descriptor.grammar_name),
+        )?;
+        copy_generated_module(
+            smoke_dir,
+            rust_dir,
+            &format!("{}Parser", descriptor.grammar_name),
+        )?;
+    } else {
+        copy_generated_module(smoke_dir, rust_dir, &descriptor.grammar_name)?;
+    }
     fs::write(
         smoke_dir.join("Cargo.toml"),
         smoke_cargo_toml(&args.runtime_crate),
     )?;
-    fs::write(
-        smoke_dir.join("src/main.rs"),
-        smoke_main(&descriptor.grammar_name, &descriptor.input),
+    fs::write(smoke_dir.join("src/main.rs"), smoke_main(descriptor))?;
+    Ok(())
+}
+
+fn copy_generated_module(smoke_dir: &Path, rust_dir: &Path, grammar_name: &str) -> io::Result<()> {
+    let module_name = module_name(grammar_name);
+    fs::copy(
+        rust_dir.join(format!("{module_name}.rs")),
+        smoke_dir.join(format!("src/generated/{module_name}.rs")),
     )?;
     Ok(())
 }
@@ -527,14 +577,34 @@ fn smoke_cargo_toml(runtime_crate: &Path) -> String {
     )
 }
 
-/// Builds a small executable that lexes the descriptor input and prints every
-/// buffered token using `CommonToken`'s ANTLR-compatible display format.
-fn smoke_main(grammar_name: &str, input: &str) -> String {
-    let module_name = module_name(grammar_name);
-    let type_name = rust_type_name(grammar_name);
+/// Builds a small executable for the descriptor kind.
+///
+/// Lexer descriptors print every buffered token. Parser descriptors invoke the
+/// start rule and rely on an empty stdout/stderr expectation for now because
+/// target actions and listeners are not generated by the metadata path yet.
+fn smoke_main(descriptor: &Descriptor) -> String {
+    if descriptor.test_type == "Parser" {
+        return parser_smoke_main(descriptor);
+    }
+    let module_name = module_name(&descriptor.grammar_name);
+    let type_name = rust_type_name(&descriptor.grammar_name);
     format!(
         "pub mod generated {{\n    pub mod {module_name};\n}}\n\nuse antlr4_runtime::{{CommonTokenStream, InputStream}};\nuse generated::{module_name}::{type_name};\n\nfn main() {{\n    let lexer = {type_name}::new(InputStream::new(\"{}\"));\n    let mut tokens = CommonTokenStream::new(lexer);\n    tokens.fill();\n    for token in tokens.tokens() {{\n        println!(\"{{token}}\");\n    }}\n}}\n",
-        rust_string(input)
+        rust_string(&descriptor.input)
+    )
+}
+
+fn parser_smoke_main(descriptor: &Descriptor) -> String {
+    let lexer_grammar_name = format!("{}Lexer", descriptor.grammar_name);
+    let parser_grammar_name = format!("{}Parser", descriptor.grammar_name);
+    let lexer_module = module_name(&lexer_grammar_name);
+    let parser_module = module_name(&parser_grammar_name);
+    let lexer_type = rust_type_name(&lexer_grammar_name);
+    let parser_type = rust_type_name(&parser_grammar_name);
+    let start_rule = rust_function_name(&descriptor.start_rule);
+    format!(
+        "pub mod generated {{\n    pub mod {lexer_module};\n    pub mod {parser_module};\n}}\n\nuse antlr4_runtime::{{CommonTokenStream, InputStream}};\nuse generated::{lexer_module}::{lexer_type};\nuse generated::{parser_module}::{parser_type};\n\nfn main() {{\n    let lexer = {lexer_type}::new(InputStream::new(\"{}\"));\n    let tokens = CommonTokenStream::new(lexer);\n    let mut parser = {parser_type}::new(tokens);\n    if let Err(error) = parser.{start_rule}() {{\n        eprintln!(\"{{error}}\");\n    }}\n}}\n",
+        rust_string(&descriptor.input)
     )
 }
 
@@ -567,6 +637,21 @@ fn rust_type_name(name: &str) -> String {
             })
         })
         .collect()
+}
+
+fn rust_function_name(name: &str) -> String {
+    let words = split_identifier_words(name);
+    let ident = if words.is_empty() {
+        "rule".to_owned()
+    } else {
+        words.join("_")
+    };
+    let ident = sanitize_identifier(&ident);
+    if is_rust_keyword(&ident) {
+        format!("r#{ident}")
+    } else {
+        ident
+    }
 }
 
 /// Splits grammar identifiers the same way the metadata generator does so the
@@ -604,6 +689,78 @@ fn split_identifier_words(name: &str) -> Vec<String> {
 
 fn ascii_lowercase(value: &str) -> String {
     value.chars().map(|ch| ch.to_ascii_lowercase()).collect()
+}
+
+fn sanitize_identifier(value: &str) -> String {
+    let mut out = String::new();
+    for (index, ch) in value.chars().enumerate() {
+        if ch == '_' || ch.is_ascii_alphanumeric() {
+            if index == 0 && ch.is_ascii_digit() {
+                out.push('_');
+            }
+            out.push(ch);
+        } else {
+            out.push('_');
+        }
+    }
+    if out.is_empty() { "_".to_owned() } else { out }
+}
+
+fn is_rust_keyword(value: &str) -> bool {
+    matches!(
+        value,
+        "as" | "async"
+            | "await"
+            | "break"
+            | "const"
+            | "continue"
+            | "crate"
+            | "dyn"
+            | "else"
+            | "enum"
+            | "extern"
+            | "false"
+            | "fn"
+            | "for"
+            | "gen"
+            | "if"
+            | "impl"
+            | "in"
+            | "let"
+            | "loop"
+            | "match"
+            | "mod"
+            | "move"
+            | "mut"
+            | "pub"
+            | "ref"
+            | "return"
+            | "Self"
+            | "self"
+            | "static"
+            | "struct"
+            | "super"
+            | "trait"
+            | "true"
+            | "type"
+            | "unsafe"
+            | "use"
+            | "where"
+            | "while"
+            | "abstract"
+            | "become"
+            | "box"
+            | "do"
+            | "final"
+            | "macro"
+            | "override"
+            | "priv"
+            | "try"
+            | "typeof"
+            | "unsized"
+            | "virtual"
+            | "yield"
+    )
 }
 
 fn rust_string(value: &str) -> String {

@@ -47,6 +47,7 @@ Pass `--keep` to retain those directories for debugging.
 Supported now:
 
 - lexer descriptors,
+- parser descriptors with empty stdout/stderr expectations,
 - single-grammar descriptors,
 - descriptor stdout/stderr comparison,
 - grouped lexer recovery diagnostics,
@@ -56,9 +57,10 @@ Supported now:
 
 Not wired yet:
 
-- parser descriptors,
 - composite grammars,
 - target-template semantic actions such as `<writeln(...)>`,
+- parser target actions/listeners that produce expected stdout,
+- parser error recovery diagnostics,
 - runtime diagnostic/profile/DFA flags.
 
 The harness reports unsupported descriptors as skipped and treats output mismatches
@@ -68,6 +70,8 @@ Current validated groups:
 
 - `LexerExec`: `29 passed, 0 failed, 13 skipped, 29 run`
 - `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
+- `ParserExec`: `10 passed, 0 failed, 40 skipped, 10 run`
+- `ParserErrors`: `4 passed, 0 failed, 30 skipped, 4 run`
 
 The `LexerExec` skips are descriptors that depend on target-specific action or
 member templates. Those should become runnable when the Rust target action
