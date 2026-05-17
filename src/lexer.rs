@@ -29,6 +29,7 @@ pub struct BaseLexer<I, F = CommonTokenFactory> {
     token_start_column: usize,
     line: usize,
     column: usize,
+    hit_eof: bool,
 }
 
 impl<I> BaseLexer<I>
@@ -59,6 +60,7 @@ where
             token_start_column: 0,
             line: 1,
             column: 0,
+            hit_eof: false,
         }
     }
 
@@ -106,9 +108,29 @@ where
     /// streams and parse trees can render token text without retaining a source
     /// pair object.
     pub fn emit(&self, token_type: i32, channel: i32, text: Option<String>) -> CommonToken {
-        let stop = self.input.index().saturating_sub(1);
-        let text =
-            text.or_else(|| Some(self.input.text(TextInterval::new(self.token_start, stop))));
+        let stop = self.input.index().checked_sub(1).unwrap_or(usize::MAX);
+        self.emit_with_stop(token_type, channel, stop, text)
+    }
+
+    /// Builds a token with an explicit stop index.
+    ///
+    /// EOF-matching lexer rules do not consume a Unicode scalar value, so their
+    /// stop index can be one before the current input index. The caller passes
+    /// `usize::MAX` to represent ANTLR's `-1` stop index at empty input.
+    pub fn emit_with_stop(
+        &self,
+        token_type: i32,
+        channel: i32,
+        stop: usize,
+        text: Option<String>,
+    ) -> CommonToken {
+        let text = text.or_else(|| {
+            if stop == usize::MAX {
+                Some("<EOF>".to_owned())
+            } else {
+                Some(self.input.text(TextInterval::new(self.token_start, stop)))
+            }
+        });
         self.factory.create(TokenSpec {
             token_type,
             channel,
@@ -186,5 +208,13 @@ where
 
     pub fn source_name(&self) -> &str {
         self.input.source_name()
+    }
+
+    pub const fn hit_eof(&self) -> bool {
+        self.hit_eof
+    }
+
+    pub const fn set_hit_eof(&mut self, hit_eof: bool) {
+        self.hit_eof = hit_eof;
     }
 }

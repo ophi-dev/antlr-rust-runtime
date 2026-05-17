@@ -302,10 +302,13 @@ fn parse_descriptor(group: String, name: String, text: &str) -> io::Result<Descr
         match section.as_str() {
             "type" => descriptor.test_type = value,
             "grammar" => {
+                let value = render_st_backslash_escapes(&value);
                 descriptor.grammar_name = grammar_name(&value)?;
                 descriptor.grammar = value;
             }
-            "slaveGrammar" => descriptor.slave_grammars.push(value),
+            "slaveGrammar" => descriptor
+                .slave_grammars
+                .push(render_st_backslash_escapes(&value)),
             "input" => descriptor.input = value,
             "output" => descriptor.output = value,
             "errors" => descriptor.errors = value,
@@ -364,6 +367,20 @@ fn remove_marker(value: &str, marker: &str) -> String {
     out
 }
 
+/// Applies the `StringTemplate` backslash collapse used by the upstream Java
+/// harness when descriptor grammars are rendered as templates.
+fn render_st_backslash_escapes(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    let mut chars = value.chars().peekable();
+    while let Some(ch) = chars.next() {
+        out.push(ch);
+        if ch == '\\' && chars.peek() == Some(&'\\') {
+            chars.next();
+        }
+    }
+    out
+}
+
 fn grammar_name(grammar: &str) -> io::Result<String> {
     let first_line = grammar.lines().next().unwrap_or_default();
     let Some(start) = first_line.find("grammar ") else {
@@ -393,7 +410,11 @@ fn unsupported_reason(descriptor: &Descriptor) -> Option<&'static str> {
     if !descriptor.flags.is_empty() {
         return Some("diagnostic/profile/DFA flags are not implemented in the Rust harness yet");
     }
-    if descriptor.grammar.contains("{<") || descriptor.grammar.contains("<writeln") {
+    if descriptor.grammar.contains("{<")
+        || descriptor.grammar.contains("<writeln")
+        || descriptor.grammar.contains("@members")
+        || descriptor.grammar.contains("@definitions")
+    {
         return Some("target-template semantic actions are not rendered by this harness yet");
     }
     None

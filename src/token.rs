@@ -95,7 +95,7 @@ impl CommonToken {
             token_type: TOKEN_EOF,
             channel: DEFAULT_CHANNEL,
             start: index,
-            stop: index.saturating_sub(1),
+            stop: index.checked_sub(1).unwrap_or(usize::MAX),
             token_index: -1,
             line,
             column,
@@ -182,19 +182,25 @@ impl Token for CommonToken {
 impl fmt::Display for CommonToken {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let text = self.text().unwrap_or("");
-        let stop = if self.token_type() == TOKEN_EOF && self.start() == 0 {
+        let stop = if self.stop() == usize::MAX {
             "-1".to_owned()
         } else {
             self.stop().to_string()
         };
+        let channel = if self.channel() == DEFAULT_CHANNEL {
+            String::new()
+        } else {
+            format!(",channel={}", self.channel())
+        };
         write!(
             f,
-            "[@{},{}:{}='{}',<{}>,{}:{}]",
+            "[@{},{}:{}='{}',<{}>{},{}:{}]",
             self.token_index(),
             self.start(),
             stop,
             display_text(text),
             self.token_type(),
+            channel,
             self.line(),
             self.column()
         )
@@ -203,8 +209,9 @@ impl fmt::Display for CommonToken {
 
 /// Escapes token text the way ANTLR's token display format expects.
 ///
-/// Debug escaping is close but not identical: ANTLR leaves double quotes
-/// unescaped because token text is wrapped in single quotes.
+/// Debug escaping is close but not identical: ANTLR leaves ordinary
+/// backslashes and quotes unescaped, and only normalizes control characters
+/// that would otherwise disrupt the one-line token representation.
 fn display_text(text: &str) -> String {
     let mut out = String::new();
     for ch in text.chars() {
@@ -212,8 +219,6 @@ fn display_text(text: &str) -> String {
             '\n' => out.push_str("\\n"),
             '\r' => out.push_str("\\r"),
             '\t' => out.push_str("\\t"),
-            '\\' => out.push_str("\\\\"),
-            '\'' => out.push_str("\\'"),
             other => out.push(other),
         }
     }
@@ -271,6 +276,15 @@ mod tests {
 
         let newline = CommonToken::new(1).with_text("\n");
         assert_eq!(newline.to_string(), "[@-1,0:0='\\n',<1>,1:0]");
+
+        let backslash = CommonToken::new(1).with_text("\\");
+        assert_eq!(backslash.to_string(), "[@-1,0:0='\\',<1>,1:0]");
+    }
+
+    #[test]
+    fn common_token_display_includes_non_default_channel() {
+        let token = CommonToken::new(2).with_text("b").with_channel(2);
+        assert_eq!(token.to_string(), "[@-1,0:0='b',<2>,channel=2,1:0]");
     }
 
     #[test]

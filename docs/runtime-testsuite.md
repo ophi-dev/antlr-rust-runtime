@@ -49,6 +49,8 @@ Supported now:
 - lexer descriptors,
 - single-grammar descriptors,
 - descriptor stdout/stderr comparison,
+- grouped lexer recovery diagnostics,
+- `StringTemplate` backslash rendering for descriptor grammars,
 - official ANTLR `.interp` generation,
 - Rust module generation and execution through Cargo.
 
@@ -60,8 +62,13 @@ Not wired yet:
 - runtime diagnostic/profile/DFA flags.
 
 The harness reports unsupported descriptors as skipped and treats output mismatches
-as failures. The first passing upstream descriptors are:
+as failures.
 
-- `LexerExec/KeywordID`
-- `LexerExec/EOFSuffixInFirstRule_1`
-- `LexerExec/QuoteTranslation`
+Current validated groups:
+
+- `LexerExec`: `29 passed, 0 failed, 13 skipped, 29 run`
+- `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
+
+The `LexerExec` skips are descriptors that depend on target-specific action or
+member templates. Those should become runnable when the Rust target action
+surface is generated instead of represented only as `.interp` metadata.
