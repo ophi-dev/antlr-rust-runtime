@@ -27,12 +27,14 @@ The crate now contains a working clean-room runtime core and metadata-based gene
 - parser ATN rule recognition with backtracking over token stream indices
 - generated lexer/parser wrappers over the runtime base types
 - `antlr4-rust-gen`, a Rust generator that consumes ANTLR `.interp` metadata and emits Rust modules
+- `antlr4-runtime-testsuite`, a harness for running upstream ANTLR runtime-test descriptors through the Rust metadata path
 
 The current generator path is intentionally metadata-first: run the official ANTLR tool to produce `.interp` files from grammars, then run `antlr4-rust-gen` to emit Rust. The checked-in Java `RustTarget`/StringTemplate files are still the direct `-Dlanguage=Rust` integration shell and will be expanded around the same runtime contracts.
 
 The current parser builds and recognizes Kotlin's `kotlinFile` entry rule for a smoke sample. Parse tree shape is still basic: parser recognition is ATN-backed, but nested rule-node construction and full ANTLR error recovery are still in progress.
 
 See [docs/kotlin-build.md](docs/kotlin-build.md) for the Kotlin smoke workflow.
+See [docs/runtime-testsuite.md](docs/runtime-testsuite.md) for the upstream runtime-testsuite harness.
 
 ## Development
 
@@ -47,6 +49,15 @@ cargo run --bin antlr4-rust-gen -- \
   --lexer path/to/KotlinLexer.interp \
   --parser path/to/KotlinParser.interp \
   --out-dir target/generated/kotlin
+```
+
+Run one upstream runtime-testsuite descriptor:
+
+```bash
+cargo run --bin antlr4-runtime-testsuite -- \
+  --antlr-jar path/to/antlr-4.13.2-complete.jar \
+  --descriptors path/to/antlr4/runtime-testsuite \
+  --case LexerExec/KeywordID
 ```
 
 ## Clean-Room Notes

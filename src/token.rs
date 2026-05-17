@@ -182,18 +182,42 @@ impl Token for CommonToken {
 impl fmt::Display for CommonToken {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let text = self.text().unwrap_or("");
+        let stop = if self.token_type() == TOKEN_EOF && self.start() == 0 {
+            "-1".to_owned()
+        } else {
+            self.stop().to_string()
+        };
         write!(
             f,
             "[@{},{}:{}='{}',<{}>,{}:{}]",
             self.token_index(),
             self.start(),
-            self.stop(),
-            text.escape_debug(),
+            stop,
+            display_text(text),
             self.token_type(),
             self.line(),
             self.column()
         )
     }
+}
+
+/// Escapes token text the way ANTLR's token display format expects.
+///
+/// Debug escaping is close but not identical: ANTLR leaves double quotes
+/// unescaped because token text is wrapped in single quotes.
+fn display_text(text: &str) -> String {
+    let mut out = String::new();
+    for ch in text.chars() {
+        match ch {
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '\\' => out.push_str("\\\\"),
+            '\'' => out.push_str("\\'"),
+            other => out.push(other),
+        }
+    }
+    out
 }
 
 pub type TokenRef = Rc<CommonToken>;
@@ -238,5 +262,20 @@ mod tests {
             .with_position(3, 9);
         token.set_token_index(5);
         assert_eq!(token.to_string(), "[@5,2:4='abc',<7>,3:9]");
+    }
+
+    #[test]
+    fn common_token_display_matches_antlr_escaping() {
+        let quote = CommonToken::new(1).with_text("\"");
+        assert_eq!(quote.to_string(), "[@-1,0:0='\"',<1>,1:0]");
+
+        let newline = CommonToken::new(1).with_text("\n");
+        assert_eq!(newline.to_string(), "[@-1,0:0='\\n',<1>,1:0]");
+    }
+
+    #[test]
+    fn eof_display_uses_antlr_empty_input_stop_index() {
+        let token = CommonToken::eof("", 0, 1, 0);
+        assert_eq!(token.to_string(), "[@-1,0:-1='<EOF>',<-1>,1:0]");
     }
 }
