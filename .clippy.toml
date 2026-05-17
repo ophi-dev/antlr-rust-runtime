@@ -1,0 +1,92 @@
+# Complexity thresholds
+allowed-idents-below-min-chars      = ["..", "id", "x", "y", "z", "i", "j", "k", "n", "m"]
+cognitive-complexity-threshold      = 15
+excessive-nesting-threshold         = 8
+min-ident-chars-threshold           = 2
+single-char-binding-names-threshold = 3
+too-many-arguments-threshold        = 6
+too-many-lines-threshold            = 476
+trivial-copy-size-limit             = 16
+type-complexity-threshold           = 300
+
+avoid-breaking-exported-api = false
+
+# Testing allowances
+allow-dbg-in-tests                 = true
+allow-expect-in-tests              = true
+allow-print-in-tests               = true
+allow-unwrap-in-tests              = true
+suppress-restriction-lint-in-const = true
+
+# Trait implementations
+allow-renamed-params-for = ["core::fmt::Debug", "core::fmt::Display", ".."]
+
+# Documentation
+doc-valid-idents = [
+    "..",
+    "ANTLR",
+    "CodeQL",
+    "CPython",
+    "FastAPI",
+    "GitHub",
+    "GitLab",
+    "GraphQL",
+    "IPython",
+    "LangChain",
+    "LibCST",
+    "McCabe",
+    "MongoDB",
+    "MySQL",
+    "NumPy",
+    "PostgreSQL",
+    "PyCharm",
+    "PyFlakes",
+    "Redis",
+    "SCREAMING_SNAKE_CASE",
+    "SNMPv1",
+    "SNMPv2",
+    "SNMPv3",
+    "SQLAlchemy",
+    "SQLite",
+    "StackOverflow",
+    "WebSocket",
+    "gRPC",
+]
+
+disallowed-names = ["foo", "bar", "baz", "tmp", "qux", "temp", "test", "dummy"]
+
+disallowed-types = [
+    { path = "std::collections::HashMap", reason = "Non-deterministic iteration; use an ordered map instead" },
+    { path = "std::collections::HashSet", reason = "Non-deterministic iteration; use an ordered set instead" },
+    { path = "std::sync::Once", reason = "Use std::sync::OnceLock for lazy initialization" },
+    { path = "rand::rngs::ThreadRng", reason = "ThreadRng is inherently non-deterministic" },
+]
+
+disallowed-methods = [
+    { path = "rand::random", reason = "Use deterministic data in runtime code" },
+    { path = "rand::Rng::gen", reason = "Use deterministic data in runtime code", allow-invalid = true },
+    { path = "str::to_ascii_lowercase", reason = "Avoid hidden allocation; use explicit conversion helper" },
+    { path = "str::to_ascii_uppercase", reason = "Avoid hidden allocation; use explicit conversion helper" },
+    { path = "str::to_lowercase", reason = "Avoid hidden allocation; use explicit conversion helper" },
+    { path = "str::to_uppercase", reason = "Avoid hidden allocation; use explicit conversion helper" },
+    { path = "str::replace", reason = "Avoid hidden allocation in hot paths" },
+    { path = "str::replacen", reason = "Avoid hidden allocation in hot paths" },
+    { path = "std::mem::forget", reason = "Leaking values should be explicit and reviewed" },
+    { path = "futures::executor::block_on", reason = "block_on can deadlock" },
+    { path = "async_std::task::block_on", reason = "block_on can deadlock" },
+    { path = "pollster::block_on", reason = "block_on can deadlock" },
+    { path = "std::time::Instant::now", reason = "Do not use current time in deterministic runtime behavior" },
+    { path = "std::iter::Iterator::for_each", reason = "Prefer for loops for side effects" },
+    { path = "std::option::Option::unwrap", reason = "Use expect with a descriptive message or handle None" },
+    { path = "std::result::Result::unwrap", reason = "Use expect with a descriptive message or handle errors" },
+    { path = "std::panic::catch_unwind", reason = "Panics are not for control flow" },
+    { path = "std::process::exit", reason = "Return Result from main instead of exiting" },
+    { path = "std::thread::sleep", reason = "Document any blocking sleeps" },
+    { path = "std::mem::transmute", reason = "Use safe alternatives" },
+    { path = "std::mem::uninitialized", reason = "Deprecated; use MaybeUninit" },
+    { path = "std::mem::zeroed", reason = "Use MaybeUninit::zeroed or Default::default" },
+    { path = "tokio::task::spawn_blocking", reason = "Document blocking work in async contexts" },
+]
+
+ignore-interior-mutability = []
+allowed-duplicate-crates = ["thiserror", "thiserror-impl"]

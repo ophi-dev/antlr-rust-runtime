@@ -1,0 +1,10 @@
+/*
+ * Clean-room Rust target template group.
+ *
+ * This file starts with only the templates required to let the ANTLR tool
+ * discover the target and compute output file names. Full recognizer,
+ * listener, and visitor templates will be added with the generated-code
+ * contract in src/generated.rs and the ATN simulator.
+ */
+
+codeFileExtension() ::= ".rs"
