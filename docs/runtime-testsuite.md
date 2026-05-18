@@ -58,10 +58,12 @@ Supported now:
 - parser rule-level `@after` actions for the currently supported stdout helpers,
 - nested parser tree construction for action-bearing rules and direct
   `ToStringTree("$ctx")` stdout actions,
-- parser `@init {<BuildParseTrees()>}` descriptors as no-ops because the harness
-  keeps parse-tree building enabled,
+- parser `@init {<BuildParseTrees()>}` and `notBuildParseTree` descriptors,
 - parser rule-level `@after {<ToStringTree("$label.ctx")>}` actions for simple
   rule labels,
+- `RuleInvocationStack()` stdout helper actions,
+- `BailErrorStrategy()` descriptors as no-ops while the default Rust error
+  handling still matches the covered outputs,
 - ANTLR recursive-context tree rewrites for left-recursive parse-tree output,
 - `StringTemplate` backslash rendering for descriptor grammars,
 - official ANTLR `.interp` generation,
@@ -79,12 +81,12 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `222 passed, 0 failed, 135 skipped, 222 run`
+- full descriptor sweep: `225 passed, 0 failed, 132 skipped, 225 run`
 - `LexerExec`: `41 passed, 0 failed, 1 skipped, 41 run`
 - `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
 - `LeftRecursion`: `81 passed, 0 failed, 17 skipped, 81 run`
-- `ParseTrees`: `4 passed, 0 failed, 6 skipped, 4 run`
-- `ParserExec`: `36 passed, 0 failed, 14 skipped, 36 run`
+- `ParseTrees`: `5 passed, 0 failed, 5 skipped, 5 run`
+- `ParserExec`: `38 passed, 0 failed, 12 skipped, 38 run`
 - `ParserErrors`: `4 passed, 0 failed, 30 skipped, 4 run`
 - `Performance`: `7 passed, 0 failed, 0 skipped, 7 run`
 - `SemPredEvalLexer`: `1 passed, 0 failed, 7 skipped, 1 run`

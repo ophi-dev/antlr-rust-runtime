@@ -415,7 +415,7 @@ fn unsupported_reason(descriptor: &Descriptor) -> Option<&'static str> {
     if !descriptor.slave_grammars.is_empty() {
         return Some("composite grammars are not wired into the metadata harness yet");
     }
-    if !descriptor.flags.is_empty() {
+    if !descriptor.flags.is_empty() && descriptor.flags.trim() != "notBuildParseTree" {
         return Some("diagnostic/profile/DFA flags are not implemented in the Rust harness yet");
     }
     if has_target_template(&descriptor.grammar) && !target_templates_supported(descriptor) {
@@ -445,6 +445,8 @@ fn unsupported_reason(descriptor: &Descriptor) -> Option<&'static str> {
 fn has_target_template(grammar: &str) -> bool {
     next_template_block(grammar, 0).is_some()
         || grammar.contains("{<")
+        || grammar.contains("<BailErrorStrategy")
+        || grammar.contains("<ImportRuleInvocationStack")
         || grammar.contains("<writeln")
         || grammar.contains("<write")
         || grammar.contains("<InputText")
@@ -478,13 +480,10 @@ fn target_templates_supported(descriptor: &Descriptor) -> bool {
         || grammar.contains("returns [<")
         || grammar.contains("locals [<")
         || grammar.contains("<AssertIsList")
-        || grammar.contains("<BailErrorStrategy")
         || grammar.contains("<ContextListFunction")
         || grammar.contains("<LANotEquals")
         || grammar.contains("<ParserProperty")
         || grammar.contains("<AppendStr")
-        || grammar.contains("<RuleInvocationStack")
-        || grammar.contains("<ImportRuleInvocationStack")
         || grammar.contains("<TreeNodeWithAltNumField")
         || grammar.contains("contextSuperClass")
     {
@@ -541,7 +540,10 @@ fn supported_init_action_templates(grammar: &str) -> bool {
             continue;
         }
         saw_init_action = true;
-        if block.body.trim() != "BuildParseTrees()" {
+        if !matches!(
+            block.body.trim(),
+            "BuildParseTrees()" | "BailErrorStrategy()"
+        ) {
             return false;
         }
     }
@@ -589,6 +591,8 @@ fn is_supported_action_template(body: &str) -> bool {
             | "InputText():writeln()"
             | "Text():writeln()"
             | "Text():write()"
+            | "RuleInvocationStack():writeln()"
+            | "RuleInvocationStack():write()"
             | r#"ToStringTree("$ctx"):writeln()"#
             | r#"ToStringTree("$ctx"):write()"#
     ) || body.starts_with("writeln(\"\\\"")
@@ -697,6 +701,20 @@ fn render_target_templates_for_metadata(grammar: &str) -> String {
         offset = block.after_brace;
     }
     out.push_str(&grammar[offset..]);
+    strip_supported_preamble_templates(&out)
+}
+
+/// Removes supported file-scope target templates that are imports in other
+/// targets but no-ops for the generated Rust metadata path.
+fn strip_supported_preamble_templates(grammar: &str) -> String {
+    let mut out = String::with_capacity(grammar.len());
+    for line in grammar.lines() {
+        if line.trim() == "<ImportRuleInvocationStack()>" {
+            continue;
+        }
+        out.push_str(line);
+        out.push('\n');
+    }
     out
 }
 
@@ -894,8 +912,13 @@ fn parser_smoke_main(descriptor: &Descriptor) -> String {
     let lexer_type = rust_type_name(&lexer_grammar_name);
     let parser_type = rust_type_name(&parser_grammar_name);
     let start_rule = rust_function_name(&descriptor.start_rule);
+    let build_parse_trees = if descriptor.flags.trim() == "notBuildParseTree" {
+        "false"
+    } else {
+        "true"
+    };
     format!(
-        "pub mod generated {{\n    pub mod {lexer_module};\n    pub mod {parser_module};\n}}\n\nuse antlr4_runtime::{{CommonTokenStream, InputStream}};\nuse generated::{lexer_module}::{lexer_type};\nuse generated::{parser_module}::{parser_type};\n\nfn main() {{\n    let handle = std::thread::Builder::new()\n        .stack_size(128 * 1024 * 1024)\n        .spawn(|| {{\n            let lexer = {lexer_type}::new(InputStream::new(\"{}\"));\n            let tokens = CommonTokenStream::new(lexer);\n            let mut parser = {parser_type}::new(tokens);\n            if let Err(error) = parser.{start_rule}() {{\n                eprintln!(\"{{error}}\");\n            }}\n        }})\n        .expect(\"parser smoke thread should start\");\n    handle.join().expect(\"parser smoke thread should finish\");\n}}\n",
+        "pub mod generated {{\n    pub mod {lexer_module};\n    pub mod {parser_module};\n}}\n\nuse antlr4_runtime::{{CommonTokenStream, InputStream, Parser}};\nuse generated::{lexer_module}::{lexer_type};\nuse generated::{parser_module}::{parser_type};\n\nfn main() {{\n    let handle = std::thread::Builder::new()\n        .stack_size(128 * 1024 * 1024)\n        .spawn(|| {{\n            let lexer = {lexer_type}::new(InputStream::new(\"{}\"));\n            let tokens = CommonTokenStream::new(lexer);\n            let mut parser = {parser_type}::new(tokens);\n            parser.set_build_parse_trees({build_parse_trees});\n            if let Err(error) = parser.{start_rule}() {{\n                eprintln!(\"{{error}}\");\n            }}\n        }})\n        .expect(\"parser smoke thread should start\");\n    handle.join().expect(\"parser smoke thread should finish\");\n}}\n",
         rust_string(&descriptor.input)
     )
 }

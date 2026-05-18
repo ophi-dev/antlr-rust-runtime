@@ -435,7 +435,7 @@ fn render_parser(
                 writeln!(
                     rule_methods,
                     "        {}",
-                    render_parser_after_action_statement(template)
+                    render_parser_after_action_statement(template, index)
                 )
                 .expect("writing to a string cannot fail");
             }
@@ -545,6 +545,9 @@ enum ActionTemplate {
         target: StringTreeTarget,
         newline: bool,
     },
+    RuleInvocationStack {
+        newline: bool,
+    },
     TokenText {
         source: TokenTextSource,
         newline: bool,
@@ -568,7 +571,10 @@ impl ActionTemplate {
     /// Reports whether rendering the action requires a nested parse tree
     /// instead of the faster flat rule tree.
     const fn needs_nested_tree(&self) -> bool {
-        matches!(self, Self::StringTree { .. })
+        matches!(
+            self,
+            Self::StringTree { .. } | Self::RuleInvocationStack { .. }
+        )
     }
 }
 
@@ -767,13 +773,16 @@ fn is_rule_named_action(source: &str, open_brace: usize, marker: &str) -> bool {
 fn after_action_rule_name(source: &str, open_brace: usize) -> Option<&str> {
     let prefix = &source[..open_brace];
     let statement_start = prefix.rfind(';').map_or(0, |index| index + 1);
-    prefix[statement_start..]
+    let rule_preamble = prefix[statement_start..]
         .split("@after")
         .next()?
-        .trim_start()
-        .split(|ch: char| !(ch == '_' || ch.is_ascii_alphanumeric()))
-        .next()
-        .filter(|name| !name.is_empty())
+        .split('@')
+        .next()?;
+    rule_preamble
+        .lines()
+        .filter(|line| !line.trim_start().starts_with('<'))
+        .flat_map(|line| line.split(|ch: char| !(ch == '_' || ch.is_ascii_alphanumeric())))
+        .rfind(|name| !name.is_empty())
 }
 
 /// Resolves `$label.ctx` in a rule-level `@after` action to the referenced
@@ -851,6 +860,7 @@ fn parse_action_template(body: &str) -> Option<ActionTemplate> {
         }),
         _ => parse_plus_text(body)
             .or_else(|| parse_string_tree(body))
+            .or_else(|| parse_rule_invocation_stack(body))
             .or_else(|| parse_token_text(body))
             .or_else(|| parse_write_literal(body)),
     }
@@ -876,6 +886,20 @@ fn parse_string_tree(body: &str) -> Option<ActionTemplate> {
         target: StringTreeTarget::Label(label.to_owned()),
         newline,
     })
+}
+
+/// Parses the runtime-testsuite helper that prints the active rule invocation
+/// stack for a parser action site.
+fn parse_rule_invocation_stack(body: &str) -> Option<ActionTemplate> {
+    match body {
+        "RuleInvocationStack():writeln()" => {
+            Some(ActionTemplate::RuleInvocationStack { newline: true })
+        }
+        "RuleInvocationStack():write()" => {
+            Some(ActionTemplate::RuleInvocationStack { newline: false })
+        }
+        _ => None,
+    }
 }
 
 fn parse_plus_text(body: &str) -> Option<ActionTemplate> {
@@ -1034,6 +1058,7 @@ fn render_lexer_action_statement(template: &ActionTemplate) -> String {
             )
         }
         ActionTemplate::StringTree { .. } => String::new(),
+        ActionTemplate::RuleInvocationStack { .. } => String::new(),
         ActionTemplate::Literal { value, newline } => {
             let write = if *newline { "println!" } else { "print!" };
             format!("{write}(\"{}\");", rust_string(value))
@@ -1090,6 +1115,10 @@ fn render_action_statement(template: &ActionTemplate) -> String {
             let write = if *newline { "println!" } else { "print!" };
             render_string_tree_write(write, "_tree", target)
         }
+        ActionTemplate::RuleInvocationStack { newline } => {
+            let write = if *newline { "println!" } else { "print!" };
+            render_rule_invocation_stack_write(write, "_tree", "action.rule_index()")
+        }
         ActionTemplate::Literal { value, newline } => {
             let write = if *newline { "println!" } else { "print!" };
             format!("{write}(\"{}\");", rust_string(value))
@@ -1098,7 +1127,7 @@ fn render_action_statement(template: &ActionTemplate) -> String {
 }
 
 /// Renders a rule-level `@after` action using the parsed rule input span.
-fn render_parser_after_action_statement(template: &ActionTemplate) -> String {
+fn render_parser_after_action_statement(template: &ActionTemplate, rule_index: usize) -> String {
     match template {
         ActionTemplate::Text { newline } => {
             let write = if *newline { "println!" } else { "print!" };
@@ -1128,11 +1157,30 @@ fn render_parser_after_action_statement(template: &ActionTemplate) -> String {
             let write = if *newline { "println!" } else { "print!" };
             render_string_tree_write(write, "tree", target)
         }
+        ActionTemplate::RuleInvocationStack { newline } => {
+            let write = if *newline { "println!" } else { "print!" };
+            let rule_index = rule_index.to_string();
+            render_rule_invocation_stack_write(write, "tree", &rule_index)
+        }
         ActionTemplate::Literal { value, newline } => {
             let write = if *newline { "println!" } else { "print!" };
             format!("{write}(\"{}\");", rust_string(value))
         }
     }
+}
+
+/// Emits the generated print statement for the first rule invocation stack
+/// matching `rule_index_expr`.
+fn render_rule_invocation_stack_write(
+    write: &str,
+    tree_expr: &str,
+    rule_index_expr: &str,
+) -> String {
+    let rule_names =
+        "METADATA.rule_names().iter().map(|name| (*name).to_owned()).collect::<Vec<_>>()";
+    format!(
+        "let stack = {tree_expr}.rule_invocation_stack({rule_index_expr}, &{rule_names}).unwrap_or_default().join(\", \"); {write}(\"[{{}}]\", stack);"
+    )
 }
 
 /// Emits the generated print statement for either the current parse tree or a

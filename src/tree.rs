@@ -40,6 +40,50 @@ impl ParseTree {
             Self::Terminal(_) | Self::Error(_) => None,
         }
     }
+
+    /// Returns the first rule invocation stack for `rule_index`, ordered from
+    /// the selected rule outward to the root rule.
+    pub fn rule_invocation_stack(
+        &self,
+        rule_index: usize,
+        rule_names: &[String],
+    ) -> Option<Vec<String>> {
+        let mut stack = Vec::new();
+        if self.find_rule_path(rule_index, rule_names, &mut stack) {
+            stack.reverse();
+            return Some(stack);
+        }
+        None
+    }
+
+    fn find_rule_path(
+        &self,
+        rule_index: usize,
+        rule_names: &[String],
+        stack: &mut Vec<String>,
+    ) -> bool {
+        let Self::Rule(rule) = self else {
+            return false;
+        };
+        let current_index = rule.context().rule_index();
+        stack.push(
+            rule_names
+                .get(current_index)
+                .map_or("<unknown>", String::as_str)
+                .to_owned(),
+        );
+        if current_index == rule_index
+            || rule
+                .context()
+                .children()
+                .iter()
+                .any(|child| child.find_rule_path(rule_index, rule_names, stack))
+        {
+            return true;
+        }
+        stack.pop();
+        false
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -264,5 +308,22 @@ mod tests {
             "(child x)"
         );
         assert!(tree.first_rule(2).is_none());
+    }
+
+    #[test]
+    fn reports_rule_invocation_stack_from_leaf_to_root() {
+        let mut nested = ParserRuleContext::new(1, -1);
+        nested.add_child(ParseTree::Terminal(TerminalNode::new(
+            CommonToken::new(1).with_text("x"),
+        )));
+
+        let mut root = ParserRuleContext::new(0, -1);
+        root.add_child(ParseTree::Rule(RuleNode::new(nested)));
+        let tree = ParseTree::Rule(RuleNode::new(root));
+
+        assert_eq!(
+            tree.rule_invocation_stack(1, &["s".to_owned(), "a".to_owned()]),
+            Some(vec!["a".to_owned(), "s".to_owned()])
+        );
     }
 }
