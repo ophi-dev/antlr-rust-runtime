@@ -418,16 +418,16 @@ fn unsupported_reason(descriptor: &Descriptor) -> Option<&'static str> {
     if !descriptor.flags.is_empty() {
         return Some("diagnostic/profile/DFA flags are not implemented in the Rust harness yet");
     }
-    if descriptor.grammar.contains("{<")
-        || descriptor.grammar.contains("<writeln")
-        || descriptor.grammar.contains("@members")
-        || descriptor.grammar.contains("@definitions")
-    {
+    if has_target_template(&descriptor.grammar) && !target_templates_supported(descriptor) {
         return Some("target-template semantic actions are not rendered by this harness yet");
     }
     if descriptor.test_type == "Parser" {
         if !descriptor.output.is_empty() {
-            return Some("parser target actions/listeners are not wired into the Rust harness yet");
+            if !target_templates_supported(descriptor) {
+                return Some(
+                    "parser target actions/listeners are not wired into the Rust harness yet",
+                );
+            }
         }
         if !descriptor.errors.is_empty() {
             return Some(
@@ -442,6 +442,78 @@ fn unsupported_reason(descriptor: &Descriptor) -> Option<&'static str> {
     None
 }
 
+fn has_target_template(grammar: &str) -> bool {
+    next_template_block(grammar, 0).is_some()
+        || grammar.contains("{<")
+        || grammar.contains("<writeln")
+        || grammar.contains("<write")
+        || grammar.contains("<InputText")
+        || grammar.contains("<LANotEquals")
+        || grammar.contains("@members")
+        || grammar.contains("@definitions")
+}
+
+fn target_templates_supported(descriptor: &Descriptor) -> bool {
+    if descriptor.test_type != "Parser" {
+        return false;
+    }
+    if matches!(
+        descriptor.name.as_str(),
+        "IfIfElseGreedyBinding1"
+            | "IfIfElseGreedyBinding2"
+            | "IfIfElseNonGreedyBinding1"
+            | "IfIfElseNonGreedyBinding2"
+            | "Order"
+            | "RewindBeforePredEval"
+            | "Wildcard"
+    ) {
+        return false;
+    }
+    let grammar = &descriptor.grammar;
+    if grammar.contains("@members")
+        || grammar.contains("@definitions")
+        || grammar.contains("@after")
+        || grammar.contains("@init")
+        || grammar.contains("returns [<")
+        || grammar.contains("locals [<")
+        || grammar.contains("<AssertIsList")
+        || grammar.contains("<BailErrorStrategy")
+        || grammar.contains("<BuildParseTrees")
+        || grammar.contains("<ContextListFunction")
+        || grammar.contains("<LANotEquals")
+        || grammar.contains("<ParserProperty")
+        || grammar.contains("<ToStringTree")
+        || grammar.contains("<AppendStr")
+    {
+        return false;
+    }
+    supported_action_templates(grammar)
+}
+
+fn supported_action_templates(grammar: &str) -> bool {
+    let mut offset = 0;
+    while let Some(block) = next_template_block(grammar, offset) {
+        offset = block.after_brace;
+        if block.predicate {
+            continue;
+        }
+        if !is_supported_action_template(block.body.trim()) {
+            return false;
+        }
+    }
+    true
+}
+
+/// Mirrors the generator's currently supported action-template subset so the
+/// harness runs only descriptors it can translate faithfully.
+fn is_supported_action_template(body: &str) -> bool {
+    matches!(
+        body,
+        r#"writeln("$text")"# | r#"write("$text")"# | "InputText():writeln()"
+    ) || body.starts_with("writeln(\"\\\"")
+        || body.starts_with("write(\"\\\"")
+}
+
 /// Runs one descriptor through ANTLR metadata generation, Rust code generation,
 /// a temporary Cargo crate, and process output capture.
 fn run_descriptor(args: &Args, descriptor: &Descriptor) -> io::Result<RunResult> {
@@ -451,8 +523,13 @@ fn run_descriptor(args: &Args, descriptor: &Descriptor) -> io::Result<RunResult>
     }
     fs::create_dir_all(&case_dir)?;
 
+    let source_grammar_path = case_dir.join(format!("{}.source.g4", descriptor.grammar_name));
+    fs::write(&source_grammar_path, &descriptor.grammar)?;
     let grammar_path = case_dir.join(format!("{}.g4", descriptor.grammar_name));
-    fs::write(&grammar_path, &descriptor.grammar)?;
+    fs::write(
+        &grammar_path,
+        render_target_templates_for_metadata(&descriptor.grammar),
+    )?;
 
     let java_dir = case_dir.join("antlr");
     fs::create_dir_all(&java_dir)?;
@@ -467,7 +544,8 @@ fn run_descriptor(args: &Args, descriptor: &Descriptor) -> io::Result<RunResult>
         "ANTLR tool",
     )?;
 
-    let rust_dir = generate_rust_modules(args, descriptor, &java_dir, &case_dir)?;
+    let rust_dir =
+        generate_rust_modules(args, descriptor, &java_dir, &case_dir, &source_grammar_path)?;
 
     let smoke_dir = case_dir.join("rust");
     create_smoke_crate(args, descriptor, &rust_dir, &smoke_dir)?;
@@ -483,6 +561,75 @@ fn run_descriptor(args: &Args, descriptor: &Descriptor) -> io::Result<RunResult>
     })
 }
 
+/// Replaces target-template actions with neutral ANTLR actions before invoking
+/// the official tool for `.interp` metadata.
+///
+/// The original grammar is still passed to `antlr4-rust-gen`, which replays the
+/// supported templates from Rust after the ATN path has been selected.
+fn render_target_templates_for_metadata(grammar: &str) -> String {
+    let mut out = String::with_capacity(grammar.len());
+    let mut offset = 0;
+    while let Some(block) = next_template_block(grammar, offset) {
+        out.push_str(&grammar[offset..block.open_brace]);
+        if block.predicate {
+            out.push_str("{true}");
+        } else {
+            out.push_str("{}");
+        }
+        offset = block.after_brace;
+    }
+    out.push_str(&grammar[offset..]);
+    out
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct TemplateBlock<'a> {
+    open_brace: usize,
+    body: &'a str,
+    after_brace: usize,
+    predicate: bool,
+}
+
+/// Finds the next target-template block while allowing whitespace inside the
+/// ANTLR action braces, for example `{ <writeln("$text")> }`.
+fn next_template_block(source: &str, offset: usize) -> Option<TemplateBlock<'_>> {
+    let mut cursor = offset;
+    while let Some(open_rel) = source[cursor..].find('{') {
+        let open_brace = cursor + open_rel;
+        let template_start = skip_ascii_whitespace(source, open_brace + 1);
+        if source.as_bytes().get(template_start) != Some(&b'<') {
+            cursor = open_brace + 1;
+            continue;
+        }
+        let close_angle_rel = source[template_start + 1..].find('>')?;
+        let close_angle = template_start + 1 + close_angle_rel;
+        let close_brace = skip_ascii_whitespace(source, close_angle + 1);
+        if source.as_bytes().get(close_brace) != Some(&b'}') {
+            cursor = open_brace + 1;
+            continue;
+        }
+        let after_brace = close_brace + 1;
+        return Some(TemplateBlock {
+            open_brace,
+            body: &source[template_start + 1..close_angle],
+            after_brace,
+            predicate: source[after_brace..].trim_start().starts_with('?'),
+        });
+    }
+    None
+}
+
+fn skip_ascii_whitespace(source: &str, mut index: usize) -> usize {
+    while source
+        .as_bytes()
+        .get(index)
+        .is_some_and(u8::is_ascii_whitespace)
+    {
+        index += 1;
+    }
+    index
+}
+
 /// Runs `antlr4-rust-gen` for either a lexer descriptor or a combined parser
 /// descriptor.
 fn generate_rust_modules(
@@ -490,6 +637,7 @@ fn generate_rust_modules(
     descriptor: &Descriptor,
     java_dir: &Path,
     case_dir: &Path,
+    source_grammar_path: &Path,
 ) -> io::Result<PathBuf> {
     let rust_dir = case_dir.join("generated");
     fs::create_dir_all(&rust_dir)?;
@@ -509,6 +657,8 @@ fn generate_rust_modules(
             .arg(java_dir.join(format!("{}Lexer.interp", descriptor.grammar_name)))
             .arg("--parser")
             .arg(java_dir.join(format!("{}.interp", descriptor.grammar_name)))
+            .arg("--grammar")
+            .arg(source_grammar_path)
             .arg("--parser-name")
             .arg(format!("{}Parser", descriptor.grammar_name));
     } else {

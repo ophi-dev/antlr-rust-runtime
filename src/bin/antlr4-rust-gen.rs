@@ -5,9 +5,17 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use antlr4_runtime::atn::Transition;
+use antlr4_runtime::atn::serialized::{AtnDeserializer, SerializedAtn};
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse()?;
     fs::create_dir_all(&args.out_dir)?;
+    let grammar_source = args
+        .grammar
+        .as_deref()
+        .map(fs::read_to_string)
+        .transpose()?;
 
     if let Some(lexer) = args.lexer {
         let data = InterpData::parse(&fs::read_to_string(&lexer)?)?;
@@ -29,7 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .parser_name
             .clone()
             .unwrap_or_else(|| grammar_name_from_path(&parser));
-        let module = render_parser(&grammar_name, &data);
+        let module = render_parser(&grammar_name, &data, grammar_source.as_deref())?;
         fs::write(
             args.out_dir
                 .join(format!("{}.rs", module_name(&grammar_name))),
@@ -46,6 +54,7 @@ struct Args {
     parser: Option<PathBuf>,
     lexer_name: Option<String>,
     parser_name: Option<String>,
+    grammar: Option<PathBuf>,
     out_dir: PathBuf,
 }
 
@@ -62,6 +71,7 @@ impl Args {
         let mut parser = None;
         let mut lexer_name = None;
         let mut parser_name = None;
+        let mut grammar = None;
         let mut out_dir = None;
 
         let mut iter = env::args().skip(1);
@@ -71,6 +81,7 @@ impl Args {
                 "--parser" => parser = Some(PathBuf::from(next_arg(&mut iter, "--parser")?)),
                 "--lexer-name" => lexer_name = Some(next_arg(&mut iter, "--lexer-name")?),
                 "--parser-name" => parser_name = Some(next_arg(&mut iter, "--parser-name")?),
+                "--grammar" => grammar = Some(PathBuf::from(next_arg(&mut iter, "--grammar")?)),
                 "--out-dir" => out_dir = Some(PathBuf::from(next_arg(&mut iter, "--out-dir")?)),
                 "--help" | "-h" => return Err(usage()),
                 other => return Err(format!("unknown argument {other}\n\n{}", usage())),
@@ -89,6 +100,7 @@ impl Args {
             parser,
             lexer_name,
             parser_name,
+            grammar,
             out_dir: out_dir.unwrap_or_else(|| PathBuf::from(".")),
         })
     }
@@ -100,7 +112,7 @@ fn next_arg(iter: &mut impl Iterator<Item = String>, flag: &str) -> Result<Strin
 }
 
 fn usage() -> String {
-    "usage: antlr4-rust-gen [--lexer Lexer.interp] [--parser Parser.interp] [--out-dir DIR]"
+    "usage: antlr4-rust-gen [--lexer Lexer.interp] [--parser Parser.interp] [--grammar Grammar.g4] [--out-dir DIR]"
         .to_owned()
 }
 
@@ -237,11 +249,11 @@ use std::sync::OnceLock;
 {token_constants}
 {metadata}
 
-static ATN: OnceLock<Atn> = OnceLock::new();
+static ATN_CELL: OnceLock<Atn> = OnceLock::new();
 
 /// Deserializes and caches the grammar ATN for all lexer instances.
 fn atn() -> &'static Atn {{
-    ATN.get_or_init(|| {{
+    ATN_CELL.get_or_init(|| {{
         let serialized = METADATA.serialized_atn();
         AtnDeserializer::new(&serialized)
             .deserialize()
@@ -328,11 +340,20 @@ where
 /// Parser methods currently route through the runtime parser interpreter entry
 /// point. As the parser ATN simulator matures, the generated surface can remain
 /// stable while the interpreter becomes semantically complete.
-fn render_parser(grammar_name: &str, data: &InterpData) -> String {
+fn render_parser(
+    grammar_name: &str,
+    data: &InterpData,
+    grammar_source: Option<&str>,
+) -> io::Result<String> {
     let type_name = rust_type_name(grammar_name);
     let metadata = render_metadata(grammar_name, data);
     let token_constants = render_token_constants(data);
     let rule_constants = render_rule_constants(data);
+    let actions = grammar_source.map_or_else(
+        || Ok(Vec::new()),
+        |grammar| parser_action_templates(data, grammar),
+    )?;
+    let action_method = render_parser_action_method(&actions);
     let mut rule_methods = String::new();
     for (index, rule) in data.rule_names.iter().enumerate() {
         writeln!(
@@ -341,15 +362,29 @@ fn render_parser(grammar_name: &str, data: &InterpData) -> String {
             rust_function_name(rule)
         )
         .expect("writing to a string cannot fail");
-        writeln!(
-            rule_methods,
-            "        self.base.parse_atn_rule(atn(), {index})"
-        )
-        .expect("writing to a string cannot fail");
+        if actions.is_empty() {
+            writeln!(
+                rule_methods,
+                "        self.base.parse_atn_rule(atn(), {index})"
+            )
+            .expect("writing to a string cannot fail");
+        } else {
+            writeln!(
+                rule_methods,
+                "        let (tree, actions) = self.base.parse_atn_rule_with_actions(atn(), {index})?;"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(
+                rule_methods,
+                "        for action in actions {{ self.run_action(action); }}"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(rule_methods, "        Ok(tree)").expect("writing to a string cannot fail");
+        }
         writeln!(rule_methods, "    }}").expect("writing to a string cannot fail");
     }
 
-    format!(
+    Ok(format!(
         r#"use antlr4_runtime::recognizer::RecognizerData;
 use antlr4_runtime::token::TokenSource;
 use antlr4_runtime::token_stream::CommonTokenStream;
@@ -362,11 +397,11 @@ use std::sync::OnceLock;
 {rule_constants}
 {metadata}
 
-static ATN: OnceLock<Atn> = OnceLock::new();
+static ATN_CELL: OnceLock<Atn> = OnceLock::new();
 
 /// Deserializes and caches the grammar ATN for all parser instances.
 fn atn() -> &'static Atn {{
-    ATN.get_or_init(|| {{
+    ATN_CELL.get_or_init(|| {{
         let serialized = METADATA.serialized_atn();
         AtnDeserializer::new(&serialized)
             .deserialize()
@@ -400,6 +435,8 @@ where
     }}
 
 {rule_methods}
+
+{action_method}
 }}
 
 impl<S> GeneratedParser for {type_name}<S>
@@ -432,7 +469,214 @@ where
     fn set_build_parse_trees(&mut self, build: bool) {{ self.base.set_build_parse_trees(build); }}
 }}
 "#
+    ))
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum ActionTemplate {
+    WriteText { newline: bool },
+    WriteLiteral { value: String, newline: bool },
+}
+
+/// Pairs supported target-template actions with parser ATN action source states.
+fn parser_action_templates(
+    data: &InterpData,
+    grammar_source: &str,
+) -> io::Result<Vec<(usize, ActionTemplate)>> {
+    let templates = extract_supported_action_templates(grammar_source)?;
+    if templates.is_empty() {
+        return Ok(Vec::new());
+    }
+    let states = parser_action_states(data)?;
+    if templates.len() == 1 && states.len() > 1 {
+        let template = templates[0].clone();
+        let Some(state) = states.last().copied() else {
+            return Ok(Vec::new());
+        };
+        return Ok(vec![(state, template)]);
+    }
+    if states.len() != templates.len() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "grammar has {} supported action template(s), but parser ATN has {} action transition(s)",
+                templates.len(),
+                states.len()
+            ),
+        ));
+    }
+    Ok(states.into_iter().zip(templates).collect())
+}
+
+/// Finds action templates embedded as `{<...>}` blocks, ignoring semantic
+/// predicates (`{<...>}?`) because those are control-flow guards rather than
+/// side-effect actions.
+fn extract_supported_action_templates(grammar_source: &str) -> io::Result<Vec<ActionTemplate>> {
+    let mut templates = Vec::new();
+    let mut offset = 0;
+    while let Some(block) = next_template_block(grammar_source, offset) {
+        offset = block.after_brace;
+        if block.predicate {
+            continue;
+        }
+        let Some(template) = parse_action_template(block.body) else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("unsupported target action template <{}>", block.body),
+            ));
+        };
+        templates.push(template);
+    }
+    Ok(templates)
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct TemplateBlock<'a> {
+    body: &'a str,
+    after_brace: usize,
+    predicate: bool,
+}
+
+/// Finds the next target-template block while allowing whitespace inside the
+/// ANTLR action braces, for example `{ <writeln("$text")> }`.
+fn next_template_block(source: &str, offset: usize) -> Option<TemplateBlock<'_>> {
+    let mut cursor = offset;
+    while let Some(open_rel) = source[cursor..].find('{') {
+        let open = cursor + open_rel;
+        let template_start = skip_ascii_whitespace(source, open + 1);
+        if source.as_bytes().get(template_start) != Some(&b'<') {
+            cursor = open + 1;
+            continue;
+        }
+        let close_angle_rel = source[template_start + 1..].find('>')?;
+        let close_angle = template_start + 1 + close_angle_rel;
+        let close_brace = skip_ascii_whitespace(source, close_angle + 1);
+        if source.as_bytes().get(close_brace) != Some(&b'}') {
+            cursor = open + 1;
+            continue;
+        }
+        let after_brace = close_brace + 1;
+        return Some(TemplateBlock {
+            body: &source[template_start + 1..close_angle],
+            after_brace,
+            predicate: source[after_brace..].trim_start().starts_with('?'),
+        });
+    }
+    None
+}
+
+fn skip_ascii_whitespace(source: &str, mut index: usize) -> usize {
+    while source
+        .as_bytes()
+        .get(index)
+        .is_some_and(u8::is_ascii_whitespace)
+    {
+        index += 1;
+    }
+    index
+}
+
+/// Converts the subset of upstream `StringTemplate` actions the Rust generator
+/// can replay today into concrete output actions.
+fn parse_action_template(body: &str) -> Option<ActionTemplate> {
+    let body = body.trim();
+    match body {
+        r#"writeln("$text")"# | "InputText():writeln()" => {
+            Some(ActionTemplate::WriteText { newline: true })
+        }
+        r#"write("$text")"# => Some(ActionTemplate::WriteText { newline: false }),
+        _ => parse_write_literal(body),
+    }
+}
+
+fn parse_write_literal(body: &str) -> Option<ActionTemplate> {
+    let (newline, argument) = if let Some(argument) = body
+        .strip_prefix("writeln(")
+        .and_then(|value| value.strip_suffix(')'))
+    {
+        (true, argument)
+    } else {
+        let argument = body
+            .strip_prefix("write(")
+            .and_then(|value| value.strip_suffix(')'))?;
+        (false, argument)
+    };
+    let value = parse_template_string(argument)?;
+    Some(ActionTemplate::WriteLiteral { value, newline })
+}
+
+/// Decodes the descriptor's quoted `StringTemplate` argument into the Rust
+/// string literal payload that generated parser code should print.
+fn parse_template_string(argument: &str) -> Option<String> {
+    let mut value = argument.trim();
+    value = value.strip_prefix('"')?.strip_suffix('"')?;
+    let mut out = String::new();
+    let mut chars = value.chars();
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            if let Some(next) = chars.next() {
+                out.push(next);
+            }
+        } else {
+            out.push(ch);
+        }
+    }
+    if out.starts_with('"') && out.ends_with('"') && out.len() >= 2 {
+        out = out[1..out.len() - 1].to_owned();
+    }
+    Some(out)
+}
+
+/// Reads the parser ATN to locate action-transition source states.
+fn parser_action_states(data: &InterpData) -> io::Result<Vec<usize>> {
+    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(data.atn.clone()))
+        .deserialize()
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    let mut states = Vec::new();
+    for state in atn.states() {
+        if state
+            .transitions
+            .iter()
+            .any(|transition| matches!(transition, Transition::Action { .. }))
+        {
+            states.push(state.state_number);
+        }
+    }
+    Ok(states)
+}
+
+/// Emits the generated parser action dispatcher for the grammar-specific action
+/// source states discovered from the serialized ATN.
+fn render_parser_action_method(actions: &[(usize, ActionTemplate)]) -> String {
+    if actions.is_empty() {
+        return String::new();
+    }
+    let mut arms = String::new();
+    for (state, template) in actions {
+        let statement = render_action_statement(template);
+        writeln!(arms, "            {state} => {{ {statement} }}")
+            .expect("writing to a string cannot fail");
+    }
+    arms.push_str("            _ => {}\n");
+    format!(
+        "    fn run_action(&mut self, action: antlr4_runtime::ParserAction) {{\n        match action.source_state() {{\n{arms}        }}\n    }}\n"
     )
+}
+
+/// Renders one supported target-template action as Rust code.
+fn render_action_statement(template: &ActionTemplate) -> String {
+    match template {
+        ActionTemplate::WriteText { newline } => {
+            let write = if *newline { "println!" } else { "print!" };
+            format!(
+                "let text = self.base.text_interval(action.start_index(), action.stop_index()); {write}(\"{{}}\", text);"
+            )
+        }
+        ActionTemplate::WriteLiteral { value, newline } => {
+            let write = if *newline { "println!" } else { "print!" };
+            format!("{write}(\"{}\");", rust_string(value))
+        }
+    }
 }
 
 /// Renders static grammar metadata shared by generated lexers and parsers.

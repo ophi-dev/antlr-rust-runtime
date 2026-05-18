@@ -13,6 +13,57 @@ use crate::tree::{ParseTree, ParserRuleContext, RuleNode, TerminalNode};
 /// of thousands of ATN edges.
 const RECOGNITION_DEPTH_LIMIT: usize = 100_000;
 
+/// Parser semantic action reached while recognizing one ATN path.
+///
+/// Generated parsers use `source_state` to dispatch back to the grammar action
+/// rendered for that ATN action transition. The token interval is the current
+/// rule's input span at the action site, which covers common target templates
+/// such as `$text`.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct ParserAction {
+    source_state: usize,
+    rule_index: usize,
+    start_index: usize,
+    stop_index: Option<usize>,
+}
+
+impl ParserAction {
+    /// Creates an action event for a recognized parser path.
+    pub const fn new(
+        source_state: usize,
+        rule_index: usize,
+        start_index: usize,
+        stop_index: Option<usize>,
+    ) -> Self {
+        Self {
+            source_state,
+            rule_index,
+            start_index,
+            stop_index,
+        }
+    }
+
+    /// ATN state that owns the semantic-action transition.
+    pub const fn source_state(&self) -> usize {
+        self.source_state
+    }
+
+    /// Grammar rule index recorded by the serialized ATN action transition.
+    pub const fn rule_index(&self) -> usize {
+        self.rule_index
+    }
+
+    /// Token-stream index where the active rule began.
+    pub const fn start_index(&self) -> usize {
+        self.start_index
+    }
+
+    /// Last token-stream index consumed before the action was reached.
+    pub const fn stop_index(&self) -> Option<usize> {
+        self.stop_index
+    }
+}
+
 pub trait Parser: Recognizer {
     fn build_parse_trees(&self) -> bool;
     fn set_build_parse_trees(&mut self, build: bool);
@@ -25,8 +76,15 @@ pub struct BaseParser<S> {
     build_parse_trees: bool,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct RecognizeOutcome {
+    index: usize,
+    consumed_eof: bool,
+    actions: Vec<ParserAction>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct FastRecognizeOutcome {
     index: usize,
     consumed_eof: bool,
 }
@@ -36,6 +94,7 @@ struct RecognizeRequest {
     state_number: usize,
     stop_state: usize,
     index: usize,
+    rule_start_index: usize,
     /// Current left-recursive precedence threshold, matching ANTLR's
     /// `precpred(_ctx, k)` check for generated precedence rules.
     precedence: i32,
@@ -44,6 +103,23 @@ struct RecognizeRequest {
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct RecognizeKey {
+    state_number: usize,
+    stop_state: usize,
+    index: usize,
+    precedence: i32,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct FastRecognizeRequest {
+    state_number: usize,
+    stop_state: usize,
+    index: usize,
+    precedence: i32,
+    depth: usize,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct FastRecognizeKey {
     state_number: usize,
     stop_state: usize,
     index: usize,
@@ -144,12 +220,79 @@ where
         let start_index = self.input.index();
         let mut visiting = BTreeSet::new();
         let mut memo = BTreeMap::new();
+        let outcomes = self.recognize_state_fast(
+            atn,
+            FastRecognizeRequest {
+                state_number: start_state,
+                stop_state,
+                index: start_index,
+                precedence: 0,
+                depth: 0,
+            },
+            &mut visiting,
+            &mut memo,
+        );
+        let Some(outcome) = select_best_fast_outcome(outcomes.into_iter()) else {
+            return Err(AntlrError::ParserError {
+                line: self.input.lt(1).map(Token::line).unwrap_or_default(),
+                column: self.input.lt(1).map(Token::column).unwrap_or_default(),
+                message: format!("no viable alternative while parsing rule {rule_index}"),
+            });
+        };
+
+        let mut context = ParserRuleContext::new(rule_index, self.state());
+        self.input.seek(start_index);
+        while self.input.index() < outcome.index {
+            let token_type = self.la(1);
+            let child = self.match_token(token_type)?;
+            if self.build_parse_trees {
+                context.add_child(child);
+            }
+        }
+        if outcome.consumed_eof && self.la(1) == TOKEN_EOF && self.build_parse_trees {
+            context.add_child(self.match_eof()?);
+        }
+
+        Ok(self.rule_node(context))
+    }
+
+    /// Parses a generated rule and returns semantic actions reached on the
+    /// selected ATN path.
+    ///
+    /// This slower path preserves action ordering and token intervals for
+    /// generated code that replays target-specific action templates after the
+    /// recognizer has chosen one viable parse path.
+    pub fn parse_atn_rule_with_actions(
+        &mut self,
+        atn: &Atn,
+        rule_index: usize,
+    ) -> Result<(ParseTree, Vec<ParserAction>), AntlrError> {
+        let start_state = atn
+            .rule_to_start_state()
+            .get(rule_index)
+            .copied()
+            .ok_or_else(|| {
+                AntlrError::Unsupported(format!("rule {rule_index} has no start state"))
+            })?;
+        let stop_state = atn
+            .rule_to_stop_state()
+            .get(rule_index)
+            .copied()
+            .filter(|state| *state != usize::MAX)
+            .ok_or_else(|| {
+                AntlrError::Unsupported(format!("rule {rule_index} has no stop state"))
+            })?;
+
+        let start_index = self.input.index();
+        let mut visiting = BTreeSet::new();
+        let mut memo = BTreeMap::new();
         let outcomes = self.recognize_state(
             atn,
             RecognizeRequest {
                 state_number: start_state,
                 stop_state,
                 index: start_index,
+                rule_start_index: start_index,
                 precedence: 0,
                 depth: 0,
             },
@@ -177,7 +320,7 @@ where
             context.add_child(self.match_eof()?);
         }
 
-        Ok(self.rule_node(context))
+        Ok((self.rule_node(context), outcome.actions))
     }
 
     /// Temporary parser entry used by generated parser methods while the parser
@@ -203,14 +346,14 @@ where
 
     /// Attempts to reach `stop_state` from `state_number` without committing
     /// token consumption to the parser's public stream position.
-    fn recognize_state(
+    fn recognize_state_fast(
         &mut self,
         atn: &Atn,
-        request: RecognizeRequest,
+        request: FastRecognizeRequest,
         visiting: &mut BTreeSet<(usize, usize, usize, i32)>,
-        memo: &mut BTreeMap<RecognizeKey, Vec<RecognizeOutcome>>,
-    ) -> Vec<RecognizeOutcome> {
-        let RecognizeRequest {
+        memo: &mut BTreeMap<FastRecognizeKey, Vec<FastRecognizeOutcome>>,
+    ) -> Vec<FastRecognizeOutcome> {
+        let FastRecognizeRequest {
             state_number,
             stop_state,
             index,
@@ -221,12 +364,12 @@ where
             return Vec::new();
         }
         if state_number == stop_state {
-            return vec![RecognizeOutcome {
+            return vec![FastRecognizeOutcome {
                 index,
                 consumed_eof: false,
             }];
         }
-        let key = RecognizeKey {
+        let key = FastRecognizeKey {
             state_number,
             stop_state,
             index,
@@ -250,9 +393,9 @@ where
                 Transition::Epsilon { target }
                 | Transition::Predicate { target, .. }
                 | Transition::Action { target, .. } => {
-                    outcomes.extend(self.recognize_state(
+                    outcomes.extend(self.recognize_state_fast(
                         atn,
-                        RecognizeRequest {
+                        FastRecognizeRequest {
                             state_number: *target,
                             stop_state,
                             index,
@@ -268,9 +411,9 @@ where
                     precedence: transition_precedence,
                 } => {
                     if *transition_precedence >= precedence {
-                        outcomes.extend(self.recognize_state(
+                        outcomes.extend(self.recognize_state_fast(
                             atn,
-                            RecognizeRequest {
+                            FastRecognizeRequest {
                                 state_number: *target,
                                 stop_state,
                                 index,
@@ -293,9 +436,9 @@ where
                     else {
                         continue;
                     };
-                    let children = self.recognize_state(
+                    let children = self.recognize_state_fast(
                         atn,
-                        RecognizeRequest {
+                        FastRecognizeRequest {
                             state_number: *target,
                             stop_state: child_stop,
                             index,
@@ -307,9 +450,9 @@ where
                     );
                     for child in children {
                         outcomes.extend(
-                            self.recognize_state(
+                            self.recognize_state_fast(
                                 atn,
-                                RecognizeRequest {
+                                FastRecognizeRequest {
                                     state_number: *follow_state,
                                     stop_state,
                                     index: child.index,
@@ -336,12 +479,204 @@ where
                     if transition.matches(symbol, 1, atn.max_token_type()) {
                         let next_index = self.consume_index(index, symbol);
                         outcomes.extend(
+                            self.recognize_state_fast(
+                                atn,
+                                FastRecognizeRequest {
+                                    state_number: *target,
+                                    stop_state,
+                                    index: next_index,
+                                    precedence,
+                                    depth: depth + 1,
+                                },
+                                visiting,
+                                memo,
+                            )
+                            .into_iter()
+                            .map(|mut outcome| {
+                                outcome.consumed_eof |= symbol == TOKEN_EOF;
+                                outcome
+                            }),
+                        );
+                    }
+                }
+            }
+        }
+
+        visiting.remove(&(state_number, stop_state, index, precedence));
+        dedupe_fast_outcomes(&mut outcomes);
+        memo.insert(key, outcomes.clone());
+        outcomes
+    }
+
+    /// Attempts to reach `stop_state` and carries semantic actions for the
+    /// selected parser path.
+    fn recognize_state(
+        &mut self,
+        atn: &Atn,
+        request: RecognizeRequest,
+        visiting: &mut BTreeSet<(usize, usize, usize, i32)>,
+        memo: &mut BTreeMap<RecognizeKey, Vec<RecognizeOutcome>>,
+    ) -> Vec<RecognizeOutcome> {
+        let RecognizeRequest {
+            state_number,
+            stop_state,
+            index,
+            rule_start_index,
+            precedence,
+            depth,
+        } = request;
+        if depth > RECOGNITION_DEPTH_LIMIT {
+            return Vec::new();
+        }
+        if state_number == stop_state {
+            return vec![RecognizeOutcome {
+                index,
+                consumed_eof: false,
+                actions: Vec::new(),
+            }];
+        }
+        let key = RecognizeKey {
+            state_number,
+            stop_state,
+            index,
+            precedence,
+        };
+        if let Some(outcomes) = memo.get(&key) {
+            return outcomes.clone();
+        }
+
+        if !visiting.insert((state_number, stop_state, index, precedence)) {
+            return Vec::new();
+        }
+
+        let Some(state) = atn.state(state_number) else {
+            visiting.remove(&(state_number, stop_state, index, precedence));
+            return Vec::new();
+        };
+        let mut outcomes = Vec::new();
+        for transition in &state.transitions {
+            match transition {
+                Transition::Epsilon { target }
+                | Transition::Predicate { target, .. }
+                | Transition::Action { target, .. } => {
+                    let action = match transition {
+                        Transition::Action { rule_index, .. } => Some(ParserAction::new(
+                            state_number,
+                            *rule_index,
+                            rule_start_index,
+                            index.checked_sub(1),
+                        )),
+                        _ => None,
+                    };
+                    outcomes.extend(
+                        self.recognize_state(
+                            atn,
+                            RecognizeRequest {
+                                state_number: *target,
+                                stop_state,
+                                index,
+                                rule_start_index,
+                                precedence,
+                                depth: depth + 1,
+                            },
+                            visiting,
+                            memo,
+                        )
+                        .into_iter()
+                        .map(|mut outcome| {
+                            if let Some(action) = action {
+                                outcome.actions.insert(0, action);
+                            }
+                            outcome
+                        }),
+                    );
+                }
+                Transition::Precedence {
+                    target,
+                    precedence: transition_precedence,
+                } => {
+                    if *transition_precedence >= precedence {
+                        outcomes.extend(self.recognize_state(
+                            atn,
+                            RecognizeRequest {
+                                state_number: *target,
+                                stop_state,
+                                index,
+                                rule_start_index,
+                                precedence,
+                                depth: depth + 1,
+                            },
+                            visiting,
+                            memo,
+                        ));
+                    }
+                }
+                Transition::Rule {
+                    target,
+                    rule_index,
+                    follow_state,
+                    precedence: rule_precedence,
+                    ..
+                } => {
+                    let Some(child_stop) = atn.rule_to_stop_state().get(*rule_index).copied()
+                    else {
+                        continue;
+                    };
+                    let children = self.recognize_state(
+                        atn,
+                        RecognizeRequest {
+                            state_number: *target,
+                            stop_state: child_stop,
+                            index,
+                            rule_start_index: index,
+                            precedence: *rule_precedence,
+                            depth: depth + 1,
+                        },
+                        visiting,
+                        memo,
+                    );
+                    for child in children {
+                        outcomes.extend(
+                            self.recognize_state(
+                                atn,
+                                RecognizeRequest {
+                                    state_number: *follow_state,
+                                    stop_state,
+                                    index: child.index,
+                                    rule_start_index,
+                                    precedence,
+                                    depth: depth + 1,
+                                },
+                                visiting,
+                                memo,
+                            )
+                            .into_iter()
+                            .map(|mut outcome| {
+                                outcome.consumed_eof |= child.consumed_eof;
+                                let mut actions = child.actions.clone();
+                                actions.append(&mut outcome.actions);
+                                outcome.actions = actions;
+                                outcome
+                            }),
+                        );
+                    }
+                }
+                Transition::Atom { target, .. }
+                | Transition::Range { target, .. }
+                | Transition::Set { target, .. }
+                | Transition::NotSet { target, .. }
+                | Transition::Wildcard { target, .. } => {
+                    let symbol = self.token_type_at(index);
+                    if transition.matches(symbol, 1, atn.max_token_type()) {
+                        let next_index = self.consume_index(index, symbol);
+                        outcomes.extend(
                             self.recognize_state(
                                 atn,
                                 RecognizeRequest {
                                     state_number: *target,
                                     stop_state,
                                     index: next_index,
+                                    rule_start_index,
                                     precedence,
                                     depth: depth + 1,
                                 },
@@ -382,6 +717,11 @@ where
         }
         self.input.index()
     }
+
+    /// Returns token text for a buffered token interval.
+    pub fn text_interval(&mut self, start: usize, stop: Option<usize>) -> String {
+        stop.map_or_else(String::new, |stop| self.input.text(start, stop))
+    }
 }
 
 /// Chooses the outermost parse result that consumed the most input.
@@ -389,6 +729,12 @@ where
 /// The recognizer intentionally keeps shorter endpoints available while walking
 /// nested rule transitions so callers can satisfy following tokens such as
 /// `expr 'and' expr`. Only the public rule entry commits to one endpoint.
+fn select_best_fast_outcome(
+    outcomes: impl Iterator<Item = FastRecognizeOutcome>,
+) -> Option<FastRecognizeOutcome> {
+    outcomes.max_by_key(|outcome| (outcome.index, outcome.consumed_eof))
+}
+
 fn select_best_outcome(
     outcomes: impl Iterator<Item = RecognizeOutcome>,
 ) -> Option<RecognizeOutcome> {
@@ -396,6 +742,12 @@ fn select_best_outcome(
 }
 
 /// Sorts and removes equivalent endpoints before memoizing a state result.
+fn dedupe_fast_outcomes(outcomes: &mut Vec<FastRecognizeOutcome>) {
+    outcomes.sort_unstable();
+    outcomes.dedup();
+}
+
+/// Sorts and removes equivalent endpoints, including their action traces.
 fn dedupe_outcomes(outcomes: &mut Vec<RecognizeOutcome>) {
     outcomes.sort_unstable();
     outcomes.dedup();

@@ -52,6 +52,7 @@ Supported now:
 - descriptor stdout/stderr comparison,
 - grouped lexer recovery diagnostics,
 - parser precedence predicates in metadata-driven recognition,
+- parser target-template actions for the currently supported stdout helpers,
 - `StringTemplate` backslash rendering for descriptor grammars,
 - official ANTLR `.interp` generation,
 - Rust module generation and execution through Cargo.
@@ -59,8 +60,8 @@ Supported now:
 Not wired yet:
 
 - composite grammars,
-- target-template semantic actions such as `<writeln(...)>`,
-- parser target actions/listeners that produce expected stdout,
+- lexer target-template semantic actions such as `<writeln(...)>`,
+- parser target actions beyond the currently supported stdout helpers,
 - parser error recovery diagnostics,
 - runtime diagnostic/profile/DFA flags.
 
@@ -69,14 +70,16 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `70 passed, 0 failed, 287 skipped, 70 run`
+- full descriptor sweep: `121 passed, 0 failed, 236 skipped, 121 run`
 - `LexerExec`: `29 passed, 0 failed, 13 skipped, 29 run`
 - `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
 - `LeftRecursion`: `7 passed, 0 failed, 91 skipped, 7 run`
-- `ParserExec`: `10 passed, 0 failed, 40 skipped, 10 run`
+- `ParserExec`: `34 passed, 0 failed, 16 skipped, 34 run`
 - `ParserErrors`: `4 passed, 0 failed, 30 skipped, 4 run`
 - `Performance`: `7 passed, 0 failed, 0 skipped, 7 run`
+- `SemPredEvalParser`: `7 passed, 0 failed, 19 skipped, 7 run`
+- `Sets`: `21 passed, 0 failed, 10 skipped, 21 run`
 
-The `LexerExec` skips are descriptors that depend on target-specific action or
-member templates. Those should become runnable when the Rust target action
-surface is generated instead of represented only as `.interp` metadata.
+The remaining target-action skips are descriptors that depend on templates the
+Rust harness does not render yet, such as target members, listener hooks,
+diagnostic helpers, or semantic predicates that need generated context methods.
