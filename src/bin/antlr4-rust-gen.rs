@@ -412,7 +412,7 @@ fn render_parser(
                 .expect("writing to a string cannot fail");
                 writeln!(
                     rule_methods,
-                    "        for action in actions {{ self.run_action(action); }}"
+                    "        for action in actions {{ self.run_action(action, &tree); }}"
                 )
                 .expect("writing to a string cannot fail");
             }
@@ -529,6 +529,9 @@ enum ActionTemplate {
     },
     TextWithPrefix {
         prefix: String,
+        newline: bool,
+    },
+    StringTree {
         newline: bool,
     },
     TokenText {
@@ -729,6 +732,8 @@ fn parse_action_template(body: &str) -> Option<ActionTemplate> {
             Some(ActionTemplate::Text { newline: true })
         }
         r#"write("$text")"# | "Text():write()" => Some(ActionTemplate::Text { newline: false }),
+        r#"ToStringTree("$ctx"):writeln()"# => Some(ActionTemplate::StringTree { newline: true }),
+        r#"ToStringTree("$ctx"):write()"# => Some(ActionTemplate::StringTree { newline: false }),
         _ => parse_plus_text(body)
             .or_else(|| parse_token_text(body))
             .or_else(|| parse_write_literal(body)),
@@ -890,6 +895,7 @@ fn render_lexer_action_statement(template: &ActionTemplate) -> String {
                 "let text = _base.token_text_until(action.position()); {write}(\"{{}}\", text);"
             )
         }
+        ActionTemplate::StringTree { .. } => String::new(),
         ActionTemplate::Literal { value, newline } => {
             let write = if *newline { "println!" } else { "print!" };
             format!("{write}(\"{}\");", rust_string(value))
@@ -911,7 +917,7 @@ fn render_parser_action_method(actions: &[(usize, ActionTemplate)]) -> String {
     }
     arms.push_str("            _ => {}\n");
     format!(
-        "    fn run_action(&mut self, action: antlr4_runtime::ParserAction) {{\n        match action.source_state() {{\n{arms}        }}\n    }}\n"
+        "    fn run_action(&mut self, action: antlr4_runtime::ParserAction, _tree: &antlr4_runtime::ParseTree) {{\n        match action.source_state() {{\n{arms}        }}\n    }}\n"
     )
 }
 
@@ -941,6 +947,12 @@ fn render_action_statement(template: &ActionTemplate) -> String {
                     "let text = action.stop_index().map_or_else(String::new, |index| self.base.text_interval(index, Some(index))); {write}(\"{{}}\", text);"
                 ),
             }
+        }
+        ActionTemplate::StringTree { newline } => {
+            let write = if *newline { "println!" } else { "print!" };
+            format!(
+                "{write}(\"{{}}\", _tree.to_string_tree(&METADATA.rule_names().iter().map(|name| (*name).to_owned()).collect::<Vec<_>>()));"
+            )
         }
         ActionTemplate::Literal { value, newline } => {
             let write = if *newline { "println!" } else { "print!" };
@@ -975,6 +987,12 @@ fn render_parser_after_action_statement(template: &ActionTemplate) -> String {
                     "let text = stop_index.map_or_else(String::new, |index| self.base.text_interval(index, Some(index))); {write}(\"{{}}\", text);"
                 ),
             }
+        }
+        ActionTemplate::StringTree { newline } => {
+            let write = if *newline { "println!" } else { "print!" };
+            format!(
+                "{write}(\"{{}}\", tree.to_string_tree(&METADATA.rule_names().iter().map(|name| (*name).to_owned()).collect::<Vec<_>>()));"
+            )
         }
         ActionTemplate::Literal { value, newline } => {
             let write = if *newline { "println!" } else { "print!" };

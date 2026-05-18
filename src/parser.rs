@@ -81,6 +81,18 @@ struct RecognizeOutcome {
     index: usize,
     consumed_eof: bool,
     actions: Vec<ParserAction>,
+    nodes: Vec<RecognizedNode>,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum RecognizedNode {
+    Token {
+        index: usize,
+    },
+    Rule {
+        rule_index: usize,
+        children: Vec<Self>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -308,17 +320,12 @@ where
         };
 
         let mut context = ParserRuleContext::new(rule_index, self.state());
-        self.input.seek(start_index);
-        while self.input.index() < outcome.index {
-            let token_type = self.la(1);
-            let child = self.match_token(token_type)?;
-            if self.build_parse_trees {
-                context.add_child(child);
+        if self.build_parse_trees {
+            for node in &outcome.nodes {
+                context.add_child(self.recognized_node_tree(node)?);
             }
         }
-        if outcome.consumed_eof && self.la(1) == TOKEN_EOF && self.build_parse_trees {
-            context.add_child(self.match_eof()?);
-        }
+        self.input.seek(outcome.index);
 
         Ok((self.rule_node(context), outcome.actions))
     }
@@ -533,6 +540,7 @@ where
                 index,
                 consumed_eof: false,
                 actions: Vec::new(),
+                nodes: Vec::new(),
             }];
         }
         let key = RecognizeKey {
@@ -636,6 +644,10 @@ where
                         memo,
                     );
                     for child in children {
+                        let child_node = RecognizedNode::Rule {
+                            rule_index: *rule_index,
+                            children: child.nodes.clone(),
+                        };
                         outcomes.extend(
                             self.recognize_state(
                                 atn,
@@ -656,6 +668,7 @@ where
                                 let mut actions = child.actions.clone();
                                 actions.append(&mut outcome.actions);
                                 outcome.actions = actions;
+                                outcome.nodes.insert(0, child_node.clone());
                                 outcome
                             }),
                         );
@@ -686,6 +699,7 @@ where
                             .into_iter()
                             .map(|mut outcome| {
                                 outcome.consumed_eof |= symbol == TOKEN_EOF;
+                                outcome.nodes.insert(0, RecognizedNode::Token { index });
                                 outcome
                             }),
                         );
@@ -721,6 +735,34 @@ where
     /// Returns token text for a buffered token interval.
     pub fn text_interval(&mut self, start: usize, stop: Option<usize>) -> String {
         stop.map_or_else(String::new, |stop| self.input.text(start, stop))
+    }
+
+    /// Converts a recognized internal node into a public parse-tree node.
+    fn recognized_node_tree(&mut self, node: &RecognizedNode) -> Result<ParseTree, AntlrError> {
+        match node {
+            RecognizedNode::Token { index } => {
+                let token =
+                    self.input
+                        .get(*index)
+                        .cloned()
+                        .ok_or_else(|| AntlrError::ParserError {
+                            line: 0,
+                            column: 0,
+                            message: format!("missing token at index {index}"),
+                        })?;
+                Ok(ParseTree::Terminal(TerminalNode::new(token)))
+            }
+            RecognizedNode::Rule {
+                rule_index,
+                children,
+            } => {
+                let mut context = ParserRuleContext::new(*rule_index, self.state());
+                for child in children {
+                    context.add_child(self.recognized_node_tree(child)?);
+                }
+                Ok(self.rule_node(context))
+            }
+        }
     }
 }
 

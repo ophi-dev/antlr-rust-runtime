@@ -484,7 +484,6 @@ fn target_templates_supported(descriptor: &Descriptor) -> bool {
         || grammar.contains("<ContextListFunction")
         || grammar.contains("<LANotEquals")
         || grammar.contains("<ParserProperty")
-        || grammar.contains("<ToStringTree")
         || grammar.contains("<AppendStr")
     {
         return false;
@@ -532,6 +531,9 @@ fn supported_after_action_templates(grammar: &str) -> bool {
             continue;
         }
         saw_after_action = true;
+        if block.body.trim().starts_with("ToStringTree(") {
+            return false;
+        }
         if !is_supported_action_template(block.body.trim()) {
             return false;
         }
@@ -560,6 +562,8 @@ fn is_supported_action_template(body: &str) -> bool {
             | "InputText():writeln()"
             | "Text():writeln()"
             | "Text():write()"
+            | r#"ToStringTree("$ctx"):writeln()"#
+            | r#"ToStringTree("$ctx"):write()"#
     ) || body.starts_with("writeln(\"\\\"")
         || body.starts_with("write(\"\\\"")
         || is_token_text_template(body)

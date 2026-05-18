@@ -56,6 +56,8 @@ Supported now:
   helpers,
 - parser token-label text actions such as `$TOKEN.text` and `$label.text`,
 - parser rule-level `@after` actions for the currently supported stdout helpers,
+- nested parser tree construction for action-bearing rules and direct
+  `ToStringTree("$ctx")` stdout actions,
 - `StringTemplate` backslash rendering for descriptor grammars,
 - official ANTLR `.interp` generation,
 - Rust module generation and execution through Cargo.
@@ -72,11 +74,11 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `143 passed, 0 failed, 214 skipped, 143 run`
+- full descriptor sweep: `144 passed, 0 failed, 213 skipped, 144 run`
 - `LexerExec`: `41 passed, 0 failed, 1 skipped, 41 run`
 - `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
 - `LeftRecursion`: `7 passed, 0 failed, 91 skipped, 7 run`
-- `ParserExec`: `35 passed, 0 failed, 15 skipped, 35 run`
+- `ParserExec`: `36 passed, 0 failed, 14 skipped, 36 run`
 - `ParserErrors`: `4 passed, 0 failed, 30 skipped, 4 run`
 - `Performance`: `7 passed, 0 failed, 0 skipped, 7 run`
 - `SemPredEvalLexer`: `1 passed, 0 failed, 7 skipped, 1 run`
