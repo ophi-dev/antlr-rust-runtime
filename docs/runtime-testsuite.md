@@ -64,6 +64,9 @@ Supported now:
 - `RuleInvocationStack()` stdout helper actions,
 - `BailErrorStrategy()` descriptors as no-ops while the default Rust error
   handling still matches the covered outputs,
+- compile-time-only target templates such as `IntArg`, `AssignLocal`,
+  `AssertIsList`, `Pass`, and parser property helpers as no-ops,
+- nested `StringTemplate` action parsing for supported no-op wrappers,
 - ANTLR recursive-context tree rewrites for left-recursive parse-tree output,
 - `StringTemplate` backslash rendering for descriptor grammars,
 - official ANTLR `.interp` generation,
@@ -72,7 +75,8 @@ Supported now:
 Not wired yet:
 
 - composite grammars,
-- target-template semantic actions beyond the currently supported stdout helpers,
+- target-template semantic actions beyond the currently supported stdout helpers
+  and no-op compile checks,
 - parser error recovery diagnostics,
 - runtime diagnostic/profile/DFA flags.
 
@@ -81,13 +85,13 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `225 passed, 0 failed, 132 skipped, 225 run`
+- full descriptor sweep: `231 passed, 0 failed, 126 skipped, 231 run`
 - `LexerExec`: `41 passed, 0 failed, 1 skipped, 41 run`
 - `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
 - `LeftRecursion`: `81 passed, 0 failed, 17 skipped, 81 run`
 - `ParseTrees`: `5 passed, 0 failed, 5 skipped, 5 run`
-- `ParserExec`: `38 passed, 0 failed, 12 skipped, 38 run`
-- `ParserErrors`: `4 passed, 0 failed, 30 skipped, 4 run`
+- `ParserExec`: `43 passed, 0 failed, 7 skipped, 43 run`
+- `ParserErrors`: `5 passed, 0 failed, 29 skipped, 5 run`
 - `Performance`: `7 passed, 0 failed, 0 skipped, 7 run`
 - `SemPredEvalLexer`: `1 passed, 0 failed, 7 skipped, 1 run`
 - `SemPredEvalParser`: `7 passed, 0 failed, 19 skipped, 7 run`

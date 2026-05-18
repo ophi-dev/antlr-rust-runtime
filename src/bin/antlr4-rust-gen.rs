@@ -534,6 +534,7 @@ where
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum ActionTemplate {
+    Noop,
     Text {
         newline: bool,
     },
@@ -683,29 +684,86 @@ fn parser_after_action_templates(
     Ok(actions)
 }
 
-/// Finds action templates embedded as `{<...>}` blocks, ignoring semantic
-/// predicates (`{<...>}?`) because those are control-flow guards rather than
-/// side-effect actions.
+/// Finds grammar action templates in the same order as ANTLR serializes action
+/// transitions, while ignoring semantic predicates that are control-flow guards.
 fn extract_supported_action_templates(grammar_source: &str) -> io::Result<Vec<ActionTemplate>> {
     let mut templates = Vec::new();
     let mut offset = 0;
-    while let Some(block) = next_template_block(grammar_source, offset) {
-        offset = block.after_brace;
-        if block.predicate
-            || is_after_action(grammar_source, block.open_brace)
-            || is_init_action(grammar_source, block.open_brace)
-        {
-            continue;
+    loop {
+        let block = next_template_block(grammar_source, offset);
+        let signature = next_signature_template(grammar_source, offset);
+        match (block, signature) {
+            (None, None) => break,
+            (Some(block), Some(signature)) if signature.open_angle < block.open_brace => {
+                offset = signature.after_template;
+                let Some(template) = parse_action_template(signature.body) else {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("unsupported signature target template <{}>", signature.body),
+                    ));
+                };
+                templates.push(template);
+            }
+            (Some(block), _) => {
+                offset = block.after_brace;
+                if block.predicate
+                    || is_after_action(grammar_source, block.open_brace)
+                    || is_init_action(grammar_source, block.open_brace)
+                {
+                    continue;
+                }
+                let Some(template) = parse_action_template(block.body) else {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("unsupported target action template <{}>", block.body),
+                    ));
+                };
+                templates.push(template);
+            }
+            (None, Some(signature)) => {
+                offset = signature.after_template;
+                let Some(template) = parse_action_template(signature.body) else {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("unsupported signature target template <{}>", signature.body),
+                    ));
+                };
+                templates.push(template);
+            }
         }
-        let Some(template) = parse_action_template(block.body) else {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("unsupported target action template <{}>", block.body),
-            ));
-        };
-        templates.push(template);
     }
     Ok(templates)
+}
+
+/// Finds the next supported return-value target template that ANTLR lowers into
+/// an action transition even though the metadata runtime treats it as a no-op.
+fn next_signature_template(source: &str, offset: usize) -> Option<SignatureTemplate<'_>> {
+    find_signature_template(source, offset, "returns [<")
+}
+
+/// Finds one signature template introduced by a specific rule-element marker.
+fn find_signature_template<'a>(
+    source: &'a str,
+    offset: usize,
+    marker: &str,
+) -> Option<SignatureTemplate<'a>> {
+    let marker_start = offset + source[offset..].find(marker)?;
+    let open_angle = marker_start + marker.len() - 1;
+    let body_start = open_angle + 1;
+    let close_rel = source[body_start..].find(">]")?;
+    let close_angle = body_start + close_rel;
+    Some(SignatureTemplate {
+        open_angle,
+        body: &source[body_start..close_angle],
+        after_template: close_angle + 2,
+    })
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct SignatureTemplate<'a> {
+    open_angle: usize,
+    body: &'a str,
+    after_template: usize,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -727,8 +785,7 @@ fn next_template_block(source: &str, offset: usize) -> Option<TemplateBlock<'_>>
             cursor = open + 1;
             continue;
         }
-        let close_angle_rel = source[template_start + 1..].find('>')?;
-        let close_angle = template_start + 1 + close_angle_rel;
+        let close_angle = matching_template_close(source, template_start + 1)?;
         let close_brace = skip_ascii_whitespace(source, close_angle + 1);
         if source.as_bytes().get(close_brace) != Some(&b'}') {
             cursor = open + 1;
@@ -741,6 +798,31 @@ fn next_template_block(source: &str, offset: usize) -> Option<TemplateBlock<'_>>
             after_brace,
             predicate: source[after_brace..].trim_start().starts_with('?'),
         });
+    }
+    None
+}
+
+/// Finds the matching `>` for a `StringTemplate` expression, allowing nested
+/// template expressions inside arguments such as `<Assert({<Inner()>})>`.
+fn matching_template_close(source: &str, mut index: usize) -> Option<usize> {
+    let mut nested = 0_usize;
+    let mut quoted = false;
+    let mut escaped = false;
+    while let Some(ch) = source[index..].chars().next() {
+        if escaped {
+            escaped = false;
+            index += ch.len_utf8();
+            continue;
+        }
+        match ch {
+            '\\' if quoted => escaped = true,
+            '"' => quoted = !quoted,
+            '<' if !quoted => nested += 1,
+            '>' if !quoted && nested == 0 => return Some(index),
+            '>' if !quoted => nested = nested.saturating_sub(1),
+            _ => {}
+        }
+        index += ch.len_utf8();
     }
     None
 }
@@ -846,6 +928,7 @@ fn labeled_rule_name<'a>(source: &'a str, open_brace: usize, label: &str) -> Opt
 fn parse_action_template(body: &str) -> Option<ActionTemplate> {
     let body = body.trim();
     match body {
+        "Pass()" => Some(ActionTemplate::Noop),
         r#"writeln("$text")"# | "InputText():writeln()" | "Text():writeln()" => {
             Some(ActionTemplate::Text { newline: true })
         }
@@ -862,6 +945,7 @@ fn parse_action_template(body: &str) -> Option<ActionTemplate> {
             .or_else(|| parse_string_tree(body))
             .or_else(|| parse_rule_invocation_stack(body))
             .or_else(|| parse_token_text(body))
+            .or_else(|| parse_noop_action(body))
             .or_else(|| parse_write_literal(body)),
     }
 }
@@ -900,6 +984,19 @@ fn parse_rule_invocation_stack(body: &str) -> Option<ActionTemplate> {
         }
         _ => None,
     }
+}
+
+/// Recognizes target templates whose only purpose is compile-time API coverage
+/// in the upstream descriptors.
+fn parse_noop_action(body: &str) -> Option<ActionTemplate> {
+    if (body.starts_with("AssignLocal(")
+        || body.starts_with("AssertIsList(")
+        || body.starts_with("IntArg("))
+        && body.ends_with(')')
+    {
+        return Some(ActionTemplate::Noop);
+    }
+    None
 }
 
 fn parse_plus_text(body: &str) -> Option<ActionTemplate> {
@@ -1038,6 +1135,7 @@ fn render_lexer_action_method(actions: &[((i32, i32), ActionTemplate)]) -> Strin
 /// Renders one supported lexer target-template action as Rust code.
 fn render_lexer_action_statement(template: &ActionTemplate) -> String {
     match template {
+        ActionTemplate::Noop => String::new(),
         ActionTemplate::Text { newline } => {
             let write = if *newline { "println!" } else { "print!" };
             format!(
@@ -1087,6 +1185,7 @@ fn render_parser_action_method(actions: &[(usize, ActionTemplate)]) -> String {
 /// Renders one supported target-template action as Rust code.
 fn render_action_statement(template: &ActionTemplate) -> String {
     match template {
+        ActionTemplate::Noop => String::new(),
         ActionTemplate::Text { newline } => {
             let write = if *newline { "println!" } else { "print!" };
             format!(
@@ -1129,6 +1228,7 @@ fn render_action_statement(template: &ActionTemplate) -> String {
 /// Renders a rule-level `@after` action using the parsed rule input span.
 fn render_parser_after_action_statement(template: &ActionTemplate, rule_index: usize) -> String {
     match template {
+        ActionTemplate::Noop => String::new(),
         ActionTemplate::Text { newline } => {
             let write = if *newline { "println!" } else { "print!" };
             format!(
@@ -1518,5 +1618,33 @@ atn:
         assert_eq!(rust_function_name("try"), "r#try");
         assert_eq!(rust_function_name("Self"), "r#self");
         assert!(is_rust_keyword("Self"));
+    }
+
+    #[test]
+    fn parses_nested_template_action_block() {
+        let block = next_template_block(
+            r#"s @after {<AssertIsList({<ContextListFunction("$ctx","x")>})>} : 'x' ;"#,
+            0,
+        )
+        .expect("nested template block should parse");
+
+        assert_eq!(
+            block.body,
+            r#"AssertIsList({<ContextListFunction("$ctx","x")>})"#
+        );
+    }
+
+    #[test]
+    fn extracts_return_noop_between_parser_actions() {
+        let templates = extract_supported_action_templates(
+            r#"root : {<write("$text")>} continue ;
+continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#,
+        )
+        .expect("supported templates should extract");
+
+        assert_eq!(templates.len(), 3);
+        assert!(matches!(templates[0], ActionTemplate::Text { .. }));
+        assert!(matches!(templates[1], ActionTemplate::Noop));
+        assert!(matches!(templates[2], ActionTemplate::Noop));
     }
 }

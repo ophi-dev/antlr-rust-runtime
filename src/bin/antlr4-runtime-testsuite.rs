@@ -470,19 +470,14 @@ fn target_templates_supported(descriptor: &Descriptor) -> bool {
             | "IfIfElseNonGreedyBinding2"
             | "Order"
             | "RewindBeforePredEval"
-            | "Wildcard"
     ) {
         return false;
     }
     let grammar = &descriptor.grammar;
     if grammar.contains("@members")
         || grammar.contains("@definitions")
-        || grammar.contains("returns [<")
-        || grammar.contains("locals [<")
-        || grammar.contains("<AssertIsList")
-        || grammar.contains("<ContextListFunction")
+        || !supported_signature_templates(grammar)
         || grammar.contains("<LANotEquals")
-        || grammar.contains("<ParserProperty")
         || grammar.contains("<AppendStr")
         || grammar.contains("<TreeNodeWithAltNumField")
         || grammar.contains("contextSuperClass")
@@ -529,8 +524,8 @@ fn supported_action_templates(grammar: &str) -> bool {
     true
 }
 
-/// Allows the parse-tree build switch used by upstream descriptors; this
-/// runtime always builds trees for the metadata harness.
+/// Allows upstream parser setup actions that are either implemented directly by
+/// the smoke harness or irrelevant to metadata-driven recognition.
 fn supported_init_action_templates(grammar: &str) -> bool {
     let mut saw_init_action = false;
     let mut offset = 0;
@@ -593,13 +588,43 @@ fn is_supported_action_template(body: &str) -> bool {
             | "Text():write()"
             | "RuleInvocationStack():writeln()"
             | "RuleInvocationStack():write()"
+            | "Pass()"
             | r#"ToStringTree("$ctx"):writeln()"#
             | r#"ToStringTree("$ctx"):write()"#
     ) || body.starts_with("writeln(\"\\\"")
         || body.starts_with("write(\"\\\"")
+        || is_noop_action_template(body)
         || is_token_text_template(body)
         || (body.starts_with("PlusText(\"") && body.ends_with("):writeln()"))
         || (body.starts_with("PlusText(\"") && body.ends_with("):write()"))
+}
+
+fn supported_signature_templates(grammar: &str) -> bool {
+    grammar.lines().all(|line| {
+        supported_signature_template_on_line(line, "returns [")
+            && supported_signature_template_on_line(line, "locals [")
+    })
+}
+
+fn supported_signature_template_on_line(line: &str, marker: &str) -> bool {
+    let Some(marker_start) = line.find(marker) else {
+        return true;
+    };
+    let template_start = marker_start + marker.len();
+    let Some(template) = line[template_start..].trim().strip_prefix('<') else {
+        return true;
+    };
+    template
+        .strip_suffix(']')
+        .and_then(|value| value.strip_suffix('>'))
+        .is_some_and(|body| body.starts_with("IntArg(") && body.ends_with(')'))
+}
+
+fn is_noop_action_template(body: &str) -> bool {
+    (body.starts_with("AssignLocal(")
+        || body.starts_with("AssertIsList(")
+        || body.starts_with("IntArg("))
+        && body.ends_with(')')
 }
 
 fn is_token_text_template(body: &str) -> bool {
@@ -709,7 +734,10 @@ fn render_target_templates_for_metadata(grammar: &str) -> String {
 fn strip_supported_preamble_templates(grammar: &str) -> String {
     let mut out = String::with_capacity(grammar.len());
     for line in grammar.lines() {
-        if line.trim() == "<ImportRuleInvocationStack()>" {
+        if matches!(
+            line.trim(),
+            "<ImportRuleInvocationStack()>" | "<ParserPropertyMember()>"
+        ) {
             continue;
         }
         out.push_str(line);
@@ -737,8 +765,7 @@ fn next_template_block(source: &str, offset: usize) -> Option<TemplateBlock<'_>>
             cursor = open_brace + 1;
             continue;
         }
-        let close_angle_rel = source[template_start + 1..].find('>')?;
-        let close_angle = template_start + 1 + close_angle_rel;
+        let close_angle = matching_template_close(source, template_start + 1)?;
         let close_brace = skip_ascii_whitespace(source, close_angle + 1);
         if source.as_bytes().get(close_brace) != Some(&b'}') {
             cursor = open_brace + 1;
@@ -751,6 +778,31 @@ fn next_template_block(source: &str, offset: usize) -> Option<TemplateBlock<'_>>
             after_brace,
             predicate: source[after_brace..].trim_start().starts_with('?'),
         });
+    }
+    None
+}
+
+/// Finds the matching `>` for a `StringTemplate` expression, allowing nested
+/// template expressions inside arguments such as `<Assert({<Inner()>})>`.
+fn matching_template_close(source: &str, mut index: usize) -> Option<usize> {
+    let mut nested = 0_usize;
+    let mut quoted = false;
+    let mut escaped = false;
+    while let Some(ch) = source[index..].chars().next() {
+        if escaped {
+            escaped = false;
+            index += ch.len_utf8();
+            continue;
+        }
+        match ch {
+            '\\' if quoted => escaped = true,
+            '"' => quoted = !quoted,
+            '<' if !quoted => nested += 1,
+            '>' if !quoted && nested == 0 => return Some(index),
+            '>' if !quoted => nested = nested.saturating_sub(1),
+            _ => {}
+        }
+        index += ch.len_utf8();
     }
     None
 }

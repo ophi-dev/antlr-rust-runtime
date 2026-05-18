@@ -833,9 +833,13 @@ fn select_best_outcome(
         .iter()
         .any(|outcome| nodes_need_stable_tie(&outcome.nodes));
     outcomes.into_iter().reduce(|best, outcome| {
-        let outcome_key = (outcome.index, outcome.consumed_eof);
-        let best_key = (best.index, best.consumed_eof);
-        if outcome_key > best_key || (!prefer_first_tie && outcome_key == best_key) {
+        let outcome_position = (outcome.index, outcome.consumed_eof);
+        let best_position = (best.index, best.consumed_eof);
+        if outcome_position > best_position
+            || (!prefer_first_tie
+                && outcome_position == best_position
+                && outcome.actions.len() >= best.actions.len())
+        {
             return outcome;
         }
         best
@@ -1040,6 +1044,27 @@ mod tests {
         let selected = select_best_outcome([first, second].into_iter())
             .expect("one outcome should be selected");
         assert_eq!(selected.actions[0].source_state(), 2);
+    }
+
+    #[test]
+    fn outcome_ties_prefer_more_actions_for_non_recursive_paths() {
+        let first = RecognizeOutcome {
+            index: 1,
+            consumed_eof: false,
+            actions: vec![ParserAction::new(1, 0, 0, None)],
+            nodes: vec![RecognizedNode::Token { index: 0 }],
+        };
+        let second = RecognizeOutcome {
+            actions: vec![
+                ParserAction::new(2, 0, 0, None),
+                ParserAction::new(3, 0, 0, None),
+            ],
+            ..first.clone()
+        };
+
+        let selected = select_best_outcome([second, first].into_iter())
+            .expect("one outcome should be selected");
+        assert_eq!(selected.actions.len(), 2);
     }
 
     #[test]
