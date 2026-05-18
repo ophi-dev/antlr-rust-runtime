@@ -4,9 +4,9 @@ use crate::atn::{Atn, AtnState, AtnStateKind, Transition};
 use crate::errors::AntlrError;
 use crate::int_stream::IntStream;
 use crate::recognizer::{Recognizer, RecognizerData};
-use crate::token::{TOKEN_EOF, Token, TokenSource};
+use crate::token::{CommonToken, TOKEN_EOF, Token, TokenSource};
 use crate::token_stream::CommonTokenStream;
-use crate::tree::{ParseTree, ParserRuleContext, RuleNode, TerminalNode};
+use crate::tree::{ErrorNode, ParseTree, ParserRuleContext, RuleNode, TerminalNode};
 use crate::vocabulary::Vocabulary;
 
 /// Upper bound for the recursive metadata recognizer before it treats a path as
@@ -81,6 +81,7 @@ pub struct BaseParser<S> {
 struct RecognizeOutcome {
     index: usize,
     consumed_eof: bool,
+    diagnostics: Vec<ParserDiagnostic>,
     actions: Vec<ParserAction>,
     nodes: Vec<RecognizedNode>,
 }
@@ -89,6 +90,14 @@ struct RecognizeOutcome {
 enum RecognizedNode {
     Token {
         index: usize,
+    },
+    ErrorToken {
+        index: usize,
+    },
+    MissingToken {
+        token_type: i32,
+        at_index: usize,
+        text: String,
     },
     Rule {
         rule_index: usize,
@@ -99,10 +108,18 @@ enum RecognizedNode {
     },
 }
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct FastRecognizeOutcome {
     index: usize,
     consumed_eof: bool,
+    diagnostics: Vec<ParserDiagnostic>,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct ParserDiagnostic {
+    line: usize,
+    column: usize,
+    message: String,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -161,7 +178,56 @@ fn transition_expected_symbols(transition: &Transition, max_token_type: i32) -> 
     symbols
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// Returns the consuming-token expectations reachable from an ATN state through
+/// epsilon transitions. Recovery diagnostics need this closure so alternatives
+/// and loop exits report the same expectation set ANTLR users see.
+fn state_expected_symbols(atn: &Atn, state_number: usize) -> BTreeSet<i32> {
+    let mut symbols = BTreeSet::new();
+    let mut stack = vec![state_number];
+    let mut visited = BTreeSet::new();
+    while let Some(current) = stack.pop() {
+        if !visited.insert(current) {
+            continue;
+        }
+        let Some(state) = atn.state(current) else {
+            continue;
+        };
+        for transition in &state.transitions {
+            let transition_symbols = transition_expected_symbols(transition, atn.max_token_type());
+            if transition_symbols.is_empty() {
+                if transition.is_epsilon() {
+                    stack.push(transition.target());
+                }
+            } else {
+                symbols.extend(transition_symbols);
+            }
+        }
+    }
+    symbols
+}
+
+/// Carries recovery context through epsilon-only paths. ANTLR reports some
+/// recovery diagnostics at the decision state even when the failed consuming
+/// transition is nested under block or loop epsilon edges.
+fn next_recovery_symbols(atn: &Atn, state: &AtnState, inherited: &BTreeSet<i32>) -> BTreeSet<i32> {
+    let state_symbols = state_expected_symbols(atn, state.state_number);
+    if state.transitions.len() > 1 && !state_symbols.is_empty() {
+        return state_symbols;
+    }
+    inherited.clone()
+}
+
+fn recovery_expected_symbols(
+    atn: &Atn,
+    state_number: usize,
+    inherited: &BTreeSet<i32>,
+) -> BTreeSet<i32> {
+    let mut symbols = state_expected_symbols(atn, state_number);
+    symbols.extend(inherited.iter().copied());
+    symbols
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct RecognizeRequest {
     state_number: usize,
     stop_state: usize,
@@ -171,9 +237,10 @@ struct RecognizeRequest {
     /// `precpred(_ctx, k)` check for generated precedence rules.
     precedence: i32,
     depth: usize,
+    recovery_symbols: BTreeSet<i32>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct RecognizeKey {
     state_number: usize,
     stop_state: usize,
@@ -181,21 +248,44 @@ struct RecognizeKey {
     precedence: i32,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct FastRecognizeRequest {
     state_number: usize,
     stop_state: usize,
     index: usize,
     precedence: i32,
     depth: usize,
+    recovery_symbols: BTreeSet<i32>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct FastRecognizeKey {
     state_number: usize,
     stop_state: usize,
     index: usize,
     precedence: i32,
+}
+
+struct FastRecoveryRequest<'a, 'b> {
+    atn: &'a Atn,
+    transition: &'a Transition,
+    expected_symbols: BTreeSet<i32>,
+    target: usize,
+    request: FastRecognizeRequest,
+    visiting: &'b mut BTreeSet<(usize, usize, usize, i32)>,
+    memo: &'b mut BTreeMap<FastRecognizeKey, Vec<FastRecognizeOutcome>>,
+    expected: &'b mut ExpectedTokens,
+}
+
+struct RecoveryRequest<'a, 'b> {
+    atn: &'a Atn,
+    transition: &'a Transition,
+    expected_symbols: BTreeSet<i32>,
+    target: usize,
+    request: RecognizeRequest,
+    visiting: &'b mut BTreeSet<(usize, usize, usize, i32)>,
+    memo: &'b mut BTreeMap<RecognizeKey, Vec<RecognizeOutcome>>,
+    expected: &'b mut ExpectedTokens,
 }
 
 impl<S> BaseParser<S>
@@ -301,6 +391,7 @@ where
                 index: start_index,
                 precedence: 0,
                 depth: 0,
+                recovery_symbols: BTreeSet::new(),
             },
             &mut visiting,
             &mut memo,
@@ -310,6 +401,7 @@ where
             return Err(self.recognition_error(rule_index, &expected));
         };
 
+        report_parser_diagnostics(&outcome.diagnostics);
         let mut context = ParserRuleContext::new(rule_index, self.state());
         self.input.seek(start_index);
         while self.input.index() < outcome.index {
@@ -366,6 +458,7 @@ where
                 rule_start_index: start_index,
                 precedence: 0,
                 depth: 0,
+                recovery_symbols: BTreeSet::new(),
             },
             &mut visiting,
             &mut memo,
@@ -375,6 +468,7 @@ where
             return Err(self.recognition_error(rule_index, &expected));
         };
 
+        report_parser_diagnostics(&outcome.diagnostics);
         let mut context = ParserRuleContext::new(rule_index, self.state());
         if self.build_parse_trees {
             let nodes = fold_left_recursive_boundaries(outcome.nodes);
@@ -436,14 +530,194 @@ where
 
     /// Formats expected token types using ANTLR's single-token or set syntax.
     fn expected_symbols_display(&self, symbols: &BTreeSet<i32>) -> String {
-        let items = symbols
-            .iter()
-            .map(|symbol| expected_symbol_display(*symbol, self.vocabulary()))
-            .collect::<Vec<_>>();
-        if let [single] = items.as_slice() {
-            return single.clone();
+        expected_symbols_display(symbols, self.vocabulary())
+    }
+
+    /// Returns the single-token deletion repair if the token after `index`
+    /// satisfies the failed consuming transition.
+    fn single_token_deletion(
+        &mut self,
+        transition: &Transition,
+        index: usize,
+        max_token_type: i32,
+        expected_symbols: &BTreeSet<i32>,
+    ) -> Option<(ParserDiagnostic, usize, i32)> {
+        let current_symbol = self.token_type_at(index);
+        if current_symbol == TOKEN_EOF {
+            return None;
         }
-        format!("{{{}}}", items.join(", "))
+        let next_index = self.consume_index(index, current_symbol);
+        if next_index == index {
+            return None;
+        }
+        let next_symbol = self.token_type_at(next_index);
+        if !transition.matches(next_symbol, 1, max_token_type) {
+            return None;
+        }
+        let transition_expected = transition_expected_symbols(transition, max_token_type);
+        let expected_display = self.expected_symbols_display(if expected_symbols.is_empty() {
+            &transition_expected
+        } else {
+            expected_symbols
+        });
+        let current = self.token_at(index);
+        let message = format!(
+            "extraneous input {} expecting {expected_display}",
+            current
+                .as_ref()
+                .map_or_else(|| "'<EOF>'".to_owned(), token_input_display)
+        );
+        Some((
+            diagnostic_for_token(current.as_ref(), message),
+            next_index,
+            next_symbol,
+        ))
+    }
+
+    /// Returns the single-token insertion repair for a failed consuming
+    /// transition. The caller validates the repair by continuing from the
+    /// transition target at the same input index.
+    fn single_token_insertion(
+        &mut self,
+        transition: &Transition,
+        index: usize,
+        max_token_type: i32,
+        expected_symbols: &BTreeSet<i32>,
+        follow_symbols: &BTreeSet<i32>,
+    ) -> Option<(ParserDiagnostic, i32, String)> {
+        let current_symbol = self.token_type_at(index);
+        if current_symbol == TOKEN_EOF || !follow_symbols.contains(&current_symbol) {
+            return None;
+        }
+        let transition_expected = transition_expected_symbols(transition, max_token_type);
+        let token_type = transition_expected.iter().next().copied()?;
+        let expected_display = self.expected_symbols_display(if expected_symbols.is_empty() {
+            &transition_expected
+        } else {
+            expected_symbols
+        });
+        let current = self.token_at(index);
+        let message = format!(
+            "missing {expected_display} at {}",
+            current
+                .as_ref()
+                .map_or_else(|| "'<EOF>'".to_owned(), token_input_display)
+        );
+        let text = format!("<missing {expected_display}>");
+        Some((
+            diagnostic_for_token(current.as_ref(), message),
+            token_type,
+            text,
+        ))
+    }
+
+    /// Explores ANTLR's single-token deletion recovery for the fast recognizer:
+    /// skip the unexpected current token when the following token satisfies the
+    /// transition that failed.
+    fn fast_single_token_deletion_recovery(
+        &mut self,
+        recovery: FastRecoveryRequest<'_, '_>,
+    ) -> Vec<FastRecognizeOutcome> {
+        let FastRecoveryRequest {
+            atn,
+            transition,
+            expected_symbols,
+            target,
+            request,
+            visiting,
+            memo,
+            expected,
+        } = recovery;
+        let FastRecognizeRequest {
+            stop_state,
+            index,
+            precedence,
+            depth,
+            ..
+        } = request;
+        let Some((diagnostic, next_index, next_symbol)) =
+            self.single_token_deletion(transition, index, atn.max_token_type(), &expected_symbols)
+        else {
+            return Vec::new();
+        };
+        let after_next = self.consume_index(next_index, next_symbol);
+        self.recognize_state_fast(
+            atn,
+            FastRecognizeRequest {
+                state_number: target,
+                stop_state,
+                index: after_next,
+                precedence,
+                depth: depth + 1,
+                recovery_symbols: BTreeSet::new(),
+            },
+            visiting,
+            memo,
+            expected,
+        )
+        .into_iter()
+        .map(|mut outcome| {
+            outcome.consumed_eof |= next_symbol == TOKEN_EOF;
+            outcome.diagnostics.insert(0, diagnostic.clone());
+            outcome
+        })
+        .collect()
+    }
+
+    /// Explores ANTLR's single-token insertion recovery for the fast recognizer:
+    /// pretend the expected transition token was present and continue without
+    /// consuming the current token.
+    fn fast_single_token_insertion_recovery(
+        &mut self,
+        recovery: FastRecoveryRequest<'_, '_>,
+    ) -> Vec<FastRecognizeOutcome> {
+        let FastRecoveryRequest {
+            atn,
+            transition,
+            expected_symbols,
+            target,
+            request,
+            visiting,
+            memo,
+            expected,
+        } = recovery;
+        let FastRecognizeRequest {
+            stop_state,
+            index,
+            precedence,
+            depth,
+            ..
+        } = request;
+        let follow_symbols = state_expected_symbols(atn, transition.target());
+        let Some((diagnostic, _token_type, _text)) = self.single_token_insertion(
+            transition,
+            index,
+            atn.max_token_type(),
+            &expected_symbols,
+            &follow_symbols,
+        ) else {
+            return Vec::new();
+        };
+        self.recognize_state_fast(
+            atn,
+            FastRecognizeRequest {
+                state_number: target,
+                stop_state,
+                index,
+                precedence,
+                depth: depth + 1,
+                recovery_symbols: BTreeSet::new(),
+            },
+            visiting,
+            memo,
+            expected,
+        )
+        .into_iter()
+        .map(|mut outcome| {
+            outcome.diagnostics.insert(0, diagnostic.clone());
+            outcome
+        })
+        .collect()
     }
 
     /// Attempts to reach `stop_state` from `state_number` without committing
@@ -462,6 +736,7 @@ where
             index,
             precedence,
             depth,
+            recovery_symbols,
         } = request;
         if depth > RECOGNITION_DEPTH_LIMIT {
             return Vec::new();
@@ -470,6 +745,7 @@ where
             return vec![FastRecognizeOutcome {
                 index,
                 consumed_eof: false,
+                diagnostics: Vec::new(),
             }];
         }
         let key = FastRecognizeKey {
@@ -490,6 +766,7 @@ where
             visiting.remove(&(state_number, stop_state, index, precedence));
             return Vec::new();
         };
+        let epsilon_recovery_symbols = next_recovery_symbols(atn, state, &recovery_symbols);
         let mut outcomes = Vec::new();
         for transition in &state.transitions {
             match transition {
@@ -504,6 +781,7 @@ where
                             index,
                             precedence,
                             depth: depth + 1,
+                            recovery_symbols: epsilon_recovery_symbols.clone(),
                         },
                         visiting,
                         memo,
@@ -523,6 +801,7 @@ where
                                 index,
                                 precedence,
                                 depth: depth + 1,
+                                recovery_symbols: epsilon_recovery_symbols.clone(),
                             },
                             visiting,
                             memo,
@@ -549,6 +828,7 @@ where
                             index,
                             precedence: *rule_precedence,
                             depth: depth + 1,
+                            recovery_symbols: epsilon_recovery_symbols.clone(),
                         },
                         visiting,
                         memo,
@@ -564,6 +844,7 @@ where
                                     index: child.index,
                                     precedence,
                                     depth: depth + 1,
+                                    recovery_symbols: BTreeSet::new(),
                                 },
                                 visiting,
                                 memo,
@@ -572,6 +853,9 @@ where
                             .into_iter()
                             .map(|mut outcome| {
                                 outcome.consumed_eof |= child.consumed_eof;
+                                let mut diagnostics = child.diagnostics.clone();
+                                diagnostics.append(&mut outcome.diagnostics);
+                                outcome.diagnostics = diagnostics;
                                 outcome
                             }),
                         );
@@ -594,6 +878,7 @@ where
                                     index: next_index,
                                     precedence,
                                     depth: depth + 1,
+                                    recovery_symbols: BTreeSet::new(),
                                 },
                                 visiting,
                                 memo,
@@ -606,16 +891,187 @@ where
                             }),
                         );
                     } else {
+                        let expected_symbols =
+                            recovery_expected_symbols(atn, state.state_number, &recovery_symbols);
+                        if expected_symbols.contains(&symbol) {
+                            continue;
+                        }
                         expected.record_transition(index, transition, atn.max_token_type());
+                        outcomes.extend(self.fast_single_token_deletion_recovery(
+                            FastRecoveryRequest {
+                                atn,
+                                transition,
+                                expected_symbols: expected_symbols.clone(),
+                                target: *target,
+                                request: FastRecognizeRequest {
+                                    state_number,
+                                    stop_state,
+                                    index,
+                                    precedence,
+                                    depth,
+                                    recovery_symbols: recovery_symbols.clone(),
+                                },
+                                visiting,
+                                memo,
+                                expected,
+                            },
+                        ));
+                        if !state_is_left_recursive_rule(atn, state) {
+                            outcomes.extend(self.fast_single_token_insertion_recovery(
+                                FastRecoveryRequest {
+                                    atn,
+                                    transition,
+                                    expected_symbols,
+                                    target: *target,
+                                    request: FastRecognizeRequest {
+                                        state_number,
+                                        stop_state,
+                                        index,
+                                        precedence,
+                                        depth,
+                                        recovery_symbols: recovery_symbols.clone(),
+                                    },
+                                    visiting,
+                                    memo,
+                                    expected,
+                                },
+                            ));
+                        }
                     }
                 }
             }
         }
 
         visiting.remove(&(state_number, stop_state, index, precedence));
+        discard_recovered_fast_outcomes_if_clean_path_exists(&mut outcomes);
         dedupe_fast_outcomes(&mut outcomes);
         memo.insert(key, outcomes.clone());
         outcomes
+    }
+
+    /// Explores single-token deletion recovery while preserving the matched
+    /// token and skipped error token in the selected parse tree path.
+    fn single_token_deletion_recovery(
+        &mut self,
+        recovery: RecoveryRequest<'_, '_>,
+    ) -> Vec<RecognizeOutcome> {
+        let RecoveryRequest {
+            atn,
+            transition,
+            expected_symbols,
+            target,
+            request,
+            visiting,
+            memo,
+            expected,
+        } = recovery;
+        let RecognizeRequest {
+            stop_state,
+            index,
+            rule_start_index,
+            precedence,
+            depth,
+            ..
+        } = request;
+        let Some((diagnostic, next_index, next_symbol)) =
+            self.single_token_deletion(transition, index, atn.max_token_type(), &expected_symbols)
+        else {
+            return Vec::new();
+        };
+        let after_next = self.consume_index(next_index, next_symbol);
+        self.recognize_state(
+            atn,
+            RecognizeRequest {
+                state_number: target,
+                stop_state,
+                index: after_next,
+                rule_start_index,
+                precedence,
+                depth: depth + 1,
+                recovery_symbols: BTreeSet::new(),
+            },
+            visiting,
+            memo,
+            expected,
+        )
+        .into_iter()
+        .map(|mut outcome| {
+            outcome.consumed_eof |= next_symbol == TOKEN_EOF;
+            outcome.diagnostics.insert(0, diagnostic.clone());
+            outcome
+                .nodes
+                .insert(0, RecognizedNode::Token { index: next_index });
+            outcome
+                .nodes
+                .insert(0, RecognizedNode::ErrorToken { index });
+            outcome
+        })
+        .collect()
+    }
+
+    /// Explores single-token insertion recovery while adding a conjured
+    /// missing-token error node to the selected parse tree path.
+    fn single_token_insertion_recovery(
+        &mut self,
+        recovery: RecoveryRequest<'_, '_>,
+    ) -> Vec<RecognizeOutcome> {
+        let RecoveryRequest {
+            atn,
+            transition,
+            expected_symbols,
+            target,
+            request,
+            visiting,
+            memo,
+            expected,
+        } = recovery;
+        let RecognizeRequest {
+            stop_state,
+            index,
+            rule_start_index,
+            precedence,
+            depth,
+            ..
+        } = request;
+        let follow_symbols = state_expected_symbols(atn, transition.target());
+        let Some((diagnostic, token_type, text)) = self.single_token_insertion(
+            transition,
+            index,
+            atn.max_token_type(),
+            &expected_symbols,
+            &follow_symbols,
+        ) else {
+            return Vec::new();
+        };
+        self.recognize_state(
+            atn,
+            RecognizeRequest {
+                state_number: target,
+                stop_state,
+                index,
+                rule_start_index,
+                precedence,
+                depth: depth + 1,
+                recovery_symbols: BTreeSet::new(),
+            },
+            visiting,
+            memo,
+            expected,
+        )
+        .into_iter()
+        .map(|mut outcome| {
+            outcome.diagnostics.insert(0, diagnostic.clone());
+            outcome.nodes.insert(
+                0,
+                RecognizedNode::MissingToken {
+                    token_type,
+                    at_index: index,
+                    text: text.clone(),
+                },
+            );
+            outcome
+        })
+        .collect()
     }
 
     /// Attempts to reach `stop_state` and carries semantic actions for the
@@ -635,6 +1091,7 @@ where
             rule_start_index,
             precedence,
             depth,
+            recovery_symbols,
         } = request;
         if depth > RECOGNITION_DEPTH_LIMIT {
             return Vec::new();
@@ -643,6 +1100,7 @@ where
             return vec![RecognizeOutcome {
                 index,
                 consumed_eof: false,
+                diagnostics: Vec::new(),
                 actions: Vec::new(),
                 nodes: Vec::new(),
             }];
@@ -665,6 +1123,7 @@ where
             visiting.remove(&(state_number, stop_state, index, precedence));
             return Vec::new();
         };
+        let epsilon_recovery_symbols = next_recovery_symbols(atn, state, &recovery_symbols);
         let mut outcomes = Vec::new();
         for transition in &state.transitions {
             match transition {
@@ -691,6 +1150,7 @@ where
                                 rule_start_index,
                                 precedence,
                                 depth: depth + 1,
+                                recovery_symbols: epsilon_recovery_symbols.clone(),
                             },
                             visiting,
                             memo,
@@ -725,6 +1185,7 @@ where
                                 rule_start_index,
                                 precedence,
                                 depth: depth + 1,
+                                recovery_symbols: epsilon_recovery_symbols.clone(),
                             },
                             visiting,
                             memo,
@@ -752,6 +1213,7 @@ where
                             rule_start_index: index,
                             precedence: *rule_precedence,
                             depth: depth + 1,
+                            recovery_symbols: epsilon_recovery_symbols.clone(),
                         },
                         visiting,
                         memo,
@@ -772,6 +1234,7 @@ where
                                     rule_start_index,
                                     precedence,
                                     depth: depth + 1,
+                                    recovery_symbols: BTreeSet::new(),
                                 },
                                 visiting,
                                 memo,
@@ -780,6 +1243,9 @@ where
                             .into_iter()
                             .map(|mut outcome| {
                                 outcome.consumed_eof |= child.consumed_eof;
+                                let mut diagnostics = child.diagnostics.clone();
+                                diagnostics.append(&mut outcome.diagnostics);
+                                outcome.diagnostics = diagnostics;
                                 let mut actions = child.actions.clone();
                                 actions.append(&mut outcome.actions);
                                 outcome.actions = actions;
@@ -807,6 +1273,7 @@ where
                                     rule_start_index,
                                     precedence,
                                     depth: depth + 1,
+                                    recovery_symbols: BTreeSet::new(),
                                 },
                                 visiting,
                                 memo,
@@ -820,13 +1287,59 @@ where
                             }),
                         );
                     } else {
+                        let expected_symbols =
+                            recovery_expected_symbols(atn, state.state_number, &recovery_symbols);
+                        if expected_symbols.contains(&symbol) {
+                            continue;
+                        }
                         expected.record_transition(index, transition, atn.max_token_type());
+                        outcomes.extend(self.single_token_deletion_recovery(RecoveryRequest {
+                            atn,
+                            transition,
+                            expected_symbols: expected_symbols.clone(),
+                            target: *target,
+                            request: RecognizeRequest {
+                                state_number,
+                                stop_state,
+                                index,
+                                rule_start_index,
+                                precedence,
+                                depth,
+                                recovery_symbols: recovery_symbols.clone(),
+                            },
+                            visiting,
+                            memo,
+                            expected,
+                        }));
+                        if !state_is_left_recursive_rule(atn, state) {
+                            outcomes.extend(self.single_token_insertion_recovery(
+                                RecoveryRequest {
+                                    atn,
+                                    transition,
+                                    expected_symbols,
+                                    target: *target,
+                                    request: RecognizeRequest {
+                                        state_number,
+                                        stop_state,
+                                        index,
+                                        rule_start_index,
+                                        precedence,
+                                        depth,
+                                        recovery_symbols: recovery_symbols.clone(),
+                                    },
+                                    visiting,
+                                    memo,
+                                    expected,
+                                },
+                            ));
+                        }
                     }
                 }
             }
         }
 
         visiting.remove(&(state_number, stop_state, index, precedence));
+        discard_recovered_outcomes_if_clean_path_exists(&mut outcomes);
         dedupe_outcomes(&mut outcomes);
         memo.insert(key, outcomes.clone());
         outcomes
@@ -836,6 +1349,11 @@ where
     fn token_type_at(&mut self, index: usize) -> i32 {
         self.input.seek(index);
         self.input.la_token(1)
+    }
+
+    /// Clones the visible token at an absolute token-stream index.
+    fn token_at(&mut self, index: usize) -> Option<CommonToken> {
+        self.input.get(index).cloned()
     }
 
     /// Returns the token-stream index after consuming `symbol` at `index`.
@@ -869,6 +1387,30 @@ where
                             message: format!("missing token at index {index}"),
                         })?;
                 Ok(ParseTree::Terminal(TerminalNode::new(token)))
+            }
+            RecognizedNode::ErrorToken { index } => {
+                let token =
+                    self.input
+                        .get(*index)
+                        .cloned()
+                        .ok_or_else(|| AntlrError::ParserError {
+                            line: 0,
+                            column: 0,
+                            message: format!("missing error token at index {index}"),
+                        })?;
+                Ok(ParseTree::Error(ErrorNode::new(token)))
+            }
+            RecognizedNode::MissingToken {
+                token_type,
+                at_index,
+                text,
+            } => {
+                let current = self.token_at(*at_index);
+                let token = CommonToken::new(*token_type).with_text(text).with_position(
+                    current.as_ref().map(Token::line).unwrap_or_default(),
+                    current.as_ref().map(Token::column).unwrap_or_default(),
+                );
+                Ok(ParseTree::Error(ErrorNode::new(token)))
             }
             RecognizedNode::Rule {
                 rule_index,
@@ -925,11 +1467,54 @@ fn token_input_display(token: &impl Token) -> String {
     format!("'{}'", token.text().unwrap_or("<EOF>"))
 }
 
+fn diagnostic_for_token(token: Option<&impl Token>, message: String) -> ParserDiagnostic {
+    ParserDiagnostic {
+        line: token.map(Token::line).unwrap_or_default(),
+        column: token.map(Token::column).unwrap_or_default(),
+        message,
+    }
+}
+
+/// Emits parser diagnostics for the selected recovered parse path.
+#[allow(clippy::print_stderr)]
+fn report_parser_diagnostics(diagnostics: &[ParserDiagnostic]) {
+    for diagnostic in diagnostics {
+        eprintln!(
+            "line {}:{} {}",
+            diagnostic.line, diagnostic.column, diagnostic.message
+        );
+    }
+}
+
+fn expected_symbols_display(symbols: &BTreeSet<i32>, vocabulary: &Vocabulary) -> String {
+    let items = symbols
+        .iter()
+        .map(|symbol| expected_symbol_display(*symbol, vocabulary))
+        .collect::<Vec<_>>();
+    if let [single] = items.as_slice() {
+        return single.clone();
+    }
+    format!("{{{}}}", items.join(", "))
+}
+
 fn expected_symbol_display(symbol: i32, vocabulary: &Vocabulary) -> String {
     if symbol == TOKEN_EOF {
         return "<EOF>".to_owned();
     }
     vocabulary.display_name(symbol)
+}
+
+/// Returns whether `state` belongs to an ANTLR-transformed left-recursive rule.
+/// Inline insertion in those precedence loops can synthesize a missing operand
+/// before an operator and then block the legitimate loop-exit path.
+fn state_is_left_recursive_rule(atn: &Atn, state: &AtnState) -> bool {
+    let Some(rule_index) = state.rule_index else {
+        return false;
+    };
+    atn.rule_to_start_state()
+        .get(rule_index)
+        .and_then(|state_number| atn.state(*state_number))
+        .is_some_and(|rule_start| rule_start.left_recursive_rule)
 }
 
 /// Chooses the outermost parse result that consumed the most input.
@@ -940,7 +1525,17 @@ fn expected_symbol_display(symbol: i32, vocabulary: &Vocabulary) -> String {
 fn select_best_fast_outcome(
     outcomes: impl Iterator<Item = FastRecognizeOutcome>,
 ) -> Option<FastRecognizeOutcome> {
-    outcomes.max_by_key(|outcome| (outcome.index, outcome.consumed_eof))
+    outcomes.reduce(|best, outcome| {
+        if outcome_is_better(
+            (outcome.index, outcome.consumed_eof),
+            outcome.diagnostics.len(),
+            (best.index, best.consumed_eof),
+            best.diagnostics.len(),
+        ) {
+            return outcome;
+        }
+        best
+    })
 }
 
 fn select_best_outcome(
@@ -953,15 +1548,48 @@ fn select_best_outcome(
     outcomes.into_iter().reduce(|best, outcome| {
         let outcome_position = (outcome.index, outcome.consumed_eof);
         let best_position = (best.index, best.consumed_eof);
-        if outcome_position > best_position
-            || (!prefer_first_tie
-                && outcome_position == best_position
-                && outcome.actions.len() >= best.actions.len())
+        if outcome_is_better(
+            outcome_position,
+            outcome.diagnostics.len(),
+            best_position,
+            best.diagnostics.len(),
+        ) || (!prefer_first_tie
+            && outcome_position == best_position
+            && outcome.diagnostics.len() == best.diagnostics.len()
+            && outcome.actions.len() >= best.actions.len())
         {
             return outcome;
         }
         best
     })
+}
+
+fn outcome_is_better(
+    outcome_position: (usize, bool),
+    outcome_diagnostics: usize,
+    best_position: (usize, bool),
+    best_diagnostics: usize,
+) -> bool {
+    outcome_position > best_position
+        || (outcome_position == best_position && outcome_diagnostics < best_diagnostics)
+}
+
+fn discard_recovered_fast_outcomes_if_clean_path_exists(outcomes: &mut Vec<FastRecognizeOutcome>) {
+    if outcomes
+        .iter()
+        .any(|outcome| outcome.diagnostics.is_empty())
+    {
+        outcomes.retain(|outcome| outcome.diagnostics.is_empty());
+    }
+}
+
+fn discard_recovered_outcomes_if_clean_path_exists(outcomes: &mut Vec<RecognizeOutcome>) {
+    if outcomes
+        .iter()
+        .any(|outcome| outcome.diagnostics.is_empty())
+    {
+        outcomes.retain(|outcome| outcome.diagnostics.is_empty());
+    }
 }
 
 /// Reports whether a candidate contains recursive tree structure where ANTLR's
@@ -972,7 +1600,9 @@ fn nodes_need_stable_tie(nodes: &[RecognizedNode]) -> bool {
 
 fn node_needs_stable_tie(node: &RecognizedNode, ancestors: &[usize]) -> bool {
     match node {
-        RecognizedNode::Token { .. } => false,
+        RecognizedNode::Token { .. }
+        | RecognizedNode::ErrorToken { .. }
+        | RecognizedNode::MissingToken { .. } => false,
         RecognizedNode::LeftRecursiveBoundary { .. } => true,
         RecognizedNode::Rule {
             rule_index,
@@ -1151,6 +1781,7 @@ mod tests {
         let first = RecognizeOutcome {
             index: 1,
             consumed_eof: false,
+            diagnostics: Vec::new(),
             actions: vec![ParserAction::new(1, 0, 0, None)],
             nodes: vec![RecognizedNode::Token { index: 0 }],
         };
@@ -1169,6 +1800,7 @@ mod tests {
         let first = RecognizeOutcome {
             index: 1,
             consumed_eof: false,
+            diagnostics: Vec::new(),
             actions: vec![ParserAction::new(1, 0, 0, None)],
             nodes: vec![RecognizedNode::Token { index: 0 }],
         };
@@ -1197,12 +1829,14 @@ mod tests {
         let first = RecognizeOutcome {
             index: 1,
             consumed_eof: false,
+            diagnostics: Vec::new(),
             actions: vec![ParserAction::new(1, 0, 0, None)],
             nodes: recursive_nodes.clone(),
         };
         let second = RecognizeOutcome {
             index: 1,
             consumed_eof: false,
+            diagnostics: Vec::new(),
             actions: vec![ParserAction::new(2, 0, 0, None)],
             nodes: recursive_nodes,
         };

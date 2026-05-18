@@ -442,12 +442,23 @@ fn unsupported_reason(descriptor: &Descriptor) -> Option<&'static str> {
     None
 }
 
-/// Admits only parser-error descriptors covered by the current farthest-token
-/// mismatch diagnostics, leaving recovery cases skipped.
+/// Admits only parser-error descriptors covered by the current mismatch and
+/// single-token recovery diagnostics, leaving mixed lexer/parser diagnostic
+/// ordering cases skipped.
 fn parser_error_diagnostics_supported(descriptor: &Descriptor) -> bool {
     matches!(
         descriptor.name.as_str(),
-        "InvalidEmptyInput" | "TokenMismatch" | "TokenMismatch2" | "TokenMismatch3"
+        "InvalidEmptyInput"
+            | "SingleSetInsertion"
+            | "SingleTokenDeletion"
+            | "SingleTokenDeletionBeforeAlt"
+            | "SingleTokenDeletionBeforePredict"
+            | "SingleTokenDeletionDuringLoop"
+            | "SingleTokenDeletionExpectingSet"
+            | "SingleTokenInsertion"
+            | "TokenMismatch"
+            | "TokenMismatch2"
+            | "TokenMismatch3"
     )
 }
 

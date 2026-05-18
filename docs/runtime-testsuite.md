@@ -53,6 +53,8 @@ Supported now:
 - grouped lexer recovery diagnostics,
 - farthest-token parser mismatch diagnostics for supported non-recovery
   failures,
+- parser single-token insertion/deletion recovery diagnostics for supported
+  descriptors,
 - parser precedence predicates in metadata-driven recognition,
 - lexer and parser target-template actions for the currently supported stdout
   helpers,
@@ -80,7 +82,8 @@ Not wired yet:
 - composite grammars,
 - target-template semantic actions beyond the currently supported stdout helpers
   and no-op compile checks,
-- parser error recovery diagnostics beyond farthest-token mismatch reporting,
+- parser error recovery diagnostics beyond the currently supported mismatch and
+  single-token recovery cases,
 - runtime diagnostic/profile/DFA flags.
 
 The harness reports unsupported descriptors as skipped and treats output mismatches
@@ -88,13 +91,13 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `236 passed, 0 failed, 121 skipped, 236 run`
+- full descriptor sweep: `243 passed, 0 failed, 114 skipped, 243 run`
 - `LexerExec`: `41 passed, 0 failed, 1 skipped, 41 run`
 - `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
 - `LeftRecursion`: `81 passed, 0 failed, 17 skipped, 81 run`
 - `ParseTrees`: `5 passed, 0 failed, 5 skipped, 5 run`
 - `ParserExec`: `43 passed, 0 failed, 7 skipped, 43 run`
-- `ParserErrors`: `10 passed, 0 failed, 24 skipped, 10 run`
+- `ParserErrors`: `17 passed, 0 failed, 17 skipped, 17 run`
 - `Performance`: `7 passed, 0 failed, 0 skipped, 7 run`
 - `SemPredEvalLexer`: `1 passed, 0 failed, 7 skipped, 1 run`
 - `SemPredEvalParser`: `7 passed, 0 failed, 19 skipped, 7 run`
