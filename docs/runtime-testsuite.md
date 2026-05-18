@@ -62,6 +62,8 @@ Supported now:
 - parser token-display actions such as `Append(..., "$label")` and
   `Append(..., "$rule.stop")` for recovered-token descriptors,
 - parser rule-level `@after` actions for the currently supported stdout helpers,
+- parser `$text` action intervals that stop at the previous visible token,
+  including the non-greedy if/else binding descriptors,
 - parser rule-level `@init {<GetExpectedTokenNames():writeln()>}` actions,
 - nested parser tree construction for action-bearing rules and direct
   `ToStringTree("$ctx")` stdout actions,
@@ -101,12 +103,12 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `251 passed, 0 failed, 106 skipped, 251 run`
+- full descriptor sweep: `253 passed, 0 failed, 104 skipped, 253 run`
 - `LexerExec`: `42 passed, 0 failed, 0 skipped, 42 run`
 - `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
 - `LeftRecursion`: `81 passed, 0 failed, 17 skipped, 81 run`
 - `ParseTrees`: `6 passed, 0 failed, 4 skipped, 6 run`
-- `ParserExec`: `43 passed, 0 failed, 7 skipped, 43 run`
+- `ParserExec`: `45 passed, 0 failed, 5 skipped, 45 run`
 - `ParserErrors`: `22 passed, 0 failed, 12 skipped, 22 run`
 - `Performance`: `7 passed, 0 failed, 0 skipped, 7 run`
 - `SemPredEvalLexer`: `2 passed, 0 failed, 6 skipped, 2 run`

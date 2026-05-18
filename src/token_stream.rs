@@ -146,6 +146,21 @@ where
         }
         None
     }
+
+    /// Finds the previous buffered token visible to this stream before
+    /// `index`.
+    ///
+    /// Parser rule intervals and `$text` actions are defined in terms of
+    /// visible tokens, but their rendered source text still includes hidden
+    /// tokens between the visible start and stop. Returning the previous token
+    /// on the stream channel avoids accidentally using trailing hidden
+    /// whitespace as the stop token.
+    pub fn previous_visible_token_index(&mut self, index: usize) -> Option<usize> {
+        if index > 0 {
+            self.sync(index - 1);
+        }
+        self.previous_token_on_channel(index, self.channel)
+    }
 }
 
 impl<S> IntStream for CommonTokenStream<S>

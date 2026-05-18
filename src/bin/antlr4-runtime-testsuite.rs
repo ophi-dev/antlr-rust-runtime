@@ -488,12 +488,7 @@ fn target_templates_supported(descriptor: &Descriptor) -> bool {
     }
     if matches!(
         descriptor.name.as_str(),
-        "IfIfElseGreedyBinding1"
-            | "IfIfElseGreedyBinding2"
-            | "IfIfElseNonGreedyBinding1"
-            | "IfIfElseNonGreedyBinding2"
-            | "Order"
-            | "RewindBeforePredEval"
+        "IfIfElseGreedyBinding1" | "IfIfElseGreedyBinding2" | "Order" | "RewindBeforePredEval"
     ) {
         return false;
     }

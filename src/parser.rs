@@ -284,6 +284,9 @@ struct RecognizeKey {
     state_number: usize,
     stop_state: usize,
     index: usize,
+    rule_start_index: usize,
+    rule_alt_number: usize,
+    track_alt_numbers: bool,
     precedence: i32,
 }
 
@@ -322,7 +325,7 @@ struct RecoveryRequest<'a, 'b> {
     expected_symbols: BTreeSet<i32>,
     target: usize,
     request: RecognizeRequest<'a>,
-    visiting: &'b mut BTreeSet<(usize, usize, usize, i32)>,
+    visiting: &'b mut BTreeSet<(usize, usize, usize, usize, i32)>,
     memo: &'b mut BTreeMap<RecognizeKey, Vec<RecognizeOutcome>>,
     expected: &'b mut ExpectedTokens,
 }
@@ -445,9 +448,8 @@ where
         if let Some(token) = self.token_at(start_index) {
             context.set_start(token);
         }
-        if let Some(token) = outcome
-            .index
-            .checked_sub(1)
+        if let Some(token) = self
+            .previous_token_index(outcome.index)
             .and_then(|index| self.token_at(index))
         {
             context.set_stop(token);
@@ -567,9 +569,8 @@ where
         if let Some(token) = self.token_at(start_index) {
             context.set_start(token);
         }
-        if let Some(token) = outcome
-            .index
-            .checked_sub(1)
+        if let Some(token) = self
+            .previous_token_index(outcome.index)
             .and_then(|index| self.token_at(index))
         {
             context.set_stop(token);
@@ -1199,7 +1200,7 @@ where
         &mut self,
         atn: &Atn,
         request: RecognizeRequest<'_>,
-        visiting: &mut BTreeSet<(usize, usize, usize, i32)>,
+        visiting: &mut BTreeSet<(usize, usize, usize, usize, i32)>,
         memo: &mut BTreeMap<RecognizeKey, Vec<RecognizeOutcome>>,
         expected: &mut ExpectedTokens,
     ) -> Vec<RecognizeOutcome> {
@@ -1232,18 +1233,28 @@ where
             state_number,
             stop_state,
             index,
+            rule_start_index,
+            rule_alt_number,
+            track_alt_numbers,
             precedence,
         };
         if let Some(outcomes) = memo.get(&key) {
             return outcomes.clone();
         }
 
-        if !visiting.insert((state_number, stop_state, index, precedence)) {
+        let visit_key = (
+            state_number,
+            stop_state,
+            index,
+            rule_start_index,
+            precedence,
+        );
+        if !visiting.insert(visit_key) {
             return Vec::new();
         }
 
         let Some(state) = atn.state(state_number) else {
-            visiting.remove(&(state_number, stop_state, index, precedence));
+            visiting.remove(&visit_key);
             return Vec::new();
         };
         let epsilon_recovery_symbols = next_recovery_symbols(atn, state, &recovery_symbols);
@@ -1261,7 +1272,7 @@ where
                             state_number,
                             *rule_index,
                             rule_start_index,
-                            index.checked_sub(1),
+                            self.previous_token_index(index),
                         )),
                         _ => None,
                     };
@@ -1358,7 +1369,7 @@ where
                             rule_index: *rule_index,
                             alt_number: child.alt_number,
                             start_index: index,
-                            stop_index: child.index.checked_sub(1),
+                            stop_index: self.previous_token_index(child.index),
                             children: fold_left_recursive_boundaries(child.nodes.clone()),
                         };
                         outcomes.extend(
@@ -1497,7 +1508,7 @@ where
             }
         }
 
-        visiting.remove(&(state_number, stop_state, index, precedence));
+        visiting.remove(&visit_key);
         discard_recovered_outcomes_if_clean_path_exists(&mut outcomes);
         dedupe_outcomes(&mut outcomes);
         memo.insert(key, outcomes.clone());
@@ -1513,6 +1524,16 @@ where
     /// Clones the visible token at an absolute token-stream index.
     fn token_at(&mut self, index: usize) -> Option<CommonToken> {
         self.input.get(index).cloned()
+    }
+
+    /// Finds the previous token visible to the parser before `index`.
+    ///
+    /// The token stream cursor skips hidden-channel tokens, so subtracting one
+    /// from a visible-token index can point at whitespace. Parser intervals use
+    /// this helper to stop at the previous visible token while preserving hidden
+    /// text inside the rendered interval.
+    fn previous_token_index(&mut self, index: usize) -> Option<usize> {
+        self.input.previous_visible_token_index(index)
     }
 
     /// Returns the token-stream index after consuming `symbol` at `index`.
