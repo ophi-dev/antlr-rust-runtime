@@ -378,50 +378,60 @@ fn render_parser(
     let mut rule_methods = String::new();
     for (index, rule) in data.rule_names.iter().enumerate() {
         let after_action = after_actions.get(index).and_then(Option::as_ref);
+        let uses_after_interval = after_action.is_some_and(ActionTemplate::uses_rule_interval);
+        let needs_slow_path =
+            !actions.is_empty() || after_action.is_some_and(ActionTemplate::needs_nested_tree);
         writeln!(
             rule_methods,
             "    pub fn {}(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{",
             rust_function_name(rule)
         )
         .expect("writing to a string cannot fail");
-        if after_action.is_some() {
+        if uses_after_interval {
             writeln!(
                 rule_methods,
                 "        let start_index = antlr4_runtime::IntStream::index(self.base.input());"
             )
             .expect("writing to a string cannot fail");
         }
-        if actions.is_empty() && after_action.is_none() {
+        if !needs_slow_path && after_action.is_none() {
             writeln!(
                 rule_methods,
                 "        self.base.parse_atn_rule(atn(), {index})"
             )
             .expect("writing to a string cannot fail");
         } else {
-            if actions.is_empty() {
-                writeln!(
-                    rule_methods,
-                    "        let tree = self.base.parse_atn_rule(atn(), {index})?;"
-                )
-                .expect("writing to a string cannot fail");
-            } else {
+            if needs_slow_path {
                 writeln!(
                     rule_methods,
                     "        let (tree, actions) = self.base.parse_atn_rule_with_actions(atn(), {index})?;"
                 )
                 .expect("writing to a string cannot fail");
+                if actions.is_empty() {
+                    writeln!(rule_methods, "        let _ = actions;")
+                        .expect("writing to a string cannot fail");
+                } else {
+                    writeln!(
+                        rule_methods,
+                        "        for action in actions {{ self.run_action(action, &tree); }}"
+                    )
+                    .expect("writing to a string cannot fail");
+                }
+            } else {
                 writeln!(
                     rule_methods,
-                    "        for action in actions {{ self.run_action(action, &tree); }}"
+                    "        let tree = self.base.parse_atn_rule(atn(), {index})?;"
                 )
                 .expect("writing to a string cannot fail");
             }
             if let Some(template) = after_action {
-                writeln!(
-                    rule_methods,
-                    "        let stop_index = antlr4_runtime::IntStream::index(self.base.input()).checked_sub(1);"
-                )
-                .expect("writing to a string cannot fail");
+                if uses_after_interval {
+                    writeln!(
+                        rule_methods,
+                        "        let stop_index = antlr4_runtime::IntStream::index(self.base.input()).checked_sub(1);"
+                    )
+                    .expect("writing to a string cannot fail");
+                }
                 writeln!(
                     rule_methods,
                     "        {}",
@@ -532,6 +542,7 @@ enum ActionTemplate {
         newline: bool,
     },
     StringTree {
+        target: StringTreeTarget,
         newline: bool,
     },
     TokenText {
@@ -544,10 +555,34 @@ enum ActionTemplate {
     },
 }
 
+impl ActionTemplate {
+    /// Reports whether an `@after` action needs the rule's input interval
+    /// captured before and after parsing.
+    const fn uses_rule_interval(&self) -> bool {
+        matches!(
+            self,
+            Self::Text { .. } | Self::TextWithPrefix { .. } | Self::TokenText { .. }
+        )
+    }
+
+    /// Reports whether rendering the action requires a nested parse tree
+    /// instead of the faster flat rule tree.
+    const fn needs_nested_tree(&self) -> bool {
+        matches!(self, Self::StringTree { .. })
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum TokenTextSource {
     RuleStart,
     ActionStop,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum StringTreeTarget {
+    Current,
+    Label(String),
+    Rule(usize),
 }
 
 /// Pairs supported lexer target-template actions with serialized custom-action
@@ -632,7 +667,12 @@ fn parser_after_action_templates(
                 format!("unsupported @after target action template <{}>", block.body),
             ));
         };
-        actions[rule_index] = Some(template);
+        actions[rule_index] = Some(resolve_after_action_template(
+            template,
+            grammar_source,
+            block.open_brace,
+            data,
+        )?);
     }
     Ok(actions)
 }
@@ -645,7 +685,10 @@ fn extract_supported_action_templates(grammar_source: &str) -> io::Result<Vec<Ac
     let mut offset = 0;
     while let Some(block) = next_template_block(grammar_source, offset) {
         offset = block.after_brace;
-        if block.predicate || is_after_action(grammar_source, block.open_brace) {
+        if block.predicate
+            || is_after_action(grammar_source, block.open_brace)
+            || is_init_action(grammar_source, block.open_brace)
+        {
             continue;
         }
         let Some(template) = parse_action_template(block.body) else {
@@ -708,9 +751,17 @@ fn skip_ascii_whitespace(source: &str, mut index: usize) -> usize {
 }
 
 fn is_after_action(source: &str, open_brace: usize) -> bool {
+    is_rule_named_action(source, open_brace, "@after")
+}
+
+fn is_init_action(source: &str, open_brace: usize) -> bool {
+    is_rule_named_action(source, open_brace, "@init")
+}
+
+fn is_rule_named_action(source: &str, open_brace: usize, marker: &str) -> bool {
     let prefix = &source[..open_brace];
     let statement_start = prefix.rfind(';').map_or(0, |index| index + 1);
-    prefix[statement_start..].contains("@after")
+    prefix[statement_start..].trim_end().ends_with(marker)
 }
 
 fn after_action_rule_name(source: &str, open_brace: usize) -> Option<&str> {
@@ -719,8 +770,66 @@ fn after_action_rule_name(source: &str, open_brace: usize) -> Option<&str> {
     prefix[statement_start..]
         .split("@after")
         .next()?
-        .split_whitespace()
-        .last()
+        .trim_start()
+        .split(|ch: char| !(ch == '_' || ch.is_ascii_alphanumeric()))
+        .next()
+        .filter(|name| !name.is_empty())
+}
+
+/// Resolves `$label.ctx` in a rule-level `@after` action to the referenced
+/// rule index so generated code does not need to preserve source-level labels.
+fn resolve_after_action_template(
+    template: ActionTemplate,
+    source: &str,
+    open_brace: usize,
+    data: &InterpData,
+) -> io::Result<ActionTemplate> {
+    let ActionTemplate::StringTree {
+        target: StringTreeTarget::Label(label),
+        newline,
+    } = template
+    else {
+        return Ok(template);
+    };
+    let Some(rule_name) = labeled_rule_name(source, open_brace, &label) else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("could not resolve label {label} for @after ToStringTree action"),
+        ));
+    };
+    let Some(rule_index) = data.rule_names.iter().position(|name| name == rule_name) else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("label {label} references unknown rule {rule_name}"),
+        ));
+    };
+    Ok(ActionTemplate::StringTree {
+        target: StringTreeTarget::Rule(rule_index),
+        newline,
+    })
+}
+
+/// Finds the rule name on the right side of `label=ruleName` inside the rule
+/// that owns an `@after` action block.
+fn labeled_rule_name<'a>(source: &'a str, open_brace: usize, label: &str) -> Option<&'a str> {
+    let statement_start = source[..open_brace].rfind(';').map_or(0, |index| index + 1);
+    let statement_end = source[open_brace..]
+        .find(';')
+        .map_or(source.len(), |index| open_brace + index);
+    let rule = &source[statement_start..statement_end];
+    let assignment = format!("{label}=");
+    let after_label = rule.split(&assignment).nth(1)?;
+    let mut chars = after_label.trim_start().chars();
+    let mut end = 0;
+    for ch in chars.by_ref() {
+        if ch == '_' || ch.is_ascii_alphanumeric() {
+            end += ch.len_utf8();
+        } else {
+            break;
+        }
+    }
+    let name = after_label.trim_start().get(..end)?;
+    (!name.is_empty()).then_some(name)
 }
 
 /// Converts the subset of upstream `StringTemplate` actions the Rust generator
@@ -732,12 +841,41 @@ fn parse_action_template(body: &str) -> Option<ActionTemplate> {
             Some(ActionTemplate::Text { newline: true })
         }
         r#"write("$text")"# | "Text():write()" => Some(ActionTemplate::Text { newline: false }),
-        r#"ToStringTree("$ctx"):writeln()"# => Some(ActionTemplate::StringTree { newline: true }),
-        r#"ToStringTree("$ctx"):write()"# => Some(ActionTemplate::StringTree { newline: false }),
+        r#"ToStringTree("$ctx"):writeln()"# => Some(ActionTemplate::StringTree {
+            target: StringTreeTarget::Current,
+            newline: true,
+        }),
+        r#"ToStringTree("$ctx"):write()"# => Some(ActionTemplate::StringTree {
+            target: StringTreeTarget::Current,
+            newline: false,
+        }),
         _ => parse_plus_text(body)
+            .or_else(|| parse_string_tree(body))
             .or_else(|| parse_token_text(body))
             .or_else(|| parse_write_literal(body)),
     }
+}
+
+/// Parses `ToStringTree("$label.ctx")` target templates into a label-bearing
+/// tree action that can later be resolved against the owning rule.
+fn parse_string_tree(body: &str) -> Option<ActionTemplate> {
+    let (newline, argument) = if let Some(argument) = body
+        .strip_prefix("ToStringTree(")
+        .and_then(|value| value.strip_suffix("):writeln()"))
+    {
+        (true, argument)
+    } else {
+        let argument = body
+            .strip_prefix("ToStringTree(")
+            .and_then(|value| value.strip_suffix("):write()"))?;
+        (false, argument)
+    };
+    let value = parse_template_string(argument)?;
+    let label = value.strip_prefix('$')?.strip_suffix(".ctx")?;
+    Some(ActionTemplate::StringTree {
+        target: StringTreeTarget::Label(label.to_owned()),
+        newline,
+    })
 }
 
 fn parse_plus_text(body: &str) -> Option<ActionTemplate> {
@@ -948,11 +1086,9 @@ fn render_action_statement(template: &ActionTemplate) -> String {
                 ),
             }
         }
-        ActionTemplate::StringTree { newline } => {
+        ActionTemplate::StringTree { target, newline } => {
             let write = if *newline { "println!" } else { "print!" };
-            format!(
-                "{write}(\"{{}}\", _tree.to_string_tree(&METADATA.rule_names().iter().map(|name| (*name).to_owned()).collect::<Vec<_>>()));"
-            )
+            render_string_tree_write(write, "_tree", target)
         }
         ActionTemplate::Literal { value, newline } => {
             let write = if *newline { "println!" } else { "print!" };
@@ -988,16 +1124,30 @@ fn render_parser_after_action_statement(template: &ActionTemplate) -> String {
                 ),
             }
         }
-        ActionTemplate::StringTree { newline } => {
+        ActionTemplate::StringTree { target, newline } => {
             let write = if *newline { "println!" } else { "print!" };
-            format!(
-                "{write}(\"{{}}\", tree.to_string_tree(&METADATA.rule_names().iter().map(|name| (*name).to_owned()).collect::<Vec<_>>()));"
-            )
+            render_string_tree_write(write, "tree", target)
         }
         ActionTemplate::Literal { value, newline } => {
             let write = if *newline { "println!" } else { "print!" };
             format!("{write}(\"{}\");", rust_string(value))
         }
+    }
+}
+
+/// Emits the generated print statement for either the current parse tree or a
+/// selected child rule tree found inside it.
+fn render_string_tree_write(write: &str, tree_expr: &str, target: &StringTreeTarget) -> String {
+    let rule_names =
+        "METADATA.rule_names().iter().map(|name| (*name).to_owned()).collect::<Vec<_>>()";
+    match target {
+        StringTreeTarget::Current => {
+            format!("{write}(\"{{}}\", {tree_expr}.to_string_tree(&{rule_names}));")
+        }
+        StringTreeTarget::Rule(rule_index) => format!(
+            "let text = {tree_expr}.first_rule({rule_index}).map_or_else(String::new, |node| node.to_string_tree(&{rule_names})); {write}(\"{{}}\", text);"
+        ),
+        StringTreeTarget::Label(_) => String::new(),
     }
 }
 

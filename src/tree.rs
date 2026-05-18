@@ -24,6 +24,22 @@ impl ParseTree {
             Self::Error(node) => node.text(),
         }
     }
+
+    /// Finds the first rule node with `rule_index` in a depth-first walk.
+    pub fn first_rule(&self, rule_index: usize) -> Option<&Self> {
+        match self {
+            Self::Rule(rule) => {
+                if rule.context().rule_index() == rule_index {
+                    return Some(self);
+                }
+                rule.context()
+                    .children()
+                    .iter()
+                    .find_map(|child| child.first_rule(rule_index))
+            }
+            Self::Terminal(_) | Self::Error(_) => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -229,5 +245,24 @@ mod tests {
         )));
         let tree = ParseTree::Rule(RuleNode::new(ctx));
         assert_eq!(tree.to_string_tree(&["expr".to_owned()]), "(expr x)");
+    }
+
+    #[test]
+    fn finds_first_rule_depth_first() {
+        let mut nested = ParserRuleContext::new(1, -1);
+        nested.add_child(ParseTree::Terminal(TerminalNode::new(
+            CommonToken::new(1).with_text("x"),
+        )));
+
+        let mut root = ParserRuleContext::new(0, -1);
+        root.add_child(ParseTree::Rule(RuleNode::new(nested)));
+        let tree = ParseTree::Rule(RuleNode::new(root));
+
+        let rule = tree.first_rule(1).expect("nested rule should be found");
+        assert_eq!(
+            rule.to_string_tree(&["root".to_owned(), "child".to_owned()]),
+            "(child x)"
+        );
+        assert!(tree.first_rule(2).is_none());
     }
 }

@@ -473,19 +473,29 @@ fn target_templates_supported(descriptor: &Descriptor) -> bool {
         return false;
     }
     let grammar = &descriptor.grammar;
+    // Tree-output descriptors in this group require ANTLR's recursive-context
+    // rewrites; the recognizer accepts them but does not yet shape those trees.
+    if descriptor.group == "LeftRecursion" {
+        return false;
+    }
     if grammar.contains("@members")
         || grammar.contains("@definitions")
-        || grammar.contains("@init")
         || grammar.contains("returns [<")
         || grammar.contains("locals [<")
         || grammar.contains("<AssertIsList")
         || grammar.contains("<BailErrorStrategy")
-        || grammar.contains("<BuildParseTrees")
         || grammar.contains("<ContextListFunction")
         || grammar.contains("<LANotEquals")
         || grammar.contains("<ParserProperty")
         || grammar.contains("<AppendStr")
+        || grammar.contains("<RuleInvocationStack")
+        || grammar.contains("<ImportRuleInvocationStack")
+        || grammar.contains("<TreeNodeWithAltNumField")
+        || grammar.contains("contextSuperClass")
     {
+        return false;
+    }
+    if grammar.contains("@init") && !supported_init_action_templates(grammar) {
         return false;
     }
     if grammar.contains("@after") && !supported_after_action_templates(grammar) {
@@ -512,7 +522,10 @@ fn supported_action_templates(grammar: &str) -> bool {
     let mut offset = 0;
     while let Some(block) = next_template_block(grammar, offset) {
         offset = block.after_brace;
-        if block.predicate || is_after_action(grammar, block.open_brace) {
+        if block.predicate
+            || is_after_action(grammar, block.open_brace)
+            || is_init_action(grammar, block.open_brace)
+        {
             continue;
         }
         if !is_supported_action_template(block.body.trim()) {
@@ -520,6 +533,24 @@ fn supported_action_templates(grammar: &str) -> bool {
         }
     }
     true
+}
+
+/// Allows the parse-tree build switch used by upstream descriptors; this
+/// runtime always builds trees for the metadata harness.
+fn supported_init_action_templates(grammar: &str) -> bool {
+    let mut saw_init_action = false;
+    let mut offset = 0;
+    while let Some(block) = next_template_block(grammar, offset) {
+        offset = block.after_brace;
+        if block.predicate || !is_init_action(grammar, block.open_brace) {
+            continue;
+        }
+        saw_init_action = true;
+        if block.body.trim() != "BuildParseTrees()" {
+            return false;
+        }
+    }
+    saw_init_action
 }
 
 fn supported_after_action_templates(grammar: &str) -> bool {
@@ -531,10 +562,11 @@ fn supported_after_action_templates(grammar: &str) -> bool {
             continue;
         }
         saw_after_action = true;
-        if block.body.trim().starts_with("ToStringTree(") {
-            return false;
+        let body = block.body.trim();
+        if is_string_tree_label_template(body) {
+            continue;
         }
-        if !is_supported_action_template(block.body.trim()) {
+        if !is_supported_action_template(body) {
             return false;
         }
     }
@@ -578,6 +610,24 @@ fn is_token_text_template(body: &str) -> bool {
         .or_else(|| {
             body.strip_prefix("write(\"$")
                 .and_then(|value| value.strip_suffix(".text\")"))
+        })
+    else {
+        return false;
+    };
+    argument
+        .chars()
+        .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+}
+
+/// Recognizes `ToStringTree("$label.ctx")` templates that the generator can
+/// resolve from a rule-level `@after` action.
+fn is_string_tree_label_template(body: &str) -> bool {
+    let Some(argument) = body
+        .strip_prefix("ToStringTree(\"$")
+        .and_then(|value| value.strip_suffix(".ctx\"):writeln()"))
+        .or_else(|| {
+            body.strip_prefix("ToStringTree(\"$")
+                .and_then(|value| value.strip_suffix(".ctx\"):write()"))
         })
     else {
         return false;
@@ -704,9 +754,17 @@ fn skip_ascii_whitespace(source: &str, mut index: usize) -> usize {
 }
 
 fn is_after_action(source: &str, open_brace: usize) -> bool {
+    is_rule_named_action(source, open_brace, "@after")
+}
+
+fn is_init_action(source: &str, open_brace: usize) -> bool {
+    is_rule_named_action(source, open_brace, "@init")
+}
+
+fn is_rule_named_action(source: &str, open_brace: usize, marker: &str) -> bool {
     let prefix = &source[..open_brace];
     let statement_start = prefix.rfind(';').map_or(0, |index| index + 1);
-    prefix[statement_start..].contains("@after")
+    prefix[statement_start..].trim_end().ends_with(marker)
 }
 
 /// Runs `antlr4-rust-gen` for either a lexer descriptor or a combined parser

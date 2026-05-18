@@ -58,6 +58,10 @@ Supported now:
 - parser rule-level `@after` actions for the currently supported stdout helpers,
 - nested parser tree construction for action-bearing rules and direct
   `ToStringTree("$ctx")` stdout actions,
+- parser `@init {<BuildParseTrees()>}` descriptors as no-ops because the harness
+  keeps parse-tree building enabled,
+- parser rule-level `@after {<ToStringTree("$label.ctx")>}` actions for simple
+  rule labels,
 - `StringTemplate` backslash rendering for descriptor grammars,
 - official ANTLR `.interp` generation,
 - Rust module generation and execution through Cargo.
@@ -67,6 +71,8 @@ Not wired yet:
 - composite grammars,
 - target-template semantic actions beyond the currently supported stdout helpers,
 - parser error recovery diagnostics,
+- ANTLR recursive-context tree rewrites for left-recursive `ToStringTree`
+  descriptors,
 - runtime diagnostic/profile/DFA flags.
 
 The harness reports unsupported descriptors as skipped and treats output mismatches
@@ -74,10 +80,11 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `144 passed, 0 failed, 213 skipped, 144 run`
+- full descriptor sweep: `148 passed, 0 failed, 209 skipped, 148 run`
 - `LexerExec`: `41 passed, 0 failed, 1 skipped, 41 run`
 - `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
 - `LeftRecursion`: `7 passed, 0 failed, 91 skipped, 7 run`
+- `ParseTrees`: `4 passed, 0 failed, 6 skipped, 4 run`
 - `ParserExec`: `36 passed, 0 failed, 14 skipped, 36 run`
 - `ParserErrors`: `4 passed, 0 failed, 30 skipped, 4 run`
 - `Performance`: `7 passed, 0 failed, 0 skipped, 7 run`
