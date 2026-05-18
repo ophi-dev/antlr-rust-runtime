@@ -7,6 +7,7 @@ use crate::recognizer::{Recognizer, RecognizerData};
 use crate::token::{TOKEN_EOF, Token, TokenSource};
 use crate::token_stream::CommonTokenStream;
 use crate::tree::{ParseTree, ParserRuleContext, RuleNode, TerminalNode};
+use crate::vocabulary::Vocabulary;
 
 /// Upper bound for the recursive metadata recognizer before it treats a path as
 /// non-viable. Long expression-regression descriptors legitimately walk tens
@@ -102,6 +103,62 @@ enum RecognizedNode {
 struct FastRecognizeOutcome {
     index: usize,
     consumed_eof: bool,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct ExpectedTokens {
+    index: Option<usize>,
+    symbols: BTreeSet<i32>,
+}
+
+impl ExpectedTokens {
+    /// Records the expected symbols for the farthest token index reached by any
+    /// failed ATN path.
+    fn record_transition(&mut self, index: usize, transition: &Transition, max_token_type: i32) {
+        let symbols = transition_expected_symbols(transition, max_token_type);
+        if symbols.is_empty() {
+            return;
+        }
+        match self.index {
+            Some(current) if index < current => {}
+            Some(current) if index == current => self.symbols.extend(symbols),
+            _ => {
+                self.index = Some(index);
+                self.symbols = symbols;
+            }
+        }
+    }
+}
+
+/// Converts one consuming transition into the token types that would satisfy it
+/// for diagnostic reporting.
+fn transition_expected_symbols(transition: &Transition, max_token_type: i32) -> BTreeSet<i32> {
+    let mut symbols = BTreeSet::new();
+    match transition {
+        Transition::Atom { label, .. } => {
+            symbols.insert(*label);
+        }
+        Transition::Range { start, stop, .. } => {
+            symbols.extend(*start..=*stop);
+        }
+        Transition::Set { set, .. } => {
+            for (start, stop) in set.ranges() {
+                symbols.extend(*start..=*stop);
+            }
+        }
+        Transition::NotSet { set, .. } => {
+            symbols.extend((1..=max_token_type).filter(|symbol| !set.contains(*symbol)));
+        }
+        Transition::Wildcard { .. } => {
+            symbols.extend(1..=max_token_type);
+        }
+        Transition::Epsilon { .. }
+        | Transition::Rule { .. }
+        | Transition::Predicate { .. }
+        | Transition::Action { .. }
+        | Transition::Precedence { .. } => {}
+    }
+    symbols
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -235,6 +292,7 @@ where
         let start_index = self.input.index();
         let mut visiting = BTreeSet::new();
         let mut memo = BTreeMap::new();
+        let mut expected = ExpectedTokens::default();
         let outcomes = self.recognize_state_fast(
             atn,
             FastRecognizeRequest {
@@ -246,13 +304,10 @@ where
             },
             &mut visiting,
             &mut memo,
+            &mut expected,
         );
         let Some(outcome) = select_best_fast_outcome(outcomes.into_iter()) else {
-            return Err(AntlrError::ParserError {
-                line: self.input.lt(1).map(Token::line).unwrap_or_default(),
-                column: self.input.lt(1).map(Token::column).unwrap_or_default(),
-                message: format!("no viable alternative while parsing rule {rule_index}"),
-            });
+            return Err(self.recognition_error(rule_index, &expected));
         };
 
         let mut context = ParserRuleContext::new(rule_index, self.state());
@@ -301,6 +356,7 @@ where
         let start_index = self.input.index();
         let mut visiting = BTreeSet::new();
         let mut memo = BTreeMap::new();
+        let mut expected = ExpectedTokens::default();
         let outcomes = self.recognize_state(
             atn,
             RecognizeRequest {
@@ -313,13 +369,10 @@ where
             },
             &mut visiting,
             &mut memo,
+            &mut expected,
         );
         let Some(outcome) = select_best_outcome(outcomes.into_iter()) else {
-            return Err(AntlrError::ParserError {
-                line: self.input.lt(1).map(Token::line).unwrap_or_default(),
-                column: self.input.lt(1).map(Token::column).unwrap_or_default(),
-                message: format!("no viable alternative while parsing rule {rule_index}"),
-            });
+            return Err(self.recognition_error(rule_index, &expected));
         };
 
         let mut context = ParserRuleContext::new(rule_index, self.state());
@@ -355,6 +408,44 @@ where
         Ok(self.rule_node(context))
     }
 
+    /// Builds the parser error reported when no ATN path can reach the active
+    /// rule stop state.
+    fn recognition_error(&mut self, rule_index: usize, expected: &ExpectedTokens) -> AntlrError {
+        let index = expected.index.unwrap_or_else(|| self.input.index());
+        self.input.seek(index);
+        let current = self.input.lt(1).cloned();
+        let line = current.as_ref().map(Token::line).unwrap_or_default();
+        let column = current.as_ref().map(Token::column).unwrap_or_default();
+        let message = if expected.symbols.is_empty() {
+            format!("no viable alternative while parsing rule {rule_index}")
+        } else {
+            format!(
+                "mismatched input {} expecting {}",
+                current
+                    .as_ref()
+                    .map_or_else(|| "'<EOF>'".to_owned(), token_input_display),
+                self.expected_symbols_display(&expected.symbols)
+            )
+        };
+        AntlrError::ParserError {
+            line,
+            column,
+            message,
+        }
+    }
+
+    /// Formats expected token types using ANTLR's single-token or set syntax.
+    fn expected_symbols_display(&self, symbols: &BTreeSet<i32>) -> String {
+        let items = symbols
+            .iter()
+            .map(|symbol| expected_symbol_display(*symbol, self.vocabulary()))
+            .collect::<Vec<_>>();
+        if let [single] = items.as_slice() {
+            return single.clone();
+        }
+        format!("{{{}}}", items.join(", "))
+    }
+
     /// Attempts to reach `stop_state` from `state_number` without committing
     /// token consumption to the parser's public stream position.
     fn recognize_state_fast(
@@ -363,6 +454,7 @@ where
         request: FastRecognizeRequest,
         visiting: &mut BTreeSet<(usize, usize, usize, i32)>,
         memo: &mut BTreeMap<FastRecognizeKey, Vec<FastRecognizeOutcome>>,
+        expected: &mut ExpectedTokens,
     ) -> Vec<FastRecognizeOutcome> {
         let FastRecognizeRequest {
             state_number,
@@ -415,6 +507,7 @@ where
                         },
                         visiting,
                         memo,
+                        expected,
                     ));
                 }
                 Transition::Precedence {
@@ -433,6 +526,7 @@ where
                             },
                             visiting,
                             memo,
+                            expected,
                         ));
                     }
                 }
@@ -458,6 +552,7 @@ where
                         },
                         visiting,
                         memo,
+                        expected,
                     );
                     for child in children {
                         outcomes.extend(
@@ -472,6 +567,7 @@ where
                                 },
                                 visiting,
                                 memo,
+                                expected,
                             )
                             .into_iter()
                             .map(|mut outcome| {
@@ -501,6 +597,7 @@ where
                                 },
                                 visiting,
                                 memo,
+                                expected,
                             )
                             .into_iter()
                             .map(|mut outcome| {
@@ -508,6 +605,8 @@ where
                                 outcome
                             }),
                         );
+                    } else {
+                        expected.record_transition(index, transition, atn.max_token_type());
                     }
                 }
             }
@@ -527,6 +626,7 @@ where
         request: RecognizeRequest,
         visiting: &mut BTreeSet<(usize, usize, usize, i32)>,
         memo: &mut BTreeMap<RecognizeKey, Vec<RecognizeOutcome>>,
+        expected: &mut ExpectedTokens,
     ) -> Vec<RecognizeOutcome> {
         let RecognizeRequest {
             state_number,
@@ -594,6 +694,7 @@ where
                             },
                             visiting,
                             memo,
+                            expected,
                         )
                         .into_iter()
                         .map(|mut outcome| {
@@ -627,6 +728,7 @@ where
                             },
                             visiting,
                             memo,
+                            expected,
                         ));
                     }
                 }
@@ -653,6 +755,7 @@ where
                         },
                         visiting,
                         memo,
+                        expected,
                     );
                     for child in children {
                         let child_node = RecognizedNode::Rule {
@@ -672,6 +775,7 @@ where
                                 },
                                 visiting,
                                 memo,
+                                expected,
                             )
                             .into_iter()
                             .map(|mut outcome| {
@@ -706,6 +810,7 @@ where
                                 },
                                 visiting,
                                 memo,
+                                expected,
                             )
                             .into_iter()
                             .map(|mut outcome| {
@@ -714,6 +819,8 @@ where
                                 outcome
                             }),
                         );
+                    } else {
+                        expected.record_transition(index, transition, atn.max_token_type());
                     }
                 }
             }
@@ -812,6 +919,17 @@ fn fold_left_recursive_boundaries(nodes: Vec<RecognizedNode>) -> Vec<RecognizedN
         }
     }
     folded
+}
+
+fn token_input_display(token: &impl Token) -> String {
+    format!("'{}'", token.text().unwrap_or("<EOF>"))
+}
+
+fn expected_symbol_display(symbol: i32, vocabulary: &Vocabulary) -> String {
+    if symbol == TOKEN_EOF {
+        return "<EOF>".to_owned();
+    }
+    vocabulary.display_name(symbol)
 }
 
 /// Chooses the outermost parse result that consumed the most input.
