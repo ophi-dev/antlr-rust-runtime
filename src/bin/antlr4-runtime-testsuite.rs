@@ -562,7 +562,7 @@ fn supported_init_action_templates(grammar: &str) -> bool {
         saw_init_action = true;
         if !matches!(
             block.body.trim(),
-            "BuildParseTrees()" | "BailErrorStrategy()"
+            "BuildParseTrees()" | "BailErrorStrategy()" | "GetExpectedTokenNames():writeln()"
         ) {
             return false;
         }

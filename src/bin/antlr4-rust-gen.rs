@@ -389,13 +389,24 @@ fn render_parser(
         || Ok(vec![None; data.rule_names.len()]),
         |grammar| parser_after_action_templates(data, grammar),
     )?;
-    let action_method = render_parser_action_method(&actions);
+    let init_actions = grammar_source.map_or_else(
+        || Ok(vec![None; data.rule_names.len()]),
+        |grammar| parser_init_action_templates(data, grammar),
+    )?;
+    let has_init_actions = init_actions.iter().any(Option::is_some);
+    let has_action_dispatch = !actions.is_empty() || has_init_actions;
+    let init_action_rules = init_actions
+        .iter()
+        .enumerate()
+        .filter_map(|(index, action)| action.as_ref().map(|_| index))
+        .collect::<Vec<_>>();
+    let action_method = render_parser_action_method(&actions, &init_actions);
     let mut rule_methods = String::new();
     for (index, rule) in data.rule_names.iter().enumerate() {
         let after_action = after_actions.get(index).and_then(Option::as_ref);
         let uses_after_interval = after_action.is_some_and(ActionTemplate::uses_rule_interval);
         let needs_slow_path =
-            !actions.is_empty() || after_action.is_some_and(ActionTemplate::needs_nested_tree);
+            has_action_dispatch || after_action.is_some_and(ActionTemplate::needs_nested_tree);
         writeln!(
             rule_methods,
             "    pub fn {}(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{",
@@ -417,20 +428,29 @@ fn render_parser(
             .expect("writing to a string cannot fail");
         } else {
             if needs_slow_path {
-                writeln!(
-                    rule_methods,
-                    "        let (tree, actions) = self.base.parse_atn_rule_with_actions(atn(), {index})?;"
-                )
-                .expect("writing to a string cannot fail");
-                if actions.is_empty() {
-                    writeln!(rule_methods, "        let _ = actions;")
-                        .expect("writing to a string cannot fail");
+                if has_init_actions {
+                    writeln!(
+                        rule_methods,
+                        "        let (tree, actions) = self.base.parse_atn_rule_with_action_inits(atn(), {index}, &{})?;",
+                        render_usize_array(&init_action_rules)
+                    )
+                    .expect("writing to a string cannot fail");
                 } else {
+                    writeln!(
+                        rule_methods,
+                        "        let (tree, actions) = self.base.parse_atn_rule_with_actions(atn(), {index})?;"
+                    )
+                    .expect("writing to a string cannot fail");
+                }
+                if has_action_dispatch {
                     writeln!(
                         rule_methods,
                         "        for action in actions {{ self.run_action(action, &tree); }}"
                     )
                     .expect("writing to a string cannot fail");
+                } else {
+                    writeln!(rule_methods, "        let _ = actions;")
+                        .expect("writing to a string cannot fail");
                 }
             } else {
                 writeln!(
@@ -571,6 +591,9 @@ enum ActionTemplate {
     TokenDisplay {
         prefix: String,
         source: TokenDisplaySource,
+        newline: bool,
+    },
+    ExpectedTokenNames {
         newline: bool,
     },
     Literal {
@@ -740,6 +763,40 @@ fn parser_after_action_templates(
             block.open_brace,
             data,
         )?);
+    }
+    Ok(actions)
+}
+
+/// Extracts rule-level `@init` templates that must be replayed when a rule is
+/// entered on the selected parser path.
+fn parser_init_action_templates(
+    data: &InterpData,
+    grammar_source: &str,
+) -> io::Result<Vec<Option<ActionTemplate>>> {
+    let mut actions = vec![None; data.rule_names.len()];
+    let mut offset = 0;
+    while let Some(block) = next_template_block(grammar_source, offset) {
+        offset = block.after_brace;
+        if block.predicate || !is_init_action(grammar_source, block.open_brace) {
+            continue;
+        }
+        let body = block.body.trim();
+        if matches!(body, "BuildParseTrees()" | "BailErrorStrategy()") {
+            continue;
+        }
+        let Some(rule_name) = init_action_rule_name(grammar_source, block.open_brace) else {
+            continue;
+        };
+        let Some(rule_index) = data.rule_names.iter().position(|name| name == rule_name) else {
+            continue;
+        };
+        let Some(template) = parse_action_template(body) else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("unsupported @init target action template <{}>", block.body),
+            ));
+        };
+        actions[rule_index] = Some(template);
     }
     Ok(actions)
 }
@@ -948,10 +1005,18 @@ fn is_members_action(source: &str, open_brace: usize) -> bool {
 }
 
 fn after_action_rule_name(source: &str, open_brace: usize) -> Option<&str> {
+    named_action_rule_name(source, open_brace, "@after")
+}
+
+fn init_action_rule_name(source: &str, open_brace: usize) -> Option<&str> {
+    named_action_rule_name(source, open_brace, "@init")
+}
+
+fn named_action_rule_name<'a>(source: &'a str, open_brace: usize, marker: &str) -> Option<&'a str> {
     let prefix = &source[..open_brace];
     let statement_start = prefix.rfind(';').map_or(0, |index| index + 1);
     let rule_preamble = prefix[statement_start..]
-        .split("@after")
+        .split(marker)
         .next()?
         .split('@')
         .next()?;
@@ -1036,6 +1101,12 @@ fn parse_action_template(body: &str) -> Option<ActionTemplate> {
             target: StringTreeTarget::Current,
             newline: false,
         }),
+        "GetExpectedTokenNames():writeln()" => {
+            Some(ActionTemplate::ExpectedTokenNames { newline: true })
+        }
+        "GetExpectedTokenNames():write()" => {
+            Some(ActionTemplate::ExpectedTokenNames { newline: false })
+        }
         _ => parse_plus_text(body)
             .or_else(|| parse_string_tree(body))
             .or_else(|| parse_rule_invocation_stack(body))
@@ -1383,6 +1454,7 @@ fn render_lexer_action_statement(template: &ActionTemplate) -> String {
             )
         }
         ActionTemplate::TokenDisplay { .. } => String::new(),
+        ActionTemplate::ExpectedTokenNames { .. } => String::new(),
         ActionTemplate::StringTree { .. } => String::new(),
         ActionTemplate::RuleInvocationStack { .. } => String::new(),
         ActionTemplate::Literal { value, newline } => {
@@ -1426,9 +1498,28 @@ fn render_lexer_predicate_expression(template: &PredicateTemplate) -> String {
 
 /// Emits the generated parser action dispatcher for the grammar-specific action
 /// source states discovered from the serialized ATN.
-fn render_parser_action_method(actions: &[(usize, ActionTemplate)]) -> String {
-    if actions.is_empty() {
+fn render_parser_action_method(
+    actions: &[(usize, ActionTemplate)],
+    init_actions: &[Option<ActionTemplate>],
+) -> String {
+    let has_init_actions = init_actions.iter().any(Option::is_some);
+    if actions.is_empty() && !has_init_actions {
         return String::new();
+    }
+    let mut init_arms = String::new();
+    for (rule_index, template) in init_actions.iter().enumerate() {
+        let Some(template) = template else {
+            continue;
+        };
+        let statement = render_action_statement(template);
+        writeln!(
+            init_arms,
+            "                {rule_index} => {{ {statement} }}"
+        )
+        .expect("writing to a string cannot fail");
+    }
+    if has_init_actions {
+        init_arms.push_str("                _ => {}\n");
     }
     let mut arms = String::new();
     for (state, template) in actions {
@@ -1437,8 +1528,15 @@ fn render_parser_action_method(actions: &[(usize, ActionTemplate)]) -> String {
             .expect("writing to a string cannot fail");
     }
     arms.push_str("            _ => {}\n");
+    let init_dispatch = if has_init_actions {
+        format!(
+            "        if action.is_rule_init() {{\n            match action.rule_index() {{\n{init_arms}            }}\n            return;\n        }}\n"
+        )
+    } else {
+        String::new()
+    };
     format!(
-        "    fn run_action(&mut self, action: antlr4_runtime::ParserAction, _tree: &antlr4_runtime::ParseTree) {{\n        match action.source_state() {{\n{arms}        }}\n    }}\n"
+        "    fn run_action(&mut self, action: antlr4_runtime::ParserAction, _tree: &antlr4_runtime::ParseTree) {{\n{init_dispatch}        match action.source_state() {{\n{arms}        }}\n    }}\n"
     )
 }
 
@@ -1477,6 +1575,12 @@ fn render_action_statement(template: &ActionTemplate) -> String {
         } => {
             let write = if *newline { "println!" } else { "print!" };
             render_token_display_write(write, "_tree", "action", prefix, source)
+        }
+        ActionTemplate::ExpectedTokenNames { newline } => {
+            let write = if *newline { "println!" } else { "print!" };
+            format!(
+                "let text = action.expected_state().map_or_else(String::new, |state| self.base.expected_tokens_at_state(atn(), state)); {write}(\"{{}}\", text);"
+            )
         }
         ActionTemplate::StringTree { target, newline } => {
             let write = if *newline { "println!" } else { "print!" };
@@ -1528,6 +1632,10 @@ fn render_parser_after_action_statement(template: &ActionTemplate, rule_index: u
         } => {
             let write = if *newline { "println!" } else { "print!" };
             render_after_token_display_write(write, "tree", prefix, source)
+        }
+        ActionTemplate::ExpectedTokenNames { newline } => {
+            let write = if *newline { "println!" } else { "print!" };
+            format!("{write}(\"\");")
         }
         ActionTemplate::StringTree { target, newline } => {
             let write = if *newline { "println!" } else { "print!" };
@@ -1701,6 +1809,16 @@ fn render_i32_slice(values: &[i32]) -> String {
     let items = values
         .iter()
         .map(i32::to_string)
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("[{items}]")
+}
+
+/// Renders an inline `[usize; N]` expression for generated parser helpers.
+fn render_usize_array(values: &[usize]) -> String {
+    let items = values
+        .iter()
+        .map(usize::to_string)
         .collect::<Vec<_>>()
         .join(", ");
     format!("[{items}]")

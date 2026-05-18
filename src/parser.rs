@@ -19,13 +19,17 @@ const RECOGNITION_DEPTH_LIMIT: usize = 100_000;
 /// Generated parsers use `source_state` to dispatch back to the grammar action
 /// rendered for that ATN action transition. The token interval is the current
 /// rule's input span at the action site, which covers common target templates
-/// such as `$text`.
+/// such as `$text`. Rule-init actions do not have an ATN action source state,
+/// so they are marked separately and may carry an ATN state for expected-token
+/// rendering.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct ParserAction {
     source_state: usize,
     rule_index: usize,
     start_index: usize,
     stop_index: Option<usize>,
+    rule_init: bool,
+    expected_state: Option<usize>,
 }
 
 impl ParserAction {
@@ -41,6 +45,24 @@ impl ParserAction {
             rule_index,
             start_index,
             stop_index,
+            rule_init: false,
+            expected_state: None,
+        }
+    }
+
+    /// Creates an action event for a rule-level `@init` action.
+    pub const fn new_rule_init(
+        rule_index: usize,
+        start_index: usize,
+        expected_state: Option<usize>,
+    ) -> Self {
+        Self {
+            source_state: usize::MAX,
+            rule_index,
+            start_index,
+            stop_index: None,
+            rule_init: true,
+            expected_state,
         }
     }
 
@@ -62,6 +84,16 @@ impl ParserAction {
     /// Last token-stream index consumed before the action was reached.
     pub const fn stop_index(&self) -> Option<usize> {
         self.stop_index
+    }
+
+    /// Reports whether this event represents a rule-level `@init` action.
+    pub const fn is_rule_init(&self) -> bool {
+        self.rule_init
+    }
+
+    /// ATN state used to compute expected-token display for this action.
+    pub const fn expected_state(&self) -> Option<usize> {
+        self.expected_state
     }
 }
 
@@ -230,11 +262,12 @@ fn recovery_expected_symbols(
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct RecognizeRequest {
+struct RecognizeRequest<'a> {
     state_number: usize,
     stop_state: usize,
     index: usize,
     rule_start_index: usize,
+    init_action_rules: &'a BTreeSet<usize>,
     /// Current left-recursive precedence threshold, matching ANTLR's
     /// `precpred(_ctx, k)` check for generated precedence rules.
     precedence: i32,
@@ -284,7 +317,7 @@ struct RecoveryRequest<'a, 'b> {
     transition: &'a Transition,
     expected_symbols: BTreeSet<i32>,
     target: usize,
-    request: RecognizeRequest,
+    request: RecognizeRequest<'a>,
     visiting: &'b mut BTreeSet<(usize, usize, usize, i32)>,
     memo: &'b mut BTreeMap<RecognizeKey, Vec<RecognizeOutcome>>,
     expected: &'b mut ExpectedTokens,
@@ -441,6 +474,22 @@ where
         atn: &Atn,
         rule_index: usize,
     ) -> Result<(ParseTree, Vec<ParserAction>), AntlrError> {
+        self.parse_atn_rule_with_action_inits(atn, rule_index, &[])
+    }
+
+    /// Parses a generated rule and emits ATN actions plus selected rule-init
+    /// actions reached on the chosen path.
+    ///
+    /// Generated parsers use this when a grammar contains rule-level `@init`
+    /// templates that must run for nested rule invocations. The runtime keeps
+    /// the action list path-sensitive, so init templates are replayed only for
+    /// rules that were actually entered by the selected parse.
+    pub fn parse_atn_rule_with_action_inits(
+        &mut self,
+        atn: &Atn,
+        rule_index: usize,
+        init_action_rules: &[usize],
+    ) -> Result<(ParseTree, Vec<ParserAction>), AntlrError> {
         let start_state = atn
             .rule_to_start_state()
             .get(rule_index)
@@ -458,6 +507,7 @@ where
             })?;
 
         let start_index = self.input.index();
+        let init_action_rules = init_action_rules.iter().copied().collect::<BTreeSet<_>>();
         let mut visiting = BTreeSet::new();
         let mut memo = BTreeMap::new();
         let mut expected = ExpectedTokens::default();
@@ -468,6 +518,7 @@ where
                 stop_state,
                 index: start_index,
                 rule_start_index: start_index,
+                init_action_rules: &init_action_rules,
                 precedence: 0,
                 depth: 0,
                 recovery_symbols: BTreeSet::new(),
@@ -481,6 +532,13 @@ where
         };
 
         report_parser_diagnostics(&outcome.diagnostics);
+        let mut actions = outcome.actions;
+        if init_action_rules.contains(&rule_index) {
+            actions.insert(
+                0,
+                ParserAction::new_rule_init(rule_index, start_index, Some(start_state)),
+            );
+        }
         let mut context = ParserRuleContext::new(rule_index, self.state());
         if let Some(token) = self.token_at(start_index) {
             context.set_start(token);
@@ -500,7 +558,7 @@ where
         }
         self.input.seek(outcome.index);
 
-        Ok((self.rule_node(context), outcome.actions))
+        Ok((self.rule_node(context), actions))
     }
 
     /// Temporary parser entry used by generated parser methods while the parser
@@ -994,6 +1052,7 @@ where
             stop_state,
             index,
             rule_start_index,
+            init_action_rules,
             precedence,
             depth,
             ..
@@ -1011,6 +1070,7 @@ where
                 stop_state,
                 index: after_next,
                 rule_start_index,
+                init_action_rules,
                 precedence,
                 depth: depth + 1,
                 recovery_symbols: BTreeSet::new(),
@@ -1054,6 +1114,7 @@ where
             stop_state,
             index,
             rule_start_index,
+            init_action_rules,
             precedence,
             depth,
             ..
@@ -1075,6 +1136,7 @@ where
                 stop_state,
                 index,
                 rule_start_index,
+                init_action_rules,
                 precedence,
                 depth: depth + 1,
                 recovery_symbols: BTreeSet::new(),
@@ -1104,7 +1166,7 @@ where
     fn recognize_state(
         &mut self,
         atn: &Atn,
-        request: RecognizeRequest,
+        request: RecognizeRequest<'_>,
         visiting: &mut BTreeSet<(usize, usize, usize, i32)>,
         memo: &mut BTreeMap<RecognizeKey, Vec<RecognizeOutcome>>,
         expected: &mut ExpectedTokens,
@@ -1114,6 +1176,7 @@ where
             stop_state,
             index,
             rule_start_index,
+            init_action_rules,
             precedence,
             depth,
             recovery_symbols,
@@ -1173,6 +1236,7 @@ where
                                 stop_state,
                                 index,
                                 rule_start_index,
+                                init_action_rules,
                                 precedence,
                                 depth: depth + 1,
                                 recovery_symbols: epsilon_recovery_symbols.clone(),
@@ -1208,6 +1272,7 @@ where
                                 stop_state,
                                 index,
                                 rule_start_index,
+                                init_action_rules,
                                 precedence,
                                 depth: depth + 1,
                                 recovery_symbols: epsilon_recovery_symbols.clone(),
@@ -1236,6 +1301,7 @@ where
                             stop_state: child_stop,
                             index,
                             rule_start_index: index,
+                            init_action_rules,
                             precedence: *rule_precedence,
                             depth: depth + 1,
                             recovery_symbols: epsilon_recovery_symbols.clone(),
@@ -1259,6 +1325,7 @@ where
                                     stop_state,
                                     index: child.index,
                                     rule_start_index,
+                                    init_action_rules,
                                     precedence,
                                     depth: depth + 1,
                                     recovery_symbols: BTreeSet::new(),
@@ -1274,6 +1341,16 @@ where
                                 diagnostics.append(&mut outcome.diagnostics);
                                 outcome.diagnostics = diagnostics;
                                 let mut actions = child.actions.clone();
+                                if init_action_rules.contains(rule_index) {
+                                    actions.insert(
+                                        0,
+                                        ParserAction::new_rule_init(
+                                            *rule_index,
+                                            index,
+                                            Some(*follow_state),
+                                        ),
+                                    );
+                                }
                                 actions.append(&mut outcome.actions);
                                 outcome.actions = actions;
                                 outcome.nodes.insert(0, child_node.clone());
@@ -1298,6 +1375,7 @@ where
                                     stop_state,
                                     index: next_index,
                                     rule_start_index,
+                                    init_action_rules,
                                     precedence,
                                     depth: depth + 1,
                                     recovery_symbols: BTreeSet::new(),
@@ -1330,6 +1408,7 @@ where
                                 stop_state,
                                 index,
                                 rule_start_index,
+                                init_action_rules,
                                 precedence,
                                 depth,
                                 recovery_symbols: recovery_symbols.clone(),
@@ -1350,6 +1429,7 @@ where
                                         stop_state,
                                         index,
                                         rule_start_index,
+                                        init_action_rules,
                                         precedence,
                                         depth,
                                         recovery_symbols: recovery_symbols.clone(),
@@ -1398,6 +1478,14 @@ where
     /// Returns token text for a buffered token interval.
     pub fn text_interval(&mut self, start: usize, stop: Option<usize>) -> String {
         stop.map_or_else(String::new, |stop| self.input.text(start, stop))
+    }
+
+    /// Formats the tokens expected from an ATN state using ANTLR display names.
+    pub fn expected_tokens_at_state(&self, atn: &Atn, state_number: usize) -> String {
+        expected_symbols_display(
+            &state_expected_symbols(atn, state_number),
+            self.vocabulary(),
+        )
     }
 
     /// Formats a buffered token in ANTLR's diagnostic token display form.
