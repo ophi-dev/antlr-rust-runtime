@@ -182,11 +182,6 @@ impl Token for CommonToken {
 impl fmt::Display for CommonToken {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let text = self.text().unwrap_or("");
-        let stop = if self.stop() == usize::MAX {
-            "-1".to_owned()
-        } else {
-            self.stop().to_string()
-        };
         let channel = if self.channel() == DEFAULT_CHANNEL {
             String::new()
         } else {
@@ -196,14 +191,23 @@ impl fmt::Display for CommonToken {
             f,
             "[@{},{}:{}='{}',<{}>{},{}:{}]",
             self.token_index(),
-            self.start(),
-            stop,
+            display_token_boundary(self.start()),
+            display_token_boundary(self.stop()),
             display_text(text),
             self.token_type(),
             channel,
             self.line(),
             self.column()
         )
+    }
+}
+
+/// Formats synthetic-token boundaries with ANTLR's `-1` sentinel.
+fn display_token_boundary(value: usize) -> String {
+    if value == usize::MAX {
+        "-1".to_owned()
+    } else {
+        value.to_string()
     }
 }
 

@@ -448,11 +448,15 @@ fn unsupported_reason(descriptor: &Descriptor) -> Option<&'static str> {
 fn parser_error_diagnostics_supported(descriptor: &Descriptor) -> bool {
     matches!(
         descriptor.name.as_str(),
-        "InvalidEmptyInput"
+        "ConjuringUpToken"
+            | "ConjuringUpTokenFromSet"
+            | "InvalidEmptyInput"
             | "SingleSetInsertion"
+            | "SingleSetInsertionConsumption"
             | "SingleTokenDeletion"
             | "SingleTokenDeletionBeforeAlt"
             | "SingleTokenDeletionBeforePredict"
+            | "SingleTokenDeletionConsumption"
             | "SingleTokenDeletionDuringLoop"
             | "SingleTokenDeletionExpectingSet"
             | "SingleTokenInsertion"
@@ -590,11 +594,19 @@ fn supported_lexer_predicate_templates(grammar: &str) -> bool {
     let mut offset = 0;
     while let Some(block) = next_template_block(grammar, offset) {
         offset = block.after_brace;
-        if block.predicate && block.body.trim() != "True()" {
+        if block.predicate && !is_supported_lexer_predicate_template(block.body.trim()) {
             return false;
         }
     }
     true
+}
+
+fn is_supported_lexer_predicate_template(body: &str) -> bool {
+    matches!(body, "True()" | "False()")
+        || body
+            .strip_prefix("TextEquals(")
+            .and_then(|value| value.strip_suffix(')'))
+            .is_some_and(|argument| parse_template_string(argument).is_some())
 }
 
 /// Mirrors the generator's currently supported action-template subset so the
@@ -616,6 +628,7 @@ fn is_supported_action_template(body: &str) -> bool {
         || body.starts_with("write(\"\\\"")
         || is_noop_action_template(body)
         || is_token_text_template(body)
+        || is_token_display_template(body)
         || (body.starts_with("PlusText(\"") && body.ends_with("):writeln()"))
         || (body.starts_with("PlusText(\"") && body.ends_with("):write()"))
 }
@@ -683,6 +696,107 @@ fn is_token_text_template(body: &str) -> bool {
     argument
         .chars()
         .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+}
+
+fn is_token_display_template(body: &str) -> bool {
+    append_arguments(body)
+        .map(split_template_arguments)
+        .is_some_and(|arguments| {
+            let [prefix, value] = arguments.as_slice() else {
+                return false;
+            };
+            parse_template_string(prefix).is_some()
+                && parse_template_string(value).is_some_and(|value| {
+                    value.strip_prefix('$').is_some_and(|name| {
+                        is_antlr_identifier(name.strip_suffix(".stop").unwrap_or(name))
+                    })
+                })
+        })
+}
+
+fn append_arguments(body: &str) -> Option<&str> {
+    if let Some(arguments) = body
+        .strip_prefix("Append(")
+        .and_then(|value| value.strip_suffix("):writeln()"))
+    {
+        return Some(arguments);
+    }
+    if let Some(arguments) = body
+        .strip_prefix("Append(")
+        .and_then(|value| value.strip_suffix("):write()"))
+    {
+        return Some(arguments);
+    }
+    if let Some(arguments) = body
+        .strip_prefix("writeln(Append(")
+        .and_then(|value| value.strip_suffix("))"))
+    {
+        return Some(arguments);
+    }
+    body.strip_prefix("write(Append(")
+        .and_then(|value| value.strip_suffix("))"))
+}
+
+/// Splits a `StringTemplate` argument list while ignoring nested expressions.
+fn split_template_arguments(arguments: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut start = 0;
+    let mut quoted = false;
+    let mut escaped = false;
+    let mut paren_depth = 0_usize;
+    let mut angle_depth = 0_usize;
+    let mut brace_depth = 0_usize;
+    for (index, ch) in arguments.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match ch {
+            '\\' if quoted => escaped = true,
+            '"' => quoted = !quoted,
+            '(' if !quoted => paren_depth += 1,
+            ')' if !quoted => paren_depth = paren_depth.saturating_sub(1),
+            '<' if !quoted => angle_depth += 1,
+            '>' if !quoted => angle_depth = angle_depth.saturating_sub(1),
+            '{' if !quoted => brace_depth += 1,
+            '}' if !quoted => brace_depth = brace_depth.saturating_sub(1),
+            ',' if !quoted && paren_depth == 0 && angle_depth == 0 && brace_depth == 0 => {
+                parts.push(arguments[start..index].trim());
+                start = index + ch.len_utf8();
+            }
+            _ => {}
+        }
+    }
+    parts.push(arguments[start..].trim());
+    parts
+}
+
+fn parse_template_string(argument: &str) -> Option<String> {
+    let mut value = argument.trim();
+    value = value.strip_prefix('"')?.strip_suffix('"')?;
+    let mut out = String::new();
+    let mut chars = value.chars();
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            if let Some(next) = chars.next() {
+                out.push(next);
+            }
+        } else {
+            out.push(ch);
+        }
+    }
+    if out.starts_with('"') && out.ends_with('"') && out.len() >= 2 {
+        out = out[1..out.len() - 1].to_owned();
+    }
+    Some(out)
+}
+
+fn is_antlr_identifier(value: &str) -> bool {
+    let mut chars = value.chars();
+    chars
+        .next()
+        .is_some_and(|ch| ch == '_' || ch.is_ascii_alphabetic())
+        && chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
 }
 
 /// Recognizes `ToStringTree("$label.ctx")` templates that the generator can
@@ -768,7 +882,25 @@ fn render_target_templates_for_metadata(grammar: &str) -> String {
         offset = block.after_brace;
     }
     out.push_str(&grammar[offset..]);
-    strip_supported_preamble_templates(&out)
+    strip_supported_preamble_templates(&strip_template_comments(&out))
+}
+
+/// Removes upstream `StringTemplate` comments before handing grammar text to
+/// ANTLR, which only understands comments in ANTLR syntax.
+fn strip_template_comments(grammar: &str) -> String {
+    let mut out = String::with_capacity(grammar.len());
+    let mut rest = grammar;
+    while let Some(start) = rest.find("<!") {
+        out.push_str(&rest[..start]);
+        let after_start = &rest[start + 2..];
+        let Some(stop) = after_start.find("!>") else {
+            rest = &rest[start..];
+            break;
+        };
+        rest = &after_start[stop + 2..];
+    }
+    out.push_str(rest);
+    out
 }
 
 /// Removes supported file-scope target templates that are imports in other

@@ -244,12 +244,26 @@ fn render_lexer(
         || Ok(Vec::new()),
         |source| lexer_action_templates(data, source),
     )?;
+    let predicates = grammar_source.map_or_else(
+        || Ok(Vec::new()),
+        |source| lexer_predicate_templates(data, source),
+    )?;
     let action_method = render_lexer_action_method(&actions);
-    let next_token_call = if actions.is_empty() {
-        "antlr4_runtime::atn::lexer::next_token(&mut self.base, atn())".to_owned()
-    } else {
-        "antlr4_runtime::atn::lexer::next_token_with_actions(&mut self.base, atn(), Self::run_action)"
-            .to_owned()
+    let predicate_method = render_lexer_predicate_method(&predicates);
+    let next_token_call = match (actions.is_empty(), predicates.is_empty()) {
+        (true, true) => "antlr4_runtime::atn::lexer::next_token(&mut self.base, atn())".to_owned(),
+        (false, true) => {
+            "antlr4_runtime::atn::lexer::next_token_with_actions(&mut self.base, atn(), Self::run_action)"
+                .to_owned()
+        }
+        (true, false) => {
+            "antlr4_runtime::atn::lexer::next_token_with_actions_and_predicates(&mut self.base, atn(), |_, _| {}, Self::run_predicate)"
+                .to_owned()
+        }
+        (false, false) => {
+            "antlr4_runtime::atn::lexer::next_token_with_actions_and_predicates(&mut self.base, atn(), Self::run_action, Self::run_predicate)"
+                .to_owned()
+        }
     };
 
     Ok(format!(
@@ -302,6 +316,7 @@ where
     }}
 
 {action_method}
+{predicate_method}
 }}
 
 impl<I> GeneratedLexer for {type_name}<I>
@@ -553,6 +568,11 @@ enum ActionTemplate {
         source: TokenTextSource,
         newline: bool,
     },
+    TokenDisplay {
+        prefix: String,
+        source: TokenDisplaySource,
+        newline: bool,
+    },
     Literal {
         value: String,
         newline: bool,
@@ -565,7 +585,10 @@ impl ActionTemplate {
     const fn uses_rule_interval(&self) -> bool {
         matches!(
             self,
-            Self::Text { .. } | Self::TextWithPrefix { .. } | Self::TokenText { .. }
+            Self::Text { .. }
+                | Self::TextWithPrefix { .. }
+                | Self::TokenText { .. }
+                | Self::TokenDisplay { .. }
         )
     }
 
@@ -583,6 +606,19 @@ impl ActionTemplate {
 enum TokenTextSource {
     RuleStart,
     ActionStop,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum TokenDisplaySource {
+    FirstErrorOrActionStop,
+    RuleStop(String),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum PredicateTemplate {
+    True,
+    False,
+    TextEquals(String),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -619,6 +655,33 @@ fn lexer_action_templates(
     Ok(actions.into_iter().zip(templates).collect())
 }
 
+/// Pairs supported lexer semantic predicates with serialized predicate
+/// coordinates from the lexer ATN.
+fn lexer_predicate_templates(
+    data: &InterpData,
+    grammar_source: &str,
+) -> io::Result<Vec<((usize, usize), PredicateTemplate)>> {
+    let predicates = lexer_predicate_transitions(data)?;
+    if predicates.is_empty() {
+        return Ok(Vec::new());
+    }
+    let templates = extract_supported_predicate_templates(grammar_source)?;
+    if templates.is_empty() {
+        return Ok(Vec::new());
+    }
+    if predicates.len() != templates.len() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "grammar has {} supported predicate template(s), but lexer ATN has {} predicate transition(s)",
+                templates.len(),
+                predicates.len()
+            ),
+        ));
+    }
+    Ok(predicates.into_iter().zip(templates).collect())
+}
+
 /// Pairs supported target-template actions with parser ATN action source states.
 fn parser_action_templates(
     data: &InterpData,
@@ -629,12 +692,9 @@ fn parser_action_templates(
         return Ok(Vec::new());
     }
     let states = parser_action_states(data)?;
-    if templates.len() == 1 && states.len() > 1 {
-        let template = templates[0].clone();
-        let Some(state) = states.last().copied() else {
-            return Ok(Vec::new());
-        };
-        return Ok(vec![(state, template)]);
+    if states.len() > templates.len() {
+        let skip = states.len() - templates.len();
+        return Ok(states.into_iter().skip(skip).zip(templates).collect());
     }
     if states.len() != templates.len() {
         return Err(io::Error::new(
@@ -732,6 +792,29 @@ fn extract_supported_action_templates(grammar_source: &str) -> io::Result<Vec<Ac
                 templates.push(template);
             }
         }
+    }
+    Ok(templates)
+}
+
+/// Finds grammar predicate templates in the same order as ANTLR serializes
+/// predicate transitions.
+fn extract_supported_predicate_templates(
+    grammar_source: &str,
+) -> io::Result<Vec<PredicateTemplate>> {
+    let mut templates = Vec::new();
+    let mut offset = 0;
+    while let Some(block) = next_template_block(grammar_source, offset) {
+        offset = block.after_brace;
+        if !block.predicate {
+            continue;
+        }
+        let Some(template) = parse_predicate_template(block.body) else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("unsupported target predicate template <{}>", block.body),
+            ));
+        };
+        templates.push(template);
     }
     Ok(templates)
 }
@@ -957,8 +1040,25 @@ fn parse_action_template(body: &str) -> Option<ActionTemplate> {
             .or_else(|| parse_string_tree(body))
             .or_else(|| parse_rule_invocation_stack(body))
             .or_else(|| parse_token_text(body))
+            .or_else(|| parse_token_display(body))
             .or_else(|| parse_noop_action(body))
             .or_else(|| parse_write_literal(body)),
+    }
+}
+
+fn parse_predicate_template(body: &str) -> Option<PredicateTemplate> {
+    let body = body.trim();
+    match body {
+        "True()" => Some(PredicateTemplate::True),
+        "False()" => Some(PredicateTemplate::False),
+        _ => {
+            let argument = body
+                .strip_prefix("TextEquals(")
+                .and_then(|value| value.strip_suffix(')'))?;
+            Some(PredicateTemplate::TextEquals(parse_template_string(
+                argument,
+            )?))
+        }
     }
 }
 
@@ -1049,6 +1149,100 @@ fn parse_token_text(body: &str) -> Option<ActionTemplate> {
     Some(ActionTemplate::TokenText { source, newline })
 }
 
+/// Parses token-display templates such as `Append("prefix","$x")` and
+/// `writeln(Append("", "$rule.stop"))`.
+fn parse_token_display(body: &str) -> Option<ActionTemplate> {
+    let (newline, arguments) = append_arguments(body)?;
+    let arguments = split_template_arguments(arguments);
+    let [prefix_argument, value_argument] = arguments.as_slice() else {
+        return None;
+    };
+    let prefix = parse_template_string(prefix_argument)?;
+    let value = parse_template_string(value_argument)?;
+    let source = if let Some(rule_name) = value.strip_prefix('$').and_then(|name| {
+        name.strip_suffix(".stop")
+            .filter(|name| is_antlr_identifier(name))
+    }) {
+        TokenDisplaySource::RuleStop(rule_name.to_owned())
+    } else if value.strip_prefix('$').is_some_and(is_antlr_identifier) {
+        TokenDisplaySource::FirstErrorOrActionStop
+    } else {
+        return None;
+    };
+    Some(ActionTemplate::TokenDisplay {
+        prefix,
+        source,
+        newline,
+    })
+}
+
+fn append_arguments(body: &str) -> Option<(bool, &str)> {
+    if let Some(arguments) = body
+        .strip_prefix("Append(")
+        .and_then(|value| value.strip_suffix("):writeln()"))
+    {
+        return Some((true, arguments));
+    }
+    if let Some(arguments) = body
+        .strip_prefix("Append(")
+        .and_then(|value| value.strip_suffix("):write()"))
+    {
+        return Some((false, arguments));
+    }
+    if let Some(arguments) = body
+        .strip_prefix("writeln(Append(")
+        .and_then(|value| value.strip_suffix("))"))
+    {
+        return Some((true, arguments));
+    }
+    body.strip_prefix("write(Append(")
+        .and_then(|value| value.strip_suffix("))"))
+        .map(|arguments| (false, arguments))
+}
+
+/// Splits a `StringTemplate` argument list while ignoring commas inside quoted
+/// strings or nested template/function calls.
+fn split_template_arguments(arguments: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut start = 0;
+    let mut quoted = false;
+    let mut escaped = false;
+    let mut paren_depth = 0_usize;
+    let mut angle_depth = 0_usize;
+    let mut brace_depth = 0_usize;
+    for (index, ch) in arguments.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match ch {
+            '\\' if quoted => escaped = true,
+            '"' => quoted = !quoted,
+            '(' if !quoted => paren_depth += 1,
+            ')' if !quoted => paren_depth = paren_depth.saturating_sub(1),
+            '<' if !quoted => angle_depth += 1,
+            '>' if !quoted => angle_depth = angle_depth.saturating_sub(1),
+            '{' if !quoted => brace_depth += 1,
+            '}' if !quoted => brace_depth = brace_depth.saturating_sub(1),
+            ',' if !quoted && paren_depth == 0 && angle_depth == 0 && brace_depth == 0 => {
+                parts.push(arguments[start..index].trim());
+                start = index + ch.len_utf8();
+            }
+            _ => {}
+        }
+    }
+    parts.push(arguments[start..].trim());
+    parts
+}
+
+fn is_antlr_identifier(value: &str) -> bool {
+    let mut chars = value.chars();
+    chars
+        .next()
+        .is_some_and(|ch| ch == '_' || ch.is_ascii_alphabetic())
+        && chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+}
+
 fn parse_write_literal(body: &str) -> Option<ActionTemplate> {
     let (newline, argument) = if let Some(argument) = body
         .strip_prefix("writeln(")
@@ -1103,6 +1297,27 @@ fn lexer_custom_actions(data: &InterpData) -> io::Result<Vec<(i32, i32)>> {
             _ => None,
         })
         .collect())
+}
+
+/// Reads the lexer ATN to locate semantic predicate coordinates.
+fn lexer_predicate_transitions(data: &InterpData) -> io::Result<Vec<(usize, usize)>> {
+    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(data.atn.clone()))
+        .deserialize()
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    let mut predicates = Vec::new();
+    for state in atn.states() {
+        for transition in &state.transitions {
+            if let Transition::Predicate {
+                rule_index,
+                pred_index,
+                ..
+            } = transition
+            {
+                predicates.push((*rule_index, *pred_index));
+            }
+        }
+    }
+    Ok(predicates)
 }
 
 /// Reads the parser ATN to locate action-transition source states.
@@ -1167,12 +1382,45 @@ fn render_lexer_action_statement(template: &ActionTemplate) -> String {
                 "let text = _base.token_text_until(action.position()); {write}(\"{{}}\", text);"
             )
         }
+        ActionTemplate::TokenDisplay { .. } => String::new(),
         ActionTemplate::StringTree { .. } => String::new(),
         ActionTemplate::RuleInvocationStack { .. } => String::new(),
         ActionTemplate::Literal { value, newline } => {
             let write = if *newline { "println!" } else { "print!" };
             format!("{write}(\"{}\");", rust_string(value))
         }
+    }
+}
+
+/// Emits the generated lexer predicate dispatcher for grammar-specific
+/// predicate coordinates discovered from the serialized ATN.
+fn render_lexer_predicate_method(predicates: &[((usize, usize), PredicateTemplate)]) -> String {
+    if predicates.is_empty() {
+        return String::new();
+    }
+    let mut arms = String::new();
+    for ((rule_index, pred_index), template) in predicates {
+        let statement = render_lexer_predicate_expression(template);
+        writeln!(
+            arms,
+            "            ({rule_index}, {pred_index}) => {{ {statement} }}"
+        )
+        .expect("writing to a string cannot fail");
+    }
+    arms.push_str("            _ => true,\n");
+    format!(
+        "    fn run_predicate(_base: &BaseLexer<I>, predicate: antlr4_runtime::LexerPredicate) -> bool {{\n        match (predicate.rule_index(), predicate.pred_index()) {{\n{arms}        }}\n    }}\n"
+    )
+}
+
+fn render_lexer_predicate_expression(template: &PredicateTemplate) -> String {
+    match template {
+        PredicateTemplate::True => "true".to_owned(),
+        PredicateTemplate::False => "false".to_owned(),
+        PredicateTemplate::TextEquals(value) => format!(
+            "_base.token_text_until(predicate.position()) == \"{}\"",
+            rust_string(value)
+        ),
     }
 }
 
@@ -1222,6 +1470,14 @@ fn render_action_statement(template: &ActionTemplate) -> String {
                 ),
             }
         }
+        ActionTemplate::TokenDisplay {
+            prefix,
+            source,
+            newline,
+        } => {
+            let write = if *newline { "println!" } else { "print!" };
+            render_token_display_write(write, "_tree", "action", prefix, source)
+        }
         ActionTemplate::StringTree { target, newline } => {
             let write = if *newline { "println!" } else { "print!" };
             render_string_tree_write(write, "_tree", target)
@@ -1265,6 +1521,14 @@ fn render_parser_after_action_statement(template: &ActionTemplate, rule_index: u
                 ),
             }
         }
+        ActionTemplate::TokenDisplay {
+            prefix,
+            source,
+            newline,
+        } => {
+            let write = if *newline { "println!" } else { "print!" };
+            render_after_token_display_write(write, "tree", prefix, source)
+        }
         ActionTemplate::StringTree { target, newline } => {
             let write = if *newline { "println!" } else { "print!" };
             render_string_tree_write(write, "tree", target)
@@ -1293,6 +1557,50 @@ fn render_rule_invocation_stack_write(
     format!(
         "let stack = {tree_expr}.rule_invocation_stack({rule_index_expr}, &{rule_names}).unwrap_or_default().join(\", \"); {write}(\"[{{}}]\", stack);"
     )
+}
+
+/// Emits the generated print statement for token-display target templates.
+fn render_token_display_write(
+    write: &str,
+    tree_expr: &str,
+    action_expr: &str,
+    prefix: &str,
+    source: &TokenDisplaySource,
+) -> String {
+    let prefix = rust_string(prefix);
+    match source {
+        TokenDisplaySource::FirstErrorOrActionStop => format!(
+            "let text = {tree_expr}.first_error_token().map_or_else(|| {action_expr}.stop_index().and_then(|index| self.base.token_display_at(index)).unwrap_or_default(), |token| format!(\"{{token}}\")); {write}(\"{prefix}{{}}\", text);"
+        ),
+        TokenDisplaySource::RuleStop(rule_name) => {
+            let rule_name = rust_string(rule_name);
+            format!(
+                "let text = METADATA.rule_names().iter().position(|name| *name == \"{rule_name}\").and_then(|rule_index| {tree_expr}.first_rule_stop(rule_index)).map_or_else(String::new, |token| format!(\"{{token}}\")); {write}(\"{prefix}{{}}\", text);"
+            )
+        }
+    }
+}
+
+/// Emits token-display target templates from rule-level actions where no
+/// parser action event is available.
+fn render_after_token_display_write(
+    write: &str,
+    tree_expr: &str,
+    prefix: &str,
+    source: &TokenDisplaySource,
+) -> String {
+    let prefix = rust_string(prefix);
+    match source {
+        TokenDisplaySource::FirstErrorOrActionStop => format!(
+            "let text = stop_index.and_then(|index| self.base.token_display_at(index)).unwrap_or_default(); {write}(\"{prefix}{{}}\", text);"
+        ),
+        TokenDisplaySource::RuleStop(rule_name) => {
+            let rule_name = rust_string(rule_name);
+            format!(
+                "let text = METADATA.rule_names().iter().position(|name| *name == \"{rule_name}\").and_then(|rule_index| {tree_expr}.first_rule_stop(rule_index)).map_or_else(String::new, |token| format!(\"{{token}}\")); {write}(\"{prefix}{{}}\", text);"
+            )
+        }
+    }
 }
 
 /// Emits the generated print statement for either the current parse tree or a

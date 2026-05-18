@@ -49,6 +49,40 @@ impl LexerCustomAction {
     }
 }
 
+/// Grammar-specific lexer predicate reached while exploring an ATN path.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct LexerPredicate {
+    rule_index: usize,
+    pred_index: usize,
+    position: usize,
+}
+
+impl LexerPredicate {
+    /// Creates a lexer predicate event from serialized ATN metadata.
+    pub const fn new(rule_index: usize, pred_index: usize, position: usize) -> Self {
+        Self {
+            rule_index,
+            pred_index,
+            position,
+        }
+    }
+
+    /// Lexer rule index that owns the predicate transition.
+    pub const fn rule_index(self) -> usize {
+        self.rule_index
+    }
+
+    /// Per-rule predicate index assigned by ANTLR serialization.
+    pub const fn pred_index(self) -> usize {
+        self.pred_index
+    }
+
+    /// Character-stream position at which the predicate is evaluated.
+    pub const fn position(self) -> usize {
+        self.position
+    }
+}
+
 pub trait Lexer: Recognizer {
     fn mode(&self) -> i32;
     fn set_mode(&mut self, mode: i32);

@@ -101,6 +101,8 @@ enum RecognizedNode {
     },
     Rule {
         rule_index: usize,
+        start_index: usize,
+        stop_index: Option<usize>,
         children: Vec<Self>,
     },
     LeftRecursiveBoundary {
@@ -403,6 +405,16 @@ where
 
         report_parser_diagnostics(&outcome.diagnostics);
         let mut context = ParserRuleContext::new(rule_index, self.state());
+        if let Some(token) = self.token_at(start_index) {
+            context.set_start(token);
+        }
+        if let Some(token) = outcome
+            .index
+            .checked_sub(1)
+            .and_then(|index| self.token_at(index))
+        {
+            context.set_stop(token);
+        }
         self.input.seek(start_index);
         while self.input.index() < outcome.index {
             let token_type = self.la(1);
@@ -470,6 +482,16 @@ where
 
         report_parser_diagnostics(&outcome.diagnostics);
         let mut context = ParserRuleContext::new(rule_index, self.state());
+        if let Some(token) = self.token_at(start_index) {
+            context.set_start(token);
+        }
+        if let Some(token) = outcome
+            .index
+            .checked_sub(1)
+            .and_then(|index| self.token_at(index))
+        {
+            context.set_stop(token);
+        }
         if self.build_parse_trees {
             let nodes = fold_left_recursive_boundaries(outcome.nodes);
             for node in &nodes {
@@ -596,6 +618,9 @@ where
         } else {
             expected_symbols
         });
+        let mut token_symbols = BTreeSet::new();
+        token_symbols.insert(token_type);
+        let missing_token_display = self.expected_symbols_display(&token_symbols);
         let current = self.token_at(index);
         let message = format!(
             "missing {expected_display} at {}",
@@ -603,7 +628,7 @@ where
                 .as_ref()
                 .map_or_else(|| "'<EOF>'".to_owned(), token_input_display)
         );
-        let text = format!("<missing {expected_display}>");
+        let text = format!("<missing {missing_token_display}>");
         Some((
             diagnostic_for_token(current.as_ref(), message),
             token_type,
@@ -1222,6 +1247,8 @@ where
                     for child in children {
                         let child_node = RecognizedNode::Rule {
                             rule_index: *rule_index,
+                            start_index: index,
+                            stop_index: child.index.checked_sub(1),
                             children: fold_left_recursive_boundaries(child.nodes.clone()),
                         };
                         outcomes.extend(
@@ -1373,6 +1400,11 @@ where
         stop.map_or_else(String::new, |stop| self.input.text(start, stop))
     }
 
+    /// Formats a buffered token in ANTLR's diagnostic token display form.
+    pub fn token_display_at(&mut self, index: usize) -> Option<String> {
+        self.token_at(index).map(|token| format!("{token}"))
+    }
+
     /// Converts a recognized internal node into a public parse-tree node.
     fn recognized_node_tree(&mut self, node: &RecognizedNode) -> Result<ParseTree, AntlrError> {
         match node {
@@ -1406,17 +1438,28 @@ where
                 text,
             } => {
                 let current = self.token_at(*at_index);
-                let token = CommonToken::new(*token_type).with_text(text).with_position(
-                    current.as_ref().map(Token::line).unwrap_or_default(),
-                    current.as_ref().map(Token::column).unwrap_or_default(),
-                );
+                let token = CommonToken::new(*token_type)
+                    .with_text(text)
+                    .with_span(usize::MAX, usize::MAX)
+                    .with_position(
+                        current.as_ref().map(Token::line).unwrap_or_default(),
+                        current.as_ref().map(Token::column).unwrap_or_default(),
+                    );
                 Ok(ParseTree::Error(ErrorNode::new(token)))
             }
             RecognizedNode::Rule {
                 rule_index,
+                start_index,
+                stop_index,
                 children,
             } => {
                 let mut context = ParserRuleContext::new(*rule_index, self.state());
+                if let Some(token) = self.token_at(*start_index) {
+                    context.set_start(token);
+                }
+                if let Some(token) = stop_index.and_then(|index| self.token_at(index)) {
+                    context.set_stop(token);
+                }
                 for child in children {
                     context.add_child(self.recognized_node_tree(child)?);
                 }
@@ -1451,8 +1494,12 @@ fn fold_left_recursive_boundaries(nodes: Vec<RecognizedNode>) -> Vec<RecognizedN
             RecognizedNode::LeftRecursiveBoundary { rule_index } => {
                 if !folded.is_empty() {
                     let children = std::mem::take(&mut folded);
+                    let start_index = recognized_nodes_start_index(&children).unwrap_or_default();
+                    let stop_index = recognized_nodes_stop_index(&children);
                     folded.push(RecognizedNode::Rule {
                         rule_index,
+                        start_index,
+                        stop_index,
                         children,
                     });
                 }
@@ -1461,6 +1508,32 @@ fn fold_left_recursive_boundaries(nodes: Vec<RecognizedNode>) -> Vec<RecognizedN
         }
     }
     folded
+}
+
+fn recognized_nodes_start_index(nodes: &[RecognizedNode]) -> Option<usize> {
+    nodes.iter().find_map(recognized_node_start_index)
+}
+
+const fn recognized_node_start_index(node: &RecognizedNode) -> Option<usize> {
+    match node {
+        RecognizedNode::Token { index } | RecognizedNode::ErrorToken { index } => Some(*index),
+        RecognizedNode::MissingToken { at_index, .. } => Some(*at_index),
+        RecognizedNode::Rule { start_index, .. } => Some(*start_index),
+        RecognizedNode::LeftRecursiveBoundary { .. } => None,
+    }
+}
+
+fn recognized_nodes_stop_index(nodes: &[RecognizedNode]) -> Option<usize> {
+    nodes.iter().rev().find_map(recognized_node_stop_index)
+}
+
+const fn recognized_node_stop_index(node: &RecognizedNode) -> Option<usize> {
+    match node {
+        RecognizedNode::Token { index } | RecognizedNode::ErrorToken { index } => Some(*index),
+        RecognizedNode::MissingToken { at_index, .. } => at_index.checked_sub(1),
+        RecognizedNode::Rule { stop_index, .. } => *stop_index,
+        RecognizedNode::LeftRecursiveBoundary { .. } => None,
+    }
 }
 
 fn token_input_display(token: &impl Token) -> String {
@@ -1607,6 +1680,7 @@ fn node_needs_stable_tie(node: &RecognizedNode, ancestors: &[usize]) -> bool {
         RecognizedNode::Rule {
             rule_index,
             children,
+            ..
         } => {
             ancestors.contains(rule_index) || {
                 let mut child_ancestors = ancestors.to_vec();
@@ -1769,6 +1843,8 @@ mod tests {
             vec![
                 RecognizedNode::Rule {
                     rule_index: 1,
+                    start_index: 0,
+                    stop_index: Some(0),
                     children: vec![RecognizedNode::Token { index: 0 }],
                 },
                 RecognizedNode::Token { index: 1 },
@@ -1821,8 +1897,12 @@ mod tests {
     fn outcome_ties_keep_first_recursive_tree_shape() {
         let recursive_nodes = vec![RecognizedNode::Rule {
             rule_index: 1,
+            start_index: 0,
+            stop_index: Some(0),
             children: vec![RecognizedNode::Rule {
                 rule_index: 1,
+                start_index: 0,
+                stop_index: Some(0),
                 children: vec![RecognizedNode::Token { index: 0 }],
             }],
         }];

@@ -41,6 +41,33 @@ impl ParseTree {
         }
     }
 
+    /// Finds the stop token for the first rule node with `rule_index`.
+    pub fn first_rule_stop(&self, rule_index: usize) -> Option<&CommonToken> {
+        let Self::Rule(rule) = self else {
+            return None;
+        };
+        if rule.context().rule_index() == rule_index {
+            return rule.context().stop();
+        }
+        rule.context()
+            .children()
+            .iter()
+            .find_map(|child| child.first_rule_stop(rule_index))
+    }
+
+    /// Finds the first recovery error token in a depth-first walk.
+    pub fn first_error_token(&self) -> Option<&CommonToken> {
+        match self {
+            Self::Rule(rule) => rule
+                .context()
+                .children()
+                .iter()
+                .find_map(Self::first_error_token),
+            Self::Terminal(_) => None,
+            Self::Error(node) => Some(node.symbol()),
+        }
+    }
+
     /// Returns the first rule invocation stack for `rule_index`, ordered from
     /// the selected rule outward to the root rule.
     pub fn rule_invocation_stack(

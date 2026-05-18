@@ -59,9 +59,13 @@ Supported now:
 - lexer and parser target-template actions for the currently supported stdout
   helpers,
 - parser token-label text actions such as `$TOKEN.text` and `$label.text`,
+- parser token-display actions such as `Append(..., "$label")` and
+  `Append(..., "$rule.stop")` for recovered-token descriptors,
 - parser rule-level `@after` actions for the currently supported stdout helpers,
 - nested parser tree construction for action-bearing rules and direct
   `ToStringTree("$ctx")` stdout actions,
+- lexer semantic predicates for the currently supported `True()`, `False()`,
+  and `TextEquals(...)` templates,
 - parser `@init {<BuildParseTrees()>}` and `notBuildParseTree` descriptors,
 - parser rule-level `@after {<ToStringTree("$label.ctx")>}` actions for simple
   rule labels,
@@ -72,6 +76,7 @@ Supported now:
   `AssertIsList`, `Pass`, parser property helpers, and supported member
   scaffolding as no-ops,
 - nested `StringTemplate` action parsing for supported no-op wrappers,
+- `StringTemplate` comments in descriptor grammars,
 - ANTLR recursive-context tree rewrites for left-recursive parse-tree output,
 - `StringTemplate` backslash rendering for descriptor grammars,
 - official ANTLR `.interp` generation,
@@ -91,18 +96,19 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `243 passed, 0 failed, 114 skipped, 243 run`
+- full descriptor sweep: `248 passed, 0 failed, 109 skipped, 248 run`
 - `LexerExec`: `41 passed, 0 failed, 1 skipped, 41 run`
 - `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
 - `LeftRecursion`: `81 passed, 0 failed, 17 skipped, 81 run`
 - `ParseTrees`: `5 passed, 0 failed, 5 skipped, 5 run`
 - `ParserExec`: `43 passed, 0 failed, 7 skipped, 43 run`
-- `ParserErrors`: `17 passed, 0 failed, 17 skipped, 17 run`
+- `ParserErrors`: `21 passed, 0 failed, 13 skipped, 21 run`
 - `Performance`: `7 passed, 0 failed, 0 skipped, 7 run`
-- `SemPredEvalLexer`: `1 passed, 0 failed, 7 skipped, 1 run`
+- `SemPredEvalLexer`: `2 passed, 0 failed, 6 skipped, 2 run`
 - `SemPredEvalParser`: `7 passed, 0 failed, 19 skipped, 7 run`
 - `Sets`: `29 passed, 0 failed, 2 skipped, 29 run`
 
 The remaining target-action skips are descriptors that depend on templates the
 Rust harness does not render yet, such as target members, listener hooks,
-diagnostic helpers, or semantic predicates that need generated context methods.
+diagnostic helpers, return-value evaluation, parser predicates that need
+generated context methods, or listener hooks.
