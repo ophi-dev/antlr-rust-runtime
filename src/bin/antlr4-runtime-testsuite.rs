@@ -503,8 +503,6 @@ fn target_templates_supported(descriptor: &Descriptor) -> bool {
         || !supported_signature_templates(grammar)
         || grammar.contains("<LANotEquals")
         || grammar.contains("<AppendStr")
-        || grammar.contains("<TreeNodeWithAltNumField")
-        || grammar.contains("contextSuperClass")
     {
         return false;
     }
@@ -908,10 +906,12 @@ fn strip_template_comments(grammar: &str) -> String {
 fn strip_supported_preamble_templates(grammar: &str) -> String {
     let mut out = String::with_capacity(grammar.len());
     for line in grammar.lines() {
+        let trimmed = line.trim();
         if matches!(
-            line.trim(),
+            trimmed,
             "<ImportRuleInvocationStack()>" | "<ParserPropertyMember()>"
-        ) {
+        ) || trimmed.starts_with("<TreeNodeWithAltNumField(")
+        {
             continue;
         }
         out.push_str(line);

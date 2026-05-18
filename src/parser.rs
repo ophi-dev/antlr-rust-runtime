@@ -113,6 +113,7 @@ pub struct BaseParser<S> {
 struct RecognizeOutcome {
     index: usize,
     consumed_eof: bool,
+    alt_number: usize,
     diagnostics: Vec<ParserDiagnostic>,
     actions: Vec<ParserAction>,
     nodes: Vec<RecognizedNode>,
@@ -133,6 +134,7 @@ enum RecognizedNode {
     },
     Rule {
         rule_index: usize,
+        alt_number: usize,
         start_index: usize,
         stop_index: Option<usize>,
         children: Vec<Self>,
@@ -268,6 +270,8 @@ struct RecognizeRequest<'a> {
     index: usize,
     rule_start_index: usize,
     init_action_rules: &'a BTreeSet<usize>,
+    rule_alt_number: usize,
+    track_alt_numbers: bool,
     /// Current left-recursive precedence threshold, matching ANTLR's
     /// `precpred(_ctx, k)` check for generated precedence rules.
     precedence: i32,
@@ -474,7 +478,7 @@ where
         atn: &Atn,
         rule_index: usize,
     ) -> Result<(ParseTree, Vec<ParserAction>), AntlrError> {
-        self.parse_atn_rule_with_action_inits(atn, rule_index, &[])
+        self.parse_atn_rule_with_action_options(atn, rule_index, &[], false)
     }
 
     /// Parses a generated rule and emits ATN actions plus selected rule-init
@@ -489,6 +493,21 @@ where
         atn: &Atn,
         rule_index: usize,
         init_action_rules: &[usize],
+    ) -> Result<(ParseTree, Vec<ParserAction>), AntlrError> {
+        self.parse_atn_rule_with_action_options(atn, rule_index, init_action_rules, false)
+    }
+
+    /// Parses a generated rule with optional semantic-action replay features.
+    ///
+    /// `track_alt_numbers` is used by grammars that opt into ANTLR's
+    /// alt-numbered context behavior. It keeps ordinary parse-tree rendering
+    /// unchanged for grammars that do not request that target template.
+    pub fn parse_atn_rule_with_action_options(
+        &mut self,
+        atn: &Atn,
+        rule_index: usize,
+        init_action_rules: &[usize],
+        track_alt_numbers: bool,
     ) -> Result<(ParseTree, Vec<ParserAction>), AntlrError> {
         let start_state = atn
             .rule_to_start_state()
@@ -519,6 +538,8 @@ where
                 index: start_index,
                 rule_start_index: start_index,
                 init_action_rules: &init_action_rules,
+                rule_alt_number: 0,
+                track_alt_numbers,
                 precedence: 0,
                 depth: 0,
                 recovery_symbols: BTreeSet::new(),
@@ -540,6 +561,9 @@ where
             );
         }
         let mut context = ParserRuleContext::new(rule_index, self.state());
+        if track_alt_numbers {
+            context.set_alt_number(outcome.alt_number);
+        }
         if let Some(token) = self.token_at(start_index) {
             context.set_start(token);
         }
@@ -553,7 +577,7 @@ where
         if self.build_parse_trees {
             let nodes = fold_left_recursive_boundaries(outcome.nodes);
             for node in &nodes {
-                context.add_child(self.recognized_node_tree(node)?);
+                context.add_child(self.recognized_node_tree(node, track_alt_numbers)?);
             }
         }
         self.input.seek(outcome.index);
@@ -1053,6 +1077,8 @@ where
             index,
             rule_start_index,
             init_action_rules,
+            rule_alt_number,
+            track_alt_numbers,
             precedence,
             depth,
             ..
@@ -1071,6 +1097,8 @@ where
                 index: after_next,
                 rule_start_index,
                 init_action_rules,
+                rule_alt_number,
+                track_alt_numbers,
                 precedence,
                 depth: depth + 1,
                 recovery_symbols: BTreeSet::new(),
@@ -1115,6 +1143,8 @@ where
             index,
             rule_start_index,
             init_action_rules,
+            rule_alt_number,
+            track_alt_numbers,
             precedence,
             depth,
             ..
@@ -1137,6 +1167,8 @@ where
                 index,
                 rule_start_index,
                 init_action_rules,
+                rule_alt_number,
+                track_alt_numbers,
                 precedence,
                 depth: depth + 1,
                 recovery_symbols: BTreeSet::new(),
@@ -1177,6 +1209,8 @@ where
             index,
             rule_start_index,
             init_action_rules,
+            rule_alt_number,
+            track_alt_numbers,
             precedence,
             depth,
             recovery_symbols,
@@ -1188,6 +1222,7 @@ where
             return vec![RecognizeOutcome {
                 index,
                 consumed_eof: false,
+                alt_number: rule_alt_number,
                 diagnostics: Vec::new(),
                 actions: Vec::new(),
                 nodes: Vec::new(),
@@ -1213,7 +1248,9 @@ where
         };
         let epsilon_recovery_symbols = next_recovery_symbols(atn, state, &recovery_symbols);
         let mut outcomes = Vec::new();
-        for transition in &state.transitions {
+        for (transition_index, transition) in state.transitions.iter().enumerate() {
+            let next_alt_number =
+                next_alt_number(state, transition_index, rule_alt_number, track_alt_numbers);
             match transition {
                 Transition::Epsilon { target }
                 | Transition::Predicate { target, .. }
@@ -1237,6 +1274,8 @@ where
                                 index,
                                 rule_start_index,
                                 init_action_rules,
+                                rule_alt_number: next_alt_number,
+                                track_alt_numbers,
                                 precedence,
                                 depth: depth + 1,
                                 recovery_symbols: epsilon_recovery_symbols.clone(),
@@ -1273,6 +1312,8 @@ where
                                 index,
                                 rule_start_index,
                                 init_action_rules,
+                                rule_alt_number: next_alt_number,
+                                track_alt_numbers,
                                 precedence,
                                 depth: depth + 1,
                                 recovery_symbols: epsilon_recovery_symbols.clone(),
@@ -1302,6 +1343,8 @@ where
                             index,
                             rule_start_index: index,
                             init_action_rules,
+                            rule_alt_number: 0,
+                            track_alt_numbers,
                             precedence: *rule_precedence,
                             depth: depth + 1,
                             recovery_symbols: epsilon_recovery_symbols.clone(),
@@ -1313,6 +1356,7 @@ where
                     for child in children {
                         let child_node = RecognizedNode::Rule {
                             rule_index: *rule_index,
+                            alt_number: child.alt_number,
                             start_index: index,
                             stop_index: child.index.checked_sub(1),
                             children: fold_left_recursive_boundaries(child.nodes.clone()),
@@ -1326,6 +1370,8 @@ where
                                     index: child.index,
                                     rule_start_index,
                                     init_action_rules,
+                                    rule_alt_number,
+                                    track_alt_numbers,
                                     precedence,
                                     depth: depth + 1,
                                     recovery_symbols: BTreeSet::new(),
@@ -1376,6 +1422,8 @@ where
                                     index: next_index,
                                     rule_start_index,
                                     init_action_rules,
+                                    rule_alt_number: next_alt_number,
+                                    track_alt_numbers,
                                     precedence,
                                     depth: depth + 1,
                                     recovery_symbols: BTreeSet::new(),
@@ -1409,6 +1457,8 @@ where
                                 index,
                                 rule_start_index,
                                 init_action_rules,
+                                rule_alt_number,
+                                track_alt_numbers,
                                 precedence,
                                 depth,
                                 recovery_symbols: recovery_symbols.clone(),
@@ -1430,6 +1480,8 @@ where
                                         index,
                                         rule_start_index,
                                         init_action_rules,
+                                        rule_alt_number,
+                                        track_alt_numbers,
                                         precedence,
                                         depth,
                                         recovery_symbols: recovery_symbols.clone(),
@@ -1494,7 +1546,11 @@ where
     }
 
     /// Converts a recognized internal node into a public parse-tree node.
-    fn recognized_node_tree(&mut self, node: &RecognizedNode) -> Result<ParseTree, AntlrError> {
+    fn recognized_node_tree(
+        &mut self,
+        node: &RecognizedNode,
+        track_alt_numbers: bool,
+    ) -> Result<ParseTree, AntlrError> {
         match node {
             RecognizedNode::Token { index } => {
                 let token =
@@ -1537,11 +1593,15 @@ where
             }
             RecognizedNode::Rule {
                 rule_index,
+                alt_number,
                 start_index,
                 stop_index,
                 children,
             } => {
                 let mut context = ParserRuleContext::new(*rule_index, self.state());
+                if track_alt_numbers {
+                    context.set_alt_number(*alt_number);
+                }
                 if let Some(token) = self.token_at(*start_index) {
                     context.set_start(token);
                 }
@@ -1549,7 +1609,7 @@ where
                     context.set_stop(token);
                 }
                 for child in children {
-                    context.add_child(self.recognized_node_tree(child)?);
+                    context.add_child(self.recognized_node_tree(child, track_alt_numbers)?);
                 }
                 Ok(self.rule_node(context))
             }
@@ -1573,6 +1633,35 @@ fn left_recursive_boundary(atn: &Atn, state: &AtnState, target: usize) -> Option
     state.rule_index
 }
 
+/// Selects the first outer alternative observed for a rule path.
+///
+/// ANTLR's alt-numbered tree contexts store the rule alternative chosen at the
+/// outer decision. The metadata recognizer only needs this when a generated
+/// grammar opts into that target template; otherwise the value remains `0` and
+/// parse-tree rendering is unchanged.
+const fn next_alt_number(
+    state: &AtnState,
+    transition_index: usize,
+    current_alt_number: usize,
+    track_alt_numbers: bool,
+) -> usize {
+    if !track_alt_numbers || current_alt_number != 0 || state.transitions.len() <= 1 {
+        return current_alt_number;
+    }
+    if matches!(
+        state.kind,
+        AtnStateKind::Basic
+            | AtnStateKind::BlockStart
+            | AtnStateKind::PlusBlockStart
+            | AtnStateKind::StarBlockStart
+            | AtnStateKind::StarLoopEntry
+    ) && !state.precedence_rule_decision
+    {
+        return transition_index + 1;
+    }
+    current_alt_number
+}
+
 /// Folds boundary markers emitted at precedence-loop entries into nested rule
 /// nodes, matching ANTLR's recursive-context parse-tree shape.
 fn fold_left_recursive_boundaries(nodes: Vec<RecognizedNode>) -> Vec<RecognizedNode> {
@@ -1586,6 +1675,7 @@ fn fold_left_recursive_boundaries(nodes: Vec<RecognizedNode>) -> Vec<RecognizedN
                     let stop_index = recognized_nodes_stop_index(&children);
                     folded.push(RecognizedNode::Rule {
                         rule_index,
+                        alt_number: 0,
                         start_index,
                         stop_index,
                         children,
@@ -1931,6 +2021,7 @@ mod tests {
             vec![
                 RecognizedNode::Rule {
                     rule_index: 1,
+                    alt_number: 0,
                     start_index: 0,
                     stop_index: Some(0),
                     children: vec![RecognizedNode::Token { index: 0 }],
@@ -1945,6 +2036,7 @@ mod tests {
         let first = RecognizeOutcome {
             index: 1,
             consumed_eof: false,
+            alt_number: 0,
             diagnostics: Vec::new(),
             actions: vec![ParserAction::new(1, 0, 0, None)],
             nodes: vec![RecognizedNode::Token { index: 0 }],
@@ -1964,6 +2056,7 @@ mod tests {
         let first = RecognizeOutcome {
             index: 1,
             consumed_eof: false,
+            alt_number: 0,
             diagnostics: Vec::new(),
             actions: vec![ParserAction::new(1, 0, 0, None)],
             nodes: vec![RecognizedNode::Token { index: 0 }],
@@ -1985,10 +2078,12 @@ mod tests {
     fn outcome_ties_keep_first_recursive_tree_shape() {
         let recursive_nodes = vec![RecognizedNode::Rule {
             rule_index: 1,
+            alt_number: 0,
             start_index: 0,
             stop_index: Some(0),
             children: vec![RecognizedNode::Rule {
                 rule_index: 1,
+                alt_number: 0,
                 start_index: 0,
                 stop_index: Some(0),
                 children: vec![RecognizedNode::Token { index: 0 }],
@@ -1997,6 +2092,7 @@ mod tests {
         let first = RecognizeOutcome {
             index: 1,
             consumed_eof: false,
+            alt_number: 0,
             diagnostics: Vec::new(),
             actions: vec![ParserAction::new(1, 0, 0, None)],
             nodes: recursive_nodes.clone(),
@@ -2004,6 +2100,7 @@ mod tests {
         let second = RecognizeOutcome {
             index: 1,
             consumed_eof: false,
+            alt_number: 0,
             diagnostics: Vec::new(),
             actions: vec![ParserAction::new(2, 0, 0, None)],
             nodes: recursive_nodes,

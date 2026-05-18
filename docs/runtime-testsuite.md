@@ -70,6 +70,8 @@ Supported now:
 - parser `@init {<BuildParseTrees()>}` and `notBuildParseTree` descriptors,
 - parser rule-level `@after {<ToStringTree("$label.ctx")>}` actions for simple
   rule labels,
+- alt-numbered parse-tree contexts for grammars using
+  `TreeNodeWithAltNumField`/`contextSuperClass`,
 - `RuleInvocationStack()` stdout helper actions,
 - `BailErrorStrategy()` descriptors as no-ops while the default Rust error
   handling still matches the covered outputs,
@@ -97,11 +99,11 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `249 passed, 0 failed, 108 skipped, 249 run`
+- full descriptor sweep: `250 passed, 0 failed, 107 skipped, 250 run`
 - `LexerExec`: `41 passed, 0 failed, 1 skipped, 41 run`
 - `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
 - `LeftRecursion`: `81 passed, 0 failed, 17 skipped, 81 run`
-- `ParseTrees`: `5 passed, 0 failed, 5 skipped, 5 run`
+- `ParseTrees`: `6 passed, 0 failed, 4 skipped, 6 run`
 - `ParserExec`: `43 passed, 0 failed, 7 skipped, 43 run`
 - `ParserErrors`: `22 passed, 0 failed, 12 skipped, 22 run`
 - `Performance`: `7 passed, 0 failed, 0 skipped, 7 run`

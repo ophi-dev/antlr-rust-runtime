@@ -395,6 +395,7 @@ fn render_parser(
     )?;
     let has_init_actions = init_actions.iter().any(Option::is_some);
     let has_action_dispatch = !actions.is_empty() || has_init_actions;
+    let track_alt_numbers = grammar_source.is_some_and(uses_alt_number_contexts);
     let init_action_rules = init_actions
         .iter()
         .enumerate()
@@ -405,8 +406,9 @@ fn render_parser(
     for (index, rule) in data.rule_names.iter().enumerate() {
         let after_action = after_actions.get(index).and_then(Option::as_ref);
         let uses_after_interval = after_action.is_some_and(ActionTemplate::uses_rule_interval);
-        let needs_slow_path =
-            has_action_dispatch || after_action.is_some_and(ActionTemplate::needs_nested_tree);
+        let needs_slow_path = has_action_dispatch
+            || track_alt_numbers
+            || after_action.is_some_and(ActionTemplate::needs_nested_tree);
         writeln!(
             rule_methods,
             "    pub fn {}(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{",
@@ -428,7 +430,14 @@ fn render_parser(
             .expect("writing to a string cannot fail");
         } else {
             if needs_slow_path {
-                if has_init_actions {
+                if track_alt_numbers {
+                    writeln!(
+                        rule_methods,
+                        "        let (tree, actions) = self.base.parse_atn_rule_with_action_options(atn(), {index}, &{}, true)?;",
+                        render_usize_array(&init_action_rules)
+                    )
+                    .expect("writing to a string cannot fail");
+                } else if has_init_actions {
                     writeln!(
                         rule_methods,
                         "        let (tree, actions) = self.base.parse_atn_rule_with_action_inits(atn(), {index}, &{})?;",
@@ -1002,6 +1011,10 @@ fn is_members_action(source: &str, open_brace: usize) -> bool {
         prefix[statement_start..].trim(),
         "@members" | "@parser::members"
     )
+}
+
+fn uses_alt_number_contexts(source: &str) -> bool {
+    source.contains("<TreeNodeWithAltNumField") || source.contains("contextSuperClass")
 }
 
 fn after_action_rule_name(source: &str, open_brace: usize) -> Option<&str> {

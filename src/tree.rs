@@ -144,6 +144,7 @@ impl RuleNode {
 pub struct ParserRuleContext {
     rule_index: usize,
     invoking_state: isize,
+    alt_number: usize,
     start: Option<CommonToken>,
     stop: Option<CommonToken>,
     children: Vec<ParseTree>,
@@ -155,6 +156,7 @@ impl ParserRuleContext {
         Self {
             rule_index,
             invoking_state,
+            alt_number: 0,
             start: None,
             stop: None,
             children: Vec::new(),
@@ -168,6 +170,14 @@ impl ParserRuleContext {
 
     pub const fn invoking_state(&self) -> isize {
         self.invoking_state
+    }
+
+    pub const fn alt_number(&self) -> usize {
+        self.alt_number
+    }
+
+    pub const fn set_alt_number(&mut self, alt_number: usize) {
+        self.alt_number = alt_number;
     }
 
     pub const fn start(&self) -> Option<&CommonToken> {
@@ -210,8 +220,13 @@ impl ParserRuleContext {
         let name = rule_names
             .get(self.rule_index)
             .map_or("<unknown>", String::as_str);
+        let display_name = if self.alt_number == 0 {
+            name.to_owned()
+        } else {
+            format!("{name}:{}", self.alt_number)
+        };
         if self.children.is_empty() {
-            return name.to_owned();
+            return display_name;
         }
         let children = self
             .children
@@ -219,7 +234,7 @@ impl ParserRuleContext {
             .map(|child| child.to_string_tree(rule_names))
             .collect::<Vec<_>>()
             .join(" ");
-        format!("({name} {children})")
+        format!("({display_name} {children})")
     }
 }
 
