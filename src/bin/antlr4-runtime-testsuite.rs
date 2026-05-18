@@ -475,7 +475,6 @@ fn target_templates_supported(descriptor: &Descriptor) -> bool {
     let grammar = &descriptor.grammar;
     if grammar.contains("@members")
         || grammar.contains("@definitions")
-        || grammar.contains("@after")
         || grammar.contains("@init")
         || grammar.contains("returns [<")
         || grammar.contains("locals [<")
@@ -488,6 +487,9 @@ fn target_templates_supported(descriptor: &Descriptor) -> bool {
         || grammar.contains("<ToStringTree")
         || grammar.contains("<AppendStr")
     {
+        return false;
+    }
+    if grammar.contains("@after") && !supported_after_action_templates(grammar) {
         return false;
     }
     supported_action_templates(grammar)
@@ -511,7 +513,7 @@ fn supported_action_templates(grammar: &str) -> bool {
     let mut offset = 0;
     while let Some(block) = next_template_block(grammar, offset) {
         offset = block.after_brace;
-        if block.predicate {
+        if block.predicate || is_after_action(grammar, block.open_brace) {
             continue;
         }
         if !is_supported_action_template(block.body.trim()) {
@@ -519,6 +521,22 @@ fn supported_action_templates(grammar: &str) -> bool {
         }
     }
     true
+}
+
+fn supported_after_action_templates(grammar: &str) -> bool {
+    let mut saw_after_action = false;
+    let mut offset = 0;
+    while let Some(block) = next_template_block(grammar, offset) {
+        offset = block.after_brace;
+        if block.predicate || !is_after_action(grammar, block.open_brace) {
+            continue;
+        }
+        saw_after_action = true;
+        if !is_supported_action_template(block.body.trim()) {
+            return false;
+        }
+    }
+    saw_after_action
 }
 
 fn supported_lexer_predicate_templates(grammar: &str) -> bool {
@@ -679,6 +697,12 @@ fn skip_ascii_whitespace(source: &str, mut index: usize) -> usize {
         index += 1;
     }
     index
+}
+
+fn is_after_action(source: &str, open_brace: usize) -> bool {
+    let prefix = &source[..open_brace];
+    let statement_start = prefix.rfind(';').map_or(0, |index| index + 1);
+    prefix[statement_start..].contains("@after")
 }
 
 /// Runs `antlr4-rust-gen` for either a lexer descriptor or a combined parser

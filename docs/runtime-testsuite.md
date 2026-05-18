@@ -55,6 +55,7 @@ Supported now:
 - lexer and parser target-template actions for the currently supported stdout
   helpers,
 - parser token-label text actions such as `$TOKEN.text` and `$label.text`,
+- parser rule-level `@after` actions for the currently supported stdout helpers,
 - `StringTemplate` backslash rendering for descriptor grammars,
 - official ANTLR `.interp` generation,
 - Rust module generation and execution through Cargo.
@@ -71,7 +72,7 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `142 passed, 0 failed, 215 skipped, 142 run`
+- full descriptor sweep: `143 passed, 0 failed, 214 skipped, 143 run`
 - `LexerExec`: `41 passed, 0 failed, 1 skipped, 41 run`
 - `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
 - `LeftRecursion`: `7 passed, 0 failed, 91 skipped, 7 run`
@@ -80,7 +81,7 @@ Current validated groups:
 - `Performance`: `7 passed, 0 failed, 0 skipped, 7 run`
 - `SemPredEvalLexer`: `1 passed, 0 failed, 7 skipped, 1 run`
 - `SemPredEvalParser`: `7 passed, 0 failed, 19 skipped, 7 run`
-- `Sets`: `28 passed, 0 failed, 3 skipped, 28 run`
+- `Sets`: `29 passed, 0 failed, 2 skipped, 29 run`
 
 The remaining target-action skips are descriptors that depend on templates the
 Rust harness does not render yet, such as target members, listener hooks,

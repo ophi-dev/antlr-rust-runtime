@@ -370,32 +370,65 @@ fn render_parser(
         || Ok(Vec::new()),
         |grammar| parser_action_templates(data, grammar),
     )?;
+    let after_actions = grammar_source.map_or_else(
+        || Ok(vec![None; data.rule_names.len()]),
+        |grammar| parser_after_action_templates(data, grammar),
+    )?;
     let action_method = render_parser_action_method(&actions);
     let mut rule_methods = String::new();
     for (index, rule) in data.rule_names.iter().enumerate() {
+        let after_action = after_actions.get(index).and_then(Option::as_ref);
         writeln!(
             rule_methods,
             "    pub fn {}(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{",
             rust_function_name(rule)
         )
         .expect("writing to a string cannot fail");
-        if actions.is_empty() {
+        if after_action.is_some() {
+            writeln!(
+                rule_methods,
+                "        let start_index = antlr4_runtime::IntStream::index(self.base.input());"
+            )
+            .expect("writing to a string cannot fail");
+        }
+        if actions.is_empty() && after_action.is_none() {
             writeln!(
                 rule_methods,
                 "        self.base.parse_atn_rule(atn(), {index})"
             )
             .expect("writing to a string cannot fail");
         } else {
-            writeln!(
-                rule_methods,
-                "        let (tree, actions) = self.base.parse_atn_rule_with_actions(atn(), {index})?;"
-            )
-            .expect("writing to a string cannot fail");
-            writeln!(
-                rule_methods,
-                "        for action in actions {{ self.run_action(action); }}"
-            )
-            .expect("writing to a string cannot fail");
+            if actions.is_empty() {
+                writeln!(
+                    rule_methods,
+                    "        let tree = self.base.parse_atn_rule(atn(), {index})?;"
+                )
+                .expect("writing to a string cannot fail");
+            } else {
+                writeln!(
+                    rule_methods,
+                    "        let (tree, actions) = self.base.parse_atn_rule_with_actions(atn(), {index})?;"
+                )
+                .expect("writing to a string cannot fail");
+                writeln!(
+                    rule_methods,
+                    "        for action in actions {{ self.run_action(action); }}"
+                )
+                .expect("writing to a string cannot fail");
+            }
+            if let Some(template) = after_action {
+                writeln!(
+                    rule_methods,
+                    "        let stop_index = antlr4_runtime::IntStream::index(self.base.input()).checked_sub(1);"
+                )
+                .expect("writing to a string cannot fail");
+                writeln!(
+                    rule_methods,
+                    "        {}",
+                    render_parser_after_action_statement(template)
+                )
+                .expect("writing to a string cannot fail");
+            }
             writeln!(rule_methods, "        Ok(tree)").expect("writing to a string cannot fail");
         }
         writeln!(rule_methods, "    }}").expect("writing to a string cannot fail");
@@ -571,6 +604,36 @@ fn parser_action_templates(
     Ok(states.into_iter().zip(templates).collect())
 }
 
+/// Extracts rule-level `@after` target templates keyed by generated rule
+/// index.
+fn parser_after_action_templates(
+    data: &InterpData,
+    grammar_source: &str,
+) -> io::Result<Vec<Option<ActionTemplate>>> {
+    let mut actions = vec![None; data.rule_names.len()];
+    let mut offset = 0;
+    while let Some(block) = next_template_block(grammar_source, offset) {
+        offset = block.after_brace;
+        if block.predicate || !is_after_action(grammar_source, block.open_brace) {
+            continue;
+        }
+        let Some(rule_name) = after_action_rule_name(grammar_source, block.open_brace) else {
+            continue;
+        };
+        let Some(rule_index) = data.rule_names.iter().position(|name| name == rule_name) else {
+            continue;
+        };
+        let Some(template) = parse_action_template(block.body) else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("unsupported @after target action template <{}>", block.body),
+            ));
+        };
+        actions[rule_index] = Some(template);
+    }
+    Ok(actions)
+}
+
 /// Finds action templates embedded as `{<...>}` blocks, ignoring semantic
 /// predicates (`{<...>}?`) because those are control-flow guards rather than
 /// side-effect actions.
@@ -579,7 +642,7 @@ fn extract_supported_action_templates(grammar_source: &str) -> io::Result<Vec<Ac
     let mut offset = 0;
     while let Some(block) = next_template_block(grammar_source, offset) {
         offset = block.after_brace;
-        if block.predicate {
+        if block.predicate || is_after_action(grammar_source, block.open_brace) {
             continue;
         }
         let Some(template) = parse_action_template(block.body) else {
@@ -595,6 +658,7 @@ fn extract_supported_action_templates(grammar_source: &str) -> io::Result<Vec<Ac
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct TemplateBlock<'a> {
+    open_brace: usize,
     body: &'a str,
     after_brace: usize,
     predicate: bool,
@@ -620,6 +684,7 @@ fn next_template_block(source: &str, offset: usize) -> Option<TemplateBlock<'_>>
         }
         let after_brace = close_brace + 1;
         return Some(TemplateBlock {
+            open_brace: open,
             body: &source[template_start + 1..close_angle],
             after_brace,
             predicate: source[after_brace..].trim_start().starts_with('?'),
@@ -637,6 +702,22 @@ fn skip_ascii_whitespace(source: &str, mut index: usize) -> usize {
         index += 1;
     }
     index
+}
+
+fn is_after_action(source: &str, open_brace: usize) -> bool {
+    let prefix = &source[..open_brace];
+    let statement_start = prefix.rfind(';').map_or(0, |index| index + 1);
+    prefix[statement_start..].contains("@after")
+}
+
+fn after_action_rule_name(source: &str, open_brace: usize) -> Option<&str> {
+    let prefix = &source[..open_brace];
+    let statement_start = prefix.rfind(';').map_or(0, |index| index + 1);
+    prefix[statement_start..]
+        .split("@after")
+        .next()?
+        .split_whitespace()
+        .last()
 }
 
 /// Converts the subset of upstream `StringTemplate` actions the Rust generator
@@ -858,6 +939,40 @@ fn render_action_statement(template: &ActionTemplate) -> String {
                 ),
                 TokenTextSource::ActionStop => format!(
                     "let text = action.stop_index().map_or_else(String::new, |index| self.base.text_interval(index, Some(index))); {write}(\"{{}}\", text);"
+                ),
+            }
+        }
+        ActionTemplate::Literal { value, newline } => {
+            let write = if *newline { "println!" } else { "print!" };
+            format!("{write}(\"{}\");", rust_string(value))
+        }
+    }
+}
+
+/// Renders a rule-level `@after` action using the parsed rule input span.
+fn render_parser_after_action_statement(template: &ActionTemplate) -> String {
+    match template {
+        ActionTemplate::Text { newline } => {
+            let write = if *newline { "println!" } else { "print!" };
+            format!(
+                "let text = self.base.text_interval(start_index, stop_index); {write}(\"{{}}\", text);"
+            )
+        }
+        ActionTemplate::TextWithPrefix { prefix, newline } => {
+            let write = if *newline { "println!" } else { "print!" };
+            format!(
+                "let text = self.base.text_interval(start_index, stop_index); {write}(\"{}{{}}\", text);",
+                rust_string(prefix)
+            )
+        }
+        ActionTemplate::TokenText { source, newline } => {
+            let write = if *newline { "println!" } else { "print!" };
+            match source {
+                TokenTextSource::RuleStart => format!(
+                    "let text = self.base.text_interval(start_index, Some(start_index)); {write}(\"{{}}\", text);"
+                ),
+                TokenTextSource::ActionStop => format!(
+                    "let text = stop_index.map_or_else(String::new, |index| self.base.text_interval(index, Some(index))); {write}(\"{{}}\", text);"
                 ),
             }
         }
