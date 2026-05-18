@@ -491,9 +491,27 @@ where
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum ActionTemplate {
-    Text { newline: bool },
-    TextWithPrefix { prefix: String, newline: bool },
-    Literal { value: String, newline: bool },
+    Text {
+        newline: bool,
+    },
+    TextWithPrefix {
+        prefix: String,
+        newline: bool,
+    },
+    TokenText {
+        source: TokenTextSource,
+        newline: bool,
+    },
+    Literal {
+        value: String,
+        newline: bool,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TokenTextSource {
+    RuleStart,
+    ActionStop,
 }
 
 /// Pairs supported lexer target-template actions with serialized custom-action
@@ -630,7 +648,9 @@ fn parse_action_template(body: &str) -> Option<ActionTemplate> {
             Some(ActionTemplate::Text { newline: true })
         }
         r#"write("$text")"# | "Text():write()" => Some(ActionTemplate::Text { newline: false }),
-        _ => parse_plus_text(body).or_else(|| parse_write_literal(body)),
+        _ => parse_plus_text(body)
+            .or_else(|| parse_token_text(body))
+            .or_else(|| parse_write_literal(body)),
     }
 }
 
@@ -648,6 +668,28 @@ fn parse_plus_text(body: &str) -> Option<ActionTemplate> {
     };
     let prefix = parse_template_string(argument)?;
     Some(ActionTemplate::TextWithPrefix { prefix, newline })
+}
+
+fn parse_token_text(body: &str) -> Option<ActionTemplate> {
+    let (newline, argument) = if let Some(argument) = body
+        .strip_prefix("writeln(")
+        .and_then(|value| value.strip_suffix(')'))
+    {
+        (true, argument)
+    } else {
+        let argument = body
+            .strip_prefix("write(")
+            .and_then(|value| value.strip_suffix(')'))?;
+        (false, argument)
+    };
+    let value = parse_template_string(argument)?;
+    let label = value.strip_prefix('$')?.strip_suffix(".text")?;
+    let source = label
+        .chars()
+        .next()
+        .filter(char::is_ascii_uppercase)
+        .map_or(TokenTextSource::RuleStart, |_| TokenTextSource::ActionStop);
+    Some(ActionTemplate::TokenText { source, newline })
 }
 
 fn parse_write_literal(body: &str) -> Option<ActionTemplate> {
@@ -761,6 +803,12 @@ fn render_lexer_action_statement(template: &ActionTemplate) -> String {
                 rust_string(prefix)
             )
         }
+        ActionTemplate::TokenText { newline, .. } => {
+            let write = if *newline { "println!" } else { "print!" };
+            format!(
+                "let text = _base.token_text_until(action.position()); {write}(\"{{}}\", text);"
+            )
+        }
         ActionTemplate::Literal { value, newline } => {
             let write = if *newline { "println!" } else { "print!" };
             format!("{write}(\"{}\");", rust_string(value))
@@ -801,6 +849,17 @@ fn render_action_statement(template: &ActionTemplate) -> String {
                 "let text = self.base.text_interval(action.start_index(), action.stop_index()); {write}(\"{}{{}}\", text);",
                 rust_string(prefix)
             )
+        }
+        ActionTemplate::TokenText { source, newline } => {
+            let write = if *newline { "println!" } else { "print!" };
+            match source {
+                TokenTextSource::RuleStart => format!(
+                    "let text = self.base.text_interval(action.start_index(), Some(action.start_index())); {write}(\"{{}}\", text);"
+                ),
+                TokenTextSource::ActionStop => format!(
+                    "let text = action.stop_index().map_or_else(String::new, |index| self.base.text_interval(index, Some(index))); {write}(\"{{}}\", text);"
+                ),
+            }
         }
         ActionTemplate::Literal { value, newline } => {
             let write = if *newline { "println!" } else { "print!" };

@@ -544,8 +544,25 @@ fn is_supported_action_template(body: &str) -> bool {
             | "Text():write()"
     ) || body.starts_with("writeln(\"\\\"")
         || body.starts_with("write(\"\\\"")
+        || is_token_text_template(body)
         || (body.starts_with("PlusText(\"") && body.ends_with("):writeln()"))
         || (body.starts_with("PlusText(\"") && body.ends_with("):write()"))
+}
+
+fn is_token_text_template(body: &str) -> bool {
+    let Some(argument) = body
+        .strip_prefix("writeln(\"$")
+        .and_then(|value| value.strip_suffix(".text\")"))
+        .or_else(|| {
+            body.strip_prefix("write(\"$")
+                .and_then(|value| value.strip_suffix(".text\")"))
+        })
+    else {
+        return false;
+    };
+    argument
+        .chars()
+        .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
 }
 
 /// Runs one descriptor through ANTLR metadata generation, Rust code generation,
