@@ -65,7 +65,8 @@ Supported now:
 - `BailErrorStrategy()` descriptors as no-ops while the default Rust error
   handling still matches the covered outputs,
 - compile-time-only target templates such as `IntArg`, `AssignLocal`,
-  `AssertIsList`, `Pass`, and parser property helpers as no-ops,
+  `AssertIsList`, `Pass`, parser property helpers, and supported member
+  scaffolding as no-ops,
 - nested `StringTemplate` action parsing for supported no-op wrappers,
 - ANTLR recursive-context tree rewrites for left-recursive parse-tree output,
 - `StringTemplate` backslash rendering for descriptor grammars,
@@ -85,13 +86,13 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `231 passed, 0 failed, 126 skipped, 231 run`
+- full descriptor sweep: `232 passed, 0 failed, 125 skipped, 232 run`
 - `LexerExec`: `41 passed, 0 failed, 1 skipped, 41 run`
 - `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
 - `LeftRecursion`: `81 passed, 0 failed, 17 skipped, 81 run`
 - `ParseTrees`: `5 passed, 0 failed, 5 skipped, 5 run`
 - `ParserExec`: `43 passed, 0 failed, 7 skipped, 43 run`
-- `ParserErrors`: `5 passed, 0 failed, 29 skipped, 5 run`
+- `ParserErrors`: `6 passed, 0 failed, 28 skipped, 6 run`
 - `Performance`: `7 passed, 0 failed, 0 skipped, 7 run`
 - `SemPredEvalLexer`: `1 passed, 0 failed, 7 skipped, 1 run`
 - `SemPredEvalParser`: `7 passed, 0 failed, 19 skipped, 7 run`

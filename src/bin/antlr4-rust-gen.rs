@@ -709,6 +709,7 @@ fn extract_supported_action_templates(grammar_source: &str) -> io::Result<Vec<Ac
                 if block.predicate
                     || is_after_action(grammar_source, block.open_brace)
                     || is_init_action(grammar_source, block.open_brace)
+                    || is_members_action(grammar_source, block.open_brace)
                 {
                     continue;
                 }
@@ -850,6 +851,17 @@ fn is_rule_named_action(source: &str, open_brace: usize, marker: &str) -> bool {
     let prefix = &source[..open_brace];
     let statement_start = prefix.rfind(';').map_or(0, |index| index + 1);
     prefix[statement_start..].trim_end().ends_with(marker)
+}
+
+/// Detects member-action blocks whose target code is compile-time scaffolding
+/// rather than an ATN semantic action.
+fn is_members_action(source: &str, open_brace: usize) -> bool {
+    let prefix = &source[..open_brace];
+    let statement_start = prefix.rfind(';').map_or(0, |index| index + 1);
+    matches!(
+        prefix[statement_start..].trim(),
+        "@members" | "@parser::members"
+    )
 }
 
 fn after_action_rule_name(source: &str, open_brace: usize) -> Option<&str> {

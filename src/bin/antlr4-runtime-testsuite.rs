@@ -474,7 +474,7 @@ fn target_templates_supported(descriptor: &Descriptor) -> bool {
         return false;
     }
     let grammar = &descriptor.grammar;
-    if grammar.contains("@members")
+    if unsupported_members_templates(grammar)
         || grammar.contains("@definitions")
         || !supported_signature_templates(grammar)
         || grammar.contains("<LANotEquals")
@@ -514,6 +514,7 @@ fn supported_action_templates(grammar: &str) -> bool {
         if block.predicate
             || is_after_action(grammar, block.open_brace)
             || is_init_action(grammar, block.open_brace)
+            || is_members_action(grammar, block.open_brace)
         {
             continue;
         }
@@ -618,6 +619,27 @@ fn supported_signature_template_on_line(line: &str, marker: &str) -> bool {
         .strip_suffix(']')
         .and_then(|value| value.strip_suffix('>'))
         .is_some_and(|body| body.starts_with("IntArg(") && body.ends_with(')'))
+}
+
+/// Allows only member templates that are no-op scaffolding for this metadata
+/// harness; real listener/member customizations stay skipped.
+fn unsupported_members_templates(grammar: &str) -> bool {
+    if !(grammar.contains("@members") || grammar.contains("@parser::members")) {
+        return false;
+    }
+    let mut saw_supported = false;
+    let mut offset = 0;
+    while let Some(block) = next_template_block(grammar, offset) {
+        offset = block.after_brace;
+        if !is_members_action(grammar, block.open_brace) {
+            continue;
+        }
+        if block.body.trim() != "DeclareContextListGettersFunction()" {
+            return true;
+        }
+        saw_supported = true;
+    }
+    !saw_supported
 }
 
 fn is_noop_action_template(body: &str) -> bool {
@@ -830,6 +852,17 @@ fn is_rule_named_action(source: &str, open_brace: usize, marker: &str) -> bool {
     let prefix = &source[..open_brace];
     let statement_start = prefix.rfind(';').map_or(0, |index| index + 1);
     prefix[statement_start..].trim_end().ends_with(marker)
+}
+
+/// Detects target member blocks that are compile-time scaffolding for other
+/// runtimes and should not be counted as parser action transitions.
+fn is_members_action(source: &str, open_brace: usize) -> bool {
+    let prefix = &source[..open_brace];
+    let statement_start = prefix.rfind(';').map_or(0, |index| index + 1);
+    matches!(
+        prefix[statement_start..].trim(),
+        "@members" | "@parser::members"
+    )
 }
 
 /// Runs `antlr4-rust-gen` for either a lexer descriptor or a combined parser
