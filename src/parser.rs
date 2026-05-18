@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::atn::{Atn, Transition};
+use crate::atn::{Atn, AtnState, AtnStateKind, Transition};
 use crate::errors::AntlrError;
 use crate::int_stream::IntStream;
 use crate::recognizer::{Recognizer, RecognizerData};
@@ -92,6 +92,9 @@ enum RecognizedNode {
     Rule {
         rule_index: usize,
         children: Vec<Self>,
+    },
+    LeftRecursiveBoundary {
+        rule_index: usize,
     },
 }
 
@@ -321,7 +324,8 @@ where
 
         let mut context = ParserRuleContext::new(rule_index, self.state());
         if self.build_parse_trees {
-            for node in &outcome.nodes {
+            let nodes = fold_left_recursive_boundaries(outcome.nodes);
+            for node in &nodes {
                 context.add_child(self.recognized_node_tree(node)?);
             }
         }
@@ -567,6 +571,7 @@ where
                 Transition::Epsilon { target }
                 | Transition::Predicate { target, .. }
                 | Transition::Action { target, .. } => {
+                    let left_recursive_boundary = left_recursive_boundary(atn, state, *target);
                     let action = match transition {
                         Transition::Action { rule_index, .. } => Some(ParserAction::new(
                             state_number,
@@ -592,6 +597,12 @@ where
                         )
                         .into_iter()
                         .map(|mut outcome| {
+                            if let Some(rule_index) = left_recursive_boundary {
+                                outcome.nodes.insert(
+                                    0,
+                                    RecognizedNode::LeftRecursiveBoundary { rule_index },
+                                );
+                            }
                             if let Some(action) = action {
                                 outcome.actions.insert(0, action);
                             }
@@ -646,7 +657,7 @@ where
                     for child in children {
                         let child_node = RecognizedNode::Rule {
                             rule_index: *rule_index,
-                            children: child.nodes.clone(),
+                            children: fold_left_recursive_boundaries(child.nodes.clone()),
                         };
                         outcomes.extend(
                             self.recognize_state(
@@ -762,8 +773,45 @@ where
                 }
                 Ok(self.rule_node(context))
             }
+            RecognizedNode::LeftRecursiveBoundary { rule_index } => Err(AntlrError::Unsupported(
+                format!("unfolded left-recursive boundary for rule {rule_index}"),
+            )),
         }
     }
+}
+
+/// Detects the loop edge where ANTLR would call `pushNewRecursionContext` for a
+/// transformed left-recursive rule.
+fn left_recursive_boundary(atn: &Atn, state: &AtnState, target: usize) -> Option<usize> {
+    if !state.precedence_rule_decision {
+        return None;
+    }
+    let target_state = atn.state(target)?;
+    if target_state.kind == AtnStateKind::LoopEnd {
+        return None;
+    }
+    state.rule_index
+}
+
+/// Folds boundary markers emitted at precedence-loop entries into nested rule
+/// nodes, matching ANTLR's recursive-context parse-tree shape.
+fn fold_left_recursive_boundaries(nodes: Vec<RecognizedNode>) -> Vec<RecognizedNode> {
+    let mut folded = Vec::new();
+    for node in nodes {
+        match node {
+            RecognizedNode::LeftRecursiveBoundary { rule_index } => {
+                if !folded.is_empty() {
+                    let children = std::mem::take(&mut folded);
+                    folded.push(RecognizedNode::Rule {
+                        rule_index,
+                        children,
+                    });
+                }
+            }
+            node => folded.push(node),
+        }
+    }
+    folded
 }
 
 /// Chooses the outermost parse result that consumed the most input.
@@ -780,7 +828,43 @@ fn select_best_fast_outcome(
 fn select_best_outcome(
     outcomes: impl Iterator<Item = RecognizeOutcome>,
 ) -> Option<RecognizeOutcome> {
-    outcomes.max_by_key(|outcome| (outcome.index, outcome.consumed_eof))
+    let outcomes = outcomes.collect::<Vec<_>>();
+    let prefer_first_tie = outcomes
+        .iter()
+        .any(|outcome| nodes_need_stable_tie(&outcome.nodes));
+    outcomes.into_iter().reduce(|best, outcome| {
+        let outcome_key = (outcome.index, outcome.consumed_eof);
+        let best_key = (best.index, best.consumed_eof);
+        if outcome_key > best_key || (!prefer_first_tie && outcome_key == best_key) {
+            return outcome;
+        }
+        best
+    })
+}
+
+/// Reports whether a candidate contains recursive tree structure where ANTLR's
+/// first viable candidate preserves the correct left-recursive context shape.
+fn nodes_need_stable_tie(nodes: &[RecognizedNode]) -> bool {
+    nodes.iter().any(|node| node_needs_stable_tie(node, &[]))
+}
+
+fn node_needs_stable_tie(node: &RecognizedNode, ancestors: &[usize]) -> bool {
+    match node {
+        RecognizedNode::Token { .. } => false,
+        RecognizedNode::LeftRecursiveBoundary { .. } => true,
+        RecognizedNode::Rule {
+            rule_index,
+            children,
+        } => {
+            ancestors.contains(rule_index) || {
+                let mut child_ancestors = ancestors.to_vec();
+                child_ancestors.push(*rule_index);
+                children
+                    .iter()
+                    .any(|child| node_needs_stable_tie(child, &child_ancestors))
+            }
+        }
+    }
 }
 
 /// Sorts and removes equivalent endpoints before memoizing a state result.
@@ -918,5 +1002,70 @@ mod tests {
             .parse_atn_rule(&atn, 0)
             .expect("artificial parser rule should parse");
         assert_eq!(tree.text(), "x<EOF>");
+    }
+
+    #[test]
+    fn folds_left_recursive_boundary_into_rule_node() {
+        let nodes = fold_left_recursive_boundaries(vec![
+            RecognizedNode::Token { index: 0 },
+            RecognizedNode::LeftRecursiveBoundary { rule_index: 1 },
+            RecognizedNode::Token { index: 1 },
+        ]);
+
+        assert_eq!(
+            nodes,
+            vec![
+                RecognizedNode::Rule {
+                    rule_index: 1,
+                    children: vec![RecognizedNode::Token { index: 0 }],
+                },
+                RecognizedNode::Token { index: 1 },
+            ]
+        );
+    }
+
+    #[test]
+    fn outcome_ties_keep_later_non_recursive_alternative() {
+        let first = RecognizeOutcome {
+            index: 1,
+            consumed_eof: false,
+            actions: vec![ParserAction::new(1, 0, 0, None)],
+            nodes: vec![RecognizedNode::Token { index: 0 }],
+        };
+        let second = RecognizeOutcome {
+            actions: vec![ParserAction::new(2, 0, 0, None)],
+            ..first.clone()
+        };
+
+        let selected = select_best_outcome([first, second].into_iter())
+            .expect("one outcome should be selected");
+        assert_eq!(selected.actions[0].source_state(), 2);
+    }
+
+    #[test]
+    fn outcome_ties_keep_first_recursive_tree_shape() {
+        let recursive_nodes = vec![RecognizedNode::Rule {
+            rule_index: 1,
+            children: vec![RecognizedNode::Rule {
+                rule_index: 1,
+                children: vec![RecognizedNode::Token { index: 0 }],
+            }],
+        }];
+        let first = RecognizeOutcome {
+            index: 1,
+            consumed_eof: false,
+            actions: vec![ParserAction::new(1, 0, 0, None)],
+            nodes: recursive_nodes.clone(),
+        };
+        let second = RecognizeOutcome {
+            index: 1,
+            consumed_eof: false,
+            actions: vec![ParserAction::new(2, 0, 0, None)],
+            nodes: recursive_nodes,
+        };
+
+        let selected = select_best_outcome([first, second].into_iter())
+            .expect("one outcome should be selected");
+        assert_eq!(selected.actions[0].source_state(), 1);
     }
 }

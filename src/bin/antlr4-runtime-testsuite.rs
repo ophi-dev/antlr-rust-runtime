@@ -473,11 +473,6 @@ fn target_templates_supported(descriptor: &Descriptor) -> bool {
         return false;
     }
     let grammar = &descriptor.grammar;
-    // Tree-output descriptors in this group require ANTLR's recursive-context
-    // rewrites; the recognizer accepts them but does not yet shape those trees.
-    if descriptor.group == "LeftRecursion" {
-        return false;
-    }
     if grammar.contains("@members")
         || grammar.contains("@definitions")
         || grammar.contains("returns [<")
