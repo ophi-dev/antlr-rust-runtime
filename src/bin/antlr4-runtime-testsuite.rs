@@ -454,6 +454,9 @@ fn has_target_template(grammar: &str) -> bool {
 }
 
 fn target_templates_supported(descriptor: &Descriptor) -> bool {
+    if descriptor.test_type == "Lexer" {
+        return lexer_target_templates_supported(descriptor);
+    }
     if descriptor.test_type != "Parser" {
         return false;
     }
@@ -490,6 +493,20 @@ fn target_templates_supported(descriptor: &Descriptor) -> bool {
     supported_action_templates(grammar)
 }
 
+fn lexer_target_templates_supported(descriptor: &Descriptor) -> bool {
+    if descriptor.name == "PositionAdjustingLexer" {
+        return false;
+    }
+    let grammar = &descriptor.grammar;
+    if grammar.contains("@members")
+        || grammar.contains("@definitions")
+        || grammar.contains("<PositionAdjustingLexer")
+    {
+        return false;
+    }
+    supported_lexer_predicate_templates(grammar) && supported_action_templates(grammar)
+}
+
 fn supported_action_templates(grammar: &str) -> bool {
     let mut offset = 0;
     while let Some(block) = next_template_block(grammar, offset) {
@@ -504,14 +521,31 @@ fn supported_action_templates(grammar: &str) -> bool {
     true
 }
 
+fn supported_lexer_predicate_templates(grammar: &str) -> bool {
+    let mut offset = 0;
+    while let Some(block) = next_template_block(grammar, offset) {
+        offset = block.after_brace;
+        if block.predicate && block.body.trim() != "True()" {
+            return false;
+        }
+    }
+    true
+}
+
 /// Mirrors the generator's currently supported action-template subset so the
 /// harness runs only descriptors it can translate faithfully.
 fn is_supported_action_template(body: &str) -> bool {
     matches!(
         body,
-        r#"writeln("$text")"# | r#"write("$text")"# | "InputText():writeln()"
+        r#"writeln("$text")"#
+            | r#"write("$text")"#
+            | "InputText():writeln()"
+            | "Text():writeln()"
+            | "Text():write()"
     ) || body.starts_with("writeln(\"\\\"")
         || body.starts_with("write(\"\\\"")
+        || (body.starts_with("PlusText(\"") && body.ends_with("):writeln()"))
+        || (body.starts_with("PlusText(\"") && body.ends_with("):write()"))
 }
 
 /// Runs one descriptor through ANTLR metadata generation, Rust code generation,
@@ -664,7 +698,9 @@ fn generate_rust_modules(
     } else {
         command
             .arg("--lexer")
-            .arg(java_dir.join(format!("{}.interp", descriptor.grammar_name)));
+            .arg(java_dir.join(format!("{}.interp", descriptor.grammar_name)))
+            .arg("--grammar")
+            .arg(source_grammar_path);
     }
     command.arg("--out-dir").arg(&rust_dir);
     run_checked(&mut command, "Rust metadata generator")?;

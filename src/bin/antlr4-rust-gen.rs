@@ -5,8 +5,8 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use antlr4_runtime::atn::Transition;
 use antlr4_runtime::atn::serialized::{AtnDeserializer, SerializedAtn};
+use antlr4_runtime::atn::{LexerAction, Transition};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse()?;
@@ -23,7 +23,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .lexer_name
             .clone()
             .unwrap_or_else(|| grammar_name_from_path(&lexer));
-        let module = render_lexer(&grammar_name, &data);
+        let module = render_lexer(&grammar_name, &data, grammar_source.as_deref())?;
         fs::write(
             args.out_dir
                 .join(format!("{}.rs", module_name(&grammar_name))),
@@ -232,12 +232,27 @@ fn parse_atn_values(value: &str) -> Result<Vec<i32>, io::Error> {
 /// The emitted lexer owns only generated metadata and a `BaseLexer`. Keeping
 /// recognition in the runtime avoids emitting thousands of lines of
 /// grammar-specific Rust control flow for the first target implementation.
-fn render_lexer(grammar_name: &str, data: &InterpData) -> String {
+fn render_lexer(
+    grammar_name: &str,
+    data: &InterpData,
+    grammar_source: Option<&str>,
+) -> io::Result<String> {
     let type_name = rust_type_name(grammar_name);
     let metadata = render_metadata(grammar_name, data);
     let token_constants = render_token_constants(data);
+    let actions = grammar_source.map_or_else(
+        || Ok(Vec::new()),
+        |source| lexer_action_templates(data, source),
+    )?;
+    let action_method = render_lexer_action_method(&actions);
+    let next_token_call = if actions.is_empty() {
+        "antlr4_runtime::atn::lexer::next_token(&mut self.base, atn())".to_owned()
+    } else {
+        "antlr4_runtime::atn::lexer::next_token_with_actions(&mut self.base, atn(), Self::run_action)"
+            .to_owned()
+    };
 
-    format!(
+    Ok(format!(
         r#"use antlr4_runtime::char_stream::CharStream;
 use antlr4_runtime::recognizer::RecognizerData;
 use antlr4_runtime::token::{{CommonToken, TokenSource}};
@@ -285,6 +300,8 @@ where
     pub fn metadata() -> &'static GrammarMetadata {{
         &METADATA
     }}
+
+{action_method}
 }}
 
 impl<I> GeneratedLexer for {type_name}<I>
@@ -324,7 +341,7 @@ where
     I: CharStream,
 {{
     fn next_token(&mut self) -> CommonToken {{
-        antlr4_runtime::atn::lexer::next_token(&mut self.base, atn())
+        {next_token_call}
     }}
 
     fn line(&self) -> usize {{ self.base.line() }}
@@ -332,7 +349,7 @@ where
     fn source_name(&self) -> &str {{ self.base.source_name() }}
 }}
 "#
-    )
+    ))
 }
 
 /// Renders a Rust parser module with one public method per grammar rule.
@@ -474,8 +491,36 @@ where
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum ActionTemplate {
-    WriteText { newline: bool },
-    WriteLiteral { value: String, newline: bool },
+    Text { newline: bool },
+    TextWithPrefix { prefix: String, newline: bool },
+    Literal { value: String, newline: bool },
+}
+
+/// Pairs supported lexer target-template actions with serialized custom-action
+/// coordinates from the lexer ATN.
+fn lexer_action_templates(
+    data: &InterpData,
+    grammar_source: &str,
+) -> io::Result<Vec<((i32, i32), ActionTemplate)>> {
+    let templates = extract_supported_action_templates(grammar_source)?;
+    if templates.is_empty() {
+        return Ok(Vec::new());
+    }
+    let actions = lexer_custom_actions(data)?;
+    if actions.is_empty() {
+        return Ok(Vec::new());
+    }
+    if actions.len() != templates.len() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "grammar has {} supported action template(s), but lexer ATN has {} custom action(s)",
+                templates.len(),
+                actions.len()
+            ),
+        ));
+    }
+    Ok(actions.into_iter().zip(templates).collect())
 }
 
 /// Pairs supported target-template actions with parser ATN action source states.
@@ -581,12 +626,28 @@ fn skip_ascii_whitespace(source: &str, mut index: usize) -> usize {
 fn parse_action_template(body: &str) -> Option<ActionTemplate> {
     let body = body.trim();
     match body {
-        r#"writeln("$text")"# | "InputText():writeln()" => {
-            Some(ActionTemplate::WriteText { newline: true })
+        r#"writeln("$text")"# | "InputText():writeln()" | "Text():writeln()" => {
+            Some(ActionTemplate::Text { newline: true })
         }
-        r#"write("$text")"# => Some(ActionTemplate::WriteText { newline: false }),
-        _ => parse_write_literal(body),
+        r#"write("$text")"# | "Text():write()" => Some(ActionTemplate::Text { newline: false }),
+        _ => parse_plus_text(body).or_else(|| parse_write_literal(body)),
     }
+}
+
+fn parse_plus_text(body: &str) -> Option<ActionTemplate> {
+    let (newline, argument) = if let Some(argument) = body
+        .strip_prefix("PlusText(")
+        .and_then(|value| value.strip_suffix("):writeln()"))
+    {
+        (true, argument)
+    } else {
+        let argument = body
+            .strip_prefix("PlusText(")
+            .and_then(|value| value.strip_suffix("):write()"))?;
+        (false, argument)
+    };
+    let prefix = parse_template_string(argument)?;
+    Some(ActionTemplate::TextWithPrefix { prefix, newline })
 }
 
 fn parse_write_literal(body: &str) -> Option<ActionTemplate> {
@@ -602,7 +663,7 @@ fn parse_write_literal(body: &str) -> Option<ActionTemplate> {
         (false, argument)
     };
     let value = parse_template_string(argument)?;
-    Some(ActionTemplate::WriteLiteral { value, newline })
+    Some(ActionTemplate::Literal { value, newline })
 }
 
 /// Decodes the descriptor's quoted `StringTemplate` argument into the Rust
@@ -627,6 +688,24 @@ fn parse_template_string(argument: &str) -> Option<String> {
     Some(out)
 }
 
+/// Reads the lexer ATN to locate serialized custom action coordinates.
+fn lexer_custom_actions(data: &InterpData) -> io::Result<Vec<(i32, i32)>> {
+    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(data.atn.clone()))
+        .deserialize()
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    Ok(atn
+        .lexer_actions()
+        .iter()
+        .filter_map(|action| match action {
+            LexerAction::Custom {
+                rule_index,
+                action_index,
+            } => Some((*rule_index, *action_index)),
+            _ => None,
+        })
+        .collect())
+}
+
 /// Reads the parser ATN to locate action-transition source states.
 fn parser_action_states(data: &InterpData) -> io::Result<Vec<usize>> {
     let atn = AtnDeserializer::new(&SerializedAtn::from_i32(data.atn.clone()))
@@ -643,6 +722,50 @@ fn parser_action_states(data: &InterpData) -> io::Result<Vec<usize>> {
         }
     }
     Ok(states)
+}
+
+/// Emits the generated lexer action dispatcher for grammar-specific custom
+/// lexer actions discovered from the serialized ATN.
+fn render_lexer_action_method(actions: &[((i32, i32), ActionTemplate)]) -> String {
+    if actions.is_empty() {
+        return String::new();
+    }
+    let mut arms = String::new();
+    for ((rule_index, action_index), template) in actions {
+        let statement = render_lexer_action_statement(template);
+        writeln!(
+            arms,
+            "            ({rule_index}, {action_index}) => {{ {statement} }}"
+        )
+        .expect("writing to a string cannot fail");
+    }
+    arms.push_str("            _ => {}\n");
+    format!(
+        "    fn run_action(_base: &mut BaseLexer<I>, action: antlr4_runtime::LexerCustomAction) {{\n        match (action.rule_index(), action.action_index()) {{\n{arms}        }}\n    }}\n"
+    )
+}
+
+/// Renders one supported lexer target-template action as Rust code.
+fn render_lexer_action_statement(template: &ActionTemplate) -> String {
+    match template {
+        ActionTemplate::Text { newline } => {
+            let write = if *newline { "println!" } else { "print!" };
+            format!(
+                "let text = _base.token_text_until(action.position()); {write}(\"{{}}\", text);"
+            )
+        }
+        ActionTemplate::TextWithPrefix { prefix, newline } => {
+            let write = if *newline { "println!" } else { "print!" };
+            format!(
+                "let text = _base.token_text_until(action.position()); {write}(\"{}{{}}\", text);",
+                rust_string(prefix)
+            )
+        }
+        ActionTemplate::Literal { value, newline } => {
+            let write = if *newline { "println!" } else { "print!" };
+            format!("{write}(\"{}\");", rust_string(value))
+        }
+    }
 }
 
 /// Emits the generated parser action dispatcher for the grammar-specific action
@@ -666,13 +789,20 @@ fn render_parser_action_method(actions: &[(usize, ActionTemplate)]) -> String {
 /// Renders one supported target-template action as Rust code.
 fn render_action_statement(template: &ActionTemplate) -> String {
     match template {
-        ActionTemplate::WriteText { newline } => {
+        ActionTemplate::Text { newline } => {
             let write = if *newline { "println!" } else { "print!" };
             format!(
                 "let text = self.base.text_interval(action.start_index(), action.stop_index()); {write}(\"{{}}\", text);"
             )
         }
-        ActionTemplate::WriteLiteral { value, newline } => {
+        ActionTemplate::TextWithPrefix { prefix, newline } => {
+            let write = if *newline { "println!" } else { "print!" };
+            format!(
+                "let text = self.base.text_interval(action.start_index(), action.stop_index()); {write}(\"{}{{}}\", text);",
+                rust_string(prefix)
+            )
+        }
+        ActionTemplate::Literal { value, newline } => {
             let write = if *newline { "println!" } else { "print!" };
             format!("{write}(\"{}\");", rust_string(value))
         }

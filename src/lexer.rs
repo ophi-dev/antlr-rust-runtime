@@ -10,6 +10,45 @@ pub const DEFAULT_MODE: i32 = 0;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LexerMode(pub i32);
 
+/// Grammar-specific lexer action reached on the accepted ATN path.
+///
+/// ANTLR serializes embedded lexer actions as `(rule_index, action_index)`
+/// pairs. The runtime also records the input position where the action was
+/// reached so generated code can evaluate templates such as `Text()` at the
+/// same point as a generated ANTLR lexer, not only at the token end.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct LexerCustomAction {
+    rule_index: i32,
+    action_index: i32,
+    position: usize,
+}
+
+impl LexerCustomAction {
+    /// Creates a custom lexer action event from serialized ATN metadata.
+    pub const fn new(rule_index: i32, action_index: i32, position: usize) -> Self {
+        Self {
+            rule_index,
+            action_index,
+            position,
+        }
+    }
+
+    /// Lexer rule index that owns the embedded action.
+    pub const fn rule_index(self) -> i32 {
+        self.rule_index
+    }
+
+    /// Per-rule action index assigned by ANTLR serialization.
+    pub const fn action_index(self) -> i32 {
+        self.action_index
+    }
+
+    /// Character-stream position at which the action transition was reached.
+    pub const fn position(self) -> usize {
+        self.position
+    }
+}
+
 pub trait Lexer: Recognizer {
     fn mode(&self) -> i32;
     fn set_mode(&mut self, mode: i32);
@@ -141,6 +180,27 @@ where
             text,
             source_name: self.input.source_name(),
         })
+    }
+
+    /// Returns the current token text from the token start through the input
+    /// cursor.
+    pub fn token_text(&self) -> String {
+        self.token_text_until(self.input.index())
+    }
+
+    /// Returns the current token text from the token start through
+    /// `stop_exclusive`.
+    ///
+    /// Lexer custom actions can occur before the accepted token is complete.
+    /// The action event records the position where the transition fired, and
+    /// generated action code uses this helper to render ANTLR's `Text()`
+    /// template at that exact point.
+    pub fn token_text_until(&self, stop_exclusive: usize) -> String {
+        if stop_exclusive <= self.token_start {
+            return String::new();
+        }
+        self.input
+            .text(TextInterval::new(self.token_start, stop_exclusive - 1))
     }
 
     /// Builds the synthetic EOF token at the current input cursor.

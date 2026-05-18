@@ -1,9 +1,9 @@
 use std::collections::BTreeSet;
 
-use crate::atn::{Atn, AtnStateKind, LexerActionResult, Transition};
+use crate::atn::{Atn, AtnStateKind, LexerAction, LexerActionResult, Transition};
 use crate::char_stream::{CharStream, TextInterval};
 use crate::int_stream::EOF;
-use crate::lexer::{BaseLexer, Lexer};
+use crate::lexer::{BaseLexer, Lexer, LexerCustomAction};
 use crate::token::{CommonToken, DEFAULT_CHANNEL, INVALID_TOKEN_TYPE, TokenFactory};
 
 const MIN_CHAR_VALUE: i32 = 0;
@@ -15,8 +15,15 @@ struct LexerConfig {
     position: usize,
     consumed_eof: bool,
     alt_rule_index: Option<usize>,
+    passed_non_greedy: bool,
     stack: Vec<usize>,
-    actions: Vec<usize>,
+    actions: Vec<LexerActionTrace>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct LexerActionTrace {
+    action_index: usize,
+    position: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -24,7 +31,7 @@ struct AcceptState {
     position: usize,
     rule_index: usize,
     consumed_eof: bool,
-    actions: Vec<usize>,
+    actions: Vec<LexerActionTrace>,
 }
 
 #[derive(Clone, Debug)]
@@ -46,6 +53,25 @@ pub fn next_token<I, F>(lexer: &mut BaseLexer<I, F>, atn: &Atn) -> CommonToken
 where
     I: CharStream,
     F: TokenFactory,
+{
+    next_token_with_actions(lexer, atn, |_, _| {})
+}
+
+/// Runs one lexer-token match and invokes `custom_action` for embedded
+/// grammar-specific lexer actions on the accepted path.
+///
+/// The callback receives the base lexer plus the serialized custom-action
+/// coordinates. It is used by generated lexers to replay target templates while
+/// keeping all ATN path exploration in the shared runtime.
+pub fn next_token_with_actions<I, F, A>(
+    lexer: &mut BaseLexer<I, F>,
+    atn: &Atn,
+    mut custom_action: A,
+) -> CommonToken
+where
+    I: CharStream,
+    F: TokenFactory,
+    A: FnMut(&mut BaseLexer<I, F>, LexerCustomAction),
 {
     let mut continuing_more = false;
     loop {
@@ -89,9 +115,18 @@ where
             .copied()
             .unwrap_or(INVALID_TOKEN_TYPE);
         let mut result = LexerActionResult::new(token_type, DEFAULT_CHANNEL);
-        for action_index in accept.actions {
-            if let Some(action) = atn.lexer_actions().get(action_index) {
-                result.apply(action, lexer);
+        for trace in accept.actions {
+            if let Some(action) = atn.lexer_actions().get(trace.action_index) {
+                match action {
+                    LexerAction::Custom {
+                        rule_index,
+                        action_index,
+                    } => custom_action(
+                        lexer,
+                        LexerCustomAction::new(*rule_index, *action_index, trace.position),
+                    ),
+                    other => result.apply(other, lexer),
+                }
             }
         }
 
@@ -141,6 +176,7 @@ where
                 position: start,
                 consumed_eof: false,
                 alt_rule_index: None,
+                passed_non_greedy: false,
                 stack: Vec::new(),
                 actions: Vec::new(),
             }],
@@ -247,6 +283,7 @@ fn close_config(
             Transition::Epsilon { target } => {
                 let mut next = config.clone();
                 set_config_state(atn, &mut next, *target);
+                next.passed_non_greedy |= state.non_greedy;
                 close_config(atn, next, seen, closed);
                 expanded = true;
             }
@@ -257,6 +294,7 @@ fn close_config(
             } => {
                 let mut next = config.clone();
                 set_config_state(atn, &mut next, *target);
+                next.passed_non_greedy |= state.non_greedy;
                 next.stack.push(*follow_state);
                 close_config(atn, next, seen, closed);
                 expanded = true;
@@ -264,6 +302,7 @@ fn close_config(
             Transition::Predicate { target, .. } | Transition::Precedence { target, .. } => {
                 let mut next = config.clone();
                 set_config_state(atn, &mut next, *target);
+                next.passed_non_greedy |= state.non_greedy;
                 close_config(atn, next, seen, closed);
                 expanded = true;
             }
@@ -274,8 +313,12 @@ fn close_config(
             } => {
                 let mut next = config.clone();
                 set_config_state(atn, &mut next, *target);
+                next.passed_non_greedy |= state.non_greedy;
                 if let Some(action_index) = action_index {
-                    next.actions.push(*action_index);
+                    next.actions.push(LexerActionTrace {
+                        action_index: *action_index,
+                        position: config.position,
+                    });
                 }
                 close_config(atn, next, seen, closed);
                 expanded = true;
@@ -298,12 +341,13 @@ fn close_config(
     }
 }
 
-/// Removes configs ordered after a top-level accept for the same lexer rule.
+/// Removes configs ordered after a non-greedy top-level accept for the same
+/// lexer rule.
 ///
-/// ANTLR's lexer simulator preserves ATN transition order and skips later
-/// configs for a rule once an earlier config reaches that rule's stop state.
-/// This is what makes non-greedy loops stop early while greedy loops can still
-/// place their continuing path before the stop path.
+/// Non-greedy decisions serialize their exit path before their continuing path.
+/// Once such a path reaches the rule stop state, later same-rule configs should
+/// not continue to grow into a longer token. Greedy decisions still need all
+/// paths to remain available so longest-match selection can win.
 fn prune_after_accepts(atn: &Atn, configs: Vec<LexerConfig>) -> Vec<LexerConfig> {
     let mut accepted_rules = BTreeSet::new();
     let mut pruned = Vec::with_capacity(configs.len());
@@ -319,7 +363,7 @@ fn prune_after_accepts(atn: &Atn, configs: Vec<LexerConfig>) -> Vec<LexerConfig>
             && atn
                 .state(config.state)
                 .is_some_and(crate::atn::AtnState::is_rule_stop);
-        if is_top_level_accept {
+        if is_top_level_accept && config.passed_non_greedy {
             accepted_rules.insert(rule_index);
         }
         pruned.push(config);

@@ -20,7 +20,7 @@ pub use dfa::{Dfa, DfaState};
 pub use errors::{AntlrError, ConsoleErrorListener, ErrorListener};
 pub use generated::{GeneratedLexer, GeneratedParser, GrammarMetadata};
 pub use int_stream::{EOF, IntStream, UNKNOWN_SOURCE_NAME};
-pub use lexer::{BaseLexer, Lexer, LexerMode};
+pub use lexer::{BaseLexer, Lexer, LexerCustomAction, LexerMode};
 pub use parser::{BaseParser, Parser, ParserAction};
 pub use prediction::{AtnConfig, AtnConfigSet, PredictionContext};
 pub use recognizer::{Recognizer, RecognizerData};

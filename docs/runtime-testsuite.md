@@ -52,7 +52,8 @@ Supported now:
 - descriptor stdout/stderr comparison,
 - grouped lexer recovery diagnostics,
 - parser precedence predicates in metadata-driven recognition,
-- parser target-template actions for the currently supported stdout helpers,
+- lexer and parser target-template actions for the currently supported stdout
+  helpers,
 - `StringTemplate` backslash rendering for descriptor grammars,
 - official ANTLR `.interp` generation,
 - Rust module generation and execution through Cargo.
@@ -60,8 +61,7 @@ Supported now:
 Not wired yet:
 
 - composite grammars,
-- lexer target-template semantic actions such as `<writeln(...)>`,
-- parser target actions beyond the currently supported stdout helpers,
+- target-template semantic actions beyond the currently supported stdout helpers,
 - parser error recovery diagnostics,
 - runtime diagnostic/profile/DFA flags.
 
@@ -70,13 +70,14 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `121 passed, 0 failed, 236 skipped, 121 run`
-- `LexerExec`: `29 passed, 0 failed, 13 skipped, 29 run`
+- full descriptor sweep: `134 passed, 0 failed, 223 skipped, 134 run`
+- `LexerExec`: `41 passed, 0 failed, 1 skipped, 41 run`
 - `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
 - `LeftRecursion`: `7 passed, 0 failed, 91 skipped, 7 run`
 - `ParserExec`: `34 passed, 0 failed, 16 skipped, 34 run`
 - `ParserErrors`: `4 passed, 0 failed, 30 skipped, 4 run`
 - `Performance`: `7 passed, 0 failed, 0 skipped, 7 run`
+- `SemPredEvalLexer`: `1 passed, 0 failed, 7 skipped, 1 run`
 - `SemPredEvalParser`: `7 passed, 0 failed, 19 skipped, 7 run`
 - `Sets`: `21 passed, 0 failed, 10 skipped, 21 run`
 
