@@ -54,7 +54,7 @@ where
     I: CharStream,
     F: TokenFactory,
 {
-    next_token_with_actions(lexer, atn, |_, _| {})
+    next_token_with_hooks(lexer, atn, |_, _| {}, |_, _| true, |_, _, _| {})
 }
 
 /// Runs one lexer-token match and invokes `custom_action` for embedded
@@ -73,7 +73,26 @@ where
     F: TokenFactory,
     A: FnMut(&mut BaseLexer<I, F>, LexerCustomAction),
 {
-    next_token_with_actions_and_predicates(lexer, atn, custom_action, |_, _| true)
+    next_token_with_hooks(lexer, atn, custom_action, |_, _| true, |_, _, _| {})
+}
+
+/// Runs one lexer-token match and lets generated code adjust the final accept
+/// position before the token is emitted.
+///
+/// ANTLR target templates such as `PositionAdjustingLexer` use this to accept
+/// a long disambiguating token path but emit only the prefix, leaving the
+/// remaining characters for the next token.
+pub fn next_token_with_accept_adjuster<I, F, E>(
+    lexer: &mut BaseLexer<I, F>,
+    atn: &Atn,
+    accept_adjuster: E,
+) -> CommonToken
+where
+    I: CharStream,
+    F: TokenFactory,
+    E: FnMut(&mut BaseLexer<I, F>, i32, usize),
+{
+    next_token_with_hooks(lexer, atn, |_, _| {}, |_, _| true, accept_adjuster)
 }
 
 /// Runs one lexer-token match with grammar-specific actions and predicates.
@@ -91,6 +110,34 @@ where
     F: TokenFactory,
     A: FnMut(&mut BaseLexer<I, F>, LexerCustomAction),
     P: FnMut(&BaseLexer<I, F>, LexerPredicate) -> bool,
+{
+    next_token_with_hooks(
+        lexer,
+        atn,
+        &mut custom_action,
+        &mut semantic_predicate,
+        |_, _, _| {},
+    )
+}
+
+/// Runs one lexer-token match with all generated extension hooks.
+///
+/// Custom actions and predicates correspond to serialized ATN edges. The
+/// accept adjuster runs after lexer commands but before `emit`, matching target
+/// runtimes that override emission to split a longest-match token.
+pub fn next_token_with_hooks<I, F, A, P, E>(
+    lexer: &mut BaseLexer<I, F>,
+    atn: &Atn,
+    mut custom_action: A,
+    mut semantic_predicate: P,
+    mut accept_adjuster: E,
+) -> CommonToken
+where
+    I: CharStream,
+    F: TokenFactory,
+    A: FnMut(&mut BaseLexer<I, F>, LexerCustomAction),
+    P: FnMut(&BaseLexer<I, F>, LexerPredicate) -> bool,
+    E: FnMut(&mut BaseLexer<I, F>, i32, usize),
 {
     let mut continuing_more = false;
     loop {
@@ -158,8 +205,10 @@ where
             continue;
         }
 
-        let stop = accept.position.checked_sub(1).unwrap_or(usize::MAX);
-        let text = if accept.consumed_eof && start == accept.position {
+        accept_adjuster(lexer, result.token_type, accept.position);
+        let emit_position = lexer.input().index();
+        let stop = emit_position.checked_sub(1).unwrap_or(usize::MAX);
+        let text = if accept.consumed_eof && start == emit_position {
             Some("<EOF>".to_owned())
         } else {
             None

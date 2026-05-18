@@ -153,6 +153,21 @@ where
         self.token_start_column = self.column;
     }
 
+    /// Returns the absolute character index where the current token began.
+    pub const fn token_start(&self) -> usize {
+        self.token_start
+    }
+
+    /// Returns the source line captured at the start of the current token.
+    pub const fn token_start_line(&self) -> usize {
+        self.token_start_line
+    }
+
+    /// Returns the source column captured at the start of the current token.
+    pub const fn token_start_column(&self) -> usize {
+        self.token_start_column
+    }
+
     /// Consumes one character from the input stream and updates lexer line and
     /// column counters.
     ///
@@ -170,6 +185,22 @@ where
             self.column = 0;
         } else {
             self.column += 1;
+        }
+    }
+
+    /// Rewinds or advances the input cursor to a token accept boundary.
+    ///
+    /// Some generated lexers intentionally accept a longer path to disambiguate
+    /// a token, then emit only the prefix and leave the suffix for the next
+    /// token. Recomputing line/column from `token_start` keeps the visible lexer
+    /// position consistent after moving the cursor backwards.
+    pub fn reset_accept_position(&mut self, index: usize) {
+        let target = index.max(self.token_start);
+        self.input.seek(self.token_start);
+        self.line = self.token_start_line;
+        self.column = self.token_start_column;
+        while self.input.index() < target && self.input.la(1) != EOF {
+            self.consume_char();
         }
     }
 

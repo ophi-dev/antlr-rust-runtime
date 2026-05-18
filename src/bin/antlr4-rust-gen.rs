@@ -248,20 +248,48 @@ fn render_lexer(
         || Ok(Vec::new()),
         |source| lexer_predicate_templates(data, source),
     )?;
+    let adjusts_accept_position = grammar_source.is_some_and(uses_position_adjusting_lexer);
     let action_method = render_lexer_action_method(&actions);
     let predicate_method = render_lexer_predicate_method(&predicates);
-    let next_token_call = match (actions.is_empty(), predicates.is_empty()) {
-        (true, true) => "antlr4_runtime::atn::lexer::next_token(&mut self.base, atn())".to_owned(),
-        (false, true) => {
+    let accept_adjust_method = if adjusts_accept_position {
+        render_position_adjusting_lexer_methods()
+    } else {
+        String::new()
+    };
+    let next_token_call = match (
+        actions.is_empty(),
+        predicates.is_empty(),
+        adjusts_accept_position,
+    ) {
+        (true, true, false) => {
+            "antlr4_runtime::atn::lexer::next_token(&mut self.base, atn())".to_owned()
+        }
+        (false, true, false) => {
             "antlr4_runtime::atn::lexer::next_token_with_actions(&mut self.base, atn(), Self::run_action)"
                 .to_owned()
         }
-        (true, false) => {
+        (true, false, false) => {
             "antlr4_runtime::atn::lexer::next_token_with_actions_and_predicates(&mut self.base, atn(), |_, _| {}, Self::run_predicate)"
                 .to_owned()
         }
-        (false, false) => {
+        (false, false, false) => {
             "antlr4_runtime::atn::lexer::next_token_with_actions_and_predicates(&mut self.base, atn(), Self::run_action, Self::run_predicate)"
+                .to_owned()
+        }
+        (true, true, true) => {
+            "antlr4_runtime::atn::lexer::next_token_with_accept_adjuster(&mut self.base, atn(), Self::adjust_accept_position)"
+                .to_owned()
+        }
+        (false, true, true) => {
+            "antlr4_runtime::atn::lexer::next_token_with_hooks(&mut self.base, atn(), Self::run_action, |_, _| true, Self::adjust_accept_position)"
+                .to_owned()
+        }
+        (true, false, true) => {
+            "antlr4_runtime::atn::lexer::next_token_with_hooks(&mut self.base, atn(), |_, _| {}, Self::run_predicate, Self::adjust_accept_position)"
+                .to_owned()
+        }
+        (false, false, true) => {
+            "antlr4_runtime::atn::lexer::next_token_with_hooks(&mut self.base, atn(), Self::run_action, Self::run_predicate, Self::adjust_accept_position)"
                 .to_owned()
         }
     };
@@ -317,6 +345,7 @@ where
 
 {action_method}
 {predicate_method}
+{accept_adjust_method}
 }}
 
 impl<I> GeneratedLexer for {type_name}<I>
@@ -835,6 +864,7 @@ fn extract_supported_action_templates(grammar_source: &str) -> io::Result<Vec<Ac
                 if block.predicate
                     || is_after_action(grammar_source, block.open_brace)
                     || is_init_action(grammar_source, block.open_brace)
+                    || is_definitions_action(grammar_source, block.open_brace)
                     || is_members_action(grammar_source, block.open_brace)
                 {
                     continue;
@@ -1005,16 +1035,20 @@ fn is_rule_named_action(source: &str, open_brace: usize, marker: &str) -> bool {
 /// Detects member-action blocks whose target code is compile-time scaffolding
 /// rather than an ATN semantic action.
 fn is_members_action(source: &str, open_brace: usize) -> bool {
-    let prefix = &source[..open_brace];
-    let statement_start = prefix.rfind(';').map_or(0, |index| index + 1);
-    matches!(
-        prefix[statement_start..].trim(),
-        "@members" | "@parser::members"
-    )
+    let prefix = source[..open_brace].trim_end();
+    prefix.ends_with("@members") || prefix.ends_with("@parser::members")
+}
+
+fn is_definitions_action(source: &str, open_brace: usize) -> bool {
+    source[..open_brace].trim_end().ends_with("@definitions")
 }
 
 fn uses_alt_number_contexts(source: &str) -> bool {
     source.contains("<TreeNodeWithAltNumField") || source.contains("contextSuperClass")
+}
+
+fn uses_position_adjusting_lexer(source: &str) -> bool {
+    source.contains("<PositionAdjustingLexer()")
 }
 
 fn after_action_rule_name(source: &str, open_brace: usize) -> Option<&str> {
@@ -1420,6 +1454,57 @@ fn parser_action_states(data: &InterpData) -> io::Result<Vec<usize>> {
         }
     }
     Ok(states)
+}
+
+/// Emits the helper methods for ANTLR's `PositionAdjustingLexer` runtime-test
+/// target template.
+///
+/// The template accepts a longer lexer path for keywords and labels, then emits
+/// only the keyword or identifier prefix. Resetting the accept position leaves
+/// delimiters such as `{`, `=`, and `+=` available for the next token.
+fn render_position_adjusting_lexer_methods() -> String {
+    r#"
+    fn adjust_accept_position(base: &mut BaseLexer<I>, token_type: i32, accept_position: usize) {
+        match token_type {
+            TOKENS => Self::adjust_accept_position_for_keyword(base, accept_position, "tokens"),
+            LABEL => Self::adjust_accept_position_for_identifier(base, accept_position),
+            _ => {}
+        }
+    }
+
+    fn adjust_accept_position_for_identifier(base: &mut BaseLexer<I>, accept_position: usize) {
+        let identifier_length = base
+            .token_text_until(accept_position)
+            .chars()
+            .take_while(|ch| ch.is_ascii_alphanumeric() || *ch == '_')
+            .count();
+        Self::reset_accept_position_after_prefix(base, accept_position, identifier_length);
+    }
+
+    fn adjust_accept_position_for_keyword(
+        base: &mut BaseLexer<I>,
+        accept_position: usize,
+        keyword: &str,
+    ) {
+        Self::reset_accept_position_after_prefix(
+            base,
+            accept_position,
+            keyword.chars().count(),
+        );
+    }
+
+    fn reset_accept_position_after_prefix(
+        base: &mut BaseLexer<I>,
+        accept_position: usize,
+        prefix_length: usize,
+    ) {
+        let target = base.token_start().saturating_add(prefix_length);
+        if accept_position > target {
+            base.reset_accept_position(target);
+        }
+    }
+"#
+    .to_owned()
 }
 
 /// Emits the generated lexer action dispatcher for grammar-specific custom

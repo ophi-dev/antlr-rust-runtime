@@ -67,6 +67,8 @@ Supported now:
   `ToStringTree("$ctx")` stdout actions,
 - lexer semantic predicates for the currently supported `True()`, `False()`,
   and `TextEquals(...)` templates,
+- lexer accept-position adjustment for the upstream `PositionAdjustingLexer`
+  target template,
 - parser `@init {<BuildParseTrees()>}` and `notBuildParseTree` descriptors,
 - parser rule-level `@after {<ToStringTree("$label.ctx")>}` actions for simple
   rule labels,
@@ -99,8 +101,8 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `250 passed, 0 failed, 107 skipped, 250 run`
-- `LexerExec`: `41 passed, 0 failed, 1 skipped, 41 run`
+- full descriptor sweep: `251 passed, 0 failed, 106 skipped, 251 run`
+- `LexerExec`: `42 passed, 0 failed, 0 skipped, 42 run`
 - `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
 - `LeftRecursion`: `81 passed, 0 failed, 17 skipped, 81 run`
 - `ParseTrees`: `6 passed, 0 failed, 4 skipped, 6 run`
