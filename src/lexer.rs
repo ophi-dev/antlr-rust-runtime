@@ -1,3 +1,5 @@
+use std::collections::{BTreeMap, BTreeSet};
+
 use crate::char_stream::{CharStream, TextInterval};
 use crate::int_stream::EOF;
 use crate::recognizer::{Recognizer, RecognizerData};
@@ -104,6 +106,35 @@ pub struct BaseLexer<I, F = CommonTokenFactory> {
     column: usize,
     hit_eof: bool,
     errors: Vec<TokenSourceError>,
+    lexer_dfa: LexerDfaTrace,
+}
+
+/// Compact observation log for the default-mode lexer DFA printed by `showDFA`
+/// runtime-suite descriptors.
+#[derive(Clone, Debug, Default)]
+struct LexerDfaTrace {
+    state_numbers: BTreeMap<String, usize>,
+    accept_predictions: BTreeMap<usize, i32>,
+    edges: BTreeSet<LexerDfaEdge>,
+}
+
+impl LexerDfaTrace {
+    const fn new() -> Self {
+        Self {
+            state_numbers: BTreeMap::new(),
+            accept_predictions: BTreeMap::new(),
+            edges: BTreeSet::new(),
+        }
+    }
+}
+
+/// One printable lexer DFA edge keyed so repeated matches keep deterministic
+/// output order.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct LexerDfaEdge {
+    from: usize,
+    symbol: i32,
+    to: usize,
 }
 
 impl<I> BaseLexer<I>
@@ -136,6 +167,7 @@ where
             column: 0,
             hit_eof: false,
             errors: Vec::new(),
+            lexer_dfa: LexerDfaTrace::new(),
         }
     }
 
@@ -356,4 +388,50 @@ where
     pub fn drain_errors(&mut self) -> Vec<TokenSourceError> {
         std::mem::take(&mut self.errors)
     }
+
+    /// Returns the stable state number for a normalized lexer DFA config set,
+    /// creating one if this input path has not reached it before.
+    pub fn lexer_dfa_state(&mut self, key: String, accept_prediction: Option<i32>) -> usize {
+        let next = self.lexer_dfa.state_numbers.len();
+        let state = *self.lexer_dfa.state_numbers.entry(key).or_insert(next);
+        if let Some(prediction) = accept_prediction {
+            self.lexer_dfa.accept_predictions.insert(state, prediction);
+        }
+        state
+    }
+
+    /// Records a visible lexer DFA edge unless it was already observed.
+    pub fn record_lexer_dfa_edge(&mut self, from: usize, symbol: i32, to: usize) {
+        self.lexer_dfa
+            .edges
+            .insert(LexerDfaEdge { from, symbol, to });
+    }
+
+    /// Serializes the observed default-mode lexer DFA in ANTLR's text shape.
+    pub fn lexer_dfa_string(&self) -> String {
+        let mut out = String::new();
+        for edge in &self.lexer_dfa.edges {
+            let Some(label) = lexer_dfa_edge_label(edge.symbol) else {
+                continue;
+            };
+            out.push_str(&self.lexer_dfa_state_string(edge.from));
+            out.push('-');
+            out.push_str(&label);
+            out.push_str("->");
+            out.push_str(&self.lexer_dfa_state_string(edge.to));
+            out.push('\n');
+        }
+        out
+    }
+
+    fn lexer_dfa_state_string(&self, state: usize) -> String {
+        self.lexer_dfa.accept_predictions.get(&state).map_or_else(
+            || format!("s{state}"),
+            |prediction| format!(":s{state}=>{prediction}"),
+        )
+    }
+}
+
+fn lexer_dfa_edge_label(symbol: i32) -> Option<String> {
+    char::from_u32(symbol.cast_unsigned()).map(|ch| format!("'{ch}'"))
 }

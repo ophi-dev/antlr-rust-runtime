@@ -35,6 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             {
                 summary.passed += 1;
                 println!("pass {}", descriptor.id());
+                remove_descriptor_work_dir(&args, &descriptor)?;
             }
             Ok(result) => {
                 summary.failed += 1;
@@ -468,12 +469,19 @@ fn runtime_flags_supported(descriptor: &Descriptor) -> bool {
     matches!(
         descriptor.flags.trim(),
         "notBuildParseTree" | "predictionMode=LL"
-    ) || (descriptor.flags.trim() == "showDiagnosticErrors"
+    ) || (descriptor.flags.trim() == "showDFA"
         && matches!(
             descriptor.id().as_str(),
-            "SemPredEvalParser/TwoUnpredicatedAlts"
-                | "SemPredEvalParser/TwoUnpredicatedAltsAndOneOrthogonalAlt"
+            "SemPredEvalLexer/DisableRule"
+                | "SemPredEvalLexer/EnumNotID"
+                | "SemPredEvalLexer/IDnotEnum"
         ))
+        || (descriptor.flags.trim() == "showDiagnosticErrors"
+            && matches!(
+                descriptor.id().as_str(),
+                "SemPredEvalParser/TwoUnpredicatedAlts"
+                    | "SemPredEvalParser/TwoUnpredicatedAltsAndOneOrthogonalAlt"
+            ))
 }
 
 /// Whitelists composite descriptors whose import and action shapes are modeled by
@@ -1153,7 +1161,7 @@ fn context_member_label(arguments: &str) -> Option<String> {
 /// Runs one descriptor through ANTLR metadata generation, Rust code generation,
 /// a temporary Cargo crate, and process output capture.
 fn run_descriptor(args: &Args, descriptor: &Descriptor) -> io::Result<RunResult> {
-    let case_dir = args.work_dir.join(safe_case_dir(&descriptor.id()));
+    let case_dir = descriptor_work_dir(args, descriptor);
     if case_dir.exists() {
         fs::remove_dir_all(&case_dir)?;
     }
@@ -1196,6 +1204,19 @@ fn run_descriptor(args: &Args, descriptor: &Descriptor) -> io::Result<RunResult>
         output: String::from_utf8_lossy(&output.stdout).into_owned(),
         errors: String::from_utf8_lossy(&output.stderr).into_owned(),
     })
+}
+
+fn descriptor_work_dir(args: &Args, descriptor: &Descriptor) -> PathBuf {
+    args.work_dir.join(safe_case_dir(&descriptor.id()))
+}
+
+/// Deletes successful descriptor output unless the caller asked to keep cases
+/// around for inspection.
+fn remove_descriptor_work_dir(args: &Args, descriptor: &Descriptor) -> io::Result<()> {
+    if args.keep {
+        return Ok(());
+    }
+    fs::remove_dir_all(descriptor_work_dir(args, descriptor))
 }
 
 /// Writes imported grammars next to the delegator grammar before invoking ANTLR,
@@ -1630,8 +1651,18 @@ fn smoke_main(descriptor: &Descriptor) -> String {
     }
     let module_name = module_name(&descriptor.grammar_name);
     let type_name = rust_type_name(&descriptor.grammar_name);
+    let dfa_dump = if descriptor.flags.trim() == "showDFA" {
+        "    print!(\"{}\", tokens.token_source().lexer_dfa_string());\n"
+    } else {
+        ""
+    };
+    let token_source_import = if descriptor.flags.trim() == "showDFA" {
+        ", TokenSource"
+    } else {
+        ""
+    };
     format!(
-        "pub mod generated {{\n    pub mod {module_name};\n}}\n\nuse antlr4_runtime::{{CommonTokenStream, InputStream}};\nuse generated::{module_name}::{type_name};\n\nfn main() {{\n    let lexer = {type_name}::new(InputStream::new(\"{}\"));\n    let mut tokens = CommonTokenStream::new(lexer);\n    tokens.fill();\n    for error in tokens.drain_source_errors() {{\n        eprintln!(\"line {{}}:{{}} {{}}\", error.line, error.column, error.message);\n    }}\n    for token in tokens.tokens() {{\n        println!(\"{{token}}\");\n    }}\n}}\n",
+        "pub mod generated {{\n    pub mod {module_name};\n}}\n\nuse antlr4_runtime::{{CommonTokenStream, InputStream{token_source_import}}};\nuse generated::{module_name}::{type_name};\n\nfn main() {{\n    let lexer = {type_name}::new(InputStream::new(\"{}\"));\n    let mut tokens = CommonTokenStream::new(lexer);\n    tokens.fill();\n    for error in tokens.drain_source_errors() {{\n        eprintln!(\"line {{}}:{{}} {{}}\", error.line, error.column, error.message);\n    }}\n    for token in tokens.tokens() {{\n        println!(\"{{token}}\");\n    }}\n{dfa_dump}}}\n",
         rust_string(&descriptor.input)
     )
 }

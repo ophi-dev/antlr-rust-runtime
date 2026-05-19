@@ -283,6 +283,11 @@ pub trait TokenSource {
     fn drain_errors(&mut self) -> Vec<TokenSourceError> {
         Vec::new()
     }
+
+    /// Serializes lexer DFA cache state when the token source exposes one.
+    fn lexer_dfa_string(&self) -> String {
+        String::new()
+    }
 }
 
 #[cfg(test)]

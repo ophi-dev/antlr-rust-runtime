@@ -394,6 +394,9 @@ where
     fn drain_errors(&mut self) -> Vec<antlr4_runtime::token::TokenSourceError> {{
         self.base.drain_errors()
     }}
+    fn lexer_dfa_string(&self) -> String {{
+        self.base.lexer_dfa_string()
+    }}
 }}
 "#
     ))
