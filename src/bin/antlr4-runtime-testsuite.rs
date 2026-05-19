@@ -527,6 +527,7 @@ fn parser_error_diagnostics_supported(descriptor: &Descriptor) -> bool {
             | "NoTruePredsThrowsNoViableAlt"
             | "NoViableAlt"
             | "NoViableAltAvoidance"
+            | "PredTestedEvenWhenUnAmbig_2"
             | "SingleSetInsertion"
             | "SingleSetInsertionConsumption"
             | "SingleTokenDeletion"

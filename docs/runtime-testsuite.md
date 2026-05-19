@@ -91,6 +91,8 @@ Supported now:
 - parser rule-argument predicates for supported `ValEquals("$i", "...")`
   target templates, including literal integer calls and `VarRef("i")`
   forwarding,
+- parser boolean-member predicates for the runtime-testsuite
+  `GetMember(...):Not()` fixture,
 - parser integer-member target templates for semantic-predicate fixtures,
   including `AddMember`, `GetMember`, `ModMemberEquals`, and
   `ModMemberNotEquals`,
@@ -137,7 +139,7 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `330 passed, 0 failed, 27 skipped, 330 run`
+- full descriptor sweep: `331 passed, 0 failed, 26 skipped, 331 run`
 - `CompositeLexers`: `2 passed, 0 failed, 0 skipped, 2 run`
 - `CompositeParsers`: `15 passed, 0 failed, 0 skipped, 15 run`
 - `LexerExec`: `42 passed, 0 failed, 0 skipped, 42 run`
@@ -149,7 +151,7 @@ Current validated groups:
 - `ParserErrors`: `34 passed, 0 failed, 0 skipped, 34 run`
 - `Performance`: `7 passed, 0 failed, 0 skipped, 7 run`
 - `SemPredEvalLexer`: `2 passed, 0 failed, 6 skipped, 2 run`
-- `SemPredEvalParser`: `22 passed, 0 failed, 4 skipped, 22 run`
+- `SemPredEvalParser`: `23 passed, 0 failed, 3 skipped, 23 run`
 - `Sets`: `31 passed, 0 failed, 0 skipped, 31 run`
 
 The remaining skips are now diagnostic/profile flags and parser recovery

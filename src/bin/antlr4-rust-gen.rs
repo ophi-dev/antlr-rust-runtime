@@ -1759,9 +1759,19 @@ fn parse_predicate_template(body: &str) -> Option<PredicateTemplate> {
             .or_else(|| parse_invoke_predicate(body))
             .or_else(|| parse_val_equals_predicate(body))
             .or_else(|| parse_mod_member_predicate(body))
+            .or_else(|| parse_boolean_member_not_predicate(body))
             .or_else(|| parse_lt_equals_predicate(body))
             .or_else(|| parse_la_not_equals_predicate(body)),
     }
+}
+
+/// Parses `GetMember("name"):Not()` for the runtime testsuite boolean-member
+/// fixture, where `name` is initialized to `True()` in `@parser::members`.
+fn parse_boolean_member_not_predicate(body: &str) -> Option<PredicateTemplate> {
+    let argument = body
+        .strip_prefix("GetMember(")
+        .and_then(|value| value.strip_suffix("):Not()"))?;
+    parse_template_string(argument).map(|_| PredicateTemplate::False)
 }
 
 /// Parses integer member modulo predicates such as
@@ -3988,6 +3998,10 @@ continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#,
         assert_eq!(
             parse_val_equals_predicate(r#"ValEquals("$i","2")"#),
             Some(PredicateTemplate::LocalIntEquals { value: 2 })
+        );
+        assert_eq!(
+            parse_boolean_member_not_predicate(r#"GetMember("enumKeyword"):Not()"#),
+            Some(PredicateTemplate::False)
         );
     }
 }
