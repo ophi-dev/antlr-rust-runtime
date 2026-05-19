@@ -491,9 +491,6 @@ fn target_templates_supported(descriptor: &Descriptor) -> bool {
     if descriptor.test_type != "Parser" {
         return false;
     }
-    if descriptor.name == "RewindBeforePredEval" {
-        return false;
-    }
     let grammar = &descriptor.grammar;
     if unsupported_members_templates(grammar)
         || grammar.contains("@definitions")

@@ -107,6 +107,7 @@ impl ParserAction {
 pub enum ParserPredicate {
     True,
     False,
+    LookaheadTextEquals { offset: isize, text: &'static str },
     LookaheadNotEquals { offset: isize, token_type: i32 },
 }
 
@@ -1727,6 +1728,9 @@ where
         match predicate {
             ParserPredicate::True => true,
             ParserPredicate::False => false,
+            ParserPredicate::LookaheadTextEquals { offset, text } => {
+                self.input.lt(*offset).and_then(Token::text) == Some(*text)
+            }
             ParserPredicate::LookaheadNotEquals { offset, token_type } => {
                 self.la(*offset) != *token_type
             }

@@ -693,6 +693,7 @@ enum TokenDisplaySource {
 enum PredicateTemplate {
     True,
     False,
+    LookaheadTextEquals { offset: isize, text: String },
     TextEquals(String),
     LookaheadNotEquals { offset: isize, token_name: String },
 }
@@ -1216,7 +1217,9 @@ fn parse_predicate_template(body: &str) -> Option<PredicateTemplate> {
     match body {
         "True()" => Some(PredicateTemplate::True),
         "False()" => Some(PredicateTemplate::False),
-        _ => parse_text_equals_predicate(body).or_else(|| parse_la_not_equals_predicate(body)),
+        _ => parse_text_equals_predicate(body)
+            .or_else(|| parse_lt_equals_predicate(body))
+            .or_else(|| parse_la_not_equals_predicate(body)),
     }
 }
 
@@ -1240,6 +1243,29 @@ fn parse_la_not_equals_predicate(body: &str) -> Option<PredicateTemplate> {
     let offset = parse_template_string(offset)?.parse::<isize>().ok()?;
     let token_name = parse_parser_token_argument(token)?;
     Some(PredicateTemplate::LookaheadNotEquals { offset, token_name })
+}
+
+/// Parses `LTEquals` predicates that compare lookahead token text.
+///
+/// The runtime-testsuite passes the expected text as a quoted target-language
+/// string literal, so the decoded `StringTemplate` argument may still contain
+/// one nested quote pair.
+fn parse_lt_equals_predicate(body: &str) -> Option<PredicateTemplate> {
+    let arguments = body
+        .strip_prefix("LTEquals(")
+        .and_then(|value| value.strip_suffix(')'))
+        .map(split_template_arguments)?;
+    let [offset, text] = arguments.as_slice() else {
+        return None;
+    };
+    let offset = parse_template_string(offset)?.parse::<isize>().ok()?;
+    let text = parse_template_string(text)?;
+    let text = text
+        .strip_prefix('"')
+        .and_then(|value| value.strip_suffix('"'))
+        .unwrap_or(&text)
+        .to_owned();
+    Some(PredicateTemplate::LookaheadTextEquals { offset, text })
 }
 
 fn parse_parser_token_argument(argument: &str) -> Option<String> {
@@ -1665,7 +1691,8 @@ fn render_lexer_predicate_expression(template: &PredicateTemplate) -> String {
             "_base.token_text_until(predicate.position()) == \"{}\"",
             rust_string(value)
         ),
-        PredicateTemplate::LookaheadNotEquals { .. } => {
+        PredicateTemplate::LookaheadTextEquals { .. }
+        | PredicateTemplate::LookaheadNotEquals { .. } => {
             unreachable!("lookahead parser predicates are not lexer predicates")
         }
     }
@@ -2015,6 +2042,12 @@ fn render_parser_predicate_array(
                     io::ErrorKind::InvalidData,
                     "TextEquals is only supported for lexer predicates",
                 ));
+            }
+            PredicateTemplate::LookaheadTextEquals { offset, text } => {
+                format!(
+                    "antlr4_runtime::ParserPredicate::LookaheadTextEquals {{ offset: {offset}, text: \"{}\" }}",
+                    rust_string(text)
+                )
             }
             PredicateTemplate::LookaheadNotEquals { offset, token_name } => {
                 let token_type = token_type_for_name(data, token_name).ok_or_else(|| {
