@@ -250,6 +250,13 @@ struct ParserDiagnostic {
 struct ExpectedTokens {
     index: Option<usize>,
     symbols: BTreeSet<i32>,
+    no_viable: Option<NoViableAlternative>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct NoViableAlternative {
+    start_index: usize,
+    error_index: usize,
 }
 
 impl ExpectedTokens {
@@ -266,6 +273,20 @@ impl ExpectedTokens {
             _ => {
                 self.index = Some(index);
                 self.symbols = symbols;
+            }
+        }
+    }
+
+    /// Records an ambiguous decision that failed after consuming a shared
+    /// prefix, which ANTLR reports as `no viable alternative`.
+    const fn record_no_viable(&mut self, start_index: usize, error_index: usize) {
+        match self.no_viable {
+            Some(current) if error_index < current.error_index => {}
+            _ => {
+                self.no_viable = Some(NoViableAlternative {
+                    start_index,
+                    error_index,
+                });
             }
         }
     }
@@ -428,6 +449,7 @@ struct RecognizeRequest<'a> {
     stop_state: usize,
     index: usize,
     rule_start_index: usize,
+    decision_start_index: Option<usize>,
     init_action_rules: &'a BTreeSet<usize>,
     predicates: &'a [(usize, usize, ParserPredicate)],
     rule_args: &'a [ParserRuleArg],
@@ -450,6 +472,7 @@ struct RecognizeKey {
     stop_state: usize,
     index: usize,
     rule_start_index: usize,
+    decision_start_index: Option<usize>,
     local_int_arg: Option<(usize, i64)>,
     member_values: BTreeMap<usize, i64>,
     rule_alt_number: usize,
@@ -465,6 +488,7 @@ struct FastRecognizeRequest {
     stop_state: usize,
     index: usize,
     rule_start_index: usize,
+    decision_start_index: Option<usize>,
     precedence: i32,
     depth: usize,
     recovery_symbols: BTreeSet<i32>,
@@ -477,6 +501,7 @@ struct FastRecognizeKey {
     stop_state: usize,
     index: usize,
     rule_start_index: usize,
+    decision_start_index: Option<usize>,
     precedence: i32,
     recovery_symbols: BTreeSet<i32>,
     recovery_state: Option<usize>,
@@ -654,6 +679,7 @@ where
                 stop_state,
                 index: start_index,
                 rule_start_index: start_index,
+                decision_start_index: None,
                 precedence: 0,
                 depth: 0,
                 recovery_symbols: BTreeSet::new(),
@@ -664,7 +690,7 @@ where
             &mut expected,
         );
         let Some(outcome) = select_best_fast_outcome(outcomes.into_iter()) else {
-            return Err(self.recognition_error(rule_index, &expected));
+            return Err(self.recognition_error(rule_index, start_index, &expected));
         };
 
         report_parser_diagnostics(&outcome.diagnostics);
@@ -795,6 +821,7 @@ where
                 stop_state,
                 index: start_index,
                 rule_start_index: start_index,
+                decision_start_index: None,
                 init_action_rules: &init_action_rules,
                 predicates,
                 rule_args,
@@ -813,7 +840,7 @@ where
             &mut expected,
         );
         let Some(outcome) = select_best_outcome(outcomes.into_iter()) else {
-            return Err(self.recognition_error(rule_index, &expected));
+            return Err(self.recognition_error(rule_index, start_index, &expected));
         };
 
         report_parser_diagnostics(&outcome.diagnostics);
@@ -872,13 +899,29 @@ where
 
     /// Builds the parser error reported when no ATN path can reach the active
     /// rule stop state.
-    fn recognition_error(&mut self, rule_index: usize, expected: &ExpectedTokens) -> AntlrError {
+    fn recognition_error(
+        &mut self,
+        rule_index: usize,
+        start_index: usize,
+        expected: &ExpectedTokens,
+    ) -> AntlrError {
         let index = expected.index.unwrap_or_else(|| self.input.index());
         self.input.seek(index);
         let current = self.input.lt(1).cloned();
         let line = current.as_ref().map(Token::line).unwrap_or_default();
         let column = current.as_ref().map(Token::column).unwrap_or_default();
-        let message = if expected.symbols.is_empty() {
+        let message = if expected
+            .no_viable
+            .as_ref()
+            .is_some_and(|no_viable| no_viable.error_index == index)
+        {
+            let start = expected
+                .no_viable
+                .as_ref()
+                .map_or(start_index, |no_viable| no_viable.start_index);
+            let text = display_input_text(&self.input.text(start, index));
+            format!("no viable alternative at input '{text}'")
+        } else if expected.symbols.is_empty() {
             format!("no viable alternative while parsing rule {rule_index}")
         } else {
             format!(
@@ -1046,6 +1089,7 @@ where
             stop_state,
             index,
             rule_start_index,
+            decision_start_index,
             precedence,
             depth,
             ..
@@ -1063,6 +1107,7 @@ where
                 stop_state,
                 index: after_next,
                 rule_start_index,
+                decision_start_index,
                 precedence,
                 depth: depth + 1,
                 recovery_symbols: BTreeSet::new(),
@@ -1102,6 +1147,7 @@ where
             stop_state,
             index,
             rule_start_index,
+            decision_start_index,
             precedence,
             depth,
             ..
@@ -1123,6 +1169,7 @@ where
                 stop_state,
                 index,
                 rule_start_index,
+                decision_start_index,
                 precedence,
                 depth: depth + 1,
                 recovery_symbols: BTreeSet::new(),
@@ -1190,6 +1237,7 @@ where
             stop_state,
             index,
             rule_start_index,
+            decision_start_index,
             precedence,
             depth,
             recovery_symbols,
@@ -1210,6 +1258,7 @@ where
             stop_state,
             index,
             rule_start_index,
+            decision_start_index,
             precedence,
             recovery_symbols: recovery_symbols.clone(),
             recovery_state,
@@ -1227,6 +1276,11 @@ where
             visiting.remove(&visit_key);
             return Vec::new();
         };
+        let next_decision_start_index = if starts_prediction_decision(state) {
+            Some(index)
+        } else {
+            decision_start_index
+        };
         let (epsilon_recovery_symbols, epsilon_recovery_state) =
             next_recovery_context(atn, state, &recovery_symbols, recovery_state);
         let mut outcomes = Vec::new();
@@ -1242,6 +1296,7 @@ where
                             stop_state,
                             index,
                             rule_start_index,
+                            decision_start_index: next_decision_start_index,
                             precedence,
                             depth: depth + 1,
                             recovery_symbols: epsilon_recovery_symbols.clone(),
@@ -1264,6 +1319,7 @@ where
                                 stop_state,
                                 index,
                                 rule_start_index,
+                                decision_start_index: next_decision_start_index,
                                 precedence,
                                 depth: depth + 1,
                                 recovery_symbols: epsilon_recovery_symbols.clone(),
@@ -1286,6 +1342,7 @@ where
                     else {
                         continue;
                     };
+                    let expected_before_child = expected.clone();
                     let children = self.recognize_state_fast(
                         atn,
                         FastRecognizeRequest {
@@ -1293,6 +1350,7 @@ where
                             stop_state: child_stop,
                             index,
                             rule_start_index: index,
+                            decision_start_index: None,
                             precedence: *rule_precedence,
                             depth: depth + 1,
                             recovery_symbols: epsilon_recovery_symbols.clone(),
@@ -1302,6 +1360,12 @@ where
                         memo,
                         expected,
                     );
+                    if children
+                        .iter()
+                        .any(|child| child.diagnostics.is_empty() && child.index > index)
+                    {
+                        *expected = expected_before_child;
+                    }
                     for child in children {
                         outcomes.extend(
                             self.recognize_state_fast(
@@ -1311,6 +1375,7 @@ where
                                     stop_state,
                                     index: child.index,
                                     rule_start_index,
+                                    decision_start_index: next_decision_start_index,
                                     precedence,
                                     depth: depth + 1,
                                     recovery_symbols: BTreeSet::new(),
@@ -1347,6 +1412,7 @@ where
                                     stop_state,
                                     index: next_index,
                                     rule_start_index,
+                                    decision_start_index: next_decision_start_index,
                                     precedence,
                                     depth: depth + 1,
                                     recovery_symbols: BTreeSet::new(),
@@ -1369,6 +1435,7 @@ where
                             continue;
                         }
                         expected.record_transition(index, transition, atn.max_token_type());
+                        record_no_viable_if_ambiguous(expected, next_decision_start_index, index);
                         outcomes.extend(self.fast_single_token_deletion_recovery(
                             FastRecoveryRequest {
                                 atn,
@@ -1380,6 +1447,7 @@ where
                                     stop_state,
                                     index,
                                     rule_start_index,
+                                    decision_start_index,
                                     precedence,
                                     depth,
                                     recovery_symbols: recovery_symbols.clone(),
@@ -1402,6 +1470,7 @@ where
                                         stop_state,
                                         index,
                                         rule_start_index,
+                                        decision_start_index,
                                         precedence,
                                         depth,
                                         recovery_symbols: recovery_symbols.clone(),
@@ -1422,6 +1491,7 @@ where
                                     stop_state,
                                     index,
                                     rule_start_index,
+                                    decision_start_index,
                                     precedence,
                                     depth,
                                     recovery_symbols: recovery_symbols.clone(),
@@ -1464,6 +1534,7 @@ where
             stop_state,
             index,
             rule_start_index,
+            decision_start_index,
             init_action_rules,
             predicates,
             rule_args,
@@ -1489,6 +1560,7 @@ where
                 stop_state,
                 index: after_next,
                 rule_start_index,
+                decision_start_index,
                 init_action_rules,
                 predicates,
                 rule_args,
@@ -1582,6 +1654,7 @@ where
             stop_state,
             index,
             rule_start_index,
+            decision_start_index,
             init_action_rules,
             predicates,
             rule_args,
@@ -1611,6 +1684,7 @@ where
                 stop_state,
                 index,
                 rule_start_index,
+                decision_start_index,
                 init_action_rules,
                 predicates,
                 rule_args,
@@ -1660,6 +1734,7 @@ where
             stop_state,
             index,
             rule_start_index,
+            decision_start_index,
             init_action_rules,
             predicates,
             rule_args,
@@ -1684,6 +1759,7 @@ where
             stop_state,
             index,
             rule_start_index,
+            decision_start_index,
             local_int_arg,
             member_values: member_values.clone(),
             rule_alt_number,
@@ -1704,6 +1780,11 @@ where
         let Some(state) = atn.state(state_number) else {
             visiting.remove(&visit_key);
             return Vec::new();
+        };
+        let next_decision_start_index = if starts_prediction_decision(state) {
+            Some(index)
+        } else {
+            decision_start_index
         };
         let (epsilon_recovery_symbols, epsilon_recovery_state) =
             next_recovery_context(atn, state, &recovery_symbols, recovery_state);
@@ -1737,6 +1818,7 @@ where
                                 stop_state,
                                 index,
                                 rule_start_index,
+                                decision_start_index: next_decision_start_index,
                                 init_action_rules,
                                 predicates,
                                 rule_args,
@@ -1793,6 +1875,7 @@ where
                                     stop_state,
                                     index,
                                     rule_start_index,
+                                    decision_start_index: next_decision_start_index,
                                     init_action_rules,
                                     predicates,
                                     rule_args,
@@ -1837,6 +1920,7 @@ where
                                     stop_state,
                                     index,
                                     rule_start_index,
+                                    decision_start_index: next_decision_start_index,
                                     init_action_rules,
                                     predicates,
                                     rule_args,
@@ -1875,6 +1959,7 @@ where
                     };
                     let child_local_int_arg =
                         rule_local_int_arg(rule_args, state_number, *rule_index, local_int_arg);
+                    let expected_before_child = expected.clone();
                     let children = self.recognize_state(
                         atn,
                         RecognizeRequest {
@@ -1882,6 +1967,7 @@ where
                             stop_state: child_stop,
                             index,
                             rule_start_index: index,
+                            decision_start_index: None,
                             init_action_rules,
                             predicates,
                             rule_args,
@@ -1899,6 +1985,7 @@ where
                         memo,
                         expected,
                     );
+                    restore_expected(&children, index, expected, expected_before_child);
                     for child in children {
                         let child_node = RecognizedNode::Rule {
                             rule_index: *rule_index,
@@ -1916,6 +2003,7 @@ where
                                     stop_state,
                                     index: child.index,
                                     rule_start_index,
+                                    decision_start_index: next_decision_start_index,
                                     init_action_rules,
                                     predicates,
                                     rule_args,
@@ -1978,6 +2066,7 @@ where
                                     stop_state,
                                     index: next_index,
                                     rule_start_index,
+                                    decision_start_index: next_decision_start_index,
                                     init_action_rules,
                                     predicates,
                                     rule_args,
@@ -2010,6 +2099,7 @@ where
                             continue;
                         }
                         expected.record_transition(index, transition, atn.max_token_type());
+                        record_no_viable_if_ambiguous(expected, next_decision_start_index, index);
                         let before_recovery = outcomes.len();
                         let recovery_request = request_template.clone();
                         outcomes.extend(
@@ -2063,15 +2153,10 @@ where
                             && symbol != TOKEN_EOF
                             && !expected_symbols.is_empty()
                         {
-                            let diagnostic = diagnostic_for_token(
-                                self.token_at(index).as_ref(),
-                                format!(
-                                    "mismatched input {} expecting {}",
-                                    self.token_at(index)
-                                        .as_ref()
-                                        .map_or_else(|| "'<EOF>'".to_owned(), token_input_display),
-                                    self.expected_symbols_display(&expected_symbols)
-                                ),
+                            let diagnostic = self.recovery_failure_diagnostic(
+                                index,
+                                next_decision_start_index,
+                                &expected_symbols,
                             );
                             let next_index = self.consume_index(index, symbol);
                             outcomes.extend(
@@ -2082,6 +2167,7 @@ where
                                         stop_state,
                                         index: next_index,
                                         rule_start_index,
+                                        decision_start_index: next_decision_start_index,
                                         init_action_rules,
                                         predicates,
                                         rule_args,
@@ -2212,6 +2298,45 @@ where
             self.consume();
         }
         self.input.index()
+    }
+
+    /// Builds ANTLR's no-viable-alternative diagnostic for an ambiguous
+    /// decision that failed after consuming a shared prefix.
+    fn no_viable_alternative(
+        &mut self,
+        start_index: usize,
+        error_index: usize,
+    ) -> ParserDiagnostic {
+        let text = display_input_text(&self.input.text(start_index, error_index));
+        diagnostic_for_token(
+            self.token_at(error_index).as_ref(),
+            format!("no viable alternative at input '{text}'"),
+        )
+    }
+
+    /// Selects the diagnostic for a failed consuming transition after all
+    /// recovery repairs have been ruled out.
+    fn recovery_failure_diagnostic(
+        &mut self,
+        index: usize,
+        decision_start_index: Option<usize>,
+        expected_symbols: &BTreeSet<i32>,
+    ) -> ParserDiagnostic {
+        if expected_symbols.len() > 1 {
+            if let Some(decision_start) = no_viable_decision_start(decision_start_index, index) {
+                return self.no_viable_alternative(decision_start, index);
+            }
+        }
+        diagnostic_for_token(
+            self.token_at(index).as_ref(),
+            format!(
+                "mismatched input {} expecting {}",
+                self.token_at(index)
+                    .as_ref()
+                    .map_or_else(|| "'<EOF>'".to_owned(), token_input_display),
+                self.expected_symbols_display(expected_symbols)
+            ),
+        )
     }
 
     /// Returns token text for a buffered token interval.
@@ -2413,6 +2538,19 @@ fn token_input_display(token: &impl Token) -> String {
     format!("'{}'", token.text().unwrap_or("<EOF>"))
 }
 
+fn display_input_text(text: &str) -> String {
+    let mut out = String::new();
+    for ch in text.chars() {
+        match ch {
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            other => out.push(other),
+        }
+    }
+    out
+}
+
 fn diagnostic_for_token(token: Option<&impl Token>, message: String) -> ParserDiagnostic {
     ParserDiagnostic {
         line: token.map(Token::line).unwrap_or_default(),
@@ -2541,6 +2679,61 @@ fn transition_decision(
         return None;
     }
     Some(transition_index)
+}
+
+/// Reports whether a state should reset the active no-viable decision start.
+///
+/// Loop entry/back states are continuations of the surrounding adaptive
+/// prediction; resetting at those states would turn LL-star failures back into
+/// ordinary mismatches.
+const fn starts_prediction_decision(state: &AtnState) -> bool {
+    state.transitions.len() > 1
+        && !matches!(
+            state.kind,
+            AtnStateKind::PlusLoopBack | AtnStateKind::StarLoopBack | AtnStateKind::StarLoopEntry
+        )
+}
+
+/// Marks a farthest expected-token set as no-viable when multiple alternatives
+/// failed after the active decision had already consumed input.
+fn record_no_viable_if_ambiguous(
+    expected: &mut ExpectedTokens,
+    decision_start_index: Option<usize>,
+    index: usize,
+) {
+    if expected.index == Some(index) && expected.symbols.len() > 1 {
+        if let Some(decision_start) = no_viable_decision_start(decision_start_index, index) {
+            expected.record_no_viable(decision_start, index);
+        }
+    }
+}
+
+/// Returns the active decision start only when the error is past that start.
+const fn no_viable_decision_start(
+    decision_start_index: Option<usize>,
+    index: usize,
+) -> Option<usize> {
+    match decision_start_index {
+        Some(start) if index > start => Some(start),
+        _ => None,
+    }
+}
+
+/// Restores expected-token bookkeeping when a child rule found a clean
+/// consuming path; failures in longer child alternatives should not pollute the
+/// caller's final expectation set.
+fn restore_expected(
+    children: &[RecognizeOutcome],
+    child_start_index: usize,
+    expected: &mut ExpectedTokens,
+    snapshot: ExpectedTokens,
+) {
+    if children
+        .iter()
+        .any(|child| child.diagnostics.is_empty() && child.index > child_start_index)
+    {
+        *expected = snapshot;
+    }
 }
 
 /// Reports whether a decision can reach a predicate the generator did not
