@@ -336,7 +336,9 @@ fn state_expected_symbols(atn: &Atn, state_number: usize) -> BTreeSet<i32> {
 fn next_recovery_symbols(atn: &Atn, state: &AtnState, inherited: &BTreeSet<i32>) -> BTreeSet<i32> {
     let state_symbols = state_expected_symbols(atn, state.state_number);
     if state.transitions.len() > 1 && !state_symbols.is_empty() {
-        return state_symbols;
+        let mut symbols = state_symbols;
+        symbols.extend(inherited.iter().copied());
+        return symbols;
     }
     inherited.clone()
 }

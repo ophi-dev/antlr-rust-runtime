@@ -463,6 +463,7 @@ fn parser_error_diagnostics_supported(descriptor: &Descriptor) -> bool {
             | "SingleTokenDeletionBeforePredict"
             | "SingleTokenDeletionConsumption"
             | "SingleTokenDeletionDuringLoop"
+            | "SingleTokenDeletionDuringLoop2"
             | "SingleTokenDeletionExpectingSet"
             | "SingleTokenInsertion"
             | "Sync"
