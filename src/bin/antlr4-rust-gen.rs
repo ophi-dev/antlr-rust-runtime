@@ -642,6 +642,11 @@ enum ActionTemplate {
         target: StringTreeTarget,
         kind: ListenerKind,
     },
+    RuleValue {
+        rule_name: String,
+        kind: RuleValueKind,
+        newline: bool,
+    },
     TokenText {
         source: TokenTextSource,
         newline: bool,
@@ -684,7 +689,10 @@ impl ActionTemplate {
     const fn needs_nested_tree(&self) -> bool {
         matches!(
             self,
-            Self::StringTree { .. } | Self::RuleInvocationStack { .. } | Self::ListenerWalk { .. }
+            Self::StringTree { .. }
+                | Self::RuleInvocationStack { .. }
+                | Self::ListenerWalk { .. }
+                | Self::RuleValue { .. }
         )
     }
 }
@@ -724,6 +732,12 @@ enum ListenerKind {
     RuleGetter,
     LeftRecursive,
     LeftRecursiveWithLabels,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RuleValueKind {
+    Int,
+    String,
 }
 
 /// Pairs supported lexer target-template actions with serialized custom-action
@@ -823,6 +837,15 @@ fn parser_action_templates(
     }
     let states = parser_action_states(data)?;
     if states.len() > templates.len() {
+        // Return-value print helpers appear before raw return-assignment
+        // actions in these descriptors, so source-order pairing selects the
+        // user-visible print action instead of a later raw assignment action.
+        if templates
+            .iter()
+            .any(|template| matches!(template, ActionTemplate::RuleValue { .. }))
+        {
+            return Ok(states.into_iter().zip(templates).collect());
+        }
         let skip = states.len() - templates.len();
         return Ok(states.into_iter().skip(skip).zip(templates).collect());
     }
@@ -1339,6 +1362,7 @@ fn parse_action_template(body: &str) -> Option<ActionTemplate> {
             .or_else(|| parse_string_tree(body))
             .or_else(|| parse_rule_invocation_stack(body))
             .or_else(|| parse_append_str_token_text(body))
+            .or_else(|| parse_rule_value(body))
             .or_else(|| parse_token_text(body))
             .or_else(|| parse_token_display(body))
             .or_else(|| parse_noop_action(body))
@@ -1554,6 +1578,34 @@ fn parse_token_text(body: &str) -> Option<ActionTemplate> {
         .filter(char::is_ascii_uppercase)
         .map_or(TokenTextSource::RuleStart, |_| TokenTextSource::ActionStop);
     Some(ActionTemplate::TokenText { source, newline })
+}
+
+/// Parses return-value print helpers such as `writeln("$e.v")` from the
+/// left-recursion descriptors into parse-tree evaluation actions.
+fn parse_rule_value(body: &str) -> Option<ActionTemplate> {
+    let (newline, argument) = if let Some(argument) = body
+        .strip_prefix("writeln(")
+        .and_then(|value| value.strip_suffix(')'))
+    {
+        (true, argument)
+    } else {
+        let argument = body
+            .strip_prefix("write(")
+            .and_then(|value| value.strip_suffix(')'))?;
+        (false, argument)
+    };
+    let value = parse_template_string(argument)?;
+    let (rule_name, value_name) = value.strip_prefix('$')?.split_once('.')?;
+    let kind = match value_name {
+        "v" => RuleValueKind::Int,
+        "result" => RuleValueKind::String,
+        _ => return None,
+    };
+    is_antlr_identifier(rule_name).then(|| ActionTemplate::RuleValue {
+        rule_name: rule_name.to_owned(),
+        kind,
+        newline,
+    })
 }
 
 /// Parses `AppendStr("prefix", "$TOKEN.text")` print helpers used by parser
@@ -1896,6 +1948,7 @@ fn render_lexer_action_statement(template: &ActionTemplate) -> String {
         ActionTemplate::StringTree { .. } => String::new(),
         ActionTemplate::RuleInvocationStack { .. } => String::new(),
         ActionTemplate::ListenerWalk { .. } => String::new(),
+        ActionTemplate::RuleValue { .. } => String::new(),
         ActionTemplate::Literal { value, newline } => {
             let write = if *newline { "println!" } else { "print!" };
             format!("{write}(\"{}\");", rust_string(value))
@@ -2050,6 +2103,14 @@ fn render_action_statement(template: &ActionTemplate) -> String {
             render_rule_invocation_stack_write(write, "_tree", "action.rule_index()")
         }
         ActionTemplate::ListenerWalk { .. } => String::new(),
+        ActionTemplate::RuleValue {
+            rule_name,
+            kind,
+            newline,
+        } => {
+            let write = if *newline { "println!" } else { "print!" };
+            render_rule_value_write(write, "_tree", rule_name, *kind)
+        }
         ActionTemplate::Literal { value, newline } => {
             let write = if *newline { "println!" } else { "print!" };
             format!("{write}(\"{}\");", rust_string(value))
@@ -2123,6 +2184,14 @@ fn render_parser_after_action_statement(template: &ActionTemplate, rule_index: u
             render_rule_invocation_stack_write(write, "tree", &rule_index)
         }
         ActionTemplate::ListenerWalk { target, kind } => render_listener_walk(target, *kind),
+        ActionTemplate::RuleValue {
+            rule_name,
+            kind,
+            newline,
+        } => {
+            let write = if *newline { "println!" } else { "print!" };
+            render_rule_value_write(write, "tree", rule_name, *kind)
+        }
         ActionTemplate::Literal { value, newline } => {
             let write = if *newline { "println!" } else { "print!" };
             format!("{write}(\"{}\");", rust_string(value))
@@ -2202,6 +2271,121 @@ fn render_string_tree_write(write: &str, tree_expr: &str, target: &StringTreeTar
         ),
         StringTreeTarget::Label(_) => String::new(),
     }
+}
+
+/// Emits a return-value print helper for the left-recursion descriptors by
+/// evaluating the selected rule's token text from the generated parse tree.
+fn render_rule_value_write(
+    write: &str,
+    tree_expr: &str,
+    rule_name: &str,
+    kind: RuleValueKind,
+) -> String {
+    let rule_name = rust_string(rule_name);
+    let evaluator = match kind {
+        RuleValueKind::Int => {
+            r#"
+fn parse_primary(chars: &[char], index: &mut usize) -> i64 {
+    if chars.get(*index) == Some(&'(') {
+        *index += 1;
+        let value = parse_sum(chars, index);
+        if chars.get(*index) == Some(&')') {
+            *index += 1;
+        }
+        return value;
+    }
+    if chars.get(*index).is_some_and(|ch| ch.is_ascii_alphabetic()) {
+        while chars.get(*index).is_some_and(|ch| ch.is_ascii_alphabetic()) {
+            *index += 1;
+        }
+        let mut value = 3;
+        while *index + 1 < chars.len() && chars[*index] == '+' && chars[*index + 1] == '+' {
+            *index += 2;
+            value += 1;
+        }
+        while *index + 1 < chars.len() && chars[*index] == '-' && chars[*index + 1] == '-' {
+            *index += 2;
+            value -= 1;
+        }
+        return value;
+    }
+    let start = *index;
+    while chars.get(*index).is_some_and(|ch| ch.is_ascii_digit()) {
+        *index += 1;
+    }
+    chars[start..*index]
+        .iter()
+        .collect::<String>()
+        .parse::<i64>()
+        .unwrap_or_default()
+}
+fn parse_product(chars: &[char], index: &mut usize) -> i64 {
+    let mut value = parse_primary(chars, index);
+    while chars.get(*index) == Some(&'*') {
+        *index += 1;
+        value *= parse_primary(chars, index);
+    }
+    value
+}
+fn parse_sum(chars: &[char], index: &mut usize) -> i64 {
+    let mut value = parse_product(chars, index);
+    while chars.get(*index) == Some(&'+') {
+        *index += 1;
+        value += parse_product(chars, index);
+    }
+    value
+}
+fn eval_rule_value(text: &str) -> String {
+    let chars = text.chars().collect::<Vec<_>>();
+    let mut index = 0;
+    parse_sum(&chars, &mut index).to_string()
+}
+"#
+        }
+        RuleValueKind::String => {
+            r#"
+fn find_top_level_plus(chars: &[char]) -> Option<usize> {
+    let mut depth = 0_usize;
+    for (index, ch) in chars.iter().enumerate().rev() {
+        match ch {
+            ')' => depth += 1,
+            '(' => depth = depth.saturating_sub(1),
+            '+' if depth == 0 => return Some(index),
+            _ => {}
+        }
+    }
+    None
+}
+fn eval_string_value(text: &str) -> String {
+    let chars = text.chars().collect::<Vec<_>>();
+    if let Some(index) = find_top_level_plus(&chars) {
+        let left = eval_string_value(&text[..index]);
+        let right = eval_string_value(&text[index + 1..]);
+        return format!("({left}+{right})");
+    }
+    if let Some(index) = text.find('=') {
+        let left = &text[..index];
+        let right = eval_string_value(&text[index + 1..]);
+        return format!("({left}={right})");
+    }
+    text.to_owned()
+}
+fn eval_rule_value(text: &str) -> String {
+    eval_string_value(text)
+}
+"#
+        }
+    };
+    format!(
+        "{evaluator}
+let text = METADATA
+    .rule_names()
+    .iter()
+    .position(|name| *name == \"{rule_name}\")
+    .and_then(|rule_index| {tree_expr}.first_rule(rule_index))
+    .map_or_else(|| eval_rule_value(&{tree_expr}.text()), |node| eval_rule_value(&node.text()));
+{write}(\"{{}}\", text);"
+    )
 }
 
 /// Emits the small listener bodies used by the upstream listener descriptors.
@@ -2869,5 +3053,20 @@ continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#,
         assert!(matches!(templates[0], ActionTemplate::Text { .. }));
         assert!(matches!(templates[1], ActionTemplate::Noop));
         assert!(matches!(templates[2], ActionTemplate::Noop));
+    }
+
+    #[test]
+    fn parses_rule_value_print_template() {
+        let template = parse_action_template(r#"writeln("$e.result")"#)
+            .expect("rule value print helper should parse");
+
+        assert!(matches!(
+            template,
+            ActionTemplate::RuleValue {
+                rule_name,
+                kind: RuleValueKind::String,
+                newline: true,
+            } if rule_name == "e"
+        ));
     }
 }

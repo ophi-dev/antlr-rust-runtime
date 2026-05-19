@@ -622,6 +622,7 @@ fn is_supported_action_template(body: &str) -> bool {
         || is_append_str_token_text_template(body)
         || is_token_text_template(body)
         || is_token_display_template(body)
+        || is_rule_value_template(body)
         || (body.starts_with("PlusText(\"") && body.ends_with("):writeln()"))
         || (body.starts_with("PlusText(\"") && body.ends_with("):write()"))
 }
@@ -633,18 +634,24 @@ fn supported_signature_templates(grammar: &str) -> bool {
     })
 }
 
+/// Checks one `returns [...]` or `locals [...]` clause for target-template
+/// signatures the generator can erase or model in the runtime-test harness.
 fn supported_signature_template_on_line(line: &str, marker: &str) -> bool {
     let Some(marker_start) = line.find(marker) else {
         return true;
     };
-    let template_start = marker_start + marker.len();
-    let Some(template) = line[template_start..].trim().strip_prefix('<') else {
+    let after_marker = marker_start + marker.len();
+    let leading_whitespace = line[after_marker..].len() - line[after_marker..].trim_start().len();
+    let template_start = after_marker + leading_whitespace;
+    if line.as_bytes().get(template_start) != Some(&b'<') {
         return true;
+    }
+    let Some(close_angle) = matching_template_close(line, template_start + 1) else {
+        return false;
     };
-    template
-        .strip_suffix(']')
-        .and_then(|value| value.strip_suffix('>'))
-        .is_some_and(|body| body.starts_with("IntArg(") && body.ends_with(')'))
+    let body = &line[template_start + 1..close_angle];
+    (body.starts_with("IntArg(") && body.ends_with(')'))
+        || matches!(body, "StringType()" | "StringList()")
 }
 
 /// Allows only member templates that are no-op scaffolding for this metadata
@@ -716,6 +723,25 @@ fn is_token_text_template(body: &str) -> bool {
     argument
         .chars()
         .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+}
+
+/// Recognizes the simple `$rule.v` and `$rule.result` print helpers that the
+/// generator can evaluate from the parse tree for left-recursion fixtures.
+fn is_rule_value_template(body: &str) -> bool {
+    let Some(argument) = body
+        .strip_prefix("writeln(\"$")
+        .and_then(|value| value.strip_suffix("\")"))
+        .or_else(|| {
+            body.strip_prefix("write(\"$")
+                .and_then(|value| value.strip_suffix("\")"))
+        })
+    else {
+        return false;
+    };
+    let Some((rule_name, value_name)) = argument.split_once('.') else {
+        return false;
+    };
+    is_antlr_identifier(rule_name) && matches!(value_name, "v" | "result")
 }
 
 /// Mirrors the generator's `AppendStr` subset: a literal prefix plus a

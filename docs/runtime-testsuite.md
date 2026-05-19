@@ -87,6 +87,8 @@ Supported now:
 - parser supported-predicate decision ordering for action-bearing alternatives,
 - listener-suite target templates for `BasicListener`, token/rule getter
   listeners, and the left-recursive listener fixtures,
+- simple left-recursive return-value stdout helpers such as `$e.v` and
+  `$e.result`,
 - alt-numbered parse-tree contexts for grammars using
   `TreeNodeWithAltNumField`/`contextSuperClass`,
 - `RuleInvocationStack()` stdout helper actions,
@@ -117,10 +119,10 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `272 passed, 0 failed, 85 skipped, 272 run`
+- full descriptor sweep: `283 passed, 0 failed, 74 skipped, 283 run`
 - `LexerExec`: `42 passed, 0 failed, 0 skipped, 42 run`
 - `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
-- `LeftRecursion`: `81 passed, 0 failed, 17 skipped, 81 run`
+- `LeftRecursion`: `92 passed, 0 failed, 6 skipped, 92 run`
 - `Listeners`: `7 passed, 0 failed, 0 skipped, 7 run`
 - `ParseTrees`: `10 passed, 0 failed, 0 skipped, 10 run`
 - `ParserExec`: `48 passed, 0 failed, 2 skipped, 48 run`
@@ -132,5 +134,5 @@ Current validated groups:
 
 The remaining target-action skips are descriptors that depend on templates the
 Rust harness does not render yet, such as target members, diagnostic helpers,
-return-value evaluation, or parser predicates that need generated context
-methods.
+common-label return-value/member evaluation, or parser predicates that need
+generated context methods.
