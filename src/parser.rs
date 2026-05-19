@@ -125,6 +125,13 @@ pub enum ParserPredicate {
     LocalIntEquals {
         value: i64,
     },
+    /// Compares a generated parser integer member modulo a literal value.
+    MemberModuloEquals {
+        member: usize,
+        modulus: i64,
+        value: i64,
+        equals: bool,
+    },
 }
 
 /// Integer argument metadata for a generated parser rule invocation.
@@ -144,6 +151,17 @@ pub struct ParserRuleArg {
     pub inherit_local: bool,
 }
 
+/// Integer member mutation attached to an ATN action transition.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct ParserMemberAction {
+    /// ATN state containing the action transition.
+    pub source_state: usize,
+    /// Generator-assigned integer member id.
+    pub member: usize,
+    /// Delta applied when the action is reached on one speculative path.
+    pub delta: i64,
+}
+
 /// Optional generated-runtime metadata for metadata-driven parser execution.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ParserRuntimeOptions<'a> {
@@ -155,6 +173,8 @@ pub struct ParserRuntimeOptions<'a> {
     pub predicates: &'a [(usize, usize, ParserPredicate)],
     /// Rule-call integer argument table keyed by ATN source state.
     pub rule_args: &'a [ParserRuleArg],
+    /// Integer member mutations keyed by ATN action source state.
+    pub member_actions: &'a [ParserMemberAction],
 }
 
 pub trait Parser: Recognizer {
@@ -167,6 +187,7 @@ pub struct BaseParser<S> {
     input: CommonTokenStream<S>,
     data: RecognizerData,
     build_parse_trees: bool,
+    int_members: BTreeMap<usize, i64>,
     /// Predicate side effects are observable in a few target-template tests;
     /// speculative recognition may revisit the same coordinate, so replay it
     /// once per parser instance.
@@ -178,6 +199,7 @@ struct RecognizeOutcome {
     index: usize,
     consumed_eof: bool,
     alt_number: usize,
+    member_values: BTreeMap<usize, i64>,
     diagnostics: Vec<ParserDiagnostic>,
     decisions: Vec<usize>,
     actions: Vec<ParserAction>,
@@ -329,6 +351,70 @@ fn recovery_expected_symbols(
     symbols
 }
 
+/// Applies generated integer-member side effects to one speculative path.
+fn apply_member_actions(
+    source_state: usize,
+    actions: &[ParserMemberAction],
+    values: &mut BTreeMap<usize, i64>,
+) {
+    for action in actions
+        .iter()
+        .filter(|action| action.source_state == source_state)
+    {
+        *values.entry(action.member).or_default() += action.delta;
+    }
+}
+
+/// Returns the speculative member state after replaying one ATN action state.
+fn member_values_after_action(
+    source_state: usize,
+    actions: &[ParserMemberAction],
+    values: &BTreeMap<usize, i64>,
+) -> BTreeMap<usize, i64> {
+    let mut values = values.clone();
+    apply_member_actions(source_state, actions, &mut values);
+    values
+}
+
+/// Resolves the integer argument visible to a child rule invocation.
+fn rule_local_int_arg(
+    rule_args: &[ParserRuleArg],
+    source_state: usize,
+    rule_index: usize,
+    local_int_arg: Option<(usize, i64)>,
+) -> Option<(usize, i64)> {
+    rule_args
+        .iter()
+        .find(|arg| arg.source_state == source_state && arg.rule_index == rule_index)
+        .map(|arg| {
+            let value = if arg.inherit_local {
+                local_int_arg.map_or(arg.value, |(_, value)| value)
+            } else {
+                arg.value
+            };
+            (rule_index, value)
+        })
+}
+
+/// Builds the terminal recognition outcome for a path that reached its stop
+/// state.
+fn stop_outcome(
+    index: usize,
+    rule_alt_number: usize,
+    member_values: BTreeMap<usize, i64>,
+) -> Vec<RecognizeOutcome> {
+    vec![RecognizeOutcome {
+        index,
+        consumed_eof: false,
+        alt_number: rule_alt_number,
+        member_values,
+        diagnostics: Vec::new(),
+        decisions: Vec::new(),
+        actions: Vec::new(),
+        nodes: Vec::new(),
+    }]
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct RecognizeRequest<'a> {
     state_number: usize,
@@ -338,7 +424,9 @@ struct RecognizeRequest<'a> {
     init_action_rules: &'a BTreeSet<usize>,
     predicates: &'a [(usize, usize, ParserPredicate)],
     rule_args: &'a [ParserRuleArg],
+    member_actions: &'a [ParserMemberAction],
     local_int_arg: Option<(usize, i64)>,
+    member_values: BTreeMap<usize, i64>,
     rule_alt_number: usize,
     track_alt_numbers: bool,
     /// Current left-recursive precedence threshold, matching ANTLR's
@@ -355,6 +443,7 @@ struct RecognizeKey {
     index: usize,
     rule_start_index: usize,
     local_int_arg: Option<(usize, i64)>,
+    member_values: BTreeMap<usize, i64>,
     rule_alt_number: usize,
     track_alt_numbers: bool,
     precedence: i32,
@@ -395,9 +484,20 @@ struct RecoveryRequest<'a, 'b> {
     expected_symbols: BTreeSet<i32>,
     target: usize,
     request: RecognizeRequest<'a>,
-    visiting: &'b mut BTreeSet<(usize, usize, usize, usize, i32)>,
+    visiting: &'b mut BTreeSet<RecognizeKey>,
     memo: &'b mut BTreeMap<RecognizeKey, Vec<RecognizeOutcome>>,
     expected: &'b mut ExpectedTokens,
+}
+
+/// Bundles the context needed to evaluate one semantic predicate transition.
+#[derive(Clone, Copy, Debug)]
+struct PredicateEval<'a> {
+    index: usize,
+    rule_index: usize,
+    pred_index: usize,
+    predicates: &'a [(usize, usize, ParserPredicate)],
+    local_int_arg: Option<(usize, i64)>,
+    member_values: &'a BTreeMap<usize, i64>,
 }
 
 impl<S> BaseParser<S>
@@ -411,6 +511,7 @@ where
             input,
             data,
             build_parse_trees: true,
+            int_members: BTreeMap::new(),
             invoked_predicates: Vec::new(),
         }
     }
@@ -425,6 +526,23 @@ where
 
     pub fn consume(&mut self) {
         IntStream::consume(&mut self.input);
+    }
+
+    /// Sets a generated integer member value used by target-template tests.
+    pub fn set_int_member(&mut self, member: usize, value: i64) {
+        self.int_members.insert(member, value);
+    }
+
+    /// Reads a generated integer member value.
+    pub fn int_member(&self, member: usize) -> Option<i64> {
+        self.int_members.get(&member).copied()
+    }
+
+    /// Adds `delta` to a generated integer member and returns the new value.
+    pub fn add_int_member(&mut self, member: usize, delta: i64) -> i64 {
+        let value = self.int_members.entry(member).or_default();
+        *value += delta;
+        *value
     }
 
     /// Matches and consumes the current token when it has the expected token
@@ -610,6 +728,7 @@ where
             track_alt_numbers,
             predicates,
             rule_args,
+            member_actions,
         } = options;
         let start_state = atn
             .rule_to_start_state()
@@ -632,6 +751,7 @@ where
         let mut visiting = BTreeSet::new();
         let mut memo = BTreeMap::new();
         let mut expected = ExpectedTokens::default();
+        let member_values = self.int_members.clone();
         let outcomes = self.recognize_state(
             atn,
             RecognizeRequest {
@@ -642,7 +762,9 @@ where
                 init_action_rules: &init_action_rules,
                 predicates,
                 rule_args,
+                member_actions,
                 local_int_arg: None,
+                member_values,
                 rule_alt_number: 0,
                 track_alt_numbers,
                 precedence: 0,
@@ -1183,7 +1305,9 @@ where
             init_action_rules,
             predicates,
             rule_args,
+            member_actions,
             local_int_arg,
+            member_values,
             rule_alt_number,
             track_alt_numbers,
             precedence,
@@ -1206,7 +1330,9 @@ where
                 init_action_rules,
                 predicates,
                 rule_args,
+                member_actions,
                 local_int_arg,
+                member_values,
                 rule_alt_number,
                 track_alt_numbers,
                 precedence,
@@ -1255,7 +1381,9 @@ where
             init_action_rules,
             predicates,
             rule_args,
+            member_actions,
             local_int_arg,
+            member_values,
             rule_alt_number,
             track_alt_numbers,
             precedence,
@@ -1282,7 +1410,9 @@ where
                 init_action_rules,
                 predicates,
                 rule_args,
+                member_actions,
                 local_int_arg,
+                member_values,
                 rule_alt_number,
                 track_alt_numbers,
                 precedence,
@@ -1315,7 +1445,7 @@ where
         &mut self,
         atn: &Atn,
         request: RecognizeRequest<'_>,
-        visiting: &mut BTreeSet<(usize, usize, usize, usize, i32)>,
+        visiting: &mut BTreeSet<RecognizeKey>,
         memo: &mut BTreeMap<RecognizeKey, Vec<RecognizeOutcome>>,
         expected: &mut ExpectedTokens,
     ) -> Vec<RecognizeOutcome> {
@@ -1327,7 +1457,9 @@ where
             init_action_rules,
             predicates,
             rule_args,
+            member_actions,
             local_int_arg,
+            member_values,
             rule_alt_number,
             track_alt_numbers,
             precedence,
@@ -1338,15 +1470,7 @@ where
             return Vec::new();
         }
         if state_number == stop_state {
-            return vec![RecognizeOutcome {
-                index,
-                consumed_eof: false,
-                alt_number: rule_alt_number,
-                diagnostics: Vec::new(),
-                decisions: Vec::new(),
-                actions: Vec::new(),
-                nodes: Vec::new(),
-            }];
+            return stop_outcome(index, rule_alt_number, member_values);
         }
         let key = RecognizeKey {
             state_number,
@@ -1354,6 +1478,7 @@ where
             index,
             rule_start_index,
             local_int_arg,
+            member_values: member_values.clone(),
             rule_alt_number,
             track_alt_numbers,
             precedence,
@@ -1362,14 +1487,8 @@ where
             return outcomes.clone();
         }
 
-        let visit_key = (
-            state_number,
-            stop_state,
-            index,
-            rule_start_index,
-            precedence,
-        );
-        if !visiting.insert(visit_key) {
+        let visit_key = key.clone();
+        if !visiting.insert(visit_key.clone()) {
             return Vec::new();
         }
 
@@ -1395,6 +1514,11 @@ where
                         )),
                         _ => None,
                     };
+                    let next_member_values = if action.is_some() {
+                        member_values_after_action(state_number, member_actions, &member_values)
+                    } else {
+                        member_values.clone()
+                    };
                     outcomes.extend(
                         self.recognize_state(
                             atn,
@@ -1406,7 +1530,9 @@ where
                                 init_action_rules,
                                 predicates,
                                 rule_args,
+                                member_actions,
                                 local_int_arg,
+                                member_values: next_member_values,
                                 rule_alt_number: next_alt_number,
                                 track_alt_numbers,
                                 precedence,
@@ -1439,13 +1565,14 @@ where
                     pred_index,
                     ..
                 } => {
-                    if self.parser_predicate_matches(
+                    if self.parser_predicate_matches(PredicateEval {
                         index,
-                        *rule_index,
-                        *pred_index,
+                        rule_index: *rule_index,
+                        pred_index: *pred_index,
                         predicates,
                         local_int_arg,
-                    ) {
+                        member_values: &member_values,
+                    }) {
                         let left_recursive_boundary = left_recursive_boundary(atn, state, *target);
                         outcomes.extend(
                             self.recognize_state(
@@ -1458,7 +1585,9 @@ where
                                     init_action_rules,
                                     predicates,
                                     rule_args,
+                                    member_actions,
                                     local_int_arg,
+                                    member_values: member_values.clone(),
                                     rule_alt_number: next_alt_number,
                                     track_alt_numbers,
                                     precedence,
@@ -1499,7 +1628,9 @@ where
                                     init_action_rules,
                                     predicates,
                                     rule_args,
+                                    member_actions,
                                     local_int_arg,
+                                    member_values: member_values.clone(),
                                     rule_alt_number: next_alt_number,
                                     track_alt_numbers,
                                     precedence,
@@ -1529,21 +1660,8 @@ where
                     else {
                         continue;
                     };
-                    let child_local_int_arg = rule_args
-                        .iter()
-                        .find(|arg| {
-                            arg.source_state == state_number && arg.rule_index == *rule_index
-                        })
-                        .map(|arg| {
-                            (
-                                *rule_index,
-                                if arg.inherit_local {
-                                    local_int_arg.map_or(arg.value, |(_, value)| value)
-                                } else {
-                                    arg.value
-                                },
-                            )
-                        });
+                    let child_local_int_arg =
+                        rule_local_int_arg(rule_args, state_number, *rule_index, local_int_arg);
                     let children = self.recognize_state(
                         atn,
                         RecognizeRequest {
@@ -1554,7 +1672,9 @@ where
                             init_action_rules,
                             predicates,
                             rule_args,
+                            member_actions,
                             local_int_arg: child_local_int_arg,
+                            member_values: member_values.clone(),
                             rule_alt_number: 0,
                             track_alt_numbers,
                             precedence: *rule_precedence,
@@ -1585,7 +1705,9 @@ where
                                     init_action_rules,
                                     predicates,
                                     rule_args,
+                                    member_actions,
                                     local_int_arg,
+                                    member_values: child.member_values.clone(),
                                     rule_alt_number,
                                     track_alt_numbers,
                                     precedence,
@@ -1644,7 +1766,9 @@ where
                                     init_action_rules,
                                     predicates,
                                     rule_args,
+                                    member_actions,
                                     local_int_arg,
+                                    member_values: member_values.clone(),
                                     rule_alt_number: next_alt_number,
                                     track_alt_numbers,
                                     precedence,
@@ -1685,7 +1809,9 @@ where
                                     init_action_rules,
                                     predicates,
                                     rule_args,
+                                    member_actions,
                                     local_int_arg,
+                                    member_values: member_values.clone(),
                                     rule_alt_number,
                                     track_alt_numbers,
                                     precedence,
@@ -1717,7 +1843,9 @@ where
                                         init_action_rules,
                                         predicates,
                                         rule_args,
+                                        member_actions,
                                         local_int_arg,
+                                        member_values: member_values.clone(),
                                         rule_alt_number,
                                         track_alt_numbers,
                                         precedence,
@@ -1764,7 +1892,9 @@ where
                                         init_action_rules,
                                         predicates,
                                         rule_args,
+                                        member_actions,
                                         local_int_arg,
+                                        member_values: member_values.clone(),
                                         rule_alt_number,
                                         track_alt_numbers,
                                         precedence,
@@ -1825,14 +1955,15 @@ where
     /// the candidate index before applying lookahead. A missing predicate entry
     /// means the generator did not opt into runtime evaluation for that
     /// coordinate and the transition remains viable.
-    fn parser_predicate_matches(
-        &mut self,
-        index: usize,
-        rule_index: usize,
-        pred_index: usize,
-        predicates: &[(usize, usize, ParserPredicate)],
-        local_int_arg: Option<(usize, i64)>,
-    ) -> bool {
+    fn parser_predicate_matches(&mut self, eval: PredicateEval<'_>) -> bool {
+        let PredicateEval {
+            index,
+            rule_index,
+            pred_index,
+            predicates,
+            local_int_arg,
+            member_values,
+        } = eval;
         let Some((_, _, predicate)) = predicates
             .iter()
             .find(|(rule, pred, _)| *rule == rule_index && *pred == pred_index)
@@ -1861,6 +1992,18 @@ where
             }
             ParserPredicate::LocalIntEquals { value } => {
                 local_int_arg.is_none_or(|(_, actual)| actual == *value)
+            }
+            ParserPredicate::MemberModuloEquals {
+                member,
+                modulus,
+                value,
+                equals,
+            } => {
+                if *modulus == 0 {
+                    return false;
+                }
+                let actual = member_values.get(member).copied().unwrap_or_default() % *modulus;
+                (actual == *value) == *equals
             }
         }
     }
@@ -2484,6 +2627,7 @@ mod tests {
             index: 1,
             consumed_eof: false,
             alt_number: 0,
+            member_values: BTreeMap::new(),
             diagnostics: Vec::new(),
             decisions: Vec::new(),
             actions: vec![ParserAction::new(1, 0, 0, None)],
@@ -2505,6 +2649,7 @@ mod tests {
             index: 1,
             consumed_eof: false,
             alt_number: 0,
+            member_values: BTreeMap::new(),
             diagnostics: Vec::new(),
             decisions: Vec::new(),
             actions: vec![ParserAction::new(1, 0, 0, None)],
@@ -2529,6 +2674,7 @@ mod tests {
             index: 7,
             consumed_eof: false,
             alt_number: 0,
+            member_values: BTreeMap::new(),
             diagnostics: Vec::new(),
             decisions: vec![1, 0],
             actions: vec![
@@ -2572,6 +2718,7 @@ mod tests {
             index: 1,
             consumed_eof: false,
             alt_number: 0,
+            member_values: BTreeMap::new(),
             diagnostics: Vec::new(),
             decisions: Vec::new(),
             actions: vec![ParserAction::new(1, 0, 0, None)],
@@ -2581,6 +2728,7 @@ mod tests {
             index: 1,
             consumed_eof: false,
             alt_number: 0,
+            member_values: BTreeMap::new(),
             diagnostics: Vec::new(),
             decisions: Vec::new(),
             actions: vec![ParserAction::new(2, 0, 0, None)],

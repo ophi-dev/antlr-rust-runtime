@@ -428,6 +428,8 @@ fn render_parser(
     )?;
     let rule_args =
         grammar_source.map_or_else(|| Ok(Vec::new()), |grammar| parser_rule_args(data, grammar))?;
+    let int_members = grammar_source.map_or_else(Vec::new, parser_int_members);
+    let member_actions = parser_member_actions(&actions, &int_members)?;
     let has_init_actions = init_actions.iter().any(Option::is_some);
     let has_action_dispatch = !actions.is_empty() || has_init_actions;
     let has_predicate_dispatch = !predicates.is_empty();
@@ -437,7 +439,8 @@ fn render_parser(
         .enumerate()
         .filter_map(|(index, action)| action.as_ref().map(|_| index))
         .collect::<Vec<_>>();
-    let action_method = render_parser_action_method(&actions, &init_actions);
+    let action_method = render_parser_action_method(&actions, &init_actions, &int_members)?;
+    let base_initialization = render_parser_base_initialization(&int_members);
     let mut rule_methods = String::new();
     for (index, rule) in data.rule_names.iter().enumerate() {
         let after_action = after_actions.get(index).map_or(&[][..], Vec::as_slice);
@@ -470,10 +473,11 @@ fn render_parser(
                 if has_predicate_dispatch {
                     writeln!(
                         rule_methods,
-                        "        let (tree, actions) = self.base.parse_atn_rule_with_runtime_options(atn(), {index}, antlr4_runtime::ParserRuntimeOptions {{ init_action_rules: &{}, track_alt_numbers: {track_alt_numbers}, predicates: &{}, rule_args: &{} }})?;",
+                        "        let (tree, actions) = self.base.parse_atn_rule_with_runtime_options(atn(), {index}, antlr4_runtime::ParserRuntimeOptions {{ init_action_rules: &{}, track_alt_numbers: {track_alt_numbers}, predicates: &{}, rule_args: &{}, member_actions: &{} }})?;",
                         render_usize_array(&init_action_rules),
-                        render_parser_predicate_array(&predicates, data)?,
-                        render_parser_rule_arg_array(&rule_args)
+                        render_parser_predicate_array(&predicates, data, &int_members)?,
+                        render_parser_rule_arg_array(&rule_args),
+                        render_parser_member_action_array(&member_actions)
                     )
                     .expect("writing to a string cannot fail");
                 } else if track_alt_numbers {
@@ -579,7 +583,8 @@ where
             .with_rule_names(metadata.rule_names().iter().copied())
             .with_channel_names(metadata.channel_names().iter().copied())
             .with_mode_names(metadata.mode_names().iter().copied());
-        Self {{ base: BaseParser::new(input, data) }}
+{base_initialization}
+        Self {{ base }}
     }}
 
     pub fn metadata() -> &'static GrammarMetadata {{
@@ -671,12 +676,21 @@ enum ActionTemplate {
         value: String,
         newline: bool,
     },
+    AddMember {
+        member: String,
+        value: i64,
+    },
+    MemberValue {
+        member: String,
+        newline: bool,
+    },
+    Sequence(Vec<Self>),
 }
 
 impl ActionTemplate {
     /// Reports whether an `@after` action needs the rule's input interval
     /// captured before and after parsing.
-    const fn uses_rule_interval(&self) -> bool {
+    fn uses_rule_interval(&self) -> bool {
         matches!(
             self,
             Self::Text { .. }
@@ -684,19 +698,19 @@ impl ActionTemplate {
                 | Self::TokenText { .. }
                 | Self::TokenTextWithPrefix { .. }
                 | Self::TokenDisplay { .. }
-        )
+        ) || matches!(self, Self::Sequence(actions) if actions.iter().any(Self::uses_rule_interval))
     }
 
     /// Reports whether rendering the action requires a nested parse tree
     /// instead of the faster flat rule tree.
-    const fn needs_nested_tree(&self) -> bool {
+    fn needs_nested_tree(&self) -> bool {
         matches!(
             self,
             Self::StringTree { .. }
                 | Self::RuleInvocationStack { .. }
                 | Self::ListenerWalk { .. }
                 | Self::RuleValue { .. }
-        )
+        ) || matches!(self, Self::Sequence(actions) if actions.iter().any(Self::needs_nested_tree))
     }
 }
 
@@ -716,11 +730,27 @@ enum TokenDisplaySource {
 enum PredicateTemplate {
     True,
     False,
-    Invoke { value: bool },
-    LocalIntEquals { value: i64 },
-    LookaheadTextEquals { offset: isize, text: String },
+    Invoke {
+        value: bool,
+    },
+    LocalIntEquals {
+        value: i64,
+    },
+    MemberModuloEquals {
+        member: String,
+        modulus: i64,
+        value: i64,
+        equals: bool,
+    },
+    LookaheadTextEquals {
+        offset: isize,
+        text: String,
+    },
     TextEquals(String),
-    LookaheadNotEquals { offset: isize, token_name: String },
+    LookaheadNotEquals {
+        offset: isize,
+        token_name: String,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -749,6 +779,12 @@ enum RuleValueKind {
 enum RuleArgTemplate {
     Literal(i64),
     InheritLocal,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct IntMemberTemplate {
+    name: String,
+    initial_value: i64,
 }
 
 /// Pairs supported lexer target-template actions with serialized custom-action
@@ -944,7 +980,7 @@ fn extract_supported_action_templates(grammar_source: &str) -> io::Result<Vec<Ac
     let mut templates = Vec::new();
     let mut offset = 0;
     loop {
-        let block = next_template_block(grammar_source, offset);
+        let block = next_parser_action_block(grammar_source, offset);
         let signature = next_signature_template(grammar_source, offset);
         match (block, signature) {
             (None, None) => break,
@@ -968,11 +1004,16 @@ fn extract_supported_action_templates(grammar_source: &str) -> io::Result<Vec<Ac
                 {
                     continue;
                 }
-                let Some(template) = parse_action_template(block.body) else {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!("unsupported target action template <{}>", block.body),
-                    ));
+                let template = if block.body.trim().is_empty() {
+                    ActionTemplate::Noop
+                } else {
+                    let Some(template) = parse_action_template_sequence(block.body) else {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            format!("unsupported target action template <{}>", block.body),
+                        ));
+                    };
+                    template
                 };
                 templates.push(template);
             }
@@ -1125,6 +1166,47 @@ fn next_template_block(source: &str, offset: usize) -> Option<TemplateBlock<'_>>
         });
     }
     None
+}
+
+/// Finds the next parser action block, including empty actions serialized as
+/// no-op ATN action transitions.
+fn next_parser_action_block(source: &str, offset: usize) -> Option<TemplateBlock<'_>> {
+    let mut cursor = offset;
+    while let Some(open_rel) = source[cursor..].find('{') {
+        let open_brace = cursor + open_rel;
+        let close_brace = matching_action_brace(source, open_brace + 1)?;
+        let body = &source[open_brace + 1..close_brace];
+        if body.trim().is_empty() || template_sequence_bodies(body).is_some() {
+            let after_brace = close_brace + 1;
+            return Some(TemplateBlock {
+                open_brace,
+                body,
+                after_brace,
+                predicate: source[after_brace..].trim_start().starts_with('?'),
+            });
+        }
+        cursor = open_brace + 1;
+    }
+    None
+}
+
+/// Splits a body made only of adjacent target-template expressions.
+fn template_sequence_bodies(body: &str) -> Option<Vec<&str>> {
+    let mut templates = Vec::new();
+    let mut cursor = 0;
+    while cursor < body.len() {
+        cursor = skip_ascii_whitespace(body, cursor);
+        if cursor == body.len() {
+            break;
+        }
+        if body.as_bytes().get(cursor) != Some(&b'<') {
+            return None;
+        }
+        let close_angle = matching_template_close(body, cursor + 1)?;
+        templates.push(&body[cursor + 1..close_angle]);
+        cursor = close_angle + 1;
+    }
+    (!templates.is_empty()).then_some(templates)
 }
 
 /// Finds the closing brace for a named ANTLR action block while ignoring braces
@@ -1347,6 +1429,18 @@ fn labeled_rule_name<'a>(source: &'a str, open_brace: usize, label: &str) -> Opt
 
 /// Converts the subset of upstream `StringTemplate` actions the Rust generator
 /// can replay today into concrete output actions.
+fn parse_action_template_sequence(body: &str) -> Option<ActionTemplate> {
+    let parts = template_sequence_bodies(body)?;
+    let mut actions = Vec::with_capacity(parts.len());
+    for part in parts {
+        actions.push(parse_action_template(part)?);
+    }
+    match actions.as_slice() {
+        [action] => Some(action.clone()),
+        _ => Some(ActionTemplate::Sequence(actions)),
+    }
+}
+
 fn parse_action_template(body: &str) -> Option<ActionTemplate> {
     let body = body.trim();
     match body {
@@ -1376,9 +1470,58 @@ fn parse_action_template(body: &str) -> Option<ActionTemplate> {
             .or_else(|| parse_rule_value(body))
             .or_else(|| parse_token_text(body))
             .or_else(|| parse_token_display(body))
+            .or_else(|| parse_add_member(body))
+            .or_else(|| parse_member_value(body))
             .or_else(|| parse_noop_action(body))
             .or_else(|| parse_write_literal(body)),
     }
+}
+
+fn parse_init_int_member(body: &str) -> Option<IntMemberTemplate> {
+    let arguments = body
+        .strip_prefix("InitIntMember(")
+        .and_then(|value| value.strip_suffix(')'))
+        .map(split_template_arguments)?;
+    let [name, value] = arguments.as_slice() else {
+        return None;
+    };
+    Some(IntMemberTemplate {
+        name: parse_template_string(name)?,
+        initial_value: parse_template_string(value)?.parse::<i64>().ok()?,
+    })
+}
+
+fn parse_add_member(body: &str) -> Option<ActionTemplate> {
+    let arguments = body
+        .strip_prefix("AddMember(")
+        .and_then(|value| value.strip_suffix(')'))
+        .map(split_template_arguments)?;
+    let [member, value] = arguments.as_slice() else {
+        return None;
+    };
+    Some(ActionTemplate::AddMember {
+        member: parse_template_string(member)?,
+        value: parse_template_string(value)?.parse::<i64>().ok()?,
+    })
+}
+
+fn parse_member_value(body: &str) -> Option<ActionTemplate> {
+    let (newline, argument) = if let Some(argument) = body
+        .strip_prefix("writeln(GetMember(")
+        .and_then(|value| value.strip_suffix("))"))
+    {
+        (true, argument)
+    } else {
+        (
+            false,
+            body.strip_prefix("write(GetMember(")
+                .and_then(|value| value.strip_suffix("))"))?,
+        )
+    };
+    Some(ActionTemplate::MemberValue {
+        member: parse_template_string(argument)?,
+        newline,
+    })
 }
 
 /// Parses rule-level `@after` helpers, including listener-suite wrappers that
@@ -1400,9 +1543,37 @@ fn parse_predicate_template(body: &str) -> Option<PredicateTemplate> {
         _ => parse_text_equals_predicate(body)
             .or_else(|| parse_invoke_predicate(body))
             .or_else(|| parse_val_equals_predicate(body))
+            .or_else(|| parse_mod_member_predicate(body))
             .or_else(|| parse_lt_equals_predicate(body))
             .or_else(|| parse_la_not_equals_predicate(body)),
     }
+}
+
+/// Parses integer member modulo predicates such as
+/// `ModMemberEquals("i","2","0")`.
+fn parse_mod_member_predicate(body: &str) -> Option<PredicateTemplate> {
+    let (equals, arguments) = if let Some(arguments) = body
+        .strip_prefix("ModMemberEquals(")
+        .and_then(|value| value.strip_suffix(')'))
+    {
+        (true, arguments)
+    } else {
+        (
+            false,
+            body.strip_prefix("ModMemberNotEquals(")
+                .and_then(|value| value.strip_suffix(')'))?,
+        )
+    };
+    let arguments = split_template_arguments(arguments);
+    let [member, modulus, value] = arguments.as_slice() else {
+        return None;
+    };
+    Some(PredicateTemplate::MemberModuloEquals {
+        member: parse_template_string(member)?,
+        modulus: parse_template_string(modulus)?.parse::<i64>().ok()?,
+        value: parse_template_string(value)?.parse::<i64>().ok()?,
+        equals,
+    })
 }
 
 /// Parses simple local integer argument predicates such as
@@ -1972,6 +2143,68 @@ fn literal_rule_arg_calls(
         .collect()
 }
 
+/// Extracts integer parser members declared through supported member templates.
+fn parser_int_members(grammar_source: &str) -> Vec<IntMemberTemplate> {
+    let mut members = Vec::new();
+    for marker in ["@members", "@parser::members"] {
+        for block in named_action_templates(grammar_source, marker) {
+            if let Some(member) = parse_init_int_member(block.body.trim())
+                && !members
+                    .iter()
+                    .any(|existing: &IntMemberTemplate| existing.name == member.name)
+            {
+                members.push(member);
+            }
+        }
+    }
+    members
+}
+
+/// Maps generated action templates that mutate parser members to ATN states.
+fn parser_member_actions(
+    actions: &[(usize, ActionTemplate)],
+    members: &[IntMemberTemplate],
+) -> io::Result<Vec<(usize, usize, i64)>> {
+    let mut member_actions = Vec::new();
+    for (source_state, action) in actions {
+        collect_member_actions(*source_state, action, members, &mut member_actions)?;
+    }
+    Ok(member_actions)
+}
+
+fn collect_member_actions(
+    source_state: usize,
+    action: &ActionTemplate,
+    members: &[IntMemberTemplate],
+    out: &mut Vec<(usize, usize, i64)>,
+) -> io::Result<()> {
+    match action {
+        ActionTemplate::AddMember { member, value } => {
+            let member = member_id(members, member)?;
+            out.push((source_state, member, *value));
+        }
+        ActionTemplate::Sequence(actions) => {
+            for action in actions {
+                collect_member_actions(source_state, action, members, out)?;
+            }
+        }
+        ActionTemplate::Noop
+        | ActionTemplate::Text { .. }
+        | ActionTemplate::TextWithPrefix { .. }
+        | ActionTemplate::StringTree { .. }
+        | ActionTemplate::RuleInvocationStack { .. }
+        | ActionTemplate::ListenerWalk { .. }
+        | ActionTemplate::RuleValue { .. }
+        | ActionTemplate::TokenText { .. }
+        | ActionTemplate::TokenTextWithPrefix { .. }
+        | ActionTemplate::TokenDisplay { .. }
+        | ActionTemplate::ExpectedTokenNames { .. }
+        | ActionTemplate::Literal { .. }
+        | ActionTemplate::MemberValue { .. } => {}
+    }
+    Ok(())
+}
+
 /// Emits the helper methods for ANTLR's `PositionAdjustingLexer` runtime-test
 /// target template.
 ///
@@ -2082,6 +2315,13 @@ fn render_lexer_action_statement(template: &ActionTemplate) -> String {
         ActionTemplate::RuleInvocationStack { .. } => String::new(),
         ActionTemplate::ListenerWalk { .. } => String::new(),
         ActionTemplate::RuleValue { .. } => String::new(),
+        ActionTemplate::AddMember { .. } => String::new(),
+        ActionTemplate::MemberValue { .. } => String::new(),
+        ActionTemplate::Sequence(actions) => actions
+            .iter()
+            .map(render_lexer_action_statement)
+            .collect::<Vec<_>>()
+            .join(" "),
         ActionTemplate::Literal { value, newline } => {
             let write = if *newline { "println!" } else { "print!" };
             format!("{write}(\"{}\");", rust_string(value))
@@ -2120,6 +2360,7 @@ fn render_lexer_predicate_expression(template: &PredicateTemplate) -> String {
         ),
         PredicateTemplate::Invoke { .. }
         | PredicateTemplate::LocalIntEquals { .. }
+        | PredicateTemplate::MemberModuloEquals { .. }
         | PredicateTemplate::LookaheadTextEquals { .. }
         | PredicateTemplate::LookaheadNotEquals { .. } => {
             unreachable!("lookahead parser predicates are not lexer predicates")
@@ -2132,17 +2373,18 @@ fn render_lexer_predicate_expression(template: &PredicateTemplate) -> String {
 fn render_parser_action_method(
     actions: &[(usize, ActionTemplate)],
     init_actions: &[Option<ActionTemplate>],
-) -> String {
+    members: &[IntMemberTemplate],
+) -> io::Result<String> {
     let has_init_actions = init_actions.iter().any(Option::is_some);
     if actions.is_empty() && !has_init_actions {
-        return String::new();
+        return Ok(String::new());
     }
     let mut init_arms = String::new();
     for (rule_index, template) in init_actions.iter().enumerate() {
         let Some(template) = template else {
             continue;
         };
-        let statement = render_action_statement(template);
+        let statement = render_action_statement(template, members)?;
         writeln!(
             init_arms,
             "                {rule_index} => {{ {statement} }}"
@@ -2154,7 +2396,7 @@ fn render_parser_action_method(
     }
     let mut arms = String::new();
     for (state, template) in actions {
-        let statement = render_action_statement(template);
+        let statement = render_action_statement(template, members)?;
         writeln!(arms, "            {state} => {{ {statement} }}")
             .expect("writing to a string cannot fail");
     }
@@ -2166,38 +2408,41 @@ fn render_parser_action_method(
     } else {
         String::new()
     };
-    format!(
+    Ok(format!(
         "    fn run_action(&mut self, action: antlr4_runtime::ParserAction, _tree: &antlr4_runtime::ParseTree) {{\n{init_dispatch}        match action.source_state() {{\n{arms}        }}\n    }}\n"
-    )
+    ))
 }
 
 /// Renders one supported target-template action as Rust code.
-fn render_action_statement(template: &ActionTemplate) -> String {
+fn render_action_statement(
+    template: &ActionTemplate,
+    members: &[IntMemberTemplate],
+) -> io::Result<String> {
     match template {
-        ActionTemplate::Noop => String::new(),
+        ActionTemplate::Noop => Ok(String::new()),
         ActionTemplate::Text { newline } => {
             let write = if *newline { "println!" } else { "print!" };
-            format!(
+            Ok(format!(
                 "let text = self.base.text_interval(action.start_index(), action.stop_index()); {write}(\"{{}}\", text);"
-            )
+            ))
         }
         ActionTemplate::TextWithPrefix { prefix, newline } => {
             let write = if *newline { "println!" } else { "print!" };
-            format!(
+            Ok(format!(
                 "let text = self.base.text_interval(action.start_index(), action.stop_index()); {write}(\"{}{{}}\", text);",
                 rust_string(prefix)
-            )
+            ))
         }
         ActionTemplate::TokenText { source, newline } => {
             let write = if *newline { "println!" } else { "print!" };
-            match source {
+            Ok(match source {
                 TokenTextSource::RuleStart => format!(
                     "let text = self.base.text_interval(action.start_index(), Some(action.start_index())); {write}(\"{{}}\", text);"
                 ),
                 TokenTextSource::ActionStop => format!(
                     "let text = action.stop_index().map_or_else(String::new, |index| self.base.text_interval(index, Some(index))); {write}(\"{{}}\", text);"
                 ),
-            }
+            })
         }
         ActionTemplate::TokenTextWithPrefix {
             prefix,
@@ -2206,14 +2451,14 @@ fn render_action_statement(template: &ActionTemplate) -> String {
         } => {
             let write = if *newline { "println!" } else { "print!" };
             let prefix = rust_string(prefix);
-            match source {
+            Ok(match source {
                 TokenTextSource::RuleStart => format!(
                     "let text = self.base.text_interval(action.start_index(), Some(action.start_index())); {write}(\"{prefix}{{}}\", text);"
                 ),
                 TokenTextSource::ActionStop => format!(
                     "let text = action.stop_index().map_or_else(String::new, |index| self.base.text_interval(index, Some(index))); {write}(\"{prefix}{{}}\", text);"
                 ),
-            }
+            })
         }
         ActionTemplate::TokenDisplay {
             prefix,
@@ -2221,34 +2466,58 @@ fn render_action_statement(template: &ActionTemplate) -> String {
             newline,
         } => {
             let write = if *newline { "println!" } else { "print!" };
-            render_token_display_write(write, "_tree", "action", prefix, source)
+            Ok(render_token_display_write(
+                write, "_tree", "action", prefix, source,
+            ))
         }
         ActionTemplate::ExpectedTokenNames { newline } => {
             let write = if *newline { "println!" } else { "print!" };
-            format!(
+            Ok(format!(
                 "let text = action.expected_state().map_or_else(String::new, |state| self.base.expected_tokens_at_state(atn(), state)); {write}(\"{{}}\", text);"
-            )
+            ))
         }
         ActionTemplate::StringTree { target, newline } => {
             let write = if *newline { "println!" } else { "print!" };
-            render_string_tree_write(write, "_tree", target)
+            Ok(render_string_tree_write(write, "_tree", target))
         }
         ActionTemplate::RuleInvocationStack { newline } => {
             let write = if *newline { "println!" } else { "print!" };
-            render_rule_invocation_stack_write(write, "_tree", "action.rule_index()")
+            Ok(render_rule_invocation_stack_write(
+                write,
+                "_tree",
+                "action.rule_index()",
+            ))
         }
-        ActionTemplate::ListenerWalk { .. } => String::new(),
+        ActionTemplate::ListenerWalk { .. } => Ok(String::new()),
         ActionTemplate::RuleValue {
             rule_name,
             kind,
             newline,
         } => {
             let write = if *newline { "println!" } else { "print!" };
-            render_rule_value_write(write, "_tree", rule_name, *kind)
+            Ok(render_rule_value_write(write, "_tree", rule_name, *kind))
         }
         ActionTemplate::Literal { value, newline } => {
             let write = if *newline { "println!" } else { "print!" };
-            format!("{write}(\"{}\");", rust_string(value))
+            Ok(format!("{write}(\"{}\");", rust_string(value)))
+        }
+        ActionTemplate::AddMember { member, value } => {
+            let member = member_id(members, member)?;
+            Ok(format!("self.base.add_int_member({member}, {value});"))
+        }
+        ActionTemplate::MemberValue { member, newline } => {
+            let member = member_id(members, member)?;
+            let write = if *newline { "println!" } else { "print!" };
+            Ok(format!(
+                "{write}(\"{{}}\", self.base.int_member({member}).unwrap_or_default());"
+            ))
+        }
+        ActionTemplate::Sequence(actions) => {
+            let mut rendered = Vec::with_capacity(actions.len());
+            for action in actions {
+                rendered.push(render_action_statement(action, members)?);
+            }
+            Ok(rendered.join(" "))
         }
     }
 }
@@ -2331,6 +2600,12 @@ fn render_parser_after_action_statement(template: &ActionTemplate, rule_index: u
             let write = if *newline { "println!" } else { "print!" };
             format!("{write}(\"{}\");", rust_string(value))
         }
+        ActionTemplate::AddMember { .. } | ActionTemplate::MemberValue { .. } => String::new(),
+        ActionTemplate::Sequence(actions) => actions
+            .iter()
+            .map(|action| render_parser_after_action_statement(action, rule_index))
+            .collect::<Vec<_>>()
+            .join(" "),
     }
 }
 
@@ -2887,6 +3162,7 @@ fn render_usize_array(values: &[usize]) -> String {
 fn render_parser_predicate_array(
     predicates: &[((usize, usize), PredicateTemplate)],
     data: &InterpData,
+    members: &[IntMemberTemplate],
 ) -> io::Result<String> {
     let mut items = Vec::new();
     for ((rule_index, pred_index), predicate) in predicates {
@@ -2898,6 +3174,17 @@ fn render_parser_predicate_array(
             }
             PredicateTemplate::LocalIntEquals { value } => {
                 format!("antlr4_runtime::ParserPredicate::LocalIntEquals {{ value: {value} }}")
+            }
+            PredicateTemplate::MemberModuloEquals {
+                member,
+                modulus,
+                value,
+                equals,
+            } => {
+                let member = member_id(members, member)?;
+                format!(
+                    "antlr4_runtime::ParserPredicate::MemberModuloEquals {{ member: {member}, modulus: {modulus}, value: {value}, equals: {equals} }}"
+                )
             }
             PredicateTemplate::TextEquals(_) => {
                 return Err(io::Error::new(
@@ -2944,6 +3231,55 @@ fn render_parser_rule_arg_array(args: &[(usize, usize, RuleArgTemplate)]) -> Str
         .collect::<Vec<_>>()
         .join(", ");
     format!("[{items}]")
+}
+
+/// Renders parser member-action metadata for speculative predicate evaluation.
+fn render_parser_member_action_array(args: &[(usize, usize, i64)]) -> String {
+    let items = args
+        .iter()
+        .map(|(source_state, member, delta)| {
+            format!(
+                "antlr4_runtime::ParserMemberAction {{ source_state: {source_state}, member: {member}, delta: {delta} }}"
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("[{items}]")
+}
+
+/// Renders the generated parser base construction and member initialization.
+fn render_parser_base_initialization(members: &[IntMemberTemplate]) -> String {
+    let mut out = if members.is_empty() {
+        "        let base = BaseParser::new(input, data);".to_owned()
+    } else {
+        "        let mut base = BaseParser::new(input, data);".to_owned()
+    };
+    let initializers = members
+        .iter()
+        .enumerate()
+        .map(|(index, member)| {
+            let value = member.initial_value;
+            format!("        base.set_int_member({index}, {value});")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    if !initializers.is_empty() {
+        out.push('\n');
+        out.push_str(&initializers);
+    }
+    out
+}
+
+fn member_id(members: &[IntMemberTemplate], name: &str) -> io::Result<usize> {
+    members
+        .iter()
+        .position(|member| member.name == name)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("unknown parser member {name}"),
+            )
+        })
 }
 
 fn token_type_for_name(data: &InterpData, token_name: &str) -> Option<usize> {

@@ -491,21 +491,9 @@ fn target_templates_supported(descriptor: &Descriptor) -> bool {
     if descriptor.test_type != "Parser" {
         return false;
     }
-    // These fixtures need runtime state that is not modeled yet: action-hiding
-    // for global-follow predicates, or rule-argument values during speculative
-    // predicate evaluation.
-    if matches!(
-        descriptor.name.as_str(),
-        "ActionsHidePredsInGlobalFOLLOW" | "DepedentPredsInGlobalFOLLOW"
-    ) {
-        return false;
-    }
     let grammar = &descriptor.grammar;
     if unsupported_members_templates(grammar)
         || grammar.contains("@definitions")
-        || grammar.contains("AddMember(")
-        || grammar.contains("writeln(GetMember(")
-        || grammar.contains("ModMember")
         || !supported_signature_templates(grammar)
     {
         return false;
@@ -537,7 +525,7 @@ fn lexer_target_templates_supported(descriptor: &Descriptor) -> bool {
 
 fn supported_action_templates(grammar: &str) -> bool {
     let mut offset = 0;
-    while let Some(block) = next_template_block(grammar, offset) {
+    while let Some(block) = next_parser_action_block(grammar, offset) {
         offset = block.after_brace;
         if block.predicate
             || is_after_action(grammar, block.open_brace)
@@ -547,7 +535,7 @@ fn supported_action_templates(grammar: &str) -> bool {
         {
             continue;
         }
-        if !is_supported_action_template(block.body.trim()) {
+        if !block.body.trim().is_empty() && !is_supported_action_template_sequence(block.body) {
             return false;
         }
     }
@@ -634,9 +622,43 @@ fn is_supported_action_template(body: &str) -> bool {
         || is_append_str_token_text_template(body)
         || is_token_text_template(body)
         || is_token_display_template(body)
+        || is_add_member_template(body)
+        || is_member_value_template(body)
         || is_rule_value_template(body)
         || (body.starts_with("PlusText(\"") && body.ends_with("):writeln()"))
         || (body.starts_with("PlusText(\"") && body.ends_with("):write()"))
+}
+
+fn is_supported_action_template_sequence(body: &str) -> bool {
+    template_sequence_bodies(body).is_some_and(|templates| {
+        templates
+            .into_iter()
+            .all(|template| is_supported_action_template(template.trim()))
+    })
+}
+
+fn is_add_member_template(body: &str) -> bool {
+    body.strip_prefix("AddMember(")
+        .and_then(|value| value.strip_suffix(')'))
+        .map(split_template_arguments)
+        .is_some_and(|arguments| {
+            let [member, value] = arguments.as_slice() else {
+                return false;
+            };
+            parse_template_string(member).is_some()
+                && parse_template_string(value).is_some_and(|value| value.parse::<i64>().is_ok())
+        })
+}
+
+fn is_member_value_template(body: &str) -> bool {
+    let argument = body
+        .strip_prefix("writeln(GetMember(")
+        .and_then(|value| value.strip_suffix("))"))
+        .or_else(|| {
+            body.strip_prefix("write(GetMember(")
+                .and_then(|value| value.strip_suffix("))"))
+        });
+    argument.is_some_and(|argument| parse_template_string(argument).is_some())
 }
 
 fn supported_signature_templates(grammar: &str) -> bool {
@@ -1157,6 +1179,47 @@ fn next_template_block(source: &str, offset: usize) -> Option<TemplateBlock<'_>>
         });
     }
     None
+}
+
+/// Finds the next parser action block, including empty actions serialized as
+/// no-op ATN action transitions.
+fn next_parser_action_block(source: &str, offset: usize) -> Option<TemplateBlock<'_>> {
+    let mut cursor = offset;
+    while let Some(open_rel) = source[cursor..].find('{') {
+        let open_brace = cursor + open_rel;
+        let close_brace = matching_action_brace(source, open_brace + 1)?;
+        let body = &source[open_brace + 1..close_brace];
+        if body.trim().is_empty() || template_sequence_bodies(body).is_some() {
+            let after_brace = close_brace + 1;
+            return Some(TemplateBlock {
+                open_brace,
+                body,
+                after_brace,
+                predicate: source[after_brace..].trim_start().starts_with('?'),
+            });
+        }
+        cursor = open_brace + 1;
+    }
+    None
+}
+
+/// Splits a body made only of adjacent target-template expressions.
+fn template_sequence_bodies(body: &str) -> Option<Vec<&str>> {
+    let mut templates = Vec::new();
+    let mut cursor = 0;
+    while cursor < body.len() {
+        cursor = skip_ascii_whitespace(body, cursor);
+        if cursor == body.len() {
+            break;
+        }
+        if body.as_bytes().get(cursor) != Some(&b'<') {
+            return None;
+        }
+        let close_angle = matching_template_close(body, cursor + 1)?;
+        templates.push(&body[cursor + 1..close_angle]);
+        cursor = close_angle + 1;
+    }
+    (!templates.is_empty()).then_some(templates)
 }
 
 /// Finds the closing brace for a named ANTLR action block while ignoring braces
