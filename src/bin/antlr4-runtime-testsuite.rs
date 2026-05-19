@@ -705,7 +705,9 @@ fn listener_line_kind(trimmed: &str) -> Option<&'static str> {
 fn is_noop_action_template(body: &str) -> bool {
     (body.starts_with("AssignLocal(")
         || body.starts_with("AssertIsList(")
-        || body.starts_with("IntArg("))
+        || body.starts_with("IntArg(")
+        || body.starts_with("Production(")
+        || body.starts_with("Result("))
         && body.ends_with(')')
 }
 

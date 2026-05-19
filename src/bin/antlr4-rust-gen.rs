@@ -1532,7 +1532,9 @@ fn parse_rule_invocation_stack(body: &str) -> Option<ActionTemplate> {
 fn parse_noop_action(body: &str) -> Option<ActionTemplate> {
     if (body.starts_with("AssignLocal(")
         || body.starts_with("AssertIsList(")
-        || body.starts_with("IntArg("))
+        || body.starts_with("IntArg(")
+        || body.starts_with("Production(")
+        || body.starts_with("Result("))
         && body.ends_with(')')
     {
         return Some(ActionTemplate::Noop);
@@ -3067,6 +3069,18 @@ continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#,
                 kind: RuleValueKind::String,
                 newline: true,
             } if rule_name == "e"
+        ));
+    }
+
+    #[test]
+    fn parses_common_label_compile_check_templates_as_noops() {
+        assert!(matches!(
+            parse_action_template(r#"Production("e")"#),
+            Some(ActionTemplate::Noop)
+        ));
+        assert!(matches!(
+            parse_action_template(r#"Result("v")"#),
+            Some(ActionTemplate::Noop)
         ));
     }
 }
