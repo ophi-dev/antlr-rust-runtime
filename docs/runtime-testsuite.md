@@ -82,6 +82,8 @@ Supported now:
 - parser `@init {<BuildParseTrees()>}` and `notBuildParseTree` descriptors,
 - parser `predictionMode=LL` descriptors where the default Rust parser behavior
   already matches LL prediction,
+- parser `showDiagnosticErrors` ambiguity diagnostics for the currently modeled
+  exact-ambiguity semantic-predicate descriptors,
 - parser rule-level `@after {<ToStringTree("$label.ctx")>}` actions for simple
   rule labels,
 - parser semantic predicates for `LANotEquals(...)` and `LTEquals(...)`
@@ -127,14 +129,15 @@ Not wired yet:
   and no-op compile checks,
 - parser error recovery diagnostics beyond the currently supported mismatch,
   no-viable, extraneous-input, and token recovery cases,
-- runtime diagnostic/profile/DFA flags and non-default prediction modes.
+- runtime diagnostic/profile/DFA flags beyond the currently modeled ambiguity
+  diagnostics and non-default prediction modes.
 
 The harness reports unsupported descriptors as skipped and treats output mismatches
 as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `328 passed, 0 failed, 29 skipped, 328 run`
+- full descriptor sweep: `330 passed, 0 failed, 27 skipped, 330 run`
 - `CompositeLexers`: `2 passed, 0 failed, 0 skipped, 2 run`
 - `CompositeParsers`: `15 passed, 0 failed, 0 skipped, 15 run`
 - `LexerExec`: `42 passed, 0 failed, 0 skipped, 42 run`
@@ -146,7 +149,7 @@ Current validated groups:
 - `ParserErrors`: `34 passed, 0 failed, 0 skipped, 34 run`
 - `Performance`: `7 passed, 0 failed, 0 skipped, 7 run`
 - `SemPredEvalLexer`: `2 passed, 0 failed, 6 skipped, 2 run`
-- `SemPredEvalParser`: `20 passed, 0 failed, 6 skipped, 20 run`
+- `SemPredEvalParser`: `22 passed, 0 failed, 4 skipped, 22 run`
 - `Sets`: `31 passed, 0 failed, 0 skipped, 31 run`
 
 The remaining skips are now diagnostic/profile flags and parser recovery

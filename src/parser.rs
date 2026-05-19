@@ -198,8 +198,22 @@ pub struct ParserRuntimeOptions<'a> {
 }
 
 pub trait Parser: Recognizer {
+    /// Reports whether generated parser rules should build parse-tree nodes
+    /// while recognizing input.
     fn build_parse_trees(&self) -> bool;
+
+    /// Enables or disables parse-tree construction for subsequent rule calls.
     fn set_build_parse_trees(&mut self, build: bool);
+
+    /// Reports whether prediction diagnostic-listener messages are emitted
+    /// during parser ATN recognition.
+    fn report_diagnostic_errors(&self) -> bool {
+        false
+    }
+
+    /// Enables or disables ANTLR-style prediction diagnostics for subsequent
+    /// rule calls.
+    fn set_report_diagnostic_errors(&mut self, _report: bool) {}
 }
 
 #[derive(Debug)]
@@ -207,6 +221,9 @@ pub struct BaseParser<S> {
     input: CommonTokenStream<S>,
     data: RecognizerData,
     build_parse_trees: bool,
+    report_diagnostic_errors: bool,
+    prediction_diagnostics: Vec<ParserDiagnostic>,
+    reported_prediction_diagnostics: BTreeSet<(usize, usize, String)>,
     int_members: BTreeMap<usize, i64>,
     /// Predicate side effects are observable in a few target-template tests;
     /// speculative recognition may revisit the same coordinate, so replay it
@@ -629,6 +646,9 @@ where
             input,
             data,
             build_parse_trees: true,
+            report_diagnostic_errors: false,
+            prediction_diagnostics: Vec::new(),
+            reported_prediction_diagnostics: BTreeSet::new(),
             int_members: BTreeMap::new(),
             invoked_predicates: Vec::new(),
         }
@@ -729,6 +749,7 @@ where
             })?;
 
         let start_index = self.input.index();
+        self.clear_prediction_diagnostics();
         let mut visiting = BTreeSet::new();
         let mut memo = BTreeMap::new();
         let mut expected = ExpectedTokens::default();
@@ -755,6 +776,7 @@ where
             return Err(error);
         };
 
+        report_parser_diagnostics(&self.prediction_diagnostics);
         report_parser_diagnostics(&outcome.diagnostics);
         report_token_source_errors(&self.input.drain_source_errors());
         let mut context = ParserRuleContext::new(rule_index, self.state());
@@ -872,6 +894,7 @@ where
             })?;
 
         let start_index = self.input.index();
+        self.clear_prediction_diagnostics();
         let init_action_rules = init_action_rules.iter().copied().collect::<BTreeSet<_>>();
         let mut visiting = BTreeSet::new();
         let mut memo = BTreeMap::new();
@@ -911,6 +934,7 @@ where
             return Err(error);
         };
 
+        report_parser_diagnostics(&self.prediction_diagnostics);
         report_parser_diagnostics(&outcome.diagnostics);
         report_token_source_errors(&self.input.drain_source_errors());
         let mut actions = outcome.actions;
@@ -2280,6 +2304,7 @@ where
         }
 
         visiting.remove(&visit_key);
+        self.record_prediction_diagnostics(atn, state, index, &outcomes);
         discard_recovered_outcomes_if_clean_path_exists(&mut outcomes);
         dedupe_outcomes(&mut outcomes);
         memo.insert(key, outcomes.clone());
@@ -2506,6 +2531,84 @@ where
     /// Returns token text for a buffered token interval.
     pub fn text_interval(&mut self, start: usize, stop: Option<usize>) -> String {
         stop.map_or_else(String::new, |stop| self.input.text(start, stop))
+    }
+
+    /// Resets per-parse prediction diagnostics while keeping the parser-level
+    /// reporting flag configured by generated harness code.
+    fn clear_prediction_diagnostics(&mut self) {
+        self.prediction_diagnostics.clear();
+        self.reported_prediction_diagnostics.clear();
+    }
+
+    /// Buffers ANTLR-style diagnostic-listener messages for decision states
+    /// where multiple clean alternatives survive full-context recognition.
+    fn record_prediction_diagnostics(
+        &mut self,
+        atn: &Atn,
+        state: &AtnState,
+        start_index: usize,
+        outcomes: &[RecognizeOutcome],
+    ) {
+        if !self.report_diagnostic_errors || state.transitions.len() < 2 {
+            return;
+        }
+        let Some(decision) = atn
+            .decision_to_state()
+            .iter()
+            .position(|state_number| *state_number == state.state_number)
+        else {
+            return;
+        };
+        let Some(rule_index) = state.rule_index else {
+            return;
+        };
+        let mut alts_by_end = BTreeMap::<usize, BTreeSet<usize>>::new();
+        for outcome in outcomes
+            .iter()
+            .filter(|outcome| outcome.diagnostics.is_empty())
+        {
+            let Some(alt) = outcome.decisions.first() else {
+                continue;
+            };
+            alts_by_end
+                .entry(outcome.index)
+                .or_default()
+                .insert(alt + 1);
+        }
+        let Some((&end_index, ambig_alts)) = alts_by_end
+            .iter()
+            .filter(|(_, alts)| alts.len() > 1)
+            .max_by_key(|(end, _)| *end)
+        else {
+            return;
+        };
+        let rule_name = self
+            .rule_names()
+            .get(rule_index)
+            .map_or_else(|| "<unknown>".to_owned(), Clone::clone);
+        let stop_index = self.previous_token_index(end_index).unwrap_or(start_index);
+        let input = display_input_text(&self.input.text(start_index, stop_index));
+        let alts = ambig_alts
+            .iter()
+            .map(usize::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+        let key = (decision, start_index, format!("{alts}:{input}"));
+        if !self.reported_prediction_diagnostics.insert(key) {
+            return;
+        }
+        let start_token = self.token_at(start_index);
+        let stop_token = self.token_at(stop_index);
+        self.prediction_diagnostics.push(diagnostic_for_token(
+            start_token.as_ref(),
+            format!("reportAttemptingFullContext d={decision} ({rule_name}), input='{input}'"),
+        ));
+        self.prediction_diagnostics.push(diagnostic_for_token(
+            stop_token.as_ref(),
+            format!(
+                "reportAmbiguity d={decision} ({rule_name}): ambigAlts={{{alts}}}, input='{input}'"
+            ),
+        ));
     }
 
     /// Formats the tokens expected from an ATN state using ANTLR display names.
@@ -3087,6 +3190,14 @@ where
 
     fn set_build_parse_trees(&mut self, build: bool) {
         self.build_parse_trees = build;
+    }
+
+    fn report_diagnostic_errors(&self) -> bool {
+        self.report_diagnostic_errors
+    }
+
+    fn set_report_diagnostic_errors(&mut self, report: bool) {
+        self.report_diagnostic_errors = report;
     }
 }
 

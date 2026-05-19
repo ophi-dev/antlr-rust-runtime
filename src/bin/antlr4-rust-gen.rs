@@ -631,6 +631,8 @@ where
 {{
     fn build_parse_trees(&self) -> bool {{ self.base.build_parse_trees() }}
     fn set_build_parse_trees(&mut self, build: bool) {{ self.base.set_build_parse_trees(build); }}
+    fn report_diagnostic_errors(&self) -> bool {{ self.base.report_diagnostic_errors() }}
+    fn set_report_diagnostic_errors(&mut self, report: bool) {{ self.base.set_report_diagnostic_errors(report); }}
 }}
 "#
     ))
@@ -991,7 +993,10 @@ fn parser_init_action_templates(
             continue;
         }
         let body = block.body.trim();
-        if matches!(body, "BuildParseTrees()" | "BailErrorStrategy()") {
+        if matches!(
+            body,
+            "BuildParseTrees()" | "BailErrorStrategy()" | "LL_EXACT_AMBIG_DETECTION()"
+        ) {
             continue;
         }
         let Some(rule_name) = init_action_rule_name(grammar_source, block.open_brace) else {
@@ -1650,7 +1655,7 @@ fn parse_action_template_sequence(body: &str) -> Option<ActionTemplate> {
 fn parse_action_template(body: &str) -> Option<ActionTemplate> {
     let body = body.trim();
     match body {
-        "Pass()" => Some(ActionTemplate::Noop),
+        "Pass()" | "LL_EXACT_AMBIG_DETECTION()" => Some(ActionTemplate::Noop),
         r#"writeln("$text")"# | "InputText():writeln()" | "Text():writeln()" => {
             Some(ActionTemplate::Text { newline: true })
         }
