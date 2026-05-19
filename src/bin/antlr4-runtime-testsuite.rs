@@ -450,6 +450,9 @@ fn parser_error_diagnostics_supported(descriptor: &Descriptor) -> bool {
         descriptor.name.as_str(),
         "ConjuringUpToken"
             | "ConjuringUpTokenFromSet"
+            | "ExtraToken"
+            | "ExtraTokensAndAltLabels"
+            | "ExtraneousInput"
             | "InvalidEmptyInput"
             | "SingleSetInsertion"
             | "SingleSetInsertionConsumption"
@@ -460,6 +463,7 @@ fn parser_error_diagnostics_supported(descriptor: &Descriptor) -> bool {
             | "SingleTokenDeletionDuringLoop"
             | "SingleTokenDeletionExpectingSet"
             | "SingleTokenInsertion"
+            | "Sync"
             | "TokenMismatch"
             | "TokenMismatch2"
             | "TokenMismatch3"

@@ -55,6 +55,8 @@ Supported now:
   failures,
 - parser single-token insertion/deletion recovery diagnostics for supported
   descriptors,
+- parser extraneous-input diagnostics and error-node parse trees for supported
+  single-token deletion descriptors,
 - parser precedence predicates in metadata-driven recognition,
 - lexer and parser target-template actions for the currently supported stdout
   helpers,
@@ -105,13 +107,13 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `255 passed, 0 failed, 102 skipped, 255 run`
+- full descriptor sweep: `259 passed, 0 failed, 98 skipped, 259 run`
 - `LexerExec`: `42 passed, 0 failed, 0 skipped, 42 run`
 - `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
 - `LeftRecursion`: `81 passed, 0 failed, 17 skipped, 81 run`
-- `ParseTrees`: `6 passed, 0 failed, 4 skipped, 6 run`
+- `ParseTrees`: `9 passed, 0 failed, 1 skipped, 9 run`
 - `ParserExec`: `46 passed, 0 failed, 4 skipped, 46 run`
-- `ParserErrors`: `22 passed, 0 failed, 12 skipped, 22 run`
+- `ParserErrors`: `23 passed, 0 failed, 11 skipped, 23 run`
 - `Performance`: `7 passed, 0 failed, 0 skipped, 7 run`
 - `SemPredEvalLexer`: `2 passed, 0 failed, 6 skipped, 2 run`
 - `SemPredEvalParser`: `8 passed, 0 failed, 18 skipped, 8 run`
