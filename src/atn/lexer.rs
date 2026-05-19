@@ -187,10 +187,13 @@ where
                     LexerAction::Custom {
                         rule_index,
                         action_index,
-                    } => custom_action(
-                        lexer,
-                        LexerCustomAction::new(*rule_index, *action_index, trace.position),
-                    ),
+                    } if lexer_action_belongs_to_accept(atn, accept.rule_index, *rule_index) => {
+                        custom_action(
+                            lexer,
+                            LexerCustomAction::new(*rule_index, *action_index, trace.position),
+                        );
+                    }
+                    LexerAction::Custom { .. } => {}
                     other => result.apply(other, lexer),
                 }
             }
@@ -215,6 +218,26 @@ where
         };
         return lexer.emit_with_stop(result.token_type, result.channel, stop, text);
     }
+}
+
+/// Reports whether a custom lexer action should fire for the accepted token.
+///
+/// ANTLR treats token-rule references inside another token rule like inlined
+/// matching logic for action ownership: the referenced token rule can help match
+/// text, but its embedded action does not run unless that rule itself accepts
+/// the token. Fragment-rule actions remain eligible because fragments have no
+/// token type of their own.
+fn lexer_action_belongs_to_accept(atn: &Atn, accept_rule: usize, action_rule: i32) -> bool {
+    let Ok(action_rule) = usize::try_from(action_rule) else {
+        return false;
+    };
+    action_rule == accept_rule
+        || atn
+            .rule_to_token_type()
+            .get(action_rule)
+            .copied()
+            .unwrap_or(INVALID_TOKEN_TYPE)
+            == INVALID_TOKEN_TYPE
 }
 
 /// Simulates all lexer paths reachable from the current mode start state and

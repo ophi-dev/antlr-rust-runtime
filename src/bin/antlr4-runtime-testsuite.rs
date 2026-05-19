@@ -468,6 +468,7 @@ fn composite_grammar_supported(descriptor: &Descriptor) -> bool {
     matches!(
         descriptor.id().as_str(),
         "CompositeLexers/LexerDelegatorInvokesDelegateRule"
+            | "CompositeLexers/LexerDelegatorRuleOverridesDelegate"
             | "CompositeParsers/BringInLiteralsFromDelegate"
             | "CompositeParsers/CombinedImportsCombined"
             | "CompositeParsers/DelegatesSeeSameTokenType"
