@@ -491,10 +491,7 @@ fn target_templates_supported(descriptor: &Descriptor) -> bool {
     if descriptor.test_type != "Parser" {
         return false;
     }
-    if matches!(
-        descriptor.name.as_str(),
-        "IfIfElseGreedyBinding1" | "IfIfElseGreedyBinding2" | "Order" | "RewindBeforePredEval"
-    ) {
+    if matches!(descriptor.name.as_str(), "Order" | "RewindBeforePredEval") {
         return false;
     }
     let grammar = &descriptor.grammar;

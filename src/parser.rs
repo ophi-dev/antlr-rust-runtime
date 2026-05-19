@@ -128,6 +128,7 @@ struct RecognizeOutcome {
     consumed_eof: bool,
     alt_number: usize,
     diagnostics: Vec<ParserDiagnostic>,
+    decisions: Vec<usize>,
     actions: Vec<ParserAction>,
     nodes: Vec<RecognizedNode>,
 }
@@ -1268,6 +1269,7 @@ where
                 consumed_eof: false,
                 alt_number: rule_alt_number,
                 diagnostics: Vec::new(),
+                decisions: Vec::new(),
                 actions: Vec::new(),
                 nodes: Vec::new(),
             }];
@@ -1303,6 +1305,7 @@ where
         let epsilon_recovery_symbols = next_recovery_symbols(atn, state, &recovery_symbols);
         let mut outcomes = Vec::new();
         for (transition_index, transition) in state.transitions.iter().enumerate() {
+            let decision = transition_decision(atn, state, transition_index);
             let next_alt_number =
                 next_alt_number(state, transition_index, rule_alt_number, track_alt_numbers);
             match transition {
@@ -1339,6 +1342,7 @@ where
                         )
                         .into_iter()
                         .map(|mut outcome| {
+                            prepend_decision(&mut outcome, decision);
                             if let Some(rule_index) = left_recursive_boundary {
                                 outcome.nodes.insert(
                                     0,
@@ -1382,6 +1386,7 @@ where
                             )
                             .into_iter()
                             .map(|mut outcome| {
+                                prepend_decision(&mut outcome, decision);
                                 if let Some(rule_index) = left_recursive_boundary {
                                     outcome.nodes.insert(
                                         0,
@@ -1398,25 +1403,32 @@ where
                     precedence: transition_precedence,
                 } => {
                     if *transition_precedence >= precedence {
-                        outcomes.extend(self.recognize_state(
-                            atn,
-                            RecognizeRequest {
-                                state_number: *target,
-                                stop_state,
-                                index,
-                                rule_start_index,
-                                init_action_rules,
-                                predicates,
-                                rule_alt_number: next_alt_number,
-                                track_alt_numbers,
-                                precedence,
-                                depth: depth + 1,
-                                recovery_symbols: epsilon_recovery_symbols.clone(),
-                            },
-                            visiting,
-                            memo,
-                            expected,
-                        ));
+                        outcomes.extend(
+                            self.recognize_state(
+                                atn,
+                                RecognizeRequest {
+                                    state_number: *target,
+                                    stop_state,
+                                    index,
+                                    rule_start_index,
+                                    init_action_rules,
+                                    predicates,
+                                    rule_alt_number: next_alt_number,
+                                    track_alt_numbers,
+                                    precedence,
+                                    depth: depth + 1,
+                                    recovery_symbols: epsilon_recovery_symbols.clone(),
+                                },
+                                visiting,
+                                memo,
+                                expected,
+                            )
+                            .into_iter()
+                            .map(|mut outcome| {
+                                prepend_decision(&mut outcome, decision);
+                                outcome
+                            }),
+                        );
                     }
                 }
                 Transition::Rule {
@@ -1483,6 +1495,10 @@ where
                                 let mut diagnostics = child.diagnostics.clone();
                                 diagnostics.append(&mut outcome.diagnostics);
                                 outcome.diagnostics = diagnostics;
+                                let mut decisions = child.decisions.clone();
+                                decisions.append(&mut outcome.decisions);
+                                outcome.decisions = decisions;
+                                prepend_decision(&mut outcome, decision);
                                 let mut actions = child.actions.clone();
                                 if init_action_rules.contains(rule_index) {
                                     actions.insert(
@@ -1532,6 +1548,7 @@ where
                             )
                             .into_iter()
                             .map(|mut outcome| {
+                                prepend_decision(&mut outcome, decision);
                                 outcome.consumed_eof |= symbol == TOKEN_EOF;
                                 outcome.nodes.insert(0, RecognizedNode::Token { index });
                                 outcome
@@ -1545,31 +1562,38 @@ where
                         }
                         expected.record_transition(index, transition, atn.max_token_type());
                         let before_recovery = outcomes.len();
-                        outcomes.extend(self.single_token_deletion_recovery(RecoveryRequest {
-                            atn,
-                            transition,
-                            expected_symbols: expected_symbols.clone(),
-                            target: *target,
-                            request: RecognizeRequest {
-                                state_number,
-                                stop_state,
-                                index,
-                                rule_start_index,
-                                init_action_rules,
-                                predicates,
-                                rule_alt_number,
-                                track_alt_numbers,
-                                precedence,
-                                depth,
-                                recovery_symbols: recovery_symbols.clone(),
-                            },
-                            visiting,
-                            memo,
-                            expected,
-                        }));
+                        outcomes.extend(
+                            self.single_token_deletion_recovery(RecoveryRequest {
+                                atn,
+                                transition,
+                                expected_symbols: expected_symbols.clone(),
+                                target: *target,
+                                request: RecognizeRequest {
+                                    state_number,
+                                    stop_state,
+                                    index,
+                                    rule_start_index,
+                                    init_action_rules,
+                                    predicates,
+                                    rule_alt_number,
+                                    track_alt_numbers,
+                                    precedence,
+                                    depth,
+                                    recovery_symbols: recovery_symbols.clone(),
+                                },
+                                visiting,
+                                memo,
+                                expected,
+                            })
+                            .into_iter()
+                            .map(|mut outcome| {
+                                prepend_decision(&mut outcome, decision);
+                                outcome
+                            }),
+                        );
                         if !state_is_left_recursive_rule(atn, state) {
-                            outcomes.extend(self.single_token_insertion_recovery(
-                                RecoveryRequest {
+                            outcomes.extend(
+                                self.single_token_insertion_recovery(RecoveryRequest {
                                     atn,
                                     transition,
                                     expected_symbols: expected_symbols.clone(),
@@ -1590,8 +1614,13 @@ where
                                     visiting,
                                     memo,
                                     expected,
-                                },
-                            ));
+                                })
+                                .into_iter()
+                                .map(|mut outcome| {
+                                    prepend_decision(&mut outcome, decision);
+                                    outcome
+                                }),
+                            );
                         }
                         // If neither deletion nor insertion can continue, ANTLR
                         // still consumes the offending token as an error node so
@@ -1633,6 +1662,7 @@ where
                                 )
                                 .into_iter()
                                 .map(|mut outcome| {
+                                    prepend_decision(&mut outcome, decision);
                                     outcome.diagnostics.insert(0, diagnostic.clone());
                                     outcome
                                         .nodes
@@ -1995,12 +2025,79 @@ fn select_best_outcome(
         ) || (!prefer_first_tie
             && outcome_position == best_position
             && outcome.diagnostics.len() == best.diagnostics.len()
-            && outcome.actions.len() >= best.actions.len())
+            && (outcome.decisions < best.decisions
+                || (outcome.decisions == best.decisions && outcome.actions > best.actions)))
         {
             return outcome;
         }
         best
     })
+}
+
+/// Records the serialized transition order at parser decision states.
+///
+/// When two clean paths consume the same input, ANTLR's adaptive prediction
+/// chooses by alternative order. Keeping this compact trace lets the metadata
+/// recognizer distinguish greedy and non-greedy optional blocks without a full
+/// prediction simulator.
+fn transition_decision(atn: &Atn, state: &AtnState, transition_index: usize) -> Option<usize> {
+    if state.transitions.len() <= 1
+        || state.precedence_rule_decision
+        || decision_reaches_predicate(atn, state)
+    {
+        return None;
+    }
+    Some(transition_index)
+}
+
+/// Reports whether a decision can reach semantic predicates before consuming
+/// input, where static alternative order is not enough to model ANTLR.
+fn decision_reaches_predicate(atn: &Atn, state: &AtnState) -> bool {
+    state
+        .transitions
+        .iter()
+        .any(|transition| transition_reaches_predicate(atn, transition, &mut BTreeSet::new()))
+}
+
+/// Walks epsilon-like edges from one transition to find predicate-gated paths.
+fn transition_reaches_predicate(
+    atn: &Atn,
+    transition: &Transition,
+    visited: &mut BTreeSet<usize>,
+) -> bool {
+    match transition {
+        Transition::Predicate { .. } => true,
+        Transition::Epsilon { target }
+        | Transition::Action { target, .. }
+        | Transition::Rule { target, .. } => state_reaches_predicate(atn, *target, visited),
+        Transition::Precedence { .. }
+        | Transition::Atom { .. }
+        | Transition::Range { .. }
+        | Transition::Set { .. }
+        | Transition::NotSet { .. }
+        | Transition::Wildcard { .. } => false,
+    }
+}
+
+/// Finds a predicate reachable without passing through a consuming transition.
+fn state_reaches_predicate(atn: &Atn, state_number: usize, visited: &mut BTreeSet<usize>) -> bool {
+    if !visited.insert(state_number) {
+        return false;
+    }
+    let Some(state) = atn.state(state_number) else {
+        return false;
+    };
+    state
+        .transitions
+        .iter()
+        .any(|transition| transition_reaches_predicate(atn, transition, visited))
+}
+
+/// Adds a decision step to the front of an already-recognized suffix path.
+fn prepend_decision(outcome: &mut RecognizeOutcome, decision: Option<usize>) {
+    if let Some(decision) = decision {
+        outcome.decisions.insert(0, decision);
+    }
 }
 
 fn outcome_is_better(
@@ -2034,10 +2131,10 @@ fn discard_recovered_outcomes_if_clean_path_exists(outcomes: &mut Vec<RecognizeO
 /// Reports whether a candidate contains recursive tree structure where ANTLR's
 /// first viable candidate preserves the correct left-recursive context shape.
 fn nodes_need_stable_tie(nodes: &[RecognizedNode]) -> bool {
-    nodes.iter().any(|node| node_needs_stable_tie(node, &[]))
+    nodes.iter().any(node_needs_stable_tie)
 }
 
-fn node_needs_stable_tie(node: &RecognizedNode, ancestors: &[usize]) -> bool {
+fn node_needs_stable_tie(node: &RecognizedNode) -> bool {
     match node {
         RecognizedNode::Token { .. }
         | RecognizedNode::ErrorToken { .. }
@@ -2047,15 +2144,15 @@ fn node_needs_stable_tie(node: &RecognizedNode, ancestors: &[usize]) -> bool {
             rule_index,
             children,
             ..
-        } => {
-            ancestors.contains(rule_index) || {
-                let mut child_ancestors = ancestors.to_vec();
-                child_ancestors.push(*rule_index);
-                children
-                    .iter()
-                    .any(|child| node_needs_stable_tie(child, &child_ancestors))
-            }
-        }
+        } => children.iter().any(|child| {
+            matches!(
+                child,
+                RecognizedNode::Rule {
+                    rule_index: child_rule,
+                    ..
+                } if child_rule == rule_index
+            ) || node_needs_stable_tie(child)
+        }),
     }
 }
 
@@ -2226,6 +2323,7 @@ mod tests {
             consumed_eof: false,
             alt_number: 0,
             diagnostics: Vec::new(),
+            decisions: Vec::new(),
             actions: vec![ParserAction::new(1, 0, 0, None)],
             nodes: vec![RecognizedNode::Token { index: 0 }],
         };
@@ -2246,6 +2344,7 @@ mod tests {
             consumed_eof: false,
             alt_number: 0,
             diagnostics: Vec::new(),
+            decisions: Vec::new(),
             actions: vec![ParserAction::new(1, 0, 0, None)],
             nodes: vec![RecognizedNode::Token { index: 0 }],
         };
@@ -2260,6 +2359,34 @@ mod tests {
         let selected = select_best_outcome([second, first].into_iter())
             .expect("one outcome should be selected");
         assert_eq!(selected.actions.len(), 2);
+    }
+
+    #[test]
+    fn outcome_ties_prefer_later_action_stop_for_greedy_optional_paths() {
+        let first = RecognizeOutcome {
+            index: 7,
+            consumed_eof: false,
+            alt_number: 0,
+            diagnostics: Vec::new(),
+            decisions: vec![1, 0],
+            actions: vec![
+                ParserAction::new(23, 2, 2, Some(4)),
+                ParserAction::new(23, 2, 0, Some(6)),
+            ],
+            nodes: vec![RecognizedNode::Token { index: 0 }],
+        };
+        let second = RecognizeOutcome {
+            decisions: vec![0, 1],
+            actions: vec![
+                ParserAction::new(23, 2, 2, Some(6)),
+                ParserAction::new(23, 2, 0, Some(6)),
+            ],
+            ..first.clone()
+        };
+
+        let selected = select_best_outcome([first, second].into_iter())
+            .expect("one outcome should be selected");
+        assert_eq!(selected.actions[0].stop_index(), Some(6));
     }
 
     #[test]
@@ -2282,6 +2409,7 @@ mod tests {
             consumed_eof: false,
             alt_number: 0,
             diagnostics: Vec::new(),
+            decisions: Vec::new(),
             actions: vec![ParserAction::new(1, 0, 0, None)],
             nodes: recursive_nodes.clone(),
         };
@@ -2290,6 +2418,7 @@ mod tests {
             consumed_eof: false,
             alt_number: 0,
             diagnostics: Vec::new(),
+            decisions: Vec::new(),
             actions: vec![ParserAction::new(2, 0, 0, None)],
             nodes: recursive_nodes,
         };
