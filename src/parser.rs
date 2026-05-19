@@ -1305,7 +1305,7 @@ where
         let epsilon_recovery_symbols = next_recovery_symbols(atn, state, &recovery_symbols);
         let mut outcomes = Vec::new();
         for (transition_index, transition) in state.transitions.iter().enumerate() {
-            let decision = transition_decision(atn, state, transition_index);
+            let decision = transition_decision(atn, state, transition_index, predicates);
             let next_alt_number =
                 next_alt_number(state, transition_index, rule_alt_number, track_alt_numbers);
             match transition {
@@ -2040,36 +2040,53 @@ fn select_best_outcome(
 /// chooses by alternative order. Keeping this compact trace lets the metadata
 /// recognizer distinguish greedy and non-greedy optional blocks without a full
 /// prediction simulator.
-fn transition_decision(atn: &Atn, state: &AtnState, transition_index: usize) -> Option<usize> {
+fn transition_decision(
+    atn: &Atn,
+    state: &AtnState,
+    transition_index: usize,
+    predicates: &[(usize, usize, ParserPredicate)],
+) -> Option<usize> {
     if state.transitions.len() <= 1
         || state.precedence_rule_decision
-        || decision_reaches_predicate(atn, state)
+        || decision_reaches_unsupported_predicate(atn, state, predicates)
     {
         return None;
     }
     Some(transition_index)
 }
 
-/// Reports whether a decision can reach semantic predicates before consuming
-/// input, where static alternative order is not enough to model ANTLR.
-fn decision_reaches_predicate(atn: &Atn, state: &AtnState) -> bool {
-    state
-        .transitions
-        .iter()
-        .any(|transition| transition_reaches_predicate(atn, transition, &mut BTreeSet::new()))
+/// Reports whether a decision can reach a predicate the generator did not
+/// translate. Static alternative order is unsafe for those context predicates.
+fn decision_reaches_unsupported_predicate(
+    atn: &Atn,
+    state: &AtnState,
+    predicates: &[(usize, usize, ParserPredicate)],
+) -> bool {
+    state.transitions.iter().any(|transition| {
+        transition_reaches_unsupported_predicate(atn, transition, predicates, &mut BTreeSet::new())
+    })
 }
 
-/// Walks epsilon-like edges from one transition to find predicate-gated paths.
-fn transition_reaches_predicate(
+/// Walks epsilon-like edges from one transition to find unsupported predicates.
+fn transition_reaches_unsupported_predicate(
     atn: &Atn,
     transition: &Transition,
+    predicates: &[(usize, usize, ParserPredicate)],
     visited: &mut BTreeSet<usize>,
 ) -> bool {
     match transition {
-        Transition::Predicate { .. } => true,
+        Transition::Predicate {
+            rule_index,
+            pred_index,
+            ..
+        } => !predicates
+            .iter()
+            .any(|(rule, pred, _)| rule == rule_index && pred == pred_index),
         Transition::Epsilon { target }
         | Transition::Action { target, .. }
-        | Transition::Rule { target, .. } => state_reaches_predicate(atn, *target, visited),
+        | Transition::Rule { target, .. } => {
+            state_reaches_unsupported_predicate(atn, *target, predicates, visited)
+        }
         Transition::Precedence { .. }
         | Transition::Atom { .. }
         | Transition::Range { .. }
@@ -2079,18 +2096,22 @@ fn transition_reaches_predicate(
     }
 }
 
-/// Finds a predicate reachable without passing through a consuming transition.
-fn state_reaches_predicate(atn: &Atn, state_number: usize, visited: &mut BTreeSet<usize>) -> bool {
+/// Finds an unsupported predicate reachable before a consuming transition.
+fn state_reaches_unsupported_predicate(
+    atn: &Atn,
+    state_number: usize,
+    predicates: &[(usize, usize, ParserPredicate)],
+    visited: &mut BTreeSet<usize>,
+) -> bool {
     if !visited.insert(state_number) {
         return false;
     }
     let Some(state) = atn.state(state_number) else {
         return false;
     };
-    state
-        .transitions
-        .iter()
-        .any(|transition| transition_reaches_predicate(atn, transition, visited))
+    state.transitions.iter().any(|transition| {
+        transition_reaches_unsupported_predicate(atn, transition, predicates, visited)
+    })
 }
 
 /// Adds a decision step to the front of an already-recognized suffix path.

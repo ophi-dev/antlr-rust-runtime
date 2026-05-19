@@ -81,6 +81,7 @@ Supported now:
 - parser rule-level `@after {<ToStringTree("$label.ctx")>}` actions for simple
   rule labels,
 - parser semantic predicates for `LANotEquals(...)` lookahead target templates,
+- parser supported-predicate decision ordering for action-bearing alternatives,
 - alt-numbered parse-tree contexts for grammars using
   `TreeNodeWithAltNumField`/`contextSuperClass`,
 - `RuleInvocationStack()` stdout helper actions,
@@ -111,7 +112,7 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `262 passed, 0 failed, 95 skipped, 262 run`
+- full descriptor sweep: `263 passed, 0 failed, 94 skipped, 263 run`
 - `LexerExec`: `42 passed, 0 failed, 0 skipped, 42 run`
 - `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
 - `LeftRecursion`: `81 passed, 0 failed, 17 skipped, 81 run`
@@ -120,7 +121,7 @@ Current validated groups:
 - `ParserErrors`: `23 passed, 0 failed, 11 skipped, 23 run`
 - `Performance`: `7 passed, 0 failed, 0 skipped, 7 run`
 - `SemPredEvalLexer`: `2 passed, 0 failed, 6 skipped, 2 run`
-- `SemPredEvalParser`: `8 passed, 0 failed, 18 skipped, 8 run`
+- `SemPredEvalParser`: `9 passed, 0 failed, 17 skipped, 9 run`
 - `Sets`: `29 passed, 0 failed, 2 skipped, 29 run`
 
 The remaining target-action skips are descriptors that depend on templates the
