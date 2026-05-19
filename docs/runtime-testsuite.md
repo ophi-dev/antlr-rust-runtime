@@ -85,6 +85,8 @@ Supported now:
 - parser semantic predicates for `LANotEquals(...)` and `LTEquals(...)`
   lookahead target templates,
 - parser supported-predicate decision ordering for action-bearing alternatives,
+- listener-suite target templates for `BasicListener`, token/rule getter
+  listeners, and the left-recursive listener fixtures,
 - alt-numbered parse-tree contexts for grammars using
   `TreeNodeWithAltNumField`/`contextSuperClass`,
 - `RuleInvocationStack()` stdout helper actions,
@@ -115,10 +117,11 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `265 passed, 0 failed, 92 skipped, 265 run`
+- full descriptor sweep: `272 passed, 0 failed, 85 skipped, 272 run`
 - `LexerExec`: `42 passed, 0 failed, 0 skipped, 42 run`
 - `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
 - `LeftRecursion`: `81 passed, 0 failed, 17 skipped, 81 run`
+- `Listeners`: `7 passed, 0 failed, 0 skipped, 7 run`
 - `ParseTrees`: `10 passed, 0 failed, 0 skipped, 10 run`
 - `ParserExec`: `48 passed, 0 failed, 2 skipped, 48 run`
 - `ParserErrors`: `23 passed, 0 failed, 11 skipped, 23 run`
@@ -128,6 +131,6 @@ Current validated groups:
 - `Sets`: `29 passed, 0 failed, 2 skipped, 29 run`
 
 The remaining target-action skips are descriptors that depend on templates the
-Rust harness does not render yet, such as target members, listener hooks,
-diagnostic helpers, return-value evaluation, parser predicates that need
-generated context methods, or listener hooks.
+Rust harness does not render yet, such as target members, diagnostic helpers,
+return-value evaluation, or parser predicates that need generated context
+methods.

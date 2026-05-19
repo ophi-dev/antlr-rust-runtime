@@ -149,6 +149,7 @@ enum RecognizedNode {
     },
     Rule {
         rule_index: usize,
+        invoking_state: isize,
         alt_number: usize,
         start_index: usize,
         stop_index: Option<usize>,
@@ -1465,6 +1466,7 @@ where
                     for child in children {
                         let child_node = RecognizedNode::Rule {
                             rule_index: *rule_index,
+                            invoking_state: invoking_state_number(state_number),
                             alt_number: child.alt_number,
                             start_index: index,
                             stop_index: self.previous_token_index(child.index),
@@ -1815,12 +1817,13 @@ where
             }
             RecognizedNode::Rule {
                 rule_index,
+                invoking_state,
                 alt_number,
                 start_index,
                 stop_index,
                 children,
             } => {
-                let mut context = ParserRuleContext::new(*rule_index, self.state());
+                let mut context = ParserRuleContext::new(*rule_index, *invoking_state);
                 if track_alt_numbers {
                     context.set_alt_number(*alt_number);
                 }
@@ -1897,6 +1900,7 @@ fn fold_left_recursive_boundaries(nodes: Vec<RecognizedNode>) -> Vec<RecognizedN
                     let stop_index = recognized_nodes_stop_index(&children);
                     folded.push(RecognizedNode::Rule {
                         rule_index,
+                        invoking_state: -1,
                         alt_number: 0,
                         start_index,
                         stop_index,
@@ -1925,6 +1929,12 @@ const fn recognized_node_start_index(node: &RecognizedNode) -> Option<usize> {
 
 fn recognized_nodes_stop_index(nodes: &[RecognizedNode]) -> Option<usize> {
     nodes.iter().rev().find_map(recognized_node_stop_index)
+}
+
+/// Converts an ATN state number into the signed invoking-state slot used by
+/// ANTLR parse-tree contexts, saturating only for impossible platform widths.
+fn invoking_state_number(state_number: usize) -> isize {
+    isize::try_from(state_number).unwrap_or(isize::MAX)
 }
 
 const fn recognized_node_stop_index(node: &RecognizedNode) -> Option<usize> {
@@ -2331,6 +2341,7 @@ mod tests {
             vec![
                 RecognizedNode::Rule {
                     rule_index: 1,
+                    invoking_state: -1,
                     alt_number: 0,
                     start_index: 0,
                     stop_index: Some(0),
@@ -2418,11 +2429,13 @@ mod tests {
     fn outcome_ties_keep_first_recursive_tree_shape() {
         let recursive_nodes = vec![RecognizedNode::Rule {
             rule_index: 1,
+            invoking_state: -1,
             alt_number: 0,
             start_index: 0,
             stop_index: Some(0),
             children: vec![RecognizedNode::Rule {
                 rule_index: 1,
+                invoking_state: -1,
                 alt_number: 0,
                 start_index: 0,
                 stop_index: Some(0),

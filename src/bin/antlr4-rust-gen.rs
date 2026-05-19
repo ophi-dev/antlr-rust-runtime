@@ -415,7 +415,7 @@ fn render_parser(
         |grammar| parser_action_templates(data, grammar),
     )?;
     let after_actions = grammar_source.map_or_else(
-        || Ok(vec![None; data.rule_names.len()]),
+        || Ok(vec![Vec::new(); data.rule_names.len()]),
         |grammar| parser_after_action_templates(data, grammar),
     )?;
     let init_actions = grammar_source.map_or_else(
@@ -438,12 +438,12 @@ fn render_parser(
     let action_method = render_parser_action_method(&actions, &init_actions);
     let mut rule_methods = String::new();
     for (index, rule) in data.rule_names.iter().enumerate() {
-        let after_action = after_actions.get(index).and_then(Option::as_ref);
-        let uses_after_interval = after_action.is_some_and(ActionTemplate::uses_rule_interval);
+        let after_action = after_actions.get(index).map_or(&[][..], Vec::as_slice);
+        let uses_after_interval = after_action.iter().any(ActionTemplate::uses_rule_interval);
         let needs_slow_path = has_action_dispatch
             || track_alt_numbers
             || has_predicate_dispatch
-            || after_action.is_some_and(ActionTemplate::needs_nested_tree);
+            || after_action.iter().any(ActionTemplate::needs_nested_tree);
         writeln!(
             rule_methods,
             "    pub fn {}(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{",
@@ -457,7 +457,7 @@ fn render_parser(
             )
             .expect("writing to a string cannot fail");
         }
-        if !needs_slow_path && after_action.is_none() {
+        if !needs_slow_path && after_action.is_empty() {
             writeln!(
                 rule_methods,
                 "        self.base.parse_atn_rule(atn(), {index})"
@@ -511,7 +511,7 @@ fn render_parser(
                 )
                 .expect("writing to a string cannot fail");
             }
-            if let Some(template) = after_action {
+            if !after_action.is_empty() {
                 if uses_after_interval {
                     writeln!(
                         rule_methods,
@@ -519,12 +519,14 @@ fn render_parser(
                     )
                     .expect("writing to a string cannot fail");
                 }
-                writeln!(
-                    rule_methods,
-                    "        {}",
-                    render_parser_after_action_statement(template, index)
-                )
-                .expect("writing to a string cannot fail");
+                for template in after_action {
+                    writeln!(
+                        rule_methods,
+                        "        {}",
+                        render_parser_after_action_statement(template, index)
+                    )
+                    .expect("writing to a string cannot fail");
+                }
             }
             writeln!(rule_methods, "        Ok(tree)").expect("writing to a string cannot fail");
         }
@@ -636,6 +638,10 @@ enum ActionTemplate {
     RuleInvocationStack {
         newline: bool,
     },
+    ListenerWalk {
+        target: StringTreeTarget,
+        kind: ListenerKind,
+    },
     TokenText {
         source: TokenTextSource,
         newline: bool,
@@ -678,7 +684,7 @@ impl ActionTemplate {
     const fn needs_nested_tree(&self) -> bool {
         matches!(
             self,
-            Self::StringTree { .. } | Self::RuleInvocationStack { .. }
+            Self::StringTree { .. } | Self::RuleInvocationStack { .. } | Self::ListenerWalk { .. }
         )
     }
 }
@@ -709,6 +715,15 @@ enum StringTreeTarget {
     Current,
     Label(String),
     Rule(usize),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ListenerKind {
+    Basic,
+    TokenGetter,
+    RuleGetter,
+    LeftRecursive,
+    LeftRecursiveWithLabels,
 }
 
 /// Pairs supported lexer target-template actions with serialized custom-action
@@ -829,27 +844,23 @@ fn parser_action_templates(
 fn parser_after_action_templates(
     data: &InterpData,
     grammar_source: &str,
-) -> io::Result<Vec<Option<ActionTemplate>>> {
-    let mut actions = vec![None; data.rule_names.len()];
-    let mut offset = 0;
-    while let Some(block) = next_template_block(grammar_source, offset) {
-        offset = block.after_brace;
-        if block.predicate || !is_after_action(grammar_source, block.open_brace) {
-            continue;
-        }
+) -> io::Result<Vec<Vec<ActionTemplate>>> {
+    let mut actions = vec![Vec::new(); data.rule_names.len()];
+    let listener_kind = listener_template_kind(grammar_source);
+    for block in named_action_templates(grammar_source, "@after") {
         let Some(rule_name) = after_action_rule_name(grammar_source, block.open_brace) else {
             continue;
         };
         let Some(rule_index) = data.rule_names.iter().position(|name| name == rule_name) else {
             continue;
         };
-        let Some(template) = parse_action_template(block.body) else {
+        let Some(template) = parse_after_action_template(block.body, listener_kind) else {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("unsupported @after target action template <{}>", block.body),
             ));
         };
-        actions[rule_index] = Some(resolve_after_action_template(
+        actions[rule_index].push(resolve_after_action_template(
             template,
             grammar_source,
             block.open_brace,
@@ -1008,6 +1019,52 @@ struct TemplateBlock<'a> {
     predicate: bool,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct NamedActionTemplate<'a> {
+    open_brace: usize,
+    body: &'a str,
+}
+
+/// Finds all target templates inside a rule-level named action body, including
+/// multi-template blocks such as the listener-suite `@after` actions.
+fn named_action_templates<'a>(source: &'a str, marker: &str) -> Vec<NamedActionTemplate<'a>> {
+    let mut templates = Vec::new();
+    let mut offset = 0;
+    while let Some(marker_start) = source[offset..].find(marker).map(|index| offset + index) {
+        let Some(open_brace) = source[marker_start..]
+            .find('{')
+            .map(|index| marker_start + index)
+        else {
+            break;
+        };
+        let Some(close_brace) = matching_action_brace(source, open_brace + 1) else {
+            break;
+        };
+        let mut cursor = open_brace + 1;
+        while cursor < close_brace {
+            let Some(open_angle) = source[cursor..close_brace]
+                .find('<')
+                .map(|index| cursor + index)
+            else {
+                break;
+            };
+            let Some(close_angle) = matching_template_close(source, open_angle + 1) else {
+                break;
+            };
+            if close_angle > close_brace {
+                break;
+            }
+            templates.push(NamedActionTemplate {
+                open_brace,
+                body: &source[open_angle + 1..close_angle],
+            });
+            cursor = close_angle + 1;
+        }
+        offset = close_brace + 1;
+    }
+    templates
+}
+
 /// Finds the next target-template block while allowing whitespace inside the
 /// ANTLR action braces, for example `{ <writeln("$text")> }`.
 fn next_template_block(source: &str, offset: usize) -> Option<TemplateBlock<'_>> {
@@ -1032,6 +1089,31 @@ fn next_template_block(source: &str, offset: usize) -> Option<TemplateBlock<'_>>
             after_brace,
             predicate: source[after_brace..].trim_start().starts_with('?'),
         });
+    }
+    None
+}
+
+/// Finds the closing brace for a named ANTLR action block while ignoring braces
+/// inside string literals.
+fn matching_action_brace(source: &str, mut index: usize) -> Option<usize> {
+    let mut nested = 0_usize;
+    let mut quoted = false;
+    let mut escaped = false;
+    while let Some(ch) = source[index..].chars().next() {
+        if escaped {
+            escaped = false;
+            index += ch.len_utf8();
+            continue;
+        }
+        match ch {
+            '\\' if quoted => escaped = true,
+            '"' => quoted = !quoted,
+            '{' if !quoted => nested += 1,
+            '}' if !quoted && nested == 0 => return Some(index),
+            '}' if !quoted => nested = nested.saturating_sub(1),
+            _ => {}
+        }
+        index += ch.len_utf8();
     }
     None
 }
@@ -1101,6 +1183,27 @@ fn uses_alt_number_contexts(source: &str) -> bool {
     source.contains("<TreeNodeWithAltNumField") || source.contains("contextSuperClass")
 }
 
+/// Identifies the descriptor listener helper declared in the file-scope
+/// preamble; these helpers are test templates, not ANTLR grammar syntax.
+fn listener_template_kind(source: &str) -> Option<ListenerKind> {
+    source.lines().find_map(|line| {
+        let trimmed = line.trim();
+        if trimmed.starts_with("<BasicListener(") {
+            Some(ListenerKind::Basic)
+        } else if trimmed.starts_with("<TokenGetterListener(") {
+            Some(ListenerKind::TokenGetter)
+        } else if trimmed.starts_with("<RuleGetterListener(") {
+            Some(ListenerKind::RuleGetter)
+        } else if trimmed.starts_with("<LRListener(") {
+            Some(ListenerKind::LeftRecursive)
+        } else if trimmed.starts_with("<LRWithLabelsListener(") {
+            Some(ListenerKind::LeftRecursiveWithLabels)
+        } else {
+            None
+        }
+    })
+}
+
 fn uses_position_adjusting_lexer(source: &str) -> bool {
     source.contains("<PositionAdjustingLexer()")
 }
@@ -1136,12 +1239,16 @@ fn resolve_after_action_template(
     open_brace: usize,
     data: &InterpData,
 ) -> io::Result<ActionTemplate> {
-    let ActionTemplate::StringTree {
-        target: StringTreeTarget::Label(label),
-        newline,
-    } = template
-    else {
-        return Ok(template);
+    let (label, rebuild) = match template {
+        ActionTemplate::StringTree {
+            target: StringTreeTarget::Label(label),
+            newline,
+        } => (label, ResolvedAfterAction::StringTree { newline }),
+        ActionTemplate::ListenerWalk {
+            target: StringTreeTarget::Label(label),
+            kind,
+        } => (label, ResolvedAfterAction::ListenerWalk { kind }),
+        other => return Ok(other),
     };
     let Some(rule_name) = labeled_rule_name(source, open_brace, &label) else {
         return Err(io::Error::new(
@@ -1155,10 +1262,30 @@ fn resolve_after_action_template(
             format!("label {label} references unknown rule {rule_name}"),
         ));
     };
-    Ok(ActionTemplate::StringTree {
-        target: StringTreeTarget::Rule(rule_index),
-        newline,
-    })
+    Ok(rebuild.into_action(rule_index))
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ResolvedAfterAction {
+    StringTree { newline: bool },
+    ListenerWalk { kind: ListenerKind },
+}
+
+impl ResolvedAfterAction {
+    /// Rebuilds a label-based `@after` action after resolving the label to the
+    /// rule index stored in generated parse-tree nodes.
+    const fn into_action(self, rule_index: usize) -> ActionTemplate {
+        match self {
+            Self::StringTree { newline } => ActionTemplate::StringTree {
+                target: StringTreeTarget::Rule(rule_index),
+                newline,
+            },
+            Self::ListenerWalk { kind } => ActionTemplate::ListenerWalk {
+                target: StringTreeTarget::Rule(rule_index),
+                kind,
+            },
+        }
+    }
 }
 
 /// Finds the rule name on the right side of `label=ruleName` inside the rule
@@ -1217,6 +1344,17 @@ fn parse_action_template(body: &str) -> Option<ActionTemplate> {
             .or_else(|| parse_noop_action(body))
             .or_else(|| parse_write_literal(body)),
     }
+}
+
+/// Parses rule-level `@after` helpers, including listener-suite wrappers that
+/// are meaningful only after the selected parse tree is available.
+fn parse_after_action_template(
+    body: &str,
+    listener_kind: Option<ListenerKind>,
+) -> Option<ActionTemplate> {
+    parse_context_member_string_tree(body)
+        .or_else(|| parse_context_member_walk_listener(body, listener_kind?))
+        .or_else(|| parse_action_template(body))
 }
 
 fn parse_predicate_template(body: &str) -> Option<PredicateTemplate> {
@@ -1307,6 +1445,48 @@ fn parse_string_tree(body: &str) -> Option<ActionTemplate> {
         target: StringTreeTarget::Label(label.to_owned()),
         newline,
     })
+}
+
+/// Parses `ContextMember("$ctx", "label"):ToStringTree():write[ln]()` from the
+/// listener descriptors into the same label-resolution path as `$label.ctx`.
+fn parse_context_member_string_tree(body: &str) -> Option<ActionTemplate> {
+    let (newline, label) = if let Some(arguments) = body
+        .strip_prefix("ContextMember(")
+        .and_then(|value| value.strip_suffix("):ToStringTree():writeln()"))
+    {
+        (true, parse_context_member_label(arguments)?)
+    } else {
+        let arguments = body
+            .strip_prefix("ContextMember(")
+            .and_then(|value| value.strip_suffix("):ToStringTree():write()"))?;
+        (false, parse_context_member_label(arguments)?)
+    };
+    Some(ActionTemplate::StringTree {
+        target: StringTreeTarget::Label(label),
+        newline,
+    })
+}
+
+/// Parses `ContextMember("$ctx", "label"):WalkListener()` and attaches the
+/// file-scope listener template selected by the descriptor.
+fn parse_context_member_walk_listener(body: &str, kind: ListenerKind) -> Option<ActionTemplate> {
+    let arguments = body
+        .strip_prefix("ContextMember(")
+        .and_then(|value| value.strip_suffix("):WalkListener()"))?;
+    Some(ActionTemplate::ListenerWalk {
+        target: StringTreeTarget::Label(parse_context_member_label(arguments)?),
+        kind,
+    })
+}
+
+/// Extracts the rule label from `ContextMember("$ctx", "...")`; the first
+/// argument is fixed by the upstream templates and identifies the current ctx.
+fn parse_context_member_label(arguments: &str) -> Option<String> {
+    let arguments = split_template_arguments(arguments);
+    let [ctx, label] = arguments.as_slice() else {
+        return None;
+    };
+    (parse_template_string(ctx)? == "$ctx").then(|| parse_template_string(label))?
 }
 
 /// Parses the runtime-testsuite helper that prints the active rule invocation
@@ -1715,6 +1895,7 @@ fn render_lexer_action_statement(template: &ActionTemplate) -> String {
         ActionTemplate::ExpectedTokenNames { .. } => String::new(),
         ActionTemplate::StringTree { .. } => String::new(),
         ActionTemplate::RuleInvocationStack { .. } => String::new(),
+        ActionTemplate::ListenerWalk { .. } => String::new(),
         ActionTemplate::Literal { value, newline } => {
             let write = if *newline { "println!" } else { "print!" };
             format!("{write}(\"{}\");", rust_string(value))
@@ -1868,6 +2049,7 @@ fn render_action_statement(template: &ActionTemplate) -> String {
             let write = if *newline { "println!" } else { "print!" };
             render_rule_invocation_stack_write(write, "_tree", "action.rule_index()")
         }
+        ActionTemplate::ListenerWalk { .. } => String::new(),
         ActionTemplate::Literal { value, newline } => {
             let write = if *newline { "println!" } else { "print!" };
             format!("{write}(\"{}\");", rust_string(value))
@@ -1940,6 +2122,7 @@ fn render_parser_after_action_statement(template: &ActionTemplate, rule_index: u
             let rule_index = rule_index.to_string();
             render_rule_invocation_stack_write(write, "tree", &rule_index)
         }
+        ActionTemplate::ListenerWalk { target, kind } => render_listener_walk(target, *kind),
         ActionTemplate::Literal { value, newline } => {
             let write = if *newline { "println!" } else { "print!" };
             format!("{write}(\"{}\");", rust_string(value))
@@ -2019,6 +2202,268 @@ fn render_string_tree_write(write: &str, tree_expr: &str, target: &StringTreeTar
         ),
         StringTreeTarget::Label(_) => String::new(),
     }
+}
+
+/// Emits the small listener bodies used by the upstream listener descriptors.
+/// These are target-template test fixtures, so the generated code mirrors their
+/// observable callbacks without exposing them as a stable listener API.
+fn render_listener_walk(target: &StringTreeTarget, kind: ListenerKind) -> String {
+    let StringTreeTarget::Rule(rule_index) = target else {
+        return String::new();
+    };
+    let template = match kind {
+        ListenerKind::Basic => {
+            r#"
+fn visit_listener_node(node: &antlr4_runtime::ParseTree) {
+    match node {
+        antlr4_runtime::ParseTree::Rule(rule) => {
+            for child in rule.context().children() {
+                visit_listener_node(child);
+            }
+        }
+        antlr4_runtime::ParseTree::Terminal(node) => {
+            println!("{}", antlr4_runtime::Token::text(node.symbol()).unwrap_or(""));
+        }
+        antlr4_runtime::ParseTree::Error(node) => {
+            println!("{}", antlr4_runtime::Token::text(node.symbol()).unwrap_or(""));
+        }
+    }
+}
+if let Some(node) = tree.first_rule(__TARGET_RULE__) {
+    visit_listener_node(node);
+}
+"#
+        }
+        ListenerKind::TokenGetter => {
+            r#"
+fn terminal_tokens<'a>(
+    ctx: &'a antlr4_runtime::ParserRuleContext,
+) -> Vec<&'a antlr4_runtime::CommonToken> {
+    ctx.children()
+        .iter()
+        .filter_map(|child| match child {
+            antlr4_runtime::ParseTree::Terminal(node) => Some(node.symbol()),
+            antlr4_runtime::ParseTree::Error(node) => Some(node.symbol()),
+            antlr4_runtime::ParseTree::Rule(_) => None,
+        })
+        .collect()
+}
+fn token_text(token: &antlr4_runtime::CommonToken) -> &str {
+    antlr4_runtime::Token::text(token).unwrap_or("")
+}
+if let Some(antlr4_runtime::ParseTree::Rule(rule)) = tree.first_rule(__TARGET_RULE__) {
+    let tokens = terminal_tokens(rule.context());
+    match tokens.as_slice() {
+        [first, second] => {
+            let list = tokens
+                .iter()
+                .map(|token| token_text(token).to_owned())
+                .collect::<Vec<_>>()
+                .join(", ");
+            println!("{} {} [{}]", token_text(first), token_text(second), list);
+        }
+        [token] => println!("{}", *token),
+        _ => {}
+    }
+}
+"#
+        }
+        ListenerKind::RuleGetter => {
+            r#"
+fn rule_children<'a>(
+    ctx: &'a antlr4_runtime::ParserRuleContext,
+    rule_index: usize,
+) -> Vec<&'a antlr4_runtime::ParserRuleContext> {
+    ctx.children()
+        .iter()
+        .filter_map(|child| match child {
+            antlr4_runtime::ParseTree::Rule(rule)
+                if rule.context().rule_index() == rule_index =>
+            {
+                Some(rule.context())
+            }
+            _ => None,
+        })
+        .collect()
+}
+fn start_text(ctx: &antlr4_runtime::ParserRuleContext) -> &str {
+    ctx.start().and_then(antlr4_runtime::Token::text).unwrap_or("")
+}
+let b_rule = METADATA
+    .rule_names()
+    .iter()
+    .position(|name| *name == "b")
+    .unwrap_or(usize::MAX);
+if let Some(antlr4_runtime::ParseTree::Rule(rule)) = tree.first_rule(__TARGET_RULE__) {
+    let rules = rule_children(rule.context(), b_rule);
+    match rules.as_slice() {
+        [first, second] => println!(
+            "{} {} {}",
+            start_text(first),
+            start_text(second),
+            start_text(first)
+        ),
+        [only] => println!("{}", start_text(only)),
+        _ => {}
+    }
+}
+"#
+        }
+        ListenerKind::LeftRecursive => {
+            r#"
+fn rule_children<'a>(
+    ctx: &'a antlr4_runtime::ParserRuleContext,
+    rule_index: usize,
+) -> Vec<&'a antlr4_runtime::ParserRuleContext> {
+    ctx.children()
+        .iter()
+        .filter_map(|child| match child {
+            antlr4_runtime::ParseTree::Rule(rule)
+                if rule.context().rule_index() == rule_index =>
+            {
+                Some(rule.context())
+            }
+            _ => None,
+        })
+        .collect()
+}
+fn start_text(ctx: &antlr4_runtime::ParserRuleContext) -> &str {
+    ctx.start().and_then(antlr4_runtime::Token::text).unwrap_or("")
+}
+fn first_terminal_text(ctx: &antlr4_runtime::ParserRuleContext) -> Option<&str> {
+    ctx.children().iter().find_map(|child| match child {
+        antlr4_runtime::ParseTree::Terminal(node) => antlr4_runtime::Token::text(node.symbol()),
+        antlr4_runtime::ParseTree::Error(node) => antlr4_runtime::Token::text(node.symbol()),
+        antlr4_runtime::ParseTree::Rule(_) => None,
+    })
+}
+fn walk_lr(node: &antlr4_runtime::ParseTree, e_rule: usize) {
+    if let antlr4_runtime::ParseTree::Rule(rule) = node {
+        for child in rule.context().children() {
+            walk_lr(child, e_rule);
+        }
+        let ctx = rule.context();
+        if ctx.rule_index() == e_rule {
+            if ctx.children().len() == 3 {
+                let rules = rule_children(ctx, e_rule);
+                if rules.len() >= 2 {
+                    println!(
+                        "{} {} {}",
+                        start_text(rules[0]),
+                        start_text(rules[1]),
+                        start_text(rules[0])
+                    );
+                }
+            } else if let Some(text) = first_terminal_text(ctx) {
+                println!("{text}");
+            }
+        }
+    }
+}
+let e_rule = METADATA
+    .rule_names()
+    .iter()
+    .position(|name| *name == "e")
+    .unwrap_or(usize::MAX);
+if let Some(node) = tree.first_rule(__TARGET_RULE__) {
+    walk_lr(node, e_rule);
+}
+"#
+        }
+        ListenerKind::LeftRecursiveWithLabels => {
+            r#"
+fn rule_children<'a>(
+    ctx: &'a antlr4_runtime::ParserRuleContext,
+    rule_index: usize,
+) -> Vec<&'a antlr4_runtime::ParserRuleContext> {
+    ctx.children()
+        .iter()
+        .filter_map(|child| match child {
+            antlr4_runtime::ParseTree::Rule(rule)
+                if rule.context().rule_index() == rule_index =>
+            {
+                Some(rule.context())
+            }
+            _ => None,
+        })
+        .collect()
+}
+fn first_rule_child(
+    ctx: &antlr4_runtime::ParserRuleContext,
+    rule_index: usize,
+) -> Option<&antlr4_runtime::ParserRuleContext> {
+    ctx.children().iter().find_map(|child| match child {
+        antlr4_runtime::ParseTree::Rule(rule) if rule.context().rule_index() == rule_index => {
+            Some(rule.context())
+        }
+        _ => None,
+    })
+}
+fn start_text(ctx: &antlr4_runtime::ParserRuleContext) -> &str {
+    ctx.start().and_then(antlr4_runtime::Token::text).unwrap_or("")
+}
+fn first_terminal_text(ctx: &antlr4_runtime::ParserRuleContext) -> Option<&str> {
+    ctx.children().iter().find_map(|child| match child {
+        antlr4_runtime::ParseTree::Terminal(node) => antlr4_runtime::Token::text(node.symbol()),
+        antlr4_runtime::ParseTree::Error(node) => antlr4_runtime::Token::text(node.symbol()),
+        antlr4_runtime::ParseTree::Rule(_) => None,
+    })
+}
+fn walk_lr_labels(node: &antlr4_runtime::ParseTree, e_rule: usize, e_list_rule: usize) {
+    if let antlr4_runtime::ParseTree::Rule(rule) = node {
+        for child in rule.context().children() {
+            walk_lr_labels(child, e_rule, e_list_rule);
+        }
+        let ctx = rule.context();
+        if ctx.rule_index() == e_rule {
+            if let Some(e_list_ctx) = first_rule_child(ctx, e_list_rule) {
+                let e_children = rule_children(ctx, e_rule);
+                let callee = e_children.first().map_or("", |child| start_text(child));
+                println!(
+                    "{} [{} {}]",
+                    callee,
+                    e_list_ctx.invoking_state(),
+                    ctx.invoking_state()
+                );
+            } else if let Some(text) = first_terminal_text(ctx) {
+                println!("{text}");
+            }
+        }
+    }
+}
+let e_rule = METADATA
+    .rule_names()
+    .iter()
+    .position(|name| *name == "e")
+    .unwrap_or(usize::MAX);
+let e_list_rule = METADATA
+    .rule_names()
+    .iter()
+    .position(|name| *name == "eList")
+    .unwrap_or(usize::MAX);
+if let Some(node) = tree.first_rule(__TARGET_RULE__) {
+    walk_lr_labels(node, e_rule, e_list_rule);
+}
+"#
+        }
+    };
+    render_with_target_rule(template, *rule_index)
+}
+
+/// Expands the target-rule placeholder without using `str::replace`, which is
+/// disallowed by the repository Clippy policy because it hides allocation.
+fn render_with_target_rule(template: &str, rule_index: usize) -> String {
+    const PLACEHOLDER: &str = "__TARGET_RULE__";
+    let rule_index = rule_index.to_string();
+    let mut out = String::with_capacity(template.len() + rule_index.len());
+    let mut rest = template;
+    while let Some(index) = rest.find(PLACEHOLDER) {
+        out.push_str(&rest[..index]);
+        out.push_str(&rule_index);
+        rest = &rest[index + PLACEHOLDER.len()..];
+    }
+    out.push_str(rest);
+    out
 }
 
 /// Renders static grammar metadata shared by generated lexers and parsers.

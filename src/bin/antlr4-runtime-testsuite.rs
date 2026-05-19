@@ -565,15 +565,14 @@ fn supported_init_action_templates(grammar: &str) -> bool {
 
 fn supported_after_action_templates(grammar: &str) -> bool {
     let mut saw_after_action = false;
-    let mut offset = 0;
-    while let Some(block) = next_template_block(grammar, offset) {
-        offset = block.after_brace;
-        if block.predicate || !is_after_action(grammar, block.open_brace) {
-            continue;
-        }
+    let listener_kind = listener_template_kind(grammar);
+    for block in named_action_templates(grammar, "@after") {
         saw_after_action = true;
         let body = block.body.trim();
-        if is_string_tree_label_template(body) {
+        if is_string_tree_label_template(body)
+            || is_context_member_string_tree_template(body)
+            || (listener_kind.is_some() && is_context_member_walk_listener_template(body))
+        {
             continue;
         }
         if !is_supported_action_template(body) {
@@ -672,6 +671,28 @@ fn unsupported_members_templates(grammar: &str) -> bool {
 fn is_supported_members_template(body: &str) -> bool {
     body == "DeclareContextListGettersFunction()"
         || (body.starts_with("InitBooleanMember(") && body.ends_with(",True())"))
+}
+
+fn listener_template_kind(grammar: &str) -> Option<&'static str> {
+    grammar
+        .lines()
+        .find_map(|line| listener_line_kind(line.trim()))
+}
+
+fn listener_line_kind(trimmed: &str) -> Option<&'static str> {
+    if trimmed.starts_with("<BasicListener(") {
+        Some("basic")
+    } else if trimmed.starts_with("<TokenGetterListener(") {
+        Some("token-getter")
+    } else if trimmed.starts_with("<RuleGetterListener(") {
+        Some("rule-getter")
+    } else if trimmed.starts_with("<LRListener(") {
+        Some("left-recursive")
+    } else if trimmed.starts_with("<LRWithLabelsListener(") {
+        Some("left-recursive-labels")
+    } else {
+        None
+    }
 }
 
 fn is_noop_action_template(body: &str) -> bool {
@@ -848,6 +869,37 @@ fn is_string_tree_label_template(body: &str) -> bool {
         .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
 }
 
+fn is_context_member_string_tree_template(body: &str) -> bool {
+    if let Some(arguments) = body
+        .strip_prefix("ContextMember(")
+        .and_then(|value| value.strip_suffix("):ToStringTree():writeln()"))
+        .or_else(|| {
+            body.strip_prefix("ContextMember(")
+                .and_then(|value| value.strip_suffix("):ToStringTree():write()"))
+        })
+    {
+        return context_member_label(arguments).is_some();
+    }
+    false
+}
+
+fn is_context_member_walk_listener_template(body: &str) -> bool {
+    body.strip_prefix("ContextMember(")
+        .and_then(|value| value.strip_suffix("):WalkListener()"))
+        .and_then(context_member_label)
+        .is_some()
+}
+
+/// Validates `ContextMember("$ctx", "label")` wrappers used by listener
+/// descriptors before the generator resolves the label to a rule reference.
+fn context_member_label(arguments: &str) -> Option<String> {
+    let arguments = split_template_arguments(arguments);
+    let [ctx, label] = arguments.as_slice() else {
+        return None;
+    };
+    (parse_template_string(ctx)? == "$ctx").then(|| parse_template_string(label))?
+}
+
 /// Runs one descriptor through ANTLR metadata generation, Rust code generation,
 /// a temporary Cargo crate, and process output capture.
 fn run_descriptor(args: &Args, descriptor: &Descriptor) -> io::Result<RunResult> {
@@ -901,9 +953,10 @@ fn run_descriptor(args: &Args, descriptor: &Descriptor) -> io::Result<RunResult>
 /// The original grammar is still passed to `antlr4-rust-gen`, which replays the
 /// supported templates from Rust after the ATN path has been selected.
 fn render_target_templates_for_metadata(grammar: &str) -> String {
+    let grammar = strip_named_action_template_body(grammar, "@after");
     let mut out = String::with_capacity(grammar.len());
     let mut offset = 0;
-    while let Some(block) = next_template_block(grammar, offset) {
+    while let Some(block) = next_template_block(&grammar, offset) {
         out.push_str(&grammar[offset..block.open_brace]);
         if block.predicate {
             out.push_str("{true}");
@@ -914,6 +967,32 @@ fn render_target_templates_for_metadata(grammar: &str) -> String {
     }
     out.push_str(&grammar[offset..]);
     strip_supported_preamble_templates(&strip_template_comments(&out))
+}
+
+/// Replaces target-template contents in named action blocks with an empty
+/// action so ANTLR can still emit metadata for the surrounding grammar.
+fn strip_named_action_template_body(grammar: &str, marker: &str) -> String {
+    let mut out = String::with_capacity(grammar.len());
+    let mut offset = 0;
+    while let Some(marker_start) = grammar[offset..].find(marker).map(|index| offset + index) {
+        let Some(open_brace) = grammar[marker_start..]
+            .find('{')
+            .map(|index| marker_start + index)
+        else {
+            break;
+        };
+        let Some(close_brace) = matching_action_brace(grammar, open_brace + 1) else {
+            break;
+        };
+        out.push_str(&grammar[offset..=open_brace]);
+        if !grammar[open_brace + 1..close_brace].contains('<') {
+            out.push_str(&grammar[open_brace + 1..close_brace]);
+        }
+        out.push('}');
+        offset = close_brace + 1;
+    }
+    out.push_str(&grammar[offset..]);
+    out
 }
 
 /// Removes upstream `StringTemplate` comments before handing grammar text to
@@ -944,6 +1023,8 @@ fn strip_supported_preamble_templates(grammar: &str) -> String {
             trimmed,
             "<ImportRuleInvocationStack()>" | "<ParserPropertyMember()>" | "@definitions {}"
         ) || trimmed.starts_with("<TreeNodeWithAltNumField(")
+            || trimmed.starts_with("<ImportListener(")
+            || listener_line_kind(trimmed).is_some()
         {
             continue;
         }
@@ -959,6 +1040,52 @@ struct TemplateBlock<'a> {
     body: &'a str,
     after_brace: usize,
     predicate: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct NamedActionTemplate<'a> {
+    open_brace: usize,
+    body: &'a str,
+}
+
+/// Finds all target templates inside a rule-level named action body, including
+/// multi-template blocks such as the listener-suite `@after` actions.
+fn named_action_templates<'a>(source: &'a str, marker: &str) -> Vec<NamedActionTemplate<'a>> {
+    let mut templates = Vec::new();
+    let mut offset = 0;
+    while let Some(marker_start) = source[offset..].find(marker).map(|index| offset + index) {
+        let Some(open_brace) = source[marker_start..]
+            .find('{')
+            .map(|index| marker_start + index)
+        else {
+            break;
+        };
+        let Some(close_brace) = matching_action_brace(source, open_brace + 1) else {
+            break;
+        };
+        let mut cursor = open_brace + 1;
+        while cursor < close_brace {
+            let Some(open_angle) = source[cursor..close_brace]
+                .find('<')
+                .map(|index| cursor + index)
+            else {
+                break;
+            };
+            let Some(close_angle) = matching_template_close(source, open_angle + 1) else {
+                break;
+            };
+            if close_angle > close_brace {
+                break;
+            }
+            templates.push(NamedActionTemplate {
+                open_brace,
+                body: &source[open_angle + 1..close_angle],
+            });
+            cursor = close_angle + 1;
+        }
+        offset = close_brace + 1;
+    }
+    templates
 }
 
 /// Finds the next target-template block while allowing whitespace inside the
@@ -985,6 +1112,31 @@ fn next_template_block(source: &str, offset: usize) -> Option<TemplateBlock<'_>>
             after_brace,
             predicate: source[after_brace..].trim_start().starts_with('?'),
         });
+    }
+    None
+}
+
+/// Finds the closing brace for a named ANTLR action block while ignoring braces
+/// inside string literals.
+fn matching_action_brace(source: &str, mut index: usize) -> Option<usize> {
+    let mut nested = 0_usize;
+    let mut quoted = false;
+    let mut escaped = false;
+    while let Some(ch) = source[index..].chars().next() {
+        if escaped {
+            escaped = false;
+            index += ch.len_utf8();
+            continue;
+        }
+        match ch {
+            '\\' if quoted => escaped = true,
+            '"' => quoted = !quoted,
+            '{' if !quoted => nested += 1,
+            '}' if !quoted && nested == 0 => return Some(index),
+            '}' if !quoted => nested = nested.saturating_sub(1),
+            _ => {}
+        }
+        index += ch.len_utf8();
     }
     None
 }
