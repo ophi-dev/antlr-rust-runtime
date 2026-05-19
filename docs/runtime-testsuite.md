@@ -80,6 +80,8 @@ Supported now:
 - lexer accept-position adjustment for the upstream `PositionAdjustingLexer`
   target template,
 - parser `@init {<BuildParseTrees()>}` and `notBuildParseTree` descriptors,
+- parser `predictionMode=LL` descriptors where the default Rust parser behavior
+  already matches LL prediction,
 - parser rule-level `@after {<ToStringTree("$label.ctx")>}` actions for simple
   rule labels,
 - parser semantic predicates for `LANotEquals(...)` and `LTEquals(...)`
@@ -125,14 +127,14 @@ Not wired yet:
   and no-op compile checks,
 - parser error recovery diagnostics beyond the currently supported mismatch,
   no-viable, extraneous-input, and token recovery cases,
-- runtime diagnostic/profile/DFA flags.
+- runtime diagnostic/profile/DFA flags and non-default prediction modes.
 
 The harness reports unsupported descriptors as skipped and treats output mismatches
 as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `327 passed, 0 failed, 30 skipped, 327 run`
+- full descriptor sweep: `328 passed, 0 failed, 29 skipped, 328 run`
 - `CompositeLexers`: `2 passed, 0 failed, 0 skipped, 2 run`
 - `CompositeParsers`: `15 passed, 0 failed, 0 skipped, 15 run`
 - `LexerExec`: `42 passed, 0 failed, 0 skipped, 42 run`
@@ -140,7 +142,7 @@ Current validated groups:
 - `LeftRecursion`: `97 passed, 0 failed, 1 skipped, 97 run`
 - `Listeners`: `7 passed, 0 failed, 0 skipped, 7 run`
 - `ParseTrees`: `10 passed, 0 failed, 0 skipped, 10 run`
-- `ParserExec`: `48 passed, 0 failed, 2 skipped, 48 run`
+- `ParserExec`: `49 passed, 0 failed, 1 skipped, 49 run`
 - `ParserErrors`: `34 passed, 0 failed, 0 skipped, 34 run`
 - `Performance`: `7 passed, 0 failed, 0 skipped, 7 run`
 - `SemPredEvalLexer`: `2 passed, 0 failed, 6 skipped, 2 run`

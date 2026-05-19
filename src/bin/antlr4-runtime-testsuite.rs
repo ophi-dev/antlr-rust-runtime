@@ -434,7 +434,7 @@ fn unsupported_reason(descriptor: &Descriptor) -> Option<&'static str> {
     if descriptor.is_composite() && !composite_grammar_supported(descriptor) {
         return Some("composite grammar shape is not wired into the metadata harness yet");
     }
-    if !descriptor.flags.is_empty() && descriptor.flags.trim() != "notBuildParseTree" {
+    if !descriptor.flags.is_empty() && !runtime_flags_supported(descriptor.flags.trim()) {
         return Some("diagnostic/profile/DFA flags are not implemented in the Rust harness yet");
     }
     let grammar = combined_grammar_source(descriptor);
@@ -460,6 +460,12 @@ fn unsupported_reason(descriptor: &Descriptor) -> Option<&'static str> {
         return Some("descriptor type is not supported by the metadata harness yet");
     }
     None
+}
+
+/// Identifies descriptor runtime flags whose behavior is already represented by
+/// the current Rust harness without extra setup.
+fn runtime_flags_supported(flags: &str) -> bool {
+    matches!(flags, "notBuildParseTree" | "predictionMode=LL")
 }
 
 /// Whitelists composite descriptors whose import and action shapes are modeled by
