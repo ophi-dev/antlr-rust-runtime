@@ -1067,7 +1067,7 @@ where
                                 FastRecoveryRequest {
                                     atn,
                                     transition,
-                                    expected_symbols,
+                                    expected_symbols: expected_symbols.clone(),
                                     target: *target,
                                     request: FastRecognizeRequest {
                                         state_number,
@@ -1544,6 +1544,7 @@ where
                             continue;
                         }
                         expected.record_transition(index, transition, atn.max_token_type());
+                        let before_recovery = outcomes.len();
                         outcomes.extend(self.single_token_deletion_recovery(RecoveryRequest {
                             atn,
                             transition,
@@ -1571,7 +1572,7 @@ where
                                 RecoveryRequest {
                                     atn,
                                     transition,
-                                    expected_symbols,
+                                    expected_symbols: expected_symbols.clone(),
                                     target: *target,
                                     request: RecognizeRequest {
                                         state_number,
@@ -1591,6 +1592,54 @@ where
                                     expected,
                                 },
                             ));
+                        }
+                        // If neither deletion nor insertion can continue, ANTLR
+                        // still consumes the offending token as an error node so
+                        // parse-tree output retains the unexpected input.
+                        if outcomes.len() == before_recovery
+                            && symbol != TOKEN_EOF
+                            && !expected_symbols.is_empty()
+                        {
+                            let diagnostic = diagnostic_for_token(
+                                self.token_at(index).as_ref(),
+                                format!(
+                                    "mismatched input {} expecting {}",
+                                    self.token_at(index)
+                                        .as_ref()
+                                        .map_or_else(|| "'<EOF>'".to_owned(), token_input_display),
+                                    self.expected_symbols_display(&expected_symbols)
+                                ),
+                            );
+                            let next_index = self.consume_index(index, symbol);
+                            outcomes.extend(
+                                self.recognize_state(
+                                    atn,
+                                    RecognizeRequest {
+                                        state_number: *target,
+                                        stop_state,
+                                        index: next_index,
+                                        rule_start_index,
+                                        init_action_rules,
+                                        predicates,
+                                        rule_alt_number,
+                                        track_alt_numbers,
+                                        precedence,
+                                        depth: depth + 1,
+                                        recovery_symbols: BTreeSet::new(),
+                                    },
+                                    visiting,
+                                    memo,
+                                    expected,
+                                )
+                                .into_iter()
+                                .map(|mut outcome| {
+                                    outcome.diagnostics.insert(0, diagnostic.clone());
+                                    outcome
+                                        .nodes
+                                        .insert(0, RecognizedNode::ErrorToken { index });
+                                    outcome
+                                }),
+                            );
                         }
                     }
                 }

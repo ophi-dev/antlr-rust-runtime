@@ -454,6 +454,7 @@ fn parser_error_diagnostics_supported(descriptor: &Descriptor) -> bool {
             | "ExtraTokensAndAltLabels"
             | "ExtraneousInput"
             | "InvalidEmptyInput"
+            | "NoViableAlt"
             | "SingleSetInsertion"
             | "SingleSetInsertionConsumption"
             | "SingleTokenDeletion"
