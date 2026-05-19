@@ -1004,6 +1004,7 @@ fn extract_supported_action_templates(grammar_source: &str) -> io::Result<Vec<Ac
                     || is_init_action(grammar_source, block.open_brace)
                     || is_definitions_action(grammar_source, block.open_brace)
                     || is_members_action(grammar_source, block.open_brace)
+                    || is_options_block(grammar_source, block.open_brace)
                 {
                     continue;
                 }
@@ -1296,6 +1297,12 @@ fn is_members_action(source: &str, open_brace: usize) -> bool {
 
 fn is_definitions_action(source: &str, open_brace: usize) -> bool {
     source[..open_brace].trim_end().ends_with("@definitions")
+}
+
+/// ANTLR `options { ... }` blocks are grammar metadata, not semantic actions,
+/// even though their braces look like empty action transitions to a text scan.
+fn is_options_block(source: &str, open_brace: usize) -> bool {
+    source[..open_brace].trim_end().ends_with("options")
 }
 
 fn uses_alt_number_contexts(source: &str) -> bool {

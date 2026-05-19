@@ -1,5 +1,6 @@
 #![allow(clippy::print_stderr, clippy::print_stdout)]
 
+use std::collections::BTreeSet;
 use std::env;
 use std::ffi::OsStr;
 use std::fs;
@@ -182,6 +183,21 @@ struct Descriptor {
 impl Descriptor {
     fn id(&self) -> String {
         format!("{}/{}", self.group, self.name)
+    }
+
+    fn is_parser(&self) -> bool {
+        matches!(self.test_type.as_str(), "Parser" | "CompositeParser")
+    }
+
+    fn is_lexer(&self) -> bool {
+        matches!(self.test_type.as_str(), "Lexer" | "CompositeLexer")
+    }
+
+    fn is_composite(&self) -> bool {
+        matches!(
+            self.test_type.as_str(),
+            "CompositeParser" | "CompositeLexer"
+        )
     }
 }
 
@@ -412,18 +428,22 @@ fn grammar_name(grammar: &str) -> io::Result<String> {
 /// Classifies descriptors that the current metadata-first harness cannot run
 /// yet while keeping them visible in summaries.
 fn unsupported_reason(descriptor: &Descriptor) -> Option<&'static str> {
-    if !descriptor.slave_grammars.is_empty() {
+    if !descriptor.slave_grammars.is_empty() && !descriptor.is_composite() {
         return Some("composite grammars are not wired into the metadata harness yet");
+    }
+    if descriptor.is_composite() && !composite_grammar_supported(descriptor) {
+        return Some("composite grammar shape is not wired into the metadata harness yet");
     }
     if !descriptor.flags.is_empty() && descriptor.flags.trim() != "notBuildParseTree" {
         return Some("diagnostic/profile/DFA flags are not implemented in the Rust harness yet");
     }
-    if has_target_template(&descriptor.grammar) && !target_templates_supported(descriptor) {
+    let grammar = combined_grammar_source(descriptor);
+    if has_target_template(&grammar) && !target_templates_supported(descriptor, &grammar) {
         return Some("target-template semantic actions are not rendered by this harness yet");
     }
-    if descriptor.test_type == "Parser" {
+    if descriptor.is_parser() {
         if !descriptor.output.is_empty() {
-            if !target_templates_supported(descriptor) {
+            if !target_templates_supported(descriptor, &grammar) {
                 return Some(
                     "parser target actions/listeners are not wired into the Rust harness yet",
                 );
@@ -436,10 +456,29 @@ fn unsupported_reason(descriptor: &Descriptor) -> Option<&'static str> {
         }
         return None;
     }
-    if descriptor.test_type != "Lexer" {
+    if !descriptor.is_lexer() {
         return Some("descriptor type is not supported by the metadata harness yet");
     }
     None
+}
+
+/// Whitelists composite descriptors whose import and action shapes are modeled by
+/// the current metadata harness.
+fn composite_grammar_supported(descriptor: &Descriptor) -> bool {
+    matches!(
+        descriptor.id().as_str(),
+        "CompositeLexers/LexerDelegatorInvokesDelegateRule"
+            | "CompositeParsers/BringInLiteralsFromDelegate"
+            | "CompositeParsers/CombinedImportsCombined"
+            | "CompositeParsers/DelegatesSeeSameTokenType"
+            | "CompositeParsers/DelegatorInvokesDelegateRule"
+            | "CompositeParsers/DelegatorInvokesDelegateRuleWithArgs"
+            | "CompositeParsers/DelegatorInvokesDelegateRuleWithReturnStruct"
+            | "CompositeParsers/DelegatorRuleOverridesDelegate"
+            | "CompositeParsers/DelegatorRuleOverridesLookaheadInDelegate"
+            | "CompositeParsers/ImportedGrammarWithEmptyOptions"
+            | "CompositeParsers/ImportLexerWithOnlyFragmentRules"
+    )
 }
 
 /// Admits only parser-error descriptors covered by the current mismatch and
@@ -486,6 +525,86 @@ fn parser_error_diagnostics_supported(descriptor: &Descriptor) -> bool {
     )
 }
 
+/// Builds the grammar text passed to the Rust generator for action extraction.
+///
+/// ANTLR's metadata output for imported grammars is flattened into the delegator
+/// `.interp` file, so action templates from imported rules must be visible to the
+/// Rust generator as well. Delegates are ordered by the delegator's `import`
+/// clause so rule overrides pick the same first definition ANTLR keeps.
+fn combined_grammar_source(descriptor: &Descriptor) -> String {
+    let mut out = String::new();
+    let mut seen = BTreeSet::new();
+    push_grammar_source(&mut out, &descriptor.grammar);
+    append_imported_grammar_sources(&descriptor.grammar, descriptor, &mut seen, &mut out);
+    for grammar in &descriptor.slave_grammars {
+        if let Ok(name) = grammar_name(grammar) {
+            if seen.insert(name) {
+                push_grammar_source(&mut out, grammar);
+            }
+        }
+    }
+    out
+}
+
+fn append_imported_grammar_sources(
+    grammar: &str,
+    descriptor: &Descriptor,
+    seen: &mut BTreeSet<String>,
+    out: &mut String,
+) {
+    for import in imported_grammar_names(grammar) {
+        if !seen.insert(import.clone()) {
+            continue;
+        }
+        let Some(slave) = slave_grammar_by_name(descriptor, &import) else {
+            continue;
+        };
+        push_grammar_source(out, slave);
+        append_imported_grammar_sources(slave, descriptor, seen, out);
+    }
+}
+
+fn slave_grammar_by_name<'a>(descriptor: &'a Descriptor, name: &str) -> Option<&'a str> {
+    descriptor.slave_grammars.iter().find_map(|grammar| {
+        grammar_name(grammar)
+            .ok()
+            .filter(|grammar_name| grammar_name == name)
+            .map(|_| grammar.as_str())
+    })
+}
+
+fn push_grammar_source(out: &mut String, grammar: &str) {
+    if !out.is_empty() && !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out.push_str(grammar);
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+}
+
+/// Extracts direct `import A, B;` dependencies from a grammar header.
+fn imported_grammar_names(grammar: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    for line in grammar.lines() {
+        let line = line.split("//").next().unwrap_or_default().trim();
+        let Some(imports) = line
+            .strip_prefix("import ")
+            .and_then(|value| value.strip_suffix(';'))
+        else {
+            continue;
+        };
+        names.extend(
+            imports
+                .split(',')
+                .map(str::trim)
+                .filter(|name| !name.is_empty())
+                .map(ToOwned::to_owned),
+        );
+    }
+    names
+}
+
 fn has_target_template(grammar: &str) -> bool {
     next_template_block(grammar, 0).is_some()
         || grammar.contains("{<")
@@ -499,14 +618,13 @@ fn has_target_template(grammar: &str) -> bool {
         || grammar.contains("@definitions")
 }
 
-fn target_templates_supported(descriptor: &Descriptor) -> bool {
-    if descriptor.test_type == "Lexer" {
-        return lexer_target_templates_supported(descriptor);
+fn target_templates_supported(descriptor: &Descriptor, grammar: &str) -> bool {
+    if descriptor.is_lexer() {
+        return lexer_target_templates_supported(descriptor, grammar);
     }
-    if descriptor.test_type != "Parser" {
+    if !descriptor.is_parser() {
         return false;
     }
-    let grammar = &descriptor.grammar;
     if unsupported_members_templates(grammar)
         || grammar.contains("@definitions")
         || !supported_signature_templates(grammar)
@@ -522,8 +640,7 @@ fn target_templates_supported(descriptor: &Descriptor) -> bool {
     supported_action_templates(grammar)
 }
 
-fn lexer_target_templates_supported(descriptor: &Descriptor) -> bool {
-    let grammar = &descriptor.grammar;
+fn lexer_target_templates_supported(descriptor: &Descriptor, grammar: &str) -> bool {
     if descriptor.name == "PositionAdjustingLexer" {
         return grammar.contains("<PositionAdjustingLexer")
             && supported_lexer_predicate_templates(grammar)
@@ -547,6 +664,7 @@ fn supported_action_templates(grammar: &str) -> bool {
             || is_init_action(grammar, block.open_brace)
             || is_definitions_action(grammar, block.open_brace)
             || is_members_action(grammar, block.open_brace)
+            || is_options_block(grammar, block.open_brace)
         {
             continue;
         }
@@ -990,12 +1108,13 @@ fn run_descriptor(args: &Args, descriptor: &Descriptor) -> io::Result<RunResult>
     fs::create_dir_all(&case_dir)?;
 
     let source_grammar_path = case_dir.join(format!("{}.source.g4", descriptor.grammar_name));
-    fs::write(&source_grammar_path, &descriptor.grammar)?;
+    fs::write(&source_grammar_path, combined_grammar_source(descriptor))?;
     let grammar_path = case_dir.join(format!("{}.g4", descriptor.grammar_name));
     fs::write(
         &grammar_path,
         render_target_templates_for_metadata(&descriptor.grammar),
     )?;
+    write_slave_grammars(&case_dir, descriptor)?;
 
     let java_dir = case_dir.join("antlr");
     fs::create_dir_all(&java_dir)?;
@@ -1025,6 +1144,16 @@ fn run_descriptor(args: &Args, descriptor: &Descriptor) -> io::Result<RunResult>
         output: String::from_utf8_lossy(&output.stdout).into_owned(),
         errors: String::from_utf8_lossy(&output.stderr).into_owned(),
     })
+}
+
+/// Writes imported grammars next to the delegator grammar before invoking ANTLR,
+/// matching the file layout expected by ANTLR's import resolver.
+fn write_slave_grammars(case_dir: &Path, descriptor: &Descriptor) -> io::Result<()> {
+    for grammar in &descriptor.slave_grammars {
+        let grammar_path = case_dir.join(format!("{}.g4", grammar_name(grammar)?));
+        fs::write(grammar_path, render_target_templates_for_metadata(grammar))?;
+    }
+    Ok(())
 }
 
 /// Replaces target-template actions with neutral ANTLR actions before invoking
@@ -1323,6 +1452,12 @@ fn is_definitions_action(source: &str, open_brace: usize) -> bool {
     source[..open_brace].trim_end().ends_with("@definitions")
 }
 
+/// ANTLR `options { ... }` blocks configure grammar generation and should not
+/// be mistaken for parser action blocks by the harness scanner.
+fn is_options_block(source: &str, open_brace: usize) -> bool {
+    source[..open_brace].trim_end().ends_with("options")
+}
+
 /// Runs `antlr4-rust-gen` for either a lexer descriptor or a combined parser
 /// descriptor.
 fn generate_rust_modules(
@@ -1344,7 +1479,7 @@ fn generate_rust_modules(
         .arg("--bin")
         .arg("antlr4-rust-gen")
         .arg("--");
-    if descriptor.test_type == "Parser" {
+    if descriptor.is_parser() {
         command
             .arg("--lexer")
             .arg(java_dir.join(format!("{}Lexer.interp", descriptor.grammar_name)))
@@ -1391,7 +1526,7 @@ fn create_smoke_crate(
     smoke_dir: &Path,
 ) -> io::Result<()> {
     fs::create_dir_all(smoke_dir.join("src/generated"))?;
-    if descriptor.test_type == "Parser" {
+    if descriptor.is_parser() {
         copy_generated_module(
             smoke_dir,
             rust_dir,
@@ -1435,7 +1570,7 @@ fn smoke_cargo_toml(runtime_crate: &Path) -> String {
 /// Lexer descriptors print every buffered token. Parser descriptors invoke the
 /// start rule and print parser diagnostics in ANTLR's console-listener shape.
 fn smoke_main(descriptor: &Descriptor) -> String {
-    if descriptor.test_type == "Parser" {
+    if descriptor.is_parser() {
         return parser_smoke_main(descriptor);
     }
     let module_name = module_name(&descriptor.grammar_name);

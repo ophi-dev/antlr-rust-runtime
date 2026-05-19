@@ -119,7 +119,8 @@ Supported now:
 
 Not wired yet:
 
-- composite grammars,
+- composite grammar override/member/mixed-action shapes beyond the currently
+  supported import metadata cases,
 - target-template semantic actions beyond the currently supported stdout helpers
   and no-op compile checks,
 - parser error recovery diagnostics beyond the currently supported mismatch,
@@ -131,7 +132,9 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `310 passed, 0 failed, 47 skipped, 310 run`
+- full descriptor sweep: `319 passed, 0 failed, 38 skipped, 319 run`
+- `CompositeLexers`: `1 passed, 0 failed, 1 skipped, 1 run`
+- `CompositeParsers`: `8 passed, 0 failed, 7 skipped, 8 run`
 - `LexerExec`: `42 passed, 0 failed, 0 skipped, 42 run`
 - `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
 - `LeftRecursion`: `97 passed, 0 failed, 1 skipped, 97 run`
@@ -144,5 +147,6 @@ Current validated groups:
 - `SemPredEvalParser`: `20 passed, 0 failed, 6 skipped, 20 run`
 - `Sets`: `31 passed, 0 failed, 0 skipped, 31 run`
 
-The remaining skips are now dominated by composite grammars, diagnostic/profile
-flags, and parser recovery diagnostics beyond the currently modeled cases.
+The remaining skips are now dominated by diagnostic/profile flags, remaining
+composite grammar shapes, and parser recovery diagnostics beyond the currently
+modeled cases.
