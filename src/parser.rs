@@ -162,6 +162,24 @@ pub struct ParserMemberAction {
     pub delta: i64,
 }
 
+/// Integer return-value assignment attached to an ATN action transition.
+///
+/// Generated parsers use this metadata when target actions assign a simple
+/// return field such as `$y=1000;`. The interpreter applies it while selecting
+/// the recognized path so the finished parse tree can answer later
+/// `$label.y` action templates.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct ParserReturnAction {
+    /// ATN state containing the action transition.
+    pub source_state: usize,
+    /// Rule index recorded by the serialized action transition.
+    pub rule_index: usize,
+    /// Return-field name as it appears in the grammar.
+    pub name: &'static str,
+    /// Literal integer value assigned by the action.
+    pub value: i64,
+}
+
 /// Optional generated-runtime metadata for metadata-driven parser execution.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ParserRuntimeOptions<'a> {
@@ -175,6 +193,8 @@ pub struct ParserRuntimeOptions<'a> {
     pub rule_args: &'a [ParserRuleArg],
     /// Integer member mutations keyed by ATN action source state.
     pub member_actions: &'a [ParserMemberAction],
+    /// Integer return assignments keyed by ATN action source state.
+    pub return_actions: &'a [ParserReturnAction],
 }
 
 pub trait Parser: Recognizer {
@@ -200,6 +220,7 @@ struct RecognizeOutcome {
     consumed_eof: bool,
     alt_number: usize,
     member_values: BTreeMap<usize, i64>,
+    return_values: BTreeMap<String, i64>,
     diagnostics: Vec<ParserDiagnostic>,
     decisions: Vec<usize>,
     actions: Vec<ParserAction>,
@@ -225,6 +246,7 @@ enum RecognizedNode {
         alt_number: usize,
         start_index: usize,
         stop_index: Option<usize>,
+        return_values: BTreeMap<String, i64>,
         children: Vec<Self>,
     },
     LeftRecursiveBoundary {
@@ -401,6 +423,23 @@ fn member_values_after_action(
     values
 }
 
+/// Returns the speculative rule-return state after replaying one ATN action.
+fn return_values_after_action(
+    source_state: usize,
+    rule_index: usize,
+    actions: &[ParserReturnAction],
+    values: &BTreeMap<String, i64>,
+) -> BTreeMap<String, i64> {
+    let mut values = values.clone();
+    for action in actions
+        .iter()
+        .filter(|action| action.source_state == source_state && action.rule_index == rule_index)
+    {
+        values.insert(action.name.to_owned(), action.value);
+    }
+    values
+}
+
 /// Resolves the integer argument visible to a child rule invocation.
 fn rule_local_int_arg(
     rule_args: &[ParserRuleArg],
@@ -427,12 +466,14 @@ fn stop_outcome(
     index: usize,
     rule_alt_number: usize,
     member_values: BTreeMap<usize, i64>,
+    return_values: BTreeMap<String, i64>,
 ) -> Vec<RecognizeOutcome> {
     vec![RecognizeOutcome {
         index,
         consumed_eof: false,
         alt_number: rule_alt_number,
         member_values,
+        return_values,
         diagnostics: Vec::new(),
         decisions: Vec::new(),
         actions: Vec::new(),
@@ -451,8 +492,10 @@ struct RecognizeRequest<'a> {
     predicates: &'a [(usize, usize, ParserPredicate)],
     rule_args: &'a [ParserRuleArg],
     member_actions: &'a [ParserMemberAction],
+    return_actions: &'a [ParserReturnAction],
     local_int_arg: Option<(usize, i64)>,
     member_values: BTreeMap<usize, i64>,
+    return_values: BTreeMap<String, i64>,
     rule_alt_number: usize,
     track_alt_numbers: bool,
     /// Current left-recursive precedence threshold, matching ANTLR's
@@ -472,11 +515,31 @@ struct RecognizeKey {
     decision_start_index: Option<usize>,
     local_int_arg: Option<(usize, i64)>,
     member_values: BTreeMap<usize, i64>,
+    return_values: BTreeMap<String, i64>,
     rule_alt_number: usize,
     track_alt_numbers: bool,
     precedence: i32,
     recovery_symbols: BTreeSet<i32>,
     recovery_state: Option<usize>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct EpsilonActionStep {
+    source_state: usize,
+    target: usize,
+    action_rule_index: Option<usize>,
+    left_recursive_boundary: Option<usize>,
+    decision: Option<usize>,
+    decision_start_index: Option<usize>,
+    alt_number: usize,
+    recovery_symbols: BTreeSet<i32>,
+    recovery_state: Option<usize>,
+}
+
+struct RecognizeScratch<'a> {
+    visiting: &'a mut BTreeSet<RecognizeKey>,
+    memo: &'a mut BTreeMap<RecognizeKey, Vec<RecognizeOutcome>>,
+    expected: &'a mut ExpectedTokens,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -790,6 +853,7 @@ where
             predicates,
             rule_args,
             member_actions,
+            return_actions,
         } = options;
         let start_state = atn
             .rule_to_start_state()
@@ -813,6 +877,7 @@ where
         let mut memo = BTreeMap::new();
         let mut expected = ExpectedTokens::default();
         let member_values = self.int_members.clone();
+        let return_values = BTreeMap::new();
         let outcomes = self.recognize_state(
             atn,
             RecognizeRequest {
@@ -825,8 +890,10 @@ where
                 predicates,
                 rule_args,
                 member_actions,
+                return_actions,
                 local_int_arg: None,
                 member_values,
+                return_values,
                 rule_alt_number: 0,
                 track_alt_numbers,
                 precedence: 0,
@@ -856,6 +923,9 @@ where
         let mut context = ParserRuleContext::new(rule_index, self.state());
         if track_alt_numbers {
             context.set_alt_number(outcome.alt_number);
+        }
+        for (name, value) in outcome.return_values {
+            context.set_int_return(name, value);
         }
         if let Some(token) = self.token_at(start_index) {
             context.set_start(token);
@@ -1553,8 +1623,10 @@ where
             predicates,
             rule_args,
             member_actions,
+            return_actions,
             local_int_arg,
             member_values,
+            return_values,
             rule_alt_number,
             track_alt_numbers,
             precedence,
@@ -1579,8 +1651,10 @@ where
                 predicates,
                 rule_args,
                 member_actions,
+                return_actions,
                 local_int_arg,
                 member_values,
+                return_values,
                 rule_alt_number,
                 track_alt_numbers,
                 precedence,
@@ -1673,8 +1747,10 @@ where
             predicates,
             rule_args,
             member_actions,
+            return_actions,
             local_int_arg,
             member_values,
+            return_values,
             rule_alt_number,
             track_alt_numbers,
             precedence,
@@ -1703,8 +1779,10 @@ where
                 predicates,
                 rule_args,
                 member_actions,
+                return_actions,
                 local_int_arg,
                 member_values,
+                return_values,
                 rule_alt_number,
                 track_alt_numbers,
                 precedence,
@@ -1753,8 +1831,10 @@ where
             predicates,
             rule_args,
             member_actions,
+            return_actions,
             local_int_arg,
             member_values,
+            return_values,
             rule_alt_number,
             track_alt_numbers,
             precedence,
@@ -1766,7 +1846,7 @@ where
             return Vec::new();
         }
         if state_number == stop_state {
-            return stop_outcome(index, rule_alt_number, member_values);
+            return stop_outcome(index, rule_alt_number, member_values, return_values);
         }
         let key = RecognizeKey {
             state_number,
@@ -1776,6 +1856,7 @@ where
             decision_start_index,
             local_int_arg,
             member_values: member_values.clone(),
+            return_values: return_values.clone(),
             rule_alt_number,
             track_alt_numbers,
             precedence,
@@ -1809,62 +1890,30 @@ where
                 next_alt_number(state, transition_index, rule_alt_number, track_alt_numbers);
             match transition {
                 Transition::Epsilon { target } | Transition::Action { target, .. } => {
-                    let left_recursive_boundary = left_recursive_boundary(atn, state, *target);
-                    let action = match transition {
-                        Transition::Action { rule_index, .. } => Some(ParserAction::new(
-                            state_number,
-                            *rule_index,
-                            rule_start_index,
-                            self.previous_token_index(index),
-                        )),
+                    let action_rule_index = match transition {
+                        Transition::Action { rule_index, .. } => Some(*rule_index),
                         _ => None,
                     };
-                    let next_member_values = if action.is_some() {
-                        member_values_after_action(state_number, member_actions, &member_values)
-                    } else {
-                        member_values.clone()
-                    };
-                    outcomes.extend(
-                        self.recognize_state(
-                            atn,
-                            RecognizeRequest {
-                                state_number: *target,
-                                stop_state,
-                                index,
-                                rule_start_index,
-                                decision_start_index: next_decision_start_index,
-                                init_action_rules,
-                                predicates,
-                                rule_args,
-                                member_actions,
-                                local_int_arg,
-                                member_values: next_member_values,
-                                rule_alt_number: next_alt_number,
-                                track_alt_numbers,
-                                precedence,
-                                depth: depth + 1,
-                                recovery_symbols: epsilon_recovery_symbols.clone(),
-                                recovery_state: epsilon_recovery_state,
-                            },
+                    outcomes.extend(self.recognize_epsilon_or_action_step(
+                        atn,
+                        &request_template,
+                        EpsilonActionStep {
+                            source_state: state_number,
+                            target: *target,
+                            action_rule_index,
+                            left_recursive_boundary: left_recursive_boundary(atn, state, *target),
+                            decision,
+                            decision_start_index: next_decision_start_index,
+                            alt_number: next_alt_number,
+                            recovery_symbols: epsilon_recovery_symbols.clone(),
+                            recovery_state: epsilon_recovery_state,
+                        },
+                        RecognizeScratch {
                             visiting,
                             memo,
                             expected,
-                        )
-                        .into_iter()
-                        .map(|mut outcome| {
-                            prepend_decision(&mut outcome, decision);
-                            if let Some(rule_index) = left_recursive_boundary {
-                                outcome.nodes.insert(
-                                    0,
-                                    RecognizedNode::LeftRecursiveBoundary { rule_index },
-                                );
-                            }
-                            if let Some(action) = action {
-                                outcome.actions.insert(0, action);
-                            }
-                            outcome
-                        }),
-                    );
+                        },
+                    ));
                 }
                 Transition::Predicate {
                     target,
@@ -1894,8 +1943,10 @@ where
                                     predicates,
                                     rule_args,
                                     member_actions,
+                                    return_actions,
                                     local_int_arg,
                                     member_values: member_values.clone(),
+                                    return_values: return_values.clone(),
                                     rule_alt_number: next_alt_number,
                                     track_alt_numbers,
                                     precedence,
@@ -1941,8 +1992,10 @@ where
                                     predicates,
                                     rule_args,
                                     member_actions,
+                                    return_actions,
                                     local_int_arg,
                                     member_values: member_values.clone(),
+                                    return_values: return_values.clone(),
                                     rule_alt_number: next_alt_number,
                                     track_alt_numbers,
                                     precedence,
@@ -1988,8 +2041,10 @@ where
                             predicates,
                             rule_args,
                             member_actions,
+                            return_actions,
                             local_int_arg: child_local_int_arg,
                             member_values: member_values.clone(),
+                            return_values: BTreeMap::new(),
                             rule_alt_number: 0,
                             track_alt_numbers,
                             precedence: *rule_precedence,
@@ -2009,6 +2064,7 @@ where
                             alt_number: child.alt_number,
                             start_index: index,
                             stop_index: self.previous_token_index(child.index),
+                            return_values: child.return_values.clone(),
                             children: fold_left_recursive_boundaries(child.nodes.clone()),
                         };
                         outcomes.extend(
@@ -2024,8 +2080,10 @@ where
                                     predicates,
                                     rule_args,
                                     member_actions,
+                                    return_actions,
                                     local_int_arg,
                                     member_values: child.member_values.clone(),
+                                    return_values: return_values.clone(),
                                     rule_alt_number,
                                     track_alt_numbers,
                                     precedence,
@@ -2087,8 +2145,10 @@ where
                                     predicates,
                                     rule_args,
                                     member_actions,
+                                    return_actions,
                                     local_int_arg,
                                     member_values: member_values.clone(),
+                                    return_values: return_values.clone(),
                                     rule_alt_number: next_alt_number,
                                     track_alt_numbers,
                                     precedence,
@@ -2188,8 +2248,10 @@ where
                                         predicates,
                                         rule_args,
                                         member_actions,
+                                        return_actions,
                                         local_int_arg,
                                         member_values: member_values.clone(),
+                                        return_values: return_values.clone(),
                                         rule_alt_number,
                                         track_alt_numbers,
                                         precedence,
@@ -2222,6 +2284,92 @@ where
         dedupe_outcomes(&mut outcomes);
         memo.insert(key, outcomes.clone());
         outcomes
+    }
+
+    /// Follows an epsilon or semantic-action transition while preserving the
+    /// path-local side effects that may later become generated action output.
+    fn recognize_epsilon_or_action_step(
+        &mut self,
+        atn: &Atn,
+        request: &RecognizeRequest<'_>,
+        step: EpsilonActionStep,
+        scratch: RecognizeScratch<'_>,
+    ) -> Vec<RecognizeOutcome> {
+        let RecognizeScratch {
+            visiting,
+            memo,
+            expected,
+        } = scratch;
+        let action = step.action_rule_index.map(|rule_index| {
+            ParserAction::new(
+                step.source_state,
+                rule_index,
+                request.rule_start_index,
+                self.previous_token_index(request.index),
+            )
+        });
+        let next_member_values = if action.is_some() {
+            member_values_after_action(
+                step.source_state,
+                request.member_actions,
+                &request.member_values,
+            )
+        } else {
+            request.member_values.clone()
+        };
+        let next_return_values = action.map_or_else(
+            || request.return_values.clone(),
+            |action| {
+                return_values_after_action(
+                    step.source_state,
+                    action.rule_index(),
+                    request.return_actions,
+                    &request.return_values,
+                )
+            },
+        );
+
+        self.recognize_state(
+            atn,
+            RecognizeRequest {
+                state_number: step.target,
+                stop_state: request.stop_state,
+                index: request.index,
+                rule_start_index: request.rule_start_index,
+                decision_start_index: step.decision_start_index,
+                init_action_rules: request.init_action_rules,
+                predicates: request.predicates,
+                rule_args: request.rule_args,
+                member_actions: request.member_actions,
+                return_actions: request.return_actions,
+                local_int_arg: request.local_int_arg,
+                member_values: next_member_values,
+                return_values: next_return_values,
+                rule_alt_number: step.alt_number,
+                track_alt_numbers: request.track_alt_numbers,
+                precedence: request.precedence,
+                depth: request.depth + 1,
+                recovery_symbols: step.recovery_symbols,
+                recovery_state: step.recovery_state,
+            },
+            visiting,
+            memo,
+            expected,
+        )
+        .into_iter()
+        .map(|mut outcome| {
+            prepend_decision(&mut outcome, step.decision);
+            if let Some(rule_index) = step.left_recursive_boundary {
+                outcome
+                    .nodes
+                    .insert(0, RecognizedNode::LeftRecursiveBoundary { rule_index });
+            }
+            if let Some(action) = action {
+                outcome.actions.insert(0, action);
+            }
+            outcome
+        })
+        .collect()
     }
 
     /// Reads the token type at an absolute token-stream index.
@@ -2425,11 +2573,15 @@ where
                 alt_number,
                 start_index,
                 stop_index,
+                return_values,
                 children,
             } => {
                 let mut context = ParserRuleContext::new(*rule_index, *invoking_state);
                 if track_alt_numbers {
                     context.set_alt_number(*alt_number);
+                }
+                for (name, value) in return_values {
+                    context.set_int_return(name.clone(), *value);
                 }
                 if let Some(token) = self.token_at(*start_index) {
                     context.set_start(token);
@@ -2508,6 +2660,7 @@ fn fold_left_recursive_boundaries(nodes: Vec<RecognizedNode>) -> Vec<RecognizedN
                         alt_number: 0,
                         start_index,
                         stop_index,
+                        return_values: BTreeMap::new(),
                         children,
                     });
                 }
@@ -3053,6 +3206,7 @@ mod tests {
                     alt_number: 0,
                     start_index: 0,
                     stop_index: Some(0),
+                    return_values: BTreeMap::new(),
                     children: vec![RecognizedNode::Token { index: 0 }],
                 },
                 RecognizedNode::Token { index: 1 },
@@ -3067,6 +3221,7 @@ mod tests {
             consumed_eof: false,
             alt_number: 0,
             member_values: BTreeMap::new(),
+            return_values: BTreeMap::new(),
             diagnostics: Vec::new(),
             decisions: Vec::new(),
             actions: vec![ParserAction::new(1, 0, 0, None)],
@@ -3089,6 +3244,7 @@ mod tests {
             consumed_eof: false,
             alt_number: 0,
             member_values: BTreeMap::new(),
+            return_values: BTreeMap::new(),
             diagnostics: Vec::new(),
             decisions: Vec::new(),
             actions: vec![ParserAction::new(1, 0, 0, None)],
@@ -3114,6 +3270,7 @@ mod tests {
             consumed_eof: false,
             alt_number: 0,
             member_values: BTreeMap::new(),
+            return_values: BTreeMap::new(),
             diagnostics: Vec::new(),
             decisions: vec![1, 0],
             actions: vec![
@@ -3144,12 +3301,14 @@ mod tests {
             alt_number: 0,
             start_index: 0,
             stop_index: Some(0),
+            return_values: BTreeMap::new(),
             children: vec![RecognizedNode::Rule {
                 rule_index: 1,
                 invoking_state: -1,
                 alt_number: 0,
                 start_index: 0,
                 stop_index: Some(0),
+                return_values: BTreeMap::new(),
                 children: vec![RecognizedNode::Token { index: 0 }],
             }],
         }];
@@ -3158,6 +3317,7 @@ mod tests {
             consumed_eof: false,
             alt_number: 0,
             member_values: BTreeMap::new(),
+            return_values: BTreeMap::new(),
             diagnostics: Vec::new(),
             decisions: Vec::new(),
             actions: vec![ParserAction::new(1, 0, 0, None)],
@@ -3168,6 +3328,7 @@ mod tests {
             consumed_eof: false,
             alt_number: 0,
             member_values: BTreeMap::new(),
+            return_values: BTreeMap::new(),
             diagnostics: Vec::new(),
             decisions: Vec::new(),
             actions: vec![ParserAction::new(2, 0, 0, None)],

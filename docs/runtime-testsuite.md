@@ -132,9 +132,9 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `325 passed, 0 failed, 32 skipped, 325 run`
+- full descriptor sweep: `326 passed, 0 failed, 31 skipped, 326 run`
 - `CompositeLexers`: `1 passed, 0 failed, 1 skipped, 1 run`
-- `CompositeParsers`: `14 passed, 0 failed, 1 skipped, 14 run`
+- `CompositeParsers`: `15 passed, 0 failed, 0 skipped, 15 run`
 - `LexerExec`: `42 passed, 0 failed, 0 skipped, 42 run`
 - `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
 - `LeftRecursion`: `97 passed, 0 failed, 1 skipped, 97 run`
@@ -147,6 +147,6 @@ Current validated groups:
 - `SemPredEvalParser`: `20 passed, 0 failed, 6 skipped, 20 run`
 - `Sets`: `31 passed, 0 failed, 0 skipped, 31 run`
 
-The remaining skips are now dominated by diagnostic/profile flags, remaining
-composite grammar shapes, and parser recovery diagnostics beyond the currently
-modeled cases.
+The remaining skips are now dominated by diagnostic/profile flags, the remaining
+composite lexer override shape, and parser recovery diagnostics beyond the
+currently modeled cases.

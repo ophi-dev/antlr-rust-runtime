@@ -673,11 +673,17 @@ fn supported_action_templates(grammar: &str) -> bool {
         {
             continue;
         }
-        if !block.body.trim().is_empty() && !is_supported_action_template_sequence(block.body) {
+        if !is_supported_action_block(block.body) {
             return false;
         }
     }
     true
+}
+
+fn is_supported_action_block(body: &str) -> bool {
+    body.trim().is_empty()
+        || is_supported_action_template_sequence(body)
+        || is_int_return_assignment(body)
 }
 
 /// Allows upstream parser setup actions that are either implemented directly by
@@ -921,7 +927,21 @@ fn is_rule_value_template(body: &str) -> bool {
     let Some((rule_name, value_name)) = argument.split_once('.') else {
         return false;
     };
-    is_antlr_identifier(rule_name) && matches!(value_name, "v" | "result")
+    is_antlr_identifier(rule_name) && is_antlr_identifier(value_name) && value_name != "text"
+}
+
+/// Recognizes simple raw return assignments that ANTLR lowers to action
+/// transitions and the Rust generator captures as rule-context return slots.
+fn is_int_return_assignment(body: &str) -> bool {
+    let body = body.trim();
+    let Some((name, value)) = body
+        .strip_prefix('$')
+        .and_then(|body| body.strip_suffix(';'))
+        .and_then(|body| body.split_once('='))
+    else {
+        return false;
+    };
+    is_antlr_identifier(name.trim()) && value.trim().parse::<i64>().is_ok()
 }
 
 /// Mirrors the generator's `AppendStr` subset: a literal prefix plus either the
@@ -1342,7 +1362,10 @@ fn next_parser_action_block(source: &str, offset: usize) -> Option<TemplateBlock
         let open_brace = cursor + open_rel;
         let close_brace = matching_action_brace(source, open_brace + 1)?;
         let body = &source[open_brace + 1..close_brace];
-        if body.trim().is_empty() || template_sequence_bodies(body).is_some() {
+        if body.trim().is_empty()
+            || template_sequence_bodies(body).is_some()
+            || is_int_return_assignment(body)
+        {
             let after_brace = close_brace + 1;
             return Some(TemplateBlock {
                 open_brace,

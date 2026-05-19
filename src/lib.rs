@@ -22,8 +22,8 @@ pub use generated::{GeneratedLexer, GeneratedParser, GrammarMetadata};
 pub use int_stream::{EOF, IntStream, UNKNOWN_SOURCE_NAME};
 pub use lexer::{BaseLexer, Lexer, LexerCustomAction, LexerMode, LexerPredicate};
 pub use parser::{
-    BaseParser, Parser, ParserAction, ParserMemberAction, ParserPredicate, ParserRuleArg,
-    ParserRuntimeOptions,
+    BaseParser, Parser, ParserAction, ParserMemberAction, ParserPredicate, ParserReturnAction,
+    ParserRuleArg, ParserRuntimeOptions,
 };
 pub use prediction::{AtnConfig, AtnConfigSet, PredictionContext};
 pub use recognizer::{Recognizer, RecognizerData};

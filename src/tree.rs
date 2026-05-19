@@ -1,5 +1,6 @@
 use crate::errors::AntlrError;
 use crate::token::{CommonToken, Token};
+use std::collections::BTreeMap;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ParseTree {
@@ -53,6 +54,22 @@ impl ParseTree {
             .children()
             .iter()
             .find_map(|child| child.first_rule_stop(rule_index))
+    }
+
+    /// Reads an integer return value from the first rule node with
+    /// `rule_index`, matching ANTLR's `$label.value` resolution for labeled
+    /// rule references in the runtime testsuite.
+    pub fn first_rule_int_return(&self, rule_index: usize, name: &str) -> Option<i64> {
+        let Self::Rule(rule) = self else {
+            return None;
+        };
+        if rule.context().rule_index() == rule_index {
+            return rule.context().int_return(name);
+        }
+        rule.context()
+            .children()
+            .iter()
+            .find_map(|child| child.first_rule_int_return(rule_index, name))
     }
 
     /// Finds the first recovery error token in a depth-first walk.
@@ -160,9 +177,13 @@ pub struct ParserRuleContext {
     alt_number: usize,
     start: Option<CommonToken>,
     stop: Option<CommonToken>,
+    int_returns: Option<Box<IntReturns>>,
     children: Vec<ParseTree>,
     exception: Option<AntlrError>,
 }
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct IntReturns(BTreeMap<String, i64>);
 
 impl ParserRuleContext {
     pub const fn new(rule_index: usize, invoking_state: isize) -> Self {
@@ -172,6 +193,7 @@ impl ParserRuleContext {
             alt_number: 0,
             start: None,
             stop: None,
+            int_returns: None,
             children: Vec::new(),
             exception: None,
         }
@@ -207,6 +229,21 @@ impl ParserRuleContext {
 
     pub fn set_stop(&mut self, token: CommonToken) {
         self.stop = Some(token);
+    }
+
+    /// Stores a generated integer return value on this rule context.
+    pub fn set_int_return(&mut self, name: impl Into<String>, value: i64) {
+        self.int_returns
+            .get_or_insert_with(Box::default)
+            .0
+            .insert(name.into(), value);
+    }
+
+    /// Reads a generated integer return value from this rule context.
+    pub fn int_return(&self, name: &str) -> Option<i64> {
+        self.int_returns
+            .as_ref()
+            .and_then(|values| values.0.get(name).copied())
     }
 
     pub const fn exception(&self) -> Option<&AntlrError> {

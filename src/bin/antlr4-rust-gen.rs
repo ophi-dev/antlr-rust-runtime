@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fmt::Write as _;
 use std::fs;
@@ -433,9 +433,11 @@ fn render_parser(
         grammar_source.map_or_else(|| Ok(Vec::new()), |grammar| parser_rule_args(data, grammar))?;
     let int_members = grammar_source.map_or_else(Vec::new, parser_int_members);
     let member_actions = parser_member_actions(&actions, &int_members)?;
+    let return_actions = parser_return_actions(&actions);
     let has_init_actions = init_actions.iter().any(Option::is_some);
     let has_action_dispatch = !actions.is_empty() || has_init_actions;
     let has_predicate_dispatch = !predicates.is_empty();
+    let has_return_actions = !return_actions.is_empty();
     let track_alt_numbers = grammar_source.is_some_and(uses_alt_number_contexts);
     let init_action_rules = init_actions
         .iter()
@@ -451,6 +453,7 @@ fn render_parser(
         let needs_slow_path = has_action_dispatch
             || track_alt_numbers
             || has_predicate_dispatch
+            || has_return_actions
             || after_action.iter().any(ActionTemplate::needs_nested_tree);
         writeln!(
             rule_methods,
@@ -473,14 +476,15 @@ fn render_parser(
             .expect("writing to a string cannot fail");
         } else {
             if needs_slow_path {
-                if has_predicate_dispatch {
+                if has_predicate_dispatch || has_return_actions {
                     writeln!(
                         rule_methods,
-                        "        let (tree, actions) = self.base.parse_atn_rule_with_runtime_options(atn(), {index}, antlr4_runtime::ParserRuntimeOptions {{ init_action_rules: &{}, track_alt_numbers: {track_alt_numbers}, predicates: &{}, rule_args: &{}, member_actions: &{} }})?;",
+                        "        let (tree, actions) = self.base.parse_atn_rule_with_runtime_options(atn(), {index}, antlr4_runtime::ParserRuntimeOptions {{ init_action_rules: &{}, track_alt_numbers: {track_alt_numbers}, predicates: &{}, rule_args: &{}, member_actions: &{}, return_actions: &{} }})?;",
                         render_usize_array(&init_action_rules),
                         render_parser_predicate_array(&predicates, data, &int_members)?,
                         render_parser_rule_arg_array(&rule_args),
-                        render_parser_member_action_array(&member_actions)
+                        render_parser_member_action_array(&member_actions),
+                        render_parser_return_action_array(&return_actions, data)?
                     )
                     .expect("writing to a string cannot fail");
                 } else if track_alt_numbers {
@@ -658,6 +662,15 @@ enum ActionTemplate {
         kind: RuleValueKind,
         newline: bool,
     },
+    RuleReturnValue {
+        rule_name: String,
+        value_name: String,
+        newline: bool,
+    },
+    SetIntReturn {
+        name: String,
+        value: i64,
+    },
     TokenText {
         source: TokenTextSource,
         newline: bool,
@@ -713,6 +726,7 @@ impl ActionTemplate {
                 | Self::RuleInvocationStack { .. }
                 | Self::ListenerWalk { .. }
                 | Self::RuleValue { .. }
+                | Self::RuleReturnValue { .. }
         ) || matches!(self, Self::Sequence(actions) if actions.iter().any(Self::needs_nested_tree))
     }
 }
@@ -1051,18 +1065,17 @@ fn extract_supported_action_templates_filtered(
                 {
                     continue;
                 }
-                let template = if block.body.trim().is_empty() {
-                    ActionTemplate::Noop
-                } else {
-                    let Some(template) = parse_action_template_sequence(block.body) else {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            format!("unsupported target action template <{}>", block.body),
-                        ));
-                    };
-                    template
+                let Some(template) = parse_action_block_template(block.body) else {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("unsupported target action template <{}>", block.body),
+                    ));
                 };
-                templates.push(template);
+                templates.push(resolve_action_template_labels(
+                    template,
+                    grammar_source,
+                    block.open_brace,
+                ));
             }
             (None, Some(signature)) => {
                 offset = signature.after_template;
@@ -1235,7 +1248,10 @@ fn next_parser_action_block(source: &str, offset: usize) -> Option<TemplateBlock
         let open_brace = cursor + open_rel;
         let close_brace = matching_action_brace(source, open_brace + 1)?;
         let body = &source[open_brace + 1..close_brace];
-        if body.trim().is_empty() || template_sequence_bodies(body).is_some() {
+        if body.trim().is_empty()
+            || template_sequence_bodies(body).is_some()
+            || parse_int_return_assignment(body).is_some()
+        {
             let after_brace = close_brace + 1;
             return Some(TemplateBlock {
                 open_brace,
@@ -1532,6 +1548,38 @@ fn resolve_after_action_template(
     Ok(rebuild.into_action(rule_index))
 }
 
+/// Resolves `$label.return` action templates against `label=rule` occurrences
+/// in the owning rule before generated code loses source-level labels.
+fn resolve_action_template_labels(
+    template: ActionTemplate,
+    source: &str,
+    open_brace: usize,
+) -> ActionTemplate {
+    match template {
+        ActionTemplate::RuleReturnValue {
+            rule_name,
+            value_name,
+            newline,
+        } => {
+            let resolved = labeled_rule_name(source, open_brace, &rule_name)
+                .unwrap_or(&rule_name)
+                .to_owned();
+            ActionTemplate::RuleReturnValue {
+                rule_name: resolved,
+                value_name,
+                newline,
+            }
+        }
+        ActionTemplate::Sequence(actions) => ActionTemplate::Sequence(
+            actions
+                .into_iter()
+                .map(|action| resolve_action_template_labels(action, source, open_brace))
+                .collect(),
+        ),
+        other => other,
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ResolvedAfterAction {
     StringTree { newline: bool },
@@ -1580,6 +1628,13 @@ fn labeled_rule_name<'a>(source: &'a str, open_brace: usize, label: &str) -> Opt
 
 /// Converts the subset of upstream `StringTemplate` actions the Rust generator
 /// can replay today into concrete output actions.
+fn parse_action_block_template(body: &str) -> Option<ActionTemplate> {
+    if body.trim().is_empty() {
+        return Some(ActionTemplate::Noop);
+    }
+    parse_action_template_sequence(body).or_else(|| parse_int_return_assignment(body))
+}
+
 fn parse_action_template_sequence(body: &str) -> Option<ActionTemplate> {
     let parts = template_sequence_bodies(body)?;
     let mut actions = Vec::with_capacity(parts.len());
@@ -1969,15 +2024,42 @@ fn parse_rule_value(body: &str) -> Option<ActionTemplate> {
     };
     let value = parse_template_string(argument)?;
     let (rule_name, value_name) = value.strip_prefix('$')?.split_once('.')?;
-    let kind = match value_name {
-        "v" => RuleValueKind::Int,
-        "result" => RuleValueKind::String,
-        _ => return None,
-    };
-    is_antlr_identifier(rule_name).then(|| ActionTemplate::RuleValue {
-        rule_name: rule_name.to_owned(),
-        kind,
-        newline,
+    if !is_antlr_identifier(rule_name) || !is_antlr_identifier(value_name) {
+        return None;
+    }
+    match value_name {
+        "v" => Some(ActionTemplate::RuleValue {
+            rule_name: rule_name.to_owned(),
+            kind: RuleValueKind::Int,
+            newline,
+        }),
+        "result" => Some(ActionTemplate::RuleValue {
+            rule_name: rule_name.to_owned(),
+            kind: RuleValueKind::String,
+            newline,
+        }),
+        "text" => None,
+        _ => Some(ActionTemplate::RuleReturnValue {
+            rule_name: rule_name.to_owned(),
+            value_name: value_name.to_owned(),
+            newline,
+        }),
+    }
+}
+
+/// Parses simple raw return assignments such as `$y=1000;` into metadata that
+/// the runtime can attach to the selected rule context.
+fn parse_int_return_assignment(body: &str) -> Option<ActionTemplate> {
+    let (name, value) = body
+        .trim()
+        .strip_prefix('$')?
+        .strip_suffix(';')?
+        .split_once('=')?;
+    let name = name.trim();
+    let value = value.trim().parse::<i64>().ok()?;
+    is_antlr_identifier(name).then(|| ActionTemplate::SetIntReturn {
+        name: name.to_owned(),
+        value,
     })
 }
 
@@ -2215,6 +2297,22 @@ fn parser_action_states(data: &InterpData) -> io::Result<Vec<usize>> {
     Ok(states)
 }
 
+/// Reads the parser ATN action transitions keyed by source state.
+fn parser_action_state_rules(data: &InterpData) -> io::Result<BTreeMap<usize, usize>> {
+    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(data.atn.clone()))
+        .deserialize()
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    let mut states = BTreeMap::new();
+    for state in atn.states() {
+        for transition in &state.transitions {
+            if let Transition::Action { rule_index, .. } = transition {
+                states.insert(state.state_number, *rule_index);
+            }
+        }
+    }
+    Ok(states)
+}
+
 /// Pairs supported rule-call arguments from grammar source with the ATN
 /// rule-transition source states that carry those calls at runtime.
 ///
@@ -2331,6 +2429,48 @@ fn parser_member_actions(
     Ok(member_actions)
 }
 
+/// Maps generated return assignments to ATN action states so the interpreter
+/// can attach them to the selected rule context during recognition.
+fn parser_return_actions(actions: &[(usize, ActionTemplate)]) -> Vec<(usize, String, i64)> {
+    let mut return_actions = Vec::new();
+    for (source_state, action) in actions {
+        collect_return_actions(*source_state, action, &mut return_actions);
+    }
+    return_actions
+}
+
+fn collect_return_actions(
+    source_state: usize,
+    action: &ActionTemplate,
+    out: &mut Vec<(usize, String, i64)>,
+) {
+    match action {
+        ActionTemplate::SetIntReturn { name, value } => {
+            out.push((source_state, name.clone(), *value));
+        }
+        ActionTemplate::Sequence(actions) => {
+            for action in actions {
+                collect_return_actions(source_state, action, out);
+            }
+        }
+        ActionTemplate::Noop
+        | ActionTemplate::Text { .. }
+        | ActionTemplate::TextWithPrefix { .. }
+        | ActionTemplate::StringTree { .. }
+        | ActionTemplate::RuleInvocationStack { .. }
+        | ActionTemplate::ListenerWalk { .. }
+        | ActionTemplate::RuleValue { .. }
+        | ActionTemplate::RuleReturnValue { .. }
+        | ActionTemplate::TokenText { .. }
+        | ActionTemplate::TokenTextWithPrefix { .. }
+        | ActionTemplate::TokenDisplay { .. }
+        | ActionTemplate::ExpectedTokenNames { .. }
+        | ActionTemplate::Literal { .. }
+        | ActionTemplate::AddMember { .. }
+        | ActionTemplate::MemberValue { .. } => {}
+    }
+}
+
 fn collect_member_actions(
     source_state: usize,
     action: &ActionTemplate,
@@ -2354,6 +2494,8 @@ fn collect_member_actions(
         | ActionTemplate::RuleInvocationStack { .. }
         | ActionTemplate::ListenerWalk { .. }
         | ActionTemplate::RuleValue { .. }
+        | ActionTemplate::RuleReturnValue { .. }
+        | ActionTemplate::SetIntReturn { .. }
         | ActionTemplate::TokenText { .. }
         | ActionTemplate::TokenTextWithPrefix { .. }
         | ActionTemplate::TokenDisplay { .. }
@@ -2474,6 +2616,8 @@ fn render_lexer_action_statement(template: &ActionTemplate) -> String {
         ActionTemplate::RuleInvocationStack { .. } => String::new(),
         ActionTemplate::ListenerWalk { .. } => String::new(),
         ActionTemplate::RuleValue { .. } => String::new(),
+        ActionTemplate::RuleReturnValue { .. } => String::new(),
+        ActionTemplate::SetIntReturn { .. } => String::new(),
         ActionTemplate::AddMember { .. } => String::new(),
         ActionTemplate::MemberValue { .. } => String::new(),
         ActionTemplate::Sequence(actions) => actions
@@ -2656,6 +2800,17 @@ fn render_action_statement(
             let write = if *newline { "println!" } else { "print!" };
             Ok(render_rule_value_write(write, "_tree", rule_name, *kind))
         }
+        ActionTemplate::RuleReturnValue {
+            rule_name,
+            value_name,
+            newline,
+        } => {
+            let write = if *newline { "println!" } else { "print!" };
+            Ok(render_rule_return_value_write(
+                write, "_tree", rule_name, value_name,
+            ))
+        }
+        ActionTemplate::SetIntReturn { .. } => Ok(String::new()),
         ActionTemplate::Literal { value, newline } => {
             let write = if *newline { "println!" } else { "print!" };
             Ok(format!("{write}(\"{}\");", rust_string(value)))
@@ -2755,11 +2910,21 @@ fn render_parser_after_action_statement(template: &ActionTemplate, rule_index: u
             let write = if *newline { "println!" } else { "print!" };
             render_rule_value_write(write, "tree", rule_name, *kind)
         }
+        ActionTemplate::RuleReturnValue {
+            rule_name,
+            value_name,
+            newline,
+        } => {
+            let write = if *newline { "println!" } else { "print!" };
+            render_rule_return_value_write(write, "tree", rule_name, value_name)
+        }
         ActionTemplate::Literal { value, newline } => {
             let write = if *newline { "println!" } else { "print!" };
             format!("{write}(\"{}\");", rust_string(value))
         }
-        ActionTemplate::AddMember { .. } | ActionTemplate::MemberValue { .. } => String::new(),
+        ActionTemplate::SetIntReturn { .. }
+        | ActionTemplate::AddMember { .. }
+        | ActionTemplate::MemberValue { .. } => String::new(),
         ActionTemplate::Sequence(actions) => actions
             .iter()
             .map(|action| render_parser_after_action_statement(action, rule_index))
@@ -2840,6 +3005,21 @@ fn render_string_tree_write(write: &str, tree_expr: &str, target: &StringTreeTar
         ),
         StringTreeTarget::Label(_) => String::new(),
     }
+}
+
+/// Emits a rule-return print helper backed by return slots captured on the
+/// generated parse tree during metadata-driven recognition.
+fn render_rule_return_value_write(
+    write: &str,
+    tree_expr: &str,
+    rule_name: &str,
+    value_name: &str,
+) -> String {
+    let rule_name = rust_string(rule_name);
+    let value_name = rust_string(value_name);
+    format!(
+        "let text = METADATA.rule_names().iter().position(|name| *name == \"{rule_name}\").and_then(|rule_index| {tree_expr}.first_rule_int_return(rule_index, \"{value_name}\")).map_or_else(String::new, |value| value.to_string()); {write}(\"{{}}\", text);"
+    )
 }
 
 /// Emits a return-value print helper for the left-recursion descriptors by
@@ -3406,6 +3586,31 @@ fn render_parser_member_action_array(args: &[(usize, usize, i64)]) -> String {
     format!("[{items}]")
 }
 
+/// Renders parser return-assignment metadata keyed by ATN action state.
+fn render_parser_return_action_array(
+    args: &[(usize, String, i64)],
+    data: &InterpData,
+) -> io::Result<String> {
+    if args.is_empty() {
+        return Ok("[]".to_owned());
+    }
+    let action_rules = parser_action_state_rules(data)?;
+    let mut items = Vec::new();
+    for (source_state, name, value) in args {
+        let rule_index = action_rules.get(source_state).copied().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("return assignment has no action transition at state {source_state}"),
+            )
+        })?;
+        items.push(format!(
+            "antlr4_runtime::ParserReturnAction {{ source_state: {source_state}, rule_index: {rule_index}, name: \"{}\", value: {value} }}",
+            rust_string(name)
+        ));
+    }
+    Ok(format!("[{}]", items.join(", ")))
+}
+
 /// Renders the generated parser base construction and member initialization.
 fn render_parser_base_initialization(members: &[IntMemberTemplate]) -> String {
     let mut out = if members.is_empty() {
@@ -3721,6 +3926,31 @@ continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#,
                 kind: RuleValueKind::String,
                 newline: true,
             } if rule_name == "e"
+        ));
+    }
+
+    #[test]
+    fn parses_rule_return_assignment_and_label_read() {
+        assert!(matches!(
+            parse_action_block_template("$y=1000;"),
+            Some(ActionTemplate::SetIntReturn { name, value }) if name == "y" && value == 1000
+        ));
+
+        let template = parse_action_template(r#"writeln("$label.y")"#)
+            .expect("rule return print helper should parse");
+        let resolved = resolve_action_template_labels(
+            template,
+            "s : label=a[3] {<writeln(\"$label.y\")>} ;",
+            15,
+        );
+
+        assert!(matches!(
+            resolved,
+            ActionTemplate::RuleReturnValue {
+                rule_name,
+                value_name,
+                newline: true,
+            } if rule_name == "a" && value_name == "y"
         ));
     }
 
