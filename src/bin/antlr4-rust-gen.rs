@@ -391,6 +391,9 @@ where
     fn line(&self) -> usize {{ self.base.line() }}
     fn column(&self) -> usize {{ self.base.column() }}
     fn source_name(&self) -> &str {{ self.base.source_name() }}
+    fn drain_errors(&mut self) -> Vec<antlr4_runtime::token::TokenSourceError> {{
+        self.base.drain_errors()
+    }}
 }}
 "#
     ))

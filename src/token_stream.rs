@@ -1,5 +1,5 @@
 use crate::int_stream::{EOF, IntStream, UNKNOWN_SOURCE_NAME};
-use crate::token::{CommonToken, DEFAULT_CHANNEL, TOKEN_EOF, Token, TokenSource};
+use crate::token::{CommonToken, DEFAULT_CHANNEL, TOKEN_EOF, Token, TokenSource, TokenSourceError};
 
 #[derive(Debug)]
 pub struct CommonTokenStream<S> {
@@ -8,6 +8,7 @@ pub struct CommonTokenStream<S> {
     cursor: usize,
     fetched_eof: bool,
     channel: i32,
+    source_errors: Vec<TokenSourceError>,
 }
 
 impl<S> CommonTokenStream<S>
@@ -27,6 +28,7 @@ where
             cursor: 0,
             fetched_eof: false,
             channel,
+            source_errors: Vec::new(),
         }
     }
 
@@ -110,6 +112,7 @@ where
 
     fn fetch_one(&mut self) {
         let mut token = self.source.next_token();
+        self.source_errors.extend(self.source.drain_errors());
         let token_index = isize::try_from(self.tokens.len()).unwrap_or(isize::MAX);
         token.set_token_index(token_index);
         self.fetched_eof = token.token_type() == TOKEN_EOF;
@@ -218,6 +221,12 @@ where
             .filter_map(Token::text)
             .collect::<Vec<_>>()
             .join("")
+    }
+
+    /// Returns and clears diagnostics emitted by the underlying token source
+    /// while this stream was fetching tokens.
+    pub fn drain_source_errors(&mut self) -> Vec<TokenSourceError> {
+        std::mem::take(&mut self.source_errors)
     }
 }
 

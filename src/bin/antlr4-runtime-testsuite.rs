@@ -463,6 +463,8 @@ fn parser_error_diagnostics_supported(descriptor: &Descriptor) -> bool {
             | "SingleSetInsertionConsumption"
             | "SingleTokenDeletion"
             | "SingleTokenDeletionBeforeAlt"
+            | "SingleTokenDeletionBeforeLoop"
+            | "SingleTokenDeletionBeforeLoop2"
             | "SingleTokenDeletionBeforePredict"
             | "SingleTokenDeletionConsumption"
             | "SingleTokenDeletionDuringLoop"
@@ -1431,7 +1433,7 @@ fn smoke_main(descriptor: &Descriptor) -> String {
     let module_name = module_name(&descriptor.grammar_name);
     let type_name = rust_type_name(&descriptor.grammar_name);
     format!(
-        "pub mod generated {{\n    pub mod {module_name};\n}}\n\nuse antlr4_runtime::{{CommonTokenStream, InputStream}};\nuse generated::{module_name}::{type_name};\n\nfn main() {{\n    let lexer = {type_name}::new(InputStream::new(\"{}\"));\n    let mut tokens = CommonTokenStream::new(lexer);\n    tokens.fill();\n    for token in tokens.tokens() {{\n        println!(\"{{token}}\");\n    }}\n}}\n",
+        "pub mod generated {{\n    pub mod {module_name};\n}}\n\nuse antlr4_runtime::{{CommonTokenStream, InputStream}};\nuse generated::{module_name}::{type_name};\n\nfn main() {{\n    let lexer = {type_name}::new(InputStream::new(\"{}\"));\n    let mut tokens = CommonTokenStream::new(lexer);\n    tokens.fill();\n    for error in tokens.drain_source_errors() {{\n        eprintln!(\"line {{}}:{{}} {{}}\", error.line, error.column, error.message);\n    }}\n    for token in tokens.tokens() {{\n        println!(\"{{token}}\");\n    }}\n}}\n",
         rust_string(&descriptor.input)
     )
 }

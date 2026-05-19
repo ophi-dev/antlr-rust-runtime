@@ -158,7 +158,7 @@ where
                     lexer.set_hit_eof(true);
                     return lexer.eof_token();
                 }
-                report_token_recognition_error(lexer, start, stop);
+                record_token_recognition_error(lexer, start, stop);
                 while lexer.input().index() < stop {
                     lexer.consume_char();
                 }
@@ -519,21 +519,18 @@ fn set_config_state(atn: &Atn, config: &mut LexerConfig, state_number: usize) {
     }
 }
 
-/// Reports and skips a single unmatchable character using ANTLR's default lexer
-/// diagnostic text.
-#[allow(clippy::print_stderr)]
-fn report_token_recognition_error<I, F>(lexer: &BaseLexer<I, F>, start: usize, stop: usize)
+/// Buffers ANTLR's default diagnostic for one unmatchable input span.
+fn record_token_recognition_error<I, F>(lexer: &mut BaseLexer<I, F>, start: usize, stop: usize)
 where
     I: CharStream,
     F: TokenFactory,
 {
     let stop = stop.saturating_sub(1);
     let text = display_error_text(&lexer.input().text(TextInterval::new(start, stop)));
-    eprintln!(
-        "line {}:{} token recognition error at: '{}'",
+    lexer.record_error(
         lexer.line(),
         lexer.column(),
-        text
+        format!("token recognition error at: '{text}'"),
     );
 }
 

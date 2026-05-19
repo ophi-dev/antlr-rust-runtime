@@ -4,7 +4,7 @@ use crate::atn::{Atn, AtnState, AtnStateKind, Transition};
 use crate::errors::AntlrError;
 use crate::int_stream::IntStream;
 use crate::recognizer::{Recognizer, RecognizerData};
-use crate::token::{CommonToken, TOKEN_EOF, Token, TokenSource};
+use crate::token::{CommonToken, TOKEN_EOF, Token, TokenSource, TokenSourceError};
 use crate::token_stream::CommonTokenStream;
 use crate::tree::{ErrorNode, ParseTree, ParserRuleContext, RuleNode, TerminalNode};
 use crate::vocabulary::Vocabulary;
@@ -668,6 +668,7 @@ where
         };
 
         report_parser_diagnostics(&outcome.diagnostics);
+        report_token_source_errors(&self.input.drain_source_errors());
         let mut context = ParserRuleContext::new(rule_index, self.state());
         if let Some(token) = self.token_at(start_index) {
             context.set_start(token);
@@ -816,6 +817,7 @@ where
         };
 
         report_parser_diagnostics(&outcome.diagnostics);
+        report_token_source_errors(&self.input.drain_source_errors());
         let mut actions = outcome.actions;
         if init_action_rules.contains(&rule_index) {
             actions.insert(
@@ -2427,6 +2429,15 @@ fn report_parser_diagnostics(diagnostics: &[ParserDiagnostic]) {
             "line {}:{} {}",
             diagnostic.line, diagnostic.column, diagnostic.message
         );
+    }
+}
+
+/// Emits buffered token-source diagnostics after parser diagnostics that were
+/// discovered while speculatively reading the same token stream.
+#[allow(clippy::print_stderr)]
+fn report_token_source_errors(errors: &[TokenSourceError]) {
+    for error in errors {
+        eprintln!("line {}:{} {}", error.line, error.column, error.message);
     }
 }
 

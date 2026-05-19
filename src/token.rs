@@ -252,11 +252,37 @@ impl TokenFactory for CommonTokenFactory {
     }
 }
 
+/// A diagnostic buffered by a token source while it was producing tokens.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TokenSourceError {
+    /// One-based input line where the diagnostic starts.
+    pub line: usize,
+    /// Zero-based column within `line` where the diagnostic starts.
+    pub column: usize,
+    /// ANTLR-compatible diagnostic message without the leading line/column.
+    pub message: String,
+}
+
+impl TokenSourceError {
+    /// Creates a token-source diagnostic at the given input position.
+    pub fn new(line: usize, column: usize, message: impl Into<String>) -> Self {
+        Self {
+            line,
+            column,
+            message: message.into(),
+        }
+    }
+}
+
 pub trait TokenSource {
     fn next_token(&mut self) -> CommonToken;
     fn line(&self) -> usize;
     fn column(&self) -> usize;
     fn source_name(&self) -> &str;
+    /// Returns and clears diagnostics emitted while fetching tokens.
+    fn drain_errors(&mut self) -> Vec<TokenSourceError> {
+        Vec::new()
+    }
 }
 
 #[cfg(test)]

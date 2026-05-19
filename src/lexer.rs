@@ -1,7 +1,7 @@
 use crate::char_stream::{CharStream, TextInterval};
 use crate::int_stream::EOF;
 use crate::recognizer::{Recognizer, RecognizerData};
-use crate::token::{CommonToken, CommonTokenFactory, TokenFactory, TokenSpec};
+use crate::token::{CommonToken, CommonTokenFactory, TokenFactory, TokenSourceError, TokenSpec};
 
 pub const SKIP: i32 = -3;
 pub const MORE: i32 = -2;
@@ -103,6 +103,7 @@ pub struct BaseLexer<I, F = CommonTokenFactory> {
     line: usize,
     column: usize,
     hit_eof: bool,
+    errors: Vec<TokenSourceError>,
 }
 
 impl<I> BaseLexer<I>
@@ -134,6 +135,7 @@ where
             line: 1,
             column: 0,
             hit_eof: false,
+            errors: Vec::new(),
         }
     }
 
@@ -341,5 +343,17 @@ where
 
     pub const fn set_hit_eof(&mut self, hit_eof: bool) {
         self.hit_eof = hit_eof;
+    }
+
+    /// Buffers a lexer diagnostic until the token stream consumer is ready to
+    /// emit errors in parser-compatible order.
+    pub fn record_error(&mut self, line: usize, column: usize, message: impl Into<String>) {
+        self.errors
+            .push(TokenSourceError::new(line, column, message));
+    }
+
+    /// Returns and clears lexer diagnostics produced while fetching tokens.
+    pub fn drain_errors(&mut self) -> Vec<TokenSourceError> {
+        std::mem::take(&mut self.errors)
     }
 }
