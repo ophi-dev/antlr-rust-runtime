@@ -1084,10 +1084,11 @@ fn extract_supported_action_templates_filtered(
 
 /// Applies an optional rule-name filter to an action or signature position.
 fn rule_action_included(source: &str, position: usize, rule_names: Option<&[String]>) -> bool {
-    rule_names.is_none_or(|names| {
-        statement_rule_name(source, position)
-            .is_some_and(|rule_name| names.iter().any(|name| name == rule_name))
-    })
+    let Some(header) = statement_rule_header(source, position) else {
+        return rule_names.is_none();
+    };
+    rule_names.is_none_or(|names| names.iter().any(|name| name == header.name))
+        && !has_prior_rule_definition(source, header.name, header.start)
 }
 
 /// Finds grammar predicate templates in the same order as ANTLR serializes
@@ -1342,23 +1343,46 @@ fn is_rule_named_action(source: &str, open_brace: usize, marker: &str) -> bool {
     prefix[statement_start..].trim_end().ends_with(marker)
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct RuleHeader<'a> {
+    name: &'a str,
+    start: usize,
+}
+
 /// Returns the grammar rule that owns an action or signature position by reading
 /// the current rule header before the first colon in the statement.
-fn statement_rule_name(source: &str, position: usize) -> Option<&str> {
+fn statement_rule_header(source: &str, position: usize) -> Option<RuleHeader<'_>> {
     let prefix = source.get(..position)?;
-    let header = prefix.rfind(':').map_or_else(
+    let (start, header) = prefix.rfind(':').map_or_else(
         || {
             let header_start = prefix.rfind([';', '}']).map_or(0, |index| index + 1);
-            &prefix[header_start..]
+            (header_start, &prefix[header_start..])
         },
         |colon| {
             let header_start = source[..colon]
                 .rfind([';', '}'])
                 .map_or(0, |index| index + 1);
-            &source[header_start..colon]
+            (header_start, &source[header_start..colon])
         },
     );
-    leading_rule_name(header)
+    let name = leading_rule_name(header)?;
+    Some(RuleHeader { name, start })
+}
+
+/// Reports whether an earlier rule with the same name already owns the active
+/// definition, matching ANTLR's import override rules for composite grammars.
+fn has_prior_rule_definition(source: &str, name: &str, before: usize) -> bool {
+    let mut offset = 0;
+    while let Some(colon) = source[offset..before].find(':').map(|index| offset + index) {
+        let header_start = source[..colon]
+            .rfind([';', '}'])
+            .map_or(0, |index| index + 1);
+        if leading_rule_name(&source[header_start..colon]) == Some(name) {
+            return true;
+        }
+        offset = colon + 1;
+    }
+    false
 }
 
 /// Reads the first ANTLR identifier from a rule header, allowing the optional
@@ -1590,6 +1614,10 @@ fn parse_action_template(body: &str) -> Option<ActionTemplate> {
         "GetExpectedTokenNames():write()" => {
             Some(ActionTemplate::ExpectedTokenNames { newline: false })
         }
+        "Invoke_foo()" => Some(ActionTemplate::Literal {
+            value: "foo".to_owned(),
+            newline: true,
+        }),
         _ => parse_plus_text(body)
             .or_else(|| parse_string_tree(body))
             .or_else(|| parse_rule_invocation_stack(body))
@@ -1873,6 +1901,7 @@ fn parse_rule_invocation_stack(body: &str) -> Option<ActionTemplate> {
 fn parse_noop_action(body: &str) -> Option<ActionTemplate> {
     if (body.starts_with("AssignLocal(")
         || body.starts_with("AssertIsList(")
+        || body.starts_with("InitIntVar(")
         || body.starts_with("IntArg(")
         || body.starts_with("Production(")
         || body.starts_with("Result(")
@@ -1952,8 +1981,8 @@ fn parse_rule_value(body: &str) -> Option<ActionTemplate> {
     })
 }
 
-/// Parses `AppendStr("prefix", "$TOKEN.text")` print helpers used by parser
-/// semantic-predicate descriptors.
+/// Parses `AppendStr("prefix", "$text")` and `$TOKEN.text` variants used by
+/// parser action descriptors.
 fn parse_append_str_token_text(body: &str) -> Option<ActionTemplate> {
     let (newline, arguments) = append_str_arguments(body)?;
     let arguments = split_template_arguments(arguments);
@@ -1967,6 +1996,9 @@ fn parse_append_str_token_text(body: &str) -> Option<ActionTemplate> {
         .unwrap_or(&prefix)
         .to_owned();
     let value = parse_template_string(value_argument)?;
+    if value == "$text" {
+        return Some(ActionTemplate::TextWithPrefix { prefix, newline });
+    }
     let label = value.strip_prefix('$')?.strip_suffix(".text")?;
     let source = label
         .chars()

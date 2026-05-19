@@ -471,12 +471,16 @@ fn composite_grammar_supported(descriptor: &Descriptor) -> bool {
             | "CompositeParsers/BringInLiteralsFromDelegate"
             | "CompositeParsers/CombinedImportsCombined"
             | "CompositeParsers/DelegatesSeeSameTokenType"
+            | "CompositeParsers/DelegatorAccessesDelegateMembers"
             | "CompositeParsers/DelegatorInvokesDelegateRule"
             | "CompositeParsers/DelegatorInvokesDelegateRuleWithArgs"
             | "CompositeParsers/DelegatorInvokesDelegateRuleWithReturnStruct"
+            | "CompositeParsers/DelegatorInvokesFirstVersionOfDelegateRule"
             | "CompositeParsers/DelegatorRuleOverridesDelegate"
+            | "CompositeParsers/DelegatorRuleOverridesDelegates"
             | "CompositeParsers/DelegatorRuleOverridesLookaheadInDelegate"
             | "CompositeParsers/ImportedGrammarWithEmptyOptions"
+            | "CompositeParsers/ImportedRuleWithAction"
             | "CompositeParsers/ImportLexerWithOnlyFragmentRules"
             | "CompositeParsers/KeywordVSIDOrder"
     )
@@ -750,6 +754,7 @@ fn is_supported_action_template(body: &str) -> bool {
             | "Pass()"
             | r#"ToStringTree("$ctx"):writeln()"#
             | r#"ToStringTree("$ctx"):write()"#
+            | "Invoke_foo()"
     ) || body.starts_with("writeln(\"\\\"")
         || body.starts_with("write(\"\\\"")
         || is_noop_action_template(body)
@@ -845,6 +850,7 @@ fn unsupported_members_templates(grammar: &str) -> bool {
 
 fn is_supported_members_template(body: &str) -> bool {
     body == "DeclareContextListGettersFunction()"
+        || body == "Declare_foo()"
         || body == "Declare_pred()"
         || (body.starts_with("InitBooleanMember(") && body.ends_with(",True())"))
         || (body.starts_with("InitIntMember(") && body.ends_with(')'))
@@ -875,6 +881,7 @@ fn listener_line_kind(trimmed: &str) -> Option<&'static str> {
 fn is_noop_action_template(body: &str) -> bool {
     (body.starts_with("AssignLocal(")
         || body.starts_with("AssertIsList(")
+        || body.starts_with("InitIntVar(")
         || body.starts_with("IntArg(")
         || body.starts_with("Production(")
         || body.starts_with("Result(")
@@ -917,8 +924,8 @@ fn is_rule_value_template(body: &str) -> bool {
     is_antlr_identifier(rule_name) && matches!(value_name, "v" | "result")
 }
 
-/// Mirrors the generator's `AppendStr` subset: a literal prefix plus a
-/// `$label.text` payload that can be rendered from token interval metadata.
+/// Mirrors the generator's `AppendStr` subset: a literal prefix plus either the
+/// current rule text or a `$label.text` payload.
 fn is_append_str_token_text_template(body: &str) -> bool {
     append_str_arguments(body)
         .map(split_template_arguments)
@@ -928,10 +935,11 @@ fn is_append_str_token_text_template(body: &str) -> bool {
             };
             parse_template_string(prefix).is_some()
                 && parse_template_string(value).is_some_and(|value| {
-                    value
-                        .strip_prefix('$')
-                        .and_then(|label| label.strip_suffix(".text"))
-                        .is_some_and(is_antlr_identifier)
+                    value == "$text"
+                        || value
+                            .strip_prefix('$')
+                            .and_then(|label| label.strip_suffix(".text"))
+                            .is_some_and(is_antlr_identifier)
                 })
         })
 }
