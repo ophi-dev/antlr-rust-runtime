@@ -330,17 +330,22 @@ fn state_expected_symbols(atn: &Atn, state_number: usize) -> BTreeSet<i32> {
     symbols
 }
 
-/// Carries recovery context through epsilon-only paths. ANTLR reports some
-/// recovery diagnostics at the decision state even when the failed consuming
-/// transition is nested under block or loop epsilon edges.
-fn next_recovery_symbols(atn: &Atn, state: &AtnState, inherited: &BTreeSet<i32>) -> BTreeSet<i32> {
+/// Carries recovery expectations and their restart state through epsilon-only
+/// paths. ANTLR can report and repair at the decision state even when the
+/// failed consuming transition is nested under block or loop epsilon edges.
+fn next_recovery_context(
+    atn: &Atn,
+    state: &AtnState,
+    inherited: &BTreeSet<i32>,
+    inherited_state: Option<usize>,
+) -> (BTreeSet<i32>, Option<usize>) {
     let state_symbols = state_expected_symbols(atn, state.state_number);
     if state.transitions.len() > 1 && !state_symbols.is_empty() {
         let mut symbols = state_symbols;
         symbols.extend(inherited.iter().copied());
-        return symbols;
+        return (symbols, Some(state.state_number));
     }
-    inherited.clone()
+    (inherited.clone(), inherited_state)
 }
 
 fn recovery_expected_symbols(
@@ -436,6 +441,7 @@ struct RecognizeRequest<'a> {
     precedence: i32,
     depth: usize,
     recovery_symbols: BTreeSet<i32>,
+    recovery_state: Option<usize>,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -449,6 +455,8 @@ struct RecognizeKey {
     rule_alt_number: usize,
     track_alt_numbers: bool,
     precedence: i32,
+    recovery_symbols: BTreeSet<i32>,
+    recovery_state: Option<usize>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -459,6 +467,7 @@ struct FastRecognizeRequest {
     precedence: i32,
     depth: usize,
     recovery_symbols: BTreeSet<i32>,
+    recovery_state: Option<usize>,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -467,6 +476,8 @@ struct FastRecognizeKey {
     stop_state: usize,
     index: usize,
     precedence: i32,
+    recovery_symbols: BTreeSet<i32>,
+    recovery_state: Option<usize>,
 }
 
 struct FastRecoveryRequest<'a, 'b> {
@@ -475,7 +486,16 @@ struct FastRecoveryRequest<'a, 'b> {
     expected_symbols: BTreeSet<i32>,
     target: usize,
     request: FastRecognizeRequest,
-    visiting: &'b mut BTreeSet<(usize, usize, usize, i32)>,
+    visiting: &'b mut BTreeSet<FastRecognizeKey>,
+    memo: &'b mut BTreeMap<FastRecognizeKey, Vec<FastRecognizeOutcome>>,
+    expected: &'b mut ExpectedTokens,
+}
+
+struct FastCurrentTokenDeletionRequest<'a, 'b> {
+    atn: &'a Atn,
+    expected_symbols: BTreeSet<i32>,
+    request: FastRecognizeRequest,
+    visiting: &'b mut BTreeSet<FastRecognizeKey>,
     memo: &'b mut BTreeMap<FastRecognizeKey, Vec<FastRecognizeOutcome>>,
     expected: &'b mut ExpectedTokens,
 }
@@ -485,6 +505,15 @@ struct RecoveryRequest<'a, 'b> {
     transition: &'a Transition,
     expected_symbols: BTreeSet<i32>,
     target: usize,
+    request: RecognizeRequest<'a>,
+    visiting: &'b mut BTreeSet<RecognizeKey>,
+    memo: &'b mut BTreeMap<RecognizeKey, Vec<RecognizeOutcome>>,
+    expected: &'b mut ExpectedTokens,
+}
+
+struct CurrentTokenDeletionRequest<'a, 'b> {
+    atn: &'a Atn,
+    expected_symbols: BTreeSet<i32>,
     request: RecognizeRequest<'a>,
     visiting: &'b mut BTreeSet<RecognizeKey>,
     memo: &'b mut BTreeMap<RecognizeKey, Vec<RecognizeOutcome>>,
@@ -625,6 +654,7 @@ where
                 precedence: 0,
                 depth: 0,
                 recovery_symbols: BTreeSet::new(),
+                recovery_state: None,
             },
             &mut visiting,
             &mut memo,
@@ -772,6 +802,7 @@ where
                 precedence: 0,
                 depth: 0,
                 recovery_symbols: BTreeSet::new(),
+                recovery_state: None,
             },
             &mut visiting,
             &mut memo,
@@ -906,6 +937,39 @@ where
         ))
     }
 
+    /// Returns the repair used when deleting the current token lets a recovery
+    /// state continue with the following token.
+    fn current_token_deletion(
+        &mut self,
+        index: usize,
+        expected_symbols: &BTreeSet<i32>,
+    ) -> Option<(ParserDiagnostic, usize)> {
+        if expected_symbols.is_empty() {
+            return None;
+        }
+        let current_symbol = self.token_type_at(index);
+        if current_symbol == TOKEN_EOF {
+            return None;
+        }
+        let next_index = self.consume_index(index, current_symbol);
+        if next_index == index {
+            return None;
+        }
+        let next_symbol = self.token_type_at(next_index);
+        if !expected_symbols.contains(&next_symbol) {
+            return None;
+        }
+        let current = self.token_at(index);
+        let message = format!(
+            "extraneous input {} expecting {}",
+            current
+                .as_ref()
+                .map_or_else(|| "'<EOF>'".to_owned(), token_input_display),
+            self.expected_symbols_display(expected_symbols)
+        );
+        Some((diagnostic_for_token(current.as_ref(), message), next_index))
+    }
+
     /// Returns the single-token insertion repair for a failed consuming
     /// transition. The caller validates the repair by continuing from the
     /// transition target at the same input index.
@@ -985,6 +1049,7 @@ where
                 precedence,
                 depth: depth + 1,
                 recovery_symbols: BTreeSet::new(),
+                recovery_state: None,
             },
             visiting,
             memo,
@@ -1042,6 +1107,7 @@ where
                 precedence,
                 depth: depth + 1,
                 recovery_symbols: BTreeSet::new(),
+                recovery_state: None,
             },
             visiting,
             memo,
@@ -1055,13 +1121,45 @@ where
         .collect()
     }
 
+    /// Retries the current fast-recognition state after deleting one
+    /// unexpected token that precedes a valid loop or block continuation.
+    fn fast_current_token_deletion_recovery(
+        &mut self,
+        recovery: FastCurrentTokenDeletionRequest<'_, '_>,
+    ) -> Vec<FastRecognizeOutcome> {
+        let FastCurrentTokenDeletionRequest {
+            atn,
+            expected_symbols,
+            mut request,
+            visiting,
+            memo,
+            expected,
+        } = recovery;
+        let Some((diagnostic, next_index)) =
+            self.current_token_deletion(request.index, &expected_symbols)
+        else {
+            return Vec::new();
+        };
+        request.state_number = request.recovery_state.unwrap_or(request.state_number);
+        request.index = next_index;
+        request.depth += 1;
+        request.recovery_state = None;
+        self.recognize_state_fast(atn, request, visiting, memo, expected)
+            .into_iter()
+            .map(|mut outcome| {
+                outcome.diagnostics.insert(0, diagnostic.clone());
+                outcome
+            })
+            .collect()
+    }
+
     /// Attempts to reach `stop_state` from `state_number` without committing
     /// token consumption to the parser's public stream position.
     fn recognize_state_fast(
         &mut self,
         atn: &Atn,
         request: FastRecognizeRequest,
-        visiting: &mut BTreeSet<(usize, usize, usize, i32)>,
+        visiting: &mut BTreeSet<FastRecognizeKey>,
         memo: &mut BTreeMap<FastRecognizeKey, Vec<FastRecognizeOutcome>>,
         expected: &mut ExpectedTokens,
     ) -> Vec<FastRecognizeOutcome> {
@@ -1072,6 +1170,7 @@ where
             precedence,
             depth,
             recovery_symbols,
+            recovery_state,
         } = request;
         if depth > RECOGNITION_DEPTH_LIMIT {
             return Vec::new();
@@ -1088,20 +1187,24 @@ where
             stop_state,
             index,
             precedence,
+            recovery_symbols: recovery_symbols.clone(),
+            recovery_state,
         };
         if let Some(outcomes) = memo.get(&key) {
             return outcomes.clone();
         }
 
-        if !visiting.insert((state_number, stop_state, index, precedence)) {
+        let visit_key = key.clone();
+        if !visiting.insert(visit_key.clone()) {
             return Vec::new();
         }
 
         let Some(state) = atn.state(state_number) else {
-            visiting.remove(&(state_number, stop_state, index, precedence));
+            visiting.remove(&visit_key);
             return Vec::new();
         };
-        let epsilon_recovery_symbols = next_recovery_symbols(atn, state, &recovery_symbols);
+        let (epsilon_recovery_symbols, epsilon_recovery_state) =
+            next_recovery_context(atn, state, &recovery_symbols, recovery_state);
         let mut outcomes = Vec::new();
         for transition in &state.transitions {
             match transition {
@@ -1117,6 +1220,7 @@ where
                             precedence,
                             depth: depth + 1,
                             recovery_symbols: epsilon_recovery_symbols.clone(),
+                            recovery_state: epsilon_recovery_state,
                         },
                         visiting,
                         memo,
@@ -1137,6 +1241,7 @@ where
                                 precedence,
                                 depth: depth + 1,
                                 recovery_symbols: epsilon_recovery_symbols.clone(),
+                                recovery_state: epsilon_recovery_state,
                             },
                             visiting,
                             memo,
@@ -1164,6 +1269,7 @@ where
                             precedence: *rule_precedence,
                             depth: depth + 1,
                             recovery_symbols: epsilon_recovery_symbols.clone(),
+                            recovery_state: epsilon_recovery_state,
                         },
                         visiting,
                         memo,
@@ -1180,6 +1286,7 @@ where
                                     precedence,
                                     depth: depth + 1,
                                     recovery_symbols: BTreeSet::new(),
+                                    recovery_state: None,
                                 },
                                 visiting,
                                 memo,
@@ -1214,6 +1321,7 @@ where
                                     precedence,
                                     depth: depth + 1,
                                     recovery_symbols: BTreeSet::new(),
+                                    recovery_state: None,
                                 },
                                 visiting,
                                 memo,
@@ -1245,6 +1353,7 @@ where
                                     precedence,
                                     depth,
                                     recovery_symbols: recovery_symbols.clone(),
+                                    recovery_state,
                                 },
                                 visiting,
                                 memo,
@@ -1265,6 +1374,7 @@ where
                                         precedence,
                                         depth,
                                         recovery_symbols: recovery_symbols.clone(),
+                                        recovery_state,
                                     },
                                     visiting,
                                     memo,
@@ -1272,12 +1382,30 @@ where
                                 },
                             ));
                         }
+                        outcomes.extend(self.fast_current_token_deletion_recovery(
+                            FastCurrentTokenDeletionRequest {
+                                atn,
+                                expected_symbols,
+                                request: FastRecognizeRequest {
+                                    state_number,
+                                    stop_state,
+                                    index,
+                                    precedence,
+                                    depth,
+                                    recovery_symbols: recovery_symbols.clone(),
+                                    recovery_state,
+                                },
+                                visiting,
+                                memo,
+                                expected,
+                            },
+                        ));
                     }
                 }
             }
         }
 
-        visiting.remove(&(state_number, stop_state, index, precedence));
+        visiting.remove(&visit_key);
         discard_recovered_fast_outcomes_if_clean_path_exists(&mut outcomes);
         dedupe_fast_outcomes(&mut outcomes);
         memo.insert(key, outcomes.clone());
@@ -1340,6 +1468,7 @@ where
                 precedence,
                 depth: depth + 1,
                 recovery_symbols: BTreeSet::new(),
+                recovery_state: None,
             },
             visiting,
             memo,
@@ -1358,6 +1487,42 @@ where
             outcome
         })
         .collect()
+    }
+
+    /// Retries the current recognition state after deleting one unexpected
+    /// token, preserving the deleted token as an error node in the parse tree.
+    fn current_token_deletion_recovery(
+        &mut self,
+        recovery: CurrentTokenDeletionRequest<'_, '_>,
+    ) -> Vec<RecognizeOutcome> {
+        let CurrentTokenDeletionRequest {
+            atn,
+            expected_symbols,
+            mut request,
+            visiting,
+            memo,
+            expected,
+        } = recovery;
+        let error_index = request.index;
+        let Some((diagnostic, next_index)) =
+            self.current_token_deletion(error_index, &expected_symbols)
+        else {
+            return Vec::new();
+        };
+        request.state_number = request.recovery_state.unwrap_or(request.state_number);
+        request.index = next_index;
+        request.depth += 1;
+        request.recovery_state = None;
+        self.recognize_state(atn, request, visiting, memo, expected)
+            .into_iter()
+            .map(|mut outcome| {
+                outcome.diagnostics.insert(0, diagnostic.clone());
+                outcome
+                    .nodes
+                    .insert(0, RecognizedNode::ErrorToken { index: error_index });
+                outcome
+            })
+            .collect()
     }
 
     /// Explores single-token insertion recovery while adding a conjured
@@ -1420,6 +1585,7 @@ where
                 precedence,
                 depth: depth + 1,
                 recovery_symbols: BTreeSet::new(),
+                recovery_state: None,
             },
             visiting,
             memo,
@@ -1451,6 +1617,7 @@ where
         memo: &mut BTreeMap<RecognizeKey, Vec<RecognizeOutcome>>,
         expected: &mut ExpectedTokens,
     ) -> Vec<RecognizeOutcome> {
+        let request_template = request.clone();
         let RecognizeRequest {
             state_number,
             stop_state,
@@ -1467,6 +1634,7 @@ where
             precedence,
             depth,
             recovery_symbols,
+            recovery_state,
         } = request;
         if depth > RECOGNITION_DEPTH_LIMIT {
             return Vec::new();
@@ -1484,6 +1652,8 @@ where
             rule_alt_number,
             track_alt_numbers,
             precedence,
+            recovery_symbols: recovery_symbols.clone(),
+            recovery_state,
         };
         if let Some(outcomes) = memo.get(&key) {
             return outcomes.clone();
@@ -1498,7 +1668,8 @@ where
             visiting.remove(&visit_key);
             return Vec::new();
         };
-        let epsilon_recovery_symbols = next_recovery_symbols(atn, state, &recovery_symbols);
+        let (epsilon_recovery_symbols, epsilon_recovery_state) =
+            next_recovery_context(atn, state, &recovery_symbols, recovery_state);
         let mut outcomes = Vec::new();
         for (transition_index, transition) in state.transitions.iter().enumerate() {
             let decision = transition_decision(atn, state, transition_index, predicates);
@@ -1540,6 +1711,7 @@ where
                                 precedence,
                                 depth: depth + 1,
                                 recovery_symbols: epsilon_recovery_symbols.clone(),
+                                recovery_state: epsilon_recovery_state,
                             },
                             visiting,
                             memo,
@@ -1595,6 +1767,7 @@ where
                                     precedence,
                                     depth: depth + 1,
                                     recovery_symbols: epsilon_recovery_symbols.clone(),
+                                    recovery_state: epsilon_recovery_state,
                                 },
                                 visiting,
                                 memo,
@@ -1638,6 +1811,7 @@ where
                                     precedence,
                                     depth: depth + 1,
                                     recovery_symbols: epsilon_recovery_symbols.clone(),
+                                    recovery_state: epsilon_recovery_state,
                                 },
                                 visiting,
                                 memo,
@@ -1682,6 +1856,7 @@ where
                             precedence: *rule_precedence,
                             depth: depth + 1,
                             recovery_symbols: epsilon_recovery_symbols.clone(),
+                            recovery_state: epsilon_recovery_state,
                         },
                         visiting,
                         memo,
@@ -1715,6 +1890,7 @@ where
                                     precedence,
                                     depth: depth + 1,
                                     recovery_symbols: BTreeSet::new(),
+                                    recovery_state: None,
                                 },
                                 visiting,
                                 memo,
@@ -1776,6 +1952,7 @@ where
                                     precedence,
                                     depth: depth + 1,
                                     recovery_symbols: BTreeSet::new(),
+                                    recovery_state: None,
                                 },
                                 visiting,
                                 memo,
@@ -1797,29 +1974,14 @@ where
                         }
                         expected.record_transition(index, transition, atn.max_token_type());
                         let before_recovery = outcomes.len();
+                        let recovery_request = request_template.clone();
                         outcomes.extend(
                             self.single_token_deletion_recovery(RecoveryRequest {
                                 atn,
                                 transition,
                                 expected_symbols: expected_symbols.clone(),
                                 target: *target,
-                                request: RecognizeRequest {
-                                    state_number,
-                                    stop_state,
-                                    index,
-                                    rule_start_index,
-                                    init_action_rules,
-                                    predicates,
-                                    rule_args,
-                                    member_actions,
-                                    local_int_arg,
-                                    member_values: member_values.clone(),
-                                    rule_alt_number,
-                                    track_alt_numbers,
-                                    precedence,
-                                    depth,
-                                    recovery_symbols: recovery_symbols.clone(),
-                                },
+                                request: recovery_request.clone(),
                                 visiting,
                                 memo,
                                 expected,
@@ -1837,23 +1999,7 @@ where
                                     transition,
                                     expected_symbols: expected_symbols.clone(),
                                     target: *target,
-                                    request: RecognizeRequest {
-                                        state_number,
-                                        stop_state,
-                                        index,
-                                        rule_start_index,
-                                        init_action_rules,
-                                        predicates,
-                                        rule_args,
-                                        member_actions,
-                                        local_int_arg,
-                                        member_values: member_values.clone(),
-                                        rule_alt_number,
-                                        track_alt_numbers,
-                                        precedence,
-                                        depth,
-                                        recovery_symbols: recovery_symbols.clone(),
-                                    },
+                                    request: recovery_request.clone(),
                                     visiting,
                                     memo,
                                     expected,
@@ -1865,9 +2011,17 @@ where
                                 }),
                             );
                         }
-                        // If neither deletion nor insertion can continue, ANTLR
-                        // still consumes the offending token as an error node so
-                        // parse-tree output retains the unexpected input.
+                        outcomes.extend(self.current_token_deletion_recovery(
+                            CurrentTokenDeletionRequest {
+                                atn,
+                                expected_symbols: expected_symbols.clone(),
+                                request: recovery_request,
+                                visiting,
+                                memo,
+                                expected,
+                            },
+                        ));
+                        // Keep unexpected input visible when no repair can continue.
                         if outcomes.len() == before_recovery
                             && symbol != TOKEN_EOF
                             && !expected_symbols.is_empty()
@@ -1902,6 +2056,7 @@ where
                                         precedence,
                                         depth: depth + 1,
                                         recovery_symbols: BTreeSet::new(),
+                                        recovery_state: None,
                                     },
                                     visiting,
                                     memo,
@@ -2282,9 +2437,9 @@ fn select_best_fast_outcome(
     outcomes.reduce(|best, outcome| {
         if outcome_is_better(
             (outcome.index, outcome.consumed_eof),
-            outcome.diagnostics.len(),
+            &outcome.diagnostics,
             (best.index, best.consumed_eof),
-            best.diagnostics.len(),
+            &best.diagnostics,
         ) {
             return outcome;
         }
@@ -2304,12 +2459,14 @@ fn select_best_outcome(
         let best_position = (best.index, best.consumed_eof);
         if outcome_is_better(
             outcome_position,
-            outcome.diagnostics.len(),
+            &outcome.diagnostics,
             best_position,
-            best.diagnostics.len(),
+            &best.diagnostics,
         ) || (!prefer_first_tie
             && outcome_position == best_position
             && outcome.diagnostics.len() == best.diagnostics.len()
+            && diagnostic_recovery_rank(&outcome.diagnostics)
+                == diagnostic_recovery_rank(&best.diagnostics)
             && (outcome.decisions < best.decisions
                 || (outcome.decisions == best.decisions && outcome.actions > best.actions)))
         {
@@ -2408,12 +2565,25 @@ fn prepend_decision(outcome: &mut RecognizeOutcome, decision: Option<usize>) {
 
 fn outcome_is_better(
     outcome_position: (usize, bool),
-    outcome_diagnostics: usize,
+    outcome_diagnostics: &[ParserDiagnostic],
     best_position: (usize, bool),
-    best_diagnostics: usize,
+    best_diagnostics: &[ParserDiagnostic],
 ) -> bool {
     outcome_position > best_position
-        || (outcome_position == best_position && outcome_diagnostics < best_diagnostics)
+        || (outcome_position == best_position
+            && (outcome_diagnostics.len() < best_diagnostics.len()
+                || (outcome_diagnostics.len() == best_diagnostics.len()
+                    && diagnostic_recovery_rank(outcome_diagnostics)
+                        < diagnostic_recovery_rank(best_diagnostics))))
+}
+
+/// Ranks concrete recovery repairs ahead of generic mismatch fallbacks when
+/// speculative paths otherwise consume the same input.
+fn diagnostic_recovery_rank(diagnostics: &[ParserDiagnostic]) -> usize {
+    diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.message.starts_with("mismatched input "))
+        .count()
 }
 
 fn discard_recovered_fast_outcomes_if_clean_path_exists(outcomes: &mut Vec<FastRecognizeOutcome>) {
