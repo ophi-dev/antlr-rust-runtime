@@ -640,6 +640,11 @@ enum ActionTemplate {
         source: TokenTextSource,
         newline: bool,
     },
+    TokenTextWithPrefix {
+        prefix: String,
+        source: TokenTextSource,
+        newline: bool,
+    },
     TokenDisplay {
         prefix: String,
         source: TokenDisplaySource,
@@ -663,6 +668,7 @@ impl ActionTemplate {
             Self::Text { .. }
                 | Self::TextWithPrefix { .. }
                 | Self::TokenText { .. }
+                | Self::TokenTextWithPrefix { .. }
                 | Self::TokenDisplay { .. }
         )
     }
@@ -1205,6 +1211,7 @@ fn parse_action_template(body: &str) -> Option<ActionTemplate> {
         _ => parse_plus_text(body)
             .or_else(|| parse_string_tree(body))
             .or_else(|| parse_rule_invocation_stack(body))
+            .or_else(|| parse_append_str_token_text(body))
             .or_else(|| parse_token_text(body))
             .or_else(|| parse_token_display(body))
             .or_else(|| parse_noop_action(body))
@@ -1345,6 +1352,8 @@ fn parse_plus_text(body: &str) -> Option<ActionTemplate> {
     Some(ActionTemplate::TextWithPrefix { prefix, newline })
 }
 
+/// Parses direct `$label.text` print helpers and maps token-looking labels to
+/// the action stop token while rule-looking labels read from the rule start.
 fn parse_token_text(body: &str) -> Option<ActionTemplate> {
     let (newline, argument) = if let Some(argument) = body
         .strip_prefix("writeln(")
@@ -1365,6 +1374,34 @@ fn parse_token_text(body: &str) -> Option<ActionTemplate> {
         .filter(char::is_ascii_uppercase)
         .map_or(TokenTextSource::RuleStart, |_| TokenTextSource::ActionStop);
     Some(ActionTemplate::TokenText { source, newline })
+}
+
+/// Parses `AppendStr("prefix", "$TOKEN.text")` print helpers used by parser
+/// semantic-predicate descriptors.
+fn parse_append_str_token_text(body: &str) -> Option<ActionTemplate> {
+    let (newline, arguments) = append_str_arguments(body)?;
+    let arguments = split_template_arguments(arguments);
+    let [prefix_argument, value_argument] = arguments.as_slice() else {
+        return None;
+    };
+    let prefix = parse_template_string(prefix_argument)?;
+    let prefix = prefix
+        .strip_prefix('"')
+        .and_then(|value| value.strip_suffix('"'))
+        .unwrap_or(&prefix)
+        .to_owned();
+    let value = parse_template_string(value_argument)?;
+    let label = value.strip_prefix('$')?.strip_suffix(".text")?;
+    let source = label
+        .chars()
+        .next()
+        .filter(char::is_ascii_uppercase)
+        .map_or(TokenTextSource::RuleStart, |_| TokenTextSource::ActionStop);
+    Some(ActionTemplate::TokenTextWithPrefix {
+        prefix,
+        source,
+        newline,
+    })
 }
 
 /// Parses token-display templates such as `Append("prefix","$x")` and
@@ -1415,6 +1452,20 @@ fn append_arguments(body: &str) -> Option<(bool, &str)> {
     }
     body.strip_prefix("write(Append(")
         .and_then(|value| value.strip_suffix("))"))
+        .map(|arguments| (false, arguments))
+}
+
+/// Extracts the comma-separated arguments from the fluent
+/// `AppendStr(...):write[ln]()` forms used by runtime descriptors.
+fn append_str_arguments(body: &str) -> Option<(bool, &str)> {
+    if let Some(arguments) = body
+        .strip_prefix("AppendStr(")
+        .and_then(|value| value.strip_suffix("):writeln()"))
+    {
+        return Some((true, arguments));
+    }
+    body.strip_prefix("AppendStr(")
+        .and_then(|value| value.strip_suffix("):write()"))
         .map(|arguments| (false, arguments))
 }
 
@@ -1651,6 +1702,15 @@ fn render_lexer_action_statement(template: &ActionTemplate) -> String {
                 "let text = _base.token_text_until(action.position()); {write}(\"{{}}\", text);"
             )
         }
+        ActionTemplate::TokenTextWithPrefix {
+            prefix, newline, ..
+        } => {
+            let write = if *newline { "println!" } else { "print!" };
+            format!(
+                "let text = _base.token_text_until(action.position()); {write}(\"{}{{}}\", text);",
+                rust_string(prefix)
+            )
+        }
         ActionTemplate::TokenDisplay { .. } => String::new(),
         ActionTemplate::ExpectedTokenNames { .. } => String::new(),
         ActionTemplate::StringTree { .. } => String::new(),
@@ -1770,6 +1830,22 @@ fn render_action_statement(template: &ActionTemplate) -> String {
                 ),
             }
         }
+        ActionTemplate::TokenTextWithPrefix {
+            prefix,
+            source,
+            newline,
+        } => {
+            let write = if *newline { "println!" } else { "print!" };
+            let prefix = rust_string(prefix);
+            match source {
+                TokenTextSource::RuleStart => format!(
+                    "let text = self.base.text_interval(action.start_index(), Some(action.start_index())); {write}(\"{prefix}{{}}\", text);"
+                ),
+                TokenTextSource::ActionStop => format!(
+                    "let text = action.stop_index().map_or_else(String::new, |index| self.base.text_interval(index, Some(index))); {write}(\"{prefix}{{}}\", text);"
+                ),
+            }
+        }
         ActionTemplate::TokenDisplay {
             prefix,
             source,
@@ -1824,6 +1900,22 @@ fn render_parser_after_action_statement(template: &ActionTemplate, rule_index: u
                 ),
                 TokenTextSource::ActionStop => format!(
                     "let text = stop_index.map_or_else(String::new, |index| self.base.text_interval(index, Some(index))); {write}(\"{{}}\", text);"
+                ),
+            }
+        }
+        ActionTemplate::TokenTextWithPrefix {
+            prefix,
+            source,
+            newline,
+        } => {
+            let write = if *newline { "println!" } else { "print!" };
+            let prefix = rust_string(prefix);
+            match source {
+                TokenTextSource::RuleStart => format!(
+                    "let text = self.base.text_interval(start_index, Some(start_index)); {write}(\"{prefix}{{}}\", text);"
+                ),
+                TokenTextSource::ActionStop => format!(
+                    "let text = stop_index.map_or_else(String::new, |index| self.base.text_interval(index, Some(index))); {write}(\"{prefix}{{}}\", text);"
                 ),
             }
         }

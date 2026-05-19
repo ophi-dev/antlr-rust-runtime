@@ -63,6 +63,8 @@ Supported now:
 - lexer and parser target-template actions for the currently supported stdout
   helpers,
 - parser token-label text actions such as `$TOKEN.text` and `$label.text`,
+- parser `AppendStr(..., "$TOKEN.text")` stdout actions for supported
+  semantic-predicate descriptors,
 - parser token-display actions such as `Append(..., "$label")` and
   `Append(..., "$rule.stop")` for recovered-token descriptors,
 - parser rule-level `@after` actions for the currently supported stdout helpers,
@@ -113,7 +115,7 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `264 passed, 0 failed, 93 skipped, 264 run`
+- full descriptor sweep: `265 passed, 0 failed, 92 skipped, 265 run`
 - `LexerExec`: `42 passed, 0 failed, 0 skipped, 42 run`
 - `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
 - `LeftRecursion`: `81 passed, 0 failed, 17 skipped, 81 run`
@@ -122,7 +124,7 @@ Current validated groups:
 - `ParserErrors`: `23 passed, 0 failed, 11 skipped, 23 run`
 - `Performance`: `7 passed, 0 failed, 0 skipped, 7 run`
 - `SemPredEvalLexer`: `2 passed, 0 failed, 6 skipped, 2 run`
-- `SemPredEvalParser`: `10 passed, 0 failed, 16 skipped, 10 run`
+- `SemPredEvalParser`: `11 passed, 0 failed, 15 skipped, 11 run`
 - `Sets`: `29 passed, 0 failed, 2 skipped, 29 run`
 
 The remaining target-action skips are descriptors that depend on templates the

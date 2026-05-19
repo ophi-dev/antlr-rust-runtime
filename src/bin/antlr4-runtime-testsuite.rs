@@ -495,7 +495,6 @@ fn target_templates_supported(descriptor: &Descriptor) -> bool {
     if unsupported_members_templates(grammar)
         || grammar.contains("@definitions")
         || !supported_signature_templates(grammar)
-        || grammar.contains("<AppendStr")
     {
         return false;
     }
@@ -621,6 +620,7 @@ fn is_supported_action_template(body: &str) -> bool {
     ) || body.starts_with("writeln(\"\\\"")
         || body.starts_with("write(\"\\\"")
         || is_noop_action_template(body)
+        || is_append_str_token_text_template(body)
         || is_token_text_template(body)
         || is_token_display_template(body)
         || (body.starts_with("PlusText(\"") && body.ends_with("):writeln()"))
@@ -661,12 +661,17 @@ fn unsupported_members_templates(grammar: &str) -> bool {
         if !is_members_action(grammar, block.open_brace) {
             continue;
         }
-        if block.body.trim() != "DeclareContextListGettersFunction()" {
+        if !is_supported_members_template(block.body.trim()) {
             return true;
         }
         saw_supported = true;
     }
     !saw_supported
+}
+
+fn is_supported_members_template(body: &str) -> bool {
+    body == "DeclareContextListGettersFunction()"
+        || (body.starts_with("InitBooleanMember(") && body.ends_with(",True())"))
 }
 
 fn is_noop_action_template(body: &str) -> bool {
@@ -690,6 +695,38 @@ fn is_token_text_template(body: &str) -> bool {
     argument
         .chars()
         .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+}
+
+/// Mirrors the generator's `AppendStr` subset: a literal prefix plus a
+/// `$label.text` payload that can be rendered from token interval metadata.
+fn is_append_str_token_text_template(body: &str) -> bool {
+    append_str_arguments(body)
+        .map(split_template_arguments)
+        .is_some_and(|arguments| {
+            let [prefix, value] = arguments.as_slice() else {
+                return false;
+            };
+            parse_template_string(prefix).is_some()
+                && parse_template_string(value).is_some_and(|value| {
+                    value
+                        .strip_prefix('$')
+                        .and_then(|label| label.strip_suffix(".text"))
+                        .is_some_and(is_antlr_identifier)
+                })
+        })
+}
+
+/// Extracts the comma-separated arguments from the fluent
+/// `AppendStr(...):write[ln]()` forms used by runtime descriptors.
+fn append_str_arguments(body: &str) -> Option<&str> {
+    if let Some(arguments) = body
+        .strip_prefix("AppendStr(")
+        .and_then(|value| value.strip_suffix("):writeln()"))
+    {
+        return Some(arguments);
+    }
+    body.strip_prefix("AppendStr(")
+        .and_then(|value| value.strip_suffix("):write()"))
 }
 
 fn is_token_display_template(body: &str) -> bool {
