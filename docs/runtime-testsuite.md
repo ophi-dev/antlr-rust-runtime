@@ -123,7 +123,7 @@ Not wired yet:
 - target-template semantic actions beyond the currently supported stdout helpers
   and no-op compile checks,
 - parser error recovery diagnostics beyond the currently supported mismatch,
-  extraneous-input, and single-token recovery cases,
+  no-viable, extraneous-input, and token recovery cases,
 - runtime diagnostic/profile/DFA flags.
 
 The harness reports unsupported descriptors as skipped and treats output mismatches
@@ -131,7 +131,7 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `308 passed, 0 failed, 49 skipped, 308 run`
+- full descriptor sweep: `310 passed, 0 failed, 47 skipped, 310 run`
 - `LexerExec`: `42 passed, 0 failed, 0 skipped, 42 run`
 - `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
 - `LeftRecursion`: `97 passed, 0 failed, 1 skipped, 97 run`
@@ -141,7 +141,7 @@ Current validated groups:
 - `ParserErrors`: `34 passed, 0 failed, 0 skipped, 34 run`
 - `Performance`: `7 passed, 0 failed, 0 skipped, 7 run`
 - `SemPredEvalLexer`: `2 passed, 0 failed, 6 skipped, 2 run`
-- `SemPredEvalParser`: `18 passed, 0 failed, 8 skipped, 18 run`
+- `SemPredEvalParser`: `20 passed, 0 failed, 6 skipped, 20 run`
 - `Sets`: `31 passed, 0 failed, 0 skipped, 31 run`
 
 The remaining skips are now dominated by composite grammars, diagnostic/profile

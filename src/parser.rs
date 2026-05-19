@@ -906,7 +906,10 @@ where
         start_index: usize,
         expected: &ExpectedTokens,
     ) -> AntlrError {
-        let index = expected.index.unwrap_or_else(|| self.input.index());
+        let index = expected
+            .index
+            .or_else(|| expected.no_viable.map(|no_viable| no_viable.error_index))
+            .unwrap_or_else(|| self.input.index());
         self.input.seek(index);
         let current = self.input.lt(1).cloned();
         let line = current.as_ref().map(Token::line).unwrap_or_default();
@@ -1916,6 +1919,8 @@ where
                                 outcome
                             }),
                         );
+                    } else {
+                        record_predicate_no_viable(expected, next_decision_start_index, index);
                     }
                 }
                 Transition::Precedence {
@@ -2716,6 +2721,18 @@ fn record_no_viable_if_ambiguous(
         if let Some(decision_start) = no_viable_decision_start(decision_start_index, index) {
             expected.record_no_viable(decision_start, index);
         }
+    }
+}
+
+/// Records a no-viable decision caused by a failed semantic predicate before
+/// any consuming transition can contribute an expected-token set.
+const fn record_predicate_no_viable(
+    expected: &mut ExpectedTokens,
+    decision_start_index: Option<usize>,
+    index: usize,
+) {
+    if let Some(decision_start) = decision_start_index {
+        expected.record_no_viable(decision_start, index);
     }
 }
 
