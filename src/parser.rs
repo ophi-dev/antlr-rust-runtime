@@ -264,9 +264,6 @@ impl ExpectedTokens {
     /// failed ATN path.
     fn record_transition(&mut self, index: usize, transition: &Transition, max_token_type: i32) {
         let symbols = transition_expected_symbols(transition, max_token_type);
-        if symbols.is_empty() {
-            return;
-        }
         match self.index {
             Some(current) if index < current => {}
             Some(current) if index == current => self.symbols.extend(symbols),
@@ -690,7 +687,9 @@ where
             &mut expected,
         );
         let Some(outcome) = select_best_fast_outcome(outcomes.into_iter()) else {
-            return Err(self.recognition_error(rule_index, start_index, &expected));
+            let error = self.recognition_error(rule_index, start_index, &expected);
+            report_token_source_errors(&self.input.drain_source_errors());
+            return Err(error);
         };
 
         report_parser_diagnostics(&outcome.diagnostics);
@@ -840,7 +839,9 @@ where
             &mut expected,
         );
         let Some(outcome) = select_best_outcome(outcomes.into_iter()) else {
-            return Err(self.recognition_error(rule_index, start_index, &expected));
+            let error = self.recognition_error(rule_index, start_index, &expected);
+            report_token_source_errors(&self.input.drain_source_errors());
+            return Err(error);
         };
 
         report_parser_diagnostics(&outcome.diagnostics);
@@ -922,7 +923,17 @@ where
             let text = display_input_text(&self.input.text(start, index));
             format!("no viable alternative at input '{text}'")
         } else if expected.symbols.is_empty() {
-            format!("no viable alternative while parsing rule {rule_index}")
+            if expected.index.is_some() {
+                format!(
+                    "missing {} at {}",
+                    self.expected_symbols_display(&expected.symbols),
+                    current
+                        .as_ref()
+                        .map_or_else(|| "'<EOF>'".to_owned(), token_input_display)
+                )
+            } else {
+                format!("no viable alternative while parsing rule {rule_index}")
+            }
         } else {
             format!(
                 "mismatched input {} expecting {}",

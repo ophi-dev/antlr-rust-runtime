@@ -450,6 +450,7 @@ fn parser_error_diagnostics_supported(descriptor: &Descriptor) -> bool {
         descriptor.name.as_str(),
         "ConjuringUpToken"
             | "ConjuringUpTokenFromSet"
+            | "ComplementSet"
             | "ExtraToken"
             | "ExtraTokensAndAltLabels"
             | "ExtraneousInput"
@@ -479,6 +480,7 @@ fn parser_error_diagnostics_supported(descriptor: &Descriptor) -> bool {
             | "TokenMismatch"
             | "TokenMismatch2"
             | "TokenMismatch3"
+            | "UnicodeEscapedSMPRangeSetMismatch"
     )
 }
 
