@@ -464,6 +464,7 @@ struct FastRecognizeRequest {
     state_number: usize,
     stop_state: usize,
     index: usize,
+    rule_start_index: usize,
     precedence: i32,
     depth: usize,
     recovery_symbols: BTreeSet<i32>,
@@ -475,6 +476,7 @@ struct FastRecognizeKey {
     state_number: usize,
     stop_state: usize,
     index: usize,
+    rule_start_index: usize,
     precedence: i32,
     recovery_symbols: BTreeSet<i32>,
     recovery_state: Option<usize>,
@@ -651,6 +653,7 @@ where
                 state_number: start_state,
                 stop_state,
                 index: start_index,
+                rule_start_index: start_index,
                 precedence: 0,
                 depth: 0,
                 recovery_symbols: BTreeSet::new(),
@@ -943,20 +946,12 @@ where
         &mut self,
         index: usize,
         expected_symbols: &BTreeSet<i32>,
-    ) -> Option<(ParserDiagnostic, usize)> {
+    ) -> Option<(ParserDiagnostic, usize, Vec<usize>)> {
         if expected_symbols.is_empty() {
             return None;
         }
         let current_symbol = self.token_type_at(index);
         if current_symbol == TOKEN_EOF {
-            return None;
-        }
-        let next_index = self.consume_index(index, current_symbol);
-        if next_index == index {
-            return None;
-        }
-        let next_symbol = self.token_type_at(next_index);
-        if !expected_symbols.contains(&next_symbol) {
             return None;
         }
         let current = self.token_at(index);
@@ -967,7 +962,25 @@ where
                 .map_or_else(|| "'<EOF>'".to_owned(), token_input_display),
             self.expected_symbols_display(expected_symbols)
         );
-        Some((diagnostic_for_token(current.as_ref(), message), next_index))
+        let diagnostic = diagnostic_for_token(current.as_ref(), message);
+        let mut skipped = Vec::new();
+        let mut cursor = index;
+        loop {
+            let symbol = self.token_type_at(cursor);
+            if symbol == TOKEN_EOF {
+                return None;
+            }
+            skipped.push(cursor);
+            let next_index = self.consume_index(cursor, symbol);
+            if next_index == cursor {
+                return None;
+            }
+            let next_symbol = self.token_type_at(next_index);
+            if expected_symbols.contains(&next_symbol) {
+                return Some((diagnostic, next_index, skipped));
+            }
+            cursor = next_index;
+        }
     }
 
     /// Returns the single-token insertion repair for a failed consuming
@@ -1030,6 +1043,7 @@ where
         let FastRecognizeRequest {
             stop_state,
             index,
+            rule_start_index,
             precedence,
             depth,
             ..
@@ -1046,6 +1060,7 @@ where
                 state_number: target,
                 stop_state,
                 index: after_next,
+                rule_start_index,
                 precedence,
                 depth: depth + 1,
                 recovery_symbols: BTreeSet::new(),
@@ -1084,6 +1099,7 @@ where
         let FastRecognizeRequest {
             stop_state,
             index,
+            rule_start_index,
             precedence,
             depth,
             ..
@@ -1104,6 +1120,7 @@ where
                 state_number: target,
                 stop_state,
                 index,
+                rule_start_index,
                 precedence,
                 depth: depth + 1,
                 recovery_symbols: BTreeSet::new(),
@@ -1135,7 +1152,10 @@ where
             memo,
             expected,
         } = recovery;
-        let Some((diagnostic, next_index)) =
+        if request.index == request.rule_start_index {
+            return Vec::new();
+        }
+        let Some((diagnostic, next_index, _skipped)) =
             self.current_token_deletion(request.index, &expected_symbols)
         else {
             return Vec::new();
@@ -1167,6 +1187,7 @@ where
             state_number,
             stop_state,
             index,
+            rule_start_index,
             precedence,
             depth,
             recovery_symbols,
@@ -1186,6 +1207,7 @@ where
             state_number,
             stop_state,
             index,
+            rule_start_index,
             precedence,
             recovery_symbols: recovery_symbols.clone(),
             recovery_state,
@@ -1217,6 +1239,7 @@ where
                             state_number: *target,
                             stop_state,
                             index,
+                            rule_start_index,
                             precedence,
                             depth: depth + 1,
                             recovery_symbols: epsilon_recovery_symbols.clone(),
@@ -1238,6 +1261,7 @@ where
                                 state_number: *target,
                                 stop_state,
                                 index,
+                                rule_start_index,
                                 precedence,
                                 depth: depth + 1,
                                 recovery_symbols: epsilon_recovery_symbols.clone(),
@@ -1266,6 +1290,7 @@ where
                             state_number: *target,
                             stop_state: child_stop,
                             index,
+                            rule_start_index: index,
                             precedence: *rule_precedence,
                             depth: depth + 1,
                             recovery_symbols: epsilon_recovery_symbols.clone(),
@@ -1283,6 +1308,7 @@ where
                                     state_number: *follow_state,
                                     stop_state,
                                     index: child.index,
+                                    rule_start_index,
                                     precedence,
                                     depth: depth + 1,
                                     recovery_symbols: BTreeSet::new(),
@@ -1318,6 +1344,7 @@ where
                                     state_number: *target,
                                     stop_state,
                                     index: next_index,
+                                    rule_start_index,
                                     precedence,
                                     depth: depth + 1,
                                     recovery_symbols: BTreeSet::new(),
@@ -1350,6 +1377,7 @@ where
                                     state_number,
                                     stop_state,
                                     index,
+                                    rule_start_index,
                                     precedence,
                                     depth,
                                     recovery_symbols: recovery_symbols.clone(),
@@ -1371,6 +1399,7 @@ where
                                         state_number,
                                         stop_state,
                                         index,
+                                        rule_start_index,
                                         precedence,
                                         depth,
                                         recovery_symbols: recovery_symbols.clone(),
@@ -1390,6 +1419,7 @@ where
                                     state_number,
                                     stop_state,
                                     index,
+                                    rule_start_index,
                                     precedence,
                                     depth,
                                     recovery_symbols: recovery_symbols.clone(),
@@ -1504,7 +1534,10 @@ where
             expected,
         } = recovery;
         let error_index = request.index;
-        let Some((diagnostic, next_index)) =
+        if error_index == request.rule_start_index {
+            return Vec::new();
+        }
+        let Some((diagnostic, next_index, skipped)) =
             self.current_token_deletion(error_index, &expected_symbols)
         else {
             return Vec::new();
@@ -1517,9 +1550,11 @@ where
             .into_iter()
             .map(|mut outcome| {
                 outcome.diagnostics.insert(0, diagnostic.clone());
-                outcome
-                    .nodes
-                    .insert(0, RecognizedNode::ErrorToken { index: error_index });
+                for index in skipped.iter().rev() {
+                    outcome
+                        .nodes
+                        .insert(0, RecognizedNode::ErrorToken { index: *index });
+                }
                 outcome
             })
             .collect()

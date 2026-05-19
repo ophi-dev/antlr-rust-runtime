@@ -456,6 +456,8 @@ fn parser_error_diagnostics_supported(descriptor: &Descriptor) -> bool {
             | "InvalidEmptyInput"
             | "MultiTokenDeletionBeforeLoop"
             | "MultiTokenDeletionBeforeLoop2"
+            | "MultiTokenDeletionDuringLoop"
+            | "MultiTokenDeletionDuringLoop2"
             | "NoViableAlt"
             | "SingleSetInsertion"
             | "SingleSetInsertionConsumption"
