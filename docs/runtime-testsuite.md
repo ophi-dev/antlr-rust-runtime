@@ -132,9 +132,9 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `319 passed, 0 failed, 38 skipped, 319 run`
+- full descriptor sweep: `320 passed, 0 failed, 37 skipped, 320 run`
 - `CompositeLexers`: `1 passed, 0 failed, 1 skipped, 1 run`
-- `CompositeParsers`: `8 passed, 0 failed, 7 skipped, 8 run`
+- `CompositeParsers`: `9 passed, 0 failed, 6 skipped, 9 run`
 - `LexerExec`: `42 passed, 0 failed, 0 skipped, 42 run`
 - `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
 - `LeftRecursion`: `97 passed, 0 failed, 1 skipped, 97 run`

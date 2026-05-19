@@ -478,6 +478,7 @@ fn composite_grammar_supported(descriptor: &Descriptor) -> bool {
             | "CompositeParsers/DelegatorRuleOverridesLookaheadInDelegate"
             | "CompositeParsers/ImportedGrammarWithEmptyOptions"
             | "CompositeParsers/ImportLexerWithOnlyFragmentRules"
+            | "CompositeParsers/KeywordVSIDOrder"
     )
 }
 

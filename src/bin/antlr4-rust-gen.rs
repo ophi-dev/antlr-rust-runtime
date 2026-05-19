@@ -804,17 +804,23 @@ fn lexer_action_templates(
     if actions.is_empty() {
         return Ok(Vec::new());
     }
-    if actions.len() != templates.len() {
+    if actions.len() == templates.len() {
+        return Ok(actions.into_iter().zip(templates).collect());
+    }
+
+    let filtered_templates =
+        extract_supported_rule_action_templates(grammar_source, &data.rule_names)?;
+    if actions.len() != filtered_templates.len() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!(
                 "grammar has {} supported action template(s), but lexer ATN has {} custom action(s)",
-                templates.len(),
+                filtered_templates.len(),
                 actions.len()
             ),
         ));
     }
-    Ok(actions.into_iter().zip(templates).collect())
+    Ok(actions.into_iter().zip(filtered_templates).collect())
 }
 
 /// Pairs supported lexer semantic predicates with serialized predicate
@@ -882,6 +888,20 @@ fn parser_action_templates(
     grammar_source: &str,
 ) -> io::Result<Vec<(usize, ActionTemplate)>> {
     let templates = extract_supported_action_templates(grammar_source)?;
+    match parser_action_templates_from_templates(data, templates) {
+        Ok(actions) => Ok(actions),
+        Err(unfiltered_error) => {
+            let templates =
+                extract_supported_rule_action_templates(grammar_source, &data.rule_names)?;
+            parser_action_templates_from_templates(data, templates).map_err(|_| unfiltered_error)
+        }
+    }
+}
+
+fn parser_action_templates_from_templates(
+    data: &InterpData,
+    templates: Vec<ActionTemplate>,
+) -> io::Result<Vec<(usize, ActionTemplate)>> {
     if templates.is_empty() {
         return Ok(Vec::new());
     }
@@ -980,6 +1000,23 @@ fn parser_init_action_templates(
 /// Finds grammar action templates in the same order as ANTLR serializes action
 /// transitions, while ignoring semantic predicates that are control-flow guards.
 fn extract_supported_action_templates(grammar_source: &str) -> io::Result<Vec<ActionTemplate>> {
+    extract_supported_action_templates_filtered(grammar_source, None)
+}
+
+/// Extracts only action templates owned by rules present in the active `.interp`
+/// metadata, which keeps combined grammars from feeding parser actions to lexer
+/// generation and vice versa.
+fn extract_supported_rule_action_templates(
+    grammar_source: &str,
+    rule_names: &[String],
+) -> io::Result<Vec<ActionTemplate>> {
+    extract_supported_action_templates_filtered(grammar_source, Some(rule_names))
+}
+
+fn extract_supported_action_templates_filtered(
+    grammar_source: &str,
+    rule_names: Option<&[String]>,
+) -> io::Result<Vec<ActionTemplate>> {
     let mut templates = Vec::new();
     let mut offset = 0;
     loop {
@@ -989,6 +1026,9 @@ fn extract_supported_action_templates(grammar_source: &str) -> io::Result<Vec<Ac
             (None, None) => break,
             (Some(block), Some(signature)) if signature.open_angle < block.open_brace => {
                 offset = signature.after_template;
+                if !rule_action_included(grammar_source, signature.open_angle, rule_names) {
+                    continue;
+                }
                 let Some(template) = parse_action_template(signature.body) else {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
@@ -999,6 +1039,9 @@ fn extract_supported_action_templates(grammar_source: &str) -> io::Result<Vec<Ac
             }
             (Some(block), _) => {
                 offset = block.after_brace;
+                if !rule_action_included(grammar_source, block.open_brace, rule_names) {
+                    continue;
+                }
                 if block.predicate
                     || is_after_action(grammar_source, block.open_brace)
                     || is_init_action(grammar_source, block.open_brace)
@@ -1023,6 +1066,9 @@ fn extract_supported_action_templates(grammar_source: &str) -> io::Result<Vec<Ac
             }
             (None, Some(signature)) => {
                 offset = signature.after_template;
+                if !rule_action_included(grammar_source, signature.open_angle, rule_names) {
+                    continue;
+                }
                 let Some(template) = parse_action_template(signature.body) else {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
@@ -1034,6 +1080,14 @@ fn extract_supported_action_templates(grammar_source: &str) -> io::Result<Vec<Ac
         }
     }
     Ok(templates)
+}
+
+/// Applies an optional rule-name filter to an action or signature position.
+fn rule_action_included(source: &str, position: usize, rule_names: Option<&[String]>) -> bool {
+    rule_names.is_none_or(|names| {
+        statement_rule_name(source, position)
+            .is_some_and(|rule_name| names.iter().any(|name| name == rule_name))
+    })
 }
 
 /// Finds grammar predicate templates in the same order as ANTLR serializes
@@ -1286,6 +1340,69 @@ fn is_rule_named_action(source: &str, open_brace: usize, marker: &str) -> bool {
     let prefix = &source[..open_brace];
     let statement_start = prefix.rfind(';').map_or(0, |index| index + 1);
     prefix[statement_start..].trim_end().ends_with(marker)
+}
+
+/// Returns the grammar rule that owns an action or signature position by reading
+/// the current rule header before the first colon in the statement.
+fn statement_rule_name(source: &str, position: usize) -> Option<&str> {
+    let prefix = source.get(..position)?;
+    let header = prefix.rfind(':').map_or_else(
+        || {
+            let header_start = prefix.rfind([';', '}']).map_or(0, |index| index + 1);
+            &prefix[header_start..]
+        },
+        |colon| {
+            let header_start = source[..colon]
+                .rfind([';', '}'])
+                .map_or(0, |index| index + 1);
+            &source[header_start..colon]
+        },
+    );
+    leading_rule_name(header)
+}
+
+/// Reads the first ANTLR identifier from a rule header, allowing the optional
+/// `fragment` prefix used by lexer rules.
+fn leading_rule_name(header: &str) -> Option<&str> {
+    let header = trim_leading_non_rule_lines(header);
+    let header = header
+        .strip_prefix("fragment")
+        .map_or(header, str::trim_start);
+    let end = header
+        .char_indices()
+        .find_map(|(index, ch)| (!(ch == '_' || ch.is_ascii_alphanumeric())).then_some(index))
+        .unwrap_or(header.len());
+    let name = &header[..end];
+    (!name.is_empty()).then_some(name)
+}
+
+/// Drops standalone comment and preamble-template lines that can sit between
+/// grammar-level metadata and the next rule header.
+fn trim_leading_non_rule_lines(mut header: &str) -> &str {
+    loop {
+        header = header.trim_start();
+        if header.starts_with("//") {
+            let Some(newline) = header.find('\n') else {
+                return "";
+            };
+            header = &header[newline + 1..];
+            continue;
+        }
+        if header.starts_with('<') {
+            let Some(close) = header.find('>') else {
+                return header;
+            };
+            if header[close + 1..]
+                .chars()
+                .next()
+                .is_none_or(|ch| ch == '\r' || ch == '\n')
+            {
+                header = &header[close + 1..];
+                continue;
+            }
+        }
+        return header;
+    }
 }
 
 /// Detects member-action blocks whose target code is compile-time scaffolding
