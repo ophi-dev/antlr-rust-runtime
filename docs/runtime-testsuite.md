@@ -131,14 +131,14 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `295 passed, 0 failed, 62 skipped, 295 run`
+- full descriptor sweep: `296 passed, 0 failed, 61 skipped, 296 run`
 - `LexerExec`: `42 passed, 0 failed, 0 skipped, 42 run`
 - `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
 - `LeftRecursion`: `97 passed, 0 failed, 1 skipped, 97 run`
 - `Listeners`: `7 passed, 0 failed, 0 skipped, 7 run`
 - `ParseTrees`: `10 passed, 0 failed, 0 skipped, 10 run`
 - `ParserExec`: `48 passed, 0 failed, 2 skipped, 48 run`
-- `ParserErrors`: `23 passed, 0 failed, 11 skipped, 23 run`
+- `ParserErrors`: `24 passed, 0 failed, 10 skipped, 24 run`
 - `Performance`: `7 passed, 0 failed, 0 skipped, 7 run`
 - `SemPredEvalLexer`: `2 passed, 0 failed, 6 skipped, 2 run`
 - `SemPredEvalParser`: `18 passed, 0 failed, 8 skipped, 18 run`
