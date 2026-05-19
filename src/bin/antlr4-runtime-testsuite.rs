@@ -496,7 +496,6 @@ fn target_templates_supported(descriptor: &Descriptor) -> bool {
     if unsupported_members_templates(grammar)
         || grammar.contains("@definitions")
         || !supported_signature_templates(grammar)
-        || grammar.contains("<LANotEquals")
         || grammar.contains("<AppendStr")
     {
         return false;

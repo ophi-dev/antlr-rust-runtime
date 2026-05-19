@@ -74,6 +74,7 @@ Supported now:
 - parser `@init {<BuildParseTrees()>}` and `notBuildParseTree` descriptors,
 - parser rule-level `@after {<ToStringTree("$label.ctx")>}` actions for simple
   rule labels,
+- parser semantic predicates for `LANotEquals(...)` lookahead target templates,
 - alt-numbered parse-tree contexts for grammars using
   `TreeNodeWithAltNumField`/`contextSuperClass`,
 - `RuleInvocationStack()` stdout helper actions,
@@ -85,6 +86,7 @@ Supported now:
 - nested `StringTemplate` action parsing for supported no-op wrappers,
 - `StringTemplate` comments in descriptor grammars,
 - ANTLR recursive-context tree rewrites for left-recursive parse-tree output,
+- ANTLR whitespace escaping for terminal text in `ToStringTree(...)` output,
 - `StringTemplate` backslash rendering for descriptor grammars,
 - official ANTLR `.interp` generation,
 - Rust module generation and execution through Cargo.
@@ -103,16 +105,16 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `253 passed, 0 failed, 104 skipped, 253 run`
+- full descriptor sweep: `255 passed, 0 failed, 102 skipped, 255 run`
 - `LexerExec`: `42 passed, 0 failed, 0 skipped, 42 run`
 - `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
 - `LeftRecursion`: `81 passed, 0 failed, 17 skipped, 81 run`
 - `ParseTrees`: `6 passed, 0 failed, 4 skipped, 6 run`
-- `ParserExec`: `45 passed, 0 failed, 5 skipped, 45 run`
+- `ParserExec`: `46 passed, 0 failed, 4 skipped, 46 run`
 - `ParserErrors`: `22 passed, 0 failed, 12 skipped, 22 run`
 - `Performance`: `7 passed, 0 failed, 0 skipped, 7 run`
 - `SemPredEvalLexer`: `2 passed, 0 failed, 6 skipped, 2 run`
-- `SemPredEvalParser`: `7 passed, 0 failed, 19 skipped, 7 run`
+- `SemPredEvalParser`: `8 passed, 0 failed, 18 skipped, 8 run`
 - `Sets`: `29 passed, 0 failed, 2 skipped, 29 run`
 
 The remaining target-action skips are descriptors that depend on templates the

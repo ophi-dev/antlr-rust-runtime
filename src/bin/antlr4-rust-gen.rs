@@ -422,8 +422,13 @@ fn render_parser(
         || Ok(vec![None; data.rule_names.len()]),
         |grammar| parser_init_action_templates(data, grammar),
     )?;
+    let predicates = grammar_source.map_or_else(
+        || Ok(Vec::new()),
+        |grammar| parser_predicate_templates(data, grammar),
+    )?;
     let has_init_actions = init_actions.iter().any(Option::is_some);
     let has_action_dispatch = !actions.is_empty() || has_init_actions;
+    let has_predicate_dispatch = !predicates.is_empty();
     let track_alt_numbers = grammar_source.is_some_and(uses_alt_number_contexts);
     let init_action_rules = init_actions
         .iter()
@@ -437,6 +442,7 @@ fn render_parser(
         let uses_after_interval = after_action.is_some_and(ActionTemplate::uses_rule_interval);
         let needs_slow_path = has_action_dispatch
             || track_alt_numbers
+            || has_predicate_dispatch
             || after_action.is_some_and(ActionTemplate::needs_nested_tree);
         writeln!(
             rule_methods,
@@ -459,7 +465,15 @@ fn render_parser(
             .expect("writing to a string cannot fail");
         } else {
             if needs_slow_path {
-                if track_alt_numbers {
+                if has_predicate_dispatch {
+                    writeln!(
+                        rule_methods,
+                        "        let (tree, actions) = self.base.parse_atn_rule_with_runtime_options(atn(), {index}, &{}, {track_alt_numbers}, &{})?;",
+                        render_usize_array(&init_action_rules),
+                        render_parser_predicate_array(&predicates, data)?
+                    )
+                    .expect("writing to a string cannot fail");
+                } else if track_alt_numbers {
                     writeln!(
                         rule_methods,
                         "        let (tree, actions) = self.base.parse_atn_rule_with_action_options(atn(), {index}, &{}, true)?;",
@@ -680,6 +694,7 @@ enum PredicateTemplate {
     True,
     False,
     TextEquals(String),
+    LookaheadNotEquals { offset: isize, token_name: String },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -741,6 +756,38 @@ fn lexer_predicate_templates(
         ));
     }
     Ok(predicates.into_iter().zip(templates).collect())
+}
+
+/// Pairs supported parser semantic predicates with serialized predicate
+/// coordinates from the parser ATN.
+fn parser_predicate_templates(
+    data: &InterpData,
+    grammar_source: &str,
+) -> io::Result<Vec<((usize, usize), PredicateTemplate)>> {
+    let predicates = lexer_predicate_transitions(data)?;
+    let mut mapped = Vec::new();
+    let mut offset = 0;
+    let mut predicate_index = 0;
+    while let Some(block) = next_template_block(grammar_source, offset) {
+        offset = block.after_brace;
+        if !block.predicate {
+            continue;
+        }
+        if let Some(template) = parse_predicate_template(block.body) {
+            let Some(coordinates) = predicates.get(predicate_index).copied() else {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "grammar predicate template <{}> has no parser ATN predicate transition",
+                        block.body
+                    ),
+                ));
+            };
+            mapped.push((coordinates, template));
+        }
+        predicate_index += 1;
+    }
+    Ok(mapped)
 }
 
 /// Pairs supported target-template actions with parser ATN action source states.
@@ -1169,15 +1216,42 @@ fn parse_predicate_template(body: &str) -> Option<PredicateTemplate> {
     match body {
         "True()" => Some(PredicateTemplate::True),
         "False()" => Some(PredicateTemplate::False),
-        _ => {
-            let argument = body
-                .strip_prefix("TextEquals(")
-                .and_then(|value| value.strip_suffix(')'))?;
-            Some(PredicateTemplate::TextEquals(parse_template_string(
-                argument,
-            )?))
-        }
+        _ => parse_text_equals_predicate(body).or_else(|| parse_la_not_equals_predicate(body)),
     }
+}
+
+fn parse_text_equals_predicate(body: &str) -> Option<PredicateTemplate> {
+    let argument = body
+        .strip_prefix("TextEquals(")
+        .and_then(|value| value.strip_suffix(')'))?;
+    Some(PredicateTemplate::TextEquals(parse_template_string(
+        argument,
+    )?))
+}
+
+fn parse_la_not_equals_predicate(body: &str) -> Option<PredicateTemplate> {
+    let arguments = body
+        .strip_prefix("LANotEquals(")
+        .and_then(|value| value.strip_suffix(')'))
+        .map(split_template_arguments)?;
+    let [offset, token] = arguments.as_slice() else {
+        return None;
+    };
+    let offset = parse_template_string(offset)?.parse::<isize>().ok()?;
+    let token_name = parse_parser_token_argument(token)?;
+    Some(PredicateTemplate::LookaheadNotEquals { offset, token_name })
+}
+
+fn parse_parser_token_argument(argument: &str) -> Option<String> {
+    let body = argument
+        .trim()
+        .strip_prefix("{T<ParserToken(")?
+        .strip_suffix(")>}")?;
+    let parts = split_template_arguments(body);
+    let [_, token_name] = parts.as_slice() else {
+        return None;
+    };
+    parse_template_string(token_name)
 }
 
 /// Parses `ToStringTree("$label.ctx")` target templates into a label-bearing
@@ -1591,6 +1665,9 @@ fn render_lexer_predicate_expression(template: &PredicateTemplate) -> String {
             "_base.token_text_until(predicate.position()) == \"{}\"",
             rust_string(value)
         ),
+        PredicateTemplate::LookaheadNotEquals { .. } => {
+            unreachable!("lookahead parser predicates are not lexer predicates")
+        }
     }
 }
 
@@ -1920,6 +1997,46 @@ fn render_usize_array(values: &[usize]) -> String {
         .collect::<Vec<_>>()
         .join(", ");
     format!("[{items}]")
+}
+
+/// Renders parser predicate metadata as an inline slice consumed by the runtime
+/// parser interpreter.
+fn render_parser_predicate_array(
+    predicates: &[((usize, usize), PredicateTemplate)],
+    data: &InterpData,
+) -> io::Result<String> {
+    let mut items = Vec::new();
+    for ((rule_index, pred_index), predicate) in predicates {
+        let expression = match predicate {
+            PredicateTemplate::True => "antlr4_runtime::ParserPredicate::True".to_owned(),
+            PredicateTemplate::False => "antlr4_runtime::ParserPredicate::False".to_owned(),
+            PredicateTemplate::TextEquals(_) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "TextEquals is only supported for lexer predicates",
+                ));
+            }
+            PredicateTemplate::LookaheadNotEquals { offset, token_name } => {
+                let token_type = token_type_for_name(data, token_name).ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("unknown predicate token {token_name}"),
+                    )
+                })?;
+                format!(
+                    "antlr4_runtime::ParserPredicate::LookaheadNotEquals {{ offset: {offset}, token_type: {token_type} }}"
+                )
+            }
+        };
+        items.push(format!("({rule_index}, {pred_index}, {expression})"));
+    }
+    Ok(format!("[{}]", items.join(", ")))
+}
+
+fn token_type_for_name(data: &InterpData, token_name: &str) -> Option<usize> {
+    data.symbolic_names
+        .iter()
+        .position(|name| name.as_deref() == Some(token_name))
 }
 
 fn max_len(left: &[Option<String>], right: &[Option<String>]) -> usize {

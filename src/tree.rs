@@ -20,8 +20,8 @@ impl ParseTree {
     pub fn to_string_tree(&self, rule_names: &[String]) -> String {
         match self {
             Self::Rule(rule) => rule.to_string_tree(rule_names),
-            Self::Terminal(node) => node.text(),
-            Self::Error(node) => node.text(),
+            Self::Terminal(node) => escape_tree_text(&node.text()),
+            Self::Error(node) => escape_tree_text(&node.text()),
         }
     }
 
@@ -111,6 +111,19 @@ impl ParseTree {
         stack.pop();
         false
     }
+}
+
+fn escape_tree_text(text: &str) -> String {
+    let mut escaped = String::with_capacity(text.len());
+    for ch in text.chars() {
+        match ch {
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            _ => escaped.push(ch),
+        }
+    }
+    escaped
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

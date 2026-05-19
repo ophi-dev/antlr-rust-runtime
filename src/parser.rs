@@ -97,6 +97,19 @@ impl ParserAction {
     }
 }
 
+/// Parser semantic predicate rendered from a supported target template.
+///
+/// The metadata recognizer evaluates these at the token-stream index where the
+/// predicate transition is reached. Unsupported or absent predicate templates
+/// remain unconditional so existing generated parsers keep their previous
+/// behavior unless the generator opts into this table.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum ParserPredicate {
+    True,
+    False,
+    LookaheadNotEquals { offset: isize, token_type: i32 },
+}
+
 pub trait Parser: Recognizer {
     fn build_parse_trees(&self) -> bool;
     fn set_build_parse_trees(&mut self, build: bool);
@@ -270,6 +283,7 @@ struct RecognizeRequest<'a> {
     index: usize,
     rule_start_index: usize,
     init_action_rules: &'a BTreeSet<usize>,
+    predicates: &'a [(usize, usize, ParserPredicate)],
     rule_alt_number: usize,
     track_alt_numbers: bool,
     /// Current left-recursive precedence threshold, matching ANTLR's
@@ -511,6 +525,29 @@ where
         init_action_rules: &[usize],
         track_alt_numbers: bool,
     ) -> Result<(ParseTree, Vec<ParserAction>), AntlrError> {
+        self.parse_atn_rule_with_runtime_options(
+            atn,
+            rule_index,
+            init_action_rules,
+            track_alt_numbers,
+            &[],
+        )
+    }
+
+    /// Parses a generated rule with action replay and parser predicate support.
+    ///
+    /// `predicates` maps serialized `(rule_index, pred_index)` coordinates to
+    /// target-template predicate semantics emitted by the generator. Missing
+    /// entries are treated as true so unsupported predicate-free grammars keep
+    /// the previous unconditional transition behavior.
+    pub fn parse_atn_rule_with_runtime_options(
+        &mut self,
+        atn: &Atn,
+        rule_index: usize,
+        init_action_rules: &[usize],
+        track_alt_numbers: bool,
+        predicates: &[(usize, usize, ParserPredicate)],
+    ) -> Result<(ParseTree, Vec<ParserAction>), AntlrError> {
         let start_state = atn
             .rule_to_start_state()
             .get(rule_index)
@@ -540,6 +577,7 @@ where
                 index: start_index,
                 rule_start_index: start_index,
                 init_action_rules: &init_action_rules,
+                predicates,
                 rule_alt_number: 0,
                 track_alt_numbers,
                 precedence: 0,
@@ -1078,6 +1116,7 @@ where
             index,
             rule_start_index,
             init_action_rules,
+            predicates,
             rule_alt_number,
             track_alt_numbers,
             precedence,
@@ -1098,6 +1137,7 @@ where
                 index: after_next,
                 rule_start_index,
                 init_action_rules,
+                predicates,
                 rule_alt_number,
                 track_alt_numbers,
                 precedence,
@@ -1144,6 +1184,7 @@ where
             index,
             rule_start_index,
             init_action_rules,
+            predicates,
             rule_alt_number,
             track_alt_numbers,
             precedence,
@@ -1168,6 +1209,7 @@ where
                 index,
                 rule_start_index,
                 init_action_rules,
+                predicates,
                 rule_alt_number,
                 track_alt_numbers,
                 precedence,
@@ -1210,6 +1252,7 @@ where
             index,
             rule_start_index,
             init_action_rules,
+            predicates,
             rule_alt_number,
             track_alt_numbers,
             precedence,
@@ -1263,9 +1306,7 @@ where
             let next_alt_number =
                 next_alt_number(state, transition_index, rule_alt_number, track_alt_numbers);
             match transition {
-                Transition::Epsilon { target }
-                | Transition::Predicate { target, .. }
-                | Transition::Action { target, .. } => {
+                Transition::Epsilon { target } | Transition::Action { target, .. } => {
                     let left_recursive_boundary = left_recursive_boundary(atn, state, *target);
                     let action = match transition {
                         Transition::Action { rule_index, .. } => Some(ParserAction::new(
@@ -1285,6 +1326,7 @@ where
                                 index,
                                 rule_start_index,
                                 init_action_rules,
+                                predicates,
                                 rule_alt_number: next_alt_number,
                                 track_alt_numbers,
                                 precedence,
@@ -1310,6 +1352,47 @@ where
                         }),
                     );
                 }
+                Transition::Predicate {
+                    target,
+                    rule_index,
+                    pred_index,
+                    ..
+                } => {
+                    if self.parser_predicate_matches(index, *rule_index, *pred_index, predicates) {
+                        let left_recursive_boundary = left_recursive_boundary(atn, state, *target);
+                        outcomes.extend(
+                            self.recognize_state(
+                                atn,
+                                RecognizeRequest {
+                                    state_number: *target,
+                                    stop_state,
+                                    index,
+                                    rule_start_index,
+                                    init_action_rules,
+                                    predicates,
+                                    rule_alt_number: next_alt_number,
+                                    track_alt_numbers,
+                                    precedence,
+                                    depth: depth + 1,
+                                    recovery_symbols: epsilon_recovery_symbols.clone(),
+                                },
+                                visiting,
+                                memo,
+                                expected,
+                            )
+                            .into_iter()
+                            .map(|mut outcome| {
+                                if let Some(rule_index) = left_recursive_boundary {
+                                    outcome.nodes.insert(
+                                        0,
+                                        RecognizedNode::LeftRecursiveBoundary { rule_index },
+                                    );
+                                }
+                                outcome
+                            }),
+                        );
+                    }
+                }
                 Transition::Precedence {
                     target,
                     precedence: transition_precedence,
@@ -1323,6 +1406,7 @@ where
                                 index,
                                 rule_start_index,
                                 init_action_rules,
+                                predicates,
                                 rule_alt_number: next_alt_number,
                                 track_alt_numbers,
                                 precedence,
@@ -1354,6 +1438,7 @@ where
                             index,
                             rule_start_index: index,
                             init_action_rules,
+                            predicates,
                             rule_alt_number: 0,
                             track_alt_numbers,
                             precedence: *rule_precedence,
@@ -1381,6 +1466,7 @@ where
                                     index: child.index,
                                     rule_start_index,
                                     init_action_rules,
+                                    predicates,
                                     rule_alt_number,
                                     track_alt_numbers,
                                     precedence,
@@ -1433,6 +1519,7 @@ where
                                     index: next_index,
                                     rule_start_index,
                                     init_action_rules,
+                                    predicates,
                                     rule_alt_number: next_alt_number,
                                     track_alt_numbers,
                                     precedence,
@@ -1468,6 +1555,7 @@ where
                                 index,
                                 rule_start_index,
                                 init_action_rules,
+                                predicates,
                                 rule_alt_number,
                                 track_alt_numbers,
                                 precedence,
@@ -1491,6 +1579,7 @@ where
                                         index,
                                         rule_start_index,
                                         init_action_rules,
+                                        predicates,
                                         rule_alt_number,
                                         track_alt_numbers,
                                         precedence,
@@ -1534,6 +1623,35 @@ where
     /// text inside the rendered interval.
     fn previous_token_index(&mut self, index: usize) -> Option<usize> {
         self.input.previous_visible_token_index(index)
+    }
+
+    /// Evaluates a supported parser predicate at a speculative input index.
+    ///
+    /// Parser ATN simulation is index-based, so predicate evaluation seeks to
+    /// the candidate index before applying lookahead. A missing predicate entry
+    /// means the generator did not opt into runtime evaluation for that
+    /// coordinate and the transition remains viable.
+    fn parser_predicate_matches(
+        &mut self,
+        index: usize,
+        rule_index: usize,
+        pred_index: usize,
+        predicates: &[(usize, usize, ParserPredicate)],
+    ) -> bool {
+        let Some((_, _, predicate)) = predicates
+            .iter()
+            .find(|(rule, pred, _)| *rule == rule_index && *pred == pred_index)
+        else {
+            return true;
+        };
+        self.input.seek(index);
+        match predicate {
+            ParserPredicate::True => true,
+            ParserPredicate::False => false,
+            ParserPredicate::LookaheadNotEquals { offset, token_type } => {
+                self.la(*offset) != *token_type
+            }
+        }
     }
 
     /// Returns the token-stream index after consuming `symbol` at `index`.
