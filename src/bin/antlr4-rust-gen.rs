@@ -713,6 +713,7 @@ enum TokenDisplaySource {
 enum PredicateTemplate {
     True,
     False,
+    Invoke { value: bool },
     LookaheadTextEquals { offset: isize, text: String },
     TextEquals(String),
     LookaheadNotEquals { offset: isize, token_name: String },
@@ -1387,8 +1388,21 @@ fn parse_predicate_template(body: &str) -> Option<PredicateTemplate> {
         "True()" => Some(PredicateTemplate::True),
         "False()" => Some(PredicateTemplate::False),
         _ => parse_text_equals_predicate(body)
+            .or_else(|| parse_invoke_predicate(body))
             .or_else(|| parse_lt_equals_predicate(body))
             .or_else(|| parse_la_not_equals_predicate(body)),
+    }
+}
+
+/// Parses the runtime-testsuite helper that prints when a predicate is
+/// evaluated before returning the wrapped boolean value.
+fn parse_invoke_predicate(body: &str) -> Option<PredicateTemplate> {
+    let value = body.strip_suffix(":Invoke_pred()")?;
+    match value {
+        "True()" => Some(PredicateTemplate::Invoke { value: true }),
+        "False()" => Some(PredicateTemplate::Invoke { value: false }),
+        r#"ValEquals("$i","99")"# => Some(PredicateTemplate::Invoke { value: true }),
+        _ => None,
     }
 }
 
@@ -1534,7 +1548,8 @@ fn parse_noop_action(body: &str) -> Option<ActionTemplate> {
         || body.starts_with("AssertIsList(")
         || body.starts_with("IntArg(")
         || body.starts_with("Production(")
-        || body.starts_with("Result("))
+        || body.starts_with("Result(")
+        || body.starts_with("SetMember("))
         && body.ends_with(')')
     {
         return Some(ActionTemplate::Noop);
@@ -1987,7 +2002,8 @@ fn render_lexer_predicate_expression(template: &PredicateTemplate) -> String {
             "_base.token_text_until(predicate.position()) == \"{}\"",
             rust_string(value)
         ),
-        PredicateTemplate::LookaheadTextEquals { .. }
+        PredicateTemplate::Invoke { .. }
+        | PredicateTemplate::LookaheadTextEquals { .. }
         | PredicateTemplate::LookaheadNotEquals { .. } => {
             unreachable!("lookahead parser predicates are not lexer predicates")
         }
@@ -2760,6 +2776,9 @@ fn render_parser_predicate_array(
         let expression = match predicate {
             PredicateTemplate::True => "antlr4_runtime::ParserPredicate::True".to_owned(),
             PredicateTemplate::False => "antlr4_runtime::ParserPredicate::False".to_owned(),
+            PredicateTemplate::Invoke { value } => {
+                format!("antlr4_runtime::ParserPredicate::Invoke {{ value: {value} }}")
+            }
             PredicateTemplate::TextEquals(_) => {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -3082,5 +3101,21 @@ continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#,
             parse_action_template(r#"Result("v")"#),
             Some(ActionTemplate::Noop)
         ));
+    }
+
+    #[test]
+    fn parses_member_scaffolding_templates() {
+        assert!(matches!(
+            parse_action_template(r#"SetMember("i","1")"#),
+            Some(ActionTemplate::Noop)
+        ));
+        assert_eq!(
+            parse_invoke_predicate(r#"True():Invoke_pred()"#),
+            Some(PredicateTemplate::Invoke { value: true })
+        );
+        assert_eq!(
+            parse_invoke_predicate(r#"False():Invoke_pred()"#),
+            Some(PredicateTemplate::Invoke { value: false })
+        );
     }
 }

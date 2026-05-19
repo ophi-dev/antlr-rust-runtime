@@ -491,9 +491,23 @@ fn target_templates_supported(descriptor: &Descriptor) -> bool {
     if descriptor.test_type != "Parser" {
         return false;
     }
+    // These fixtures need runtime state that is not modeled yet: action-hiding
+    // for global-follow predicates, or rule-argument values during speculative
+    // predicate evaluation.
+    if matches!(
+        descriptor.name.as_str(),
+        "ActionsHidePredsInGlobalFOLLOW"
+            | "DepedentPredsInGlobalFOLLOW"
+            | "PredicateDependentOnArg"
+    ) {
+        return false;
+    }
     let grammar = &descriptor.grammar;
     if unsupported_members_templates(grammar)
         || grammar.contains("@definitions")
+        || grammar.contains("AddMember(")
+        || grammar.contains("writeln(GetMember(")
+        || grammar.contains("ModMember")
         || !supported_signature_templates(grammar)
     {
         return false;
@@ -677,7 +691,9 @@ fn unsupported_members_templates(grammar: &str) -> bool {
 
 fn is_supported_members_template(body: &str) -> bool {
     body == "DeclareContextListGettersFunction()"
+        || body == "Declare_pred()"
         || (body.starts_with("InitBooleanMember(") && body.ends_with(",True())"))
+        || (body.starts_with("InitIntMember(") && body.ends_with(')'))
 }
 
 fn listener_template_kind(grammar: &str) -> Option<&'static str> {
@@ -707,7 +723,8 @@ fn is_noop_action_template(body: &str) -> bool {
         || body.starts_with("AssertIsList(")
         || body.starts_with("IntArg(")
         || body.starts_with("Production(")
-        || body.starts_with("Result("))
+        || body.starts_with("Result(")
+        || body.starts_with("SetMember("))
         && body.ends_with(')')
 }
 

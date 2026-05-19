@@ -91,6 +91,8 @@ Supported now:
   `$e.result`,
 - common-label left-recursion compile-check templates such as `Production(...)`
   and `Result(...)`,
+- integer/member predicate scaffolding used by selected semantic-predicate
+  descriptors, including `InitIntMember`, `SetMember`, and `Invoke_pred`,
 - alt-numbered parse-tree contexts for grammars using
   `TreeNodeWithAltNumField`/`contextSuperClass`,
 - `RuleInvocationStack()` stdout helper actions,
@@ -121,7 +123,7 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `288 passed, 0 failed, 69 skipped, 288 run`
+- full descriptor sweep: `291 passed, 0 failed, 66 skipped, 291 run`
 - `LexerExec`: `42 passed, 0 failed, 0 skipped, 42 run`
 - `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
 - `LeftRecursion`: `97 passed, 0 failed, 1 skipped, 97 run`
@@ -131,7 +133,7 @@ Current validated groups:
 - `ParserErrors`: `23 passed, 0 failed, 11 skipped, 23 run`
 - `Performance`: `7 passed, 0 failed, 0 skipped, 7 run`
 - `SemPredEvalLexer`: `2 passed, 0 failed, 6 skipped, 2 run`
-- `SemPredEvalParser`: `11 passed, 0 failed, 15 skipped, 11 run`
+- `SemPredEvalParser`: `14 passed, 0 failed, 12 skipped, 14 run`
 - `Sets`: `29 passed, 0 failed, 2 skipped, 29 run`
 
 The remaining target-action skips are descriptors that depend on templates the

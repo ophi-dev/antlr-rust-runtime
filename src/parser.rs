@@ -107,8 +107,19 @@ impl ParserAction {
 pub enum ParserPredicate {
     True,
     False,
-    LookaheadTextEquals { offset: isize, text: &'static str },
-    LookaheadNotEquals { offset: isize, token_type: i32 },
+    /// Target-template test helper that reports predicate evaluation before
+    /// returning the wrapped boolean value.
+    Invoke {
+        value: bool,
+    },
+    LookaheadTextEquals {
+        offset: isize,
+        text: &'static str,
+    },
+    LookaheadNotEquals {
+        offset: isize,
+        token_type: i32,
+    },
 }
 
 pub trait Parser: Recognizer {
@@ -121,6 +132,10 @@ pub struct BaseParser<S> {
     input: CommonTokenStream<S>,
     data: RecognizerData,
     build_parse_trees: bool,
+    /// Predicate side effects are observable in a few target-template tests;
+    /// speculative recognition may revisit the same coordinate, so replay it
+    /// once per parser instance.
+    invoked_predicates: Vec<(usize, usize)>,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -358,6 +373,7 @@ where
             input,
             data,
             build_parse_trees: true,
+            invoked_predicates: Vec::new(),
         }
     }
 
@@ -1730,6 +1746,16 @@ where
         match predicate {
             ParserPredicate::True => true,
             ParserPredicate::False => false,
+            ParserPredicate::Invoke { value } => {
+                let key = (rule_index, pred_index);
+                if !self.invoked_predicates.contains(&key) {
+                    self.invoked_predicates.push(key);
+                    use std::io::Write as _;
+                    let mut stdout = std::io::stdout().lock();
+                    let _ = writeln!(stdout, "eval={value}");
+                }
+                *value
+            }
             ParserPredicate::LookaheadTextEquals { offset, text } => {
                 self.input.lt(*offset).and_then(Token::text) == Some(*text)
             }
