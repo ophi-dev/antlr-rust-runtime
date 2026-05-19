@@ -496,9 +496,7 @@ fn target_templates_supported(descriptor: &Descriptor) -> bool {
     // predicate evaluation.
     if matches!(
         descriptor.name.as_str(),
-        "ActionsHidePredsInGlobalFOLLOW"
-            | "DepedentPredsInGlobalFOLLOW"
-            | "PredicateDependentOnArg"
+        "ActionsHidePredsInGlobalFOLLOW" | "DepedentPredsInGlobalFOLLOW"
     ) {
         return false;
     }

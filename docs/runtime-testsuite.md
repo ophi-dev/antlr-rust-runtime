@@ -84,6 +84,9 @@ Supported now:
   rule labels,
 - parser semantic predicates for `LANotEquals(...)` and `LTEquals(...)`
   lookahead target templates,
+- parser rule-argument predicates for supported `ValEquals("$i", "...")`
+  target templates, including literal integer calls and `VarRef("i")`
+  forwarding,
 - parser supported-predicate decision ordering for action-bearing alternatives,
 - listener-suite target templates for `BasicListener`, token/rule getter
   listeners, and the left-recursive listener fixtures,
@@ -123,7 +126,7 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `291 passed, 0 failed, 66 skipped, 291 run`
+- full descriptor sweep: `292 passed, 0 failed, 65 skipped, 292 run`
 - `LexerExec`: `42 passed, 0 failed, 0 skipped, 42 run`
 - `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
 - `LeftRecursion`: `97 passed, 0 failed, 1 skipped, 97 run`
@@ -133,7 +136,7 @@ Current validated groups:
 - `ParserErrors`: `23 passed, 0 failed, 11 skipped, 23 run`
 - `Performance`: `7 passed, 0 failed, 0 skipped, 7 run`
 - `SemPredEvalLexer`: `2 passed, 0 failed, 6 skipped, 2 run`
-- `SemPredEvalParser`: `14 passed, 0 failed, 12 skipped, 14 run`
+- `SemPredEvalParser`: `15 passed, 0 failed, 11 skipped, 15 run`
 - `Sets`: `29 passed, 0 failed, 2 skipped, 29 run`
 
 The remaining target-action skips are descriptors that depend on templates the

@@ -426,6 +426,8 @@ fn render_parser(
         || Ok(Vec::new()),
         |grammar| parser_predicate_templates(data, grammar),
     )?;
+    let rule_args =
+        grammar_source.map_or_else(|| Ok(Vec::new()), |grammar| parser_rule_args(data, grammar))?;
     let has_init_actions = init_actions.iter().any(Option::is_some);
     let has_action_dispatch = !actions.is_empty() || has_init_actions;
     let has_predicate_dispatch = !predicates.is_empty();
@@ -468,9 +470,10 @@ fn render_parser(
                 if has_predicate_dispatch {
                     writeln!(
                         rule_methods,
-                        "        let (tree, actions) = self.base.parse_atn_rule_with_runtime_options(atn(), {index}, &{}, {track_alt_numbers}, &{})?;",
+                        "        let (tree, actions) = self.base.parse_atn_rule_with_runtime_options(atn(), {index}, antlr4_runtime::ParserRuntimeOptions {{ init_action_rules: &{}, track_alt_numbers: {track_alt_numbers}, predicates: &{}, rule_args: &{} }})?;",
                         render_usize_array(&init_action_rules),
-                        render_parser_predicate_array(&predicates, data)?
+                        render_parser_predicate_array(&predicates, data)?,
+                        render_parser_rule_arg_array(&rule_args)
                     )
                     .expect("writing to a string cannot fail");
                 } else if track_alt_numbers {
@@ -714,6 +717,7 @@ enum PredicateTemplate {
     True,
     False,
     Invoke { value: bool },
+    LocalIntEquals { value: i64 },
     LookaheadTextEquals { offset: isize, text: String },
     TextEquals(String),
     LookaheadNotEquals { offset: isize, token_name: String },
@@ -739,6 +743,12 @@ enum ListenerKind {
 enum RuleValueKind {
     Int,
     String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RuleArgTemplate {
+    Literal(i64),
+    InheritLocal,
 }
 
 /// Pairs supported lexer target-template actions with serialized custom-action
@@ -1389,9 +1399,28 @@ fn parse_predicate_template(body: &str) -> Option<PredicateTemplate> {
         "False()" => Some(PredicateTemplate::False),
         _ => parse_text_equals_predicate(body)
             .or_else(|| parse_invoke_predicate(body))
+            .or_else(|| parse_val_equals_predicate(body))
             .or_else(|| parse_lt_equals_predicate(body))
             .or_else(|| parse_la_not_equals_predicate(body)),
     }
+}
+
+/// Parses simple local integer argument predicates such as
+/// `ValEquals("$i","2")`.
+fn parse_val_equals_predicate(body: &str) -> Option<PredicateTemplate> {
+    let arguments = body
+        .strip_prefix("ValEquals(")
+        .and_then(|value| value.strip_suffix(')'))
+        .map(split_template_arguments)?;
+    let [local, value] = arguments.as_slice() else {
+        return None;
+    };
+    if parse_template_string(local)? != "$i" {
+        return None;
+    }
+    Some(PredicateTemplate::LocalIntEquals {
+        value: parse_template_string(value)?.parse::<i64>().ok()?,
+    })
 }
 
 /// Parses the runtime-testsuite helper that prints when a predicate is
@@ -1856,6 +1885,93 @@ fn parser_action_states(data: &InterpData) -> io::Result<Vec<usize>> {
     Ok(states)
 }
 
+/// Pairs supported rule-call arguments from grammar source with the ATN
+/// rule-transition source states that carry those calls at runtime.
+///
+/// Runtime-test templates encode rule arguments in the original grammar text,
+/// but the generated `.interp` data only preserves rule-transition structure.
+/// Source order is stable for the covered fixtures, so matching grammar calls
+/// to same-rule ATN transitions lets the generated parser expose local
+/// predicate values without depending on ANTLR's Java code generator.
+fn parser_rule_args(
+    data: &InterpData,
+    grammar_source: &str,
+) -> io::Result<Vec<(usize, usize, RuleArgTemplate)>> {
+    let calls = literal_rule_arg_calls(data, grammar_source);
+    if calls.is_empty() {
+        return Ok(Vec::new());
+    }
+    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(data.atn.clone()))
+        .deserialize()
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    let mut rule_transitions = Vec::new();
+    for state in atn.states() {
+        for transition in &state.transitions {
+            if let Transition::Rule { rule_index, .. } = transition {
+                rule_transitions.push((state.state_number, *rule_index));
+            }
+        }
+    }
+
+    let mut used = vec![false; rule_transitions.len()];
+    let mut args = Vec::new();
+    for (rule_index, value) in calls {
+        if let Some((index, (source_state, _))) = rule_transitions
+            .iter()
+            .enumerate()
+            .find(|(index, (_, transition_rule))| !used[*index] && *transition_rule == rule_index)
+        {
+            used[index] = true;
+            args.push((*source_state, rule_index, value));
+        }
+    }
+    Ok(args)
+}
+
+/// Extracts calls like `a[2]` and `a[<VarRef("i")>]` while ignoring rule
+/// declarations and target templates whose bracket contents are unsupported.
+fn literal_rule_arg_calls(
+    data: &InterpData,
+    grammar_source: &str,
+) -> Vec<(usize, RuleArgTemplate)> {
+    let mut calls = Vec::new();
+    for (rule_index, rule_name) in data.rule_names.iter().enumerate() {
+        let pattern = format!("{rule_name}[");
+        let mut offset = 0;
+        while let Some(start) = grammar_source[offset..]
+            .find(&pattern)
+            .map(|index| offset + index)
+        {
+            let value_start = start + pattern.len();
+            let Some(value_stop) = grammar_source[value_start..]
+                .find(']')
+                .map(|index| value_start + index)
+            else {
+                break;
+            };
+            if start == 0
+                || grammar_source[..start]
+                    .chars()
+                    .next_back()
+                    .is_none_or(|ch| !(ch == '_' || ch.is_ascii_alphanumeric()))
+            {
+                let value = grammar_source[value_start..value_stop].trim();
+                if let Ok(value) = value.parse::<i64>() {
+                    calls.push((start, rule_index, RuleArgTemplate::Literal(value)));
+                } else if value == r#"<VarRef("i")>"# {
+                    calls.push((start, rule_index, RuleArgTemplate::InheritLocal));
+                }
+            }
+            offset = value_stop + 1;
+        }
+    }
+    calls.sort_by_key(|(start, _, _)| *start);
+    calls
+        .into_iter()
+        .map(|(_, rule_index, value)| (rule_index, value))
+        .collect()
+}
+
 /// Emits the helper methods for ANTLR's `PositionAdjustingLexer` runtime-test
 /// target template.
 ///
@@ -2003,6 +2119,7 @@ fn render_lexer_predicate_expression(template: &PredicateTemplate) -> String {
             rust_string(value)
         ),
         PredicateTemplate::Invoke { .. }
+        | PredicateTemplate::LocalIntEquals { .. }
         | PredicateTemplate::LookaheadTextEquals { .. }
         | PredicateTemplate::LookaheadNotEquals { .. } => {
             unreachable!("lookahead parser predicates are not lexer predicates")
@@ -2779,6 +2896,9 @@ fn render_parser_predicate_array(
             PredicateTemplate::Invoke { value } => {
                 format!("antlr4_runtime::ParserPredicate::Invoke {{ value: {value} }}")
             }
+            PredicateTemplate::LocalIntEquals { value } => {
+                format!("antlr4_runtime::ParserPredicate::LocalIntEquals {{ value: {value} }}")
+            }
             PredicateTemplate::TextEquals(_) => {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -2806,6 +2926,24 @@ fn render_parser_predicate_array(
         items.push(format!("({rule_index}, {pred_index}, {expression})"));
     }
     Ok(format!("[{}]", items.join(", ")))
+}
+
+/// Renders parser rule-argument metadata for generated calls into the runtime.
+fn render_parser_rule_arg_array(args: &[(usize, usize, RuleArgTemplate)]) -> String {
+    let items = args
+        .iter()
+        .map(|(source_state, rule_index, value)| {
+            let (value, inherit_local) = match value {
+                RuleArgTemplate::Literal(value) => (*value, false),
+                RuleArgTemplate::InheritLocal => (0, true),
+            };
+            format!(
+                "antlr4_runtime::ParserRuleArg {{ source_state: {source_state}, rule_index: {rule_index}, value: {value}, inherit_local: {inherit_local} }}"
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("[{items}]")
 }
 
 fn token_type_for_name(data: &InterpData, token_name: &str) -> Option<usize> {
@@ -3116,6 +3254,10 @@ continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#,
         assert_eq!(
             parse_invoke_predicate(r#"False():Invoke_pred()"#),
             Some(PredicateTemplate::Invoke { value: false })
+        );
+        assert_eq!(
+            parse_val_equals_predicate(r#"ValEquals("$i","2")"#),
+            Some(PredicateTemplate::LocalIntEquals { value: 2 })
         );
     }
 }

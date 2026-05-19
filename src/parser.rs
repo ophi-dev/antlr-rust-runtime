@@ -120,6 +120,41 @@ pub enum ParserPredicate {
         offset: isize,
         token_type: i32,
     },
+    /// Compares the current rule invocation's integer argument with a literal
+    /// value from a supported `ValEquals("$i", "...")` target template.
+    LocalIntEquals {
+        value: i64,
+    },
+}
+
+/// Integer argument metadata for a generated parser rule invocation.
+///
+/// ANTLR's serialized ATN does not retain Rust-target rule argument values, so
+/// the generator records the rule-transition source state and the value that
+/// should be visible to semantic predicates inside the callee.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct ParserRuleArg {
+    /// ATN state containing the rule transition that receives this argument.
+    pub source_state: usize,
+    /// Callee rule index for the transition.
+    pub rule_index: usize,
+    /// Literal fallback value to expose in the callee.
+    pub value: i64,
+    /// Whether the callee should inherit the caller's current integer argument.
+    pub inherit_local: bool,
+}
+
+/// Optional generated-runtime metadata for metadata-driven parser execution.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ParserRuntimeOptions<'a> {
+    /// Rule indexes whose `@init` actions should be replayed.
+    pub init_action_rules: &'a [usize],
+    /// Whether generated parse-tree contexts should retain alternative numbers.
+    pub track_alt_numbers: bool,
+    /// Semantic predicate table keyed by serialized `(rule_index, pred_index)`.
+    pub predicates: &'a [(usize, usize, ParserPredicate)],
+    /// Rule-call integer argument table keyed by ATN source state.
+    pub rule_args: &'a [ParserRuleArg],
 }
 
 pub trait Parser: Recognizer {
@@ -302,6 +337,8 @@ struct RecognizeRequest<'a> {
     rule_start_index: usize,
     init_action_rules: &'a BTreeSet<usize>,
     predicates: &'a [(usize, usize, ParserPredicate)],
+    rule_args: &'a [ParserRuleArg],
+    local_int_arg: Option<(usize, i64)>,
     rule_alt_number: usize,
     track_alt_numbers: bool,
     /// Current left-recursive precedence threshold, matching ANTLR's
@@ -317,6 +354,7 @@ struct RecognizeKey {
     stop_state: usize,
     index: usize,
     rule_start_index: usize,
+    local_int_arg: Option<(usize, i64)>,
     rule_alt_number: usize,
     track_alt_numbers: bool,
     precedence: i32,
@@ -547,9 +585,11 @@ where
         self.parse_atn_rule_with_runtime_options(
             atn,
             rule_index,
-            init_action_rules,
-            track_alt_numbers,
-            &[],
+            ParserRuntimeOptions {
+                init_action_rules,
+                track_alt_numbers,
+                ..ParserRuntimeOptions::default()
+            },
         )
     }
 
@@ -563,10 +603,14 @@ where
         &mut self,
         atn: &Atn,
         rule_index: usize,
-        init_action_rules: &[usize],
-        track_alt_numbers: bool,
-        predicates: &[(usize, usize, ParserPredicate)],
+        options: ParserRuntimeOptions<'_>,
     ) -> Result<(ParseTree, Vec<ParserAction>), AntlrError> {
+        let ParserRuntimeOptions {
+            init_action_rules,
+            track_alt_numbers,
+            predicates,
+            rule_args,
+        } = options;
         let start_state = atn
             .rule_to_start_state()
             .get(rule_index)
@@ -597,6 +641,8 @@ where
                 rule_start_index: start_index,
                 init_action_rules: &init_action_rules,
                 predicates,
+                rule_args,
+                local_int_arg: None,
                 rule_alt_number: 0,
                 track_alt_numbers,
                 precedence: 0,
@@ -1136,6 +1182,8 @@ where
             rule_start_index,
             init_action_rules,
             predicates,
+            rule_args,
+            local_int_arg,
             rule_alt_number,
             track_alt_numbers,
             precedence,
@@ -1157,6 +1205,8 @@ where
                 rule_start_index,
                 init_action_rules,
                 predicates,
+                rule_args,
+                local_int_arg,
                 rule_alt_number,
                 track_alt_numbers,
                 precedence,
@@ -1204,6 +1254,8 @@ where
             rule_start_index,
             init_action_rules,
             predicates,
+            rule_args,
+            local_int_arg,
             rule_alt_number,
             track_alt_numbers,
             precedence,
@@ -1229,6 +1281,8 @@ where
                 rule_start_index,
                 init_action_rules,
                 predicates,
+                rule_args,
+                local_int_arg,
                 rule_alt_number,
                 track_alt_numbers,
                 precedence,
@@ -1272,6 +1326,8 @@ where
             rule_start_index,
             init_action_rules,
             predicates,
+            rule_args,
+            local_int_arg,
             rule_alt_number,
             track_alt_numbers,
             precedence,
@@ -1297,6 +1353,7 @@ where
             stop_state,
             index,
             rule_start_index,
+            local_int_arg,
             rule_alt_number,
             track_alt_numbers,
             precedence,
@@ -1348,6 +1405,8 @@ where
                                 rule_start_index,
                                 init_action_rules,
                                 predicates,
+                                rule_args,
+                                local_int_arg,
                                 rule_alt_number: next_alt_number,
                                 track_alt_numbers,
                                 precedence,
@@ -1380,7 +1439,13 @@ where
                     pred_index,
                     ..
                 } => {
-                    if self.parser_predicate_matches(index, *rule_index, *pred_index, predicates) {
+                    if self.parser_predicate_matches(
+                        index,
+                        *rule_index,
+                        *pred_index,
+                        predicates,
+                        local_int_arg,
+                    ) {
                         let left_recursive_boundary = left_recursive_boundary(atn, state, *target);
                         outcomes.extend(
                             self.recognize_state(
@@ -1392,6 +1457,8 @@ where
                                     rule_start_index,
                                     init_action_rules,
                                     predicates,
+                                    rule_args,
+                                    local_int_arg,
                                     rule_alt_number: next_alt_number,
                                     track_alt_numbers,
                                     precedence,
@@ -1431,6 +1498,8 @@ where
                                     rule_start_index,
                                     init_action_rules,
                                     predicates,
+                                    rule_args,
+                                    local_int_arg,
                                     rule_alt_number: next_alt_number,
                                     track_alt_numbers,
                                     precedence,
@@ -1460,6 +1529,21 @@ where
                     else {
                         continue;
                     };
+                    let child_local_int_arg = rule_args
+                        .iter()
+                        .find(|arg| {
+                            arg.source_state == state_number && arg.rule_index == *rule_index
+                        })
+                        .map(|arg| {
+                            (
+                                *rule_index,
+                                if arg.inherit_local {
+                                    local_int_arg.map_or(arg.value, |(_, value)| value)
+                                } else {
+                                    arg.value
+                                },
+                            )
+                        });
                     let children = self.recognize_state(
                         atn,
                         RecognizeRequest {
@@ -1469,6 +1553,8 @@ where
                             rule_start_index: index,
                             init_action_rules,
                             predicates,
+                            rule_args,
+                            local_int_arg: child_local_int_arg,
                             rule_alt_number: 0,
                             track_alt_numbers,
                             precedence: *rule_precedence,
@@ -1498,6 +1584,8 @@ where
                                     rule_start_index,
                                     init_action_rules,
                                     predicates,
+                                    rule_args,
+                                    local_int_arg,
                                     rule_alt_number,
                                     track_alt_numbers,
                                     precedence,
@@ -1555,6 +1643,8 @@ where
                                     rule_start_index,
                                     init_action_rules,
                                     predicates,
+                                    rule_args,
+                                    local_int_arg,
                                     rule_alt_number: next_alt_number,
                                     track_alt_numbers,
                                     precedence,
@@ -1594,6 +1684,8 @@ where
                                     rule_start_index,
                                     init_action_rules,
                                     predicates,
+                                    rule_args,
+                                    local_int_arg,
                                     rule_alt_number,
                                     track_alt_numbers,
                                     precedence,
@@ -1624,6 +1716,8 @@ where
                                         rule_start_index,
                                         init_action_rules,
                                         predicates,
+                                        rule_args,
+                                        local_int_arg,
                                         rule_alt_number,
                                         track_alt_numbers,
                                         precedence,
@@ -1669,6 +1763,8 @@ where
                                         rule_start_index,
                                         init_action_rules,
                                         predicates,
+                                        rule_args,
+                                        local_int_arg,
                                         rule_alt_number,
                                         track_alt_numbers,
                                         precedence,
@@ -1735,6 +1831,7 @@ where
         rule_index: usize,
         pred_index: usize,
         predicates: &[(usize, usize, ParserPredicate)],
+        local_int_arg: Option<(usize, i64)>,
     ) -> bool {
         let Some((_, _, predicate)) = predicates
             .iter()
@@ -1761,6 +1858,9 @@ where
             }
             ParserPredicate::LookaheadNotEquals { offset, token_type } => {
                 self.la(*offset) != *token_type
+            }
+            ParserPredicate::LocalIntEquals { value } => {
+                local_int_arg.is_none_or(|(_, actual)| actual == *value)
             }
         }
     }
