@@ -566,13 +566,14 @@ fn rule_local_int_arg(
 /// state.
 fn stop_outcome(
     index: usize,
+    consumed_eof: bool,
     rule_alt_number: usize,
     member_values: BTreeMap<usize, i64>,
     return_values: BTreeMap<String, i64>,
 ) -> Vec<RecognizeOutcome> {
     vec![RecognizeOutcome {
         index,
-        consumed_eof: false,
+        consumed_eof,
         alt_number: rule_alt_number,
         member_values,
         return_values,
@@ -600,6 +601,7 @@ struct RecognizeRequest<'a> {
     return_values: BTreeMap<String, i64>,
     rule_alt_number: usize,
     track_alt_numbers: bool,
+    consumed_eof: bool,
     /// Current left-recursive precedence threshold, matching ANTLR's
     /// `precpred(_ctx, k)` check for generated precedence rules.
     precedence: i32,
@@ -620,6 +622,7 @@ struct RecognizeKey {
     return_values: BTreeMap<String, i64>,
     rule_alt_number: usize,
     track_alt_numbers: bool,
+    consumed_eof: bool,
     precedence: i32,
     recovery_symbols: BTreeSet<i32>,
     recovery_state: Option<usize>,
@@ -868,7 +871,7 @@ where
                 AntlrError::Unsupported(format!("rule {rule_index} has no stop state"))
             })?;
 
-        let start_index = self.input.index();
+        let start_index = self.current_visible_index();
         self.clear_prediction_diagnostics();
         let mut visiting = BTreeSet::new();
         let mut memo = BTreeMap::new();
@@ -890,7 +893,8 @@ where
             &mut memo,
             &mut expected,
         );
-        let Some(outcome) = select_best_fast_outcome(outcomes.into_iter()) else {
+        let Some(outcome) = select_best_fast_outcome(outcomes.into_iter(), self.prediction_mode)
+        else {
             let error = self.recognition_error(rule_index, start_index, &expected);
             report_token_source_errors(&self.input.drain_source_errors());
             return Err(error);
@@ -1010,7 +1014,7 @@ where
                 AntlrError::Unsupported(format!("rule {rule_index} has no stop state"))
             })?;
 
-        let start_index = self.input.index();
+        let start_index = self.current_visible_index();
         self.clear_prediction_diagnostics();
         let init_action_rules = init_action_rules.iter().copied().collect::<BTreeSet<_>>();
         let mut visiting = BTreeSet::new();
@@ -1036,6 +1040,7 @@ where
                 return_values,
                 rule_alt_number: 0,
                 track_alt_numbers,
+                consumed_eof: false,
                 precedence: 0,
                 depth: 0,
                 recovery_symbols: BTreeSet::new(),
@@ -1851,6 +1856,7 @@ where
             return_values,
             rule_alt_number,
             track_alt_numbers,
+            consumed_eof,
             precedence,
             depth,
             ..
@@ -1879,6 +1885,7 @@ where
                 return_values,
                 rule_alt_number,
                 track_alt_numbers,
+                consumed_eof: consumed_eof || next_symbol == TOKEN_EOF,
                 precedence,
                 depth: depth + 1,
                 recovery_symbols: BTreeSet::new(),
@@ -2002,6 +2009,7 @@ where
                 return_values: request.return_values,
                 rule_alt_number: request.rule_alt_number,
                 track_alt_numbers: request.track_alt_numbers,
+                consumed_eof: request.consumed_eof,
                 precedence: request.precedence,
                 depth: request.depth + 1,
                 recovery_symbols: BTreeSet::new(),
@@ -2038,7 +2046,7 @@ where
             self.eof_rule_recovery_diagnostic(request.index, &fallback.expected_symbols, expected);
         vec![RecognizeOutcome {
             index: request.index,
-            consumed_eof: false,
+            consumed_eof: request.consumed_eof,
             alt_number: request.rule_alt_number,
             member_values: request.member_values,
             return_values: request.return_values,
@@ -2080,6 +2088,7 @@ where
             return_values,
             rule_alt_number,
             track_alt_numbers,
+            consumed_eof,
             precedence,
             depth,
             ..
@@ -2112,6 +2121,7 @@ where
                 return_values,
                 rule_alt_number,
                 track_alt_numbers,
+                consumed_eof,
                 precedence,
                 depth: depth + 1,
                 recovery_symbols: BTreeSet::new(),
@@ -2164,6 +2174,7 @@ where
             return_values,
             rule_alt_number,
             track_alt_numbers,
+            consumed_eof,
             precedence,
             depth,
             recovery_symbols,
@@ -2173,7 +2184,13 @@ where
             return Vec::new();
         }
         if state_number == stop_state {
-            return stop_outcome(index, rule_alt_number, member_values, return_values);
+            return stop_outcome(
+                index,
+                consumed_eof,
+                rule_alt_number,
+                member_values,
+                return_values,
+            );
         }
         let key = RecognizeKey {
             state_number,
@@ -2186,6 +2203,7 @@ where
             return_values: return_values.clone(),
             rule_alt_number,
             track_alt_numbers,
+            consumed_eof,
             precedence,
             recovery_symbols: recovery_symbols.clone(),
             recovery_state,
@@ -2277,6 +2295,7 @@ where
                                     return_values: return_values.clone(),
                                     rule_alt_number: next_alt_number,
                                     track_alt_numbers,
+                                    consumed_eof,
                                     precedence,
                                     depth: depth + 1,
                                     recovery_symbols: epsilon_recovery_symbols.clone(),
@@ -2337,6 +2356,7 @@ where
                                     return_values: return_values.clone(),
                                     rule_alt_number: next_alt_number,
                                     track_alt_numbers,
+                                    consumed_eof,
                                     precedence,
                                     depth: depth + 1,
                                     recovery_symbols: epsilon_recovery_symbols.clone(),
@@ -2386,6 +2406,7 @@ where
                             return_values: BTreeMap::new(),
                             rule_alt_number: 0,
                             track_alt_numbers,
+                            consumed_eof: false,
                             precedence: *rule_precedence,
                             depth: depth + 1,
                             recovery_symbols: epsilon_recovery_symbols.clone(),
@@ -2446,6 +2467,7 @@ where
                                     return_values: return_values.clone(),
                                     rule_alt_number,
                                     track_alt_numbers,
+                                    consumed_eof: consumed_eof || child.consumed_eof,
                                     precedence,
                                     depth: depth + 1,
                                     recovery_symbols: BTreeSet::new(),
@@ -2511,6 +2533,7 @@ where
                                     return_values: return_values.clone(),
                                     rule_alt_number: next_alt_number,
                                     track_alt_numbers,
+                                    consumed_eof: consumed_eof || symbol == TOKEN_EOF,
                                     precedence,
                                     depth: depth + 1,
                                     recovery_symbols: BTreeSet::new(),
@@ -2634,7 +2657,7 @@ where
                 step.source_state,
                 rule_index,
                 request.rule_start_index,
-                self.previous_token_index(request.index),
+                self.rule_stop_token_index(request.index, request.consumed_eof),
             )
         });
         let next_member_values = if action.is_some() {
@@ -2676,6 +2699,7 @@ where
                 return_values: next_return_values,
                 rule_alt_number: step.alt_number,
                 track_alt_numbers: request.track_alt_numbers,
+                consumed_eof: request.consumed_eof,
                 precedence: request.precedence,
                 depth: request.depth + 1,
                 recovery_symbols: step.recovery_symbols,
@@ -2710,6 +2734,14 @@ where
     /// Clones the visible token at an absolute token-stream index.
     fn token_at(&mut self, index: usize) -> Option<CommonToken> {
         self.input.get(index).cloned()
+    }
+
+    /// Normalizes the current token-stream cursor to the next parser-visible
+    /// token before capturing a rule start boundary.
+    fn current_visible_index(&mut self) -> usize {
+        let index = self.input.index();
+        self.input.seek(index);
+        self.input.index()
     }
 
     /// Reports whether a child rule reached EOF cleanly while also recording
@@ -2970,9 +3002,27 @@ where
         )
     }
 
-    /// Returns token text for a buffered token interval.
+    /// Returns token text for a buffered token interval used by generated
+    /// `$text` actions.
+    ///
+    /// ANTLR treats EOF as a range boundary rather than printable input text,
+    /// even when an action interval explicitly stops at the EOF token.
     pub fn text_interval(&mut self, start: usize, stop: Option<usize>) -> String {
-        stop.map_or_else(String::new, |stop| self.input.text(start, stop))
+        let Some(stop) = stop else {
+            return String::new();
+        };
+        let stop = if self
+            .token_at(stop)
+            .is_some_and(|token| token.token_type() == TOKEN_EOF)
+        {
+            let Some(previous) = self.previous_token_index(stop) else {
+                return String::new();
+            };
+            previous
+        } else {
+            stop
+        };
+        self.input.text(start, stop)
     }
 
     /// Resets per-parse prediction diagnostics while keeping the parser-level
@@ -3331,14 +3381,21 @@ fn state_is_left_recursive_rule(atn: &Atn, state: &AtnState) -> bool {
 /// `expr 'and' expr`. Only the public rule entry commits to one endpoint.
 fn select_best_fast_outcome(
     outcomes: impl Iterator<Item = FastRecognizeOutcome>,
+    prediction_mode: PredictionMode,
 ) -> Option<FastRecognizeOutcome> {
     outcomes.reduce(|best, outcome| {
-        if outcome_is_better(
-            (outcome.index, outcome.consumed_eof),
-            &outcome.diagnostics,
-            (best.index, best.consumed_eof),
-            &best.diagnostics,
-        ) {
+        let outcome_position = (outcome.index, outcome.consumed_eof);
+        let best_position = (best.index, best.consumed_eof);
+        let better = match prediction_mode {
+            PredictionMode::Ll => outcome_is_better(
+                outcome_position,
+                &outcome.diagnostics,
+                best_position,
+                &best.diagnostics,
+            ),
+            PredictionMode::Sll => outcome.index > best.index,
+        };
+        if better {
             return outcome;
         }
         best
@@ -3692,7 +3749,7 @@ where
 mod tests {
     use super::*;
     use crate::atn::serialized::{AtnDeserializer, SerializedAtn};
-    use crate::token::{CommonToken, Token};
+    use crate::token::{CommonToken, HIDDEN_CHANNEL, Token};
     use crate::token_stream::CommonTokenStream;
     use crate::vocabulary::Vocabulary;
 
@@ -3726,6 +3783,58 @@ mod tests {
         }
     }
 
+    fn mini_parser(tokens: Vec<CommonToken>) -> BaseParser<Source> {
+        let data = RecognizerData::new(
+            "Mini.g4",
+            Vocabulary::new([None, Some("'x'")], [None, Some("X")], [None::<&str>, None]),
+        );
+        BaseParser::new(CommonTokenStream::new(Source { tokens, index: 0 }), data)
+    }
+
+    fn token_then_eof_atn() -> Atn {
+        AtnDeserializer::new(&SerializedAtn::from_i32(&[
+            4, 1, 2, // version, parser, max token type
+            3, // states
+            2, 0, // rule start
+            1, 0, // basic
+            7, 0, // rule stop
+            0, // non-greedy states
+            0, // precedence states
+            1, // rules
+            0, // rule 0 start
+            0, // modes
+            0, // sets
+            2, // transitions
+            0, 1, 5, 1, 0, 0, // match token 1
+            1, 2, 5, -1, 0, 0, // match EOF
+            0, // decisions
+        ]))
+        .deserialize()
+        .expect("artificial parser ATN should deserialize")
+    }
+
+    fn eof_then_action_atn() -> Atn {
+        AtnDeserializer::new(&SerializedAtn::from_i32(&[
+            4, 1, 1, // version, parser, max token type
+            3, // states
+            2, 0, // rule start
+            1, 0, // basic
+            7, 0, // rule stop
+            0, // non-greedy states
+            0, // precedence states
+            1, // rules
+            0, // rule 0 start
+            0, // modes
+            0, // sets
+            2, // transitions
+            0, 1, 5, -1, 0, 0, // match EOF
+            1, 2, 6, 0, 0, 0, // parser action
+            0, // decisions
+        ]))
+        .deserialize()
+        .expect("artificial parser ATN should deserialize")
+    }
+
     #[test]
     fn parser_matches_token_and_reports_mismatch() {
         let source = Source {
@@ -3749,37 +3858,11 @@ mod tests {
 
     #[test]
     fn parser_interprets_simple_atn_rule() {
-        let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&[
-            4, 1, 2, // version, parser, max token type
-            3, // states
-            2, 0, // rule start
-            1, 0, // basic
-            7, 0, // rule stop
-            0, // non-greedy states
-            0, // precedence states
-            1, // rules
-            0, // rule 0 start
-            0, // modes
-            0, // sets
-            2, // transitions
-            0, 1, 5, 1, 0, 0, // match token 1
-            1, 2, 5, -1, 0, 0, // match EOF
-            0, // decisions
-        ]))
-        .deserialize()
-        .expect("artificial parser ATN should deserialize");
-        let source = Source {
-            tokens: vec![
-                CommonToken::new(1).with_text("x"),
-                CommonToken::eof("parser-test", 1, 1, 1),
-            ],
-            index: 0,
-        };
-        let data = RecognizerData::new(
-            "Mini.g4",
-            Vocabulary::new([None, Some("'x'")], [None, Some("X")], [None::<&str>, None]),
-        );
-        let mut parser = BaseParser::new(CommonTokenStream::new(source), data);
+        let atn = token_then_eof_atn();
+        let mut parser = mini_parser(vec![
+            CommonToken::new(1).with_text("x"),
+            CommonToken::eof("parser-test", 1, 1, 1),
+        ]);
 
         let tree = parser
             .parse_atn_rule(&atn, 0)
@@ -3792,18 +3875,10 @@ mod tests {
             TOKEN_EOF
         );
 
-        let source = Source {
-            tokens: vec![
-                CommonToken::new(1).with_text("x"),
-                CommonToken::eof("parser-test", 1, 1, 1),
-            ],
-            index: 0,
-        };
-        let data = RecognizerData::new(
-            "Mini.g4",
-            Vocabulary::new([None, Some("'x'")], [None, Some("X")], [None::<&str>, None]),
-        );
-        let mut parser = BaseParser::new(CommonTokenStream::new(source), data);
+        let mut parser = mini_parser(vec![
+            CommonToken::new(1).with_text("x"),
+            CommonToken::eof("parser-test", 1, 1, 1),
+        ]);
         let (tree, actions) = parser
             .parse_atn_rule_with_runtime_options(&atn, 0, ParserRuntimeOptions::default())
             .expect("runtime-option parser rule should parse");
@@ -3814,6 +3889,86 @@ mod tests {
                 .token_type(),
             TOKEN_EOF
         );
+    }
+
+    #[test]
+    fn parser_rule_start_skips_leading_hidden_tokens() {
+        let atn = token_then_eof_atn();
+        let mut parser = mini_parser(vec![
+            CommonToken::new(99)
+                .with_text(" ")
+                .with_channel(HIDDEN_CHANNEL),
+            CommonToken::new(1).with_text("x"),
+            CommonToken::eof("parser-test", 2, 1, 2),
+        ]);
+
+        let tree = parser
+            .parse_atn_rule(&atn, 0)
+            .expect("artificial parser rule should parse");
+        let Some(ParseTree::Rule(rule)) = tree.first_rule(0) else {
+            panic!("rule node should be present");
+        };
+        assert_eq!(
+            rule.context()
+                .start()
+                .expect("rule should have a start token")
+                .token_type(),
+            1
+        );
+    }
+
+    #[test]
+    fn parser_action_after_eof_stops_at_eof_token() {
+        let atn = eof_then_action_atn();
+        let mut parser = mini_parser(vec![CommonToken::eof("parser-test", 0, 1, 0)]);
+
+        let (_, actions) = parser
+            .parse_atn_rule_with_runtime_options(&atn, 0, ParserRuntimeOptions::default())
+            .expect("EOF action rule should parse");
+
+        assert_eq!(actions.len(), 1);
+        assert_eq!(actions[0].stop_index(), Some(0));
+        assert_eq!(
+            parser.text_interval(actions[0].start_index(), actions[0].stop_index()),
+            ""
+        );
+    }
+
+    #[test]
+    fn fast_outcome_selection_respects_sll_tie_order() {
+        let first = FastRecognizeOutcome {
+            index: 1,
+            consumed_eof: false,
+            diagnostics: vec![ParserDiagnostic {
+                line: 1,
+                column: 0,
+                message: "mismatched input 'x'".to_owned(),
+            }],
+        };
+        let second = FastRecognizeOutcome {
+            index: first.index,
+            consumed_eof: first.consumed_eof,
+            diagnostics: Vec::new(),
+        };
+
+        let selected = select_best_fast_outcome(
+            [first.clone(), second.clone()].into_iter(),
+            PredictionMode::Sll,
+        )
+        .expect("one outcome should be selected");
+        assert_eq!(selected.diagnostics.len(), 1);
+        let eof_second = FastRecognizeOutcome {
+            index: second.index,
+            consumed_eof: true,
+            diagnostics: Vec::new(),
+        };
+        let selected =
+            select_best_fast_outcome([first.clone(), eof_second].into_iter(), PredictionMode::Sll)
+                .expect("one outcome should be selected");
+        assert!(!selected.consumed_eof);
+        let selected = select_best_fast_outcome([first, second].into_iter(), PredictionMode::Ll)
+            .expect("one outcome should be selected");
+        assert!(selected.diagnostics.is_empty());
     }
 
     #[test]
