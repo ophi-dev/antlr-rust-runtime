@@ -903,10 +903,7 @@ where
         if let Some(token) = self.token_at(start_index) {
             context.set_start(token);
         }
-        if let Some(token) = self
-            .previous_token_index(outcome.index)
-            .and_then(|index| self.token_at(index))
-        {
+        if let Some(token) = self.rule_stop_token(outcome.index, outcome.consumed_eof) {
             context.set_stop(token);
         }
         self.input.seek(start_index);
@@ -1074,10 +1071,7 @@ where
         if let Some(token) = self.token_at(start_index) {
             context.set_start(token);
         }
-        if let Some(token) = self
-            .previous_token_index(outcome.index)
-            .and_then(|index| self.token_at(index))
-        {
+        if let Some(token) = self.rule_stop_token(outcome.index, outcome.consumed_eof) {
             context.set_stop(token);
         }
         if self.build_parse_trees {
@@ -1158,13 +1152,20 @@ where
             format!("no viable alternative at input '{text}'")
         } else if expected.symbols.is_empty() {
             if expected.index.is_some() {
-                format!(
-                    "missing {} at {}",
-                    self.expected_symbols_display(&expected.symbols),
-                    current
-                        .as_ref()
-                        .map_or_else(|| "'<EOF>'".to_owned(), token_input_display)
-                )
+                let found = current
+                    .as_ref()
+                    .map_or_else(|| "'<EOF>'".to_owned(), token_input_display);
+                if current
+                    .as_ref()
+                    .is_some_and(|token| token.token_type() == TOKEN_EOF)
+                {
+                    format!(
+                        "missing {} at {found}",
+                        self.expected_symbols_display(&expected.symbols)
+                    )
+                } else {
+                    format!("mismatched input {found}")
+                }
             } else {
                 format!("no viable alternative while parsing rule {rule_index}")
             }
@@ -2737,6 +2738,19 @@ where
         self.input.previous_visible_token_index(index)
     }
 
+    /// Returns the rule stop token for a selected parse path.
+    ///
+    /// EOF transitions do not advance the token-stream cursor, so an EOF match
+    /// must use the current token rather than the previous visible token.
+    fn rule_stop_token(&mut self, index: usize, consumed_eof: bool) -> Option<CommonToken> {
+        if consumed_eof && self.token_type_at(index) == TOKEN_EOF {
+            self.token_at(index)
+        } else {
+            self.previous_token_index(index)
+                .and_then(|token_index| self.token_at(token_index))
+        }
+    }
+
     /// Recovers from a semantic predicate with an ANTLR `<fail='...'>` option.
     ///
     /// Generated Java reports the failed-predicate message at the current
@@ -3670,7 +3684,7 @@ where
 mod tests {
     use super::*;
     use crate::atn::serialized::{AtnDeserializer, SerializedAtn};
-    use crate::token::CommonToken;
+    use crate::token::{CommonToken, Token};
     use crate::token_stream::CommonTokenStream;
     use crate::vocabulary::Vocabulary;
 
@@ -3763,6 +3777,60 @@ mod tests {
             .parse_atn_rule(&atn, 0)
             .expect("artificial parser rule should parse");
         assert_eq!(tree.text(), "x<EOF>");
+        assert_eq!(
+            tree.first_rule_stop(0)
+                .expect("rule should stop at EOF")
+                .token_type(),
+            TOKEN_EOF
+        );
+
+        let source = Source {
+            tokens: vec![
+                CommonToken::new(1).with_text("x"),
+                CommonToken::eof("parser-test", 1, 1, 1),
+            ],
+            index: 0,
+        };
+        let data = RecognizerData::new(
+            "Mini.g4",
+            Vocabulary::new([None, Some("'x'")], [None, Some("X")], [None::<&str>, None]),
+        );
+        let mut parser = BaseParser::new(CommonTokenStream::new(source), data);
+        let (tree, actions) = parser
+            .parse_atn_rule_with_runtime_options(&atn, 0, ParserRuntimeOptions::default())
+            .expect("runtime-option parser rule should parse");
+        assert!(actions.is_empty());
+        assert_eq!(
+            tree.first_rule_stop(0)
+                .expect("rule should stop at EOF")
+                .token_type(),
+            TOKEN_EOF
+        );
+    }
+
+    #[test]
+    fn parser_error_with_empty_expected_set_omits_empty_set_display() {
+        let source = Source {
+            tokens: vec![
+                CommonToken::new(1).with_text("x"),
+                CommonToken::eof("parser-test", 1, 1, 1),
+            ],
+            index: 0,
+        };
+        let data = RecognizerData::new(
+            "Mini.g4",
+            Vocabulary::new([None, Some("'x'")], [None, Some("X")], [None::<&str>, None]),
+        );
+        let mut parser = BaseParser::new(CommonTokenStream::new(source), data);
+        let expected = ExpectedTokens {
+            index: Some(0),
+            symbols: BTreeSet::new(),
+            no_viable: None,
+        };
+
+        let (_, message) = parser.expected_error_message(0, 0, &expected);
+
+        assert_eq!(message, "mismatched input 'x'");
     }
 
     #[test]

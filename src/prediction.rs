@@ -73,16 +73,10 @@ impl PredictionContext {
         if left == right {
             return left;
         }
-        if left.is_empty() || right.is_empty() {
-            return Rc::new(Self::Array {
-                parents: vec![left, right],
-                return_states: vec![EMPTY_RETURN_STATE, EMPTY_RETURN_STATE],
-            });
-        }
-
         let mut entries = Vec::new();
         collect_entries(&left, &mut entries);
         collect_entries(&right, &mut entries);
+        drop((left, right));
         entries.sort_by_key(|(_, return_state)| *return_state);
         entries.dedup_by(|a, b| a.1 == b.1 && a.0 == b.0);
         Rc::new(Self::Array {
@@ -215,5 +209,19 @@ mod tests {
         let context = PredictionContext::singleton(Rc::clone(&empty), 42);
         assert_eq!(context.return_state(0), Some(42));
         assert_eq!(context.parent(0), Some(empty));
+    }
+
+    #[test]
+    fn merge_with_empty_preserves_non_empty_return_state() {
+        let empty = PredictionContext::empty();
+        let singleton = PredictionContext::singleton(Rc::clone(&empty), 42);
+
+        let merged = PredictionContext::merge(Rc::clone(&singleton), Rc::clone(&empty));
+
+        assert_eq!(merged.len(), 2);
+        assert_eq!(merged.return_state(0), Some(42));
+        assert_eq!(merged.parent(0), Some(empty.clone()));
+        assert_eq!(merged.return_state(1), Some(EMPTY_RETURN_STATE));
+        assert_eq!(merged.parent(1), Some(empty));
     }
 }

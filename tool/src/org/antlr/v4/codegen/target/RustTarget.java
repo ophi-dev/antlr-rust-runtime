@@ -28,7 +28,7 @@ public class RustTarget extends Target {
             "pub", "ref", "return", "Self", "self", "static", "struct",
             "super", "trait", "true", "type", "unsafe", "use", "where",
             "while", "abstract", "become", "box", "do", "final", "macro",
-            "override", "priv", "try", "typeof", "unsized", "virtual",
+            "override", "priv", "try", "typeof", "union", "unsized", "virtual",
             "yield", "_"
     };
 

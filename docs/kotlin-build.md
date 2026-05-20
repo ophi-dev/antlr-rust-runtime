@@ -62,4 +62,4 @@ let tree = parser.kotlin_file().expect("entry rule parses");
 assert!(tree.text().contains("fun"));
 ```
 
-Validated locally: the generated Kotlin lexer emits real tokens and the generated parser recognizes the `kotlinFile` entry rule for `fun main() {}`.
+Validated locally: the generated Kotlin lexer emits real tokens and the generated parser recognizes the `parser.kotlin_file()` entry rule for `fun main() {}`.

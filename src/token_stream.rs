@@ -60,7 +60,7 @@ where
                 .and_then(|offset| self.lb(offset));
         }
 
-        let mut index = self.cursor;
+        let mut index = self.next_token_on_channel(self.cursor, self.channel);
         let mut remaining = offset;
         while remaining > 1 {
             index = self.next_token_on_channel(index + 1, self.channel);
@@ -174,7 +174,8 @@ where
         if self.la(1) == EOF {
             return;
         }
-        self.cursor = self.adjust_seek_index(self.cursor + 1);
+        let current = self.next_token_on_channel(self.cursor, self.channel);
+        self.cursor = self.adjust_seek_index(current + 1);
     }
 
     fn la(&mut self, offset: isize) -> i32 {
@@ -213,7 +214,7 @@ where
 
     pub fn text(&mut self, start: usize, stop: usize) -> String {
         self.sync(stop);
-        if start > stop {
+        if start > stop || start >= self.tokens.len() {
             return String::new();
         }
         self.tokens[start..=stop.min(self.tokens.len().saturating_sub(1))]
@@ -289,5 +290,39 @@ mod tests {
                 .token_type(),
             1
         );
+    }
+
+    #[test]
+    fn lookahead_skips_hidden_token_at_initial_cursor() {
+        let source = VecTokenSource {
+            tokens: vec![
+                CommonToken::new(2)
+                    .with_text(" ")
+                    .with_channel(HIDDEN_CHANNEL),
+                CommonToken::new(1).with_text("a"),
+                CommonToken::eof("vec", 2, 1, 2),
+            ],
+            index: 0,
+        };
+        let mut stream = CommonTokenStream::new(source);
+
+        assert_eq!(stream.la_token(1), 1);
+        assert_eq!(stream.lt(1).and_then(Token::text), Some("a"));
+        stream.consume();
+        assert_eq!(stream.la_token(1), TOKEN_EOF);
+    }
+
+    #[test]
+    fn text_returns_empty_when_start_is_past_buffer() {
+        let source = VecTokenSource {
+            tokens: vec![
+                CommonToken::new(1).with_text("a"),
+                CommonToken::eof("vec", 1, 1, 1),
+            ],
+            index: 0,
+        };
+        let mut stream = CommonTokenStream::new(source);
+
+        assert_eq!(stream.text(10, 12), "");
     }
 }

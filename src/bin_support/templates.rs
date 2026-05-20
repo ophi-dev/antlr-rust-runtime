@@ -159,10 +159,11 @@ pub(crate) fn template_sequence_bodies(body: &str) -> Option<Vec<&str>> {
 }
 
 /// Finds the closing brace for a named ANTLR action block while ignoring braces
-/// inside string literals.
+/// inside string and character literals.
 pub(crate) fn matching_action_brace(source: &str, mut index: usize) -> Option<usize> {
     let mut nested = 0_usize;
-    let mut quoted = false;
+    let mut double_quoted = false;
+    let mut single_quoted = false;
     let mut escaped = false;
     while let Some(ch) = source[index..].chars().next() {
         if escaped {
@@ -170,9 +171,11 @@ pub(crate) fn matching_action_brace(source: &str, mut index: usize) -> Option<us
             index += ch.len_utf8();
             continue;
         }
+        let quoted = double_quoted || single_quoted;
         match ch {
             '\\' if quoted => escaped = true,
-            '"' => quoted = !quoted,
+            '"' if !single_quoted => double_quoted = !double_quoted,
+            '\'' if !double_quoted => single_quoted = !single_quoted,
             '{' if !quoted => nested += 1,
             '}' if !quoted && nested == 0 => return Some(index),
             '}' if !quoted => nested = nested.saturating_sub(1),
@@ -187,7 +190,8 @@ pub(crate) fn matching_action_brace(source: &str, mut index: usize) -> Option<us
 /// template expressions inside arguments such as `<Assert({<Inner()>})>`.
 pub(crate) fn matching_template_close(source: &str, mut index: usize) -> Option<usize> {
     let mut nested = 0_usize;
-    let mut quoted = false;
+    let mut double_quoted = false;
+    let mut single_quoted = false;
     let mut escaped = false;
     while let Some(ch) = source[index..].chars().next() {
         if escaped {
@@ -195,9 +199,11 @@ pub(crate) fn matching_template_close(source: &str, mut index: usize) -> Option<
             index += ch.len_utf8();
             continue;
         }
+        let quoted = double_quoted || single_quoted;
         match ch {
             '\\' if quoted => escaped = true,
-            '"' => quoted = !quoted,
+            '"' if !single_quoted => double_quoted = !double_quoted,
+            '\'' if !double_quoted => single_quoted = !single_quoted,
             '<' if !quoted => nested += 1,
             '>' if !quoted && nested == 0 => return Some(index),
             '>' if !quoted => nested = nested.saturating_sub(1),
@@ -312,4 +318,23 @@ pub(crate) fn parse_template_string(argument: &str) -> Option<String> {
         out = out[1..out.len() - 1].to_owned();
     }
     Some(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{matching_action_brace, matching_template_close};
+
+    #[test]
+    fn action_brace_ignores_braces_inside_char_literals() {
+        let source = "{ char close = '}'; char open = '{'; return close; } tail";
+
+        assert_eq!(matching_action_brace(source, 1), source.find("} tail"));
+    }
+
+    #[test]
+    fn template_close_ignores_angles_inside_char_literals() {
+        let source = "<Assert({ char close = '>'; char open = '<'; return close; })> tail";
+
+        assert_eq!(matching_template_close(source, 1), source.find("> tail"));
+    }
 }
