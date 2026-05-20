@@ -1766,7 +1766,7 @@ fn copy_generated_module(smoke_dir: &Path, rust_dir: &Path, grammar_name: &str) 
 /// Writes the temporary crate manifest that points back at this checkout.
 fn smoke_cargo_toml(runtime_crate: &Path) -> String {
     format!(
-        "[package]\nname = \"antlr-runtime-testsuite-case\"\nversion = \"0.0.0\"\nedition = \"2024\"\npublish = false\n\n[dependencies]\nantlr4-runtime-rs = {{ path = \"{}\" }}\n",
+        "[package]\nname = \"antlr-runtime-testsuite-case\"\nversion = \"0.0.0\"\nedition = \"2024\"\npublish = false\n\n[dependencies]\nantlr-rust-runtime = {{ path = \"{}\" }}\n",
         toml_string(&runtime_crate.to_string_lossy())
     )
 }

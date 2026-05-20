@@ -43,7 +43,7 @@ Create any Rust crate that depends on this runtime:
 
 ```toml
 [dependencies]
-antlr4-runtime-rs = { path = "../path/to/runtime-crate" }
+antlr-rust-runtime = { path = "../path/to/runtime-crate" }
 ```
 
 Replace the path with the relative path from the smoke crate to this checkout.
