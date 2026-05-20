@@ -8,6 +8,24 @@ use std::path::{Path, PathBuf};
 use antlr4_runtime::atn::serialized::{AtnDeserializer, SerializedAtn};
 use antlr4_runtime::atn::{LexerAction, Transition};
 
+#[path = "../bin_support/rust_names.rs"]
+mod rust_names;
+#[path = "../bin_support/templates.rs"]
+mod templates;
+
+#[cfg(test)]
+use rust_names::is_rust_keyword;
+use rust_names::{
+    module_name, rust_function_name, rust_string, rust_type_name, sanitize_identifier,
+    split_identifier_words,
+};
+use templates::{
+    is_after_action, is_definitions_action, is_init_action, is_members_action, is_options_block,
+    matching_template_close, named_action_templates, next_parser_action_block,
+    next_predicate_action_block, next_template_block, parse_template_string,
+    split_template_arguments, template_sequence_bodies,
+};
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse()?;
     fs::create_dir_all(&args.out_dir)?;
@@ -1073,7 +1091,9 @@ fn extract_supported_action_templates_filtered(
     let mut templates = Vec::new();
     let mut offset = 0;
     loop {
-        let block = next_parser_action_block(grammar_source, offset);
+        let block = next_parser_action_block(grammar_source, offset, |body| {
+            parse_int_return_assignment(body).is_some()
+        });
         let signature = next_signature_template(grammar_source, offset);
         match (block, signature) {
             (None, None) => break,
@@ -1195,109 +1215,6 @@ struct SignatureTemplate<'a> {
     after_template: usize,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct TemplateBlock<'a> {
-    open_brace: usize,
-    body: &'a str,
-    after_brace: usize,
-    predicate: bool,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct NamedActionTemplate<'a> {
-    open_brace: usize,
-    body: &'a str,
-}
-
-/// Finds all target templates inside a rule-level named action body, including
-/// multi-template blocks such as the listener-suite `@after` actions.
-fn named_action_templates<'a>(source: &'a str, marker: &str) -> Vec<NamedActionTemplate<'a>> {
-    let mut templates = Vec::new();
-    let mut offset = 0;
-    while let Some(marker_start) = source[offset..].find(marker).map(|index| offset + index) {
-        let Some(open_brace) = source[marker_start..]
-            .find('{')
-            .map(|index| marker_start + index)
-        else {
-            break;
-        };
-        let Some(close_brace) = matching_action_brace(source, open_brace + 1) else {
-            break;
-        };
-        let mut cursor = open_brace + 1;
-        while cursor < close_brace {
-            let Some(open_angle) = source[cursor..close_brace]
-                .find('<')
-                .map(|index| cursor + index)
-            else {
-                break;
-            };
-            let Some(close_angle) = matching_template_close(source, open_angle + 1) else {
-                break;
-            };
-            if close_angle > close_brace {
-                break;
-            }
-            templates.push(NamedActionTemplate {
-                open_brace,
-                body: &source[open_angle + 1..close_angle],
-            });
-            cursor = close_angle + 1;
-        }
-        offset = close_brace + 1;
-    }
-    templates
-}
-
-/// Finds the next target-template block while allowing whitespace inside the
-/// ANTLR action braces, for example `{ <writeln("$text")> }`.
-fn next_template_block(source: &str, offset: usize) -> Option<TemplateBlock<'_>> {
-    let mut cursor = offset;
-    while let Some(open_rel) = source[cursor..].find('{') {
-        let open = cursor + open_rel;
-        let template_start = skip_ascii_whitespace(source, open + 1);
-        if source.as_bytes().get(template_start) != Some(&b'<') {
-            cursor = open + 1;
-            continue;
-        }
-        let close_angle = matching_template_close(source, template_start + 1)?;
-        let close_brace = skip_ascii_whitespace(source, close_angle + 1);
-        if source.as_bytes().get(close_brace) != Some(&b'}') {
-            cursor = open + 1;
-            continue;
-        }
-        let after_brace = close_brace + 1;
-        return Some(TemplateBlock {
-            open_brace: open,
-            body: &source[template_start + 1..close_angle],
-            after_brace,
-            predicate: source[after_brace..].trim_start().starts_with('?'),
-        });
-    }
-    None
-}
-
-/// Finds the next semantic-predicate action block, including expressions that
-/// combine target-template calls with target-language comparison operators.
-fn next_predicate_action_block(source: &str, offset: usize) -> Option<TemplateBlock<'_>> {
-    let mut cursor = offset;
-    while let Some(open_rel) = source[cursor..].find('{') {
-        let open_brace = cursor + open_rel;
-        let close_brace = matching_action_brace(source, open_brace + 1)?;
-        let after_brace = close_brace + 1;
-        if source[after_brace..].trim_start().starts_with('?') {
-            return Some(TemplateBlock {
-                open_brace,
-                body: &source[open_brace + 1..close_brace],
-                after_brace,
-                predicate: true,
-            });
-        }
-        cursor = open_brace + 1;
-    }
-    None
-}
-
 /// Parses an ANTLR semantic-predicate fail option following the predicate `?`.
 fn predicate_fail_message(source: &str, after_brace: usize) -> Option<String> {
     let rest = source[after_brace..].trim_start();
@@ -1314,125 +1231,6 @@ fn predicate_fail_message(source: &str, after_brace: usize) -> Option<String> {
         return None;
     }
     Some(rest[body_start..body_end].to_owned())
-}
-
-/// Finds the next parser action block, including empty actions serialized as
-/// no-op ATN action transitions.
-fn next_parser_action_block(source: &str, offset: usize) -> Option<TemplateBlock<'_>> {
-    let mut cursor = offset;
-    while let Some(open_rel) = source[cursor..].find('{') {
-        let open_brace = cursor + open_rel;
-        let close_brace = matching_action_brace(source, open_brace + 1)?;
-        let body = &source[open_brace + 1..close_brace];
-        if body.trim().is_empty()
-            || template_sequence_bodies(body).is_some()
-            || parse_int_return_assignment(body).is_some()
-        {
-            let after_brace = close_brace + 1;
-            return Some(TemplateBlock {
-                open_brace,
-                body,
-                after_brace,
-                predicate: source[after_brace..].trim_start().starts_with('?'),
-            });
-        }
-        cursor = open_brace + 1;
-    }
-    None
-}
-
-/// Splits a body made only of adjacent target-template expressions.
-fn template_sequence_bodies(body: &str) -> Option<Vec<&str>> {
-    let mut templates = Vec::new();
-    let mut cursor = 0;
-    while cursor < body.len() {
-        cursor = skip_ascii_whitespace(body, cursor);
-        if cursor == body.len() {
-            break;
-        }
-        if body.as_bytes().get(cursor) != Some(&b'<') {
-            return None;
-        }
-        let close_angle = matching_template_close(body, cursor + 1)?;
-        templates.push(&body[cursor + 1..close_angle]);
-        cursor = close_angle + 1;
-    }
-    (!templates.is_empty()).then_some(templates)
-}
-
-/// Finds the closing brace for a named ANTLR action block while ignoring braces
-/// inside string literals.
-fn matching_action_brace(source: &str, mut index: usize) -> Option<usize> {
-    let mut nested = 0_usize;
-    let mut quoted = false;
-    let mut escaped = false;
-    while let Some(ch) = source[index..].chars().next() {
-        if escaped {
-            escaped = false;
-            index += ch.len_utf8();
-            continue;
-        }
-        match ch {
-            '\\' if quoted => escaped = true,
-            '"' => quoted = !quoted,
-            '{' if !quoted => nested += 1,
-            '}' if !quoted && nested == 0 => return Some(index),
-            '}' if !quoted => nested = nested.saturating_sub(1),
-            _ => {}
-        }
-        index += ch.len_utf8();
-    }
-    None
-}
-
-/// Finds the matching `>` for a `StringTemplate` expression, allowing nested
-/// template expressions inside arguments such as `<Assert({<Inner()>})>`.
-fn matching_template_close(source: &str, mut index: usize) -> Option<usize> {
-    let mut nested = 0_usize;
-    let mut quoted = false;
-    let mut escaped = false;
-    while let Some(ch) = source[index..].chars().next() {
-        if escaped {
-            escaped = false;
-            index += ch.len_utf8();
-            continue;
-        }
-        match ch {
-            '\\' if quoted => escaped = true,
-            '"' => quoted = !quoted,
-            '<' if !quoted => nested += 1,
-            '>' if !quoted && nested == 0 => return Some(index),
-            '>' if !quoted => nested = nested.saturating_sub(1),
-            _ => {}
-        }
-        index += ch.len_utf8();
-    }
-    None
-}
-
-fn skip_ascii_whitespace(source: &str, mut index: usize) -> usize {
-    while source
-        .as_bytes()
-        .get(index)
-        .is_some_and(u8::is_ascii_whitespace)
-    {
-        index += 1;
-    }
-    index
-}
-
-fn is_after_action(source: &str, open_brace: usize) -> bool {
-    is_rule_named_action(source, open_brace, "@after")
-}
-
-fn is_init_action(source: &str, open_brace: usize) -> bool {
-    is_rule_named_action(source, open_brace, "@init")
-}
-
-fn is_rule_named_action(source: &str, open_brace: usize, marker: &str) -> bool {
-    let prefix = &source[..open_brace];
-    let statement_start = prefix.rfind(';').map_or(0, |index| index + 1);
-    prefix[statement_start..].trim_end().ends_with(marker)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1519,23 +1317,6 @@ fn trim_leading_non_rule_lines(mut header: &str) -> &str {
         }
         return header;
     }
-}
-
-/// Detects member-action blocks whose target code is compile-time scaffolding
-/// rather than an ATN semantic action.
-fn is_members_action(source: &str, open_brace: usize) -> bool {
-    let prefix = source[..open_brace].trim_end();
-    prefix.ends_with("@members") || prefix.ends_with("@parser::members")
-}
-
-fn is_definitions_action(source: &str, open_brace: usize) -> bool {
-    source[..open_brace].trim_end().ends_with("@definitions")
-}
-
-/// ANTLR `options { ... }` blocks are grammar metadata, not semantic actions,
-/// even though their braces look like empty action transitions to a text scan.
-fn is_options_block(source: &str, open_brace: usize) -> bool {
-    source[..open_brace].trim_end().ends_with("options")
 }
 
 fn uses_alt_number_contexts(source: &str) -> bool {
@@ -2309,41 +2090,6 @@ fn append_str_arguments(body: &str) -> Option<(bool, &str)> {
         .map(|arguments| (false, arguments))
 }
 
-/// Splits a `StringTemplate` argument list while ignoring commas inside quoted
-/// strings or nested template/function calls.
-fn split_template_arguments(arguments: &str) -> Vec<&str> {
-    let mut parts = Vec::new();
-    let mut start = 0;
-    let mut quoted = false;
-    let mut escaped = false;
-    let mut paren_depth = 0_usize;
-    let mut angle_depth = 0_usize;
-    let mut brace_depth = 0_usize;
-    for (index, ch) in arguments.char_indices() {
-        if escaped {
-            escaped = false;
-            continue;
-        }
-        match ch {
-            '\\' if quoted => escaped = true,
-            '"' => quoted = !quoted,
-            '(' if !quoted => paren_depth += 1,
-            ')' if !quoted => paren_depth = paren_depth.saturating_sub(1),
-            '<' if !quoted => angle_depth += 1,
-            '>' if !quoted => angle_depth = angle_depth.saturating_sub(1),
-            '{' if !quoted => brace_depth += 1,
-            '}' if !quoted => brace_depth = brace_depth.saturating_sub(1),
-            ',' if !quoted && paren_depth == 0 && angle_depth == 0 && brace_depth == 0 => {
-                parts.push(arguments[start..index].trim());
-                start = index + ch.len_utf8();
-            }
-            _ => {}
-        }
-    }
-    parts.push(arguments[start..].trim());
-    parts
-}
-
 fn is_antlr_identifier(value: &str) -> bool {
     let mut chars = value.chars();
     chars
@@ -2366,28 +2112,6 @@ fn parse_write_literal(body: &str) -> Option<ActionTemplate> {
     };
     let value = parse_template_string(argument)?;
     Some(ActionTemplate::Literal { value, newline })
-}
-
-/// Decodes the descriptor's quoted `StringTemplate` argument into the Rust
-/// string literal payload that generated parser code should print.
-fn parse_template_string(argument: &str) -> Option<String> {
-    let mut value = argument.trim();
-    value = value.strip_prefix('"')?.strip_suffix('"')?;
-    let mut out = String::new();
-    let mut chars = value.chars();
-    while let Some(ch) = chars.next() {
-        if ch == '\\' {
-            if let Some(next) = chars.next() {
-                out.push(next);
-            }
-        } else {
-            out.push(ch);
-        }
-    }
-    if out.starts_with('"') && out.ends_with('"') && out.len() >= 2 {
-        out = out[1..out.len() - 1].to_owned();
-    }
-    Some(out)
 }
 
 /// Reads the lexer ATN to locate serialized custom action coordinates.
@@ -3864,40 +3588,6 @@ fn token_type_for_name(data: &InterpData, token_name: &str) -> Option<usize> {
         .position(|name| name.as_deref() == Some(token_name))
 }
 
-fn max_len(left: &[Option<String>], right: &[Option<String>]) -> usize {
-    left.len().max(right.len())
-}
-
-/// Derives a grammar name from an input file stem when the user does not pass
-/// an explicit `--lexer-name` or `--parser-name`.
-fn grammar_name_from_path(path: &Path) -> String {
-    path.file_stem()
-        .and_then(|value| value.to_str())
-        .unwrap_or("Grammar")
-        .to_owned()
-}
-
-/// Converts a grammar type name into a snake-case module file name.
-fn module_name(name: &str) -> String {
-    split_identifier_words(name).join("_")
-}
-
-/// Converts an ANTLR grammar name into a Rust type name.
-fn rust_type_name(name: &str) -> String {
-    split_identifier_words(name)
-        .into_iter()
-        .map(|part| {
-            let mut chars = part.chars();
-            chars.next().map_or_else(String::new, |first| {
-                let mut out = String::with_capacity(part.len());
-                out.push(first.to_ascii_uppercase());
-                out.push_str(chars.as_str());
-                out
-            })
-        })
-        .collect()
-}
-
 /// Converts an ANTLR token/rule name into an upper-snake Rust constant name.
 fn rust_const_name(name: &str) -> String {
     let words = split_identifier_words(name);
@@ -3909,148 +3599,23 @@ fn rust_const_name(name: &str) -> String {
     sanitize_identifier(&ident)
 }
 
-/// Converts an ANTLR rule name into a snake-case Rust method name.
-fn rust_function_name(name: &str) -> String {
-    let words = split_identifier_words(name);
-    let ident = if words.is_empty() {
-        "rule".to_owned()
-    } else {
-        words.join("_")
-    };
-    let ident = sanitize_identifier(&ident);
-    if is_rust_keyword(&ident) {
-        format!("r#{ident}")
-    } else {
-        ident
-    }
-}
-
-/// Splits mixed-case, snake-case, and punctuation-heavy grammar identifiers
-/// into words for Rust identifier rendering.
-fn split_identifier_words(name: &str) -> Vec<String> {
-    let mut words = Vec::new();
-    let mut current = String::new();
-
-    let chars: Vec<char> = name.chars().collect();
-    for (index, ch) in chars.iter().copied().enumerate() {
-        if !ch.is_ascii_alphanumeric() {
-            if !current.is_empty() {
-                words.push(ascii_lowercase(&current));
-                current.clear();
-            }
-            continue;
-        }
-
-        let previous = index.checked_sub(1).and_then(|i| chars.get(i)).copied();
-        let next = chars.get(index + 1).copied();
-        let starts_new_word = !current.is_empty()
-            && ch.is_ascii_uppercase()
-            && (previous.is_some_and(|prev| prev.is_ascii_lowercase() || prev.is_ascii_digit())
-                || (previous.is_some_and(|prev| prev.is_ascii_uppercase())
-                    && next.is_some_and(|next| next.is_ascii_lowercase())));
-
-        if starts_new_word {
-            words.push(ascii_lowercase(&current));
-            current.clear();
-        }
-        current.push(ch);
-    }
-    if !current.is_empty() {
-        words.push(ascii_lowercase(&current));
-    }
-    words
-}
-
-/// Produces a legal Rust identifier and appends an underscore for keywords.
-fn sanitize_identifier(value: &str) -> String {
-    let mut out = String::new();
-    for (index, ch) in value.chars().enumerate() {
-        if ch == '_' || ch.is_ascii_alphanumeric() {
-            if index == 0 && ch.is_ascii_digit() {
-                out.push('_');
-            }
-            out.push(ch);
-        } else {
-            out.push('_');
-        }
-    }
-    if out.is_empty() { "_".to_owned() } else { out }
-}
-
-/// Returns true for Rust reserved and contextual keywords that cannot be used
-/// directly as generated identifiers.
-fn is_rust_keyword(value: &str) -> bool {
-    matches!(
-        value,
-        "as" | "async"
-            | "await"
-            | "break"
-            | "const"
-            | "continue"
-            | "crate"
-            | "dyn"
-            | "else"
-            | "enum"
-            | "extern"
-            | "false"
-            | "fn"
-            | "for"
-            | "gen"
-            | "if"
-            | "impl"
-            | "in"
-            | "let"
-            | "loop"
-            | "match"
-            | "mod"
-            | "move"
-            | "mut"
-            | "pub"
-            | "ref"
-            | "return"
-            | "Self"
-            | "self"
-            | "static"
-            | "struct"
-            | "super"
-            | "trait"
-            | "true"
-            | "type"
-            | "unsafe"
-            | "use"
-            | "where"
-            | "while"
-            | "abstract"
-            | "become"
-            | "box"
-            | "do"
-            | "final"
-            | "macro"
-            | "override"
-            | "priv"
-            | "try"
-            | "typeof"
-            | "unsized"
-            | "virtual"
-            | "yield"
-    )
-}
-
-/// Escapes a Rust string literal using explicit ASCII escape forms.
-fn rust_string(value: &str) -> String {
-    value.escape_default().to_string()
-}
-
-/// Converts ASCII letters to lower case without using allocation-hiding string
-/// case helpers disallowed by the strict Clippy policy.
-fn ascii_lowercase(value: &str) -> String {
-    value.chars().map(|ch| ch.to_ascii_lowercase()).collect()
-}
-
 /// Converts ASCII letters to upper case without using allocation-hiding string
 /// case helpers disallowed by the strict Clippy policy.
 fn ascii_uppercase(value: &str) -> String {
     value.chars().map(|ch| ch.to_ascii_uppercase()).collect()
+}
+
+fn max_len(left: &[Option<String>], right: &[Option<String>]) -> usize {
+    left.len().max(right.len())
+}
+
+/// Derives a grammar name from an input file stem when the user does not pass
+/// an explicit `--lexer-name` or `--parser-name`.
+fn grammar_name_from_path(path: &Path) -> String {
+    path.file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("Grammar")
+        .to_owned()
 }
 
 #[cfg(test)]
