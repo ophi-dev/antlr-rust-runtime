@@ -553,10 +553,12 @@ fn parser_error_diagnostics_supported(descriptor: &Descriptor) -> bool {
             | "SingleTokenDeletionExpectingSet"
             | "SingleTokenInsertion"
             | "SimpleValidate"
+            | "SimpleValidate2"
             | "Sync"
             | "TokenMismatch"
             | "TokenMismatch2"
             | "TokenMismatch3"
+            | "ValidateInDFA"
             | "UnicodeEscapedSMPRangeSetMismatch"
     )
 }

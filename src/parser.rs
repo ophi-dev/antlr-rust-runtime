@@ -407,6 +407,62 @@ fn state_expected_symbols(atn: &Atn, state_number: usize) -> BTreeSet<i32> {
     symbols
 }
 
+/// Returns token types that can resume parsing from `state_number` after a
+/// failed child rule, following rule calls as well as epsilon transitions.
+fn state_sync_symbols(atn: &Atn, state_number: usize, stop_state: usize) -> BTreeSet<i32> {
+    let mut symbols = BTreeSet::new();
+    state_sync_symbols_inner(
+        atn,
+        state_number,
+        stop_state,
+        &mut BTreeSet::new(),
+        &mut symbols,
+    );
+    symbols
+}
+
+/// Walks epsilon-like continuations from a parent follow state until it finds
+/// consuming tokens that can anchor recovery, or EOF if the parent rule can end.
+fn state_sync_symbols_inner(
+    atn: &Atn,
+    state_number: usize,
+    stop_state: usize,
+    visited: &mut BTreeSet<usize>,
+    symbols: &mut BTreeSet<i32>,
+) {
+    if !visited.insert(state_number) {
+        return;
+    }
+    if state_number == stop_state {
+        symbols.insert(TOKEN_EOF);
+        return;
+    }
+    let Some(state) = atn.state(state_number) else {
+        return;
+    };
+    for transition in &state.transitions {
+        let transition_symbols = transition_expected_symbols(transition, atn.max_token_type());
+        if transition_symbols.is_empty() {
+            match transition {
+                Transition::Rule { target, .. }
+                | Transition::Epsilon { target }
+                | Transition::Action { target, .. }
+                | Transition::Predicate { target, .. }
+                | Transition::Precedence { target, .. } => {
+                    state_sync_symbols_inner(atn, *target, stop_state, visited, symbols);
+                }
+                Transition::Atom { .. }
+                | Transition::Range { .. }
+                | Transition::Set { .. }
+                | Transition::NotSet { .. }
+                | Transition::Wildcard { .. } => {}
+            }
+        } else {
+            symbols.extend(transition_symbols);
+        }
+    }
+}
+
 /// Carries recovery expectations and their restart state through epsilon-only
 /// paths. ANTLR can report and repair at the decision state even when the
 /// failed consuming transition is nested under block or loop epsilon edges.
@@ -642,6 +698,18 @@ struct CurrentTokenDeletionRequest<'a, 'b> {
     visiting: &'b mut BTreeSet<RecognizeKey>,
     memo: &'b mut BTreeMap<RecognizeKey, Vec<RecognizeOutcome>>,
     expected: &'b mut ExpectedTokens,
+}
+
+/// Captures the parent-rule context needed when a called rule fails before it
+/// can produce a normal outcome.
+struct ChildRuleFailureRecovery<'a> {
+    atn: &'a Atn,
+    rule_index: usize,
+    start_index: usize,
+    follow_state: usize,
+    stop_state: usize,
+    member_values: BTreeMap<usize, i64>,
+    expected: &'a ExpectedTokens,
 }
 
 /// Bundles the context needed to evaluate one semantic predicate transition.
@@ -1021,14 +1089,31 @@ where
         start_index: usize,
         expected: &ExpectedTokens,
     ) -> AntlrError {
+        let (index, message) = self.expected_error_message(rule_index, start_index, expected);
+        self.input.seek(index);
+        let current = self.input.lt(1).cloned();
+        let line = current.as_ref().map(Token::line).unwrap_or_default();
+        let column = current.as_ref().map(Token::column).unwrap_or_default();
+        AntlrError::ParserError {
+            line,
+            column,
+            message,
+        }
+    }
+
+    /// Builds the token index and ANTLR-compatible message for a failed rule.
+    fn expected_error_message(
+        &mut self,
+        rule_index: usize,
+        start_index: usize,
+        expected: &ExpectedTokens,
+    ) -> (usize, String) {
         let index = expected
             .index
             .or_else(|| expected.no_viable.map(|no_viable| no_viable.error_index))
             .unwrap_or_else(|| self.input.index());
         self.input.seek(index);
         let current = self.input.lt(1).cloned();
-        let line = current.as_ref().map(Token::line).unwrap_or_default();
-        let column = current.as_ref().map(Token::column).unwrap_or_default();
         let message = if expected
             .no_viable
             .as_ref()
@@ -1061,11 +1146,69 @@ where
                 self.expected_symbols_display(&expected.symbols)
             )
         };
-        AntlrError::ParserError {
-            line,
-            column,
-            message,
+        (index, message)
+    }
+
+    /// Converts a failed child rule into a recovered outcome so the parent can
+    /// continue after reporting the child diagnostic.
+    fn child_rule_failure_recovery(
+        &mut self,
+        rule_index: usize,
+        start_index: usize,
+        sync_symbols: &BTreeSet<i32>,
+        member_values: BTreeMap<usize, i64>,
+        expected: &ExpectedTokens,
+    ) -> Option<RecognizeOutcome> {
+        let (error_index, message) = self.expected_error_message(rule_index, start_index, expected);
+        let token = self.token_at(error_index);
+        let mut next_index = error_index;
+        loop {
+            let symbol = self.token_type_at(next_index);
+            if sync_symbols.contains(&symbol) {
+                if next_index == error_index {
+                    return None;
+                }
+                break;
+            }
+            if symbol == TOKEN_EOF {
+                break;
+            }
+            let after = self.consume_index(next_index, symbol);
+            if after == next_index {
+                break;
+            }
+            next_index = after;
         }
+        Some(RecognizeOutcome {
+            index: next_index,
+            consumed_eof: false,
+            alt_number: 0,
+            member_values,
+            return_values: BTreeMap::new(),
+            diagnostics: vec![diagnostic_for_token(token.as_ref(), message)],
+            decisions: Vec::new(),
+            actions: Vec::new(),
+            nodes: vec![RecognizedNode::ErrorToken { index: error_index }],
+        })
+    }
+
+    /// Adapts the optional recovery result to the normal outcome list used by
+    /// rule-call transitions.
+    fn child_rule_failure_recovery_outcomes(
+        &mut self,
+        request: ChildRuleFailureRecovery<'_>,
+    ) -> Vec<RecognizeOutcome> {
+        let sync_symbols =
+            state_sync_symbols(request.atn, request.follow_state, request.stop_state);
+        self.child_rule_failure_recovery(
+            request.rule_index,
+            request.start_index,
+            &sync_symbols,
+            request.member_values,
+            request.expected,
+        )
+        .into_iter()
+        .collect()
     }
 
     /// Formats expected token types using ANTLR's single-token or set syntax.
@@ -2103,6 +2246,19 @@ where
                         memo,
                         expected,
                     );
+                    let children = if children.is_empty() {
+                        self.child_rule_failure_recovery_outcomes(ChildRuleFailureRecovery {
+                            atn,
+                            rule_index: *rule_index,
+                            start_index: index,
+                            follow_state: *follow_state,
+                            stop_state,
+                            member_values: member_values.clone(),
+                            expected,
+                        })
+                    } else {
+                        children
+                    };
                     restore_expected(&children, index, expected, expected_before_child);
                     for child in children {
                         let child_node = RecognizedNode::Rule {
