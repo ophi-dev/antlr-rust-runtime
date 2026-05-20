@@ -538,6 +538,7 @@ fn parser_error_diagnostics_supported(descriptor: &Descriptor) -> bool {
             | "NoTruePredsThrowsNoViableAlt"
             | "NoViableAlt"
             | "NoViableAltAvoidance"
+            | "PredFromAltTestedInLoopBack_1"
             | "PredTestedEvenWhenUnAmbig_2"
             | "PredictionMode_SLL"
             | "SingleSetInsertion"

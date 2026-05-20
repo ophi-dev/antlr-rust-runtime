@@ -700,6 +700,18 @@ struct CurrentTokenDeletionRequest<'a, 'b> {
     expected: &'b mut ExpectedTokens,
 }
 
+/// Carries the state needed after the normal token-recovery strategies fail
+/// for a consuming transition.
+struct ConsumingFailureFallback<'a> {
+    atn: &'a Atn,
+    target: usize,
+    request: RecognizeRequest<'a>,
+    symbol: i32,
+    expected_symbols: BTreeSet<i32>,
+    decision_start_index: Option<usize>,
+    decision: Option<usize>,
+}
+
 /// Captures the parent-rule context needed when a called rule fails before it
 /// can produce a normal outcome.
 struct ChildRuleFailureRecovery<'a> {
@@ -1912,6 +1924,111 @@ where
             .collect()
     }
 
+    /// Falls back after deletion/insertion repairs cannot continue from a
+    /// failed consuming transition.
+    fn consuming_failure_fallback(
+        &mut self,
+        fallback: ConsumingFailureFallback<'_>,
+        visiting: &mut BTreeSet<RecognizeKey>,
+        memo: &mut BTreeMap<RecognizeKey, Vec<RecognizeOutcome>>,
+        expected: &mut ExpectedTokens,
+    ) -> Vec<RecognizeOutcome> {
+        if fallback.expected_symbols.is_empty() {
+            return Vec::new();
+        }
+        if fallback.symbol == TOKEN_EOF {
+            return self.eof_consuming_failure_fallback(fallback, expected);
+        }
+        self.non_eof_consuming_failure_fallback(fallback, visiting, memo, expected)
+    }
+
+    /// Keeps unexpected non-EOF input visible as an error node when no repair
+    /// path can otherwise reach the transition target.
+    fn non_eof_consuming_failure_fallback(
+        &mut self,
+        fallback: ConsumingFailureFallback<'_>,
+        visiting: &mut BTreeSet<RecognizeKey>,
+        memo: &mut BTreeMap<RecognizeKey, Vec<RecognizeOutcome>>,
+        expected: &mut ExpectedTokens,
+    ) -> Vec<RecognizeOutcome> {
+        let ConsumingFailureFallback {
+            atn,
+            target,
+            request,
+            symbol,
+            expected_symbols,
+            decision_start_index,
+            decision,
+        } = fallback;
+        let error_index = request.index;
+        let diagnostic =
+            self.recovery_failure_diagnostic(error_index, decision_start_index, &expected_symbols);
+        let next_index = self.consume_index(error_index, symbol);
+        self.recognize_state(
+            atn,
+            RecognizeRequest {
+                state_number: target,
+                stop_state: request.stop_state,
+                index: next_index,
+                rule_start_index: request.rule_start_index,
+                decision_start_index,
+                init_action_rules: request.init_action_rules,
+                predicates: request.predicates,
+                rule_args: request.rule_args,
+                member_actions: request.member_actions,
+                return_actions: request.return_actions,
+                local_int_arg: request.local_int_arg,
+                member_values: request.member_values,
+                return_values: request.return_values,
+                rule_alt_number: request.rule_alt_number,
+                track_alt_numbers: request.track_alt_numbers,
+                precedence: request.precedence,
+                depth: request.depth + 1,
+                recovery_symbols: BTreeSet::new(),
+                recovery_state: None,
+            },
+            visiting,
+            memo,
+            expected,
+        )
+        .into_iter()
+        .map(|mut outcome| {
+            prepend_decision(&mut outcome, decision);
+            outcome.diagnostics.insert(0, diagnostic.clone());
+            outcome
+                .nodes
+                .insert(0, RecognizedNode::ErrorToken { index: error_index });
+            outcome
+        })
+        .collect()
+    }
+
+    /// Stops the current rule at EOF after a nested failure, matching ANTLR's
+    /// behavior of unwinding instead of inserting caller tokens at EOF.
+    fn eof_consuming_failure_fallback(
+        &mut self,
+        fallback: ConsumingFailureFallback<'_>,
+        expected: &ExpectedTokens,
+    ) -> Vec<RecognizeOutcome> {
+        let request = fallback.request;
+        if request.index == request.rule_start_index {
+            return Vec::new();
+        }
+        let diagnostic =
+            self.eof_rule_recovery_diagnostic(request.index, &fallback.expected_symbols, expected);
+        vec![RecognizeOutcome {
+            index: request.index,
+            consumed_eof: false,
+            alt_number: request.rule_alt_number,
+            member_values: request.member_values,
+            return_values: request.return_values,
+            diagnostics: vec![diagnostic],
+            decisions: Vec::new(),
+            actions: Vec::new(),
+            nodes: Vec::new(),
+        }]
+    }
+
     /// Explores single-token insertion recovery while adding a conjured
     /// missing-token error node to the selected parse tree path.
     fn single_token_insertion_recovery(
@@ -2259,7 +2376,15 @@ where
                     } else {
                         children
                     };
-                    restore_expected(&children, index, expected, expected_before_child);
+                    let preserve_child_expected =
+                        self.child_expected_reaches_clean_eof(&children, expected);
+                    restore_expected(
+                        &children,
+                        index,
+                        expected,
+                        expected_before_child,
+                        preserve_child_expected,
+                    );
                     for child in children {
                         let child_node = RecognizedNode::Rule {
                             rule_index: *rule_index,
@@ -2421,61 +2546,27 @@ where
                             CurrentTokenDeletionRequest {
                                 atn,
                                 expected_symbols: expected_symbols.clone(),
-                                request: recovery_request,
+                                request: recovery_request.clone(),
                                 visiting,
                                 memo,
                                 expected,
                             },
                         ));
-                        // Keep unexpected input visible when no repair can continue.
-                        if outcomes.len() == before_recovery
-                            && symbol != TOKEN_EOF
-                            && !expected_symbols.is_empty()
-                        {
-                            let diagnostic = self.recovery_failure_diagnostic(
-                                index,
-                                next_decision_start_index,
-                                &expected_symbols,
-                            );
-                            let next_index = self.consume_index(index, symbol);
-                            outcomes.extend(
-                                self.recognize_state(
+                        if outcomes.len() == before_recovery {
+                            outcomes.extend(self.consuming_failure_fallback(
+                                ConsumingFailureFallback {
                                     atn,
-                                    RecognizeRequest {
-                                        state_number: *target,
-                                        stop_state,
-                                        index: next_index,
-                                        rule_start_index,
-                                        decision_start_index: next_decision_start_index,
-                                        init_action_rules,
-                                        predicates,
-                                        rule_args,
-                                        member_actions,
-                                        return_actions,
-                                        local_int_arg,
-                                        member_values: member_values.clone(),
-                                        return_values: return_values.clone(),
-                                        rule_alt_number,
-                                        track_alt_numbers,
-                                        precedence,
-                                        depth: depth + 1,
-                                        recovery_symbols: BTreeSet::new(),
-                                        recovery_state: None,
-                                    },
-                                    visiting,
-                                    memo,
-                                    expected,
-                                )
-                                .into_iter()
-                                .map(|mut outcome| {
-                                    prepend_decision(&mut outcome, decision);
-                                    outcome.diagnostics.insert(0, diagnostic.clone());
-                                    outcome
-                                        .nodes
-                                        .insert(0, RecognizedNode::ErrorToken { index });
-                                    outcome
-                                }),
-                            );
+                                    target: *target,
+                                    request: recovery_request,
+                                    symbol,
+                                    expected_symbols,
+                                    decision_start_index: next_decision_start_index,
+                                    decision,
+                                },
+                                visiting,
+                                memo,
+                                expected,
+                            ));
                         }
                     }
                 }
@@ -2587,6 +2678,22 @@ where
     /// Clones the visible token at an absolute token-stream index.
     fn token_at(&mut self, index: usize) -> Option<CommonToken> {
         self.input.get(index).cloned()
+    }
+
+    /// Reports whether a child rule reached EOF cleanly while also recording
+    /// an EOF expectation from a longer path inside that child.
+    fn child_expected_reaches_clean_eof(
+        &mut self,
+        children: &[RecognizeOutcome],
+        expected: &ExpectedTokens,
+    ) -> bool {
+        let Some(index) = expected.index else {
+            return false;
+        };
+        self.token_type_at(index) == TOKEN_EOF
+            && children
+                .iter()
+                .any(|child| child.diagnostics.is_empty() && child.index == index)
     }
 
     /// Finds the previous token visible to the parser before `index`.
@@ -2705,6 +2812,31 @@ where
                     .as_ref()
                     .map_or_else(|| "'<EOF>'".to_owned(), token_input_display),
                 self.expected_symbols_display(expected_symbols)
+            ),
+        )
+    }
+
+    /// Builds the EOF diagnostic used when ANTLR unwinds a failed nested rule
+    /// instead of inserting missing tokens in the caller.
+    fn eof_rule_recovery_diagnostic(
+        &mut self,
+        index: usize,
+        expected_symbols: &BTreeSet<i32>,
+        expected: &ExpectedTokens,
+    ) -> ParserDiagnostic {
+        let symbols = if expected.index == Some(index) && !expected.symbols.is_empty() {
+            &expected.symbols
+        } else {
+            expected_symbols
+        };
+        diagnostic_for_token(
+            self.token_at(index).as_ref(),
+            format!(
+                "mismatched input {} expecting {}",
+                self.token_at(index)
+                    .as_ref()
+                    .map_or_else(|| "'<EOF>'".to_owned(), token_input_display),
+                self.expected_symbols_display(symbols)
             ),
         )
     }
@@ -3210,7 +3342,11 @@ fn restore_expected(
     child_start_index: usize,
     expected: &mut ExpectedTokens,
     snapshot: ExpectedTokens,
+    preserve_child_expected: bool,
 ) {
+    if preserve_child_expected {
+        return;
+    }
     if children
         .iter()
         .any(|child| child.diagnostics.is_empty() && child.index > child_start_index)
@@ -3299,12 +3435,15 @@ fn outcome_is_better(
                         < diagnostic_recovery_rank(best_diagnostics))))
 }
 
-/// Ranks concrete recovery repairs ahead of generic mismatch fallbacks when
-/// speculative paths otherwise consume the same input.
+/// Ranks concrete recovery repairs ahead of generic non-EOF mismatch fallbacks
+/// when speculative paths otherwise consume the same input.
 fn diagnostic_recovery_rank(diagnostics: &[ParserDiagnostic]) -> usize {
     diagnostics
         .iter()
-        .filter(|diagnostic| diagnostic.message.starts_with("mismatched input "))
+        .filter(|diagnostic| {
+            diagnostic.message.starts_with("mismatched input ")
+                && !diagnostic.message.starts_with("mismatched input '<EOF>' ")
+        })
         .count()
 }
 
