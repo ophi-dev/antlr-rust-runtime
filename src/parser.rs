@@ -107,6 +107,10 @@ impl ParserAction {
 pub enum ParserPredicate {
     True,
     False,
+    /// Predicate that always fails and carries ANTLR's `<fail='...'>` message.
+    FalseWithMessage {
+        message: &'static str,
+    },
     /// Target-template test helper that reports predicate evaluation before
     /// returning the wrapped boolean value.
     Invoke {
@@ -733,6 +737,16 @@ struct PredicateEval<'a> {
     predicates: &'a [(usize, usize, ParserPredicate)],
     local_int_arg: Option<(usize, i64)>,
     member_values: &'a BTreeMap<usize, i64>,
+}
+
+/// Captures predicate-failure recovery metadata for fail-option predicates.
+struct PredicateFailureRecovery<'a> {
+    rule_index: usize,
+    index: usize,
+    message: &'a str,
+    member_values: BTreeMap<usize, i64>,
+    return_values: BTreeMap<String, i64>,
+    rule_alt_number: usize,
 }
 
 impl<S> BaseParser<S>
@@ -2228,14 +2242,15 @@ where
                     pred_index,
                     ..
                 } => {
-                    if self.parser_predicate_matches(PredicateEval {
+                    let predicate = PredicateEval {
                         index,
                         rule_index: *rule_index,
                         pred_index: *pred_index,
                         predicates,
                         local_int_arg,
                         member_values: &member_values,
-                    }) {
+                    };
+                    if self.parser_predicate_matches(predicate) {
                         let left_recursive_boundary = left_recursive_boundary(atn, state, *target);
                         outcomes.extend(
                             self.recognize_state(
@@ -2277,6 +2292,17 @@ where
                                 outcome
                             }),
                         );
+                    } else if let Some(message) =
+                        self.parser_predicate_failure_message(*rule_index, *pred_index, predicates)
+                    {
+                        outcomes.push(self.predicate_failure_recovery(PredicateFailureRecovery {
+                            rule_index: *rule_index,
+                            index,
+                            message,
+                            member_values: member_values.clone(),
+                            return_values: return_values.clone(),
+                            rule_alt_number,
+                        }));
                     } else {
                         record_predicate_no_viable(expected, next_decision_start_index, index);
                     }
@@ -2706,6 +2732,59 @@ where
         self.input.previous_visible_token_index(index)
     }
 
+    /// Recovers from a semantic predicate with an ANTLR `<fail='...'>` option.
+    ///
+    /// Generated Java reports the failed-predicate message at the current
+    /// lookahead, then consumes until rule recovery can resume. The metadata
+    /// runtime models the same visible tree shape by keeping skipped tokens as
+    /// error nodes and returning from the active rule at EOF.
+    fn predicate_failure_recovery(
+        &mut self,
+        request: PredicateFailureRecovery<'_>,
+    ) -> RecognizeOutcome {
+        let PredicateFailureRecovery {
+            rule_index,
+            index,
+            message,
+            member_values,
+            return_values,
+            rule_alt_number,
+        } = request;
+        let rule_name = self
+            .rule_names()
+            .get(rule_index)
+            .map_or_else(|| rule_index.to_string(), Clone::clone);
+        let diagnostic = diagnostic_for_token(
+            self.token_at(index).as_ref(),
+            format!("rule {rule_name} {message}"),
+        );
+        let mut nodes = Vec::new();
+        let mut next_index = index;
+        loop {
+            let symbol = self.token_type_at(next_index);
+            if symbol == TOKEN_EOF {
+                break;
+            }
+            nodes.push(RecognizedNode::ErrorToken { index: next_index });
+            let after = self.consume_index(next_index, symbol);
+            if after == next_index {
+                break;
+            }
+            next_index = after;
+        }
+        RecognizeOutcome {
+            index: next_index,
+            consumed_eof: false,
+            alt_number: rule_alt_number,
+            member_values,
+            return_values,
+            diagnostics: vec![diagnostic],
+            decisions: Vec::new(),
+            actions: Vec::new(),
+            nodes,
+        }
+    }
+
     /// Evaluates a supported parser predicate at a speculative input index.
     ///
     /// Parser ATN simulation is index-based, so predicate evaluation seeks to
@@ -2731,6 +2810,7 @@ where
         match predicate {
             ParserPredicate::True => true,
             ParserPredicate::False => false,
+            ParserPredicate::FalseWithMessage { .. } => false,
             ParserPredicate::Invoke { value } => {
                 let key = (rule_index, pred_index);
                 if !self.invoked_predicates.contains(&key) {
@@ -2763,6 +2843,25 @@ where
                 (actual == *value) == *equals
             }
         }
+    }
+
+    /// Returns a generated fail-option message for a predicate coordinate.
+    fn parser_predicate_failure_message(
+        &self,
+        rule_index: usize,
+        pred_index: usize,
+        predicates: &[(usize, usize, ParserPredicate)],
+    ) -> Option<&'static str> {
+        predicates
+            .iter()
+            .find_map(|(rule, pred, predicate)| match predicate {
+                ParserPredicate::FalseWithMessage { message }
+                    if *rule == rule_index && *pred == pred_index =>
+                {
+                    Some(*message)
+                }
+                _ => None,
+            })
     }
 
     /// Returns the token-stream index after consuming `symbol` at `index`.
@@ -3457,12 +3556,24 @@ fn discard_recovered_fast_outcomes_if_clean_path_exists(outcomes: &mut Vec<FastR
 }
 
 fn discard_recovered_outcomes_if_clean_path_exists(outcomes: &mut Vec<RecognizeOutcome>) {
+    if outcomes.iter().any(outcome_has_rule_failure_diagnostic) {
+        return;
+    }
     if outcomes
         .iter()
         .any(|outcome| outcome.diagnostics.is_empty())
     {
         outcomes.retain(|outcome| outcome.diagnostics.is_empty());
     }
+}
+
+/// Reports whether a recovered outcome came from an explicit predicate
+/// fail-option and therefore should compete with shorter clean loop exits.
+fn outcome_has_rule_failure_diagnostic(outcome: &RecognizeOutcome) -> bool {
+    outcome
+        .diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.message.starts_with("rule "))
 }
 
 /// Reports whether a candidate contains recursive tree structure where ANTLR's

@@ -754,6 +754,9 @@ enum TokenDisplaySource {
 enum PredicateTemplate {
     True,
     False,
+    FalseWithMessage {
+        message: String,
+    },
     Invoke {
         value: bool,
     },
@@ -887,6 +890,10 @@ fn parser_predicate_templates(
     while let Some(block) = next_predicate_action_block(grammar_source, offset) {
         offset = block.after_brace;
         if let Some(template) = parse_predicate_template(block.body) {
+            let template = match predicate_fail_message(grammar_source, block.after_brace) {
+                Some(message) => predicate_template_with_fail_message(template, message),
+                None => template,
+            };
             let Some(coordinates) = predicates.get(predicate_index).copied() else {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -901,6 +908,18 @@ fn parser_predicate_templates(
         predicate_index += 1;
     }
     Ok(mapped)
+}
+
+/// Attaches ANTLR's fail option to predicates whose false result is modeled by
+/// the metadata runtime.
+fn predicate_template_with_fail_message(
+    template: PredicateTemplate,
+    message: String,
+) -> PredicateTemplate {
+    match template {
+        PredicateTemplate::False => PredicateTemplate::FalseWithMessage { message },
+        _ => template,
+    }
 }
 
 /// Pairs supported target-template actions with parser ATN action source states.
@@ -1267,6 +1286,24 @@ fn next_predicate_action_block(source: &str, offset: usize) -> Option<TemplateBl
         cursor = open_brace + 1;
     }
     None
+}
+
+/// Parses an ANTLR semantic-predicate fail option following the predicate `?`.
+fn predicate_fail_message(source: &str, after_brace: usize) -> Option<String> {
+    let rest = source[after_brace..].trim_start();
+    let rest = rest.strip_prefix('?')?.trim_start();
+    let rest = rest.strip_prefix("<fail=")?.trim_start();
+    let quote = rest.chars().next()?;
+    if quote != '\'' && quote != '"' {
+        return None;
+    }
+    let body_start = quote.len_utf8();
+    let body_end = rest[body_start..].find(quote)? + body_start;
+    let after_quote = body_end + quote.len_utf8();
+    if !rest[after_quote..].trim_start().starts_with('>') {
+        return None;
+    }
+    Some(rest[body_start..body_end].to_owned())
 }
 
 /// Finds the next parser action block, including empty actions serialized as
@@ -2753,6 +2790,7 @@ fn render_lexer_predicate_expression(template: &PredicateTemplate) -> String {
             format!("_base.column_at(predicate.position()) >= {value}")
         }
         PredicateTemplate::Invoke { .. }
+        | PredicateTemplate::FalseWithMessage { .. }
         | PredicateTemplate::LocalIntEquals { .. }
         | PredicateTemplate::MemberModuloEquals { .. }
         | PredicateTemplate::LookaheadTextEquals { .. }
@@ -3599,6 +3637,12 @@ fn render_parser_predicate_array(
         let expression = match predicate {
             PredicateTemplate::True => "antlr4_runtime::ParserPredicate::True".to_owned(),
             PredicateTemplate::False => "antlr4_runtime::ParserPredicate::False".to_owned(),
+            PredicateTemplate::FalseWithMessage { message } => {
+                format!(
+                    "antlr4_runtime::ParserPredicate::FalseWithMessage {{ message: \"{}\" }}",
+                    rust_string(message)
+                )
+            }
             PredicateTemplate::Invoke { value } => {
                 format!("antlr4_runtime::ParserPredicate::Invoke {{ value: {value} }}")
             }
@@ -4029,6 +4073,27 @@ fragment ID2 : { <Column()> >= 2 }? [a-zA-Z];"#,
                 PredicateTemplate::ColumnLessThan(2),
                 PredicateTemplate::ColumnGreaterOrEqual(2)
             ]
+        );
+    }
+
+    #[test]
+    fn parses_predicate_fail_option_message() {
+        let grammar = "a : a ID {<False()>}?<fail='custom message'> | ID ;";
+        let block =
+            next_predicate_action_block(grammar, 0).expect("predicate block should be present");
+
+        assert_eq!(
+            predicate_fail_message(grammar, block.after_brace),
+            Some("custom message".to_owned())
+        );
+        assert_eq!(
+            predicate_template_with_fail_message(
+                PredicateTemplate::False,
+                "custom message".to_owned(),
+            ),
+            PredicateTemplate::FalseWithMessage {
+                message: "custom message".to_owned()
+            }
         );
     }
 

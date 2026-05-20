@@ -132,7 +132,8 @@ Not wired yet:
 - target-template semantic actions beyond the currently supported stdout helpers
   and no-op compile checks,
 - parser error recovery diagnostics beyond the currently supported mismatch,
-  no-viable, extraneous-input, EOF unwind, and token recovery cases,
+  no-viable, extraneous-input, semantic-predicate fail options, EOF unwind, and
+  token recovery cases,
 - runtime diagnostic/profile/DFA flags beyond the currently modeled ambiguity
   diagnostics and non-default prediction modes.
 
@@ -141,12 +142,12 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `341 passed, 0 failed, 16 skipped, 341 run`
+- full descriptor sweep: `342 passed, 0 failed, 15 skipped, 342 run`
 - `CompositeLexers`: `2 passed, 0 failed, 0 skipped, 2 run`
 - `CompositeParsers`: `15 passed, 0 failed, 0 skipped, 15 run`
 - `LexerExec`: `42 passed, 0 failed, 0 skipped, 42 run`
 - `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
-- `LeftRecursion`: `97 passed, 0 failed, 1 skipped, 97 run`
+- `LeftRecursion`: `98 passed, 0 failed, 0 skipped, 98 run`
 - `Listeners`: `7 passed, 0 failed, 0 skipped, 7 run`
 - `ParseTrees`: `10 passed, 0 failed, 0 skipped, 10 run`
 - `ParserExec`: `50 passed, 0 failed, 0 skipped, 50 run`
@@ -156,5 +157,5 @@ Current validated groups:
 - `SemPredEvalParser`: `26 passed, 0 failed, 0 skipped, 26 run`
 - `Sets`: `31 passed, 0 failed, 0 skipped, 31 run`
 
-The remaining skips are now diagnostic/profile flags and the left-recursive
-semantic-predicate fail-option case.
+The remaining skips are now the `FullContextParsing` diagnostic/profile/DFA
+flag descriptors.

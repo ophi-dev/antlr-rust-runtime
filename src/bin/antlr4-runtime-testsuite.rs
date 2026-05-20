@@ -553,6 +553,7 @@ fn parser_error_diagnostics_supported(descriptor: &Descriptor) -> bool {
             | "SingleTokenDeletionDuringLoop2"
             | "SingleTokenDeletionExpectingSet"
             | "SingleTokenInsertion"
+            | "SemPredFailOption"
             | "SimpleValidate"
             | "SimpleValidate2"
             | "Sync"
