@@ -5,8 +5,12 @@ edition = "2024"
 rust-version = "1.95"
 description = "Clean-room Rust runtime and target support for ANTLR v4 generated parsers"
 repository = "https://github.com/ophidiarium/antlr-rust-runtime"
+homepage = "https://github.com/ophidiarium/antlr-rust-runtime"
+documentation = "https://docs.rs/antlr4-runtime-rs"
+readme = "README.md"
 license = "MIT OR Apache-2.0"
-publish = false
+keywords = ["antlr", "antlr4", "parser", "lexer", "runtime"]
+categories = ["parser-implementations", "development-tools"]
 
 [lib]
 name = "antlr4_runtime"
@@ -21,6 +25,9 @@ thiserror = "2"
 
 [dev-dependencies]
 pretty_assertions = "1"
+
+[package.metadata.docs.rs]
+all-features = true
 
 [lints.rust]
 missing_debug_implementations = "warn"

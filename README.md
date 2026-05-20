@@ -42,13 +42,41 @@ See [docs/runtime-testsuite.md](docs/runtime-testsuite.md) for the upstream runt
 cargo test
 ```
 
+## Use In A Rust Project
+
+Add the runtime crate:
+
+```toml
+[dependencies]
+antlr4-runtime-rs = "0.1"
+```
+
 Generate Rust modules from ANTLR `.interp` metadata:
 
 ```bash
+java -jar antlr-4.13.2-complete.jar MyGrammar.g4
+```
+
+Then run the Rust metadata generator:
+
+```bash
 cargo run --bin antlr4-rust-gen -- \
-  --lexer path/to/KotlinLexer.interp \
-  --parser path/to/KotlinParser.interp \
-  --out-dir target/generated/kotlin
+  --lexer path/to/MyGrammarLexer.interp \
+  --parser path/to/MyGrammarParser.interp \
+  --out-dir target/generated/my_grammar
+```
+
+Use the generated lexer and parser with the runtime:
+
+```rust
+use antlr4_runtime::{CommonTokenStream, InputStream};
+use generated::my_grammar_lexer::MyGrammarLexer;
+use generated::my_grammar_parser::MyGrammarParser;
+
+let lexer = MyGrammarLexer::new(InputStream::new("input"));
+let tokens = CommonTokenStream::new(lexer);
+let mut parser = MyGrammarParser::new(tokens);
+let tree = parser.start_rule()?;
 ```
 
 Run one upstream runtime-testsuite descriptor:
