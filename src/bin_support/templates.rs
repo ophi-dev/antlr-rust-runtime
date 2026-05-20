@@ -163,7 +163,6 @@ pub(crate) fn template_sequence_bodies(body: &str) -> Option<Vec<&str>> {
 pub(crate) fn matching_action_brace(source: &str, mut index: usize) -> Option<usize> {
     let mut nested = 0_usize;
     let mut double_quoted = false;
-    let mut single_quoted = false;
     let mut escaped = false;
     while let Some(ch) = source[index..].chars().next() {
         if escaped {
@@ -171,14 +170,18 @@ pub(crate) fn matching_action_brace(source: &str, mut index: usize) -> Option<us
             index += ch.len_utf8();
             continue;
         }
-        let quoted = double_quoted || single_quoted;
         match ch {
-            '\\' if quoted => escaped = true,
-            '"' if !single_quoted => double_quoted = !double_quoted,
-            '\'' if !double_quoted => single_quoted = !single_quoted,
-            '{' if !quoted => nested += 1,
-            '}' if !quoted && nested == 0 => return Some(index),
-            '}' if !quoted => nested = nested.saturating_sub(1),
+            '\\' if double_quoted => escaped = true,
+            '"' => double_quoted = !double_quoted,
+            '\'' if !double_quoted => {
+                if let Some(next_index) = skip_char_literal(source, index) {
+                    index = next_index;
+                    continue;
+                }
+            }
+            '{' if !double_quoted => nested += 1,
+            '}' if !double_quoted && nested == 0 => return Some(index),
+            '}' if !double_quoted => nested = nested.saturating_sub(1),
             _ => {}
         }
         index += ch.len_utf8();
@@ -191,7 +194,6 @@ pub(crate) fn matching_action_brace(source: &str, mut index: usize) -> Option<us
 pub(crate) fn matching_template_close(source: &str, mut index: usize) -> Option<usize> {
     let mut nested = 0_usize;
     let mut double_quoted = false;
-    let mut single_quoted = false;
     let mut escaped = false;
     while let Some(ch) = source[index..].chars().next() {
         if escaped {
@@ -199,19 +201,44 @@ pub(crate) fn matching_template_close(source: &str, mut index: usize) -> Option<
             index += ch.len_utf8();
             continue;
         }
-        let quoted = double_quoted || single_quoted;
         match ch {
-            '\\' if quoted => escaped = true,
-            '"' if !single_quoted => double_quoted = !double_quoted,
-            '\'' if !double_quoted => single_quoted = !single_quoted,
-            '<' if !quoted => nested += 1,
-            '>' if !quoted && nested == 0 => return Some(index),
-            '>' if !quoted => nested = nested.saturating_sub(1),
+            '\\' if double_quoted => escaped = true,
+            '"' => double_quoted = !double_quoted,
+            '\'' if !double_quoted => {
+                if let Some(next_index) = skip_char_literal(source, index) {
+                    index = next_index;
+                    continue;
+                }
+            }
+            '<' if !double_quoted => nested += 1,
+            '>' if !double_quoted && nested == 0 => return Some(index),
+            '>' if !double_quoted => nested = nested.saturating_sub(1),
             _ => {}
         }
         index += ch.len_utf8();
     }
     None
+}
+
+/// Skips one Rust-style character literal starting at `index`, if present.
+///
+/// Lifetimes such as `&'a str` and `<'input>` are intentionally not skipped:
+/// they do not contain a closing quote immediately after one character or one
+/// escaped character.
+fn skip_char_literal(source: &str, index: usize) -> Option<usize> {
+    let mut cursor = index.checked_add('\''.len_utf8())?;
+    let mut chars = source[cursor..].chars();
+    let first = chars.next()?;
+    cursor += first.len_utf8();
+    if first == '\\' {
+        let escaped = chars.next()?;
+        cursor += escaped.len_utf8();
+    }
+    if source[cursor..].starts_with('\'') {
+        Some(cursor + '\''.len_utf8())
+    } else {
+        None
+    }
 }
 
 /// Advances past ASCII whitespace and returns the first non-whitespace byte
@@ -332,8 +359,22 @@ mod tests {
     }
 
     #[test]
+    fn action_brace_does_not_treat_lifetime_as_char_literal() {
+        let source = "{ let value: &'a str = name; } tail";
+
+        assert_eq!(matching_action_brace(source, 1), source.find("} tail"));
+    }
+
+    #[test]
     fn template_close_ignores_angles_inside_char_literals() {
         let source = "<Assert({ char close = '>'; char open = '<'; return close; })> tail";
+
+        assert_eq!(matching_template_close(source, 1), source.find("> tail"));
+    }
+
+    #[test]
+    fn template_close_does_not_treat_lifetime_as_char_literal() {
+        let source = "<AssertType(<'input>())> tail";
 
         assert_eq!(matching_template_close(source, 1), source.find("> tail"));
     }

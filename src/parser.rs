@@ -2423,7 +2423,7 @@ where
                             invoking_state: invoking_state_number(state_number),
                             alt_number: child.alt_number,
                             start_index: index,
-                            stop_index: self.previous_token_index(child.index),
+                            stop_index: self.rule_stop_token_index(child.index, child.consumed_eof),
                             return_values: child.return_values.clone(),
                             children: fold_left_recursive_boundaries(child.nodes.clone()),
                         };
@@ -2738,17 +2738,25 @@ where
         self.input.previous_visible_token_index(index)
     }
 
+    /// Returns the token-stream index used as a rule stop boundary.
+    ///
+    /// EOF transitions keep the cursor on EOF, so a rule that consumed EOF must
+    /// stop at `index` rather than at the previous visible token.
+    fn rule_stop_token_index(&mut self, index: usize, consumed_eof: bool) -> Option<usize> {
+        if consumed_eof && self.token_type_at(index) == TOKEN_EOF {
+            Some(index)
+        } else {
+            self.previous_token_index(index)
+        }
+    }
+
     /// Returns the rule stop token for a selected parse path.
     ///
     /// EOF transitions do not advance the token-stream cursor, so an EOF match
     /// must use the current token rather than the previous visible token.
     fn rule_stop_token(&mut self, index: usize, consumed_eof: bool) -> Option<CommonToken> {
-        if consumed_eof && self.token_type_at(index) == TOKEN_EOF {
-            self.token_at(index)
-        } else {
-            self.previous_token_index(index)
-                .and_then(|token_index| self.token_at(token_index))
-        }
+        self.rule_stop_token_index(index, consumed_eof)
+            .and_then(|token_index| self.token_at(token_index))
     }
 
     /// Recovers from a semantic predicate with an ANTLR `<fail='...'>` option.
@@ -3831,6 +3839,25 @@ mod tests {
         let (_, message) = parser.expected_error_message(0, 0, &expected);
 
         assert_eq!(message, "mismatched input 'x'");
+    }
+
+    #[test]
+    fn eof_rule_stop_index_points_at_eof_token() {
+        let source = Source {
+            tokens: vec![
+                CommonToken::new(1).with_text("x"),
+                CommonToken::eof("parser-test", 1, 1, 1),
+            ],
+            index: 0,
+        };
+        let data = RecognizerData::new(
+            "Mini.g4",
+            Vocabulary::new([None, Some("'x'")], [None, Some("X")], [None::<&str>, None]),
+        );
+        let mut parser = BaseParser::new(CommonTokenStream::new(source), data);
+
+        assert_eq!(parser.rule_stop_token_index(1, true), Some(1));
+        assert_eq!(parser.rule_stop_token_index(1, false), Some(0));
     }
 
     #[test]

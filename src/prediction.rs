@@ -77,7 +77,11 @@ impl PredictionContext {
         collect_entries(&left, &mut entries);
         collect_entries(&right, &mut entries);
         drop((left, right));
-        entries.sort_by_key(|(_, return_state)| *return_state);
+        entries.sort_by(|(left_parent, left_return), (right_parent, right_return)| {
+            left_return
+                .cmp(right_return)
+                .then_with(|| left_parent.cmp(right_parent))
+        });
         entries.dedup_by(|a, b| a.1 == b.1 && a.0 == b.0);
         Rc::new(Self::Array {
             parents: entries
@@ -223,5 +227,21 @@ mod tests {
         assert_eq!(merged.parent(0), Some(empty.clone()));
         assert_eq!(merged.return_state(1), Some(EMPTY_RETURN_STATE));
         assert_eq!(merged.parent(1), Some(empty));
+    }
+
+    #[test]
+    fn merge_deduplicates_entries_with_same_parent_and_return_state() {
+        let empty = PredictionContext::empty();
+        let parent_one = PredictionContext::singleton(Rc::clone(&empty), 1);
+        let parent_two = PredictionContext::singleton(Rc::clone(&empty), 2);
+        let left = Rc::new(PredictionContext::Array {
+            parents: vec![Rc::clone(&parent_one), parent_two],
+            return_states: vec![42, 42],
+        });
+        let right = PredictionContext::singleton(Rc::clone(&parent_one), 42);
+
+        let merged = PredictionContext::merge(left, right);
+
+        assert_eq!(merged.len(), 2);
     }
 }
