@@ -9,6 +9,10 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 const DESCRIPTOR_PATH: &str = "resources/org/antlr/v4/test/runtime/descriptors";
+const ANTLR_JAR_ENV: &str = "ANTLR4_JAR";
+const DESCRIPTORS_ENV: &str = "ANTLR4_RUNTIME_TESTSUITE";
+const DEFAULT_ANTLR_JAR: &str = "/tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar";
+const DEFAULT_DESCRIPTORS: &str = "/tmp/antlr-cleanroom/antlr4-upstream/runtime-testsuite";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse()?;
@@ -136,9 +140,32 @@ impl Args {
             }
         }
 
+        let antlr_jar = resolve_path_argument(
+            antlr_jar,
+            ANTLR_JAR_ENV,
+            vec![
+                runtime_crate.join("tools/antlr-4.13.2-complete.jar"),
+                runtime_crate.join("target/antlr-4.13.2-complete.jar"),
+                PathBuf::from(DEFAULT_ANTLR_JAR),
+            ],
+            "--antlr-jar",
+            "ANTLR tool jar",
+        )?;
+        let descriptors = resolve_path_argument(
+            descriptors,
+            DESCRIPTORS_ENV,
+            vec![
+                runtime_crate.join("target/antlr4/runtime-testsuite"),
+                runtime_crate.join("../antlr4/runtime-testsuite"),
+                PathBuf::from(DEFAULT_DESCRIPTORS),
+            ],
+            "--descriptors",
+            "ANTLR runtime-testsuite descriptors",
+        )?;
+
         Ok(Self {
-            antlr_jar: antlr_jar.ok_or_else(usage)?,
-            descriptors: descriptors.ok_or_else(usage)?,
+            antlr_jar,
+            descriptors,
             runtime_crate,
             work_dir,
             group,
@@ -149,13 +176,43 @@ impl Args {
     }
 }
 
+/// Resolves an optional CLI path from, in order, the explicit flag, an
+/// environment override, and known local checkout locations.
+///
+/// The bare `cargo run --bin antlr4-runtime-testsuite` workflow is meant for
+/// the maintainer machine where the ANTLR jar and upstream checkout already
+/// live under `/tmp/antlr-cleanroom`; fresh environments can still pass
+/// explicit paths or set the documented environment variables.
+fn resolve_path_argument(
+    explicit: Option<PathBuf>,
+    env_key: &str,
+    candidates: Vec<PathBuf>,
+    flag: &str,
+    label: &str,
+) -> Result<PathBuf, String> {
+    if let Some(path) = explicit {
+        return Ok(path);
+    }
+    if let Ok(value) = env::var(env_key) {
+        if !value.is_empty() {
+            return Ok(PathBuf::from(value));
+        }
+    }
+    candidates.into_iter().find(|path| path.exists()).ok_or_else(|| {
+        format!(
+            "missing {label}; pass {flag}, set {env_key}, or create the default checkout under /tmp/antlr-cleanroom\n\n{}",
+            usage()
+        )
+    })
+}
+
 fn next_arg(iter: &mut impl Iterator<Item = String>, flag: &str) -> Result<String, String> {
     iter.next()
         .ok_or_else(|| format!("{flag} requires a value\n\n{}", usage()))
 }
 
 fn usage() -> String {
-    "usage: antlr4-runtime-testsuite --antlr-jar ANTLR.jar --descriptors PATH [--case Group/Name] [--group Group] [--limit N] [--keep]".to_owned()
+    "usage: antlr4-runtime-testsuite [--antlr-jar ANTLR.jar] [--descriptors PATH] [--case Group/Name] [--group Group] [--limit N] [--keep]\n\nDefaults: ANTLR4_JAR or /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar; ANTLR4_RUNTIME_TESTSUITE or /tmp/antlr-cleanroom/antlr4-upstream/runtime-testsuite".to_owned()
 }
 
 #[derive(Debug, Default)]

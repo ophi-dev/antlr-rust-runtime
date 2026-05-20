@@ -54,6 +54,8 @@ cargo run --bin antlr4-rust-gen -- \
 Run one upstream runtime-testsuite descriptor:
 
 ```bash
+cargo run --quiet --bin antlr4-runtime-testsuite
+
 cargo run --bin antlr4-runtime-testsuite -- \
   --antlr-jar path/to/antlr-4.13.2-complete.jar \
   --descriptors path/to/antlr4/runtime-testsuite \

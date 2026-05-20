@@ -17,6 +17,18 @@ This runtime currently uses a clean-room metadata path:
 The harness follows that path while still using the upstream descriptor grammar,
 input, stdout, and stderr expectations.
 
+## Run Full Sweep
+
+On the maintainer checkout, where the ANTLR jar and upstream runtime-testsuite
+live under `/tmp/antlr-cleanroom`, the full Rust sweep is:
+
+```bash
+cargo run --quiet --bin antlr4-runtime-testsuite
+```
+
+In other environments, pass explicit paths or set `ANTLR4_JAR` and
+`ANTLR4_RUNTIME_TESTSUITE`.
+
 ## Run One Descriptor
 
 ```bash
@@ -86,6 +98,8 @@ Supported now:
   the metadata recognizer,
 - parser `showDiagnosticErrors` ambiguity diagnostics for the currently modeled
   exact-ambiguity semantic-predicate descriptors,
+- parser `DumpDFA()` output for the currently modeled full-context diagnostics
+  descriptors,
 - parser rule-level `@after {<ToStringTree("$label.ctx")>}` actions for simple
   rule labels,
 - parser semantic predicates for `LANotEquals(...)` and `LTEquals(...)`
@@ -142,9 +156,10 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `342 passed, 0 failed, 15 skipped, 342 run`
+- full descriptor sweep: `357 passed, 0 failed, 0 skipped, 357 run`
 - `CompositeLexers`: `2 passed, 0 failed, 0 skipped, 2 run`
 - `CompositeParsers`: `15 passed, 0 failed, 0 skipped, 15 run`
+- `FullContextParsing`: `15 passed, 0 failed, 0 skipped, 15 run`
 - `LexerExec`: `42 passed, 0 failed, 0 skipped, 42 run`
 - `LexerErrors`: `12 passed, 0 failed, 0 skipped, 12 run`
 - `LeftRecursion`: `98 passed, 0 failed, 0 skipped, 98 run`
@@ -156,6 +171,3 @@ Current validated groups:
 - `SemPredEvalLexer`: `8 passed, 0 failed, 0 skipped, 8 run`
 - `SemPredEvalParser`: `26 passed, 0 failed, 0 skipped, 26 run`
 - `Sets`: `31 passed, 0 failed, 0 skipped, 31 run`
-
-The remaining skips are now the `FullContextParsing` diagnostic/profile/DFA
-flag descriptors.
