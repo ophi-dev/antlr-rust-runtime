@@ -475,6 +475,7 @@ fn runtime_flags_supported(descriptor: &Descriptor) -> bool {
             "SemPredEvalLexer/DisableRule"
                 | "SemPredEvalLexer/EnumNotID"
                 | "SemPredEvalLexer/IDnotEnum"
+                | "SemPredEvalLexer/IDvsEnum"
                 | "SemPredEvalLexer/Indent"
                 | "SemPredEvalLexer/LexerInputPositionSensitivePredicates"
         ))

@@ -77,7 +77,7 @@ Supported now:
   `ToStringTree("$ctx")` stdout actions,
 - lexer semantic predicates for the currently supported `True()`, `False()`,
   `TextEquals(...)`, token-start-column, and current-column templates,
-- lexer DFA dump output for the currently modeled predicate-sensitive
+- lexer DFA dump output for the predicate-sensitive `SemPredEvalLexer`
   `showDFA` fixtures,
 - lexer accept-position adjustment for the upstream `PositionAdjustingLexer`
   target template,
@@ -141,7 +141,7 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `337 passed, 0 failed, 20 skipped, 337 run`
+- full descriptor sweep: `338 passed, 0 failed, 19 skipped, 338 run`
 - `CompositeLexers`: `2 passed, 0 failed, 0 skipped, 2 run`
 - `CompositeParsers`: `15 passed, 0 failed, 0 skipped, 15 run`
 - `LexerExec`: `42 passed, 0 failed, 0 skipped, 42 run`
@@ -152,7 +152,7 @@ Current validated groups:
 - `ParserExec`: `50 passed, 0 failed, 0 skipped, 50 run`
 - `ParserErrors`: `34 passed, 0 failed, 0 skipped, 34 run`
 - `Performance`: `7 passed, 0 failed, 0 skipped, 7 run`
-- `SemPredEvalLexer`: `7 passed, 0 failed, 1 skipped, 7 run`
+- `SemPredEvalLexer`: `8 passed, 0 failed, 0 skipped, 8 run`
 - `SemPredEvalParser`: `23 passed, 0 failed, 3 skipped, 23 run`
 - `Sets`: `31 passed, 0 failed, 0 skipped, 31 run`
 

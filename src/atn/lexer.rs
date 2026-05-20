@@ -430,7 +430,6 @@ fn close_config<I, F, P>(
         return;
     }
 
-    let mut expanded = false;
     for transition in &state.transitions {
         match transition {
             Transition::Epsilon { target } => {
@@ -438,7 +437,6 @@ fn close_config<I, F, P>(
                 set_config_state(atn, &mut next, *target);
                 next.passed_non_greedy |= state.non_greedy;
                 close_config(lexer, atn, next, closure, semantic_predicate);
-                expanded = true;
             }
             Transition::Rule {
                 target,
@@ -450,7 +448,6 @@ fn close_config<I, F, P>(
                 next.passed_non_greedy |= state.non_greedy;
                 next.stack.push(*follow_state);
                 close_config(lexer, atn, next, closure, semantic_predicate);
-                expanded = true;
             }
             Transition::Predicate {
                 target,
@@ -467,7 +464,6 @@ fn close_config<I, F, P>(
                     set_config_state(atn, &mut next, *target);
                     next.passed_non_greedy |= state.non_greedy;
                     close_config(lexer, atn, next, closure, semantic_predicate);
-                    expanded = true;
                 }
             }
             Transition::Precedence { target, .. } => {
@@ -475,7 +471,6 @@ fn close_config<I, F, P>(
                 set_config_state(atn, &mut next, *target);
                 next.passed_non_greedy |= state.non_greedy;
                 close_config(lexer, atn, next, closure, semantic_predicate);
-                expanded = true;
             }
             Transition::Action {
                 target,
@@ -492,7 +487,6 @@ fn close_config<I, F, P>(
                     });
                 }
                 close_config(lexer, atn, next, closure, semantic_predicate);
-                expanded = true;
             }
             Transition::Atom { .. }
             | Transition::Range { .. }
@@ -502,11 +496,10 @@ fn close_config<I, F, P>(
         }
     }
 
-    if !expanded
-        || state
-            .transitions
-            .iter()
-            .any(|transition| !transition.is_epsilon())
+    if state
+        .transitions
+        .iter()
+        .any(|transition| !transition.is_epsilon())
     {
         closure.closed.push(config);
     }
