@@ -59,6 +59,35 @@ antlr4-rust-gen \
 The checked-in ANTLR `RustTarget`/StringTemplate shell is kept in `tool/` and
 will be expanded around the same runtime contracts.
 
+### Alternative: Generate metadata with antlr-ng
+
+[`antlr-ng`](https://www.antlr-ng.org/introduction.html) is a TypeScript/npm
+parser generator based on ANTLR 4.13.2. It does not currently ship a Rust
+target, but it can produce the same `.interp` metadata that `antlr4-rust-gen`
+uses.
+
+Install it with npm or run it through `npx`:
+
+```bash
+npx antlr-ng -Dlanguage=Java -o build/antlr --exact-output-dir true JSON.g4
+```
+
+The `-Dlanguage=Java` option selects one of antlr-ng's bundled code-generation
+targets only so the tool emits grammar artifacts, including `JSONLexer.interp`
+and `JSON.interp`. The Java files can be ignored; Rust code still comes from
+`antlr4-rust-gen`:
+
+```bash
+antlr4-rust-gen \
+  --lexer build/antlr/JSONLexer.interp \
+  --parser build/antlr/JSON.interp \
+  --out-dir src/generated
+```
+
+For local tooling, antlr-ng requires Node.js 20 or newer. See the
+[antlr-ng getting-started guide](https://www.antlr-ng.org/getting-started.html)
+for CLI installation and option details.
+
 ## Complete Example
 
 Suppose you are using the JSON grammar from `antlr/grammars-v4/json`.
