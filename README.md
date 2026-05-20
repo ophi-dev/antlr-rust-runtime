@@ -74,7 +74,7 @@ Generate Rust modules:
 ```bash
 antlr4-rust-gen \
   --lexer JSONLexer.interp \
-  --parser JSONParser.interp \
+  --parser JSON.interp \
   --out-dir src/generated
 ```
 
@@ -82,8 +82,10 @@ Declare the generated modules in your crate:
 
 ```rust
 mod generated {
+    #![allow(dead_code)]
+
+    pub mod json;
     pub mod json_lexer;
-    pub mod json_parser;
 }
 ```
 
@@ -91,13 +93,13 @@ Call the generated lexer and parser:
 
 ```rust
 use antlr4_runtime::{CommonTokenStream, InputStream};
-use generated::json_lexer::JSONLexer;
-use generated::json_parser::JSONParser;
+use generated::json::Json;
+use generated::json_lexer::JsonLexer;
 
 fn main() -> Result<(), antlr4_runtime::AntlrError> {
-    let lexer = JSONLexer::new(InputStream::new(r#"{"a":1}"#));
+    let lexer = JsonLexer::new(InputStream::new(r#"{"a":1}"#));
     let tokens = CommonTokenStream::new(lexer);
-    let mut parser = JSONParser::new(tokens);
+    let mut parser = Json::new(tokens);
     let tree = parser.json()?;
 
     println!("{}", tree.text());
