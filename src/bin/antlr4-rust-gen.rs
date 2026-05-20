@@ -636,6 +636,8 @@ where
     fn set_build_parse_trees(&mut self, build: bool) {{ self.base.set_build_parse_trees(build); }}
     fn report_diagnostic_errors(&self) -> bool {{ self.base.report_diagnostic_errors() }}
     fn set_report_diagnostic_errors(&mut self, report: bool) {{ self.base.set_report_diagnostic_errors(report); }}
+    fn prediction_mode(&self) -> antlr4_runtime::PredictionMode {{ self.base.prediction_mode() }}
+    fn set_prediction_mode(&mut self, mode: antlr4_runtime::PredictionMode) {{ self.base.set_prediction_mode(mode); }}
 }}
 "#
     ))

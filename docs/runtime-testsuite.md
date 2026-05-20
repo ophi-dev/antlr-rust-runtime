@@ -82,8 +82,8 @@ Supported now:
 - lexer accept-position adjustment for the upstream `PositionAdjustingLexer`
   target template,
 - parser `@init {<BuildParseTrees()>}` and `notBuildParseTree` descriptors,
-- parser `predictionMode=LL` descriptors where the default Rust parser behavior
-  already matches LL prediction,
+- parser `predictionMode=LL` and `predictionMode=SLL` descriptors modeled by
+  the metadata recognizer,
 - parser `showDiagnosticErrors` ambiguity diagnostics for the currently modeled
   exact-ambiguity semantic-predicate descriptors,
 - parser rule-level `@after {<ToStringTree("$label.ctx")>}` actions for simple
@@ -141,7 +141,7 @@ as failures.
 
 Current validated groups:
 
-- full descriptor sweep: `336 passed, 0 failed, 21 skipped, 336 run`
+- full descriptor sweep: `337 passed, 0 failed, 20 skipped, 337 run`
 - `CompositeLexers`: `2 passed, 0 failed, 0 skipped, 2 run`
 - `CompositeParsers`: `15 passed, 0 failed, 0 skipped, 15 run`
 - `LexerExec`: `42 passed, 0 failed, 0 skipped, 42 run`
@@ -149,7 +149,7 @@ Current validated groups:
 - `LeftRecursion`: `97 passed, 0 failed, 1 skipped, 97 run`
 - `Listeners`: `7 passed, 0 failed, 0 skipped, 7 run`
 - `ParseTrees`: `10 passed, 0 failed, 0 skipped, 10 run`
-- `ParserExec`: `49 passed, 0 failed, 1 skipped, 49 run`
+- `ParserExec`: `50 passed, 0 failed, 0 skipped, 50 run`
 - `ParserErrors`: `34 passed, 0 failed, 0 skipped, 34 run`
 - `Performance`: `7 passed, 0 failed, 0 skipped, 7 run`
 - `SemPredEvalLexer`: `7 passed, 0 failed, 1 skipped, 7 run`

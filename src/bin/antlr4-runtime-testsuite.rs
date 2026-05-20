@@ -468,7 +468,7 @@ fn unsupported_reason(descriptor: &Descriptor) -> Option<&'static str> {
 fn runtime_flags_supported(descriptor: &Descriptor) -> bool {
     matches!(
         descriptor.flags.trim(),
-        "notBuildParseTree" | "predictionMode=LL"
+        "notBuildParseTree" | "predictionMode=LL" | "predictionMode=SLL"
     ) || (descriptor.flags.trim() == "showDFA"
         && matches!(
             descriptor.id().as_str(),
@@ -538,6 +538,7 @@ fn parser_error_diagnostics_supported(descriptor: &Descriptor) -> bool {
             | "NoViableAlt"
             | "NoViableAltAvoidance"
             | "PredTestedEvenWhenUnAmbig_2"
+            | "PredictionMode_SLL"
             | "SingleSetInsertion"
             | "SingleSetInsertionConsumption"
             | "SingleTokenDeletion"
@@ -1744,8 +1745,13 @@ fn parser_smoke_main(descriptor: &Descriptor) -> String {
         "true"
     };
     let report_diagnostic_errors = descriptor.flags.trim() == "showDiagnosticErrors";
+    let prediction_mode = if descriptor.flags.trim() == "predictionMode=SLL" {
+        "            parser.set_prediction_mode(antlr4_runtime::PredictionMode::Sll);\n"
+    } else {
+        ""
+    };
     format!(
-        "pub mod generated {{\n    pub mod {lexer_module};\n    pub mod {parser_module};\n}}\n\nuse antlr4_runtime::{{AntlrError, CommonTokenStream, InputStream, Parser}};\nuse generated::{lexer_module}::{lexer_type};\nuse generated::{parser_module}::{parser_type};\n\nfn main() {{\n    let handle = std::thread::Builder::new()\n        .stack_size(128 * 1024 * 1024)\n        .spawn(|| {{\n            let lexer = {lexer_type}::new(InputStream::new(\"{}\"));\n            let tokens = CommonTokenStream::new(lexer);\n            let mut parser = {parser_type}::new(tokens);\n            parser.set_build_parse_trees({build_parse_trees});\n            parser.set_report_diagnostic_errors({report_diagnostic_errors});\n            if let Err(error) = parser.{start_rule}() {{\n                match error {{\n                    AntlrError::ParserError {{ line, column, message }} => eprintln!(\"line {{line}}:{{column}} {{message}}\"),\n                    other => eprintln!(\"{{other}}\"),\n                }}\n            }}\n        }})\n        .expect(\"parser smoke thread should start\");\n    handle.join().expect(\"parser smoke thread should finish\");\n}}\n",
+        "pub mod generated {{\n    pub mod {lexer_module};\n    pub mod {parser_module};\n}}\n\nuse antlr4_runtime::{{AntlrError, CommonTokenStream, InputStream, Parser}};\nuse generated::{lexer_module}::{lexer_type};\nuse generated::{parser_module}::{parser_type};\n\nfn main() {{\n    let handle = std::thread::Builder::new()\n        .stack_size(128 * 1024 * 1024)\n        .spawn(|| {{\n            let lexer = {lexer_type}::new(InputStream::new(\"{}\"));\n            let tokens = CommonTokenStream::new(lexer);\n            let mut parser = {parser_type}::new(tokens);\n            parser.set_build_parse_trees({build_parse_trees});\n            parser.set_report_diagnostic_errors({report_diagnostic_errors});\n{prediction_mode}            if let Err(error) = parser.{start_rule}() {{\n                match error {{\n                    AntlrError::ParserError {{ line, column, message }} => eprintln!(\"line {{line}}:{{column}} {{message}}\"),\n                    other => eprintln!(\"{{other}}\"),\n                }}\n            }}\n        }})\n        .expect(\"parser smoke thread should start\");\n    handle.join().expect(\"parser smoke thread should finish\");\n}}\n",
         rust_string(&descriptor.input)
     )
 }

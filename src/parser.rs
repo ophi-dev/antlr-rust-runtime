@@ -134,6 +134,17 @@ pub enum ParserPredicate {
     },
 }
 
+/// Prediction strategy requested by generated parser harnesses.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PredictionMode {
+    /// Prefer the clean full-context outcome when alternatives reach the same
+    /// input position.
+    Ll,
+    /// Preserve SLL's first-viable alternative bias at a decision, even when a
+    /// later full-context alternative could avoid recovery.
+    Sll,
+}
+
 /// Integer argument metadata for a generated parser rule invocation.
 ///
 /// ANTLR's serialized ATN does not retain Rust-target rule argument values, so
@@ -214,6 +225,14 @@ pub trait Parser: Recognizer {
     /// Enables or disables ANTLR-style prediction diagnostics for subsequent
     /// rule calls.
     fn set_report_diagnostic_errors(&mut self, _report: bool) {}
+
+    /// Reports the prediction strategy used when selecting among alternatives.
+    fn prediction_mode(&self) -> PredictionMode {
+        PredictionMode::Ll
+    }
+
+    /// Sets the prediction strategy for subsequent rule calls.
+    fn set_prediction_mode(&mut self, _mode: PredictionMode) {}
 }
 
 #[derive(Debug)]
@@ -222,6 +241,7 @@ pub struct BaseParser<S> {
     data: RecognizerData,
     build_parse_trees: bool,
     report_diagnostic_errors: bool,
+    prediction_mode: PredictionMode,
     prediction_diagnostics: Vec<ParserDiagnostic>,
     reported_prediction_diagnostics: BTreeSet<(usize, usize, String)>,
     int_members: BTreeMap<usize, i64>,
@@ -647,6 +667,7 @@ where
             data,
             build_parse_trees: true,
             report_diagnostic_errors: false,
+            prediction_mode: PredictionMode::Ll,
             prediction_diagnostics: Vec::new(),
             reported_prediction_diagnostics: BTreeSet::new(),
             int_members: BTreeMap::new(),
@@ -928,7 +949,7 @@ where
             &mut memo,
             &mut expected,
         );
-        let Some(outcome) = select_best_outcome(outcomes.into_iter()) else {
+        let Some(outcome) = select_best_outcome(outcomes.into_iter(), self.prediction_mode) else {
             let error = self.recognition_error(rule_index, start_index, &expected);
             report_token_source_errors(&self.input.drain_source_errors());
             return Err(error);
@@ -1148,7 +1169,7 @@ where
         follow_symbols: &BTreeSet<i32>,
     ) -> Option<(ParserDiagnostic, i32, String)> {
         let current_symbol = self.token_type_at(index);
-        if current_symbol == TOKEN_EOF || !follow_symbols.contains(&current_symbol) {
+        if !follow_symbols.contains(&current_symbol) {
             return None;
         }
         let transition_expected = transition_expected_symbols(transition, max_token_type);
@@ -1616,7 +1637,9 @@ where
         }
 
         visiting.remove(&visit_key);
-        discard_recovered_fast_outcomes_if_clean_path_exists(&mut outcomes);
+        if self.prediction_mode == PredictionMode::Ll {
+            discard_recovered_fast_outcomes_if_clean_path_exists(&mut outcomes);
+        }
         dedupe_fast_outcomes(&mut outcomes);
         memo.insert(key, outcomes.clone());
         outcomes
@@ -2305,7 +2328,9 @@ where
 
         visiting.remove(&visit_key);
         self.record_prediction_diagnostics(atn, state, index, &outcomes);
-        discard_recovered_outcomes_if_clean_path_exists(&mut outcomes);
+        if self.prediction_mode == PredictionMode::Ll {
+            discard_recovered_outcomes_if_clean_path_exists(&mut outcomes);
+        }
         dedupe_outcomes(&mut outcomes);
         memo.insert(key, outcomes.clone());
         outcomes
@@ -2905,6 +2930,7 @@ fn select_best_fast_outcome(
 
 fn select_best_outcome(
     outcomes: impl Iterator<Item = RecognizeOutcome>,
+    prediction_mode: PredictionMode,
 ) -> Option<RecognizeOutcome> {
     let outcomes = outcomes.collect::<Vec<_>>();
     let prefer_first_tie = outcomes
@@ -2913,19 +2939,36 @@ fn select_best_outcome(
     outcomes.into_iter().reduce(|best, outcome| {
         let outcome_position = (outcome.index, outcome.consumed_eof);
         let best_position = (best.index, best.consumed_eof);
-        if outcome_is_better(
-            outcome_position,
-            &outcome.diagnostics,
-            best_position,
-            &best.diagnostics,
-        ) || (!prefer_first_tie
-            && outcome_position == best_position
-            && outcome.diagnostics.len() == best.diagnostics.len()
-            && diagnostic_recovery_rank(&outcome.diagnostics)
-                == diagnostic_recovery_rank(&best.diagnostics)
-            && (outcome.decisions < best.decisions
-                || (outcome.decisions == best.decisions && outcome.actions > best.actions)))
-        {
+        let better = match prediction_mode {
+            PredictionMode::Ll => {
+                outcome_is_better(
+                    outcome_position,
+                    &outcome.diagnostics,
+                    best_position,
+                    &best.diagnostics,
+                ) || (!prefer_first_tie
+                    && outcome_position == best_position
+                    && outcome.diagnostics.len() == best.diagnostics.len()
+                    && diagnostic_recovery_rank(&outcome.diagnostics)
+                        == diagnostic_recovery_rank(&best.diagnostics)
+                    && (outcome.decisions < best.decisions
+                        || (outcome.decisions == best.decisions && outcome.actions > best.actions)))
+            }
+            PredictionMode::Sll => {
+                outcome_position > best_position
+                    || (outcome_position == best_position
+                        && !prefer_first_tie
+                        && (outcome.decisions < best.decisions
+                            || (outcome.decisions == best.decisions
+                                && outcome_is_better(
+                                    outcome_position,
+                                    &outcome.diagnostics,
+                                    best_position,
+                                    &best.diagnostics,
+                                ))))
+            }
+        };
+        if better {
             return outcome;
         }
         best
@@ -3199,6 +3242,14 @@ where
     fn set_report_diagnostic_errors(&mut self, report: bool) {
         self.report_diagnostic_errors = report;
     }
+
+    fn prediction_mode(&self) -> PredictionMode {
+        self.prediction_mode
+    }
+
+    fn set_prediction_mode(&mut self, mode: PredictionMode) {
+        self.prediction_mode = mode;
+    }
 }
 
 #[cfg(test)]
@@ -3343,7 +3394,7 @@ mod tests {
             ..first.clone()
         };
 
-        let selected = select_best_outcome([first, second].into_iter())
+        let selected = select_best_outcome([first, second].into_iter(), PredictionMode::Ll)
             .expect("one outcome should be selected");
         assert_eq!(selected.actions[0].source_state(), 2);
     }
@@ -3369,7 +3420,7 @@ mod tests {
             ..first.clone()
         };
 
-        let selected = select_best_outcome([second, first].into_iter())
+        let selected = select_best_outcome([second, first].into_iter(), PredictionMode::Ll)
             .expect("one outcome should be selected");
         assert_eq!(selected.actions.len(), 2);
     }
@@ -3399,7 +3450,7 @@ mod tests {
             ..first.clone()
         };
 
-        let selected = select_best_outcome([first, second].into_iter())
+        let selected = select_best_outcome([first, second].into_iter(), PredictionMode::Ll)
             .expect("one outcome should be selected");
         assert_eq!(selected.actions[0].stop_index(), Some(6));
     }
@@ -3446,8 +3497,39 @@ mod tests {
             nodes: recursive_nodes,
         };
 
-        let selected = select_best_outcome([first, second].into_iter())
+        let selected = select_best_outcome([first, second].into_iter(), PredictionMode::Ll)
             .expect("one outcome should be selected");
         assert_eq!(selected.actions[0].source_state(), 1);
+    }
+
+    #[test]
+    fn sll_outcome_selection_keeps_earlier_recovered_alt() {
+        let first_alt = RecognizeOutcome {
+            index: 2,
+            consumed_eof: true,
+            alt_number: 0,
+            member_values: BTreeMap::new(),
+            return_values: BTreeMap::new(),
+            diagnostics: vec![ParserDiagnostic {
+                line: 1,
+                column: 3,
+                message: "missing 'Y' at '<EOF>'".to_owned(),
+            }],
+            decisions: vec![0],
+            actions: vec![ParserAction::new(1, 0, 0, None)],
+            nodes: vec![RecognizedNode::Token { index: 0 }],
+        };
+        let second_alt = RecognizeOutcome {
+            diagnostics: Vec::new(),
+            decisions: vec![1],
+            actions: vec![ParserAction::new(2, 0, 0, None)],
+            ..first_alt.clone()
+        };
+
+        let selected =
+            select_best_outcome([second_alt, first_alt].into_iter(), PredictionMode::Sll)
+                .expect("one outcome should be selected");
+        assert_eq!(selected.diagnostics.len(), 1);
+        assert_eq!(selected.decisions, [0]);
     }
 }
