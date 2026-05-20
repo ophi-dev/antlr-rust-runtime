@@ -1,0 +1,51 @@
+name: ANTLR Runtime Testsuite
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  ANTLR_VERSION: 4.13.2
+  ANTLR4_JAR: /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar
+  ANTLR4_RUNTIME_TESTSUITE: /tmp/antlr-cleanroom/antlr4-upstream/runtime-testsuite
+  CARGO_TERM_COLOR: always
+
+jobs:
+  runtime-testsuite:
+    name: Runtime Testsuite
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+
+      - name: Install Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Prepare ANTLR runtime testsuite
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/antlr-cleanroom/tools
+          curl --fail --location --output "${ANTLR4_JAR}" \
+            "https://www.antlr.org/download/antlr-${ANTLR_VERSION}-complete.jar"
+          git clone --depth 1 --branch "${ANTLR_VERSION}" \
+            https://github.com/antlr/antlr4.git \
+            /tmp/antlr-cleanroom/antlr4-upstream
+
+      - name: Run ANTLR runtime testsuite
+        run: cargo run --locked --quiet --bin antlr4-runtime-testsuite
