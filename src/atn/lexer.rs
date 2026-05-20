@@ -1,10 +1,11 @@
 use std::collections::BTreeSet;
-use std::fmt::Write as _;
 
-use crate::atn::{Atn, AtnStateKind, LexerAction, LexerActionResult, Transition};
+use crate::atn::{Atn, AtnStateKind, LexerAction, Transition};
 use crate::char_stream::{CharStream, TextInterval};
 use crate::int_stream::EOF;
-use crate::lexer::{BaseLexer, Lexer, LexerCustomAction, LexerPredicate};
+use crate::lexer::{
+    BaseLexer, Lexer, LexerCustomAction, LexerDfaConfigKey, LexerDfaKey, LexerPredicate,
+};
 use crate::token::{CommonToken, DEFAULT_CHANNEL, INVALID_TOKEN_TYPE, TokenFactory};
 
 const MIN_CHAR_VALUE: i32 = 0;
@@ -45,6 +46,49 @@ enum MatchResult {
 struct ClosureResult {
     configs: Vec<LexerConfig>,
     has_semantic_context: bool,
+}
+
+/// Mutable emission state produced by executing lexer actions for one token.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct LexerActionResult {
+    token_type: i32,
+    channel: i32,
+    skip: bool,
+    more: bool,
+}
+
+impl LexerActionResult {
+    /// Starts action execution with the token type chosen by the accepted rule
+    /// and the default channel.
+    const fn new(token_type: i32, channel: i32) -> Self {
+        Self {
+            token_type,
+            channel,
+            skip: false,
+            more: false,
+        }
+    }
+
+    /// Applies one deserialized lexer action to this token emission result and
+    /// to the lexer mode stack when the action changes modes.
+    fn apply<I, F>(&mut self, action: &LexerAction, lexer: &mut BaseLexer<I, F>)
+    where
+        I: CharStream,
+        F: TokenFactory,
+    {
+        match action {
+            LexerAction::Channel(channel) => self.channel = *channel,
+            LexerAction::Custom { .. } => {}
+            LexerAction::Mode(mode) => lexer.set_mode(*mode),
+            LexerAction::More => self.more = true,
+            LexerAction::PopMode => {
+                lexer.pop_mode();
+            }
+            LexerAction::PushMode(mode) => lexer.push_mode(*mode),
+            LexerAction::Skip => self.skip = true,
+            LexerAction::Type(token_type) => self.token_type = *token_type,
+        }
+    }
 }
 
 /// Accumulates one epsilon-closure expansion, including whether predicate
@@ -567,30 +611,30 @@ fn accept_prediction(atn: &Atn, configs: &[LexerConfig]) -> Option<i32> {
 /// Builds a stable DFA state identity from a lexer closure while ignoring the
 /// absolute input position, matching ANTLR's cache shape rather than one input
 /// occurrence.
-fn lexer_dfa_key(configs: &[LexerConfig]) -> String {
-    let mut parts = configs
-        .iter()
-        .map(normalized_config_key)
-        .collect::<Vec<_>>();
-    parts.sort_unstable();
-    parts.join("|")
+fn lexer_dfa_key(configs: &[LexerConfig]) -> LexerDfaKey {
+    LexerDfaKey::new(
+        configs
+            .iter()
+            .map(normalized_config_key)
+            .collect::<Vec<_>>(),
+    )
 }
 
-/// Serializes a config for DFA-state identity without embedding its absolute
+/// Normalizes a config for DFA-state identity without embedding its absolute
 /// character offset in the current input.
-fn normalized_config_key(config: &LexerConfig) -> String {
-    let mut key = format!(
-        "{}:{:?}:{}:{}:{:?}:",
+fn normalized_config_key(config: &LexerConfig) -> LexerDfaConfigKey {
+    LexerDfaConfigKey::new(
         config.state,
         config.alt_rule_index,
         config.consumed_eof,
         config.passed_non_greedy,
-        config.stack
-    );
-    for action in &config.actions {
-        let _ = write!(key, "{};", action.action_index);
-    }
-    key
+        config.stack.clone(),
+        config
+            .actions
+            .iter()
+            .map(|action| action.action_index)
+            .collect(),
+    )
 }
 
 /// Moves a lexer config to `state_number` and records the top-level lexer rule
@@ -654,7 +698,7 @@ mod tests {
 
     #[test]
     fn lexer_matches_longest_token_and_skips() {
-        let atn = AtnDeserializer::new(&SerializedAtn::from_i32([
+        let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&[
             4, 0, 2, // version, lexer, max token type
             9, // states
             6, -1, // 0 token start
@@ -703,7 +747,7 @@ mod tests {
 
     #[test]
     fn lexer_more_extends_original_token_start() {
-        let atn = AtnDeserializer::new(&SerializedAtn::from_i32([
+        let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&[
             4, 0, 1, // version, lexer, max token type
             8, // states
             6, -1, // 0 token start

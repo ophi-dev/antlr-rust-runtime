@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use crate::atn::{Atn, AtnState, AtnStateKind, AtnType, IntervalSet, LexerAction, Transition};
 use crate::errors::AntlrError;
 use crate::token::TOKEN_EOF;
@@ -10,15 +12,15 @@ pub const SERIALIZED_VERSION: i32 = 4;
 /// Rust generator emits integer arrays from `.interp` files, while
 /// `from_chars` supports targets that encode ATN values in string literals.
 #[derive(Clone, Debug)]
-pub struct SerializedAtn {
-    values: Vec<i32>,
+pub struct SerializedAtn<'a> {
+    values: Cow<'a, [i32]>,
 }
 
-impl SerializedAtn {
+impl<'a> SerializedAtn<'a> {
     /// Creates serialized ATN data from an already-decoded integer array.
-    pub fn from_i32(values: impl Into<Vec<i32>>) -> Self {
+    pub const fn from_i32(values: &'a [i32]) -> Self {
         Self {
-            values: values.into(),
+            values: Cow::Borrowed(values),
         }
     }
 
@@ -28,9 +30,9 @@ impl SerializedAtn {
     /// This is useful for ANTLR targets that store serialized ATN data in
     /// string fragments. Java-style 16-bit word decoding is not applied here;
     /// callers should pass already-decoded characters for now.
-    pub fn from_chars(chars: impl IntoIterator<Item = char>) -> Self {
-        Self {
-            values: chars.into_iter().map(|ch| ch as i32).collect(),
+    pub fn from_chars(chars: impl IntoIterator<Item = char>) -> SerializedAtn<'static> {
+        SerializedAtn {
+            values: Cow::Owned(chars.into_iter().map(|ch| ch as i32).collect()),
         }
     }
 
@@ -48,7 +50,7 @@ pub struct AtnDeserializer<'a> {
 
 impl<'a> AtnDeserializer<'a> {
     /// Creates a deserializer over immutable serialized ATN storage.
-    pub fn new(serialized: &'a SerializedAtn) -> Self {
+    pub fn new(serialized: &'a SerializedAtn<'_>) -> Self {
         Self {
             values: serialized.values(),
             cursor: 0,
@@ -505,7 +507,7 @@ mod tests {
 
     #[test]
     fn reads_small_parser_atn() {
-        let serialized = SerializedAtn::from_i32([
+        let serialized = SerializedAtn::from_i32(&[
             4, 1, 9, // header: version, parser, max token type
             2, // states
             2, 0, // rule start

@@ -3727,7 +3727,7 @@ mod tests {
 
     #[test]
     fn parser_interprets_simple_atn_rule() {
-        let atn = AtnDeserializer::new(&SerializedAtn::from_i32([
+        let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&[
             4, 1, 2, // version, parser, max token type
             3, // states
             2, 0, // rule start

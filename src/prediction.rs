@@ -1,8 +1,9 @@
+use std::collections::BTreeSet;
 use std::rc::Rc;
 
 pub const EMPTY_RETURN_STATE: usize = usize::MAX;
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum PredictionContext {
     Empty,
     Singleton {
@@ -118,7 +119,7 @@ fn collect_entries(
     }
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct AtnConfig {
     pub state: usize,
     pub alt: usize,
@@ -137,9 +138,10 @@ impl AtnConfig {
     }
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct AtnConfigSet {
     configs: Vec<AtnConfig>,
+    config_index: BTreeSet<AtnConfig>,
     has_semantic_context: bool,
     dips_into_outer_context: bool,
     readonly: bool,
@@ -154,14 +156,14 @@ impl AtnConfigSet {
     /// not already present.
     pub fn add(&mut self, config: AtnConfig) -> bool {
         assert!(!self.readonly, "cannot mutate readonly ATN config set");
-        if self.configs.contains(&config) {
-            false
-        } else {
+        if self.config_index.insert(config.clone()) {
             if config.reaches_into_outer_context > 0 {
                 self.dips_into_outer_context = true;
             }
             self.configs.push(config);
             true
+        } else {
+            false
         }
     }
 

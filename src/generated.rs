@@ -62,10 +62,10 @@ impl GrammarMetadata {
         )
     }
 
-    /// Returns a copy of the serialized ATN values for deserialization by the
-    /// runtime simulators.
-    pub fn serialized_atn(&self) -> SerializedAtn {
-        SerializedAtn::from_i32(self.serialized_atn.to_vec())
+    /// Borrows the serialized ATN values for deserialization by the runtime
+    /// simulators without copying generated static data.
+    pub const fn serialized_atn(&self) -> SerializedAtn<'_> {
+        SerializedAtn::from_i32(self.serialized_atn)
     }
 }
 

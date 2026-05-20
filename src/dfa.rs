@@ -6,6 +6,7 @@ pub struct Dfa {
     decision: usize,
     atn_start_state: usize,
     states: Vec<DfaState>,
+    state_index: BTreeMap<AtnConfigSet, usize>,
 }
 
 impl Dfa {
@@ -14,6 +15,7 @@ impl Dfa {
             decision,
             atn_start_state,
             states: Vec::new(),
+            state_index: BTreeMap::new(),
         }
     }
 
@@ -32,15 +34,12 @@ impl Dfa {
     /// Inserts a DFA state or returns the existing state number for an
     /// equivalent ATN configuration set.
     pub fn add_state(&mut self, mut state: DfaState) -> usize {
-        if let Some(existing) = self
-            .states
-            .iter()
-            .find(|candidate| candidate.configs == state.configs)
-        {
-            return existing.state_number;
+        if let Some(existing) = self.state_index.get(&state.configs) {
+            return *existing;
         }
         let state_number = self.states.len();
         state.state_number = state_number;
+        self.state_index.insert(state.configs.clone(), state_number);
         self.states.push(state);
         state_number
     }

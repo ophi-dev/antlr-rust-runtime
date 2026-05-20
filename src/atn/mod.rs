@@ -391,51 +391,6 @@ pub enum LexerAction {
     Type(i32),
 }
 
-/// Mutable emission state produced by executing lexer actions for one token.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct LexerActionResult {
-    pub token_type: i32,
-    pub channel: i32,
-    pub skip: bool,
-    pub more: bool,
-}
-
-impl LexerActionResult {
-    /// Starts action execution with the token type chosen by the accepted rule
-    /// and the default channel.
-    pub const fn new(token_type: i32, channel: i32) -> Self {
-        Self {
-            token_type,
-            channel,
-            skip: false,
-            more: false,
-        }
-    }
-
-    /// Applies one deserialized lexer action to this token emission result and
-    /// to the lexer mode stack when the action changes modes.
-    pub fn apply<I, F>(&mut self, action: &LexerAction, lexer: &mut crate::lexer::BaseLexer<I, F>)
-    where
-        I: crate::char_stream::CharStream,
-        F: crate::token::TokenFactory,
-    {
-        use crate::lexer::Lexer;
-
-        match action {
-            LexerAction::Channel(channel) => self.channel = *channel,
-            LexerAction::Custom { .. } => {}
-            LexerAction::Mode(mode) => lexer.set_mode(*mode),
-            LexerAction::More => self.more = true,
-            LexerAction::PopMode => {
-                lexer.pop_mode();
-            }
-            LexerAction::PushMode(mode) => lexer.push_mode(*mode),
-            LexerAction::Skip => self.skip = true,
-            LexerAction::Type(token_type) => self.token_type = *token_type,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

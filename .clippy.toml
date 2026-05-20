@@ -5,6 +5,9 @@ excessive-nesting-threshold         = 8
 min-ident-chars-threshold           = 2
 single-char-binding-names-threshold = 3
 too-many-arguments-threshold        = 6
+# The generator and runtime-testsuite harness still contain a few deliberately
+# dense functions. Keep this inherited strict-policy threshold explicit so new
+# jumbo helpers fail Clippy without forcing premature splits in those modules.
 too-many-lines-threshold            = 476
 trivial-copy-size-limit             = 16
 type-complexity-threshold           = 300

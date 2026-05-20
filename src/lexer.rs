@@ -113,7 +113,7 @@ pub struct BaseLexer<I, F = CommonTokenFactory> {
 /// runtime-suite descriptors.
 #[derive(Clone, Debug, Default)]
 struct LexerDfaTrace {
-    state_numbers: BTreeMap<String, usize>,
+    state_numbers: BTreeMap<LexerDfaKey, usize>,
     accept_predictions: BTreeMap<usize, i32>,
     edges: BTreeSet<LexerDfaEdge>,
 }
@@ -124,6 +124,50 @@ impl LexerDfaTrace {
             state_numbers: BTreeMap::new(),
             accept_predictions: BTreeMap::new(),
             edges: BTreeSet::new(),
+        }
+    }
+}
+
+/// Normalized lexer ATN config-set identity used for observed DFA traces.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) struct LexerDfaKey {
+    configs: Vec<LexerDfaConfigKey>,
+}
+
+impl LexerDfaKey {
+    pub(crate) fn new(mut configs: Vec<LexerDfaConfigKey>) -> Self {
+        configs.sort_unstable();
+        Self { configs }
+    }
+}
+
+/// One lexer ATN config identity with the absolute input position removed.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) struct LexerDfaConfigKey {
+    state: usize,
+    alt_rule_index: Option<usize>,
+    consumed_eof: bool,
+    passed_non_greedy: bool,
+    stack: Vec<usize>,
+    actions: Vec<usize>,
+}
+
+impl LexerDfaConfigKey {
+    pub(crate) const fn new(
+        state: usize,
+        alt_rule_index: Option<usize>,
+        consumed_eof: bool,
+        passed_non_greedy: bool,
+        stack: Vec<usize>,
+        actions: Vec<usize>,
+    ) -> Self {
+        Self {
+            state,
+            alt_rule_index,
+            consumed_eof,
+            passed_non_greedy,
+            stack,
+            actions,
         }
     }
 }
@@ -412,7 +456,11 @@ where
 
     /// Returns the stable state number for a normalized lexer DFA config set,
     /// creating one if this input path has not reached it before.
-    pub fn lexer_dfa_state(&mut self, key: String, accept_prediction: Option<i32>) -> usize {
+    pub(crate) fn lexer_dfa_state(
+        &mut self,
+        key: LexerDfaKey,
+        accept_prediction: Option<i32>,
+    ) -> usize {
         let next = self.lexer_dfa.state_numbers.len();
         let state = *self.lexer_dfa.state_numbers.entry(key).or_insert(next);
         if let Some(prediction) = accept_prediction {

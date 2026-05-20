@@ -2116,7 +2116,7 @@ fn parse_write_literal(body: &str) -> Option<ActionTemplate> {
 
 /// Reads the lexer ATN to locate serialized custom action coordinates.
 fn lexer_custom_actions(data: &InterpData) -> io::Result<Vec<(i32, i32)>> {
-    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(data.atn.clone()))
+    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
         .deserialize()
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     Ok(atn
@@ -2134,7 +2134,7 @@ fn lexer_custom_actions(data: &InterpData) -> io::Result<Vec<(i32, i32)>> {
 
 /// Reads the lexer ATN to locate semantic predicate coordinates.
 fn lexer_predicate_transitions(data: &InterpData) -> io::Result<Vec<(usize, usize)>> {
-    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(data.atn.clone()))
+    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
         .deserialize()
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     let mut predicates = Vec::new();
@@ -2155,7 +2155,7 @@ fn lexer_predicate_transitions(data: &InterpData) -> io::Result<Vec<(usize, usiz
 
 /// Reads the parser ATN to locate action-transition source states.
 fn parser_action_states(data: &InterpData) -> io::Result<Vec<usize>> {
-    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(data.atn.clone()))
+    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
         .deserialize()
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     let mut states = Vec::new();
@@ -2173,7 +2173,7 @@ fn parser_action_states(data: &InterpData) -> io::Result<Vec<usize>> {
 
 /// Reads the parser ATN action transitions keyed by source state.
 fn parser_action_state_rules(data: &InterpData) -> io::Result<BTreeMap<usize, usize>> {
-    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(data.atn.clone()))
+    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
         .deserialize()
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     let mut states = BTreeMap::new();
@@ -2203,7 +2203,7 @@ fn parser_rule_args(
     if calls.is_empty() {
         return Ok(Vec::new());
     }
-    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(data.atn.clone()))
+    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
         .deserialize()
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     let mut rule_transitions = Vec::new();
