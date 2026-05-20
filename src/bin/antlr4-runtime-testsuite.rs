@@ -475,6 +475,8 @@ fn runtime_flags_supported(descriptor: &Descriptor) -> bool {
             "SemPredEvalLexer/DisableRule"
                 | "SemPredEvalLexer/EnumNotID"
                 | "SemPredEvalLexer/IDnotEnum"
+                | "SemPredEvalLexer/Indent"
+                | "SemPredEvalLexer/LexerInputPositionSensitivePredicates"
         ))
         || (descriptor.flags.trim() == "showDiagnosticErrors"
             && matches!(
@@ -758,9 +760,9 @@ fn supported_after_action_templates(grammar: &str) -> bool {
 
 fn supported_lexer_predicate_templates(grammar: &str) -> bool {
     let mut offset = 0;
-    while let Some(block) = next_template_block(grammar, offset) {
+    while let Some(block) = next_predicate_action_block(grammar, offset) {
         offset = block.after_brace;
-        if block.predicate && !is_supported_lexer_predicate_template(block.body.trim()) {
+        if block.body.contains('<') && !is_supported_lexer_predicate_template(block.body.trim()) {
             return false;
         }
     }
@@ -768,11 +770,32 @@ fn supported_lexer_predicate_templates(grammar: &str) -> bool {
 }
 
 fn is_supported_lexer_predicate_template(body: &str) -> bool {
+    if let Some(inner) = single_template_body(body) {
+        return is_supported_lexer_predicate_template(inner);
+    }
     matches!(body, "True()" | "False()")
+        || body == r#"<Column()> \< 2"#
+        || body == "<Column()> < 2"
+        || body == "<Column()> >= 2"
         || body
             .strip_prefix("TextEquals(")
             .and_then(|value| value.strip_suffix(')'))
             .is_some_and(|argument| parse_template_string(argument).is_some())
+        || body
+            .strip_prefix("TokenStartColumnEquals(")
+            .and_then(|value| value.strip_suffix(')'))
+            .is_some_and(|argument| {
+                parse_template_string(argument).is_some_and(|value| value.parse::<usize>().is_ok())
+            })
+}
+
+fn single_template_body(body: &str) -> Option<&str> {
+    let body = body.trim();
+    if body.as_bytes().first() != Some(&b'<') {
+        return None;
+    }
+    let close = matching_template_close(body, 1)?;
+    (close + 1 == body.len()).then_some(&body[1..close])
 }
 
 /// Mirrors the generator's currently supported action-template subset so the
@@ -1236,6 +1259,7 @@ fn write_slave_grammars(case_dir: &Path, descriptor: &Descriptor) -> io::Result<
 /// supported templates from Rust after the ATN path has been selected.
 fn render_target_templates_for_metadata(grammar: &str) -> String {
     let grammar = strip_named_action_template_body(grammar, "@after");
+    let grammar = render_target_predicates_for_metadata(&grammar);
     let mut out = String::with_capacity(grammar.len());
     let mut offset = 0;
     while let Some(block) = next_template_block(&grammar, offset) {
@@ -1249,6 +1273,24 @@ fn render_target_templates_for_metadata(grammar: &str) -> String {
     }
     out.push_str(&grammar[offset..]);
     strip_supported_preamble_templates(&strip_template_comments(&out))
+}
+
+/// Replaces target-template predicate expressions with `true` while preserving
+/// the surrounding `?`, so ANTLR still serializes a predicate transition.
+fn render_target_predicates_for_metadata(grammar: &str) -> String {
+    let mut out = String::with_capacity(grammar.len());
+    let mut offset = 0;
+    while let Some(block) = next_predicate_action_block(grammar, offset) {
+        if block.body.contains('<') {
+            out.push_str(&grammar[offset..block.open_brace]);
+            out.push_str("{true}");
+        } else {
+            out.push_str(&grammar[offset..block.after_brace]);
+        }
+        offset = block.after_brace;
+    }
+    out.push_str(&grammar[offset..]);
+    out
 }
 
 /// Replaces target-template contents in named action blocks with an empty
@@ -1394,6 +1436,27 @@ fn next_template_block(source: &str, offset: usize) -> Option<TemplateBlock<'_>>
             after_brace,
             predicate: source[after_brace..].trim_start().starts_with('?'),
         });
+    }
+    None
+}
+
+/// Finds one semantic-predicate action block, including expression predicates
+/// whose target-template call is only part of the action body.
+fn next_predicate_action_block(source: &str, offset: usize) -> Option<TemplateBlock<'_>> {
+    let mut cursor = offset;
+    while let Some(open_rel) = source[cursor..].find('{') {
+        let open_brace = cursor + open_rel;
+        let close_brace = matching_action_brace(source, open_brace + 1)?;
+        let after_brace = close_brace + 1;
+        if source[after_brace..].trim_start().starts_with('?') {
+            return Some(TemplateBlock {
+                open_brace,
+                body: &source[open_brace + 1..close_brace],
+                after_brace,
+                predicate: true,
+            });
+        }
+        cursor = open_brace + 1;
     }
     None
 }

@@ -769,6 +769,9 @@ enum PredicateTemplate {
         text: String,
     },
     TextEquals(String),
+    TokenStartColumnEquals(usize),
+    ColumnLessThan(usize),
+    ColumnGreaterOrEqual(usize),
     LookaheadNotEquals {
         offset: isize,
         token_name: String,
@@ -879,11 +882,8 @@ fn parser_predicate_templates(
     let mut mapped = Vec::new();
     let mut offset = 0;
     let mut predicate_index = 0;
-    while let Some(block) = next_template_block(grammar_source, offset) {
+    while let Some(block) = next_predicate_action_block(grammar_source, offset) {
         offset = block.after_brace;
-        if !block.predicate {
-            continue;
-        }
         if let Some(template) = parse_predicate_template(block.body) {
             let Some(coordinates) = predicates.get(predicate_index).copied() else {
                 return Err(io::Error::new(
@@ -1119,18 +1119,16 @@ fn extract_supported_predicate_templates(
 ) -> io::Result<Vec<PredicateTemplate>> {
     let mut templates = Vec::new();
     let mut offset = 0;
-    while let Some(block) = next_template_block(grammar_source, offset) {
+    while let Some(block) = next_predicate_action_block(grammar_source, offset) {
         offset = block.after_brace;
-        if !block.predicate {
-            continue;
-        }
-        let Some(template) = parse_predicate_template(block.body) else {
+        if let Some(template) = parse_predicate_template(block.body) {
+            templates.push(template);
+        } else if block.body.contains('<') {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("unsupported target predicate template <{}>", block.body),
             ));
-        };
-        templates.push(template);
+        }
     }
     Ok(templates)
 }
@@ -1244,6 +1242,27 @@ fn next_template_block(source: &str, offset: usize) -> Option<TemplateBlock<'_>>
             after_brace,
             predicate: source[after_brace..].trim_start().starts_with('?'),
         });
+    }
+    None
+}
+
+/// Finds the next semantic-predicate action block, including expressions that
+/// combine target-template calls with target-language comparison operators.
+fn next_predicate_action_block(source: &str, offset: usize) -> Option<TemplateBlock<'_>> {
+    let mut cursor = offset;
+    while let Some(open_rel) = source[cursor..].find('{') {
+        let open_brace = cursor + open_rel;
+        let close_brace = matching_action_brace(source, open_brace + 1)?;
+        let after_brace = close_brace + 1;
+        if source[after_brace..].trim_start().starts_with('?') {
+            return Some(TemplateBlock {
+                open_brace,
+                body: &source[open_brace + 1..close_brace],
+                after_brace,
+                predicate: true,
+            });
+        }
+        cursor = open_brace + 1;
     }
     None
 }
@@ -1755,10 +1774,15 @@ fn parse_after_action_template(
 
 fn parse_predicate_template(body: &str) -> Option<PredicateTemplate> {
     let body = body.trim();
+    if let Some(inner) = single_template_body(body) {
+        return parse_predicate_template(inner);
+    }
     match body {
         "True()" => Some(PredicateTemplate::True),
         "False()" => Some(PredicateTemplate::False),
         _ => parse_text_equals_predicate(body)
+            .or_else(|| parse_token_start_column_equals_predicate(body))
+            .or_else(|| parse_column_compare_predicate(body))
             .or_else(|| parse_invoke_predicate(body))
             .or_else(|| parse_val_equals_predicate(body))
             .or_else(|| parse_mod_member_predicate(body))
@@ -1766,6 +1790,16 @@ fn parse_predicate_template(body: &str) -> Option<PredicateTemplate> {
             .or_else(|| parse_lt_equals_predicate(body))
             .or_else(|| parse_la_not_equals_predicate(body)),
     }
+}
+
+/// Returns the call body for an action made of exactly one target template.
+fn single_template_body(body: &str) -> Option<&str> {
+    let body = body.trim();
+    if body.as_bytes().first() != Some(&b'<') {
+        return None;
+    }
+    let close = matching_template_close(body, 1)?;
+    (close + 1 == body.len()).then_some(&body[1..close])
 }
 
 /// Parses `GetMember("name"):Not()` for the runtime testsuite boolean-member
@@ -1841,6 +1875,34 @@ fn parse_text_equals_predicate(body: &str) -> Option<PredicateTemplate> {
     Some(PredicateTemplate::TextEquals(parse_template_string(
         argument,
     )?))
+}
+
+fn parse_token_start_column_equals_predicate(body: &str) -> Option<PredicateTemplate> {
+    let argument = body
+        .strip_prefix("TokenStartColumnEquals(")
+        .and_then(|value| value.strip_suffix(')'))?;
+    Some(PredicateTemplate::TokenStartColumnEquals(
+        parse_template_string(argument)?.parse().ok()?,
+    ))
+}
+
+/// Parses lexer column predicates serialized by upstream templates as
+/// `<Column()> \< 2` or `<Column()> >= 2`.
+fn parse_column_compare_predicate(body: &str) -> Option<PredicateTemplate> {
+    let rest = body
+        .trim()
+        .strip_prefix("<Column()>")
+        .or_else(|| body.trim().strip_prefix("Column()"))?
+        .trim_start();
+    let rest = rest.strip_prefix('\\').unwrap_or(rest).trim_start();
+    if let Some(value) = rest.strip_prefix('<') {
+        return Some(PredicateTemplate::ColumnLessThan(
+            value.trim().parse().ok()?,
+        ));
+    }
+    Some(PredicateTemplate::ColumnGreaterOrEqual(
+        rest.strip_prefix(">=")?.trim().parse().ok()?,
+    ))
 }
 
 fn parse_la_not_equals_predicate(body: &str) -> Option<PredicateTemplate> {
@@ -2679,6 +2741,15 @@ fn render_lexer_predicate_expression(template: &PredicateTemplate) -> String {
             "_base.token_text_until(predicate.position()) == \"{}\"",
             rust_string(value)
         ),
+        PredicateTemplate::TokenStartColumnEquals(value) => {
+            format!("_base.token_start_column() == {value}")
+        }
+        PredicateTemplate::ColumnLessThan(value) => {
+            format!("_base.column_at(predicate.position()) < {value}")
+        }
+        PredicateTemplate::ColumnGreaterOrEqual(value) => {
+            format!("_base.column_at(predicate.position()) >= {value}")
+        }
         PredicateTemplate::Invoke { .. }
         | PredicateTemplate::LocalIntEquals { .. }
         | PredicateTemplate::MemberModuloEquals { .. }
@@ -3549,6 +3620,14 @@ fn render_parser_predicate_array(
                     "TextEquals is only supported for lexer predicates",
                 ));
             }
+            PredicateTemplate::TokenStartColumnEquals(_)
+            | PredicateTemplate::ColumnLessThan(_)
+            | PredicateTemplate::ColumnGreaterOrEqual(_) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "column predicates are only supported for lexer predicates",
+                ));
+            }
             PredicateTemplate::LookaheadTextEquals { offset, text } => {
                 format!(
                     "antlr4_runtime::ParserPredicate::LookaheadTextEquals {{ offset: {offset}, text: \"{}\" }}",
@@ -3915,6 +3994,39 @@ atn:
         assert_eq!(
             block.body,
             r#"AssertIsList({<ContextListFunction("$ctx","x")>})"#
+        );
+    }
+
+    #[test]
+    fn parses_column_predicate_templates() {
+        assert_eq!(
+            parse_predicate_template(r#"<TokenStartColumnEquals("0")>"#),
+            Some(PredicateTemplate::TokenStartColumnEquals(0))
+        );
+        assert_eq!(
+            parse_predicate_template(r#"<Column()> \< 2"#),
+            Some(PredicateTemplate::ColumnLessThan(2))
+        );
+        assert_eq!(
+            parse_predicate_template("<Column()> >= 2"),
+            Some(PredicateTemplate::ColumnGreaterOrEqual(2))
+        );
+    }
+
+    #[test]
+    fn extracts_predicate_expression_blocks() {
+        let templates = extract_supported_predicate_templates(
+            r#"fragment ID1 : { <Column()> \< 2 }? [a-zA-Z];
+fragment ID2 : { <Column()> >= 2 }? [a-zA-Z];"#,
+        )
+        .expect("supported predicate expressions should extract");
+
+        assert_eq!(
+            templates,
+            [
+                PredicateTemplate::ColumnLessThan(2),
+                PredicateTemplate::ColumnGreaterOrEqual(2)
+            ]
         );
     }
 

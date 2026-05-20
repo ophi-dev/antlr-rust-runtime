@@ -302,6 +302,27 @@ where
             .text(TextInterval::new(self.token_start, stop_exclusive - 1))
     }
 
+    /// Computes the zero-based source column at an absolute input position
+    /// reached during prediction of the current token.
+    pub fn column_at(&self, position: usize) -> usize {
+        let mut column = self.token_start_column;
+        if position <= self.token_start {
+            return column;
+        }
+        for ch in self
+            .input
+            .text(TextInterval::new(self.token_start, position - 1))
+            .chars()
+        {
+            if ch == '\n' {
+                column = 0;
+            } else {
+                column += 1;
+            }
+        }
+        column
+    }
+
     /// Builds the synthetic EOF token at the current input cursor.
     pub fn eof_token(&self) -> CommonToken {
         CommonToken::eof(

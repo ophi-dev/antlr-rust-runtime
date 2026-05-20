@@ -297,12 +297,14 @@ where
     let mut active = prune_after_accepts(atn, start_closure.configs);
     let mut dfa_state =
         lexer.lexer_dfa_state(lexer_dfa_key(&active), accept_prediction(atn, &active));
+    let mut dfa_state_has_semantic_context = start_closure.has_semantic_context;
 
     let mut best = best_accept(atn, &active);
     let mut error_stop = start;
     while !active.is_empty() {
         let mut next = Vec::new();
         let source_dfa_state = dfa_state;
+        let source_has_semantic_context = dfa_state_has_semantic_context;
         let mut edge_symbol = None;
         for config in active {
             let symbol = symbol_at(lexer, config.position);
@@ -329,11 +331,13 @@ where
         }
 
         let closure = epsilon_closure(lexer, atn, next, semantic_predicate);
-        let suppress_edge = closure.has_semantic_context;
+        let target_has_semantic_context = closure.has_semantic_context;
+        let suppress_edge = source_has_semantic_context || target_has_semantic_context;
         active = prune_after_accepts(atn, closure.configs);
         if !active.is_empty() {
             dfa_state =
                 lexer.lexer_dfa_state(lexer_dfa_key(&active), accept_prediction(atn, &active));
+            dfa_state_has_semantic_context = target_has_semantic_context;
             if !suppress_edge {
                 if let Some(symbol) = edge_symbol {
                     lexer.record_lexer_dfa_edge(source_dfa_state, symbol, dfa_state);
