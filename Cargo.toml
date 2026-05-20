@@ -1,0 +1,117 @@
+[package]
+name = "antlr-rust-runtime"
+version = "0.1.1"
+edition = "2024"
+rust-version = "1.95"
+description = "Clean-room Rust runtime and target support for ANTLR v4 generated parsers"
+repository = "https://github.com/ophidiarium/antlr-rust-runtime"
+homepage = "https://github.com/ophidiarium/antlr-rust-runtime"
+documentation = "https://docs.rs/antlr-rust-runtime"
+readme = "README.md"
+license = "BSD-3-Clause"
+keywords = ["antlr", "antlr4", "parser", "lexer", "runtime"]
+categories = ["parser-implementations", "development-tools"]
+
+[lib]
+name = "antlr4_runtime"
+path = "src/lib.rs"
+
+[features]
+default = []
+std = []
+
+[dependencies]
+thiserror = "2"
+
+[dev-dependencies]
+pretty_assertions = "1"
+
+[package.metadata.docs.rs]
+all-features = true
+
+[lints.rust]
+missing_debug_implementations = "warn"
+rust_2018_compatibility = { level = "warn", priority = -2 }
+rust_2018_idioms = { level = "warn", priority = -2 }
+rust_2021_compatibility = { level = "warn", priority = -2 }
+rust_2024_compatibility = { level = "warn", priority = -2 }
+trivial_casts = "warn"
+trivial_numeric_casts = "warn"
+unreachable_pub = "warn"
+unsafe_code = "warn"
+unused_extern_crates = "warn"
+unused_import_braces = "warn"
+unused_qualifications = "warn"
+variant_size_differences = "warn"
+
+[lints.clippy]
+cargo = { level = "warn", priority = -4 }
+nursery = { level = "warn", priority = -3 }
+pedantic = { level = "warn", priority = -2 }
+perf = { level = "warn", priority = -1 }
+cast_possible_truncation = "allow"
+cast_precision_loss = "allow"
+char_lit_as_u8 = "allow"
+collapsible_else_if = "allow"
+collapsible_if = "allow"
+dbg_macro = "warn"
+debug_assert_with_mut_call = "warn"
+default_trait_access = "warn"
+empty_drop = "warn"
+empty_structs_with_brackets = "warn"
+exit = "warn"
+expl_impl_clone_on_copy = "warn"
+get_unwrap = "warn"
+if_not_else = "warn"
+implicit_hasher = "allow"
+inconsistent_struct_constructor = "warn"
+inefficient_to_string = "warn"
+items_after_statements = "allow"
+manual_assert = "warn"
+manual_instant_elapsed = "warn"
+manual_let_else = "warn"
+manual_ok_or = "warn"
+map_unwrap_or = "warn"
+match_result_ok = "warn"
+match_same_arms = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+needless_continue = "allow"
+needless_raw_string_hashes = "allow"
+negative_feature_names = "warn"
+option_map_unit_fn = "warn"
+print_stderr = "warn"
+print_stdout = "warn"
+question_mark = "warn"
+rc_buffer = "warn"
+rc_mutex = "warn"
+redundant_clone = "warn"
+redundant_pub_crate = "allow"
+ref_binding_to_reference = "warn"
+ref_option_ref = "warn"
+result_map_unit_fn = "warn"
+semicolon_if_nothing_returned = "warn"
+similar_names = "allow"
+single_match_else = "allow"
+str_to_string = "warn"
+string_add = "warn"
+string_add_assign = "warn"
+string_lit_as_bytes = "warn"
+struct_excessive_bools = "allow"
+too_many_lines = "deny"
+type_repetition_in_bounds = "warn"
+unnecessary_debug_formatting = "allow"
+unnecessary_self_imports = "warn"
+unnecessary_wraps = "warn"
+unneeded_field_pattern = "warn"
+unnested_or_patterns = "warn"
+unseparated_literal_suffix = "warn"
+unused_async = "warn"
+unused_peekable = "warn"
+unused_self = "allow"
+use_self = "warn"
+useless_let_if_seq = "warn"
+verbose_bit_mask = "warn"
+wildcard_imports = "warn"

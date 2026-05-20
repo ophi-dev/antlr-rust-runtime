@@ -1,0 +1,105 @@
+# Complexity thresholds
+allowed-idents-below-min-chars      = ["..", "id", "x", "y", "z", "i", "j", "k", "n", "m"]
+cognitive-complexity-threshold      = 15
+excessive-nesting-threshold         = 8
+min-ident-chars-threshold           = 2
+single-char-binding-names-threshold = 3
+too-many-arguments-threshold        = 6
+# The generator and runtime-testsuite harness still contain a few deliberately
+# dense functions. Keep this inherited strict-policy threshold explicit so new
+# jumbo helpers fail Clippy without forcing premature splits in those modules.
+too-many-lines-threshold            = 476
+trivial-copy-size-limit             = 16
+type-complexity-threshold           = 300
+
+avoid-breaking-exported-api = false
+
+# Testing allowances
+allow-dbg-in-tests                 = true
+allow-expect-in-tests              = true
+allow-print-in-tests               = true
+allow-unwrap-in-tests              = true
+suppress-restriction-lint-in-const = true
+
+# Trait implementations
+allow-renamed-params-for = ["core::fmt::Debug", "core::fmt::Display", "futures_sink::Sink", "serde::de::Visitor", ".."]
+
+# Documentation
+doc-valid-idents = [
+    "..",
+    "ANTLR",
+    "CodeQL",
+    "CPython",
+    "FastAPI",
+    "IPython",
+    "LangChain",
+    "LibCST",
+    "McCabe",
+    "NumPy",
+    "SCREAMING_SNAKE_CASE",
+    "SQLAlchemy",
+    "StackOverflow",
+    "PyCharm",
+    "SNMPv1",
+    "SNMPv2",
+    "SNMPv3",
+    "PyFlakes",
+    "GraphQL",
+    "gRPC",
+    "WebSocket",
+    "PostgreSQL",
+    "MySQL",
+    "SQLite",
+    "MongoDB",
+    "Redis",
+    "Kubernetes",
+    "GitHub",
+    "GitLab",
+]
+
+disallowed-names = ["foo", "bar", "baz", "tmp", "qux", "temp", "test", "dummy"]
+
+disallowed-types = [
+    { path = "std::collections::HashMap", reason = "Non-deterministic iter - use indexmap::IndexMap instead" },
+    { path = "std::collections::HashSet", reason = "Non-deterministic iter - use indexmap::IndexSet instead" },
+    { path = "std::sync::Once", reason = "Use std::sync::OnceLock for lazy initialization (available since 1.70)" },
+    { path = "rand::rngs::ThreadRng", reason = "ThreadRng is inherently non-deterministic; use a fixed-seed or hash-based approach instead." },
+]
+
+disallowed-methods = [
+    { path = "rand::random", reason = "Use a deterministic hash (e.g. via a cryptographic hasher like Sha256) instead of `rand::random`." },
+    { path = "rand::Rng::gen", reason = "Use a deterministic hash (e.g. via Sha256) rather than generating random bytes at runtime.", allow-invalid = true },
+
+    { path = "str::to_ascii_lowercase", reason = "Avoid hidden allocation; use an explicit conversion helper." },
+    { path = "str::to_ascii_uppercase", reason = "Avoid hidden allocation; use an explicit conversion helper." },
+    { path = "str::to_lowercase", reason = "Avoid hidden allocation; use an explicit conversion helper." },
+    { path = "str::to_uppercase", reason = "Avoid hidden allocation; use an explicit conversion helper." },
+    { path = "str::replace", reason = "Avoid hidden allocation in hot paths." },
+    { path = "str::replacen", reason = "Avoid hidden allocation in hot paths." },
+
+    { path = "std::mem::forget", reason = "future::scope is unsafe when used with forget" },
+    { path = "futures::executor::block_on", reason = "block_on can cause deadlock easily" },
+    { path = "async_std::task::block_on", reason = "block_on can cause deadlock easily" },
+    { path = "pollster::block_on", reason = "block_on can cause deadlock easily" },
+
+    { path = "std::time::Instant::now", reason = "Do not use current date/time in code that must be deterministic" },
+    { path = "namada_core::time::DateTimeUtc::now", reason = "Do not use current date/time in code that must be deterministic" },
+    { path = "wasmtimer::std::Instant", reason = "Do not use current date/time in code that must be deterministic" },
+
+    { path = "std::iter::Iterator::for_each", reason = "prefer `for` for side-effects" },
+
+    { path = "std::option::Option::unwrap", reason = "use `expect` with descriptive message or handle None case" },
+    { path = "std::result::Result::unwrap", reason = "use `expect` with descriptive message or handle error case" },
+    { path = "std::panic::catch_unwind", reason = "panics are not for control flow - use Result" },
+    { path = "std::process::exit", reason = "return Result from main() instead of exiting" },
+    { path = "std::thread::sleep", reason = "use async sleep in async contexts, or document why blocking is needed" },
+    { path = "std::mem::transmute", reason = "use safe alternatives like bytemuck or zerocopy" },
+    { path = "std::mem::uninitialized", reason = "deprecated - use MaybeUninit" },
+    { path = "std::mem::zeroed", reason = "use MaybeUninit::zeroed or Default::default" },
+
+    { path = "tokio::task::spawn_blocking", reason = "document why blocking is necessary - consider async alternatives" },
+]
+
+ignore-interior-mutability = []
+
+allowed-duplicate-crates = []

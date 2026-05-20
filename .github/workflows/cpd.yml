@@ -1,0 +1,178 @@
+name: Copy/Paste Detection
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "**/*.rs"
+      - "!target/**"
+      - ".github/workflows/cpd.yml"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: cpd-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  PMD_VERSION: 7.20.0
+  CPD_TOKENS: "100"
+  COMMENT_MARKER: <!-- cpd-report -->
+
+jobs:
+  cpd:
+    name: Copy/Paste Detection
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Determine changed Rust files
+        id: changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_SHA=$(git merge-base "origin/${GITHUB_BASE_REF}" HEAD)
+
+          git diff --name-only --diff-filter=d "$BASE_SHA" HEAD -- "*.rs" \
+            | grep -Ev "^target/" \
+            > changed-files.txt || true
+
+          COUNT=$(wc -l < changed-files.txt | tr -d " ")
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "Changed Rust files ($COUNT):"
+          cat changed-files.txt || true
+
+      - name: Setup Java
+        if: steps.changed.outputs.count != '0'
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup PMD
+        if: steps.changed.outputs.count != '0'
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL "https://github.com/pmd/pmd/releases/download/pmd_releases%2F${PMD_VERSION}/pmd-dist-${PMD_VERSION}-bin.zip" -o pmd.zip
+          unzip -q pmd.zip
+          rm pmd.zip
+
+      - name: Run CPD
+        id: cpd
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          if [ "${{ steps.changed.outputs.count }}" = "0" ]; then
+            : > cpd-report.md
+            echo "duplications=0" >> "$GITHUB_OUTPUT"
+            echo "No changed Rust files."
+            exit 0
+          fi
+
+          # PMD CPD exit codes:
+          #   0 - no duplications
+          #   4 - duplications found
+          #   5 - recoverable errors, for example a file failed to lex
+          set +e
+          "pmd-bin-${PMD_VERSION}/bin/pmd" cpd \
+            --language rust \
+            --minimum-tokens "${CPD_TOKENS}" \
+            --file-list changed-files.txt \
+            --format markdown \
+            > cpd-report.md 2> cpd-stderr.log
+          STATUS=$?
+          set -e
+
+          if [ "$STATUS" -ne 0 ] && [ "$STATUS" -ne 4 ] && [ "$STATUS" -ne 5 ]; then
+            echo "PMD CPD errored (status $STATUS):"
+            cat cpd-stderr.log
+            exit "$STATUS"
+          fi
+
+          if [ -s cpd-stderr.log ]; then
+            echo "=== PMD stderr ==="
+            cat cpd-stderr.log
+          fi
+
+          sed -i "s|${GITHUB_WORKSPACE}/||g" cpd-report.md
+
+          awk '
+            BEGIN { open = 0 }
+            /^```$/ {
+              if (open == 0) { print "```rust"; open = 1 }
+              else           { print "```";     open = 0 }
+              next
+            }
+            { print }
+          ' cpd-report.md > cpd-report.tagged.md
+          mv cpd-report.tagged.md cpd-report.md
+
+          DUP_COUNT=$(grep -c "^Found a " cpd-report.md || true)
+          echo "duplications=${DUP_COUNT:-0}" >> "$GITHUB_OUTPUT"
+
+          echo "=== Report ==="
+          cat cpd-report.md
+
+      - name: Build comment body
+        shell: bash
+        env:
+          CHANGED_COUNT: ${{ steps.changed.outputs.count }}
+          DUP_COUNT: ${{ steps.cpd.outputs.duplications }}
+        run: |
+          set -euo pipefail
+          {
+            echo "${COMMENT_MARKER}"
+            echo "## Copy/Paste Detection"
+            echo ""
+            if [ "${DUP_COUNT:-0}" = "0" ]; then
+              echo "No duplications found in ${CHANGED_COUNT} changed Rust file(s) (threshold: ${CPD_TOKENS} tokens)."
+            else
+              echo "Found **${DUP_COUNT}** duplication(s) across ${CHANGED_COUNT} changed Rust file(s) (threshold: ${CPD_TOKENS} tokens)."
+              echo ""
+              echo "<details>"
+              echo "<summary>Show duplications</summary>"
+              echo ""
+              cat cpd-report.md
+              echo ""
+              echo "</details>"
+            fi
+          } > comment-body.md
+
+          SIZE=$(wc -c < comment-body.md)
+          if [ "$SIZE" -gt 60000 ]; then
+            head -c 60000 comment-body.md > comment-body.trunc.md
+            printf "\n\n_(report truncated; full output in workflow logs)_\n" >> comment-body.trunc.md
+            mv comment-body.trunc.md comment-body.md
+          fi
+
+          cat comment-body.md
+
+      - name: Post sticky PR comment
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BODY=$(cat comment-body.md)
+
+          COMMENT_ID=$(gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+            --paginate -q ".[] | select(.body | startswith(\"${COMMENT_MARKER}\")) | .id" | head -1)
+
+          if [ -n "$COMMENT_ID" ]; then
+            gh api "repos/${{ github.repository }}/issues/comments/${COMMENT_ID}" \
+              -X PATCH -f body="$BODY"
+          else
+            gh pr comment "$PR_NUMBER" --body "$BODY"
+          fi
