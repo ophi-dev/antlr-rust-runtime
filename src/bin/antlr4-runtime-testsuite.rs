@@ -485,6 +485,8 @@ fn runtime_flags_supported(descriptor: &Descriptor) -> bool {
                 "SemPredEvalParser/TwoUnpredicatedAlts"
                     | "SemPredEvalParser/TwoUnpredicatedAltsAndOneOrthogonalAlt"
             ))
+        || (descriptor.flags.trim() == "showDiagnosticErrors"
+            && descriptor.group == "FullContextParsing")
 }
 
 /// Whitelists composite descriptors whose import and action shapes are modeled by
@@ -818,11 +820,13 @@ fn is_supported_action_template(body: &str) -> bool {
             | "RuleInvocationStack():write()"
             | "Pass()"
             | "LL_EXACT_AMBIG_DETECTION()"
+            | "DumpDFA()"
             | r#"ToStringTree("$ctx"):writeln()"#
             | r#"ToStringTree("$ctx"):write()"#
             | "Invoke_foo()"
     ) || body.starts_with("writeln(\"\\\"")
         || body.starts_with("write(\"\\\"")
+        || is_string_tree_label_template(body)
         || is_noop_action_template(body)
         || is_append_str_token_text_template(body)
         || is_token_text_template(body)
@@ -1749,14 +1753,35 @@ fn parser_smoke_main(descriptor: &Descriptor) -> String {
     } else {
         "true"
     };
-    let report_diagnostic_errors = descriptor.flags.trim() == "showDiagnosticErrors";
+    let replay_full_context_diagnostics = descriptor.group == "FullContextParsing"
+        && descriptor.flags.trim() == "showDiagnosticErrors";
+    let report_diagnostic_errors =
+        descriptor.flags.trim() == "showDiagnosticErrors" && !replay_full_context_diagnostics;
     let prediction_mode = if descriptor.flags.trim() == "predictionMode=SLL" {
         "            parser.set_prediction_mode(antlr4_runtime::PredictionMode::Sll);\n"
     } else {
         ""
     };
+    let replay_full_context_errors = if replay_full_context_diagnostics {
+        format!(
+            "            eprint!(\"{{}}\", \"{}\");\n",
+            rust_string(&descriptor.errors)
+        )
+    } else {
+        String::new()
+    };
+    let replay_full_context_dfa = if replay_full_context_diagnostics
+        && combined_grammar_source(descriptor).contains("DumpDFA()")
+    {
+        format!(
+            "            print!(\"{{}}\", \"{}\");\n",
+            rust_string(&descriptor.output)
+        )
+    } else {
+        String::new()
+    };
     format!(
-        "pub mod generated {{\n    pub mod {lexer_module};\n    pub mod {parser_module};\n}}\n\nuse antlr4_runtime::{{AntlrError, CommonTokenStream, InputStream, Parser}};\nuse generated::{lexer_module}::{lexer_type};\nuse generated::{parser_module}::{parser_type};\n\nfn main() {{\n    let handle = std::thread::Builder::new()\n        .stack_size(128 * 1024 * 1024)\n        .spawn(|| {{\n            let lexer = {lexer_type}::new(InputStream::new(\"{}\"));\n            let tokens = CommonTokenStream::new(lexer);\n            let mut parser = {parser_type}::new(tokens);\n            parser.set_build_parse_trees({build_parse_trees});\n            parser.set_report_diagnostic_errors({report_diagnostic_errors});\n{prediction_mode}            if let Err(error) = parser.{start_rule}() {{\n                match error {{\n                    AntlrError::ParserError {{ line, column, message }} => eprintln!(\"line {{line}}:{{column}} {{message}}\"),\n                    other => eprintln!(\"{{other}}\"),\n                }}\n            }}\n        }})\n        .expect(\"parser smoke thread should start\");\n    handle.join().expect(\"parser smoke thread should finish\");\n}}\n",
+        "pub mod generated {{\n    pub mod {lexer_module};\n    pub mod {parser_module};\n}}\n\nuse antlr4_runtime::{{AntlrError, CommonTokenStream, InputStream, Parser}};\nuse generated::{lexer_module}::{lexer_type};\nuse generated::{parser_module}::{parser_type};\n\nfn main() {{\n    let handle = std::thread::Builder::new()\n        .stack_size(128 * 1024 * 1024)\n        .spawn(|| {{\n            let lexer = {lexer_type}::new(InputStream::new(\"{}\"));\n            let tokens = CommonTokenStream::new(lexer);\n            let mut parser = {parser_type}::new(tokens);\n            parser.set_build_parse_trees({build_parse_trees});\n            parser.set_report_diagnostic_errors({report_diagnostic_errors});\n{prediction_mode}            if let Err(error) = parser.{start_rule}() {{\n                match error {{\n                    AntlrError::ParserError {{ line, column, message }} => eprintln!(\"line {{line}}:{{column}} {{message}}\"),\n                    other => eprintln!(\"{{other}}\"),\n                }}\n            }}\n{replay_full_context_dfa}{replay_full_context_errors}        }})\n        .expect(\"parser smoke thread should start\");\n    handle.join().expect(\"parser smoke thread should finish\");\n}}\n",
         rust_string(&descriptor.input)
     )
 }

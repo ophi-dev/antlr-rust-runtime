@@ -653,6 +653,11 @@ enum ActionTemplate {
         prefix: String,
         newline: bool,
     },
+    RuleTextWithPrefix {
+        rule_name: String,
+        prefix: String,
+        newline: bool,
+    },
     StringTree {
         target: StringTreeTarget,
         newline: bool,
@@ -718,6 +723,7 @@ impl ActionTemplate {
             self,
             Self::Text { .. }
                 | Self::TextWithPrefix { .. }
+                | Self::RuleTextWithPrefix { .. }
                 | Self::TokenText { .. }
                 | Self::TokenTextWithPrefix { .. }
                 | Self::TokenDisplay { .. }
@@ -730,6 +736,7 @@ impl ActionTemplate {
         matches!(
             self,
             Self::StringTree { .. }
+                | Self::RuleTextWithPrefix { .. }
                 | Self::RuleInvocationStack { .. }
                 | Self::ListenerWalk { .. }
                 | Self::RuleValue { .. }
@@ -761,6 +768,9 @@ enum PredicateTemplate {
         value: bool,
     },
     LocalIntEquals {
+        value: i64,
+    },
+    LocalIntLessOrEqual {
         value: i64,
     },
     MemberModuloEquals {
@@ -1716,7 +1726,7 @@ fn parse_action_template_sequence(body: &str) -> Option<ActionTemplate> {
 fn parse_action_template(body: &str) -> Option<ActionTemplate> {
     let body = body.trim();
     match body {
-        "Pass()" | "LL_EXACT_AMBIG_DETECTION()" => Some(ActionTemplate::Noop),
+        "Pass()" | "LL_EXACT_AMBIG_DETECTION()" | "DumpDFA()" => Some(ActionTemplate::Noop),
         r#"writeln("$text")"# | "InputText():writeln()" | "Text():writeln()" => {
             Some(ActionTemplate::Text { newline: true })
         }
@@ -1824,6 +1834,7 @@ fn parse_predicate_template(body: &str) -> Option<PredicateTemplate> {
             .or_else(|| parse_column_compare_predicate(body))
             .or_else(|| parse_invoke_predicate(body))
             .or_else(|| parse_val_equals_predicate(body))
+            .or_else(|| parse_raw_local_int_less_or_equal_predicate(body))
             .or_else(|| parse_mod_member_predicate(body))
             .or_else(|| parse_boolean_member_not_predicate(body))
             .or_else(|| parse_lt_equals_predicate(body))
@@ -1892,6 +1903,23 @@ fn parse_val_equals_predicate(body: &str) -> Option<PredicateTemplate> {
     }
     Some(PredicateTemplate::LocalIntEquals {
         value: parse_template_string(value)?.parse::<i64>().ok()?,
+    })
+}
+
+/// Parses raw ANTLR semantic predicates such as `5 >= $_p`.
+///
+/// The Java generator lowers these against the generated context field
+/// `_localctx._p`. The metadata runtime does not execute target code, so the
+/// generator records the literal bound and the rule-call argument table makes
+/// the current `_p` value available while interpreting the predicate
+/// transition.
+fn parse_raw_local_int_less_or_equal_predicate(body: &str) -> Option<PredicateTemplate> {
+    let (value, local) = body.split_once(">=")?;
+    if local.trim() != "$_p" {
+        return None;
+    }
+    Some(PredicateTemplate::LocalIntLessOrEqual {
+        value: value.trim().parse::<i64>().ok()?,
     })
 }
 
@@ -2201,14 +2229,17 @@ fn parse_append_str_token_text(body: &str) -> Option<ActionTemplate> {
         return Some(ActionTemplate::TextWithPrefix { prefix, newline });
     }
     let label = value.strip_prefix('$')?.strip_suffix(".text")?;
-    let source = label
-        .chars()
-        .next()
-        .filter(char::is_ascii_uppercase)
-        .map_or(TokenTextSource::RuleStart, |_| TokenTextSource::ActionStop);
+    let first = label.chars().next()?;
+    if !first.is_ascii_uppercase() {
+        return Some(ActionTemplate::RuleTextWithPrefix {
+            rule_name: label.to_owned(),
+            prefix,
+            newline,
+        });
+    }
     Some(ActionTemplate::TokenTextWithPrefix {
         prefix,
-        source,
+        source: TokenTextSource::ActionStop,
         newline,
     })
 }
@@ -2575,6 +2606,7 @@ fn collect_return_actions(
         ActionTemplate::Noop
         | ActionTemplate::Text { .. }
         | ActionTemplate::TextWithPrefix { .. }
+        | ActionTemplate::RuleTextWithPrefix { .. }
         | ActionTemplate::StringTree { .. }
         | ActionTemplate::RuleInvocationStack { .. }
         | ActionTemplate::ListenerWalk { .. }
@@ -2609,6 +2641,7 @@ fn collect_member_actions(
         ActionTemplate::Noop
         | ActionTemplate::Text { .. }
         | ActionTemplate::TextWithPrefix { .. }
+        | ActionTemplate::RuleTextWithPrefix { .. }
         | ActionTemplate::StringTree { .. }
         | ActionTemplate::RuleInvocationStack { .. }
         | ActionTemplate::ListenerWalk { .. }
@@ -2731,6 +2764,7 @@ fn render_lexer_action_statement(template: &ActionTemplate) -> String {
         }
         ActionTemplate::TokenDisplay { .. } => String::new(),
         ActionTemplate::ExpectedTokenNames { .. } => String::new(),
+        ActionTemplate::RuleTextWithPrefix { .. } => String::new(),
         ActionTemplate::StringTree { .. } => String::new(),
         ActionTemplate::RuleInvocationStack { .. } => String::new(),
         ActionTemplate::ListenerWalk { .. } => String::new(),
@@ -2792,6 +2826,7 @@ fn render_lexer_predicate_expression(template: &PredicateTemplate) -> String {
         PredicateTemplate::Invoke { .. }
         | PredicateTemplate::FalseWithMessage { .. }
         | PredicateTemplate::LocalIntEquals { .. }
+        | PredicateTemplate::LocalIntLessOrEqual { .. }
         | PredicateTemplate::MemberModuloEquals { .. }
         | PredicateTemplate::LookaheadTextEquals { .. }
         | PredicateTemplate::LookaheadNotEquals { .. } => {
@@ -2864,6 +2899,14 @@ fn render_action_statement(
                 "let text = self.base.text_interval(action.start_index(), action.stop_index()); {write}(\"{}{{}}\", text);",
                 rust_string(prefix)
             ))
+        }
+        ActionTemplate::RuleTextWithPrefix {
+            rule_name,
+            prefix,
+            newline,
+        } => {
+            let write = if *newline { "println!" } else { "print!" };
+            Ok(render_rule_text_write(write, "_tree", prefix, rule_name))
         }
         ActionTemplate::TokenText { source, newline } => {
             let write = if *newline { "println!" } else { "print!" };
@@ -2981,6 +3024,14 @@ fn render_parser_after_action_statement(template: &ActionTemplate, rule_index: u
                 "let text = self.base.text_interval(start_index, stop_index); {write}(\"{}{{}}\", text);",
                 rust_string(prefix)
             )
+        }
+        ActionTemplate::RuleTextWithPrefix {
+            rule_name,
+            prefix,
+            newline,
+        } => {
+            let write = if *newline { "println!" } else { "print!" };
+            render_rule_text_write(write, "tree", prefix, rule_name)
         }
         ActionTemplate::TokenText { source, newline } => {
             let write = if *newline { "println!" } else { "print!" };
@@ -3132,8 +3183,23 @@ fn render_string_tree_write(write: &str, tree_expr: &str, target: &StringTreeTar
         StringTreeTarget::Rule(rule_index) => format!(
             "let text = {tree_expr}.first_rule({rule_index}).map_or_else(String::new, |node| node.to_string_tree(&{rule_names})); {write}(\"{{}}\", text);"
         ),
-        StringTreeTarget::Label(_) => String::new(),
+        StringTreeTarget::Label(label) => {
+            let label = rust_string(label);
+            format!(
+                "let text = METADATA.rule_names().iter().position(|name| *name == \"{label}\").and_then(|rule_index| {tree_expr}.first_rule(rule_index)).map_or_else(String::new, |node| node.to_string_tree(&{rule_names})); {write}(\"{{}}\", text);"
+            )
+        }
     }
+}
+
+/// Emits text for the first child rule with `rule_name`, matching `$rule.text`
+/// in the runtime-testsuite action templates.
+fn render_rule_text_write(write: &str, tree_expr: &str, prefix: &str, rule_name: &str) -> String {
+    let prefix = rust_string(prefix);
+    let rule_name = rust_string(rule_name);
+    format!(
+        "let text = METADATA.rule_names().iter().position(|name| *name == \"{rule_name}\").and_then(|rule_index| {tree_expr}.first_rule(rule_index)).map_or_else(String::new, antlr4_runtime::ParseTree::text); {write}(\"{prefix}{{}}\", text);"
+    )
 }
 
 /// Emits a rule-return print helper backed by return slots captured on the
@@ -3648,6 +3714,9 @@ fn render_parser_predicate_array(
             }
             PredicateTemplate::LocalIntEquals { value } => {
                 format!("antlr4_runtime::ParserPredicate::LocalIntEquals {{ value: {value} }}")
+            }
+            PredicateTemplate::LocalIntLessOrEqual { value } => {
+                format!("antlr4_runtime::ParserPredicate::LocalIntLessOrEqual {{ value: {value} }}")
             }
             PredicateTemplate::MemberModuloEquals {
                 member,
@@ -4180,6 +4249,10 @@ continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#,
         assert_eq!(
             parse_val_equals_predicate(r#"ValEquals("$i","2")"#),
             Some(PredicateTemplate::LocalIntEquals { value: 2 })
+        );
+        assert_eq!(
+            parse_raw_local_int_less_or_equal_predicate("5 >= $_p"),
+            Some(PredicateTemplate::LocalIntLessOrEqual { value: 5 })
         );
         assert_eq!(
             parse_boolean_member_not_predicate(r#"GetMember("enumKeyword"):Not()"#),

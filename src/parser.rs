@@ -129,6 +129,11 @@ pub enum ParserPredicate {
     LocalIntEquals {
         value: i64,
     },
+    /// Checks ANTLR-style raw predicates like `5 >= $_p` against the current
+    /// rule invocation's integer argument.
+    LocalIntLessOrEqual {
+        value: i64,
+    },
     /// Compares a generated parser integer member modulo a literal value.
     MemberModuloEquals {
         member: usize,
@@ -2829,6 +2834,9 @@ where
             }
             ParserPredicate::LocalIntEquals { value } => {
                 local_int_arg.is_none_or(|(_, actual)| actual == *value)
+            }
+            ParserPredicate::LocalIntLessOrEqual { value } => {
+                local_int_arg.is_none_or(|(_, actual)| actual <= *value)
             }
             ParserPredicate::MemberModuloEquals {
                 member,
