@@ -60,11 +60,17 @@ fn main() -> ExitCode {
             "--input" => input = args.next().map(PathBuf::from),
             "--output" => output = args.next().map(PathBuf::from),
             "--iters" => {
-                iters = args
-                    .next()
-                    .and_then(|value| value.parse::<usize>().ok())
-                    .unwrap_or(1)
-                    .max(1);
+                let Some(value) = args.next() else {
+                    eprintln!("missing value for --iters <n>");
+                    return ExitCode::from(2);
+                };
+                match value.parse::<usize>() {
+                    Ok(parsed) if parsed >= 1 => iters = parsed,
+                    _ => {
+                        eprintln!("invalid --iters value: {value} (expected integer >= 1)");
+                        return ExitCode::from(2);
+                    }
+                }
             }
             "--time" => report_time = true,
             other => {
