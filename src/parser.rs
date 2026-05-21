@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::rc::Rc;
 
 use crate::atn::{Atn, AtnState, AtnStateKind, Transition};
 use crate::errors::AntlrError;
@@ -310,7 +311,66 @@ struct FastRecognizeOutcome {
     index: usize,
     consumed_eof: bool,
     diagnostics: Vec<ParserDiagnostic>,
-    nodes: Vec<FastRecognizedNode>,
+    /// Speculative parse-tree fragment built up as the recognizer climbs.
+    /// The list is held as a persistent cons-list of `Rc`-wrapped nodes so
+    /// prepending while chaining recognition outcomes is `O(1)` and cloning
+    /// an outcome (memo lookup, dedup, or when fanning a child's tree out
+    /// to every follow outcome) only bumps a reference count rather than
+    /// deep-copying. On left-recursive grammars the unfolded list can carry
+    /// thousands of nodes per speculative path; without the persistent-list
+    /// shape recognition becomes super-linear in path length.
+    nodes: NodeList,
+}
+
+/// Persistent cons-list of fast-recognizer nodes. The list keeps nodes in the
+/// same head-first order as the original `Vec<FastRecognizedNode>` they
+/// replaced. Shared tails across speculative outcomes amortize the cost of
+/// chaining a child rule's nodes onto every follow outcome.
+#[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
+enum NodeList {
+    #[default]
+    Empty,
+    Cons {
+        head: Rc<FastRecognizedNode>,
+        tail: Rc<Self>,
+    },
+}
+
+impl NodeList {
+    /// Creates an empty list.
+    const fn new() -> Self {
+        Self::Empty
+    }
+
+    /// Prepends `node` and returns the new list. Both shared tails and the
+    /// new head are reference-counted so this is `O(1)`.
+    fn cons(self, node: Rc<FastRecognizedNode>) -> Self {
+        Self::Cons {
+            head: node,
+            tail: Rc::new(self),
+        }
+    }
+
+    /// In-place prepend that takes ownership of `self` via [`std::mem::take`]
+    /// so existing call sites can keep using `&mut` access.
+    fn prepend(&mut self, node: Rc<FastRecognizedNode>) {
+        let owned = std::mem::take(self);
+        *self = owned.cons(node);
+    }
+
+    /// Materializes the list into a `Vec` in head-first order. Used at the
+    /// boundaries that need random-access traversal (the public rule entry
+    /// when building the final parse tree, and
+    /// `fold_fast_left_recursive_boundaries`).
+    fn to_vec(&self) -> Vec<Rc<FastRecognizedNode>> {
+        let mut out = Vec::new();
+        let mut cursor = self;
+        while let Self::Cons { head, tail } = cursor {
+            out.push(Rc::clone(head));
+            cursor = tail.as_ref();
+        }
+        out
+    }
 }
 
 /// Minimal parse-tree fragment retained by the fast recognizer so the public
@@ -334,7 +394,7 @@ enum FastRecognizedNode {
         invoking_state: isize,
         start_index: usize,
         stop_index: Option<usize>,
-        children: Vec<Self>,
+        children: Vec<Rc<Self>>,
     },
     /// Marker emitted at a precedence-rule loop entry where ANTLR would call
     /// `pushNewRecursionContext`. Folded into a wrapper rule node before the
@@ -1083,9 +1143,9 @@ where
             context.set_stop(token);
         }
         if self.build_parse_trees {
-            let folded = fold_fast_left_recursive_boundaries(outcome.nodes);
+            let folded = fold_fast_left_recursive_boundaries(outcome.nodes.to_vec());
             for node in &folded {
-                context.add_child(self.fast_recognized_node_tree(node)?);
+                context.add_child(self.fast_recognized_node_tree(node.as_ref())?);
             }
         }
         self.input.seek(outcome.index);
@@ -1154,7 +1214,7 @@ where
                     context.set_stop(token);
                 }
                 for child in children {
-                    context.add_child(self.fast_recognized_node_tree(child)?);
+                    context.add_child(self.fast_recognized_node_tree(child.as_ref())?);
                 }
                 Ok(self.rule_node(context))
             }
@@ -1671,10 +1731,10 @@ where
             outcome.diagnostics.insert(0, diagnostic.clone());
             outcome
                 .nodes
-                .insert(0, FastRecognizedNode::Token { index: next_index });
+                .prepend(Rc::new(FastRecognizedNode::Token { index: next_index }));
             outcome
                 .nodes
-                .insert(0, FastRecognizedNode::ErrorToken { index });
+                .prepend(Rc::new(FastRecognizedNode::ErrorToken { index }));
             outcome
         })
         .collect()
@@ -1736,14 +1796,11 @@ where
         .into_iter()
         .map(|mut outcome| {
             outcome.diagnostics.insert(0, diagnostic.clone());
-            outcome.nodes.insert(
-                0,
-                FastRecognizedNode::MissingToken {
-                    token_type,
-                    at_index: index,
-                    text: text.clone(),
-                },
-            );
+            outcome.nodes.prepend(Rc::new(FastRecognizedNode::MissingToken {
+                token_type,
+                at_index: index,
+                text: text.clone(),
+            }));
             outcome
         })
         .collect()
@@ -1782,7 +1839,7 @@ where
                 for index in skipped.iter().rev() {
                     outcome
                         .nodes
-                        .insert(0, FastRecognizedNode::ErrorToken { index: *index });
+                        .prepend(Rc::new(FastRecognizedNode::ErrorToken { index: *index }));
                 }
                 outcome
             })
@@ -1818,7 +1875,7 @@ where
                 index,
                 consumed_eof: false,
                 diagnostics: Vec::new(),
-                nodes: Vec::new(),
+                nodes: NodeList::new(),
             }];
         }
         let key = FastRecognizeKey {
@@ -1879,9 +1936,9 @@ where
                         .into_iter()
                         .map(|mut outcome| {
                             if let Some(rule_index) = boundary {
-                                outcome
-                                    .nodes
-                                    .insert(0, FastRecognizedNode::LeftRecursiveBoundary { rule_index });
+                                outcome.nodes.prepend(Rc::new(
+                                    FastRecognizedNode::LeftRecursiveBoundary { rule_index },
+                                ));
                             }
                             outcome
                         }),
@@ -1914,10 +1971,11 @@ where
                             .into_iter()
                             .map(|mut outcome| {
                                 if let Some(rule_index) = boundary {
-                                    outcome.nodes.insert(
-                                        0,
-                                        FastRecognizedNode::LeftRecursiveBoundary { rule_index },
-                                    );
+                                    outcome.nodes.prepend(Rc::new(
+                                        FastRecognizedNode::LeftRecursiveBoundary {
+                                            rule_index,
+                                        },
+                                    ));
                                 }
                                 outcome
                             }),
@@ -1986,20 +2044,23 @@ where
                         *expected = expected_before_child;
                     }
                     for child in children {
-                        let child_node = FastRecognizedNode::Rule {
+                        let child_index = child.index;
+                        let child_consumed_eof = child.consumed_eof;
+                        let child_diagnostics = child.diagnostics;
+                        let child_node = Rc::new(FastRecognizedNode::Rule {
                             rule_index: *rule_index,
                             invoking_state: invoking_state_number(state_number),
                             start_index: index,
-                            stop_index: self.rule_stop_token_index(child.index, child.consumed_eof),
-                            children: fold_fast_left_recursive_boundaries(child.nodes.clone()),
-                        };
+                            stop_index: self.rule_stop_token_index(child_index, child_consumed_eof),
+                            children: fold_fast_left_recursive_boundaries(child.nodes.to_vec()),
+                        });
                         outcomes.extend(
                             self.recognize_state_fast(
                                 atn,
                                 FastRecognizeRequest {
                                     state_number: *follow_state,
                                     stop_state,
-                                    index: child.index,
+                                    index: child_index,
                                     rule_start_index,
                                     decision_start_index: next_decision_start_index,
                                     precedence,
@@ -2013,11 +2074,11 @@ where
                             )
                             .into_iter()
                             .map(|mut outcome| {
-                                outcome.consumed_eof |= child.consumed_eof;
-                                let mut diagnostics = child.diagnostics.clone();
+                                outcome.consumed_eof |= child_consumed_eof;
+                                let mut diagnostics = child_diagnostics.clone();
                                 diagnostics.append(&mut outcome.diagnostics);
                                 outcome.diagnostics = diagnostics;
-                                outcome.nodes.insert(0, child_node.clone());
+                                outcome.nodes.prepend(Rc::clone(&child_node));
                                 outcome
                             }),
                         );
@@ -2052,7 +2113,9 @@ where
                             .into_iter()
                             .map(|mut outcome| {
                                 outcome.consumed_eof |= symbol == TOKEN_EOF;
-                                outcome.nodes.insert(0, FastRecognizedNode::Token { index });
+                                outcome
+                                    .nodes
+                                    .prepend(Rc::new(FastRecognizedNode::Token { index }));
                                 outcome
                             }),
                         );
@@ -3586,33 +3649,37 @@ fn fold_left_recursive_boundaries(nodes: Vec<RecognizedNode>) -> Vec<RecognizedN
 }
 
 /// Mirrors [`fold_left_recursive_boundaries`] for [`FastRecognizedNode`].
-fn fold_fast_left_recursive_boundaries(nodes: Vec<FastRecognizedNode>) -> Vec<FastRecognizedNode> {
-    let mut folded = Vec::new();
+fn fold_fast_left_recursive_boundaries(
+    nodes: Vec<Rc<FastRecognizedNode>>,
+) -> Vec<Rc<FastRecognizedNode>> {
+    let mut folded: Vec<Rc<FastRecognizedNode>> = Vec::new();
     for node in nodes {
-        match node {
+        match node.as_ref() {
             FastRecognizedNode::LeftRecursiveBoundary { rule_index } => {
                 if !folded.is_empty() {
                     let children = std::mem::take(&mut folded);
                     let start_index =
                         fast_recognized_nodes_start_index(&children).unwrap_or_default();
                     let stop_index = fast_recognized_nodes_stop_index(&children);
-                    folded.push(FastRecognizedNode::Rule {
-                        rule_index,
+                    folded.push(Rc::new(FastRecognizedNode::Rule {
+                        rule_index: *rule_index,
                         invoking_state: -1,
                         start_index,
                         stop_index,
                         children,
-                    });
+                    }));
                 }
             }
-            node => folded.push(node),
+            _ => folded.push(node),
         }
     }
     folded
 }
 
-fn fast_recognized_nodes_start_index(nodes: &[FastRecognizedNode]) -> Option<usize> {
-    nodes.iter().find_map(fast_recognized_node_start_index)
+fn fast_recognized_nodes_start_index(nodes: &[Rc<FastRecognizedNode>]) -> Option<usize> {
+    nodes
+        .iter()
+        .find_map(|node| fast_recognized_node_start_index(node.as_ref()))
 }
 
 const fn fast_recognized_node_start_index(node: &FastRecognizedNode) -> Option<usize> {
@@ -3626,8 +3693,11 @@ const fn fast_recognized_node_start_index(node: &FastRecognizedNode) -> Option<u
     }
 }
 
-fn fast_recognized_nodes_stop_index(nodes: &[FastRecognizedNode]) -> Option<usize> {
-    nodes.iter().rev().find_map(fast_recognized_node_stop_index)
+fn fast_recognized_nodes_stop_index(nodes: &[Rc<FastRecognizedNode>]) -> Option<usize> {
+    nodes
+        .iter()
+        .rev()
+        .find_map(|node| fast_recognized_node_stop_index(node.as_ref()))
 }
 
 const fn fast_recognized_node_stop_index(node: &FastRecognizedNode) -> Option<usize> {
@@ -4360,13 +4430,13 @@ mod tests {
                 column: 0,
                 message: "mismatched input 'x'".to_owned(),
             }],
-            nodes: Vec::new(),
+            nodes: NodeList::new(),
         };
         let second = FastRecognizeOutcome {
             index: first.index,
             consumed_eof: first.consumed_eof,
             diagnostics: Vec::new(),
-            nodes: Vec::new(),
+            nodes: NodeList::new(),
         };
 
         let selected = select_best_fast_outcome(
@@ -4379,7 +4449,7 @@ mod tests {
             index: second.index,
             consumed_eof: true,
             diagnostics: Vec::new(),
-            nodes: Vec::new(),
+            nodes: NodeList::new(),
         };
         let selected =
             select_best_fast_outcome([first.clone(), eof_second].into_iter(), PredictionMode::Sll)
