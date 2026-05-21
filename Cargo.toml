@@ -9,17 +9,7 @@ homepage = "https://github.com/ophidiarium/antlr-rust-runtime"
 documentation = "https://docs.rs/antlr-rust-runtime"
 readme = "README.md"
 license = "BSD-3-Clause"
-keywords = [
-    "antlr",
-    "antlr4",
-    "parser",
-    "lexer",
-    "runtime",
-    "antlr4-runtime",
-    "parser-generator",
-    "parser-combinator",
-    "antlr4rust",
-]
+keywords = ["antlr", "antlr4", "parser", "lexer", "runtime"]
 categories = ["parser-implementations", "development-tools", "parsing"]
 
 [lib]

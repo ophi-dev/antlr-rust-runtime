@@ -1,5 +1,8 @@
 # ANTLR4 Runtime for Rust
 
+![Crates.io Version](https://img.shields.io/crates/v/antlr-rust-runtime)
+[![ANTLR Runtime Testsuite](https://github.com/ophidiarium/antlr-rust-runtime/actions/workflows/antlr-runtime-testsuite.yml/badge.svg)](https://github.com/ophidiarium/antlr-rust-runtime/actions/workflows/antlr-runtime-testsuite.yml)
+
 `antlr-rust-runtime` is a pure Rust runtime and metadata generator for ANTLR v4
 lexers and parsers. It is a clean-room implementation written from scratch from
 the public ANTLR runtime contract; it does not vendor or fork an older Rust
@@ -19,7 +22,7 @@ For Rust projects, add the runtime crate:
 
 ```toml
 [dependencies]
-antlr-rust-runtime = "0.1"
+antlr-rust-runtime = "0.3"
 ```
 
 The library crate is imported as `antlr4_runtime`:
@@ -69,7 +72,7 @@ uses.
 Install it with npm or run it through `npx`:
 
 ```bash
-npx antlr-ng -Dlanguage=Java -o build/antlr --exact-output-dir true JSON.g4
+npx -y antlr-ng -Dlanguage=Java -o build/antlr --exact-output-dir true JSON.g4
 ```
 
 The `-Dlanguage=Java` option selects one of antlr-ng's bundled code-generation

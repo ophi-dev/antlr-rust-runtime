@@ -2,7 +2,7 @@
 
 ## Kotlin parser parity perf benchmark
 
-Reproduces the timings tracked in GitHub issue #4 against the Kotlin grammar from `antlr/grammars-v4`.
+Reproduces the timings against the Kotlin grammar from `antlr/grammars-v4`.
 
 ### One-time setup (fresh checkout)
 
@@ -44,9 +44,9 @@ for snippet in tests/kotlin-parity/snippets/*.kt; do
 done
 ```
 
-`--iters N` repeats parse N times within one process; `--time` prints `min`/`avg` to stderr. CI baseline numbers from issue #4: Python `antlr4-python3-runtime` parse-only ≈ 0.9–14.9 ms (`01-nested-types.kt`) and 226–317 ms (`02-dataframe.kt`).
+`--iters N` repeats parse N times within one process; `--time` prints `min`/`avg` to stderr.
 
-## ANTLR runtime testsuite (357 cases)
+## ANTLR runtime testsuite
 
 Validates the Rust runtime against ANTLR's upstream conformance descriptors.
 
