@@ -19,7 +19,7 @@ env:
 jobs:
   runtime-testsuite:
     name: Runtime Testsuite
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 90
     concurrency:
       group: runtime-testsuite-${{ github.event.pull_request.number || github.run_id }}
