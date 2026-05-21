@@ -26,6 +26,11 @@ struct LexerConfig {
 struct LexerActionTrace {
     action_index: usize,
     position: usize,
+    /// Lexer rule that the action transition belonged to. ANTLR suppresses
+    /// commands of nested non-fragment rule references, so the dispatcher
+    /// must compare this against the accepted rule before applying side
+    /// effects like `pushMode` / `popMode`.
+    rule_index: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -241,18 +246,20 @@ where
             .unwrap_or(INVALID_TOKEN_TYPE);
         let mut result = LexerActionResult::new(token_type, DEFAULT_CHANNEL);
         for trace in accept.actions {
+            if !lexer_action_belongs_to_accept(atn, accept.rule_index, trace.rule_index) {
+                continue;
+            }
             if let Some(action) = atn.lexer_actions().get(trace.action_index) {
                 match action {
                     LexerAction::Custom {
                         rule_index,
                         action_index,
-                    } if lexer_action_belongs_to_accept(atn, accept.rule_index, *rule_index) => {
+                    } => {
                         custom_action(
                             lexer,
                             LexerCustomAction::new(*rule_index, *action_index, trace.position),
                         );
                     }
-                    LexerAction::Custom { .. } => {}
                     other => result.apply(other, lexer),
                 }
             }
@@ -286,10 +293,7 @@ where
 /// text, but its embedded action does not run unless that rule itself accepts
 /// the token. Fragment-rule actions remain eligible because fragments have no
 /// token type of their own.
-fn lexer_action_belongs_to_accept(atn: &Atn, accept_rule: usize, action_rule: i32) -> bool {
-    let Ok(action_rule) = usize::try_from(action_rule) else {
-        return false;
-    };
+fn lexer_action_belongs_to_accept(atn: &Atn, accept_rule: usize, action_rule: usize) -> bool {
     action_rule == accept_rule
         || atn
             .rule_to_token_type()
@@ -519,6 +523,7 @@ fn close_config<I, F, P>(
             Transition::Action {
                 target,
                 action_index,
+                rule_index,
                 ..
             } => {
                 let mut next = config.clone();
@@ -528,6 +533,7 @@ fn close_config<I, F, P>(
                     next.actions.push(LexerActionTrace {
                         action_index: *action_index,
                         position: config.position,
+                        rule_index: *rule_index,
                     });
                 }
                 close_config(lexer, atn, next, closure, semantic_predicate);

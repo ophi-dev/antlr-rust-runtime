@@ -1,0 +1,4 @@
+/target/
+/Cargo.lock
+/src/generated/kotlin_lexer.rs
+/src/generated/kotlin_parser.rs

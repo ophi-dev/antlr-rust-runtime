@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::rc::Rc;
 
 use crate::atn::{Atn, AtnState, AtnStateKind, Transition};
 use crate::errors::AntlrError;
@@ -258,6 +259,19 @@ pub struct BaseParser<S> {
     /// speculative recognition may revisit the same coordinate, so replay it
     /// once per parser instance.
     invoked_predicates: Vec<(usize, usize)>,
+    /// FIRST-set cache shared across all speculative rule-call lookups in a
+    /// single parser instance. The fast recognizer consults FIRST sets on
+    /// every rule transition; without caching the same DFS would repeat for
+    /// every speculative path that visits the same rule.
+    first_set_cache: FirstSetCache,
+    /// Whether the fast recognizer's FIRST-set prefilter is enabled. The
+    /// prefilter trims speculative rule calls whose called rule cannot
+    /// match the current lookahead, but it also bypasses single-token
+    /// insertion / deletion recovery that ANTLR runs at the rule's first
+    /// consuming transition. `parse_atn_rule` flips this off and retries
+    /// when the first pass produces no clean outcome so the runtime can
+    /// repair inputs the reference parser would have repaired.
+    fast_first_set_prefilter: bool,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -305,6 +319,97 @@ struct FastRecognizeOutcome {
     index: usize,
     consumed_eof: bool,
     diagnostics: Vec<ParserDiagnostic>,
+    /// Speculative parse-tree fragment built up as the recognizer climbs.
+    /// The list is held as a persistent cons-list of `Rc`-wrapped nodes so
+    /// prepending while chaining recognition outcomes is `O(1)` and cloning
+    /// an outcome (memo lookup, dedup, or when fanning a child's tree out
+    /// to every follow outcome) only bumps a reference count rather than
+    /// deep-copying. On left-recursive grammars the unfolded list can carry
+    /// thousands of nodes per speculative path; without the persistent-list
+    /// shape recognition becomes super-linear in path length.
+    nodes: NodeList,
+}
+
+/// Persistent cons-list of fast-recognizer nodes. The list keeps nodes in the
+/// same head-first order as the original `Vec<FastRecognizedNode>` they
+/// replaced. Shared tails across speculative outcomes amortize the cost of
+/// chaining a child rule's nodes onto every follow outcome.
+#[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
+enum NodeList {
+    #[default]
+    Empty,
+    Cons {
+        head: Rc<FastRecognizedNode>,
+        tail: Rc<Self>,
+    },
+}
+
+impl NodeList {
+    /// Creates an empty list.
+    const fn new() -> Self {
+        Self::Empty
+    }
+
+    /// Prepends `node` and returns the new list. Both shared tails and the
+    /// new head are reference-counted so this is `O(1)`.
+    fn cons(self, node: Rc<FastRecognizedNode>) -> Self {
+        Self::Cons {
+            head: node,
+            tail: Rc::new(self),
+        }
+    }
+
+    /// In-place prepend that takes ownership of `self` via [`std::mem::take`]
+    /// so existing call sites can keep using `&mut` access.
+    fn prepend(&mut self, node: Rc<FastRecognizedNode>) {
+        let owned = std::mem::take(self);
+        *self = owned.cons(node);
+    }
+
+    /// Materializes the list into a `Vec` in head-first order. Used at the
+    /// boundaries that need random-access traversal (the public rule entry
+    /// when building the final parse tree, and
+    /// `fold_fast_left_recursive_boundaries`).
+    fn to_vec(&self) -> Vec<Rc<FastRecognizedNode>> {
+        let mut out = Vec::new();
+        let mut cursor = self;
+        while let Self::Cons { head, tail } = cursor {
+            out.push(Rc::clone(head));
+            cursor = tail.as_ref();
+        }
+        out
+    }
+}
+
+/// Minimal parse-tree fragment retained by the fast recognizer so the public
+/// rule entry can build nested rule contexts without paying for
+/// action/decision bookkeeping.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum FastRecognizedNode {
+    Token {
+        index: usize,
+    },
+    ErrorToken {
+        index: usize,
+    },
+    MissingToken {
+        token_type: i32,
+        at_index: usize,
+        text: String,
+    },
+    Rule {
+        rule_index: usize,
+        invoking_state: isize,
+        start_index: usize,
+        stop_index: Option<usize>,
+        children: Vec<Rc<Self>>,
+    },
+    /// Marker emitted at a precedence-rule loop entry where ANTLR would call
+    /// `pushNewRecursionContext`. Folded into a wrapper rule node before the
+    /// public rule entry hands the tree to the caller.
+    LeftRecursiveBoundary {
+        rule_index: usize,
+    },
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -414,6 +519,140 @@ fn state_expected_symbols(atn: &Atn, state_number: usize) -> BTreeSet<i32> {
         }
     }
     symbols
+}
+
+/// FIRST set for a rule entry plus whether the rule is nullable.
+///
+/// Walks epsilon, predicate, action, and rule-call transitions until it finds
+/// a consuming transition or reaches the rule's stop state. Used by the fast
+/// recognizer to skip rule alternatives whose first-consumed token cannot
+/// possibly match the current lookahead.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct FirstSet {
+    symbols: BTreeSet<i32>,
+    nullable: bool,
+}
+
+/// Per-parser cache of FIRST sets computed during recognition. The fast path
+/// consults this on every speculative `Transition::Rule` encounter, so the
+/// computation must amortize across all of those calls — the FIRST set is a
+/// pure function of the ATN, not of the input position.
+type FirstSetCache = BTreeMap<(usize, usize), FirstSet>;
+
+/// Mutable bookkeeping shared across one FIRST-set computation. Bundling the
+/// rarely-touched fields keeps the recursive helpers below the function-arity
+/// lint and lets every nested call thread the same cache and cycle guards.
+struct FirstSetCtx<'a> {
+    cache: &'a mut FirstSetCache,
+    in_progress: BTreeSet<(usize, usize)>,
+    hit_cycle: bool,
+}
+
+/// Returns the FIRST set for the (rule entry, rule stop) pair, populating the
+/// shared cache and tolerating recursive nullable rule chains. Mutually
+/// recursive rules cannot stack-overflow because callers in flight are tracked
+/// in `ctx.in_progress`; revisits return without recursing, and the partial
+/// result is cached only when no cycle was detected during its computation.
+fn rule_first_set(
+    atn: &Atn,
+    target: usize,
+    rule_stop_state: usize,
+    cache: &mut FirstSetCache,
+) -> FirstSet {
+    let mut ctx = FirstSetCtx {
+        cache,
+        in_progress: BTreeSet::new(),
+        hit_cycle: false,
+    };
+    rule_first_set_cached(atn, target, rule_stop_state, &mut ctx)
+}
+
+fn rule_first_set_cached(
+    atn: &Atn,
+    target: usize,
+    rule_stop_state: usize,
+    ctx: &mut FirstSetCtx<'_>,
+) -> FirstSet {
+    let key = (target, rule_stop_state);
+    if let Some(cached) = ctx.cache.get(&key) {
+        return cached.clone();
+    }
+    if !ctx.in_progress.insert(key) {
+        // Cycle: a caller above is already computing this entry. Return an
+        // empty FIRST set; that caller's traversal supplies the contributions
+        // from the rule's other alternatives.
+        return FirstSet::default();
+    }
+    let saved_hit_cycle = ctx.hit_cycle;
+    ctx.hit_cycle = false;
+    let mut first = FirstSet::default();
+    let mut visited = BTreeSet::new();
+    rule_first_set_inner(atn, target, rule_stop_state, ctx, &mut visited, &mut first);
+    ctx.in_progress.remove(&key);
+    if !ctx.hit_cycle {
+        ctx.cache.insert(key, first.clone());
+    }
+    ctx.hit_cycle = saved_hit_cycle || ctx.hit_cycle;
+    first
+}
+
+fn rule_first_set_inner(
+    atn: &Atn,
+    state_number: usize,
+    rule_stop_state: usize,
+    ctx: &mut FirstSetCtx<'_>,
+    visited: &mut BTreeSet<usize>,
+    first: &mut FirstSet,
+) {
+    if !visited.insert(state_number) {
+        return;
+    }
+    if state_number == rule_stop_state {
+        first.nullable = true;
+        return;
+    }
+    let Some(state) = atn.state(state_number) else {
+        return;
+    };
+    for transition in &state.transitions {
+        let transition_symbols = transition_expected_symbols(transition, atn.max_token_type());
+        if !transition_symbols.is_empty() {
+            first.symbols.extend(transition_symbols);
+            continue;
+        }
+        match transition {
+            Transition::Epsilon { target }
+            | Transition::Action { target, .. }
+            | Transition::Predicate { target, .. }
+            | Transition::Precedence { target, .. } => {
+                rule_first_set_inner(atn, *target, rule_stop_state, ctx, visited, first);
+            }
+            Transition::Rule {
+                target,
+                rule_index,
+                follow_state,
+                ..
+            } => {
+                let Some(child_stop) = atn.rule_to_stop_state().get(*rule_index).copied() else {
+                    continue;
+                };
+                let child_key = (*target, child_stop);
+                if ctx.in_progress.contains(&child_key) && !ctx.cache.contains_key(&child_key) {
+                    ctx.hit_cycle = true;
+                }
+                let child = rule_first_set_cached(atn, *target, child_stop, ctx);
+                first.symbols.extend(child.symbols);
+                if child.nullable {
+                    rule_first_set_inner(atn, *follow_state, rule_stop_state, ctx, visited, first);
+                }
+            }
+            Transition::Atom { .. }
+            | Transition::Range { .. }
+            | Transition::Set { .. }
+            | Transition::NotSet { .. }
+            | Transition::Wildcard { .. } => {}
+        }
+    }
 }
 
 /// Returns token types that can resume parsing from `state_number` after a
@@ -774,6 +1013,8 @@ where
             reported_prediction_diagnostics: BTreeSet::new(),
             int_members: BTreeMap::new(),
             invoked_predicates: Vec::new(),
+            first_set_cache: BTreeMap::new(),
+            fast_first_set_prefilter: true,
         }
     }
 
@@ -846,10 +1087,10 @@ where
     ///
     /// The recognizer backtracks across alternatives and loop exits using token
     /// stream indices instead of committing to input consumption immediately.
-    /// Once a viable ATN path is found, the parser consumes the accepted token
-    /// interval and returns a rule node. The initial tree is intentionally flat;
-    /// nested rule-node construction will be layered on top of the same
-    /// recognition routine.
+    /// Once a viable ATN path is found, the parser commits the accepted token
+    /// interval and returns a rule node whose children mirror every grammar
+    /// rule invocation reached on that path, matching ANTLR's parse-tree
+    /// shape.
     pub fn parse_atn_rule(
         &mut self,
         atn: &Atn,
@@ -873,6 +1114,66 @@ where
 
         let start_index = self.current_visible_index();
         self.clear_prediction_diagnostics();
+        let first_pass = self.fast_recognize_top(atn, start_state, stop_state, start_index);
+        let needs_retry = match &first_pass {
+            // The FIRST-set prefilter trims speculative rule calls that can't
+            // match the current lookahead — useful for perf on grammars with
+            // many epsilon-reachable rules, but the trim also bypasses
+            // single-token insertion / deletion recovery that ANTLR's
+            // reference parser runs at the child rule's first consuming
+            // transition. Retry without the prefilter whenever the first pass
+            // either produced no outcome at all or produced a recovered
+            // outcome (diagnostics non-empty), since the second pass might
+            // surface a child-level recovery with cleaner diagnostics or
+            // closer parity to ANTLR's tree shape.
+            Err(_) => true,
+            Ok((outcome, _)) => !outcome.diagnostics.is_empty(),
+        };
+        let (outcome, _expected) = if needs_retry {
+            self.fast_first_set_prefilter = false;
+            let retry = self.fast_recognize_top(atn, start_state, stop_state, start_index);
+            self.fast_first_set_prefilter = true;
+            select_better_top_outcome(first_pass, retry).map_err(|expected| {
+                let error = self.recognition_error(rule_index, start_index, &expected);
+                report_token_source_errors(&self.input.drain_source_errors());
+                error
+            })?
+        } else {
+            first_pass.expect("first_pass is Ok in the no-retry branch")
+        };
+
+        report_parser_diagnostics(&self.prediction_diagnostics);
+        report_parser_diagnostics(&outcome.diagnostics);
+        report_token_source_errors(&self.input.drain_source_errors());
+        let mut context = ParserRuleContext::new(rule_index, self.state());
+        if let Some(token) = self.token_at(start_index) {
+            context.set_start(token);
+        }
+        if let Some(token) = self.rule_stop_token(outcome.index, outcome.consumed_eof) {
+            context.set_stop(token);
+        }
+        if self.build_parse_trees {
+            let folded = fold_fast_left_recursive_boundaries(outcome.nodes.to_vec());
+            for node in &folded {
+                context.add_child(self.fast_recognized_node_tree(node.as_ref())?);
+            }
+        }
+        self.input.seek(outcome.index);
+
+        Ok(self.rule_node(context))
+    }
+
+    /// Runs the fast recognizer once from the rule's start state and returns
+    /// the best outcome or the per-attempt expected-token accumulator. The
+    /// caller flips `fast_first_set_prefilter` between calls when a retry is
+    /// needed, so the FIRST-set cache is left intact across both passes.
+    fn fast_recognize_top(
+        &mut self,
+        atn: &Atn,
+        start_state: usize,
+        stop_state: usize,
+        start_index: usize,
+    ) -> Result<(FastRecognizeOutcome, ExpectedTokens), ExpectedTokens> {
         let mut visiting = BTreeSet::new();
         let mut memo = BTreeMap::new();
         let mut expected = ExpectedTokens::default();
@@ -893,36 +1194,81 @@ where
             &mut memo,
             &mut expected,
         );
-        let Some(outcome) = select_best_fast_outcome(outcomes.into_iter(), self.prediction_mode)
-        else {
-            let error = self.recognition_error(rule_index, start_index, &expected);
-            report_token_source_errors(&self.input.drain_source_errors());
-            return Err(error);
-        };
+        match select_best_fast_outcome(outcomes.into_iter(), self.prediction_mode) {
+            Some(outcome) => Ok((outcome, expected)),
+            None => Err(expected),
+        }
+    }
 
-        report_parser_diagnostics(&self.prediction_diagnostics);
-        report_parser_diagnostics(&outcome.diagnostics);
-        report_token_source_errors(&self.input.drain_source_errors());
-        let mut context = ParserRuleContext::new(rule_index, self.state());
-        if let Some(token) = self.token_at(start_index) {
-            context.set_start(token);
-        }
-        if let Some(token) = self.rule_stop_token(outcome.index, outcome.consumed_eof) {
-            context.set_stop(token);
-        }
-        self.input.seek(start_index);
-        while self.input.index() < outcome.index {
-            let token_type = self.la(1);
-            let child = self.match_token(token_type)?;
-            if self.build_parse_trees {
-                context.add_child(child);
+    /// Converts a recognized fast-recognizer node into a public parse-tree
+    /// node, mirroring [`Self::recognized_node_tree`] for the slow path.
+    fn fast_recognized_node_tree(
+        &mut self,
+        node: &FastRecognizedNode,
+    ) -> Result<ParseTree, AntlrError> {
+        match node {
+            FastRecognizedNode::Token { index } => {
+                let token =
+                    self.input
+                        .get(*index)
+                        .cloned()
+                        .ok_or_else(|| AntlrError::ParserError {
+                            line: 0,
+                            column: 0,
+                            message: format!("missing token at index {index}"),
+                        })?;
+                Ok(ParseTree::Terminal(TerminalNode::new(token)))
             }
+            FastRecognizedNode::ErrorToken { index } => {
+                let token =
+                    self.input
+                        .get(*index)
+                        .cloned()
+                        .ok_or_else(|| AntlrError::ParserError {
+                            line: 0,
+                            column: 0,
+                            message: format!("missing error token at index {index}"),
+                        })?;
+                Ok(ParseTree::Error(ErrorNode::new(token)))
+            }
+            FastRecognizedNode::MissingToken {
+                token_type,
+                at_index,
+                text,
+            } => {
+                let current = self.token_at(*at_index);
+                let token = CommonToken::new(*token_type)
+                    .with_text(text)
+                    .with_span(usize::MAX, usize::MAX)
+                    .with_position(
+                        current.as_ref().map(Token::line).unwrap_or_default(),
+                        current.as_ref().map(Token::column).unwrap_or_default(),
+                    );
+                Ok(ParseTree::Error(ErrorNode::new(token)))
+            }
+            FastRecognizedNode::Rule {
+                rule_index,
+                invoking_state,
+                start_index,
+                stop_index,
+                children,
+            } => {
+                let mut context = ParserRuleContext::new(*rule_index, *invoking_state);
+                if let Some(token) = self.token_at(*start_index) {
+                    context.set_start(token);
+                }
+                if let Some(token) = stop_index.and_then(|index| self.token_at(index)) {
+                    context.set_stop(token);
+                }
+                for child in children {
+                    context.add_child(self.fast_recognized_node_tree(child.as_ref())?);
+                }
+                Ok(self.rule_node(context))
+            }
+            FastRecognizedNode::LeftRecursiveBoundary { rule_index } => Err(AntlrError::Unsupported(
+                format!("unfolded left-recursive boundary for rule {rule_index}"),
+            )),
         }
-        if outcome.consumed_eof && self.la(1) == TOKEN_EOF && self.build_parse_trees {
-            context.add_child(self.match_eof()?);
-        }
-
-        Ok(self.rule_node(context))
     }
 
     /// Parses a generated rule and returns semantic actions reached on the
@@ -1431,6 +1777,12 @@ where
             outcome.consumed_eof |= next_symbol == TOKEN_EOF;
             outcome.diagnostics.insert(0, diagnostic.clone());
             outcome
+                .nodes
+                .prepend(Rc::new(FastRecognizedNode::Token { index: next_index }));
+            outcome
+                .nodes
+                .prepend(Rc::new(FastRecognizedNode::ErrorToken { index }));
+            outcome
         })
         .collect()
     }
@@ -1462,7 +1814,7 @@ where
             ..
         } = request;
         let follow_symbols = state_expected_symbols(atn, transition.target());
-        let Some((diagnostic, _token_type, _text)) = self.single_token_insertion(
+        let Some((diagnostic, token_type, text)) = self.single_token_insertion(
             transition,
             index,
             atn.max_token_type(),
@@ -1491,6 +1843,11 @@ where
         .into_iter()
         .map(|mut outcome| {
             outcome.diagnostics.insert(0, diagnostic.clone());
+            outcome.nodes.prepend(Rc::new(FastRecognizedNode::MissingToken {
+                token_type,
+                at_index: index,
+                text: text.clone(),
+            }));
             outcome
         })
         .collect()
@@ -1513,7 +1870,7 @@ where
         if request.index == request.rule_start_index {
             return Vec::new();
         }
-        let Some((diagnostic, next_index, _skipped)) =
+        let Some((diagnostic, next_index, skipped)) =
             self.current_token_deletion(request.index, &expected_symbols)
         else {
             return Vec::new();
@@ -1526,6 +1883,11 @@ where
             .into_iter()
             .map(|mut outcome| {
                 outcome.diagnostics.insert(0, diagnostic.clone());
+                for index in skipped.iter().rev() {
+                    outcome
+                        .nodes
+                        .prepend(Rc::new(FastRecognizedNode::ErrorToken { index: *index }));
+                }
                 outcome
             })
             .collect()
@@ -1560,6 +1922,7 @@ where
                 index,
                 consumed_eof: false,
                 diagnostics: Vec::new(),
+                nodes: NodeList::new(),
             }];
         }
         let key = FastRecognizeKey {
@@ -1598,30 +1961,9 @@ where
                 Transition::Epsilon { target }
                 | Transition::Predicate { target, .. }
                 | Transition::Action { target, .. } => {
-                    outcomes.extend(self.recognize_state_fast(
-                        atn,
-                        FastRecognizeRequest {
-                            state_number: *target,
-                            stop_state,
-                            index,
-                            rule_start_index,
-                            decision_start_index: next_decision_start_index,
-                            precedence,
-                            depth: depth + 1,
-                            recovery_symbols: epsilon_recovery_symbols.clone(),
-                            recovery_state: epsilon_recovery_state,
-                        },
-                        visiting,
-                        memo,
-                        expected,
-                    ));
-                }
-                Transition::Precedence {
-                    target,
-                    precedence: transition_precedence,
-                } => {
-                    if *transition_precedence >= precedence {
-                        outcomes.extend(self.recognize_state_fast(
+                    let boundary = left_recursive_boundary(atn, state, *target);
+                    outcomes.extend(
+                        self.recognize_state_fast(
                             atn,
                             FastRecognizeRequest {
                                 state_number: *target,
@@ -1637,7 +1979,54 @@ where
                             visiting,
                             memo,
                             expected,
-                        ));
+                        )
+                        .into_iter()
+                        .map(|mut outcome| {
+                            if let Some(rule_index) = boundary {
+                                outcome.nodes.prepend(Rc::new(
+                                    FastRecognizedNode::LeftRecursiveBoundary { rule_index },
+                                ));
+                            }
+                            outcome
+                        }),
+                    );
+                }
+                Transition::Precedence {
+                    target,
+                    precedence: transition_precedence,
+                } => {
+                    if *transition_precedence >= precedence {
+                        let boundary = left_recursive_boundary(atn, state, *target);
+                        outcomes.extend(
+                            self.recognize_state_fast(
+                                atn,
+                                FastRecognizeRequest {
+                                    state_number: *target,
+                                    stop_state,
+                                    index,
+                                    rule_start_index,
+                                    decision_start_index: next_decision_start_index,
+                                    precedence,
+                                    depth: depth + 1,
+                                    recovery_symbols: epsilon_recovery_symbols.clone(),
+                                    recovery_state: epsilon_recovery_state,
+                                },
+                                visiting,
+                                memo,
+                                expected,
+                            )
+                            .into_iter()
+                            .map(|mut outcome| {
+                                if let Some(rule_index) = boundary {
+                                    outcome.nodes.prepend(Rc::new(
+                                        FastRecognizedNode::LeftRecursiveBoundary {
+                                            rule_index,
+                                        },
+                                    ));
+                                }
+                                outcome
+                            }),
+                        );
                     }
                 }
                 Transition::Rule {
@@ -1651,6 +2040,38 @@ where
                     else {
                         continue;
                     };
+                    // Lookahead-based pruning. The recognizer would otherwise
+                    // explore every speculative rule call, producing exponential
+                    // work on grammars with many epsilon-reachable rules. When
+                    // the rule is non-nullable and its FIRST set excludes the
+                    // current lookahead, recursion can't find a clean path
+                    // *through this rule*. Skipping is only safe if some sibling
+                    // transition can still consume the lookahead — otherwise the
+                    // rule call is the sole continuation and must run so the
+                    // single-token insertion / deletion recovery inside the
+                    // called rule can fire (mirroring ANTLR's reference behavior
+                    // of conjuring a missing token at child-rule entry).
+                    let symbol = self.token_type_at(index);
+                    let first =
+                        rule_first_set(atn, *target, child_stop, &mut self.first_set_cache);
+                    if self.fast_first_set_prefilter
+                        && !first.nullable
+                        && !first.symbols.contains(&symbol)
+                    {
+                        if !first.symbols.is_empty() {
+                            match expected.index {
+                                Some(current) if index < current => {}
+                                Some(current) if index == current => {
+                                    expected.symbols.extend(first.symbols);
+                                }
+                                _ => {
+                                    expected.index = Some(index);
+                                    expected.symbols = first.symbols;
+                                }
+                            }
+                        }
+                        continue;
+                    }
                     let expected_before_child = expected.clone();
                     let children = self.recognize_state_fast(
                         atn,
@@ -1676,13 +2097,23 @@ where
                         *expected = expected_before_child;
                     }
                     for child in children {
+                        let child_index = child.index;
+                        let child_consumed_eof = child.consumed_eof;
+                        let child_diagnostics = child.diagnostics;
+                        let child_node = Rc::new(FastRecognizedNode::Rule {
+                            rule_index: *rule_index,
+                            invoking_state: invoking_state_number(state_number),
+                            start_index: index,
+                            stop_index: self.rule_stop_token_index(child_index, child_consumed_eof),
+                            children: fold_fast_left_recursive_boundaries(child.nodes.to_vec()),
+                        });
                         outcomes.extend(
                             self.recognize_state_fast(
                                 atn,
                                 FastRecognizeRequest {
                                     state_number: *follow_state,
                                     stop_state,
-                                    index: child.index,
+                                    index: child_index,
                                     rule_start_index,
                                     decision_start_index: next_decision_start_index,
                                     precedence,
@@ -1696,10 +2127,11 @@ where
                             )
                             .into_iter()
                             .map(|mut outcome| {
-                                outcome.consumed_eof |= child.consumed_eof;
-                                let mut diagnostics = child.diagnostics.clone();
+                                outcome.consumed_eof |= child_consumed_eof;
+                                let mut diagnostics = child_diagnostics.clone();
                                 diagnostics.append(&mut outcome.diagnostics);
                                 outcome.diagnostics = diagnostics;
+                                outcome.nodes.prepend(Rc::clone(&child_node));
                                 outcome
                             }),
                         );
@@ -1734,6 +2166,9 @@ where
                             .into_iter()
                             .map(|mut outcome| {
                                 outcome.consumed_eof |= symbol == TOKEN_EOF;
+                                outcome
+                                    .nodes
+                                    .prepend(Rc::new(FastRecognizedNode::Token { index }));
                                 outcome
                             }),
                         );
@@ -3266,6 +3701,69 @@ fn fold_left_recursive_boundaries(nodes: Vec<RecognizedNode>) -> Vec<RecognizedN
     folded
 }
 
+/// Mirrors [`fold_left_recursive_boundaries`] for [`FastRecognizedNode`].
+fn fold_fast_left_recursive_boundaries(
+    nodes: Vec<Rc<FastRecognizedNode>>,
+) -> Vec<Rc<FastRecognizedNode>> {
+    let mut folded: Vec<Rc<FastRecognizedNode>> = Vec::new();
+    for node in nodes {
+        match node.as_ref() {
+            FastRecognizedNode::LeftRecursiveBoundary { rule_index } => {
+                if !folded.is_empty() {
+                    let children = std::mem::take(&mut folded);
+                    let start_index =
+                        fast_recognized_nodes_start_index(&children).unwrap_or_default();
+                    let stop_index = fast_recognized_nodes_stop_index(&children);
+                    folded.push(Rc::new(FastRecognizedNode::Rule {
+                        rule_index: *rule_index,
+                        invoking_state: -1,
+                        start_index,
+                        stop_index,
+                        children,
+                    }));
+                }
+            }
+            _ => folded.push(node),
+        }
+    }
+    folded
+}
+
+fn fast_recognized_nodes_start_index(nodes: &[Rc<FastRecognizedNode>]) -> Option<usize> {
+    nodes
+        .iter()
+        .find_map(|node| fast_recognized_node_start_index(node.as_ref()))
+}
+
+const fn fast_recognized_node_start_index(node: &FastRecognizedNode) -> Option<usize> {
+    match node {
+        FastRecognizedNode::Token { index } | FastRecognizedNode::ErrorToken { index } => {
+            Some(*index)
+        }
+        FastRecognizedNode::MissingToken { at_index, .. } => Some(*at_index),
+        FastRecognizedNode::Rule { start_index, .. } => Some(*start_index),
+        FastRecognizedNode::LeftRecursiveBoundary { .. } => None,
+    }
+}
+
+fn fast_recognized_nodes_stop_index(nodes: &[Rc<FastRecognizedNode>]) -> Option<usize> {
+    nodes
+        .iter()
+        .rev()
+        .find_map(|node| fast_recognized_node_stop_index(node.as_ref()))
+}
+
+const fn fast_recognized_node_stop_index(node: &FastRecognizedNode) -> Option<usize> {
+    match node {
+        FastRecognizedNode::Token { index } | FastRecognizedNode::ErrorToken { index } => {
+            Some(*index)
+        }
+        FastRecognizedNode::MissingToken { at_index, .. } => at_index.checked_sub(1),
+        FastRecognizedNode::Rule { stop_index, .. } => *stop_index,
+        FastRecognizedNode::LeftRecursiveBoundary { .. } => None,
+    }
+}
+
 fn recognized_nodes_start_index(nodes: &[RecognizedNode]) -> Option<usize> {
     nodes.iter().find_map(recognized_node_start_index)
 }
@@ -3377,6 +3875,30 @@ fn state_is_left_recursive_rule(atn: &Atn, state: &AtnState) -> bool {
 /// Chooses the outermost parse result that consumed the most input.
 ///
 /// The recognizer intentionally keeps shorter endpoints available while walking
+/// Picks the better of two `parse_atn_rule` passes (with and without the
+/// FIRST-set prefilter). A clean outcome (no diagnostics) always wins over a
+/// recovered one; among recovered outcomes the second pass is preferred
+/// because the no-prefilter walk reaches ANTLR-style recovery inside child
+/// rules. If both passes failed, the second pass's expected-token snapshot
+/// is returned so the caller renders the same diagnostic ANTLR would.
+fn select_better_top_outcome(
+    first: Result<(FastRecognizeOutcome, ExpectedTokens), ExpectedTokens>,
+    second: Result<(FastRecognizeOutcome, ExpectedTokens), ExpectedTokens>,
+) -> Result<(FastRecognizeOutcome, ExpectedTokens), ExpectedTokens> {
+    match (first, second) {
+        (Ok(first), Ok(second)) => {
+            if first.0.diagnostics.is_empty() {
+                Ok(first)
+            } else {
+                Ok(second)
+            }
+        }
+        (Ok(first), Err(_)) => Ok(first),
+        (Err(_), Ok(second)) => Ok(second),
+        (Err(_), Err(second_expected)) => Err(second_expected),
+    }
+}
+
 /// nested rule transitions so callers can satisfy following tokens such as
 /// `expr 'and' expr`. Only the public rule entry commits to one endpoint.
 fn select_best_fast_outcome(
@@ -3691,10 +4213,51 @@ fn node_needs_stable_tie(node: &RecognizedNode) -> bool {
     }
 }
 
-/// Sorts and removes equivalent endpoints before memoizing a state result.
+/// Removes equivalent endpoints before memoizing a state result while
+/// preserving ATN transition-discovery order.
+///
+/// Outcomes are compared on observable recognition state — the input index,
+/// EOF consumption, and diagnostics — without descending into the parse-tree
+/// fragment carried by `nodes`. Two paths reaching the same point with
+/// different node trees would otherwise prevent memoization from collapsing
+/// equivalent suffixes and explode the speculative-path cache.
+///
+/// The first occurrence per recognition key wins, which matches ANTLR's
+/// greedy alternative selection: serialized ATNs put greedy `*`/`+` loop-back
+/// transitions before loop-exit, so the first-discovered outcome carries the
+/// greedy parse-tree fragment.
 fn dedupe_fast_outcomes(outcomes: &mut Vec<FastRecognizeOutcome>) {
-    outcomes.sort_unstable();
-    outcomes.dedup();
+    if outcomes.len() < 2 {
+        return;
+    }
+    let mut keep = Vec::with_capacity(outcomes.len());
+    let mut seen: BTreeMap<(usize, bool), Vec<usize>> = BTreeMap::new();
+    'outcomes: for (index, outcome) in outcomes.iter().enumerate() {
+        let bucket = seen
+            .entry((outcome.index, outcome.consumed_eof))
+            .or_default();
+        for &previous in bucket.iter() {
+            if outcomes[previous].diagnostics == outcome.diagnostics {
+                continue 'outcomes;
+            }
+        }
+        bucket.push(index);
+        keep.push(index);
+    }
+    if keep.len() == outcomes.len() {
+        return;
+    }
+    let mut iter = keep.into_iter();
+    let mut next_keep = iter.next();
+    let mut current = 0_usize;
+    outcomes.retain(|_| {
+        let result = next_keep == Some(current);
+        if result {
+            next_keep = iter.next();
+        }
+        current += 1;
+        result
+    });
 }
 
 /// Sorts and removes equivalent endpoints, including their action traces.
@@ -3944,11 +4507,13 @@ mod tests {
                 column: 0,
                 message: "mismatched input 'x'".to_owned(),
             }],
+            nodes: NodeList::new(),
         };
         let second = FastRecognizeOutcome {
             index: first.index,
             consumed_eof: first.consumed_eof,
             diagnostics: Vec::new(),
+            nodes: NodeList::new(),
         };
 
         let selected = select_best_fast_outcome(
@@ -3961,6 +4526,7 @@ mod tests {
             index: second.index,
             consumed_eof: true,
             diagnostics: Vec::new(),
+            nodes: NodeList::new(),
         };
         let selected =
             select_best_fast_outcome([first.clone(), eof_second].into_iter(), PredictionMode::Sll)

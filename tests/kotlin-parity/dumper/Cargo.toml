@@ -1,0 +1,12 @@
+[package]
+name = "kotlin-parity-dumper"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+antlr4_runtime = { package = "antlr-rust-runtime", path = "../../.." }
+
+[[bin]]
+name = "kotlin-parity-dumper"
+path = "src/main.rs"
