@@ -778,6 +778,67 @@ fn transition_first_set(
     }
 }
 
+/// Reports whether `transition` can be pruned at a multi-alt state because
+/// its cached look-1 cannot accept the current lookahead.
+///
+/// Pruning runs only for non-consuming transitions (Epsilon/Action/Predicate/
+/// Rule/Precedence) so consuming transitions still reach the
+/// `matches`+recovery path that surfaces single-token deletion / insertion
+/// repairs and ANTLR-compatible expected-token sets. When a non-consuming
+/// transition is pruned, its FIRST set is folded into `expected` so failed
+/// parses produce the same `mismatched input ... expecting ...` diagnostic
+/// the no-prefilter baseline would emit.
+fn should_skip_via_lookahead(
+    transition: &Transition,
+    transition_index: usize,
+    lookahead_filter: Option<&(i32, Rc<DecisionLookahead>)>,
+    index: usize,
+    expected: &mut ExpectedTokens,
+) -> bool {
+    let prune_non_consuming = matches!(
+        transition,
+        Transition::Epsilon { .. }
+            | Transition::Action { .. }
+            | Transition::Predicate { .. }
+            | Transition::Rule { .. }
+            | Transition::Precedence { .. }
+    );
+    if !prune_non_consuming {
+        return false;
+    }
+    let Some((symbol, entry)) = lookahead_filter else {
+        return false;
+    };
+    let Some(set) = entry.transitions.get(transition_index) else {
+        return false;
+    };
+    if set.symbols.contains(symbol) || set.nullable {
+        return false;
+    }
+    if !set.symbols.is_empty() {
+        record_pruned_transition_expected(set, index, expected);
+    }
+    true
+}
+
+/// Folds a pruned transition's FIRST set into the farthest-expected accumulator.
+fn record_pruned_transition_expected(
+    set: &TransitionLookSet,
+    index: usize,
+    expected: &mut ExpectedTokens,
+) {
+    match expected.index {
+        Some(current) if index < current => {}
+        Some(current) if index == current => {
+            expected.symbols.extend(set.symbols.iter().copied());
+        }
+        _ => {
+            expected.index = Some(index);
+            expected.symbols.clone_from(&set.symbols);
+        }
+    }
+}
+
 fn rule_first_set_inner(
     atn: &Atn,
     state_number: usize,
@@ -2274,46 +2335,14 @@ where
         let transition_count = state.transitions.len();
         let mut outcomes = Vec::with_capacity(transition_count);
         for (transition_index, transition) in state.transitions.iter().enumerate() {
-            // Apply the cached prefilter to non-consuming transitions only.
-            // Consuming transitions (Atom/Range/Set/NotSet/Wildcard) still need
-            // to go through the existing `matches` + recovery path so the
-            // recognizer can surface single-token deletion / insertion repairs
-            // and the ATN's expected-token sets to error diagnostics.
-            //
-            // For non-consuming transitions, skipping is safe as long as we
-            // mirror the existing Rule prefilter and surface the transition's
-            // FIRST set into the diagnostic accumulator. ANTLR's mismatch
-            // message lists the symbols this alternative would have accepted,
-            // so failing to record them would change error output for tests
-            // that depend on the message text.
-            let prune_non_consuming = matches!(
+            if should_skip_via_lookahead(
                 transition,
-                Transition::Epsilon { .. }
-                    | Transition::Action { .. }
-                    | Transition::Predicate { .. }
-                    | Transition::Rule { .. }
-                    | Transition::Precedence { .. }
-            );
-            if prune_non_consuming {
-                if let Some((symbol, entry)) = lookahead_filter {
-                    if let Some(set) = entry.transitions.get(transition_index) {
-                        if !set.symbols.contains(symbol) && !set.nullable {
-                            if !set.symbols.is_empty() {
-                                match expected.index {
-                                    Some(current) if index < current => {}
-                                    Some(current) if index == current => {
-                                        expected.symbols.extend(set.symbols.iter().copied());
-                                    }
-                                    _ => {
-                                        expected.index = Some(index);
-                                        expected.symbols.clone_from(&set.symbols);
-                                    }
-                                }
-                            }
-                            continue;
-                        }
-                    }
-                }
+                transition_index,
+                lookahead_filter,
+                index,
+                expected,
+            ) {
+                continue;
             }
             match transition {
                 Transition::Epsilon { target }
