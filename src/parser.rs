@@ -1114,31 +1114,33 @@ where
 
         let start_index = self.current_visible_index();
         self.clear_prediction_diagnostics();
-        let (outcome, _expected) =
-            match self.fast_recognize_top(atn, start_state, stop_state, start_index) {
-                Ok(ok) => ok,
-                Err(_) => {
-                    // Retry without the FIRST-set prefilter. The prefilter
-                    // speeds up the common path but bypasses single-token
-                    // insertion / deletion recovery inside child rules — when
-                    // the first pass produces nothing we redo the parse with
-                    // full speculative exploration so ANTLR-style recovery can
-                    // fire.
-                    self.fast_first_set_prefilter = false;
-                    let result =
-                        self.fast_recognize_top(atn, start_state, stop_state, start_index);
-                    self.fast_first_set_prefilter = true;
-                    match result {
-                        Ok(ok) => ok,
-                        Err(expected) => {
-                            let error =
-                                self.recognition_error(rule_index, start_index, &expected);
-                            report_token_source_errors(&self.input.drain_source_errors());
-                            return Err(error);
-                        }
-                    }
-                }
-            };
+        let first_pass = self.fast_recognize_top(atn, start_state, stop_state, start_index);
+        let needs_retry = match &first_pass {
+            // The FIRST-set prefilter trims speculative rule calls that can't
+            // match the current lookahead — useful for perf on grammars with
+            // many epsilon-reachable rules, but the trim also bypasses
+            // single-token insertion / deletion recovery that ANTLR's
+            // reference parser runs at the child rule's first consuming
+            // transition. Retry without the prefilter whenever the first pass
+            // either produced no outcome at all or produced a recovered
+            // outcome (diagnostics non-empty), since the second pass might
+            // surface a child-level recovery with cleaner diagnostics or
+            // closer parity to ANTLR's tree shape.
+            Err(_) => true,
+            Ok((outcome, _)) => !outcome.diagnostics.is_empty(),
+        };
+        let (outcome, _expected) = if needs_retry {
+            self.fast_first_set_prefilter = false;
+            let retry = self.fast_recognize_top(atn, start_state, stop_state, start_index);
+            self.fast_first_set_prefilter = true;
+            select_better_top_outcome(first_pass, retry).map_err(|expected| {
+                let error = self.recognition_error(rule_index, start_index, &expected);
+                report_token_source_errors(&self.input.drain_source_errors());
+                error
+            })?
+        } else {
+            first_pass.expect("first_pass is Ok in the no-retry branch")
+        };
 
         report_parser_diagnostics(&self.prediction_diagnostics);
         report_parser_diagnostics(&outcome.diagnostics);
@@ -3873,6 +3875,30 @@ fn state_is_left_recursive_rule(atn: &Atn, state: &AtnState) -> bool {
 /// Chooses the outermost parse result that consumed the most input.
 ///
 /// The recognizer intentionally keeps shorter endpoints available while walking
+/// Picks the better of two `parse_atn_rule` passes (with and without the
+/// FIRST-set prefilter). A clean outcome (no diagnostics) always wins over a
+/// recovered one; among recovered outcomes the second pass is preferred
+/// because the no-prefilter walk reaches ANTLR-style recovery inside child
+/// rules. If both passes failed, the second pass's expected-token snapshot
+/// is returned so the caller renders the same diagnostic ANTLR would.
+fn select_better_top_outcome(
+    first: Result<(FastRecognizeOutcome, ExpectedTokens), ExpectedTokens>,
+    second: Result<(FastRecognizeOutcome, ExpectedTokens), ExpectedTokens>,
+) -> Result<(FastRecognizeOutcome, ExpectedTokens), ExpectedTokens> {
+    match (first, second) {
+        (Ok(first), Ok(second)) => {
+            if first.0.diagnostics.is_empty() {
+                Ok(first)
+            } else {
+                Ok(second)
+            }
+        }
+        (Ok(first), Err(_)) => Ok(first),
+        (Err(_), Ok(second)) => Ok(second),
+        (Err(_), Err(second_expected)) => Err(second_expected),
+    }
+}
+
 /// nested rule transitions so callers can satisfy following tokens such as
 /// `expr 'and' expr`. Only the public rule entry commits to one endpoint.
 fn select_best_fast_outcome(
