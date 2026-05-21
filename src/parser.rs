@@ -1480,7 +1480,7 @@ where
 
         let start_index = self.current_visible_index();
         self.clear_prediction_diagnostics();
-        self.reset_recovery_symbol_caches();
+        self.reset_per_parse_caches();
         let first_pass = self.fast_recognize_top(atn, start_state, stop_state, start_index);
         let needs_retry = match &first_pass {
             // The FIRST-set prefilter trims speculative rule calls that can't
@@ -1730,7 +1730,7 @@ where
 
         let start_index = self.current_visible_index();
         self.clear_prediction_diagnostics();
-        self.reset_recovery_symbol_caches();
+        self.reset_per_parse_caches();
         let init_action_rules = init_action_rules.iter().copied().collect::<BTreeSet<_>>();
         let mut visiting = BTreeSet::new();
         let mut memo = BTreeMap::new();
@@ -3980,20 +3980,28 @@ where
         self.reported_prediction_diagnostics.clear();
     }
 
-    /// Drops the per-parse `recovery_symbols` interner contents.
+    /// Drops every per-parse cache that depends on ATN identity or pins
+    /// recovery-symbol allocations.
     ///
-    /// `intern_recovery_symbols` accepts every union of state-expected and
-    /// inherited recovery symbols a parse encounters, so a long-lived parser
-    /// processing many inputs (especially malformed ones, which explore wide
-    /// recovery sets) would otherwise grow its interner monotonically and pin
-    /// every recovery `Rc<BTreeSet<i32>>` for the rest of the process.
+    /// `BaseParser::parse_atn_rule` takes `&Atn` on each invocation, so the
+    /// same parser instance can legally be driven against different grammars
+    /// in sequence. The four caches reset here are keyed by raw ATN
+    /// coordinates (state numbers, rule indexes) and would silently hand back
+    /// entries from a previous ATN if reused — pruning lookahead against the
+    /// wrong transitions or pinning recovery `Rc<BTreeSet<i32>>` allocations
+    /// for the rest of the process. Clearing them on every parse entry keeps
+    /// the perf wins (caches still amortize within one parse) without making
+    /// long-lived parsers leak memory or surface stale ATN data:
     ///
-    /// `state_expected_cache` is cleared in lockstep because its values are
-    /// produced through `intern_recovery_symbols`; keeping it without the
-    /// interner would let a stale interned `Rc` outlive the matching map
-    /// entry, breaking the identity invariant that makes
-    /// `FastRecognizeKey`'s pointer-based hashing safe.
-    fn reset_recovery_symbol_caches(&mut self) {
+    /// * `first_set_cache` and `decision_lookahead_cache` are pure functions
+    ///   of the ATN's state graph.
+    /// * `state_expected_cache` and `recovery_symbols_intern` together form
+    ///   the identity invariant that lets `FastRecognizeKey` hash
+    ///   `recovery_symbols` by pointer; they have to be cleared in lockstep
+    ///   so a stale interned `Rc` cannot outlive its map entry.
+    fn reset_per_parse_caches(&mut self) {
+        self.first_set_cache.clear();
+        self.decision_lookahead_cache.clear();
         self.recovery_symbols_intern.clear();
         self.state_expected_cache.clear();
     }
