@@ -23,8 +23,21 @@ const FX_ROT: u32 = 5;
 const FX_SEED: u64 = 0x51_7c_c1_b7_27_22_0a_95;
 
 impl Hasher for FxHasher {
+    /// Folds bytes 8 at a time so a `write(&[u8; 8])` call hashes to the same
+    /// state as a `write_u64` of the same little-endian bits. The `Hash` impls
+    /// for `String`, `[u8; N]`, and slice-like types reach the hasher through
+    /// `write`; matching the typed-method behaviour avoids the silent
+    /// divergence flagged in PR #5 review (Greptile P2). Tail bytes that do
+    /// not form a full word are mixed one at a time with the same constants,
+    /// keeping behaviour deterministic regardless of the slice length.
     #[inline]
-    fn write(&mut self, bytes: &[u8]) {
+    fn write(&mut self, mut bytes: &[u8]) {
+        while bytes.len() >= 8 {
+            let (head, rest) = bytes.split_at(8);
+            let word = u64::from_le_bytes(head.try_into().expect("8-byte chunk"));
+            self.hash = (self.hash.rotate_left(FX_ROT) ^ word).wrapping_mul(FX_SEED);
+            bytes = rest;
+        }
         for byte in bytes {
             self.hash =
                 (self.hash.rotate_left(FX_ROT) ^ u64::from(*byte)).wrapping_mul(FX_SEED);
@@ -1217,15 +1230,29 @@ struct FastRecognizeKey {
 
 impl PartialEq for FastRecognizeKey {
     fn eq(&self, other: &Self) -> bool {
-        self.state_number == other.state_number
-            && self.stop_state == other.stop_state
-            && self.index == other.index
-            && self.rule_start_index == other.rule_start_index
-            && self.decision_start_index == other.decision_start_index
-            && self.precedence == other.precedence
-            && self.recovery_state == other.recovery_state
-            && (Rc::ptr_eq(&self.recovery_symbols, &other.recovery_symbols)
-                || self.recovery_symbols == other.recovery_symbols)
+        if self.state_number != other.state_number
+            || self.stop_state != other.stop_state
+            || self.index != other.index
+            || self.rule_start_index != other.rule_start_index
+            || self.decision_start_index != other.decision_start_index
+            || self.precedence != other.precedence
+            || self.recovery_state != other.recovery_state
+        {
+            return false;
+        }
+        // The interner ensures equal recovery sets share one `Rc`, so
+        // pointer equality is the contract-correct comparison and matches the
+        // pointer-only `Hash` impl below. The debug-only assertion fires if a
+        // future caller forgets to intern an `Rc<BTreeSet<i32>>` before it
+        // ends up in a key, turning a silent `Hash`/`Eq` divergence (and the
+        // unbounded recursion / memo misses it would cause) into a loud test
+        // failure.
+        debug_assert!(
+            Rc::ptr_eq(&self.recovery_symbols, &other.recovery_symbols)
+                || self.recovery_symbols != other.recovery_symbols,
+            "FastRecognizeKey: recovery_symbols compared by content; interner invariant violated",
+        );
+        Rc::ptr_eq(&self.recovery_symbols, &other.recovery_symbols)
     }
 }
 
@@ -1453,6 +1480,7 @@ where
 
         let start_index = self.current_visible_index();
         self.clear_prediction_diagnostics();
+        self.reset_recovery_symbol_caches();
         let first_pass = self.fast_recognize_top(atn, start_state, stop_state, start_index);
         let needs_retry = match &first_pass {
             // The FIRST-set prefilter trims speculative rule calls that can't
@@ -1702,6 +1730,7 @@ where
 
         let start_index = self.current_visible_index();
         self.clear_prediction_diagnostics();
+        self.reset_recovery_symbol_caches();
         let init_action_rules = init_action_rules.iter().copied().collect::<BTreeSet<_>>();
         let mut visiting = BTreeSet::new();
         let mut memo = BTreeMap::new();
@@ -3951,6 +3980,24 @@ where
         self.reported_prediction_diagnostics.clear();
     }
 
+    /// Drops the per-parse `recovery_symbols` interner contents.
+    ///
+    /// `intern_recovery_symbols` accepts every union of state-expected and
+    /// inherited recovery symbols a parse encounters, so a long-lived parser
+    /// processing many inputs (especially malformed ones, which explore wide
+    /// recovery sets) would otherwise grow its interner monotonically and pin
+    /// every recovery `Rc<BTreeSet<i32>>` for the rest of the process.
+    ///
+    /// `state_expected_cache` is cleared in lockstep because its values are
+    /// produced through `intern_recovery_symbols`; keeping it without the
+    /// interner would let a stale interned `Rc` outlive the matching map
+    /// entry, breaking the identity invariant that makes
+    /// `FastRecognizeKey`'s pointer-based hashing safe.
+    fn reset_recovery_symbol_caches(&mut self) {
+        self.recovery_symbols_intern.clear();
+        self.state_expected_cache.clear();
+    }
+
     /// Buffers ANTLR-style diagnostic-listener messages for decision states
     /// where multiple clean alternatives survive full-context recognition.
     fn record_prediction_diagnostics(
@@ -4809,6 +4856,22 @@ mod tests {
     use crate::token::{CommonToken, HIDDEN_CHANNEL, Token};
     use crate::token_stream::CommonTokenStream;
     use crate::vocabulary::Vocabulary;
+
+    #[test]
+    fn fx_hasher_write_matches_typed_methods_for_full_words() {
+        // PR #5 review (Greptile P2): future key types whose `Hash` impl funnels
+        // bytes through `Hasher::write` (e.g. `String`, `[u8; 8]`, slice-typed
+        // fields) must hash the same as the typed methods, otherwise an
+        // `FxHashMap` keyed on such a type silently disagrees with itself
+        // depending on which entry point the caller used. Verify the
+        // little-endian word equivalence this PR established.
+        let value: u64 = 0x0102_0304_0506_0708;
+        let mut typed = FxHasher::default();
+        typed.write_u64(value);
+        let mut bytewise = FxHasher::default();
+        bytewise.write(&value.to_le_bytes());
+        assert_eq!(typed.finish(), bytewise.finish());
+    }
 
     #[derive(Debug)]
     struct Source {
