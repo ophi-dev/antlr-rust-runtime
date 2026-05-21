@@ -3566,6 +3566,12 @@ where
     /// The fast recognizer consults this set on every state visit through
     /// `next_recovery_context`; the underlying DFS is a pure function of the
     /// ATN, so caching the `Rc` lets clones reduce to a reference bump.
+    ///
+    /// Caching is layered through `intern_recovery_symbols` so two ATN states
+    /// with the same expected-symbol set share one `Rc`. That invariant is
+    /// what lets `FastRecognizeKey` hash on `recovery_symbols` by pointer
+    /// without violating the `Hash`/`Eq` contract — `recovery_symbols` is
+    /// always interned before it ends up in a key.
     fn cached_state_expected_symbols(
         &mut self,
         atn: &Atn,
@@ -3575,11 +3581,7 @@ where
             return Rc::clone(cached);
         }
         let symbols = state_expected_symbols(atn, state_number);
-        let entry = if symbols.is_empty() {
-            Rc::clone(&self.empty_recovery_symbols)
-        } else {
-            Rc::new(symbols)
-        };
+        let entry = self.intern_recovery_symbols(symbols);
         self.state_expected_cache
             .insert(state_number, Rc::clone(&entry));
         entry
@@ -3593,6 +3595,13 @@ where
 
     /// Returns the interned `Rc` form of a `recovery_symbols` set so the fast
     /// recognizer can hash and compare keys by pointer.
+    ///
+    /// Every `Rc<BTreeSet<i32>>` that flows into a `FastRecognizeKey` (or its
+    /// `recovery_symbols` Rc-clone) must come from this method or the empty
+    /// singleton; otherwise two content-equal `Rc`s could end up with
+    /// different `Rc::as_ptr` values, and the pointer-keyed hash on
+    /// `FastRecognizeKey` would silently disagree with the contract-equality
+    /// check.
     fn intern_recovery_symbols(&mut self, set: BTreeSet<i32>) -> Rc<BTreeSet<i32>> {
         if set.is_empty() {
             return Rc::clone(&self.empty_recovery_symbols);
