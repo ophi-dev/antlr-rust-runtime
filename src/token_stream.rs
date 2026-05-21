@@ -212,6 +212,38 @@ where
         self.lt(offset).map_or(TOKEN_EOF, Token::token_type)
     }
 
+    /// Returns the token type at a buffered absolute index, fetching from the
+    /// source on demand. Past-EOF reads are reported as `TOKEN_EOF` so the
+    /// caller does not need to special-case the buffer's stop. The cursor is
+    /// not modified, which lets hot speculative loops avoid the seek
+    /// round-trip when they only need lookahead types.
+    pub fn token_type_at_index(&mut self, index: usize) -> i32 {
+        self.sync(index);
+        self.tokens
+            .get(index)
+            .map_or(TOKEN_EOF, Token::token_type)
+    }
+
+    /// Returns the next parser-visible token index after consuming the token
+    /// at `index`, skipping hidden-channel tokens. The parser's stream cursor
+    /// is not modified. Used by speculative recognition that simulates token
+    /// consumption thousands of times without committing it.
+    pub fn next_visible_after(&mut self, index: usize) -> usize {
+        let mut next = index + 1;
+        loop {
+            self.sync(next);
+            match self.tokens.get(next) {
+                Some(token)
+                    if token.token_type() != TOKEN_EOF && token.channel() != self.channel =>
+                {
+                    next += 1;
+                    continue;
+                }
+                _ => return next,
+            }
+        }
+    }
+
     pub fn text(&mut self, start: usize, stop: usize) -> String {
         self.sync(stop);
         if start > stop || start >= self.tokens.len() {

@@ -2,11 +2,18 @@
 //! prints the parse tree in the same diff-friendly form as
 //! `tests/kotlin-parity/dump_python.py`. The smoke workflow compares the two
 //! outputs to enforce parser-tree parity with antlr4-python3-runtime.
+//!
+//! `Instant::now` is used purely for `--time` perf measurements at the request
+//! of a developer running the dumper interactively; the parity comparison
+//! itself remains deterministic.
+#![allow(clippy::disallowed_methods)]
+
 use std::env;
 use std::fs;
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::time::Instant;
 
 use antlr4_runtime::{CommonTokenStream, InputStream, ParseTree};
 
@@ -46,10 +53,26 @@ fn main() -> ExitCode {
     let mut args = env::args().skip(1);
     let mut input: Option<PathBuf> = None;
     let mut output: Option<PathBuf> = None;
+    let mut iters: usize = 1;
+    let mut report_time = false;
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--input" => input = args.next().map(PathBuf::from),
             "--output" => output = args.next().map(PathBuf::from),
+            "--iters" => {
+                let Some(value) = args.next() else {
+                    eprintln!("missing value for --iters <n>");
+                    return ExitCode::from(2);
+                };
+                match value.parse::<usize>() {
+                    Ok(parsed) if parsed >= 1 => iters = parsed,
+                    _ => {
+                        eprintln!("invalid --iters value: {value} (expected integer >= 1)");
+                        return ExitCode::from(2);
+                    }
+                }
+            }
+            "--time" => report_time = true,
             other => {
                 eprintln!("unknown argument: {other}");
                 return ExitCode::from(2);
@@ -68,15 +91,37 @@ fn main() -> ExitCode {
         }
     };
 
-    let lexer = KotlinLexer::new(InputStream::new(&src));
-    let tokens = CommonTokenStream::new(lexer);
-    let mut parser = KotlinParser::new(tokens);
-    let tree = match parser.kotlin_file() {
-        Ok(tree) => tree,
-        Err(err) => {
-            eprintln!("parse failed: {err}");
-            return ExitCode::from(1);
-        }
+    let mut last_tree = None;
+    let mut min_us: u128 = u128::MAX;
+    let mut total_us: u128 = 0;
+    for _ in 0..iters {
+        let lexer = KotlinLexer::new(InputStream::new(&src));
+        let tokens = CommonTokenStream::new(lexer);
+        let mut parser = KotlinParser::new(tokens);
+        let started = Instant::now();
+        let tree = match parser.kotlin_file() {
+            Ok(tree) => tree,
+            Err(err) => {
+                eprintln!("parse failed: {err}");
+                return ExitCode::from(1);
+            }
+        };
+        let elapsed = started.elapsed().as_micros();
+        min_us = min_us.min(elapsed);
+        total_us += elapsed;
+        last_tree = Some(tree);
+    }
+    if report_time {
+        let avg_us = total_us / iters as u128;
+        eprintln!(
+            "parse: iters={iters} min={:.3}ms avg={:.3}ms",
+            min_us as f64 / 1000.0,
+            avg_us as f64 / 1000.0,
+        );
+    }
+    let Some(tree) = last_tree else {
+        eprintln!("no parse iterations produced a tree");
+        return ExitCode::from(1);
     };
 
     let rule_names: Vec<String> = KotlinParser::<KotlinLexer<InputStream>>::metadata()

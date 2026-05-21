@@ -1,16 +1,16 @@
 [package]
 name = "antlr-rust-runtime"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.95"
-description = "Clean-room Rust runtime and target support for ANTLR v4 generated parsers"
+description = "High performance Rust runtime and target support for ANTLR v4 generated parsers"
 repository = "https://github.com/ophidiarium/antlr-rust-runtime"
 homepage = "https://github.com/ophidiarium/antlr-rust-runtime"
 documentation = "https://docs.rs/antlr-rust-runtime"
 readme = "README.md"
 license = "BSD-3-Clause"
 keywords = ["antlr", "antlr4", "parser", "lexer", "runtime"]
-categories = ["parser-implementations", "development-tools"]
+categories = ["parser-implementations", "development-tools", "parsing"]
 
 [lib]
 name = "antlr4_runtime"
