@@ -1,0 +1,70 @@
+name: Kotlin Parse-Tree Parity
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  ANTLR_VERSION: 4.13.2
+  ANTLR4_JAR: /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar
+  GRAMMARS_V4: /tmp/grammars-v4
+  # Pin grammars-v4 to a known commit so unrelated upstream grammar tweaks
+  # cannot turn the parity check into a flake.
+  GRAMMARS_V4_SHA: 284602b3f23ca54dc30778204ab7ae9e969145e9
+  CARGO_TERM_COLOR: always
+
+jobs:
+  kotlin-parity:
+    name: Kotlin Parser Parity
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install stable Rust
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+
+      - name: Install Java
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Install antlr4-python3-runtime
+        run: pip install "antlr4-python3-runtime==${ANTLR_VERSION}"
+
+      - name: Download ANTLR jar
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/antlr-cleanroom/tools
+          curl --fail --location --output "${ANTLR4_JAR}" \
+            "https://www.antlr.org/download/antlr-${ANTLR_VERSION}-complete.jar"
+
+      - name: Fetch antlr/grammars-v4 Kotlin grammar
+        run: |
+          set -euxo pipefail
+          git clone --filter=blob:none --no-checkout \
+            https://github.com/antlr/grammars-v4.git "${GRAMMARS_V4}"
+          git -C "${GRAMMARS_V4}" sparse-checkout init --cone
+          git -C "${GRAMMARS_V4}" sparse-checkout set kotlin/kotlin
+          git -C "${GRAMMARS_V4}" checkout "${GRAMMARS_V4_SHA}"
+
+      - name: Run Kotlin parity smoke
+        run: tests/kotlin-parity/run.sh

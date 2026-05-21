@@ -37,4 +37,4 @@ Generated code should avoid global mutable state except for immutable metadata a
 
 The runtime keeps generated-code shape stable by putting grammar execution behind metadata-backed ATN simulators. Generated lexers/parsers provide static names, vocabulary, and serialized ATN data; the runtime owns deserialization, token recognition, parser rule recognition, and shared stream/tree behavior.
 
-Current parser recognition is intentionally separate from final parse-tree shaping. It validates token sequences through the parser ATN and returns a rule node over the consumed token interval; nested rule contexts, listener callbacks during parsing, adaptive prediction caches, and ANTLR-compatible error recovery are the next compatibility layers.
+Parser recognition emits a parse tree whose shape mirrors ANTLR's generated targets: each grammar rule invocation produces a nested rule context, with tokens, error tokens, and missing tokens attached at their grammar position. Listener callbacks during parsing, adaptive prediction caches, and the broader ANTLR error-recovery surface are the next compatibility layers.
