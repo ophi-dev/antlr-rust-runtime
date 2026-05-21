@@ -1,5 +1,62 @@
-use std::collections::{BTreeMap, BTreeSet};
+// `HashMap`/`HashSet` here are used as parser-internal caches keyed on
+// stable ATN coordinates (state numbers, token indices). They're never
+// iterated externally, so the project's `disallowed_types` lint (which
+// guards against non-deterministic iteration order leaking out) does not
+// apply to these uses.
+#[allow(clippy::disallowed_types)]
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::hash::{BuildHasherDefault, Hash, Hasher};
 use std::rc::Rc;
+
+/// Rotate constant copied from rustc-hash / `FxHash`. The default
+/// `RandomState` hasher seeds itself from the OS RNG and runs `SipHash` on
+/// every key, which dominates `recognize_state_fast`'s memo lookups;
+/// `FxHasher` is a streaming integer hasher with near-zero per-call overhead
+/// and matches the access pattern of small integer keys that the parser memo
+/// uses.
+#[derive(Clone, Copy, Default)]
+struct FxHasher {
+    hash: u64,
+}
+
+const FX_ROT: u32 = 5;
+const FX_SEED: u64 = 0x51_7c_c1_b7_27_22_0a_95;
+
+impl Hasher for FxHasher {
+    #[inline]
+    fn write(&mut self, bytes: &[u8]) {
+        for byte in bytes {
+            self.hash =
+                (self.hash.rotate_left(FX_ROT) ^ u64::from(*byte)).wrapping_mul(FX_SEED);
+        }
+    }
+    #[inline]
+    fn write_u64(&mut self, value: u64) {
+        self.hash = (self.hash.rotate_left(FX_ROT) ^ value).wrapping_mul(FX_SEED);
+    }
+    #[inline]
+    fn write_usize(&mut self, value: usize) {
+        self.write_u64(value as u64);
+    }
+    #[inline]
+    fn write_u32(&mut self, value: u32) {
+        self.write_u64(u64::from(value));
+    }
+    #[inline]
+    fn write_i32(&mut self, value: i32) {
+        self.write_u64(u64::from(i32::cast_unsigned(value)));
+    }
+    #[inline]
+    fn finish(&self) -> u64 {
+        self.hash
+    }
+}
+
+type FxBuildHasher = BuildHasherDefault<FxHasher>;
+#[allow(clippy::disallowed_types)]
+type FxHashMap<K, V> = HashMap<K, V, FxBuildHasher>;
+#[allow(clippy::disallowed_types)]
+type FxHashSet<K> = HashSet<K, FxBuildHasher>;
 
 use crate::atn::{Atn, AtnState, AtnStateKind, Transition};
 use crate::errors::AntlrError;
@@ -264,6 +321,26 @@ pub struct BaseParser<S> {
     /// every rule transition; without caching the same DFS would repeat for
     /// every speculative path that visits the same rule.
     first_set_cache: FirstSetCache,
+    /// Per-state expected-symbol cache. `state_expected_symbols` walks every
+    /// epsilon-reachable consuming transition and shows up as a hot loop in
+    /// `next_recovery_context` and recovery diagnostics on long inputs.
+    /// Keying on `state_number` and sharing the result through `Rc` removes
+    /// repeated DFS plus per-call `BTreeSet` allocations.
+    state_expected_cache: FxHashMap<usize, Rc<BTreeSet<i32>>>,
+    /// Per-parser interner for `recovery_symbols` sets. Speculative recursion
+    /// threads the same epsilon-recovery context through hundreds of follow
+    /// states; sharing `Rc<BTreeSet<i32>>` instances lets clones reduce to a
+    /// reference bump and lets the memo key hash by pointer.
+    recovery_symbols_intern: FxHashMap<Rc<BTreeSet<i32>>, Rc<BTreeSet<i32>>>,
+    /// Per-decision-state look-1 cache. Built lazily so grammars that rarely
+    /// touch a given decision state still pay no upfront cost; once cached,
+    /// the recognizer prunes alternatives whose look-1 cannot accept the
+    /// current lookahead, letting common SLL decisions reduce to a single
+    /// transition walk instead of a full speculative fan-out.
+    decision_lookahead_cache: FxHashMap<usize, Rc<DecisionLookahead>>,
+    /// Empty recovery-symbols singleton used as the default at rule entry and
+    /// after token consumption.
+    empty_recovery_symbols: Rc<BTreeSet<i32>>,
     /// Whether the fast recognizer's FIRST-set prefilter is enabled. The
     /// prefilter trims speculative rule calls whose called rule cannot
     /// match the current lookahead, but it also bypasses single-token
@@ -536,8 +613,35 @@ struct FirstSet {
 /// Per-parser cache of FIRST sets computed during recognition. The fast path
 /// consults this on every speculative `Transition::Rule` encounter, so the
 /// computation must amortize across all of those calls — the FIRST set is a
-/// pure function of the ATN, not of the input position.
-type FirstSetCache = BTreeMap<(usize, usize), FirstSet>;
+/// pure function of the ATN, not of the input position. Cached entries are
+/// shared via `Rc` so the recognizer never deep-copies the underlying
+/// `BTreeSet<i32>`.
+type FirstSetCache = FxHashMap<(usize, usize), Rc<FirstSet>>;
+
+/// Per-decision-state cached look-1 sets for each outgoing transition.
+///
+/// At a multi-alternative state, the recognizer would otherwise speculatively
+/// walk every alternative even when only one can possibly accept the current
+/// lookahead. Caching the look-1 set per transition lets us prune the
+/// non-viable transitions before recursing — the same SLL prediction trick
+/// the reference ANTLR runtime uses, just expressed as a `(state, lookahead)`
+/// filter rather than a full DFA.
+#[derive(Debug, Default)]
+struct DecisionLookahead {
+    transitions: Vec<TransitionLookSet>,
+}
+
+/// Look-1 information for one outgoing transition.
+///
+/// `nullable` mirrors `FirstSet::nullable` and is true when the transition
+/// can reach the rule stop without consuming a token (e.g. an empty alt).
+/// Nullable transitions cannot be pruned: they may still be the right path
+/// when the lookahead consumes nothing further inside the current rule.
+#[derive(Clone, Debug, Default)]
+struct TransitionLookSet {
+    symbols: BTreeSet<i32>,
+    nullable: bool,
+}
 
 /// Mutable bookkeeping shared across one FIRST-set computation. Bundling the
 /// rarely-touched fields keeps the recursive helpers below the function-arity
@@ -553,12 +657,18 @@ struct FirstSetCtx<'a> {
 /// recursive rules cannot stack-overflow because callers in flight are tracked
 /// in `ctx.in_progress`; revisits return without recursing, and the partial
 /// result is cached only when no cycle was detected during its computation.
+///
+/// On a cache hit the returned `Rc` is shared with the recognizer so subsequent
+/// rule-call probes only pay a reference bump.
 fn rule_first_set(
     atn: &Atn,
     target: usize,
     rule_stop_state: usize,
     cache: &mut FirstSetCache,
-) -> FirstSet {
+) -> Rc<FirstSet> {
+    if let Some(cached) = cache.get(&(target, rule_stop_state)) {
+        return Rc::clone(cached);
+    }
     let mut ctx = FirstSetCtx {
         cache,
         in_progress: BTreeSet::new(),
@@ -572,16 +682,16 @@ fn rule_first_set_cached(
     target: usize,
     rule_stop_state: usize,
     ctx: &mut FirstSetCtx<'_>,
-) -> FirstSet {
+) -> Rc<FirstSet> {
     let key = (target, rule_stop_state);
     if let Some(cached) = ctx.cache.get(&key) {
-        return cached.clone();
+        return Rc::clone(cached);
     }
     if !ctx.in_progress.insert(key) {
         // Cycle: a caller above is already computing this entry. Return an
         // empty FIRST set; that caller's traversal supplies the contributions
         // from the rule's other alternatives.
-        return FirstSet::default();
+        return Rc::new(FirstSet::default());
     }
     let saved_hit_cycle = ctx.hit_cycle;
     ctx.hit_cycle = false;
@@ -589,11 +699,83 @@ fn rule_first_set_cached(
     let mut visited = BTreeSet::new();
     rule_first_set_inner(atn, target, rule_stop_state, ctx, &mut visited, &mut first);
     ctx.in_progress.remove(&key);
+    let entry = Rc::new(first);
     if !ctx.hit_cycle {
-        ctx.cache.insert(key, first.clone());
+        ctx.cache.insert(key, Rc::clone(&entry));
     }
     ctx.hit_cycle = saved_hit_cycle || ctx.hit_cycle;
-    first
+    entry
+}
+
+/// Returns the look-1 set for traversing `transition` while still inside the
+/// current `rule_stop_state`. Used by the multi-alternative prefilter, which
+/// prunes transitions whose look-1 cannot accept the current lookahead.
+fn transition_first_set(
+    atn: &Atn,
+    transition: &Transition,
+    rule_stop_state: usize,
+    cache: &mut FirstSetCache,
+) -> TransitionLookSet {
+    match transition {
+        Transition::Atom { label, .. } => TransitionLookSet {
+            symbols: BTreeSet::from([*label]),
+            nullable: false,
+        },
+        Transition::Range { start, stop, .. } => TransitionLookSet {
+            symbols: (*start..=*stop).collect(),
+            nullable: false,
+        },
+        Transition::Set { set, .. } => TransitionLookSet {
+            symbols: set.ranges()
+                .iter()
+                .flat_map(|(start, stop)| *start..=*stop)
+                .collect(),
+            nullable: false,
+        },
+        Transition::NotSet { set, .. } => {
+            let max = atn.max_token_type();
+            TransitionLookSet {
+                symbols: (1..=max).filter(|symbol| !set.contains(*symbol)).collect(),
+                nullable: false,
+            }
+        }
+        Transition::Wildcard { .. } => TransitionLookSet {
+            symbols: (1..=atn.max_token_type()).collect(),
+            nullable: false,
+        },
+        Transition::Epsilon { target }
+        | Transition::Action { target, .. }
+        | Transition::Predicate { target, .. }
+        | Transition::Precedence { target, .. } => {
+            // Walk the closure starting at `target` until a consuming transition
+            // is reached or the rule stop state is hit.
+            let first = rule_first_set(atn, *target, rule_stop_state, cache);
+            TransitionLookSet {
+                symbols: first.symbols.clone(),
+                nullable: first.nullable,
+            }
+        }
+        Transition::Rule {
+            target,
+            rule_index,
+            follow_state,
+            ..
+        } => {
+            let Some(child_stop) = atn.rule_to_stop_state().get(*rule_index).copied() else {
+                return TransitionLookSet::default();
+            };
+            let child = rule_first_set(atn, *target, child_stop, cache);
+            let mut symbols = child.symbols.clone();
+            let nullable = if child.nullable {
+                let follow = rule_first_set(atn, *follow_state, rule_stop_state, cache);
+                symbols.extend(follow.symbols.iter().copied());
+                follow.nullable
+            } else {
+                false
+            };
+            TransitionLookSet { symbols, nullable }
+        }
+    }
 }
 
 fn rule_first_set_inner(
@@ -641,7 +823,7 @@ fn rule_first_set_inner(
                     ctx.hit_cycle = true;
                 }
                 let child = rule_first_set_cached(atn, *target, child_stop, ctx);
-                first.symbols.extend(child.symbols);
+                first.symbols.extend(child.symbols.iter().copied());
                 if child.nullable {
                     rule_first_set_inner(atn, *follow_state, rule_stop_state, ctx, visited, first);
                 }
@@ -737,6 +919,64 @@ fn recovery_expected_symbols(
     let mut symbols = state_expected_symbols(atn, state_number);
     symbols.extend(inherited.iter().copied());
     symbols
+}
+
+/// Fast-recognizer variant of [`next_recovery_context`] that reuses the
+/// parser's cached state-expected-symbols sets and the inherited `Rc`
+/// without copying when the state cannot widen recovery.
+fn fast_next_recovery_context<S>(
+    parser: &mut BaseParser<S>,
+    atn: &Atn,
+    state: &AtnState,
+    inherited: &Rc<BTreeSet<i32>>,
+    inherited_state: Option<usize>,
+) -> (Rc<BTreeSet<i32>>, Option<usize>)
+where
+    S: TokenSource,
+{
+    if state.transitions.len() <= 1 {
+        return (Rc::clone(inherited), inherited_state);
+    }
+    let state_symbols = parser.cached_state_expected_symbols(atn, state.state_number);
+    if state_symbols.is_empty() {
+        return (Rc::clone(inherited), inherited_state);
+    }
+    if inherited.is_empty() {
+        return (state_symbols, Some(state.state_number));
+    }
+    if Rc::ptr_eq(&state_symbols, inherited) {
+        return (state_symbols, Some(state.state_number));
+    }
+    let mut combined = (*state_symbols).clone();
+    combined.extend(inherited.iter().copied());
+    (parser.intern_recovery_symbols(combined), Some(state.state_number))
+}
+
+/// Fast-recognizer variant of [`recovery_expected_symbols`] that reuses the
+/// cached state-expected-symbols and avoids cloning when no widening is
+/// needed.
+fn fast_recovery_expected_symbols<S>(
+    parser: &mut BaseParser<S>,
+    atn: &Atn,
+    state_number: usize,
+    inherited: &Rc<BTreeSet<i32>>,
+) -> Rc<BTreeSet<i32>>
+where
+    S: TokenSource,
+{
+    let cached = parser.cached_state_expected_symbols(atn, state_number);
+    if inherited.is_empty() {
+        return cached;
+    }
+    if cached.is_empty() {
+        return Rc::clone(inherited);
+    }
+    if Rc::ptr_eq(&cached, inherited) {
+        return cached;
+    }
+    let mut combined = (*cached).clone();
+    combined.extend(inherited.iter().copied());
+    parser.intern_recovery_symbols(combined)
 }
 
 /// Applies generated integer-member side effects to one speculative path.
@@ -895,11 +1135,14 @@ struct FastRecognizeRequest {
     decision_start_index: Option<usize>,
     precedence: i32,
     depth: usize,
-    recovery_symbols: BTreeSet<i32>,
+    recovery_symbols: Rc<BTreeSet<i32>>,
     recovery_state: Option<usize>,
 }
 
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+/// Memo key for the fast recognizer. `recovery_symbols` is interned by the
+/// parser, so equal sets share one `Rc` and the key hashes/compares on a
+/// pointer instead of walking the full `BTreeSet`.
+#[derive(Clone, Debug)]
 struct FastRecognizeKey {
     state_number: usize,
     stop_state: usize,
@@ -907,27 +1150,58 @@ struct FastRecognizeKey {
     rule_start_index: usize,
     decision_start_index: Option<usize>,
     precedence: i32,
-    recovery_symbols: BTreeSet<i32>,
+    recovery_symbols: Rc<BTreeSet<i32>>,
     recovery_state: Option<usize>,
+}
+
+impl PartialEq for FastRecognizeKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.state_number == other.state_number
+            && self.stop_state == other.stop_state
+            && self.index == other.index
+            && self.rule_start_index == other.rule_start_index
+            && self.decision_start_index == other.decision_start_index
+            && self.precedence == other.precedence
+            && self.recovery_state == other.recovery_state
+            && (Rc::ptr_eq(&self.recovery_symbols, &other.recovery_symbols)
+                || self.recovery_symbols == other.recovery_symbols)
+    }
+}
+
+impl Eq for FastRecognizeKey {}
+
+impl Hash for FastRecognizeKey {
+    fn hash<H: Hasher>(&self, hasher: &mut H) {
+        self.state_number.hash(hasher);
+        self.stop_state.hash(hasher);
+        self.index.hash(hasher);
+        self.rule_start_index.hash(hasher);
+        self.decision_start_index.hash(hasher);
+        self.precedence.hash(hasher);
+        self.recovery_state.hash(hasher);
+        // Interning makes equal sets share one allocation, so pointer identity
+        // is enough for hashing without walking the set.
+        (Rc::as_ptr(&self.recovery_symbols) as usize).hash(hasher);
+    }
 }
 
 struct FastRecoveryRequest<'a, 'b> {
     atn: &'a Atn,
     transition: &'a Transition,
-    expected_symbols: BTreeSet<i32>,
+    expected_symbols: Rc<BTreeSet<i32>>,
     target: usize,
     request: FastRecognizeRequest,
-    visiting: &'b mut BTreeSet<FastRecognizeKey>,
-    memo: &'b mut BTreeMap<FastRecognizeKey, Vec<FastRecognizeOutcome>>,
+    visiting: &'b mut FxHashSet<FastRecognizeKey>,
+    memo: &'b mut FxHashMap<FastRecognizeKey, Vec<FastRecognizeOutcome>>,
     expected: &'b mut ExpectedTokens,
 }
 
 struct FastCurrentTokenDeletionRequest<'a, 'b> {
     atn: &'a Atn,
-    expected_symbols: BTreeSet<i32>,
+    expected_symbols: Rc<BTreeSet<i32>>,
     request: FastRecognizeRequest,
-    visiting: &'b mut BTreeSet<FastRecognizeKey>,
-    memo: &'b mut BTreeMap<FastRecognizeKey, Vec<FastRecognizeOutcome>>,
+    visiting: &'b mut FxHashSet<FastRecognizeKey>,
+    memo: &'b mut FxHashMap<FastRecognizeKey, Vec<FastRecognizeOutcome>>,
     expected: &'b mut ExpectedTokens,
 }
 
@@ -1002,7 +1276,7 @@ where
 {
     /// Creates a parser base over a buffered token stream and recognizer
     /// metadata.
-    pub const fn new(input: CommonTokenStream<S>, data: RecognizerData) -> Self {
+    pub fn new(input: CommonTokenStream<S>, data: RecognizerData) -> Self {
         Self {
             input,
             data,
@@ -1013,7 +1287,11 @@ where
             reported_prediction_diagnostics: BTreeSet::new(),
             int_members: BTreeMap::new(),
             invoked_predicates: Vec::new(),
-            first_set_cache: BTreeMap::new(),
+            first_set_cache: FxHashMap::default(),
+            state_expected_cache: FxHashMap::default(),
+            recovery_symbols_intern: FxHashMap::default(),
+            decision_lookahead_cache: FxHashMap::default(),
+            empty_recovery_symbols: Rc::new(BTreeSet::new()),
             fast_first_set_prefilter: true,
         }
     }
@@ -1174,9 +1452,10 @@ where
         stop_state: usize,
         start_index: usize,
     ) -> Result<(FastRecognizeOutcome, ExpectedTokens), ExpectedTokens> {
-        let mut visiting = BTreeSet::new();
-        let mut memo = BTreeMap::new();
+        let mut visiting = FxHashSet::default();
+        let mut memo = FxHashMap::default();
         let mut expected = ExpectedTokens::default();
+        let empty_recovery = self.empty_recovery_symbols();
         let outcomes = self.recognize_state_fast(
             atn,
             FastRecognizeRequest {
@@ -1187,7 +1466,7 @@ where
                 decision_start_index: None,
                 precedence: 0,
                 depth: 0,
-                recovery_symbols: BTreeSet::new(),
+                recovery_symbols: empty_recovery,
                 recovery_state: None,
             },
             &mut visiting,
@@ -1755,6 +2034,7 @@ where
             return Vec::new();
         };
         let after_next = self.consume_index(next_index, next_symbol);
+        let empty_recovery = self.empty_recovery_symbols();
         self.recognize_state_fast(
             atn,
             FastRecognizeRequest {
@@ -1765,7 +2045,7 @@ where
                 decision_start_index,
                 precedence,
                 depth: depth + 1,
-                recovery_symbols: BTreeSet::new(),
+                recovery_symbols: empty_recovery,
                 recovery_state: None,
             },
             visiting,
@@ -1813,7 +2093,7 @@ where
             depth,
             ..
         } = request;
-        let follow_symbols = state_expected_symbols(atn, transition.target());
+        let follow_symbols = self.cached_state_expected_symbols(atn, transition.target());
         let Some((diagnostic, token_type, text)) = self.single_token_insertion(
             transition,
             index,
@@ -1823,6 +2103,7 @@ where
         ) else {
             return Vec::new();
         };
+        let empty_recovery = self.empty_recovery_symbols();
         self.recognize_state_fast(
             atn,
             FastRecognizeRequest {
@@ -1833,7 +2114,7 @@ where
                 decision_start_index,
                 precedence,
                 depth: depth + 1,
-                recovery_symbols: BTreeSet::new(),
+                recovery_symbols: empty_recovery,
                 recovery_state: None,
             },
             visiting,
@@ -1899,8 +2180,8 @@ where
         &mut self,
         atn: &Atn,
         request: FastRecognizeRequest,
-        visiting: &mut BTreeSet<FastRecognizeKey>,
-        memo: &mut BTreeMap<FastRecognizeKey, Vec<FastRecognizeOutcome>>,
+        visiting: &mut FxHashSet<FastRecognizeKey>,
+        memo: &mut FxHashMap<FastRecognizeKey, Vec<FastRecognizeOutcome>>,
         expected: &mut ExpectedTokens,
     ) -> Vec<FastRecognizeOutcome> {
         let FastRecognizeRequest {
@@ -1932,7 +2213,7 @@ where
             rule_start_index,
             decision_start_index,
             precedence,
-            recovery_symbols: recovery_symbols.clone(),
+            recovery_symbols: Rc::clone(&recovery_symbols),
             recovery_state,
         };
         if let Some(outcomes) = memo.get(&key) {
@@ -1954,9 +2235,86 @@ where
             decision_start_index
         };
         let (epsilon_recovery_symbols, epsilon_recovery_state) =
-            next_recovery_context(atn, state, &recovery_symbols, recovery_state);
-        let mut outcomes = Vec::new();
-        for transition in &state.transitions {
+            fast_next_recovery_context(self, atn, state, &recovery_symbols, recovery_state);
+
+        // Lookahead-based pruning. At a multi-alternative state we cache the
+        // look-1 set of every outgoing transition; on visit we keep only the
+        // transitions whose look-1 can accept the current lookahead (or that
+        // can be reached without consuming and so could legitimately match a
+        // shorter input). This is the main speedup vs. blind speculative
+        // recursion: it lets each visit fan out only to the alternatives that
+        // could possibly contribute a clean parse, mirroring the SLL phase of
+        // ANTLR's adaptive prediction.
+        //
+        // Pruning is skipped at:
+        //   * rule-start states (a child rule call may need every internal
+        //     transition to surface single-token recovery diagnostics that
+        //     ANTLR's reference parser emits at the rule's first consuming
+        //     transition; the FIRST-set retry path turns the prefilter off
+        //     entirely so let's keep this lightweight too),
+        //   * left-recursive precedence loops (the precedence transition's
+        //     gating is dynamic),
+        //   * states with too few alternatives to benefit.
+        let lookahead_filter = if state.transitions.len() > 1
+            && self.fast_first_set_prefilter
+            && !state.precedence_rule_decision
+            && state.kind != AtnStateKind::RuleStart
+        {
+            state.rule_index.and_then(|rule_index| {
+                atn.rule_to_stop_state().get(rule_index).copied()
+            }).map(|rule_stop| {
+                let symbol = self.token_type_at(index);
+                let entry = self.cached_decision_lookahead(atn, state, rule_stop);
+                (symbol, entry)
+            })
+        } else {
+            None
+        };
+        let lookahead_filter = lookahead_filter.as_ref();
+        let transition_count = state.transitions.len();
+        let mut outcomes = Vec::with_capacity(transition_count);
+        for (transition_index, transition) in state.transitions.iter().enumerate() {
+            // Apply the cached prefilter to non-consuming transitions only.
+            // Consuming transitions (Atom/Range/Set/NotSet/Wildcard) still need
+            // to go through the existing `matches` + recovery path so the
+            // recognizer can surface single-token deletion / insertion repairs
+            // and the ATN's expected-token sets to error diagnostics.
+            //
+            // For non-consuming transitions, skipping is safe as long as we
+            // mirror the existing Rule prefilter and surface the transition's
+            // FIRST set into the diagnostic accumulator. ANTLR's mismatch
+            // message lists the symbols this alternative would have accepted,
+            // so failing to record them would change error output for tests
+            // that depend on the message text.
+            let prune_non_consuming = matches!(
+                transition,
+                Transition::Epsilon { .. }
+                    | Transition::Action { .. }
+                    | Transition::Predicate { .. }
+                    | Transition::Rule { .. }
+                    | Transition::Precedence { .. }
+            );
+            if prune_non_consuming {
+                if let Some((symbol, entry)) = lookahead_filter {
+                    if let Some(set) = entry.transitions.get(transition_index) {
+                        if !set.symbols.contains(symbol) && !set.nullable {
+                            if !set.symbols.is_empty() {
+                                match expected.index {
+                                    Some(current) if index < current => {}
+                                    Some(current) if index == current => {
+                                        expected.symbols.extend(set.symbols.iter().copied());
+                                    }
+                                    _ => {
+                                        expected.index = Some(index);
+                                        expected.symbols.clone_from(&set.symbols);
+                                    }
+                                }
+                            }
+                            continue;
+                        }
+                    }
+                }
+            }
             match transition {
                 Transition::Epsilon { target }
                 | Transition::Predicate { target, .. }
@@ -1973,7 +2331,7 @@ where
                                 decision_start_index: next_decision_start_index,
                                 precedence,
                                 depth: depth + 1,
-                                recovery_symbols: epsilon_recovery_symbols.clone(),
+                                recovery_symbols: Rc::clone(&epsilon_recovery_symbols),
                                 recovery_state: epsilon_recovery_state,
                             },
                             visiting,
@@ -2008,7 +2366,7 @@ where
                                     decision_start_index: next_decision_start_index,
                                     precedence,
                                     depth: depth + 1,
-                                    recovery_symbols: epsilon_recovery_symbols.clone(),
+                                    recovery_symbols: Rc::clone(&epsilon_recovery_symbols),
                                     recovery_state: epsilon_recovery_state,
                                 },
                                 visiting,
@@ -2062,11 +2420,11 @@ where
                             match expected.index {
                                 Some(current) if index < current => {}
                                 Some(current) if index == current => {
-                                    expected.symbols.extend(first.symbols);
+                                    expected.symbols.extend(first.symbols.iter().copied());
                                 }
                                 _ => {
                                     expected.index = Some(index);
-                                    expected.symbols = first.symbols;
+                                    expected.symbols.clone_from(&first.symbols);
                                 }
                             }
                         }
@@ -2083,7 +2441,7 @@ where
                             decision_start_index: None,
                             precedence: *rule_precedence,
                             depth: depth + 1,
-                            recovery_symbols: epsilon_recovery_symbols.clone(),
+                            recovery_symbols: Rc::clone(&epsilon_recovery_symbols),
                             recovery_state: epsilon_recovery_state,
                         },
                         visiting,
@@ -2107,6 +2465,7 @@ where
                             stop_index: self.rule_stop_token_index(child_index, child_consumed_eof),
                             children: fold_fast_left_recursive_boundaries(child.nodes.to_vec()),
                         });
+                        let empty_recovery = self.empty_recovery_symbols();
                         outcomes.extend(
                             self.recognize_state_fast(
                                 atn,
@@ -2118,7 +2477,7 @@ where
                                     decision_start_index: next_decision_start_index,
                                     precedence,
                                     depth: depth + 1,
-                                    recovery_symbols: BTreeSet::new(),
+                                    recovery_symbols: empty_recovery,
                                     recovery_state: None,
                                 },
                                 visiting,
@@ -2145,6 +2504,7 @@ where
                     let symbol = self.token_type_at(index);
                     if transition.matches(symbol, 1, atn.max_token_type()) {
                         let next_index = self.consume_index(index, symbol);
+                        let empty_recovery = self.empty_recovery_symbols();
                         outcomes.extend(
                             self.recognize_state_fast(
                                 atn,
@@ -2156,7 +2516,7 @@ where
                                     decision_start_index: next_decision_start_index,
                                     precedence,
                                     depth: depth + 1,
-                                    recovery_symbols: BTreeSet::new(),
+                                    recovery_symbols: empty_recovery,
                                     recovery_state: None,
                                 },
                                 visiting,
@@ -2173,8 +2533,12 @@ where
                             }),
                         );
                     } else {
-                        let expected_symbols =
-                            recovery_expected_symbols(atn, state.state_number, &recovery_symbols);
+                        let expected_symbols = fast_recovery_expected_symbols(
+                            self,
+                            atn,
+                            state.state_number,
+                            &recovery_symbols,
+                        );
                         if expected_symbols.contains(&symbol) {
                             continue;
                         }
@@ -2184,7 +2548,7 @@ where
                             FastRecoveryRequest {
                                 atn,
                                 transition,
-                                expected_symbols: expected_symbols.clone(),
+                                expected_symbols: Rc::clone(&expected_symbols),
                                 target: *target,
                                 request: FastRecognizeRequest {
                                     state_number,
@@ -2194,7 +2558,7 @@ where
                                     decision_start_index,
                                     precedence,
                                     depth,
-                                    recovery_symbols: recovery_symbols.clone(),
+                                    recovery_symbols: Rc::clone(&recovery_symbols),
                                     recovery_state,
                                 },
                                 visiting,
@@ -2207,7 +2571,7 @@ where
                                 FastRecoveryRequest {
                                     atn,
                                     transition,
-                                    expected_symbols: expected_symbols.clone(),
+                                    expected_symbols: Rc::clone(&expected_symbols),
                                     target: *target,
                                     request: FastRecognizeRequest {
                                         state_number,
@@ -2217,7 +2581,7 @@ where
                                         decision_start_index,
                                         precedence,
                                         depth,
-                                        recovery_symbols: recovery_symbols.clone(),
+                                        recovery_symbols: Rc::clone(&recovery_symbols),
                                         recovery_state,
                                     },
                                     visiting,
@@ -2238,7 +2602,7 @@ where
                                     decision_start_index,
                                     precedence,
                                     depth,
-                                    recovery_symbols: recovery_symbols.clone(),
+                                    recovery_symbols: Rc::clone(&recovery_symbols),
                                     recovery_state,
                                 },
                                 visiting,
@@ -3160,10 +3524,89 @@ where
         .collect()
     }
 
-    /// Reads the token type at an absolute token-stream index.
+    /// Reads the token type at an absolute token-stream index without moving
+    /// the parser's stream cursor. The fast recognizer probes lookahead at
+    /// every state visit, so avoiding the seek round-trip is a measurable
+    /// hot-path win on long inputs.
     fn token_type_at(&mut self, index: usize) -> i32 {
-        self.input.seek(index);
-        self.input.la_token(1)
+        self.input.token_type_at_index(index)
+    }
+
+    /// Returns the cached `state_expected_symbols` set for an ATN state.
+    ///
+    /// The fast recognizer consults this set on every state visit through
+    /// `next_recovery_context`; the underlying DFS is a pure function of the
+    /// ATN, so caching the `Rc` lets clones reduce to a reference bump.
+    fn cached_state_expected_symbols(
+        &mut self,
+        atn: &Atn,
+        state_number: usize,
+    ) -> Rc<BTreeSet<i32>> {
+        if let Some(cached) = self.state_expected_cache.get(&state_number) {
+            return Rc::clone(cached);
+        }
+        let symbols = state_expected_symbols(atn, state_number);
+        let entry = if symbols.is_empty() {
+            Rc::clone(&self.empty_recovery_symbols)
+        } else {
+            Rc::new(symbols)
+        };
+        self.state_expected_cache
+            .insert(state_number, Rc::clone(&entry));
+        entry
+    }
+
+    /// Returns the parser's empty `recovery_symbols` singleton so callers can
+    /// share an `Rc` instead of allocating new `BTreeSet`s for the common case.
+    fn empty_recovery_symbols(&self) -> Rc<BTreeSet<i32>> {
+        Rc::clone(&self.empty_recovery_symbols)
+    }
+
+    /// Returns the interned `Rc` form of a `recovery_symbols` set so the fast
+    /// recognizer can hash and compare keys by pointer.
+    fn intern_recovery_symbols(&mut self, set: BTreeSet<i32>) -> Rc<BTreeSet<i32>> {
+        if set.is_empty() {
+            return Rc::clone(&self.empty_recovery_symbols);
+        }
+        let candidate = Rc::new(set);
+        match self.recovery_symbols_intern.get(&candidate) {
+            Some(existing) => Rc::clone(existing),
+            None => {
+                self.recovery_symbols_intern
+                    .insert(Rc::clone(&candidate), Rc::clone(&candidate));
+                candidate
+            }
+        }
+    }
+
+    /// Returns the cached look-1 entry for a decision state, computing it on
+    /// first use. Multi-alternative states are visited many times during
+    /// recognition; sharing the entry through `Rc` keeps the prefilter to one
+    /// hash lookup per visit.
+    fn cached_decision_lookahead(
+        &mut self,
+        atn: &Atn,
+        state: &AtnState,
+        rule_stop_state: usize,
+    ) -> Rc<DecisionLookahead> {
+        if let Some(cached) = self.decision_lookahead_cache.get(&state.state_number) {
+            return Rc::clone(cached);
+        }
+        let mut entry = DecisionLookahead {
+            transitions: Vec::with_capacity(state.transitions.len()),
+        };
+        for transition in &state.transitions {
+            entry.transitions.push(transition_first_set(
+                atn,
+                transition,
+                rule_stop_state,
+                &mut self.first_set_cache,
+            ));
+        }
+        let entry = Rc::new(entry);
+        self.decision_lookahead_cache
+            .insert(state.state_number, Rc::clone(&entry));
+        entry
     }
 
     /// Clones the visible token at an absolute token-stream index.
@@ -3365,12 +3808,15 @@ where
     ///
     /// EOF is not advanced by ANTLR token streams, so EOF transitions keep the
     /// index stable and rely on `consumed_eof` to record that EOF was matched.
+    /// The parser's stream cursor is left untouched: speculative recognition
+    /// reads ahead by absolute index, so paying for `seek` on every visited
+    /// state would dominate the hot path. Real consumption is committed by
+    /// `parse_atn_rule` via `seek` once a viable outcome is selected.
     fn consume_index(&mut self, index: usize, symbol: i32) -> usize {
-        self.input.seek(index);
-        if symbol != TOKEN_EOF {
-            self.consume();
+        if symbol == TOKEN_EOF {
+            return index;
         }
-        self.input.index()
+        self.input.next_visible_after(index)
     }
 
     /// Builds ANTLR's no-viable-alternative diagnostic for an ambiguous
@@ -3705,7 +4151,17 @@ fn fold_left_recursive_boundaries(nodes: Vec<RecognizedNode>) -> Vec<RecognizedN
 fn fold_fast_left_recursive_boundaries(
     nodes: Vec<Rc<FastRecognizedNode>>,
 ) -> Vec<Rc<FastRecognizedNode>> {
-    let mut folded: Vec<Rc<FastRecognizedNode>> = Vec::new();
+    // Most rule invocations have no left-recursive boundaries, so skip the
+    // fold work entirely when none are present. The boundary marker is only
+    // emitted at precedence-rule loop entries, which are rare relative to
+    // every rule call the recognizer fans out.
+    if !nodes
+        .iter()
+        .any(|node| matches!(node.as_ref(), FastRecognizedNode::LeftRecursiveBoundary { .. }))
+    {
+        return nodes;
+    }
+    let mut folded: Vec<Rc<FastRecognizedNode>> = Vec::with_capacity(nodes.len());
     for node in nodes {
         match node.as_ref() {
             FastRecognizedNode::LeftRecursiveBoundary { rule_index } => {
