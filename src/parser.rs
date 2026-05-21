@@ -264,6 +264,14 @@ pub struct BaseParser<S> {
     /// every rule transition; without caching the same DFS would repeat for
     /// every speculative path that visits the same rule.
     first_set_cache: FirstSetCache,
+    /// Whether the fast recognizer's FIRST-set prefilter is enabled. The
+    /// prefilter trims speculative rule calls whose called rule cannot
+    /// match the current lookahead, but it also bypasses single-token
+    /// insertion / deletion recovery that ANTLR runs at the rule's first
+    /// consuming transition. `parse_atn_rule` flips this off and retries
+    /// when the first pass produces no clean outcome so the runtime can
+    /// repair inputs the reference parser would have repaired.
+    fast_first_set_prefilter: bool,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -1006,6 +1014,7 @@ where
             int_members: BTreeMap::new(),
             invoked_predicates: Vec::new(),
             first_set_cache: BTreeMap::new(),
+            fast_first_set_prefilter: true,
         }
     }
 
@@ -1105,32 +1114,31 @@ where
 
         let start_index = self.current_visible_index();
         self.clear_prediction_diagnostics();
-        let mut visiting = BTreeSet::new();
-        let mut memo = BTreeMap::new();
-        let mut expected = ExpectedTokens::default();
-        let outcomes = self.recognize_state_fast(
-            atn,
-            FastRecognizeRequest {
-                state_number: start_state,
-                stop_state,
-                index: start_index,
-                rule_start_index: start_index,
-                decision_start_index: None,
-                precedence: 0,
-                depth: 0,
-                recovery_symbols: BTreeSet::new(),
-                recovery_state: None,
-            },
-            &mut visiting,
-            &mut memo,
-            &mut expected,
-        );
-        let Some(outcome) = select_best_fast_outcome(outcomes.into_iter(), self.prediction_mode)
-        else {
-            let error = self.recognition_error(rule_index, start_index, &expected);
-            report_token_source_errors(&self.input.drain_source_errors());
-            return Err(error);
-        };
+        let (outcome, _expected) =
+            match self.fast_recognize_top(atn, start_state, stop_state, start_index) {
+                Ok(ok) => ok,
+                Err(_) => {
+                    // Retry without the FIRST-set prefilter. The prefilter
+                    // speeds up the common path but bypasses single-token
+                    // insertion / deletion recovery inside child rules — when
+                    // the first pass produces nothing we redo the parse with
+                    // full speculative exploration so ANTLR-style recovery can
+                    // fire.
+                    self.fast_first_set_prefilter = false;
+                    let result =
+                        self.fast_recognize_top(atn, start_state, stop_state, start_index);
+                    self.fast_first_set_prefilter = true;
+                    match result {
+                        Ok(ok) => ok,
+                        Err(expected) => {
+                            let error =
+                                self.recognition_error(rule_index, start_index, &expected);
+                            report_token_source_errors(&self.input.drain_source_errors());
+                            return Err(error);
+                        }
+                    }
+                }
+            };
 
         report_parser_diagnostics(&self.prediction_diagnostics);
         report_parser_diagnostics(&outcome.diagnostics);
@@ -1151,6 +1159,43 @@ where
         self.input.seek(outcome.index);
 
         Ok(self.rule_node(context))
+    }
+
+    /// Runs the fast recognizer once from the rule's start state and returns
+    /// the best outcome or the per-attempt expected-token accumulator. The
+    /// caller flips `fast_first_set_prefilter` between calls when a retry is
+    /// needed, so the FIRST-set cache is left intact across both passes.
+    fn fast_recognize_top(
+        &mut self,
+        atn: &Atn,
+        start_state: usize,
+        stop_state: usize,
+        start_index: usize,
+    ) -> Result<(FastRecognizeOutcome, ExpectedTokens), ExpectedTokens> {
+        let mut visiting = BTreeSet::new();
+        let mut memo = BTreeMap::new();
+        let mut expected = ExpectedTokens::default();
+        let outcomes = self.recognize_state_fast(
+            atn,
+            FastRecognizeRequest {
+                state_number: start_state,
+                stop_state,
+                index: start_index,
+                rule_start_index: start_index,
+                decision_start_index: None,
+                precedence: 0,
+                depth: 0,
+                recovery_symbols: BTreeSet::new(),
+                recovery_state: None,
+            },
+            &mut visiting,
+            &mut memo,
+            &mut expected,
+        );
+        match select_best_fast_outcome(outcomes.into_iter(), self.prediction_mode) {
+            Some(outcome) => Ok((outcome, expected)),
+            None => Err(expected),
+        }
     }
 
     /// Converts a recognized fast-recognizer node into a public parse-tree
@@ -1997,14 +2042,20 @@ where
                     // explore every speculative rule call, producing exponential
                     // work on grammars with many epsilon-reachable rules. When
                     // the rule is non-nullable and its FIRST set excludes the
-                    // current lookahead, recursion can't find a clean path —
-                    // skip it but contribute its FIRST set to the diagnostic
-                    // expected-token accumulator so the rendered error keeps
-                    // matching ANTLR's reference behavior.
+                    // current lookahead, recursion can't find a clean path
+                    // *through this rule*. Skipping is only safe if some sibling
+                    // transition can still consume the lookahead — otherwise the
+                    // rule call is the sole continuation and must run so the
+                    // single-token insertion / deletion recovery inside the
+                    // called rule can fire (mirroring ANTLR's reference behavior
+                    // of conjuring a missing token at child-rule entry).
                     let symbol = self.token_type_at(index);
                     let first =
                         rule_first_set(atn, *target, child_stop, &mut self.first_set_cache);
-                    if !first.nullable && !first.symbols.contains(&symbol) {
+                    if self.fast_first_set_prefilter
+                        && !first.nullable
+                        && !first.symbols.contains(&symbol)
+                    {
                         if !first.symbols.is_empty() {
                             match expected.index {
                                 Some(current) if index < current => {}
