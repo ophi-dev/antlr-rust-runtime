@@ -258,6 +258,11 @@ pub struct BaseParser<S> {
     /// speculative recognition may revisit the same coordinate, so replay it
     /// once per parser instance.
     invoked_predicates: Vec<(usize, usize)>,
+    /// FIRST-set cache shared across all speculative rule-call lookups in a
+    /// single parser instance. The fast recognizer consults FIRST sets on
+    /// every rule transition; without caching the same DFS would repeat for
+    /// every speculative path that visits the same rule.
+    first_set_cache: FirstSetCache,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -454,15 +459,72 @@ fn state_expected_symbols(atn: &Atn, state_number: usize) -> BTreeSet<i32> {
 /// a consuming transition or reaches the rule's stop state. Used by the fast
 /// recognizer to skip rule alternatives whose first-consumed token cannot
 /// possibly match the current lookahead.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 struct FirstSet {
     symbols: BTreeSet<i32>,
     nullable: bool,
 }
 
-fn rule_first_set(atn: &Atn, target: usize, rule_stop_state: usize) -> FirstSet {
+/// Per-parser cache of FIRST sets computed during recognition. The fast path
+/// consults this on every speculative `Transition::Rule` encounter, so the
+/// computation must amortize across all of those calls — the FIRST set is a
+/// pure function of the ATN, not of the input position.
+type FirstSetCache = BTreeMap<(usize, usize), FirstSet>;
+
+/// Mutable bookkeeping shared across one FIRST-set computation. Bundling the
+/// rarely-touched fields keeps the recursive helpers below the function-arity
+/// lint and lets every nested call thread the same cache and cycle guards.
+struct FirstSetCtx<'a> {
+    cache: &'a mut FirstSetCache,
+    in_progress: BTreeSet<(usize, usize)>,
+    hit_cycle: bool,
+}
+
+/// Returns the FIRST set for the (rule entry, rule stop) pair, populating the
+/// shared cache and tolerating recursive nullable rule chains. Mutually
+/// recursive rules cannot stack-overflow because callers in flight are tracked
+/// in `ctx.in_progress`; revisits return without recursing, and the partial
+/// result is cached only when no cycle was detected during its computation.
+fn rule_first_set(
+    atn: &Atn,
+    target: usize,
+    rule_stop_state: usize,
+    cache: &mut FirstSetCache,
+) -> FirstSet {
+    let mut ctx = FirstSetCtx {
+        cache,
+        in_progress: BTreeSet::new(),
+        hit_cycle: false,
+    };
+    rule_first_set_cached(atn, target, rule_stop_state, &mut ctx)
+}
+
+fn rule_first_set_cached(
+    atn: &Atn,
+    target: usize,
+    rule_stop_state: usize,
+    ctx: &mut FirstSetCtx<'_>,
+) -> FirstSet {
+    let key = (target, rule_stop_state);
+    if let Some(cached) = ctx.cache.get(&key) {
+        return cached.clone();
+    }
+    if !ctx.in_progress.insert(key) {
+        // Cycle: a caller above is already computing this entry. Return an
+        // empty FIRST set; that caller's traversal supplies the contributions
+        // from the rule's other alternatives.
+        return FirstSet::default();
+    }
+    let saved_hit_cycle = ctx.hit_cycle;
+    ctx.hit_cycle = false;
     let mut first = FirstSet::default();
-    rule_first_set_inner(atn, target, rule_stop_state, &mut BTreeSet::new(), &mut first);
+    let mut visited = BTreeSet::new();
+    rule_first_set_inner(atn, target, rule_stop_state, ctx, &mut visited, &mut first);
+    ctx.in_progress.remove(&key);
+    if !ctx.hit_cycle {
+        ctx.cache.insert(key, first.clone());
+    }
+    ctx.hit_cycle = saved_hit_cycle || ctx.hit_cycle;
     first
 }
 
@@ -470,6 +532,7 @@ fn rule_first_set_inner(
     atn: &Atn,
     state_number: usize,
     rule_stop_state: usize,
+    ctx: &mut FirstSetCtx<'_>,
     visited: &mut BTreeSet<usize>,
     first: &mut FirstSet,
 ) {
@@ -494,7 +557,7 @@ fn rule_first_set_inner(
             | Transition::Action { target, .. }
             | Transition::Predicate { target, .. }
             | Transition::Precedence { target, .. } => {
-                rule_first_set_inner(atn, *target, rule_stop_state, visited, first);
+                rule_first_set_inner(atn, *target, rule_stop_state, ctx, visited, first);
             }
             Transition::Rule {
                 target,
@@ -505,16 +568,14 @@ fn rule_first_set_inner(
                 let Some(child_stop) = atn.rule_to_stop_state().get(*rule_index).copied() else {
                     continue;
                 };
-                let child = rule_first_set(atn, *target, child_stop);
+                let child_key = (*target, child_stop);
+                if ctx.in_progress.contains(&child_key) && !ctx.cache.contains_key(&child_key) {
+                    ctx.hit_cycle = true;
+                }
+                let child = rule_first_set_cached(atn, *target, child_stop, ctx);
                 first.symbols.extend(child.symbols);
                 if child.nullable {
-                    rule_first_set_inner(
-                        atn,
-                        *follow_state,
-                        rule_stop_state,
-                        visited,
-                        first,
-                    );
+                    rule_first_set_inner(atn, *follow_state, rule_stop_state, ctx, visited, first);
                 }
             }
             Transition::Atom { .. }
@@ -884,6 +945,7 @@ where
             reported_prediction_diagnostics: BTreeSet::new(),
             int_members: BTreeMap::new(),
             invoked_predicates: Vec::new(),
+            first_set_cache: BTreeMap::new(),
         }
     }
 
@@ -1882,7 +1944,8 @@ where
                     // expected-token accumulator so the rendered error keeps
                     // matching ANTLR's reference behavior.
                     let symbol = self.token_type_at(index);
-                    let first = rule_first_set(atn, *target, child_stop);
+                    let first =
+                        rule_first_set(atn, *target, child_stop, &mut self.first_set_cache);
                     if !first.nullable && !first.symbols.contains(&symbol) {
                         if !first.symbols.is_empty() {
                             match expected.index {
@@ -4017,13 +4080,36 @@ fn node_needs_stable_tie(node: &RecognizedNode) -> bool {
 /// transitions before loop-exit, so the first-discovered outcome carries the
 /// greedy parse-tree fragment.
 fn dedupe_fast_outcomes(outcomes: &mut Vec<FastRecognizeOutcome>) {
-    let mut seen: BTreeSet<(usize, bool, Vec<ParserDiagnostic>)> = BTreeSet::new();
-    outcomes.retain(|outcome| {
-        seen.insert((
-            outcome.index,
-            outcome.consumed_eof,
-            outcome.diagnostics.clone(),
-        ))
+    if outcomes.len() < 2 {
+        return;
+    }
+    let mut keep = Vec::with_capacity(outcomes.len());
+    let mut seen: BTreeMap<(usize, bool), Vec<usize>> = BTreeMap::new();
+    'outcomes: for (index, outcome) in outcomes.iter().enumerate() {
+        let bucket = seen
+            .entry((outcome.index, outcome.consumed_eof))
+            .or_default();
+        for &previous in bucket.iter() {
+            if outcomes[previous].diagnostics == outcome.diagnostics {
+                continue 'outcomes;
+            }
+        }
+        bucket.push(index);
+        keep.push(index);
+    }
+    if keep.len() == outcomes.len() {
+        return;
+    }
+    let mut iter = keep.into_iter();
+    let mut next_keep = iter.next();
+    let mut current = 0_usize;
+    outcomes.retain(|_| {
+        let result = next_keep == Some(current);
+        if result {
+            next_keep = iter.next();
+        }
+        current += 1;
+        result
     });
 }
 

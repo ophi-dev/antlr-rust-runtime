@@ -12,10 +12,12 @@ permissions:
 
 env:
   ANTLR_VERSION: 4.13.2
+  # Pin both upstream artifacts to known checksums so a compromised mirror
+  # or unrelated grammar tweak cannot turn the parity check into a flake or
+  # silently introduce malicious code into the runner.
+  ANTLR_JAR_SHA256: eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76
   ANTLR4_JAR: /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar
   GRAMMARS_V4: /tmp/grammars-v4
-  # Pin grammars-v4 to a known commit so unrelated upstream grammar tweaks
-  # cannot turn the parity check into a flake.
   GRAMMARS_V4_SHA: 284602b3f23ca54dc30778204ab7ae9e969145e9
   CARGO_TERM_COLOR: always
 
@@ -56,6 +58,7 @@ jobs:
           mkdir -p /tmp/antlr-cleanroom/tools
           curl --fail --location --output "${ANTLR4_JAR}" \
             "https://www.antlr.org/download/antlr-${ANTLR_VERSION}-complete.jar"
+          echo "${ANTLR_JAR_SHA256}  ${ANTLR4_JAR}" | sha256sum -c -
 
       - name: Fetch antlr/grammars-v4 Kotlin grammar
         run: |

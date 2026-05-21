@@ -5,10 +5,12 @@ upstream antlr/grammars-v4 Kotlin grammar.
 
 ## What runs
 
-`run.sh` clones the Kotlin grammar files, runs the official ANTLR jar to
-generate both Python and Rust parsers, parses every `snippets/*.kt` with
-both, and asserts the dumped trees are byte-identical (the Python dumper
-emits Rust-Debug-shaped string literals so no normalization is needed).
+`run.sh` copies the Kotlin grammar from a local antlr/grammars-v4 checkout
+(passed via `--grammars-v4` / `GRAMMARS_V4`), runs the official ANTLR jar
+to generate both Python and Rust parsers, parses every `snippets/*.kt`
+with both, and asserts the dumped trees are byte-identical. The Python
+dumper emits Rust-Debug-shaped string literals so no normalization is
+needed.
 
 ## Snippets
 

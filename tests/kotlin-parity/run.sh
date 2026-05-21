@@ -23,12 +23,19 @@ ANTLR4_JAR="${ANTLR4_JAR:-}"
 GRAMMARS_V4="${GRAMMARS_V4:-}"
 PYTHON="${PYTHON:-python3}"
 
+require_value() {
+    if [ "$#" -lt 2 ]; then
+        echo "missing value for $1" >&2
+        exit 2
+    fi
+}
+
 while [ "$#" -gt 0 ]; do
     case "$1" in
-        --antlr-jar)   ANTLR4_JAR="$2"; shift 2 ;;
-        --grammars-v4) GRAMMARS_V4="$2"; shift 2 ;;
-        --work-dir)    WORK_DIR="$2"; shift 2 ;;
-        --python)      PYTHON="$2"; shift 2 ;;
+        --antlr-jar)   require_value "$@"; ANTLR4_JAR="$2"; shift 2 ;;
+        --grammars-v4) require_value "$@"; GRAMMARS_V4="$2"; shift 2 ;;
+        --work-dir)    require_value "$@"; WORK_DIR="$2"; shift 2 ;;
+        --python)      require_value "$@"; PYTHON="$2"; shift 2 ;;
         *) echo "unknown argument: $1" >&2; exit 2 ;;
     esac
 done
