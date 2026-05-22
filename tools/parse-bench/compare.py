@@ -19,7 +19,13 @@ def result_key(result: dict) -> tuple[str, str, str]:
 
 def load_results(path: Path) -> dict[tuple[str, str, str], dict]:
     data = json.loads(path.read_text())
-    return {result_key(result): result for result in data["results"]}
+    indexed: dict[tuple[str, str, str], dict] = {}
+    for result in data["results"]:
+        key = result_key(result)
+        if key in indexed:
+            raise ValueError(f"duplicate benchmark result key in {path}: {key}")
+        indexed[key] = result
+    return indexed
 
 
 def main() -> int:
