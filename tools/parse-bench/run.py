@@ -700,8 +700,7 @@ def prepare_work(
     runtimes: set[str],
 ) -> dict[str, Path]:
     work_dir = args.work_dir
-    if work_dir.exists():
-        shutil.rmtree(work_dir)
+    clear_work_dir(work_dir)
     work_dir.mkdir(parents=True, exist_ok=True)
 
     rust_runner = write_rust_runner(work_dir, specs)
@@ -752,6 +751,16 @@ def prepare_work(
     if "tree-sitter" in runtimes:
         runners["tree-sitter"] = write_tree_sitter_runner(work_dir, specs)
     return runners
+
+
+def clear_work_dir(work_dir: Path) -> None:
+    if not work_dir.exists():
+        return
+    if not work_dir.is_dir():
+        raise SystemExit(f"Refusing to delete non-directory work path: {work_dir}")
+    if work_dir == ROOT or work_dir in ROOT.parents:
+        raise SystemExit(f"Refusing to delete project root or parent directory: {work_dir}")
+    shutil.rmtree(work_dir)
 
 
 def ensure_python_dependencies(python: str, runtimes: set[str]) -> None:
@@ -857,7 +866,7 @@ def write_json(results: list[Measurement], args: argparse.Namespace) -> None:
         return
     args.json.parent.mkdir(parents=True, exist_ok=True)
     data = {
-        "generated_at": dt.datetime.now(dt.UTC).isoformat(),
+        "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "iters": args.iters,
         "warmups": args.warmups,
         "repo": str(ROOT),
