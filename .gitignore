@@ -1,3 +1,4 @@
 /target/
 /.serena/
 *.log
+__pycache__/

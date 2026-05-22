@@ -1,0 +1,60 @@
+{
+  "fixtures": [
+    {
+      "language": "kotlin",
+      "path": "kotlin/jetbrains-kotlin-collections.kt",
+      "source": "https://github.com/JetBrains/kotlin/blob/master/libraries/stdlib/samples/test/samples/collections/collections.kt",
+      "license": "Apache-2.0",
+      "description": "Nested sample-test class shape, annotations, generic collections, and lambda-heavy assertions."
+    },
+    {
+      "language": "kotlin",
+      "path": "kotlin/kotlinx-coroutines-flow.kt",
+      "source": "https://github.com/Kotlin/kotlinx.coroutines/blob/master/kotlinx-coroutines-core/common/test/flow/operators/MapTest.kt",
+      "license": "Apache-2.0",
+      "description": "Coroutine flow builder, suspend-style test body, chained operators, and lambda calls."
+    },
+    {
+      "language": "kotlin",
+      "path": "kotlin/ktor-android-client.kt",
+      "source": "https://github.com/ktorio/ktor/blob/main/ktor-client/ktor-client-android/jvm/test/io/ktor/client/engine/android/AndroidHttpClientTest.kt",
+      "license": "Apache-2.0",
+      "description": "Ktor-style test class with inheritance call, annotation, qualified calls, and early return."
+    },
+    {
+      "language": "kotlin",
+      "path": "kotlin/compose-window.kt",
+      "source": "https://github.com/JetBrains/compose-multiplatform/blob/master/ci/templates/maven-test-project/src/main/kotlin/Main.kt",
+      "license": "Apache-2.0",
+      "description": "Compose-style nested trailing lambdas, delegated property, and top-level expression-bodied function."
+    },
+    {
+      "language": "csharp",
+      "path": "csharp/dotnet-runtime-boolean.cs",
+      "source": "https://github.com/dotnet/runtime/blob/main/src/libraries/System.Private.CoreLib/src/System/Boolean.cs",
+      "license": "MIT",
+      "description": "CoreLib-style struct, interfaces, attributes, conditional expressions, and overrides."
+    },
+    {
+      "language": "csharp",
+      "path": "csharp/roslyn-syntax-kind.cs",
+      "source": "https://github.com/dotnet/roslyn/blob/main/src/Compilers/CSharp/Portable/Syntax/SyntaxKind.cs",
+      "license": "MIT",
+      "description": "Roslyn-style enum with explicit numeric values, XML comments, and pragma directives."
+    },
+    {
+      "language": "csharp",
+      "path": "csharp/newtonsoft-jsonconvert.cs",
+      "source": "https://github.com/JamesNK/Newtonsoft.Json/blob/master/Src/Newtonsoft.Json/JsonConvert.cs",
+      "license": "MIT",
+      "description": "Library utility class with overloads, nullable-ish object flow, arrays, and static members."
+    },
+    {
+      "language": "csharp",
+      "path": "csharp/dotnet-samples-teleprompter.cs",
+      "source": "https://github.com/dotnet/samples/blob/main/csharp/getting-started/console-teleprompter/Program.cs",
+      "license": "MIT",
+      "description": "Async console sample shape with generic tasks, foreach loop, and private static helpers."
+    }
+  ]
+}
