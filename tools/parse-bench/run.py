@@ -21,6 +21,8 @@ BENCH_ROOT = Path(__file__).resolve().parent
 FIXTURE_ROOT = BENCH_ROOT / "fixtures"
 DEFAULT_ANTLR_JAR = Path("/tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar")
 DEFAULT_GRAMMARS_V4 = Path("/tmp/antlr-cleanroom/grammars-v4")
+# ANTLR 4.13.2 still generates Go imports for github.com/antlr4-go/antlr/v4,
+# whose latest published module tag is v4.13.1.
 GO_ANTLR_RUNTIME = "v4.13.1"
 
 
@@ -193,14 +195,24 @@ def transform_csharp_python(grammar_dir: Path) -> None:
 
 def transform_csharp_go(grammar_dir: Path) -> None:
     for grammar in grammar_dir.glob("*.g4"):
-        output: list[str] = []
-        for line in grammar.read_text().splitlines(keepends=True):
-            if "this." in line and "}?" in line:
-                line = line.replace("this.", "p.")
-            elif "this." in line:
-                line = line.replace("this.", "l.")
-            output.append(line)
-        grammar.write_text("".join(output))
+        if grammar.name == "CSharpLexer.g4":
+            grammar.write_text(transform_go_lexer_actions(grammar.read_text()))
+        elif grammar.name == "CSharpParser.g4":
+            grammar.write_text(grammar.read_text().replace("this.", "p."))
+
+
+def transform_go_lexer_actions(grammar: str) -> str:
+    def predicate_replacement(match: re.Match[str]) -> str:
+        body = match.group("body").replace("this.", "p.")
+        return "{" + body + "}" + match.group("suffix")
+
+    grammar = re.sub(
+        r"\{(?P<body>[^{}]*this\.[^{}]*)\}(?P<suffix>\s*\?)",
+        predicate_replacement,
+        grammar,
+        flags=re.DOTALL,
+    )
+    return grammar.replace("this.", "l.")
 
 
 def generate_antlr(

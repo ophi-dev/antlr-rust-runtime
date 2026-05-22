@@ -91,6 +91,7 @@ jobs:
           fi
 
       - name: Upload benchmark reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: parse-bench-results

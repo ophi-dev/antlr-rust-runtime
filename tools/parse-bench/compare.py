@@ -56,6 +56,19 @@ def main() -> int:
                 f"{base_avg / 1_000_000:.3f}ms ({ratio:.2f}x)"
             )
 
+    compared = sum(
+        1
+        for key in current
+        if key in baseline and key[2] in runtimes
+    )
+    if compared == 0:
+        print(
+            "parse benchmark compare found no matching baseline/current "
+            f"result pairs for runtime(s): {', '.join(sorted(runtimes))}",
+            file=sys.stderr,
+        )
+        return 1
+
     if failures:
         print(
             f"parse benchmark regression exceeds {args.max_regression:.2f}x:",
@@ -65,11 +78,6 @@ def main() -> int:
             print(f"  {failure}", file=sys.stderr)
         return 1
 
-    compared = sum(
-        1
-        for key in current
-        if key in baseline and key[2] in runtimes
-    )
     print(
         f"parse benchmark compare passed: {compared} result(s), "
         f"threshold {args.max_regression:.2f}x"
