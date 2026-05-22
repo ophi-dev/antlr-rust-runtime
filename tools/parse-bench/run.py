@@ -941,8 +941,19 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def normalize_paths(args: argparse.Namespace) -> None:
+    args.antlr_jar = args.antlr_jar.expanduser().resolve()
+    args.grammars_v4 = args.grammars_v4.expanduser().resolve()
+    args.work_dir = args.work_dir.expanduser().resolve()
+    if args.json is not None:
+        args.json = args.json.expanduser().resolve()
+    if args.markdown is not None:
+        args.markdown = args.markdown.expanduser().resolve()
+
+
 def main() -> int:
     args = parse_args()
+    normalize_paths(args)
     if args.quick:
         args.iters = 3
         args.warmups = 1
