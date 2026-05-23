@@ -92,10 +92,17 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           if [ -f base-parse-bench.json ]; then
-            python head/tools/parse-bench/compare.py \
+            compare_args=(
               --baseline base-parse-bench.json \
               --current head-parse-bench.json \
               --max-regression 1.15
+            )
+            if ! cmp -s \
+              base/tools/parse-bench/fixtures/manifest.json \
+              head/tools/parse-bench/fixtures/manifest.json; then
+              compare_args+=(--allow-empty)
+            fi
+            python head/tools/parse-bench/compare.py "${compare_args[@]}"
           else
             echo "no base benchmark report; comparison will start once this workflow is on the base branch"
           fi
