@@ -39,8 +39,7 @@ impl Hasher for FxHasher {
             bytes = rest;
         }
         for byte in bytes {
-            self.hash =
-                (self.hash.rotate_left(FX_ROT) ^ u64::from(*byte)).wrapping_mul(FX_SEED);
+            self.hash = (self.hash.rotate_left(FX_ROT) ^ u64::from(*byte)).wrapping_mul(FX_SEED);
         }
     }
     #[inline]
@@ -362,6 +361,15 @@ pub struct BaseParser<S> {
     /// when the first pass produces no clean outcome so the runtime can
     /// repair inputs the reference parser would have repaired.
     fast_first_set_prefilter: bool,
+    /// Whether the fast recognizer should explore parser error-recovery paths.
+    /// Public rule parsing starts with this disabled for the common valid-input
+    /// path and enables it only for the retry that needs ANTLR-style repairs.
+    fast_recovery_enabled: bool,
+    /// Whether the fast recognizer should record terminal-token nodes while
+    /// speculating. Clean valid-input parsing can reconstruct terminals from
+    /// selected rule spans after recognition, avoiding many speculative `Rc`
+    /// nodes that are thrown away with losing paths.
+    fast_token_nodes_enabled: bool,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -469,6 +477,57 @@ impl NodeList {
         }
         out
     }
+
+    const fn iter(&self) -> NodeListIter<'_> {
+        NodeListIter { cursor: self }
+    }
+
+    fn has_left_recursive_boundary(&self) -> bool {
+        self.iter().any(|node| {
+            matches!(
+                node.as_ref(),
+                FastRecognizedNode::LeftRecursiveBoundary { .. }
+            )
+        })
+    }
+
+    fn has_explicit_token_node(&self) -> bool {
+        self.iter().any(|node| {
+            matches!(
+                node.as_ref(),
+                FastRecognizedNode::Token { .. }
+                    | FastRecognizedNode::ErrorToken { .. }
+                    | FastRecognizedNode::MissingToken { .. }
+            )
+        })
+    }
+
+    /// Builds a list from an already ordered vector.
+    fn from_vec(nodes: Vec<Rc<FastRecognizedNode>>) -> Self {
+        let mut list = Self::new();
+        for node in nodes.into_iter().rev() {
+            list.prepend(node);
+        }
+        list
+    }
+}
+
+struct NodeListIter<'a> {
+    cursor: &'a NodeList,
+}
+
+impl<'a> Iterator for NodeListIter<'a> {
+    type Item = &'a Rc<FastRecognizedNode>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.cursor {
+            NodeList::Empty => None,
+            NodeList::Cons { head, tail } => {
+                self.cursor = tail.as_ref();
+                Some(head)
+            }
+        }
+    }
 }
 
 /// Minimal parse-tree fragment retained by the fast recognizer so the public
@@ -492,7 +551,7 @@ enum FastRecognizedNode {
         invoking_state: isize,
         start_index: usize,
         stop_index: Option<usize>,
-        children: Vec<Rc<Self>>,
+        children: NodeList,
     },
     /// Marker emitted at a precedence-rule loop entry where ANTLR would call
     /// `pushNewRecursionContext`. Folded into a wrapper rule node before the
@@ -549,6 +608,107 @@ impl ExpectedTokens {
                 });
             }
         }
+    }
+}
+
+/// Compact token-type set for parser-internal FIRST/lookahead caches.
+///
+/// Public diagnostics still use `BTreeSet<i32>` for deterministic formatting,
+/// but the hot recognizer path mostly needs `contains` and set union over
+/// small token ids. A bitset avoids tree traversal and per-symbol allocation
+/// while keeping conversion to `BTreeSet` at recovery/reporting boundaries.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct TokenBitSet {
+    words: Vec<u64>,
+}
+
+impl TokenBitSet {
+    fn insert(&mut self, symbol: i32) {
+        let Some(slot) = token_bit_slot(symbol) else {
+            return;
+        };
+        let word = slot / u64::BITS as usize;
+        if word >= self.words.len() {
+            self.words.resize(word + 1, 0);
+        }
+        self.words[word] |= 1_u64 << (slot % u64::BITS as usize);
+    }
+
+    fn extend_range(&mut self, start: i32, stop: i32) {
+        let (start, stop) = if start <= stop {
+            (start, stop)
+        } else {
+            (stop, start)
+        };
+        for symbol in start..=stop {
+            self.insert(symbol);
+        }
+    }
+
+    fn extend_iter(&mut self, symbols: impl IntoIterator<Item = i32>) {
+        for symbol in symbols {
+            self.insert(symbol);
+        }
+    }
+
+    fn extend_from(&mut self, other: &Self) {
+        if other.words.len() > self.words.len() {
+            self.words.resize(other.words.len(), 0);
+        }
+        for (left, right) in self.words.iter_mut().zip(&other.words) {
+            *left |= *right;
+        }
+    }
+
+    fn contains(&self, symbol: i32) -> bool {
+        let Some(slot) = token_bit_slot(symbol) else {
+            return false;
+        };
+        let word = slot / u64::BITS as usize;
+        self.words
+            .get(word)
+            .is_some_and(|bits| bits & (1_u64 << (slot % u64::BITS as usize)) != 0)
+    }
+
+    fn is_empty(&self) -> bool {
+        self.words.iter().all(|word| *word == 0)
+    }
+
+    fn extend_btree_set(&self, target: &mut BTreeSet<i32>) {
+        for (word_index, word) in self.words.iter().copied().enumerate() {
+            let mut bits = word;
+            while bits != 0 {
+                let bit = bits.trailing_zeros() as usize;
+                if let Some(symbol) = token_bit_symbol(word_index * u64::BITS as usize + bit) {
+                    target.insert(symbol);
+                }
+                bits &= bits - 1;
+            }
+        }
+    }
+
+    fn to_btree_set(&self) -> BTreeSet<i32> {
+        let mut out = BTreeSet::new();
+        self.extend_btree_set(&mut out);
+        out
+    }
+}
+
+fn token_bit_slot(symbol: i32) -> Option<usize> {
+    if symbol == TOKEN_EOF {
+        Some(0)
+    } else if symbol > 0 {
+        usize::try_from(symbol).ok()
+    } else {
+        None
+    }
+}
+
+fn token_bit_symbol(slot: usize) -> Option<i32> {
+    if slot == 0 {
+        Some(TOKEN_EOF)
+    } else {
+        i32::try_from(slot).ok()
     }
 }
 
@@ -619,7 +779,7 @@ fn state_expected_symbols(atn: &Atn, state_number: usize) -> BTreeSet<i32> {
 /// possibly match the current lookahead.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 struct FirstSet {
-    symbols: BTreeSet<i32>,
+    symbols: TokenBitSet,
     nullable: bool,
 }
 
@@ -652,7 +812,7 @@ struct DecisionLookahead {
 /// when the lookahead consumes nothing further inside the current rule.
 #[derive(Clone, Debug, Default)]
 struct TransitionLookSet {
-    symbols: BTreeSet<i32>,
+    symbols: TokenBitSet,
     nullable: bool,
 }
 
@@ -730,32 +890,49 @@ fn transition_first_set(
     cache: &mut FirstSetCache,
 ) -> TransitionLookSet {
     match transition {
-        Transition::Atom { label, .. } => TransitionLookSet {
-            symbols: BTreeSet::from([*label]),
-            nullable: false,
-        },
-        Transition::Range { start, stop, .. } => TransitionLookSet {
-            symbols: (*start..=*stop).collect(),
-            nullable: false,
-        },
-        Transition::Set { set, .. } => TransitionLookSet {
-            symbols: set.ranges()
-                .iter()
-                .flat_map(|(start, stop)| *start..=*stop)
-                .collect(),
-            nullable: false,
-        },
-        Transition::NotSet { set, .. } => {
-            let max = atn.max_token_type();
+        Transition::Atom { label, .. } => {
+            let mut symbols = TokenBitSet::default();
+            symbols.insert(*label);
             TransitionLookSet {
-                symbols: (1..=max).filter(|symbol| !set.contains(*symbol)).collect(),
+                symbols,
                 nullable: false,
             }
         }
-        Transition::Wildcard { .. } => TransitionLookSet {
-            symbols: (1..=atn.max_token_type()).collect(),
-            nullable: false,
-        },
+        Transition::Range { start, stop, .. } => {
+            let mut symbols = TokenBitSet::default();
+            symbols.extend_range(*start, *stop);
+            TransitionLookSet {
+                symbols,
+                nullable: false,
+            }
+        }
+        Transition::Set { set, .. } => {
+            let mut symbols = TokenBitSet::default();
+            for (start, stop) in set.ranges() {
+                symbols.extend_range(*start, *stop);
+            }
+            TransitionLookSet {
+                symbols,
+                nullable: false,
+            }
+        }
+        Transition::NotSet { set, .. } => {
+            let max = atn.max_token_type();
+            let mut symbols = TokenBitSet::default();
+            symbols.extend_iter((1..=max).filter(|symbol| !set.contains(*symbol)));
+            TransitionLookSet {
+                symbols,
+                nullable: false,
+            }
+        }
+        Transition::Wildcard { .. } => {
+            let mut symbols = TokenBitSet::default();
+            symbols.extend_range(1, atn.max_token_type());
+            TransitionLookSet {
+                symbols,
+                nullable: false,
+            }
+        }
         Transition::Epsilon { target }
         | Transition::Action { target, .. }
         | Transition::Predicate { target, .. }
@@ -781,7 +958,7 @@ fn transition_first_set(
             let mut symbols = child.symbols.clone();
             let nullable = if child.nullable {
                 let follow = rule_first_set(atn, *follow_state, rule_stop_state, cache);
-                symbols.extend(follow.symbols.iter().copied());
+                symbols.extend_from(&follow.symbols);
                 follow.nullable
             } else {
                 false
@@ -806,6 +983,7 @@ fn should_skip_via_lookahead(
     transition_index: usize,
     lookahead_filter: Option<&(i32, Rc<DecisionLookahead>)>,
     index: usize,
+    record_expected: bool,
     expected: &mut ExpectedTokens,
 ) -> bool {
     let prune_non_consuming = matches!(
@@ -825,13 +1003,42 @@ fn should_skip_via_lookahead(
     let Some(set) = entry.transitions.get(transition_index) else {
         return false;
     };
-    if set.symbols.contains(symbol) || set.nullable {
+    if set.symbols.contains(*symbol) || set.nullable {
         return false;
     }
-    if !set.symbols.is_empty() {
+    if record_expected && !set.symbols.is_empty() {
         record_pruned_transition_expected(set, index, expected);
     }
     true
+}
+
+fn should_skip_rule_via_first_set(
+    first: &FirstSet,
+    symbol: i32,
+    record_expected: bool,
+    index: usize,
+    expected: &mut ExpectedTokens,
+) -> bool {
+    if first.nullable || first.symbols.contains(symbol) {
+        return false;
+    }
+    if record_expected && !first.symbols.is_empty() {
+        record_token_bit_expected(&first.symbols, index, expected);
+    }
+    true
+}
+
+fn record_token_bit_expected(symbols: &TokenBitSet, index: usize, expected: &mut ExpectedTokens) {
+    match expected.index {
+        Some(current) if index < current => {}
+        Some(current) if index == current => {
+            symbols.extend_btree_set(&mut expected.symbols);
+        }
+        _ => {
+            expected.index = Some(index);
+            expected.symbols = symbols.to_btree_set();
+        }
+    }
 }
 
 /// Folds a pruned transition's FIRST set into the farthest-expected accumulator.
@@ -843,11 +1050,11 @@ fn record_pruned_transition_expected(
     match expected.index {
         Some(current) if index < current => {}
         Some(current) if index == current => {
-            expected.symbols.extend(set.symbols.iter().copied());
+            set.symbols.extend_btree_set(&mut expected.symbols);
         }
         _ => {
             expected.index = Some(index);
-            expected.symbols.clone_from(&set.symbols);
+            expected.symbols = set.symbols.to_btree_set();
         }
     }
 }
@@ -873,7 +1080,7 @@ fn rule_first_set_inner(
     for transition in &state.transitions {
         let transition_symbols = transition_expected_symbols(transition, atn.max_token_type());
         if !transition_symbols.is_empty() {
-            first.symbols.extend(transition_symbols);
+            first.symbols.extend_iter(transition_symbols);
             continue;
         }
         match transition {
@@ -897,7 +1104,7 @@ fn rule_first_set_inner(
                     ctx.hit_cycle = true;
                 }
                 let child = rule_first_set_cached(atn, *target, child_stop, ctx);
-                first.symbols.extend(child.symbols.iter().copied());
+                first.symbols.extend_from(&child.symbols);
                 if child.nullable {
                     rule_first_set_inner(atn, *follow_state, rule_stop_state, ctx, visited, first);
                 }
@@ -1023,7 +1230,10 @@ where
     }
     let mut combined = (*state_symbols).clone();
     combined.extend(inherited.iter().copied());
-    (parser.intern_recovery_symbols(combined), Some(state.state_number))
+    (
+        parser.intern_recovery_symbols(combined),
+        Some(state.state_number),
+    )
 }
 
 /// Fast-recognizer variant of [`recovery_expected_symbols`] that reuses the
@@ -1214,8 +1424,9 @@ struct FastRecognizeRequest {
 }
 
 /// Memo key for the fast recognizer. `recovery_symbols` is interned by the
-/// parser, so equal sets share one `Rc` and the key hashes/compares on a
-/// pointer instead of walking the full `BTreeSet`.
+/// parser before it reaches this key, so equal sets share one allocation and
+/// the key can store that allocation's address instead of cloning an `Rc` and
+/// walking the full `BTreeSet`.
 #[derive(Clone, Debug)]
 struct FastRecognizeKey {
     state_number: usize,
@@ -1224,7 +1435,7 @@ struct FastRecognizeKey {
     rule_start_index: usize,
     decision_start_index: Option<usize>,
     precedence: i32,
-    recovery_symbols: Rc<BTreeSet<i32>>,
+    recovery_symbols_id: usize,
     recovery_state: Option<usize>,
 }
 
@@ -1237,22 +1448,11 @@ impl PartialEq for FastRecognizeKey {
             || self.decision_start_index != other.decision_start_index
             || self.precedence != other.precedence
             || self.recovery_state != other.recovery_state
+            || self.recovery_symbols_id != other.recovery_symbols_id
         {
             return false;
         }
-        // The interner ensures equal recovery sets share one `Rc`, so
-        // pointer equality is the contract-correct comparison and matches the
-        // pointer-only `Hash` impl below. The debug-only assertion fires if a
-        // future caller forgets to intern an `Rc<BTreeSet<i32>>` before it
-        // ends up in a key, turning a silent `Hash`/`Eq` divergence (and the
-        // unbounded recursion / memo misses it would cause) into a loud test
-        // failure.
-        debug_assert!(
-            Rc::ptr_eq(&self.recovery_symbols, &other.recovery_symbols)
-                || self.recovery_symbols != other.recovery_symbols,
-            "FastRecognizeKey: recovery_symbols compared by content; interner invariant violated",
-        );
-        Rc::ptr_eq(&self.recovery_symbols, &other.recovery_symbols)
+        true
     }
 }
 
@@ -1267,9 +1467,7 @@ impl Hash for FastRecognizeKey {
         self.decision_start_index.hash(hasher);
         self.precedence.hash(hasher);
         self.recovery_state.hash(hasher);
-        // Interning makes equal sets share one allocation, so pointer identity
-        // is enough for hashing without walking the set.
-        (Rc::as_ptr(&self.recovery_symbols) as usize).hash(hasher);
+        self.recovery_symbols_id.hash(hasher);
     }
 }
 
@@ -1381,6 +1579,8 @@ where
             decision_lookahead_cache: FxHashMap::default(),
             empty_recovery_symbols: Rc::new(BTreeSet::new()),
             fast_first_set_prefilter: true,
+            fast_recovery_enabled: true,
+            fast_token_nodes_enabled: true,
         }
     }
 
@@ -1479,9 +1679,14 @@ where
             })?;
 
         let start_index = self.current_visible_index();
+        self.input.fill();
         self.clear_prediction_diagnostics();
         self.reset_per_parse_caches();
+        self.fast_recovery_enabled = false;
+        self.fast_token_nodes_enabled = false;
         let first_pass = self.fast_recognize_top(atn, start_state, stop_state, start_index);
+        self.fast_token_nodes_enabled = true;
+        self.fast_recovery_enabled = true;
         let needs_retry = match &first_pass {
             // The FIRST-set prefilter trims speculative rule calls that can't
             // match the current lookahead — useful for perf on grammars with
@@ -1516,13 +1721,43 @@ where
         if let Some(token) = self.token_at(start_index) {
             context.set_start(token);
         }
-        if let Some(token) = self.rule_stop_token(outcome.index, outcome.consumed_eof) {
+        let stop_index = self.rule_stop_token_index(outcome.index, outcome.consumed_eof);
+        if let Some(token) = stop_index.and_then(|token_index| self.token_at(token_index)) {
             context.set_stop(token);
         }
         if self.build_parse_trees {
-            let folded = fold_fast_left_recursive_boundaries(outcome.nodes.to_vec());
-            for node in &folded {
-                context.add_child(self.fast_recognized_node_tree(node.as_ref())?);
+            if outcome.nodes.has_left_recursive_boundary() {
+                let folded = fold_fast_left_recursive_boundaries(outcome.nodes.to_vec());
+                if folded.iter().any(|node| {
+                    matches!(
+                        node.as_ref(),
+                        FastRecognizedNode::Token { .. }
+                            | FastRecognizedNode::ErrorToken { .. }
+                            | FastRecognizedNode::MissingToken { .. }
+                    )
+                }) {
+                    for node in &folded {
+                        context.add_child(self.fast_recognized_node_tree(node.as_ref())?);
+                    }
+                } else {
+                    self.add_fast_implicit_token_children(
+                        &mut context,
+                        start_index,
+                        stop_index,
+                        &folded,
+                    )?;
+                }
+            } else if outcome.nodes.has_explicit_token_node() {
+                for node in outcome.nodes.iter() {
+                    context.add_child(self.fast_recognized_node_tree(node.as_ref())?);
+                }
+            } else {
+                self.add_fast_implicit_token_children_iter(
+                    &mut context,
+                    start_index,
+                    stop_index,
+                    outcome.nodes.iter(),
+                )?;
             }
         }
         self.input.seek(outcome.index);
@@ -1541,8 +1776,9 @@ where
         stop_state: usize,
         start_index: usize,
     ) -> Result<(FastRecognizeOutcome, ExpectedTokens), ExpectedTokens> {
-        let mut visiting = FxHashSet::default();
-        let mut memo = FxHashMap::default();
+        let memo_capacity = self.input.size().saturating_mul(4).min(1_000_000);
+        let mut visiting = FxHashSet::with_capacity_and_hasher(256, FxBuildHasher::default());
+        let mut memo = FxHashMap::with_capacity_and_hasher(memo_capacity, FxBuildHasher::default());
         let mut expected = ExpectedTokens::default();
         let empty_recovery = self.empty_recovery_symbols();
         let outcomes = self.recognize_state_fast(
@@ -1628,15 +1864,157 @@ where
                 if let Some(token) = stop_index.and_then(|index| self.token_at(index)) {
                     context.set_stop(token);
                 }
-                for child in children {
-                    context.add_child(self.fast_recognized_node_tree(child.as_ref())?);
+                if children.has_left_recursive_boundary() {
+                    let folded = fold_fast_left_recursive_boundaries(children.to_vec());
+                    for child in &folded {
+                        context.add_child(self.fast_recognized_node_tree(child.as_ref())?);
+                    }
+                } else {
+                    for child in children.iter() {
+                        context.add_child(self.fast_recognized_node_tree(child.as_ref())?);
+                    }
                 }
                 Ok(self.rule_node(context))
             }
-            FastRecognizedNode::LeftRecursiveBoundary { rule_index } => Err(AntlrError::Unsupported(
-                format!("unfolded left-recursive boundary for rule {rule_index}"),
-            )),
+            FastRecognizedNode::LeftRecursiveBoundary { rule_index } => {
+                Err(AntlrError::Unsupported(format!(
+                    "unfolded left-recursive boundary for rule {rule_index}"
+                )))
+            }
         }
+    }
+
+    fn fast_recognized_node_tree_with_implicit_tokens(
+        &mut self,
+        node: &FastRecognizedNode,
+    ) -> Result<ParseTree, AntlrError> {
+        match node {
+            FastRecognizedNode::Rule {
+                rule_index,
+                invoking_state,
+                start_index,
+                stop_index,
+                children,
+            } => {
+                let mut context = ParserRuleContext::new(*rule_index, *invoking_state);
+                if let Some(token) = self.token_at(*start_index) {
+                    context.set_start(token);
+                }
+                if let Some(token) = stop_index.and_then(|index| self.token_at(index)) {
+                    context.set_stop(token);
+                }
+                if children.has_left_recursive_boundary() {
+                    let folded = fold_fast_left_recursive_boundaries(children.to_vec());
+                    self.add_fast_implicit_token_children(
+                        &mut context,
+                        *start_index,
+                        *stop_index,
+                        &folded,
+                    )?;
+                } else {
+                    self.add_fast_implicit_token_children_iter(
+                        &mut context,
+                        *start_index,
+                        *stop_index,
+                        children.iter(),
+                    )?;
+                }
+                Ok(self.rule_node(context))
+            }
+            _ => self.fast_recognized_node_tree(node),
+        }
+    }
+
+    fn add_fast_implicit_token_children(
+        &mut self,
+        context: &mut ParserRuleContext,
+        start_index: usize,
+        stop_index: Option<usize>,
+        children: &[Rc<FastRecognizedNode>],
+    ) -> Result<(), AntlrError> {
+        self.add_fast_implicit_token_children_iter(
+            context,
+            start_index,
+            stop_index,
+            children.iter(),
+        )
+    }
+
+    fn add_fast_implicit_token_children_iter<'a>(
+        &mut self,
+        context: &mut ParserRuleContext,
+        start_index: usize,
+        stop_index: Option<usize>,
+        children: impl IntoIterator<Item = &'a Rc<FastRecognizedNode>>,
+    ) -> Result<(), AntlrError> {
+        let mut cursor = Some(start_index);
+        for child in children {
+            if let Some((child_start, child_stop)) = fast_recognized_node_span(child.as_ref()) {
+                self.add_visible_terminals_before(context, &mut cursor, child_start)?;
+                context.add_child(
+                    self.fast_recognized_node_tree_with_implicit_tokens(child.as_ref())?,
+                );
+                if let Some(child_stop) = child_stop {
+                    cursor = self.next_visible_after_token(child_stop);
+                }
+            } else {
+                context.add_child(
+                    self.fast_recognized_node_tree_with_implicit_tokens(child.as_ref())?,
+                );
+            }
+        }
+        if let Some(stop) = stop_index {
+            self.add_visible_terminals_through(context, cursor, stop)?;
+        }
+        Ok(())
+    }
+
+    fn add_visible_terminals_before(
+        &mut self,
+        context: &mut ParserRuleContext,
+        cursor: &mut Option<usize>,
+        before: usize,
+    ) -> Result<(), AntlrError> {
+        let Some(stop) = before.checked_sub(1) else {
+            return Ok(());
+        };
+        let next = self.add_visible_terminals_through(context, *cursor, stop)?;
+        *cursor = next;
+        Ok(())
+    }
+
+    fn add_visible_terminals_through(
+        &mut self,
+        context: &mut ParserRuleContext,
+        mut cursor: Option<usize>,
+        stop: usize,
+    ) -> Result<Option<usize>, AntlrError> {
+        while let Some(index) = cursor {
+            if index > stop {
+                return Ok(Some(index));
+            }
+            let token = self
+                .input
+                .get(index)
+                .cloned()
+                .ok_or_else(|| AntlrError::ParserError {
+                    line: 0,
+                    column: 0,
+                    message: format!("missing token at index {index}"),
+                })?;
+            let is_eof = token.token_type() == TOKEN_EOF;
+            context.add_child(ParseTree::Terminal(TerminalNode::new(token)));
+            if is_eof {
+                return Ok(None);
+            }
+            cursor = self.next_visible_after_token(index);
+        }
+        Ok(None)
+    }
+
+    fn next_visible_after_token(&mut self, index: usize) -> Option<usize> {
+        let next = self.input.next_visible_after(index);
+        (next != index).then_some(next)
     }
 
     /// Parses a generated rule and returns semantic actions reached on the
@@ -2146,12 +2524,14 @@ where
         .map(|mut outcome| {
             outcome.consumed_eof |= next_symbol == TOKEN_EOF;
             outcome.diagnostics.insert(0, diagnostic.clone());
-            outcome
-                .nodes
-                .prepend(Rc::new(FastRecognizedNode::Token { index: next_index }));
-            outcome
-                .nodes
-                .prepend(Rc::new(FastRecognizedNode::ErrorToken { index }));
+            if self.fast_token_nodes_enabled {
+                outcome
+                    .nodes
+                    .prepend(Rc::new(FastRecognizedNode::Token { index: next_index }));
+                outcome
+                    .nodes
+                    .prepend(Rc::new(FastRecognizedNode::ErrorToken { index }));
+            }
             outcome
         })
         .collect()
@@ -2214,11 +2594,13 @@ where
         .into_iter()
         .map(|mut outcome| {
             outcome.diagnostics.insert(0, diagnostic.clone());
-            outcome.nodes.prepend(Rc::new(FastRecognizedNode::MissingToken {
-                token_type,
-                at_index: index,
-                text: text.clone(),
-            }));
+            outcome
+                .nodes
+                .prepend(Rc::new(FastRecognizedNode::MissingToken {
+                    token_type,
+                    at_index: index,
+                    text: text.clone(),
+                }));
             outcome
         })
         .collect()
@@ -2303,7 +2685,7 @@ where
             rule_start_index,
             decision_start_index,
             precedence,
-            recovery_symbols: Rc::clone(&recovery_symbols),
+            recovery_symbols_id: Rc::as_ptr(&recovery_symbols) as usize,
             recovery_state,
         };
         if let Some(outcomes) = memo.get(&key) {
@@ -2311,12 +2693,19 @@ where
         }
 
         let visit_key = key.clone();
-        if !visiting.insert(visit_key.clone()) {
-            return Vec::new();
-        }
+        let inserted_visit = if self.fast_recovery_enabled {
+            if !visiting.insert(visit_key.clone()) {
+                return Vec::new();
+            }
+            true
+        } else {
+            false
+        };
 
         let Some(state) = atn.state(state_number) else {
-            visiting.remove(&visit_key);
+            if inserted_visit {
+                visiting.remove(&visit_key);
+            }
             return Vec::new();
         };
         let next_decision_start_index = if starts_prediction_decision(state) {
@@ -2324,8 +2713,11 @@ where
         } else {
             decision_start_index
         };
-        let (epsilon_recovery_symbols, epsilon_recovery_state) =
-            fast_next_recovery_context(self, atn, state, &recovery_symbols, recovery_state);
+        let (epsilon_recovery_symbols, epsilon_recovery_state) = if self.fast_recovery_enabled {
+            fast_next_recovery_context(self, atn, state, &recovery_symbols, recovery_state)
+        } else {
+            (Rc::clone(&recovery_symbols), recovery_state)
+        };
 
         // Lookahead-based pruning. At a multi-alternative state we cache the
         // look-1 set of every outgoing transition; on visit we keep only the
@@ -2348,15 +2740,16 @@ where
         let lookahead_filter = if state.transitions.len() > 1
             && self.fast_first_set_prefilter
             && !state.precedence_rule_decision
-            && state.kind != AtnStateKind::RuleStart
+            && (!self.fast_recovery_enabled || state.kind != AtnStateKind::RuleStart)
         {
-            state.rule_index.and_then(|rule_index| {
-                atn.rule_to_stop_state().get(rule_index).copied()
-            }).map(|rule_stop| {
-                let symbol = self.token_type_at(index);
-                let entry = self.cached_decision_lookahead(atn, state, rule_stop);
-                (symbol, entry)
-            })
+            state
+                .rule_index
+                .and_then(|rule_index| atn.rule_to_stop_state().get(rule_index).copied())
+                .map(|rule_stop| {
+                    let symbol = self.token_type_at(index);
+                    let entry = self.cached_decision_lookahead(atn, state, rule_stop);
+                    (symbol, entry)
+                })
         } else {
             None
         };
@@ -2369,6 +2762,7 @@ where
                 transition_index,
                 lookahead_filter,
                 index,
+                self.fast_recovery_enabled,
                 expected,
             ) {
                 continue;
@@ -2435,9 +2829,7 @@ where
                             .map(|mut outcome| {
                                 if let Some(rule_index) = boundary {
                                     outcome.nodes.prepend(Rc::new(
-                                        FastRecognizedNode::LeftRecursiveBoundary {
-                                            rule_index,
-                                        },
+                                        FastRecognizedNode::LeftRecursiveBoundary { rule_index },
                                     ));
                                 }
                                 outcome
@@ -2468,27 +2860,38 @@ where
                     // called rule can fire (mirroring ANTLR's reference behavior
                     // of conjuring a missing token at child-rule entry).
                     let symbol = self.token_type_at(index);
-                    let first =
-                        rule_first_set(atn, *target, child_stop, &mut self.first_set_cache);
-                    if self.fast_first_set_prefilter
-                        && !first.nullable
-                        && !first.symbols.contains(&symbol)
-                    {
-                        if !first.symbols.is_empty() {
-                            match expected.index {
-                                Some(current) if index < current => {}
-                                Some(current) if index == current => {
-                                    expected.symbols.extend(first.symbols.iter().copied());
-                                }
-                                _ => {
-                                    expected.index = Some(index);
-                                    expected.symbols.clone_from(&first.symbols);
-                                }
+                    if self.fast_first_set_prefilter {
+                        let first_key = (*target, child_stop);
+                        if !self.first_set_cache.contains_key(&first_key) {
+                            let _ =
+                                rule_first_set(atn, *target, child_stop, &mut self.first_set_cache);
+                        }
+                        if let Some(first) = self.first_set_cache.get(&first_key) {
+                            if should_skip_rule_via_first_set(
+                                first,
+                                symbol,
+                                self.fast_recovery_enabled,
+                                index,
+                                expected,
+                            ) {
+                                continue;
+                            }
+                        } else {
+                            let first =
+                                rule_first_set(atn, *target, child_stop, &mut self.first_set_cache);
+                            if should_skip_rule_via_first_set(
+                                &first,
+                                symbol,
+                                self.fast_recovery_enabled,
+                                index,
+                                expected,
+                            ) {
+                                continue;
                             }
                         }
-                        continue;
                     }
-                    let expected_before_child = expected.clone();
+                    let expected_before_child =
+                        self.fast_recovery_enabled.then(|| expected.clone());
                     let children = self.recognize_state_fast(
                         atn,
                         FastRecognizeRequest {
@@ -2506,52 +2909,54 @@ where
                         memo,
                         expected,
                     );
-                    if children
-                        .iter()
-                        .any(|child| child.diagnostics.is_empty() && child.index > index)
-                    {
-                        *expected = expected_before_child;
+                    if let Some(expected_before_child) = expected_before_child {
+                        if children
+                            .iter()
+                            .any(|child| child.diagnostics.is_empty() && child.index > index)
+                        {
+                            *expected = expected_before_child;
+                        }
                     }
                     for child in children {
                         let child_index = child.index;
                         let child_consumed_eof = child.consumed_eof;
                         let child_diagnostics = child.diagnostics;
+                        let empty_recovery = self.empty_recovery_symbols();
+                        let follow_outcomes = self.recognize_state_fast(
+                            atn,
+                            FastRecognizeRequest {
+                                state_number: *follow_state,
+                                stop_state,
+                                index: child_index,
+                                rule_start_index,
+                                decision_start_index: next_decision_start_index,
+                                precedence,
+                                depth: depth + 1,
+                                recovery_symbols: empty_recovery,
+                                recovery_state: None,
+                            },
+                            visiting,
+                            memo,
+                            expected,
+                        );
+                        if follow_outcomes.is_empty() {
+                            continue;
+                        }
                         let child_node = Rc::new(FastRecognizedNode::Rule {
                             rule_index: *rule_index,
                             invoking_state: invoking_state_number(state_number),
                             start_index: index,
                             stop_index: self.rule_stop_token_index(child_index, child_consumed_eof),
-                            children: fold_fast_left_recursive_boundaries(child.nodes.to_vec()),
+                            children: child.nodes,
                         });
-                        let empty_recovery = self.empty_recovery_symbols();
-                        outcomes.extend(
-                            self.recognize_state_fast(
-                                atn,
-                                FastRecognizeRequest {
-                                    state_number: *follow_state,
-                                    stop_state,
-                                    index: child_index,
-                                    rule_start_index,
-                                    decision_start_index: next_decision_start_index,
-                                    precedence,
-                                    depth: depth + 1,
-                                    recovery_symbols: empty_recovery,
-                                    recovery_state: None,
-                                },
-                                visiting,
-                                memo,
-                                expected,
-                            )
-                            .into_iter()
-                            .map(|mut outcome| {
-                                outcome.consumed_eof |= child_consumed_eof;
-                                let mut diagnostics = child_diagnostics.clone();
-                                diagnostics.append(&mut outcome.diagnostics);
-                                outcome.diagnostics = diagnostics;
-                                outcome.nodes.prepend(Rc::clone(&child_node));
-                                outcome
-                            }),
-                        );
+                        outcomes.extend(follow_outcomes.into_iter().map(|mut outcome| {
+                            outcome.consumed_eof |= child_consumed_eof;
+                            let mut diagnostics = child_diagnostics.clone();
+                            diagnostics.append(&mut outcome.diagnostics);
+                            outcome.diagnostics = diagnostics;
+                            outcome.nodes.prepend(Rc::clone(&child_node));
+                            outcome
+                        }));
                     }
                 }
                 Transition::Atom { target, .. }
@@ -2584,9 +2989,11 @@ where
                             .into_iter()
                             .map(|mut outcome| {
                                 outcome.consumed_eof |= symbol == TOKEN_EOF;
-                                outcome
-                                    .nodes
-                                    .prepend(Rc::new(FastRecognizedNode::Token { index }));
+                                if self.fast_token_nodes_enabled {
+                                    outcome
+                                        .nodes
+                                        .prepend(Rc::new(FastRecognizedNode::Token { index }));
+                                }
                                 outcome
                             }),
                         );
@@ -2600,32 +3007,14 @@ where
                         if expected_symbols.contains(&symbol) {
                             continue;
                         }
-                        expected.record_transition(index, transition, atn.max_token_type());
-                        record_no_viable_if_ambiguous(expected, next_decision_start_index, index);
-                        outcomes.extend(self.fast_single_token_deletion_recovery(
-                            FastRecoveryRequest {
-                                atn,
-                                transition,
-                                expected_symbols: Rc::clone(&expected_symbols),
-                                target: *target,
-                                request: FastRecognizeRequest {
-                                    state_number,
-                                    stop_state,
-                                    index,
-                                    rule_start_index,
-                                    decision_start_index,
-                                    precedence,
-                                    depth,
-                                    recovery_symbols: Rc::clone(&recovery_symbols),
-                                    recovery_state,
-                                },
-                                visiting,
-                                memo,
+                        if self.fast_recovery_enabled {
+                            expected.record_transition(index, transition, atn.max_token_type());
+                            record_no_viable_if_ambiguous(
                                 expected,
-                            },
-                        ));
-                        if !state_is_left_recursive_rule(atn, state) {
-                            outcomes.extend(self.fast_single_token_insertion_recovery(
+                                next_decision_start_index,
+                                index,
+                            );
+                            outcomes.extend(self.fast_single_token_deletion_recovery(
                                 FastRecoveryRequest {
                                     atn,
                                     transition,
@@ -2647,38 +3036,70 @@ where
                                     expected,
                                 },
                             ));
-                        }
-                        outcomes.extend(self.fast_current_token_deletion_recovery(
-                            FastCurrentTokenDeletionRequest {
-                                atn,
-                                expected_symbols,
-                                request: FastRecognizeRequest {
-                                    state_number,
-                                    stop_state,
-                                    index,
-                                    rule_start_index,
-                                    decision_start_index,
-                                    precedence,
-                                    depth,
-                                    recovery_symbols: Rc::clone(&recovery_symbols),
-                                    recovery_state,
+                            if !state_is_left_recursive_rule(atn, state) {
+                                outcomes.extend(self.fast_single_token_insertion_recovery(
+                                    FastRecoveryRequest {
+                                        atn,
+                                        transition,
+                                        expected_symbols: Rc::clone(&expected_symbols),
+                                        target: *target,
+                                        request: FastRecognizeRequest {
+                                            state_number,
+                                            stop_state,
+                                            index,
+                                            rule_start_index,
+                                            decision_start_index,
+                                            precedence,
+                                            depth,
+                                            recovery_symbols: Rc::clone(&recovery_symbols),
+                                            recovery_state,
+                                        },
+                                        visiting,
+                                        memo,
+                                        expected,
+                                    },
+                                ));
+                            }
+                            outcomes.extend(self.fast_current_token_deletion_recovery(
+                                FastCurrentTokenDeletionRequest {
+                                    atn,
+                                    expected_symbols,
+                                    request: FastRecognizeRequest {
+                                        state_number,
+                                        stop_state,
+                                        index,
+                                        rule_start_index,
+                                        decision_start_index,
+                                        precedence,
+                                        depth,
+                                        recovery_symbols: Rc::clone(&recovery_symbols),
+                                        recovery_state,
+                                    },
+                                    visiting,
+                                    memo,
+                                    expected,
                                 },
-                                visiting,
-                                memo,
-                                expected,
-                            },
-                        ));
+                            ));
+                        }
                     }
                 }
             }
         }
 
-        visiting.remove(&visit_key);
+        if inserted_visit {
+            visiting.remove(&visit_key);
+        }
         if self.prediction_mode == PredictionMode::Ll {
             discard_recovered_fast_outcomes_if_clean_path_exists(&mut outcomes);
         }
-        dedupe_fast_outcomes(&mut outcomes);
-        memo.insert(key, outcomes.clone());
+        if self.fast_recovery_enabled {
+            dedupe_fast_outcomes(&mut outcomes);
+        } else {
+            dedupe_clean_fast_outcomes(&mut outcomes);
+        }
+        if self.fast_recovery_enabled || outcomes.len() > 1 {
+            memo.insert(key, outcomes.clone());
+        }
         outcomes
     }
 
@@ -3625,12 +4046,11 @@ where
     /// Returns the interned `Rc` form of a `recovery_symbols` set so the fast
     /// recognizer can hash and compare keys by pointer.
     ///
-    /// Every `Rc<BTreeSet<i32>>` that flows into a `FastRecognizeKey` (or its
-    /// `recovery_symbols` Rc-clone) must come from this method or the empty
-    /// singleton; otherwise two content-equal `Rc`s could end up with
-    /// different `Rc::as_ptr` values, and the pointer-keyed hash on
-    /// `FastRecognizeKey` would silently disagree with the contract-equality
-    /// check.
+    /// Every `Rc<BTreeSet<i32>>` that flows into a `FastRecognizeKey` must
+    /// come from this method or the empty singleton; otherwise two
+    /// content-equal `Rc`s could end up with different `Rc::as_ptr` values,
+    /// and the pointer-keyed hash on `FastRecognizeKey` would split equivalent
+    /// recognition coordinates.
     fn intern_recovery_symbols(&mut self, set: BTreeSet<i32>) -> Rc<BTreeSet<i32>> {
         if set.is_empty() {
             return Rc::clone(&self.empty_recovery_symbols);
@@ -4248,10 +4668,12 @@ fn fold_fast_left_recursive_boundaries(
     // fold work entirely when none are present. The boundary marker is only
     // emitted at precedence-rule loop entries, which are rare relative to
     // every rule call the recognizer fans out.
-    if !nodes
-        .iter()
-        .any(|node| matches!(node.as_ref(), FastRecognizedNode::LeftRecursiveBoundary { .. }))
-    {
+    if !nodes.iter().any(|node| {
+        matches!(
+            node.as_ref(),
+            FastRecognizedNode::LeftRecursiveBoundary { .. }
+        )
+    }) {
         return nodes;
     }
     let mut folded: Vec<Rc<FastRecognizedNode>> = Vec::with_capacity(nodes.len());
@@ -4268,7 +4690,7 @@ fn fold_fast_left_recursive_boundaries(
                         invoking_state: -1,
                         start_index,
                         stop_index,
-                        children,
+                        children: NodeList::from_vec(children),
                     }));
                 }
             }
@@ -4291,6 +4713,23 @@ const fn fast_recognized_node_start_index(node: &FastRecognizedNode) -> Option<u
         }
         FastRecognizedNode::MissingToken { at_index, .. } => Some(*at_index),
         FastRecognizedNode::Rule { start_index, .. } => Some(*start_index),
+        FastRecognizedNode::LeftRecursiveBoundary { .. } => None,
+    }
+}
+
+const fn fast_recognized_node_span(node: &FastRecognizedNode) -> Option<(usize, Option<usize>)> {
+    match node {
+        FastRecognizedNode::Token { index } | FastRecognizedNode::ErrorToken { index } => {
+            Some((*index, Some(*index)))
+        }
+        FastRecognizedNode::MissingToken { at_index, .. } => {
+            Some((*at_index, at_index.checked_sub(1)))
+        }
+        FastRecognizedNode::Rule {
+            start_index,
+            stop_index,
+            ..
+        } => Some((*start_index, *stop_index)),
         FastRecognizedNode::LeftRecursiveBoundary { .. } => None,
     }
 }
@@ -4807,6 +5246,14 @@ fn dedupe_fast_outcomes(outcomes: &mut Vec<FastRecognizeOutcome>) {
         current += 1;
         result
     });
+}
+
+fn dedupe_clean_fast_outcomes(outcomes: &mut Vec<FastRecognizeOutcome>) {
+    if outcomes.len() < 2 {
+        return;
+    }
+    let mut seen = BTreeSet::new();
+    outcomes.retain(|outcome| seen.insert((outcome.index, outcome.consumed_eof)));
 }
 
 /// Sorts and removes equivalent endpoints, including their action traces.

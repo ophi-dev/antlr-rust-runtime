@@ -116,6 +116,9 @@ struct LexerDfaTrace {
     state_numbers: BTreeMap<LexerDfaKey, usize>,
     accept_predictions: BTreeMap<usize, i32>,
     edges: BTreeSet<LexerDfaEdge>,
+    cached_states: BTreeMap<usize, LexerDfaCachedState>,
+    transitions: BTreeMap<(usize, i32), LexerDfaCachedTransition>,
+    mode_starts: BTreeMap<i32, usize>,
 }
 
 impl LexerDfaTrace {
@@ -124,6 +127,9 @@ impl LexerDfaTrace {
             state_numbers: BTreeMap::new(),
             accept_predictions: BTreeMap::new(),
             edges: BTreeSet::new(),
+            cached_states: BTreeMap::new(),
+            transitions: BTreeMap::new(),
+            mode_starts: BTreeMap::new(),
         }
     }
 }
@@ -144,12 +150,18 @@ impl LexerDfaKey {
 /// One lexer ATN config identity with the absolute input position removed.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) struct LexerDfaConfigKey {
-    state: usize,
-    alt_rule_index: Option<usize>,
-    consumed_eof: bool,
-    passed_non_greedy: bool,
-    stack: Vec<usize>,
-    actions: Vec<usize>,
+    pub(crate) state: usize,
+    pub(crate) alt_rule_index: Option<usize>,
+    pub(crate) consumed_eof: bool,
+    pub(crate) passed_non_greedy: bool,
+    pub(crate) stack: Vec<usize>,
+    pub(crate) actions: Vec<LexerDfaActionKey>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) struct LexerDfaActionKey {
+    pub(crate) action_index: usize,
+    pub(crate) rule_index: usize,
 }
 
 impl LexerDfaConfigKey {
@@ -159,7 +171,7 @@ impl LexerDfaConfigKey {
         consumed_eof: bool,
         passed_non_greedy: bool,
         stack: Vec<usize>,
-        actions: Vec<usize>,
+        actions: Vec<LexerDfaActionKey>,
     ) -> Self {
         Self {
             state,
@@ -170,6 +182,27 @@ impl LexerDfaConfigKey {
             actions,
         }
     }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct LexerDfaCachedTransition {
+    pub(crate) target_state: usize,
+    pub(crate) position_delta: usize,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct LexerDfaCachedAccept {
+    pub(crate) position_delta: usize,
+    pub(crate) rule_index: usize,
+    pub(crate) consumed_eof: bool,
+    pub(crate) actions: Vec<LexerDfaActionKey>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct LexerDfaCachedState {
+    pub(crate) has_semantic_context: bool,
+    pub(crate) configs: Vec<LexerDfaConfigKey>,
+    pub(crate) accept: Option<LexerDfaCachedAccept>,
 }
 
 /// One printable lexer DFA edge keyed so repeated matches keep deterministic
@@ -474,6 +507,49 @@ where
         self.lexer_dfa
             .edges
             .insert(LexerDfaEdge { from, symbol, to });
+    }
+
+    pub(crate) fn cached_lexer_dfa_transition(
+        &self,
+        state: usize,
+        symbol: i32,
+    ) -> Option<LexerDfaCachedTransition> {
+        self.lexer_dfa.transitions.get(&(state, symbol)).cloned()
+    }
+
+    pub(crate) fn cache_lexer_dfa_transition(
+        &mut self,
+        state: usize,
+        symbol: i32,
+        transition: LexerDfaCachedTransition,
+    ) {
+        self.lexer_dfa
+            .transitions
+            .entry((state, symbol))
+            .or_insert(transition);
+    }
+
+    pub(crate) fn cached_lexer_dfa_state(&self, state: usize) -> Option<LexerDfaCachedState> {
+        self.lexer_dfa.cached_states.get(&state).cloned()
+    }
+
+    pub(crate) fn cache_lexer_dfa_state(
+        &mut self,
+        state: usize,
+        cached_state: LexerDfaCachedState,
+    ) {
+        self.lexer_dfa
+            .cached_states
+            .entry(state)
+            .or_insert(cached_state);
+    }
+
+    pub(crate) fn cached_lexer_mode_start(&self, mode: i32) -> Option<usize> {
+        self.lexer_dfa.mode_starts.get(&mode).copied()
+    }
+
+    pub(crate) fn cache_lexer_mode_start(&mut self, mode: i32, state: usize) {
+        self.lexer_dfa.mode_starts.entry(mode).or_insert(state);
     }
 
     /// Serializes the observed default-mode lexer DFA in ANTLR's text shape.
