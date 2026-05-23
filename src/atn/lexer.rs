@@ -398,8 +398,10 @@ where
         semantic_predicate,
     );
     let mut active = prune_after_accepts(atn, start_closure.configs);
-    let mut dfa_state =
-        lexer.lexer_dfa_state(lexer_dfa_key(&active), accept_prediction(atn, &active));
+    let mut dfa_state = lexer.lexer_dfa_state(
+        lexer_dfa_key(&active, start),
+        accept_prediction(atn, &active),
+    );
     let mut dfa_state_has_semantic_context = start_closure.has_semantic_context;
 
     let mut best = best_accept(atn, &active);
@@ -438,8 +440,10 @@ where
         let suppress_edge = source_has_semantic_context || target_has_semantic_context;
         active = prune_after_accepts(atn, closure.configs);
         if !active.is_empty() {
-            dfa_state =
-                lexer.lexer_dfa_state(lexer_dfa_key(&active), accept_prediction(atn, &active));
+            dfa_state = lexer.lexer_dfa_state(
+                lexer_dfa_key(&active, start),
+                accept_prediction(atn, &active),
+            );
             dfa_state_has_semantic_context = target_has_semantic_context;
             if !suppress_edge {
                 if let Some(symbol) = edge_symbol {
@@ -518,7 +522,7 @@ where
 
         let source_dfa_state = dfa_state;
         let source_has_semantic_context = cached_state.has_semantic_context;
-        let active = cached_configs_to_configs(&cached_state.configs, position);
+        let active = cached_configs_to_configs(&cached_state.configs, start, position);
         let mut next = Vec::new();
         for config in active {
             let Some(state) = atn.state(config.state) else {
@@ -554,6 +558,7 @@ where
             atn,
             &active,
             target_has_semantic_context,
+            start,
             target_position,
         );
         if !suppress_edge && symbol != EOF {
@@ -615,6 +620,7 @@ where
         &active,
         start_closure.has_semantic_context,
         start,
+        start,
     );
     if !start_closure.has_semantic_context {
         lexer.cache_lexer_mode_start(mode, state);
@@ -627,18 +633,25 @@ fn cache_dfa_state<I, F>(
     atn: &Atn,
     active: &[LexerConfig],
     has_semantic_context: bool,
+    token_start: usize,
     position: usize,
 ) -> usize
 where
     I: CharStream,
     F: TokenFactory,
 {
-    let state = lexer.lexer_dfa_state(lexer_dfa_key(active), accept_prediction(atn, active));
+    let state = lexer.lexer_dfa_state(
+        lexer_dfa_key(active, token_start),
+        accept_prediction(atn, active),
+    );
     lexer.cache_lexer_dfa_state(
         state,
         LexerDfaCachedState {
             has_semantic_context,
-            configs: active.iter().map(normalized_config_key).collect(),
+            configs: active
+                .iter()
+                .map(|config| normalized_config_key(config, token_start))
+                .collect(),
             accept: best_accept(atn, active).map(|accept| LexerDfaCachedAccept {
                 position_delta: accept.position.saturating_sub(position),
                 rule_index: accept.rule_index,
@@ -648,6 +661,7 @@ where
                     .iter()
                     .map(|action| LexerDfaActionKey {
                         action_index: action.action_index,
+                        position_delta: action.position.saturating_sub(token_start),
                         rule_index: action.rule_index,
                     })
                     .collect(),
@@ -672,7 +686,7 @@ fn cached_accept_state(
             .iter()
             .map(|action| LexerActionTrace {
                 action_index: action.action_index,
-                position: token_start,
+                position: token_start + action.position_delta,
                 rule_index: action.rule_index,
             })
             .collect(),
@@ -887,18 +901,18 @@ fn accept_prediction(atn: &Atn, configs: &[LexerConfig]) -> Option<i32> {
 /// Builds a stable DFA state identity from a lexer closure while ignoring the
 /// absolute input position, matching ANTLR's cache shape rather than one input
 /// occurrence.
-fn lexer_dfa_key(configs: &[LexerConfig]) -> LexerDfaKey {
+fn lexer_dfa_key(configs: &[LexerConfig], token_start: usize) -> LexerDfaKey {
     LexerDfaKey::new(
         configs
             .iter()
-            .map(normalized_config_key)
+            .map(|config| normalized_config_key(config, token_start))
             .collect::<Vec<_>>(),
     )
 }
 
 /// Normalizes a config for DFA-state identity without embedding its absolute
 /// character offset in the current input.
-fn normalized_config_key(config: &LexerConfig) -> LexerDfaConfigKey {
+fn normalized_config_key(config: &LexerConfig, token_start: usize) -> LexerDfaConfigKey {
     LexerDfaConfigKey::new(
         config.state,
         config.alt_rule_index,
@@ -910,6 +924,7 @@ fn normalized_config_key(config: &LexerConfig) -> LexerDfaConfigKey {
             .iter()
             .map(|action| LexerDfaActionKey {
                 action_index: action.action_index,
+                position_delta: action.position.saturating_sub(token_start),
                 rule_index: action.rule_index,
             })
             .collect(),
@@ -924,7 +939,11 @@ fn shared_config_position(configs: &[LexerConfig]) -> Option<usize> {
         .then_some(position)
 }
 
-fn cached_configs_to_configs(configs: &[LexerDfaConfigKey], position: usize) -> Vec<LexerConfig> {
+fn cached_configs_to_configs(
+    configs: &[LexerDfaConfigKey],
+    token_start: usize,
+    position: usize,
+) -> Vec<LexerConfig> {
     configs
         .iter()
         .map(|config| LexerConfig {
@@ -939,7 +958,7 @@ fn cached_configs_to_configs(configs: &[LexerDfaConfigKey], position: usize) -> 
                 .iter()
                 .map(|action| LexerActionTrace {
                     action_index: action.action_index,
-                    position,
+                    position: token_start + action.position_delta,
                     rule_index: action.rule_index,
                 })
                 .collect(),

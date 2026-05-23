@@ -161,6 +161,7 @@ pub(crate) struct LexerDfaConfigKey {
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) struct LexerDfaActionKey {
     pub(crate) action_index: usize,
+    pub(crate) position_delta: usize,
     pub(crate) rule_index: usize,
 }
 

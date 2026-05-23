@@ -278,6 +278,10 @@ where
     pub fn drain_source_errors(&mut self) -> Vec<TokenSourceError> {
         std::mem::take(&mut self.source_errors)
     }
+
+    pub const fn is_filled(&self) -> bool {
+        self.fetched_eof
+    }
 }
 
 #[cfg(test)]

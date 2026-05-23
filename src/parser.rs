@@ -83,6 +83,7 @@ use crate::vocabulary::Vocabulary;
 /// non-viable. Long expression-regression descriptors legitimately walk tens
 /// of thousands of ATN edges.
 const RECOGNITION_DEPTH_LIMIT: usize = 100_000;
+const FAST_RECOGNIZER_DEFERRED_FILL_AT: usize = 64;
 
 /// Parser semantic action reached while recognizing one ATN path.
 ///
@@ -640,9 +641,43 @@ impl TokenBitSet {
         } else {
             (stop, start)
         };
-        for symbol in start..=stop {
-            self.insert(symbol);
+        if start <= TOKEN_EOF && stop >= TOKEN_EOF {
+            self.insert(TOKEN_EOF);
         }
+        let positive_start = start.max(1);
+        if positive_start > stop {
+            return;
+        }
+        let Some(start_slot) = token_bit_slot(positive_start) else {
+            return;
+        };
+        let Some(stop_slot) = token_bit_slot(stop) else {
+            return;
+        };
+        self.extend_slot_range(start_slot, stop_slot);
+    }
+
+    fn extend_slot_range(&mut self, start_slot: usize, stop_slot: usize) {
+        if start_slot > stop_slot {
+            return;
+        }
+        let start_word = start_slot / u64::BITS as usize;
+        let stop_word = stop_slot / u64::BITS as usize;
+        if stop_word >= self.words.len() {
+            self.words.resize(stop_word + 1, 0);
+        }
+        let start_offset = start_slot % u64::BITS as usize;
+        let stop_offset = stop_slot % u64::BITS as usize;
+        if start_word == stop_word {
+            self.words[start_word] |=
+                (!0_u64 << start_offset) & (!0_u64 >> (u64::BITS as usize - 1 - stop_offset));
+            return;
+        }
+        self.words[start_word] |= !0_u64 << start_offset;
+        for word in &mut self.words[(start_word + 1)..stop_word] {
+            *word = !0_u64;
+        }
+        self.words[stop_word] |= !0_u64 >> (u64::BITS as usize - 1 - stop_offset);
     }
 
     fn extend_iter(&mut self, symbols: impl IntoIterator<Item = i32>) {
@@ -1679,7 +1714,6 @@ where
             })?;
 
         let start_index = self.current_visible_index();
-        self.input.fill();
         self.clear_prediction_diagnostics();
         self.reset_per_parse_caches();
         self.fast_recovery_enabled = false;
@@ -1776,7 +1810,7 @@ where
         stop_state: usize,
         start_index: usize,
     ) -> Result<(FastRecognizeOutcome, ExpectedTokens), ExpectedTokens> {
-        let memo_capacity = self.input.size().saturating_mul(4).min(1_000_000);
+        let memo_capacity = self.input.size().saturating_mul(4).clamp(65_536, 262_144);
         let mut visiting = FxHashSet::with_capacity_and_hasher(256, FxBuildHasher::default());
         let mut memo = FxHashMap::with_capacity_and_hasher(memo_capacity, FxBuildHasher::default());
         let mut expected = ExpectedTokens::default();
@@ -4008,6 +4042,9 @@ where
     /// every state visit, so avoiding the seek round-trip is a measurable
     /// hot-path win on long inputs.
     fn token_type_at(&mut self, index: usize) -> i32 {
+        if index >= FAST_RECOGNIZER_DEFERRED_FILL_AT && !self.input.is_filled() {
+            self.input.fill();
+        }
         self.input.token_type_at_index(index)
     }
 
