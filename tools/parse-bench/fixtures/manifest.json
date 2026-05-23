@@ -30,31 +30,31 @@
     },
     {
       "language": "csharp",
-      "path": "csharp/dotnet-runtime-boolean.cs",
-      "source": "https://github.com/dotnet/runtime/blob/main/src/libraries/System.Private.CoreLib/src/System/Boolean.cs",
+      "path": "csharp/dotnet-wpf-datagrid-column.cs",
+      "source": "https://github.com/dotnet/wpf/blob/114fbee660df4e981e851cc04a8a557dc7328898/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Controls/DataGridColumn.cs",
       "license": "MIT",
-      "description": "CoreLib-style struct, interfaces, attributes, conditional expressions, and overrides."
+      "description": "WPF control column implementation with attributes, dependency-property metadata, overrides, and property-heavy class structure."
     },
     {
       "language": "csharp",
-      "path": "csharp/roslyn-syntax-kind.cs",
-      "source": "https://github.com/dotnet/roslyn/blob/main/src/Compilers/CSharp/Portable/Syntax/SyntaxKind.cs",
+      "path": "csharp/mono-codegen.cs",
+      "source": "https://github.com/mono/mono/blob/0f53e9e151d92944cacab3e24ac359410c606df6/mcs/mcs/codegen.cs",
       "license": "MIT",
-      "description": "Roslyn-style enum with explicit numeric values, XML comments, and pragma directives."
+      "description": "Mono compiler backend code with nested visitors, switch-heavy control flow, casts, generics, and nullable preprocessor regions."
     },
     {
       "language": "csharp",
-      "path": "csharp/newtonsoft-jsonconvert.cs",
-      "source": "https://github.com/JamesNK/Newtonsoft.Json/blob/master/Src/Newtonsoft.Json/JsonConvert.cs",
+      "path": "csharp/mono-anonymous.cs",
+      "source": "https://github.com/mono/mono/blob/0f53e9e151d92944cacab3e24ac359410c606df6/mcs/mcs/anonymous.cs",
       "license": "MIT",
-      "description": "Library utility class with overloads, nullable-ish object flow, arrays, and static members."
+      "description": "Mono compiler anonymous-type and expression-tree lowering code with nested classes, generic type construction, and lambda-oriented paths."
     },
     {
       "language": "csharp",
-      "path": "csharp/dotnet-samples-teleprompter.cs",
-      "source": "https://github.com/dotnet/samples/blob/main/csharp/getting-started/console-teleprompter/Program.cs",
+      "path": "csharp/mono-statement.cs",
+      "source": "https://github.com/mono/mono/blob/0f53e9e151d92944cacab3e24ac359410c606df6/mcs/mcs/statement.cs",
       "license": "MIT",
-      "description": "Async console sample shape with generic tasks, foreach loop, and private static helpers."
+      "description": "Mono compiler statement binder and emitter code with deep statement forms, nested classes, switch paths, and exception-flow constructs."
     }
   ]
 }
