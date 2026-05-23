@@ -1,0 +1,109 @@
+name: Parse Benchmark
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  parse-bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout head
+        # actions/checkout v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          path: head
+          persist-credentials: false
+
+      - name: Checkout base
+        if: github.event_name == 'pull_request'
+        # actions/checkout v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+          persist-credentials: false
+
+      - name: Set up Java
+        # actions/setup-java v5
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Go
+        # actions/setup-go v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version: '1.23.x'
+
+      - name: Set up Python
+        # actions/setup-python v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.11'
+
+      - name: Set up Rust
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal
+          rustup default 1.95.0
+
+      - name: Install Python benchmark dependencies
+        run: python -m pip install -r head/tools/parse-bench/requirements.txt
+
+      - name: Fetch ANTLR benchmark inputs
+        run: |
+          mkdir -p /tmp/antlr-cleanroom/tools
+          curl -fLo /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
+            https://www.antlr.org/download/antlr-4.13.2-complete.jar
+          mkdir -p /tmp/antlr-cleanroom/grammars-v4
+          git -C /tmp/antlr-cleanroom/grammars-v4 init -q
+          git -C /tmp/antlr-cleanroom/grammars-v4 remote add origin https://github.com/antlr/grammars-v4.git
+          git -C /tmp/antlr-cleanroom/grammars-v4 sparse-checkout init --cone
+          git -C /tmp/antlr-cleanroom/grammars-v4 sparse-checkout set kotlin/kotlin csharp/v7
+          git -C /tmp/antlr-cleanroom/grammars-v4 fetch --depth 1 origin 284602b3f23ca54dc30778204ab7ae9e969145e9
+          git -C /tmp/antlr-cleanroom/grammars-v4 checkout FETCH_HEAD
+
+      - name: Run base benchmark
+        if: github.event_name == 'pull_request'
+        run: |
+          if [ -f base/tools/parse-bench/run.py ]; then
+            python base/tools/parse-bench/run.py \
+              --quick \
+              --work-dir base/target/parse-bench \
+              --json "$PWD/base-parse-bench.json"
+          else
+            echo "base branch does not have parse benchmark script; skipping base comparison"
+          fi
+
+      - name: Run head benchmark
+        run: |
+          python head/tools/parse-bench/run.py \
+            --quick \
+            --work-dir head/target/parse-bench \
+            --json "$PWD/head-parse-bench.json"
+
+      - name: Compare against base
+        if: github.event_name == 'pull_request'
+        run: |
+          if [ -f base-parse-bench.json ]; then
+            python head/tools/parse-bench/compare.py \
+              --baseline base-parse-bench.json \
+              --current head-parse-bench.json \
+              --max-regression 1.15
+          else
+            echo "no base benchmark report; comparison will start once this workflow is on the base branch"
+          fi
+
+      - name: Upload benchmark reports
+        if: always()
+        # actions/upload-artifact v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: parse-bench-results
+          path: '*-parse-bench.json'
