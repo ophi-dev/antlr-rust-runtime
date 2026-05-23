@@ -5,11 +5,14 @@ use crate::token::{CommonToken, DEFAULT_CHANNEL, TOKEN_EOF, Token, TokenSource, 
 pub struct CommonTokenStream<S> {
     source: S,
     tokens: Vec<CommonToken>,
+    next_visible_after: Vec<usize>,
     cursor: usize,
     fetched_eof: bool,
     channel: i32,
     source_errors: Vec<TokenSourceError>,
 }
+
+const UNKNOWN_NEXT_VISIBLE: usize = usize::MAX;
 
 impl<S> CommonTokenStream<S>
 where
@@ -25,6 +28,7 @@ where
         Self {
             source,
             tokens: Vec::new(),
+            next_visible_after: Vec::new(),
             cursor: 0,
             fetched_eof: false,
             channel,
@@ -117,6 +121,7 @@ where
         token.set_token_index(token_index);
         self.fetched_eof = token.token_type() == TOKEN_EOF;
         self.tokens.push(token);
+        self.next_visible_after.push(UNKNOWN_NEXT_VISIBLE);
     }
 
     /// Moves a raw token index to the next token visible on this stream's
@@ -219,9 +224,7 @@ where
     /// round-trip when they only need lookahead types.
     pub fn token_type_at_index(&mut self, index: usize) -> i32 {
         self.sync(index);
-        self.tokens
-            .get(index)
-            .map_or(TOKEN_EOF, Token::token_type)
+        self.tokens.get(index).map_or(TOKEN_EOF, Token::token_type)
     }
 
     /// Returns the next parser-visible token index after consuming the token
@@ -229,8 +232,18 @@ where
     /// is not modified. Used by speculative recognition that simulates token
     /// consumption thousands of times without committing it.
     pub fn next_visible_after(&mut self, index: usize) -> usize {
+        self.sync(index);
+        if let Some(cached) = self
+            .next_visible_after
+            .get(index)
+            .copied()
+            .filter(|cached| *cached != UNKNOWN_NEXT_VISIBLE)
+        {
+            return cached;
+        }
+
         let mut next = index + 1;
-        loop {
+        let found = loop {
             self.sync(next);
             match self.tokens.get(next) {
                 Some(token)
@@ -239,9 +252,13 @@ where
                     next += 1;
                     continue;
                 }
-                _ => return next,
+                _ => break next,
             }
+        };
+        if let Some(slot) = self.next_visible_after.get_mut(index) {
+            *slot = found;
         }
+        found
     }
 
     pub fn text(&mut self, start: usize, stop: usize) -> String {
@@ -260,6 +277,10 @@ where
     /// while this stream was fetching tokens.
     pub fn drain_source_errors(&mut self) -> Vec<TokenSourceError> {
         std::mem::take(&mut self.source_errors)
+    }
+
+    pub const fn is_filled(&self) -> bool {
+        self.fetched_eof
     }
 }
 
