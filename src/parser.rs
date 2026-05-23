@@ -1462,10 +1462,12 @@ struct FastRecognizeRequest {
     recovery_state: Option<usize>,
 }
 
-/// Memo key for the fast recognizer. `recovery_symbols` is interned by the
-/// parser before it reaches this key, so equal sets share one allocation and
-/// the key can store that allocation's address instead of cloning an `Rc` and
-/// walking the full `BTreeSet`.
+/// Memo key for the fast recognizer. `recovery_symbols` must come from
+/// `intern_recovery_symbols` or `empty_recovery_symbols` before it reaches this
+/// key, so equal sets share one allocation and the key can store that
+/// allocation's address instead of cloning an `Rc` and walking the full
+/// `BTreeSet`. Bypassing the interner would turn content-equal recovery sets
+/// into distinct cache coordinates.
 #[derive(Clone, Debug)]
 struct FastRecognizeKey {
     state_number: usize,
