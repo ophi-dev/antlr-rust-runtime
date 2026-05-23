@@ -2,31 +2,31 @@
   "fixtures": [
     {
       "language": "kotlin",
-      "path": "kotlin/jetbrains-kotlin-collections.kt",
-      "source": "https://github.com/JetBrains/kotlin/blob/master/libraries/stdlib/samples/test/samples/collections/collections.kt",
+      "path": "kotlin/jetbrains-kotlin-lazy-bodies-test.kt",
+      "source": "https://github.com/JetBrains/kotlin/blob/2e7e1fd40b1ff862f4b574b17c2034e441179958/analysis/low-level-api-fir/low-level-api-fir-compiler-tests/testFixtures/org/jetbrains/kotlin/analysis/low/level/api/fir/AbstractLLLazyBodiesCalculatorTest.kt",
       "license": "Apache-2.0",
-      "description": "Nested sample-test class shape, annotations, generic collections, and lambda-heavy assertions."
+      "description": "Kotlin FIR test fixture with anonymous visitor object, overrides, labeled returns, smart-cast style flow, and nested assertions."
     },
     {
       "language": "kotlin",
-      "path": "kotlin/kotlinx-coroutines-flow.kt",
-      "source": "https://github.com/Kotlin/kotlinx.coroutines/blob/master/kotlinx-coroutines-core/common/test/flow/operators/MapTest.kt",
+      "path": "kotlin/kotlinx-coroutines-flow-limit.kt",
+      "source": "https://github.com/Kotlin/kotlinx.coroutines/blob/8564f65764d3d05893cec026c6e94250e2b23874/kotlinx-coroutines-core/common/src/flow/operators/Limit.kt",
       "license": "Apache-2.0",
-      "description": "Coroutine flow builder, suspend-style test body, chained operators, and lambda calls."
+      "description": "Coroutine Flow limit operators with suspend inline extension functions, crossinline lambdas, anonymous collectors, and labeled returns."
     },
     {
       "language": "kotlin",
-      "path": "kotlin/ktor-android-client.kt",
-      "source": "https://github.com/ktorio/ktor/blob/main/ktor-client/ktor-client-android/jvm/test/io/ktor/client/engine/android/AndroidHttpClientTest.kt",
+      "path": "kotlin/ktor-openapi-describe-route-test.kt",
+      "source": "https://github.com/ktorio/ktor/blob/eac67e82d3d60bedbbf7aa0ed72acc1426cb18e7/ktor-server/ktor-server-plugins/ktor-server-routing-openapi/jvm/test/io/ktor/server/routing/openapi/DescribeRouteTest.kt",
       "license": "Apache-2.0",
-      "description": "Ktor-style test class with inheritance call, annotation, qualified calls, and early return."
+      "description": "Ktor OpenAPI routing tests with deeply nested route DSL lambdas, annotations, collection literals, and JSON assertion builders."
     },
     {
       "language": "kotlin",
-      "path": "kotlin/compose-window.kt",
-      "source": "https://github.com/JetBrains/compose-multiplatform/blob/master/ci/templates/maven-test-project/src/main/kotlin/Main.kt",
+      "path": "kotlin/ktor-openapi-security-scheme-inference-test.kt",
+      "source": "https://github.com/ktorio/ktor/blob/eac67e82d3d60bedbbf7aa0ed72acc1426cb18e7/ktor-server/ktor-server-plugins/ktor-server-routing-openapi/jvm/test/io/ktor/server/routing/openapi/SecuritySchemeInferenceTest.kt",
       "license": "Apache-2.0",
-      "description": "Compose-style nested trailing lambdas, delegated property, and top-level expression-bodied function."
+      "description": "Ktor OpenAPI security-scheme inference tests with nested plugin/routing/authentication DSLs, generics, maps, and chained assertions."
     },
     {
       "language": "csharp",

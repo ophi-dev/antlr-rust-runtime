@@ -79,5 +79,5 @@ Fixture metadata lives in `fixtures/manifest.json`. The fixture files are
 source-referenced benchmark inputs that point at independent upstream parser
 stress patterns:
 
-- Kotlin: JetBrains Kotlin, kotlinx.coroutines, Ktor, Compose Multiplatform.
+- Kotlin: JetBrains Kotlin, kotlinx.coroutines, Ktor.
 - C#: dotnet/wpf, Mono.
