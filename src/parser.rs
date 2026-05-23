@@ -3131,7 +3131,7 @@ where
         } else {
             dedupe_clean_fast_outcomes(&mut outcomes);
         }
-        if self.fast_recovery_enabled || outcomes.len() > 1 {
+        if self.fast_recovery_enabled || !outcomes.is_empty() {
             memo.insert(key, outcomes.clone());
         }
         outcomes
@@ -4759,9 +4759,7 @@ const fn fast_recognized_node_span(node: &FastRecognizedNode) -> Option<(usize, 
         FastRecognizedNode::Token { index } | FastRecognizedNode::ErrorToken { index } => {
             Some((*index, Some(*index)))
         }
-        FastRecognizedNode::MissingToken { at_index, .. } => {
-            Some((*at_index, at_index.checked_sub(1)))
-        }
+        FastRecognizedNode::MissingToken { at_index, .. } => Some((*at_index, None)),
         FastRecognizedNode::Rule {
             start_index,
             stop_index,
