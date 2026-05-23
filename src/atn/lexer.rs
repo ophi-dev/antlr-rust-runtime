@@ -480,10 +480,14 @@ where
     F: TokenFactory,
     P: FnMut(&BaseLexer<I, F>, LexerPredicate) -> bool,
 {
-    let Some(mut dfa_state) = cached_mode_start_state(lexer, atn, mode, start, semantic_predicate)
+    let Some((mut dfa_state, mode_start_has_semantic_context)) =
+        cached_mode_start_state(lexer, atn, mode, start, semantic_predicate)
     else {
         return MatchResult::NoViableAlt { stop: start };
     };
+    if mode_start_has_semantic_context {
+        return match_token(lexer, atn, mode, start, semantic_predicate);
+    }
 
     let mut position = start;
     let mut best = None;
@@ -492,6 +496,9 @@ where
         let Some(cached_state) = lexer.cached_lexer_dfa_state(dfa_state) else {
             return match_token(lexer, atn, mode, start, semantic_predicate);
         };
+        if cached_state.has_semantic_context {
+            return match_token(lexer, atn, mode, start, semantic_predicate);
+        }
         if let Some(accept) = cached_state.accept.as_ref() {
             let accept = cached_accept_state(accept, start, position);
             if best.as_ref().is_none_or(|current: &AcceptState| {
@@ -545,6 +552,9 @@ where
 
         let closure = epsilon_closure(lexer, atn, next, semantic_predicate);
         let target_has_semantic_context = closure.has_semantic_context;
+        if target_has_semantic_context {
+            return match_token(lexer, atn, mode, start, semantic_predicate);
+        }
         let suppress_edge = source_has_semantic_context || target_has_semantic_context;
         let active = prune_after_accepts(atn, closure.configs);
         if active.is_empty() {
@@ -587,14 +597,14 @@ fn cached_mode_start_state<I, F, P>(
     mode: i32,
     start: usize,
     semantic_predicate: &mut P,
-) -> Option<usize>
+) -> Option<(usize, bool)>
 where
     I: CharStream,
     F: TokenFactory,
     P: FnMut(&BaseLexer<I, F>, LexerPredicate) -> bool,
 {
     if let Some(state) = lexer.cached_lexer_mode_start(mode) {
-        return Some(state);
+        return Some((state, false));
     }
 
     let mode_index = usize::try_from(mode).ok()?;
@@ -625,7 +635,7 @@ where
     if !start_closure.has_semantic_context {
         lexer.cache_lexer_mode_start(mode, state);
     }
-    Some(state)
+    Some((state, start_closure.has_semantic_context))
 }
 
 fn cache_dfa_state<I, F>(
@@ -644,30 +654,32 @@ where
         lexer_dfa_key(active, token_start),
         accept_prediction(atn, active),
     );
-    lexer.cache_lexer_dfa_state(
-        state,
-        LexerDfaCachedState {
-            has_semantic_context,
-            configs: active
-                .iter()
-                .map(|config| normalized_config_key(config, token_start))
-                .collect(),
-            accept: best_accept(atn, active).map(|accept| LexerDfaCachedAccept {
-                position_delta: accept.position.saturating_sub(position),
-                rule_index: accept.rule_index,
-                consumed_eof: accept.consumed_eof,
-                actions: accept
-                    .actions
+    if !has_semantic_context {
+        lexer.cache_lexer_dfa_state(
+            state,
+            LexerDfaCachedState {
+                has_semantic_context,
+                configs: active
                     .iter()
-                    .map(|action| LexerDfaActionKey {
-                        action_index: action.action_index,
-                        position_delta: action.position.saturating_sub(token_start),
-                        rule_index: action.rule_index,
-                    })
+                    .map(|config| normalized_config_key(config, token_start))
                     .collect(),
-            }),
-        },
-    );
+                accept: best_accept(atn, active).map(|accept| LexerDfaCachedAccept {
+                    position_delta: accept.position.saturating_sub(position),
+                    rule_index: accept.rule_index,
+                    consumed_eof: accept.consumed_eof,
+                    actions: accept
+                        .actions
+                        .iter()
+                        .map(|action| LexerDfaActionKey {
+                            action_index: action.action_index,
+                            position_delta: action.position.saturating_sub(token_start),
+                            rule_index: action.rule_index,
+                        })
+                        .collect(),
+                }),
+            },
+        );
+    }
     state
 }
 
@@ -1025,11 +1037,29 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::atn::AtnType;
     use crate::atn::serialized::{AtnDeserializer, SerializedAtn};
     use crate::char_stream::InputStream;
     use crate::recognizer::RecognizerData;
     use crate::token::{TOKEN_EOF, Token};
     use crate::vocabulary::Vocabulary;
+
+    #[test]
+    fn predicate_sensitive_lexer_state_is_not_replay_cached() {
+        let atn = Atn::new(AtnType::Lexer, 1);
+        let data = RecognizerData::new(
+            "T",
+            Vocabulary::new([None, Some("T")], [None, Some("T")], [None::<&str>, None]),
+        );
+        let mut lexer = BaseLexer::new(InputStream::new(""), data);
+
+        let predicate_state = cache_dfa_state(&mut lexer, &atn, &[], true, 0, 0);
+        assert!(lexer.cached_lexer_dfa_state(predicate_state).is_none());
+
+        let plain_state = cache_dfa_state(&mut lexer, &atn, &[], false, 0, 0);
+        assert_eq!(predicate_state, plain_state);
+        assert!(lexer.cached_lexer_dfa_state(plain_state).is_some());
+    }
 
     #[test]
     fn lexer_matches_longest_token_and_skips() {
