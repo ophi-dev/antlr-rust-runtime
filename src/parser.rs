@@ -83,6 +83,10 @@ use crate::vocabulary::Vocabulary;
 /// non-viable. Long expression-regression descriptors legitimately walk tens
 /// of thousands of ATN edges.
 const RECOGNITION_DEPTH_LIMIT: usize = 100_000;
+/// Preserve lazy lexing for short or failing inputs, but eagerly fill once the
+/// fast recognizer has probed far enough that per-token stream sync dominates.
+/// Sixty-four tokens is a small rule-sized window: it keeps startup lazy while
+/// switching long inputs to the cheaper filled-stream path before large fanout.
 const FAST_RECOGNIZER_DEFERRED_FILL_AT: usize = 64;
 
 /// Parser semantic action reached while recognizing one ATN path.
@@ -1810,6 +1814,11 @@ where
         stop_state: usize,
         start_index: usize,
     ) -> Result<(FastRecognizeOutcome, ExpectedTokens), ExpectedTokens> {
+        // `input.size()` is intentionally only the currently buffered token
+        // count here. Do not restore an up-front fill just to size this map:
+        // the fixed floor avoids small-input churn, and large inputs grow the
+        // cache after the deferred-fill threshold without forcing startup
+        // tokenization.
         let memo_capacity = self.input.size().saturating_mul(4).clamp(65_536, 262_144);
         let mut visiting = FxHashSet::with_capacity_and_hasher(256, FxBuildHasher::default());
         let mut memo = FxHashMap::with_capacity_and_hasher(memo_capacity, FxBuildHasher::default());
@@ -2727,19 +2736,12 @@ where
         }
 
         let visit_key = key.clone();
-        let inserted_visit = if self.fast_recovery_enabled {
-            if !visiting.insert(visit_key.clone()) {
-                return Vec::new();
-            }
-            true
-        } else {
-            false
-        };
+        if !visiting.insert(visit_key.clone()) {
+            return Vec::new();
+        }
 
         let Some(state) = atn.state(state_number) else {
-            if inserted_visit {
-                visiting.remove(&visit_key);
-            }
+            visiting.remove(&visit_key);
             return Vec::new();
         };
         let next_decision_start_index = if starts_prediction_decision(state) {
@@ -3120,9 +3122,7 @@ where
             }
         }
 
-        if inserted_visit {
-            visiting.remove(&visit_key);
-        }
+        visiting.remove(&visit_key);
         if self.prediction_mode == PredictionMode::Ll {
             discard_recovered_fast_outcomes_if_clean_path_exists(&mut outcomes);
         }

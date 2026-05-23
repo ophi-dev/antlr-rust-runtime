@@ -922,10 +922,16 @@ fn normalized_config_key(config: &LexerConfig, token_start: usize) -> LexerDfaCo
         config
             .actions
             .iter()
-            .map(|action| LexerDfaActionKey {
-                action_index: action.action_index,
-                position_delta: action.position.saturating_sub(token_start),
-                rule_index: action.rule_index,
+            .map(|action| {
+                debug_assert!(
+                    action.position >= token_start,
+                    "lexer DFA action position must be relative to the current token"
+                );
+                LexerDfaActionKey {
+                    action_index: action.action_index,
+                    position_delta: action.position.saturating_sub(token_start),
+                    rule_index: action.rule_index,
+                }
             })
             .collect(),
     )
