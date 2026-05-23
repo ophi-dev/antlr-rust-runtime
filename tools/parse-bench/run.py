@@ -238,7 +238,16 @@ def prepare_python_support(spec: LanguageSpec, grammars_v4: Path, py_gen_dir: Pa
     for rel_path in spec.python_support:
         source = grammars_v4 / rel_path
         require_path(source, f"{spec.name} Python support")
-        shutil.copy2(source, py_gen_dir / source.name)
+        target = py_gen_dir / source.name
+        shutil.copy2(source, target)
+        if spec.name == "csharp" and source.name == "CSharpLexerBase.py":
+            target.write_text(
+                target.read_text().replace(
+                    'tok = CommonToken(type=CSharpLexer.SKIPPED_SECTION, text="".join(text))',
+                    'tok = CommonToken(type=CSharpLexer.SKIPPED_SECTION)\n'
+                    '        tok.text = "".join(text)',
+                )
+            )
 
 
 def prepare_go_support(

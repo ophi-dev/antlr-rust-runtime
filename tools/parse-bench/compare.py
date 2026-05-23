@@ -39,6 +39,11 @@ def main() -> int:
         default=None,
         help="Runtime to compare; repeat for multiple runtimes.",
     )
+    parser.add_argument(
+        "--allow-empty",
+        action="store_true",
+        help="Exit successfully when there are no matching baseline/current results.",
+    )
     args = parser.parse_args()
 
     baseline = load_results(args.baseline)
@@ -68,11 +73,14 @@ def main() -> int:
         if key in baseline and key[2] in runtimes
     )
     if compared == 0:
-        print(
+        message = (
             "parse benchmark compare found no matching baseline/current "
-            f"result pairs for runtime(s): {', '.join(sorted(runtimes))}",
-            file=sys.stderr,
+            f"result pairs for runtime(s): {', '.join(sorted(runtimes))}"
         )
+        if args.allow_empty:
+            print(f"{message}; skipping regression comparison")
+            return 0
+        print(message, file=sys.stderr)
         return 1
 
     if failures:
