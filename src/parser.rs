@@ -3301,11 +3301,16 @@ where
                             stop_index: self.rule_stop_token_index(child_index, child_consumed_eof),
                             children: child.nodes,
                         });
+                        let child_diags_empty = child_diagnostics.is_empty();
                         outcomes.extend(follow_outcomes.into_iter().map(|mut outcome| {
                             outcome.consumed_eof |= child_consumed_eof;
-                            let mut diagnostics = child_diagnostics.clone();
-                            diagnostics.append(&mut outcome.diagnostics);
-                            outcome.diagnostics = diagnostics;
+                            // Skip the prepend dance when there's nothing to
+                            // merge from the child — common case in pass 1.
+                            if !child_diags_empty {
+                                let mut diagnostics = child_diagnostics.clone();
+                                diagnostics.append(&mut outcome.diagnostics);
+                                outcome.diagnostics = diagnostics;
+                            }
                             outcome.nodes.prepend(Rc::clone(&child_node));
                             outcome
                         }));
