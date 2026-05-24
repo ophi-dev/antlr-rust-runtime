@@ -4513,12 +4513,21 @@ where
     /// recognition; sharing the entry through `Rc` keeps the prefilter to one
     /// hash lookup per visit.
     fn cached_decision_lookahead(
-        &self,
+        &mut self,
         atn: &Atn,
         state: &AtnState,
         rule_stop_state: usize,
     ) -> Rc<DecisionLookahead> {
-        with_shared_atn_caches(atn, |cache| {
+        // Hit the parser-instance cache first. Decision lookahead is purely
+        // a function of the ATN/state, so on a warm cache we skip the
+        // thread-local + RefCell + HashMap-entry dance through
+        // SHARED_ATN_CACHES — which on multi-trans-heavy grammars (C# does
+        // ~58K multi-trans visits per parse) shows up as RefCell borrow and
+        // hashmap-entry overhead in profiles.
+        if let Some(cached) = self.decision_lookahead_cache.get(&state.state_number) {
+            return Rc::clone(cached);
+        }
+        let entry = with_shared_atn_caches(atn, |cache| {
             if let Some(cached) = cache.decision_lookahead.get(&state.state_number) {
                 return Rc::clone(cached);
             }
@@ -4537,7 +4546,10 @@ where
             cache.decision_lookahead
                 .insert(state.state_number, Rc::clone(&entry));
             entry
-        })
+        });
+        self.decision_lookahead_cache
+            .insert(state.state_number, Rc::clone(&entry));
+        entry
     }
 
     /// Clones the visible token at an absolute token-stream index.
