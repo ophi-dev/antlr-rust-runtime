@@ -5753,8 +5753,36 @@ fn dedupe_clean_fast_outcomes(outcomes: &mut Vec<FastRecognizeOutcome>) {
     if outcomes.len() < 2 {
         return;
     }
-    let mut seen = BTreeSet::new();
-    outcomes.retain(|outcome| seen.insert((outcome.index, outcome.consumed_eof)));
+    // Most outcomes lists are 2-4 entries; an inline scan beats BTreeSet
+    // here because BTreeSet's allocation + per-insert balancing dominates
+    // O(log n) wins on tiny n. Retains the original order so callers that
+    // depend on alt ordering (e.g. fast outcome selection) stay correct.
+    let mut keep_keys: [(usize, bool); 8] = [(0, false); 8];
+    let mut keep_len = 0_usize;
+    outcomes.retain(|outcome| {
+        let key = (outcome.index, outcome.consumed_eof);
+        if keep_len < keep_keys.len() {
+            for &existing in &keep_keys[..keep_len] {
+                if existing == key {
+                    return false;
+                }
+            }
+            keep_keys[keep_len] = key;
+            keep_len += 1;
+            true
+        } else {
+            // Fallback for the rare case where there are more than 8
+            // distinct outcomes — scan all kept entries.
+            for &existing in &keep_keys[..] {
+                if existing == key {
+                    return false;
+                }
+            }
+            true
+        }
+    });
+    let _ = keep_keys;
+    let _ = keep_len;
 }
 
 /// Sorts and removes equivalent endpoints, including their action traces.
