@@ -109,8 +109,11 @@ mod perf_counters {
         pub(super) static SINGLE_TRANS_RULE: Cell<u64> = const { Cell::new(0) };
         pub(super) static SINGLE_TRANS_ATOM: Cell<u64> = const { Cell::new(0) };
         pub(super) static SINGLE_TRANS_OTHER: Cell<u64> = const { Cell::new(0) };
+        pub(super) static OUTCOMES_RETURN_0: Cell<u64> = const { Cell::new(0) };
+        pub(super) static OUTCOMES_RETURN_1: Cell<u64> = const { Cell::new(0) };
+        pub(super) static OUTCOMES_RETURN_N: Cell<u64> = const { Cell::new(0) };
     }
-    pub(super) fn snapshot() -> [(&'static str, u64); 15] {
+    pub(super) fn snapshot() -> [(&'static str, u64); 18] {
         [
             ("rfs_calls", RFS_CALLS.with(Cell::get)),
             ("rfs_memo_hits", RFS_MEMO_HITS.with(Cell::get)),
@@ -127,6 +130,9 @@ mod perf_counters {
             ("single_trans_rule", SINGLE_TRANS_RULE.with(Cell::get)),
             ("single_trans_atom", SINGLE_TRANS_ATOM.with(Cell::get)),
             ("single_trans_other", SINGLE_TRANS_OTHER.with(Cell::get)),
+            ("outcomes_return_0", OUTCOMES_RETURN_0.with(Cell::get)),
+            ("outcomes_return_1", OUTCOMES_RETURN_1.with(Cell::get)),
+            ("outcomes_return_n", OUTCOMES_RETURN_N.with(Cell::get)),
         ]
     }
     pub fn reset() {
@@ -145,6 +151,9 @@ mod perf_counters {
         SINGLE_TRANS_RULE.with(|c| c.set(0));
         SINGLE_TRANS_ATOM.with(|c| c.set(0));
         SINGLE_TRANS_OTHER.with(|c| c.set(0));
+        OUTCOMES_RETURN_0.with(|c| c.set(0));
+        OUTCOMES_RETURN_1.with(|c| c.set(0));
+        OUTCOMES_RETURN_N.with(|c| c.set(0));
     }
     pub fn dump() {
         for (name, value) in snapshot() {
@@ -1964,6 +1973,11 @@ where
             &mut memo,
             &mut expected,
         );
+        #[cfg(feature = "perf-counters")]
+        if std::env::var("ANTLR_PERF_DUMP").is_ok() {
+            perf_counters::dump();
+            perf_counters::reset();
+        }
         match select_best_fast_outcome(outcomes.into_iter(), self.prediction_mode) {
             Some(outcome) => Ok((outcome, expected)),
             None => Err(expected),
@@ -3388,6 +3402,11 @@ where
             {
                 perf_counters::inc(&perf_counters::MEMO_INSERTED, 1);
                 perf_counters::inc(&perf_counters::OUTCOMES_PUSHED, outcomes.len() as u64);
+                match outcomes.len() {
+                    0 => perf_counters::inc(&perf_counters::OUTCOMES_RETURN_0, 1),
+                    1 => perf_counters::inc(&perf_counters::OUTCOMES_RETURN_1, 1),
+                    _ => perf_counters::inc(&perf_counters::OUTCOMES_RETURN_N, 1),
+                }
             }
             // Materialize the result into a shared `Rc<[..]>` once, then
             // hand the caller a fresh `Vec` cloned from the same slice.
@@ -3397,6 +3416,12 @@ where
             let stored: Rc<[FastRecognizeOutcome]> = Rc::from(outcomes);
             memo.insert(key, Rc::clone(&stored));
             return stored.to_vec();
+        }
+        #[cfg(feature = "perf-counters")]
+        match outcomes.len() {
+            0 => perf_counters::inc(&perf_counters::OUTCOMES_RETURN_0, 1),
+            1 => perf_counters::inc(&perf_counters::OUTCOMES_RETURN_1, 1),
+            _ => perf_counters::inc(&perf_counters::OUTCOMES_RETURN_N, 1),
         }
         outcomes
     }
