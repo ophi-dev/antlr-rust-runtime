@@ -527,22 +527,19 @@ struct FastRecognizeOutcome {
 /// same head-first order as the original `Vec<FastRecognizedNode>` they
 /// replaced. Shared tails across speculative outcomes amortize the cost of
 /// chaining a child rule's nodes onto every follow outcome.
+///
+/// `One` is an inline single-element variant: most outcomes carry only one
+/// node (a single token or a single rule wrapper), so storing that node
+/// directly avoids allocating an `Rc<NodeList>` tail wrapper.
 #[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 enum NodeList {
     #[default]
     Empty,
+    One(Rc<FastRecognizedNode>),
     Cons {
         head: Rc<FastRecognizedNode>,
         tail: Rc<Self>,
     },
-}
-
-thread_local! {
-    /// Shared tail for `NodeList::Cons` that wraps the empty list — used to
-    /// avoid `Rc::new(NodeList::Empty)` allocations on every prepend onto an
-    /// empty list. Cons cells whose tail is the shared empty Rc keep the
-    /// list's clone semantics intact.
-    static EMPTY_NODELIST: Rc<NodeList> = Rc::new(NodeList::Empty);
 }
 
 impl NodeList {
@@ -551,18 +548,16 @@ impl NodeList {
         Self::Empty
     }
 
-    fn shared_empty() -> Rc<Self> {
-        EMPTY_NODELIST.with(Rc::clone)
-    }
-
     /// Prepends `node` and returns the new list. Both shared tails and the
     /// new head are reference-counted so this is `O(1)`.
     fn cons(self, node: Rc<FastRecognizedNode>) -> Self {
-        let tail = match self {
-            Self::Empty => Self::shared_empty(),
-            cons @ Self::Cons { .. } => Rc::new(cons),
-        };
-        Self::Cons { head: node, tail }
+        match self {
+            Self::Empty => Self::One(node),
+            existing @ (Self::One(_) | Self::Cons { .. }) => Self::Cons {
+                head: node,
+                tail: Rc::new(existing),
+            },
+        }
     }
 
     /// In-place prepend that takes ownership of `self` via [`std::mem::take`]
@@ -579,9 +574,18 @@ impl NodeList {
     fn to_vec(&self) -> Vec<Rc<FastRecognizedNode>> {
         let mut out = Vec::new();
         let mut cursor = self;
-        while let Self::Cons { head, tail } = cursor {
-            out.push(Rc::clone(head));
-            cursor = tail.as_ref();
+        loop {
+            match cursor {
+                Self::Empty => break,
+                Self::One(node) => {
+                    out.push(Rc::clone(node));
+                    break;
+                }
+                Self::Cons { head, tail } => {
+                    out.push(Rc::clone(head));
+                    cursor = tail.as_ref();
+                }
+            }
         }
         out
     }
@@ -630,6 +634,10 @@ impl<'a> Iterator for NodeListIter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         match self.cursor {
             NodeList::Empty => None,
+            NodeList::One(node) => {
+                self.cursor = &NodeList::Empty;
+                Some(node)
+            }
             NodeList::Cons { head, tail } => {
                 self.cursor = tail.as_ref();
                 Some(head)
