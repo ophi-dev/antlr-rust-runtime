@@ -1,10 +1,15 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeSet, HashMap};
+use std::hash::BuildHasherDefault;
 use std::rc::Rc;
 
 use crate::char_stream::{CharStream, TextInterval};
 use crate::int_stream::EOF;
+use crate::prediction::PredictionFxHasher;
 use crate::recognizer::{Recognizer, RecognizerData};
 use crate::token::{CommonToken, CommonTokenFactory, TokenFactory, TokenSourceError, TokenSpec};
+
+#[allow(clippy::disallowed_types)]
+type FxHashMap<K, V> = HashMap<K, V, BuildHasherDefault<PredictionFxHasher>>;
 
 pub const SKIP: i32 = -3;
 pub const MORE: i32 = -2;
@@ -114,29 +119,29 @@ pub struct BaseLexer<I, F = CommonTokenFactory> {
 /// runtime-suite descriptors.
 #[derive(Clone, Debug, Default)]
 struct LexerDfaTrace {
-    state_numbers: BTreeMap<LexerDfaKey, usize>,
-    accept_predictions: BTreeMap<usize, i32>,
+    state_numbers: FxHashMap<LexerDfaKey, usize>,
+    accept_predictions: FxHashMap<usize, i32>,
     edges: BTreeSet<LexerDfaEdge>,
-    cached_states: BTreeMap<usize, Rc<LexerDfaCachedState>>,
-    transitions: BTreeMap<(usize, i32), LexerDfaCachedTransition>,
-    mode_starts: BTreeMap<i32, usize>,
+    cached_states: FxHashMap<usize, Rc<LexerDfaCachedState>>,
+    transitions: FxHashMap<(usize, i32), LexerDfaCachedTransition>,
+    mode_starts: FxHashMap<i32, usize>,
 }
 
 impl LexerDfaTrace {
-    const fn new() -> Self {
+    fn new() -> Self {
         Self {
-            state_numbers: BTreeMap::new(),
-            accept_predictions: BTreeMap::new(),
+            state_numbers: FxHashMap::default(),
+            accept_predictions: FxHashMap::default(),
             edges: BTreeSet::new(),
-            cached_states: BTreeMap::new(),
-            transitions: BTreeMap::new(),
-            mode_starts: BTreeMap::new(),
+            cached_states: FxHashMap::default(),
+            transitions: FxHashMap::default(),
+            mode_starts: FxHashMap::default(),
         }
     }
 }
 
 /// Normalized lexer ATN config-set identity used for observed DFA traces.
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub(crate) struct LexerDfaKey {
     configs: Vec<LexerDfaConfigKey>,
 }
@@ -149,7 +154,7 @@ impl LexerDfaKey {
 }
 
 /// One lexer ATN config identity with the absolute input position removed.
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub(crate) struct LexerDfaConfigKey {
     pub(crate) state: usize,
     pub(crate) alt_rule_index: Option<usize>,
@@ -159,7 +164,7 @@ pub(crate) struct LexerDfaConfigKey {
     pub(crate) actions: Vec<LexerDfaActionKey>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub(crate) struct LexerDfaActionKey {
     pub(crate) action_index: usize,
     pub(crate) position_delta: usize,
@@ -221,7 +226,7 @@ where
     I: CharStream,
 {
     /// Creates a lexer base using `CommonTokenFactory`.
-    pub const fn new(input: I, data: RecognizerData) -> Self {
+    pub fn new(input: I, data: RecognizerData) -> Self {
         Self::with_factory(input, data, CommonTokenFactory)
     }
 }
@@ -232,7 +237,7 @@ where
     F: TokenFactory,
 {
     /// Creates a lexer base with a custom token factory.
-    pub const fn with_factory(input: I, data: RecognizerData, factory: F) -> Self {
+    pub fn with_factory(input: I, data: RecognizerData, factory: F) -> Self {
         Self {
             input,
             data,
