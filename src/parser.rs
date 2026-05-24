@@ -2842,7 +2842,7 @@ where
         let FastRecognizeRequest {
             mut state_number,
             stop_state,
-            index,
+            mut index,
             rule_start_index,
             decision_start_index,
             precedence,
@@ -2859,16 +2859,32 @@ where
         // The loop exits as soon as we hit the original state's logic
         // (multi-alt, decision, rule call, atom/range/set, precedence) so
         // existing fanout, recovery, and memoization still apply unchanged.
+        //
+        // The inline case also handles single-atom-match states on the
+        // happy-pass path: when the lone consuming transition matches the
+        // current lookahead, advance the index and continue without paying
+        // for a full `recognize_state_fast` recursion. We track tokens we
+        // consumed inline in `inline_consumed_tokens` so they can be
+        // prepended onto the eventual outcome list once we hit a state
+        // whose handling falls outside this fast loop.
+        let mut inline_consumed_tokens: Vec<usize> = Vec::new();
+        let mut inline_consumed_eof = false;
         loop {
             if depth > RECOGNITION_DEPTH_LIMIT {
                 return Vec::new();
             }
             if state_number == stop_state {
+                let mut nodes = NodeList::new();
+                if self.fast_token_nodes_enabled {
+                    for token_index in inline_consumed_tokens.iter().rev() {
+                        nodes.prepend(Rc::new(FastRecognizedNode::Token { index: *token_index }));
+                    }
+                }
                 return vec![FastRecognizeOutcome {
                     index,
-                    consumed_eof: false,
+                    consumed_eof: inline_consumed_eof,
                     diagnostics: Vec::new(),
-                    nodes: NodeList::new(),
+                    nodes,
                 }];
             }
             let Some(state) = atn.state(state_number) else {
@@ -2878,18 +2894,58 @@ where
                 && !starts_prediction_decision(state)
                 && !state.precedence_rule_decision
             {
-                if let Transition::Epsilon { target } = &state.transitions[0] {
-                    if left_recursive_boundary(atn, state, *target).is_none() {
-                        #[cfg(feature = "perf-counters")]
-                        perf_counters::inc(&perf_counters::EPSILON_TRANSITIONS, 1);
-                        state_number = *target;
-                        depth += 1;
-                        continue;
+                match &state.transitions[0] {
+                    Transition::Epsilon { target } => {
+                        if left_recursive_boundary(atn, state, *target).is_none() {
+                            #[cfg(feature = "perf-counters")]
+                            perf_counters::inc(&perf_counters::EPSILON_TRANSITIONS, 1);
+                            state_number = *target;
+                            depth += 1;
+                            continue;
+                        }
                     }
+                    // Single-atom / range / set / wildcard / not-set states
+                    // are common (~17K of ~125K calls on C#) and almost
+                    // always succeed in pass 1: no fanout, no recovery, no
+                    // diagnostics. Inline the token match and continue
+                    // walking instead of recursing — the recursive path
+                    // would just allocate a Vec, build one outcome, prepend
+                    // a Token node, and return. Skip pass 2 (recovery
+                    // enabled): there the failure branch matters and the
+                    // existing recursive code records expected symbols.
+                    Transition::Atom { target, .. }
+                    | Transition::Range { target, .. }
+                    | Transition::Set { target, .. }
+                    | Transition::NotSet { target, .. }
+                    | Transition::Wildcard { target, .. }
+                        if !self.fast_recovery_enabled =>
+                    {
+                        let symbol = self.token_type_at(index);
+                        let transition = &state.transitions[0];
+                        if transition.matches(symbol, 1, atn.max_token_type()) {
+                            #[cfg(feature = "perf-counters")]
+                            perf_counters::inc(&perf_counters::ATOM_RANGE_TRANSITIONS, 1);
+                            if self.fast_token_nodes_enabled {
+                                inline_consumed_tokens.push(index);
+                            }
+                            inline_consumed_eof |= symbol == TOKEN_EOF;
+                            index = self.consume_index(index, symbol);
+                            state_number = *target;
+                            depth += 1;
+                            continue;
+                        }
+                        // Fall through to break and let the regular
+                        // body handle the no-match case (returns empty).
+                    }
+                    _ => {}
                 }
             }
             break;
         }
+        // If we collected token nodes inline but bail to the recursive
+        // body (decision state, rule call, etc.), the outcomes returned
+        // below will need those token nodes prepended.
+        let inline_pending = !inline_consumed_tokens.is_empty() || inline_consumed_eof;
         // In pass 1 (`fast_recovery_enabled == false`) the recovery-related
         // fields and the rule/decision boundary indices are pure plumbing —
         // they only affect the recovery branch and the no-viable diagnostic
@@ -2931,6 +2987,27 @@ where
             // Materialize a fresh `Vec` from the cached slice; the caller
             // mutates per-outcome state (eof flags, prepended nodes) so we
             // can't hand them the shared backing.
+            if !inline_consumed_tokens.is_empty() || inline_consumed_eof {
+                let inline_eof = inline_consumed_eof;
+                let inline_tokens = &inline_consumed_tokens;
+                return outcomes
+                    .iter()
+                    .cloned()
+                    .map(|mut outcome| {
+                        if inline_eof {
+                            outcome.consumed_eof = true;
+                        }
+                        if self.fast_token_nodes_enabled {
+                            for token_index in inline_tokens.iter().rev() {
+                                outcome.nodes.prepend(Rc::new(FastRecognizedNode::Token {
+                                    index: *token_index,
+                                }));
+                            }
+                        }
+                        outcome
+                    })
+                    .collect();
+            }
             return outcomes.to_vec();
         }
         #[cfg(feature = "perf-counters")]
@@ -3397,6 +3474,22 @@ where
         // record diagnostics that the cache must surface to repeated
         // failed visits.
         let should_memoize = self.fast_recovery_enabled || transition_count > 1;
+        // Apply inline pending state to each outcome before returning.
+        // Tokens consumed inline by the loop-collapse don't appear in the
+        // recursive recognizer's output, so we need to prepend them here.
+        let apply_inline_pending = |mut outcome: FastRecognizeOutcome| -> FastRecognizeOutcome {
+            if inline_consumed_eof {
+                outcome.consumed_eof = true;
+            }
+            if !inline_consumed_tokens.is_empty() {
+                for token_index in inline_consumed_tokens.iter().rev() {
+                    outcome
+                        .nodes
+                        .prepend(Rc::new(FastRecognizedNode::Token { index: *token_index }));
+                }
+            }
+            outcome
+        };
         if should_memoize && (self.fast_recovery_enabled || !outcomes.is_empty()) {
             #[cfg(feature = "perf-counters")]
             {
@@ -3408,13 +3501,15 @@ where
                     _ => perf_counters::inc(&perf_counters::OUTCOMES_RETURN_N, 1),
                 }
             }
-            // Materialize the result into a shared `Rc<[..]>` once, then
-            // hand the caller a fresh `Vec` cloned from the same slice.
-            // `Rc::from(Vec)` reuses the existing allocation when possible,
-            // so the cache write skips an extra copy versus inserting a
-            // freshly cloned `Vec` and then cloning it again to return.
+            // The memo is keyed by the loop-exit `(state_number, index)` so
+            // the inline-consumed tokens belong to *this* call's output, not
+            // the cached result. Memoize the bare outcomes (without the
+            // inline-pending data), then prepend the inline data on return.
             let stored: Rc<[FastRecognizeOutcome]> = Rc::from(outcomes);
             memo.insert(key, Rc::clone(&stored));
+            if inline_pending {
+                return stored.iter().cloned().map(apply_inline_pending).collect();
+            }
             return stored.to_vec();
         }
         #[cfg(feature = "perf-counters")]
@@ -3422,6 +3517,9 @@ where
             0 => perf_counters::inc(&perf_counters::OUTCOMES_RETURN_0, 1),
             1 => perf_counters::inc(&perf_counters::OUTCOMES_RETURN_1, 1),
             _ => perf_counters::inc(&perf_counters::OUTCOMES_RETURN_N, 1),
+        }
+        if inline_pending {
+            return outcomes.into_iter().map(apply_inline_pending).collect();
         }
         outcomes
     }
