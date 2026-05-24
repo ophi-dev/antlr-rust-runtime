@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::rc::Rc;
 
 use crate::char_stream::{CharStream, TextInterval};
 use crate::int_stream::EOF;
@@ -116,7 +117,7 @@ struct LexerDfaTrace {
     state_numbers: BTreeMap<LexerDfaKey, usize>,
     accept_predictions: BTreeMap<usize, i32>,
     edges: BTreeSet<LexerDfaEdge>,
-    cached_states: BTreeMap<usize, LexerDfaCachedState>,
+    cached_states: BTreeMap<usize, Rc<LexerDfaCachedState>>,
     transitions: BTreeMap<(usize, i32), LexerDfaCachedTransition>,
     mode_starts: BTreeMap<i32, usize>,
 }
@@ -530,7 +531,7 @@ where
             .or_insert(transition);
     }
 
-    pub(crate) fn cached_lexer_dfa_state(&self, state: usize) -> Option<LexerDfaCachedState> {
+    pub(crate) fn cached_lexer_dfa_state(&self, state: usize) -> Option<Rc<LexerDfaCachedState>> {
         self.lexer_dfa.cached_states.get(&state).cloned()
     }
 
@@ -542,7 +543,7 @@ where
         self.lexer_dfa
             .cached_states
             .entry(state)
-            .or_insert(cached_state);
+            .or_insert_with(|| Rc::new(cached_state));
     }
 
     pub(crate) fn cached_lexer_mode_start(&self, mode: i32) -> Option<usize> {
