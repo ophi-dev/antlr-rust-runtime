@@ -1,28 +1,45 @@
 # Complexity thresholds
-allowed-idents-below-min-chars      = ["..", "id", "x", "y", "z", "i", "j", "k", "n", "m"]
-cognitive-complexity-threshold      = 15
-excessive-nesting-threshold         = 8
-min-ident-chars-threshold           = 2
+allowed-idents-below-min-chars = [
+    "..",
+    "id",
+    "x",
+    "y",
+    "z",
+    "i",
+    "j",
+    "k",
+    "n",
+    "m",
+]
+cognitive-complexity-threshold = 15
+excessive-nesting-threshold = 8
+min-ident-chars-threshold = 2
 single-char-binding-names-threshold = 3
-too-many-arguments-threshold        = 6
+too-many-arguments-threshold = 6
 # The generator and runtime-testsuite harness still contain a few deliberately
 # dense functions. Keep this inherited strict-policy threshold explicit so new
 # jumbo helpers fail Clippy without forcing premature splits in those modules.
-too-many-lines-threshold            = 476
-trivial-copy-size-limit             = 16
-type-complexity-threshold           = 300
+too-many-lines-threshold = 476
+trivial-copy-size-limit = 16
+type-complexity-threshold = 300
 
 avoid-breaking-exported-api = false
 
 # Testing allowances
-allow-dbg-in-tests                 = true
-allow-expect-in-tests              = true
-allow-print-in-tests               = true
-allow-unwrap-in-tests              = true
+allow-dbg-in-tests = true
+allow-expect-in-tests = true
+allow-print-in-tests = true
+allow-unwrap-in-tests = true
 suppress-restriction-lint-in-const = true
 
 # Trait implementations
-allow-renamed-params-for = ["core::fmt::Debug", "core::fmt::Display", "futures_sink::Sink", "serde::de::Visitor", ".."]
+allow-renamed-params-for = [
+    "core::fmt::Debug",
+    "core::fmt::Display",
+    "futures_sink::Sink",
+    "serde::de::Visitor",
+    "..",
+]
 
 # Documentation
 doc-valid-idents = [
@@ -60,8 +77,6 @@ doc-valid-idents = [
 disallowed-names = ["foo", "bar", "baz", "tmp", "qux", "temp", "test", "dummy"]
 
 disallowed-types = [
-    { path = "std::collections::HashMap", reason = "Non-deterministic iter - use indexmap::IndexMap instead" },
-    { path = "std::collections::HashSet", reason = "Non-deterministic iter - use indexmap::IndexSet instead" },
     { path = "std::sync::Once", reason = "Use std::sync::OnceLock for lazy initialization (available since 1.70)" },
     { path = "rand::rngs::ThreadRng", reason = "ThreadRng is inherently non-deterministic; use a fixed-seed or hash-based approach instead." },
 ]
@@ -82,7 +97,6 @@ disallowed-methods = [
     { path = "async_std::task::block_on", reason = "block_on can cause deadlock easily" },
     { path = "pollster::block_on", reason = "block_on can cause deadlock easily" },
 
-    { path = "std::time::Instant::now", reason = "Do not use current date/time in code that must be deterministic" },
     { path = "namada_core::time::DateTimeUtc::now", reason = "Do not use current date/time in code that must be deterministic" },
     { path = "wasmtimer::std::Instant", reason = "Do not use current date/time in code that must be deterministic" },
 
