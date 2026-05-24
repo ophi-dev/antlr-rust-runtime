@@ -531,19 +531,32 @@ enum NodeList {
     },
 }
 
+thread_local! {
+    /// Shared tail for `NodeList::Cons` that wraps the empty list — used to
+    /// avoid `Rc::new(NodeList::Empty)` allocations on every prepend onto an
+    /// empty list. Cons cells whose tail is the shared empty Rc keep the
+    /// list's clone semantics intact.
+    static EMPTY_NODELIST: Rc<NodeList> = Rc::new(NodeList::Empty);
+}
+
 impl NodeList {
     /// Creates an empty list.
     const fn new() -> Self {
         Self::Empty
     }
 
+    fn shared_empty() -> Rc<Self> {
+        EMPTY_NODELIST.with(Rc::clone)
+    }
+
     /// Prepends `node` and returns the new list. Both shared tails and the
     /// new head are reference-counted so this is `O(1)`.
     fn cons(self, node: Rc<FastRecognizedNode>) -> Self {
-        Self::Cons {
-            head: node,
-            tail: Rc::new(self),
-        }
+        let tail = match self {
+            Self::Empty => Self::shared_empty(),
+            cons @ Self::Cons { .. } => Rc::new(cons),
+        };
+        Self::Cons { head: node, tail }
     }
 
     /// In-place prepend that takes ownership of `self` via [`std::mem::take`]
