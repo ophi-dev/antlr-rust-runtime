@@ -439,6 +439,12 @@ pub struct BaseParser<S> {
     /// current lookahead, letting common SLL decisions reduce to a single
     /// transition walk instead of a full speculative fan-out.
     decision_lookahead_cache: FxHashMap<usize, Rc<DecisionLookahead>>,
+    /// Per-parser fast-path mirror of `SharedAtnCache::ll1_decision_cache`.
+    /// Each multi-trans visit asks "given this decision state and this
+    /// lookahead token, which alt do I commit to?" Hitting this cache
+    /// turns the question into a hashmap probe (no thread-local +
+    /// RefCell + entry dance). Filled lazily from the shared cache.
+    ll1_decision_cache: FxHashMap<(usize, i32), Option<usize>>,
     /// Empty recovery-symbols singleton used as the default at rule entry and
     /// after token consumption.
     empty_recovery_symbols: Rc<BTreeSet<i32>>,
@@ -1788,6 +1794,7 @@ where
             state_expected_cache: FxHashMap::default(),
             recovery_symbols_intern: FxHashMap::default(),
             decision_lookahead_cache: FxHashMap::default(),
+            ll1_decision_cache: FxHashMap::default(),
             empty_recovery_symbols: Rc::new(BTreeSet::new()),
             fast_first_set_prefilter: true,
             fast_recovery_enabled: true,
@@ -3148,10 +3155,20 @@ where
         // alternative. The recursive recognizer can then commit to that single
         // alt without iterating every transition through `should_skip_via_lookahead`
         // — saving (transition_count - 1) filter probes per visit.
+        //
+        // Result is cached per `(state, lookahead_token)` on the parser
+        // instance, so subsequent visits skip the FIRST-set scan entirely.
         let ll1_only_alt: Option<usize> = if transition_count > 1
             && let Some((symbol, entry)) = lookahead_filter.as_ref()
         {
-            ll1_unique_alt(entry, *symbol)
+            let key = (state.state_number, *symbol);
+            if let Some(&cached) = self.ll1_decision_cache.get(&key) {
+                cached
+            } else {
+                let result = ll1_unique_alt(entry, *symbol);
+                self.ll1_decision_cache.insert(key, result);
+                result
+            }
         } else {
             None
         };
