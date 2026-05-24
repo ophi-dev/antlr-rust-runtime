@@ -1157,6 +1157,36 @@ fn transition_first_set(
 /// transition is pruned, its FIRST set is folded into `expected` so failed
 /// parses produce the same `mismatched input ... expecting ...` diagnostic
 /// the no-prefilter baseline would emit.
+/// Returns the unique alt index (0-based) when `symbol` falls into exactly
+/// one transition's FIRST set and no transition is nullable. Used as an
+/// LL(1) commit point: when prediction is unambiguous from the lookahead
+/// alone, the recursive recognizer can skip every other alt without paying
+/// for the per-transition filter probe.
+///
+/// `None` signals the caller to fall back to per-transition lookahead
+/// filtering. Returning `Some` for an alt whose transition cannot actually
+/// match would prune the only viable parse path; this is why we require
+/// strict disjointness *and* no nullable transitions in the decision.
+fn ll1_unique_alt(entry: &DecisionLookahead, symbol: i32) -> Option<usize> {
+    let mut chosen: Option<usize> = None;
+    for (i, t) in entry.transitions.iter().enumerate() {
+        // Nullable transitions can match without consuming `symbol`, so
+        // they're always potentially viable. Bail and fall back to the
+        // standard filter loop.
+        if t.nullable {
+            return None;
+        }
+        if t.symbols.contains(symbol) {
+            if chosen.is_some() {
+                // Two transitions both contain this symbol — not LL(1).
+                return None;
+            }
+            chosen = Some(i);
+        }
+    }
+    chosen
+}
+
 fn should_skip_via_lookahead(
     transition: &Transition,
     transition_index: usize,
@@ -3113,6 +3143,18 @@ where
         } else {
             None
         };
+        // LL(1) fast path: when the FIRST sets for the decision are disjoint
+        // and none is nullable, the lookahead deterministically selects one
+        // alternative. The recursive recognizer can then commit to that single
+        // alt without iterating every transition through `should_skip_via_lookahead`
+        // — saving (transition_count - 1) filter probes per visit.
+        let ll1_only_alt: Option<usize> = if transition_count > 1
+            && let Some((symbol, entry)) = lookahead_filter.as_ref()
+        {
+            ll1_unique_alt(entry, *symbol)
+        } else {
+            None
+        };
         let lookahead_filter = lookahead_filter.as_ref();
         // Pre-size only when we expect at least one outcome to land — most
         // single-transition fall-throughs (the loop above didn't catch
@@ -3122,7 +3164,12 @@ where
         let mut outcomes: Vec<FastRecognizeOutcome> =
             Vec::with_capacity(transition_count.min(2));
         for (transition_index, transition) in state.transitions.iter().enumerate() {
-            if should_skip_via_lookahead(
+            if let Some(alt) = ll1_only_alt {
+                // LL(1) determinism: skip every alt except the chosen one.
+                if alt != transition_index {
+                    continue;
+                }
+            } else if should_skip_via_lookahead(
                 transition,
                 transition_index,
                 lookahead_filter,
