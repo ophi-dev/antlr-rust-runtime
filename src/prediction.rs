@@ -555,11 +555,14 @@ pub fn conflicting_alt_subsets(configs: &[AtnConfig]) -> Vec<BTreeSet<usize>> {
     by_state_context.into_values().collect()
 }
 
-pub fn has_sll_conflict_terminating_prediction(configs: &AtnConfigSet) -> bool {
+pub fn has_sll_conflict_terminating_prediction(
+    configs: &AtnConfigSet,
+    is_rule_stop_state: impl Fn(usize) -> bool,
+) -> bool {
     if configs
         .configs()
         .iter()
-        .all(|config| config.context.is_empty())
+        .all(|config| is_rule_stop_state(config.state))
     {
         return true;
     }
@@ -587,6 +590,28 @@ mod tests {
         assert!(set.add(AtnConfig::new(1, 1, Rc::clone(&empty))));
         assert!(!set.add(AtnConfig::new(1, 1, Rc::clone(&empty))));
         assert_eq!(set.len(), 1);
+    }
+
+    #[test]
+    fn sll_conflict_does_not_stop_for_empty_contexts_alone() {
+        let empty = PredictionContext::empty();
+        let mut set = AtnConfigSet::new();
+        set.add(AtnConfig::new(1, 1, Rc::clone(&empty)));
+        set.add(AtnConfig::new(2, 2, empty));
+
+        assert!(!has_sll_conflict_terminating_prediction(&set, |_| false));
+    }
+
+    #[test]
+    fn sll_conflict_stops_when_all_configs_reached_rule_stop() {
+        let empty = PredictionContext::empty();
+        let mut set = AtnConfigSet::new();
+        set.add(AtnConfig::new(10, 1, Rc::clone(&empty)));
+        set.add(AtnConfig::new(11, 2, empty));
+
+        assert!(has_sll_conflict_terminating_prediction(&set, |state| {
+            matches!(state, 10 | 11)
+        }));
     }
 
     #[test]

@@ -2,7 +2,7 @@ use crate::atn::{Atn, AtnState, Transition};
 use crate::dfa::{Dfa, DfaState};
 use crate::prediction::{
     AtnConfig, AtnConfigSet, EMPTY_RETURN_STATE, PredictionContext, PredictionContextMergeCache,
-    SemanticContext,
+    SemanticContext, has_sll_conflict_terminating_prediction,
 };
 use std::collections::BTreeSet;
 use std::rc::Rc;
@@ -134,9 +134,23 @@ impl<'a> ParserAtnSimulator<'a> {
             return Err(ParserAtnSimulatorError::NoViableAlt { symbol });
         }
         let prediction = reach.unique_alt();
+        let conflict_prediction = prediction.or_else(|| {
+            if !has_sll_conflict_terminating_prediction(&reach, |state| {
+                self.atn.state(state).is_some_and(AtnState::is_rule_stop)
+            }) {
+                return None;
+            }
+            reach
+                .conflicting_alts()
+                .into_iter()
+                .next()
+                .or_else(|| reach.alts().into_iter().next())
+        });
+        let requires_full_context = prediction.is_none() && conflict_prediction.is_some();
         let mut dfa_state = DfaState::new(reach);
-        if let Some(prediction) = prediction {
+        if let Some(prediction) = conflict_prediction {
             dfa_state.mark_accept(prediction);
+            dfa_state.requires_full_context = requires_full_context;
         }
         let target_state = self.decision_to_dfa[decision].add_state(dfa_state);
         if let Some(source) = self.decision_to_dfa[decision].state_mut(source_state) {
@@ -298,6 +312,25 @@ mod tests {
         );
     }
 
+    #[test]
+    fn adaptive_predict_marks_sll_conflict_for_full_context() {
+        let atn = ambiguous_single_token_decision_atn();
+        let mut simulator = ParserAtnSimulator::new(&atn);
+
+        assert_eq!(simulator.adaptive_predict(0, [1]), Ok(1));
+
+        let dfa = &simulator.decision_dfas()[0];
+        let start = dfa.start_state().expect("start state");
+        let target = dfa
+            .state(start)
+            .and_then(|state| state.edge(1))
+            .expect("edge for token 1");
+        let state = dfa.state(target).expect("target state");
+        assert!(state.is_accept_state);
+        assert!(state.requires_full_context);
+        assert_eq!(state.prediction, Some(1));
+    }
+
     fn two_token_decision_atn() -> Atn {
         let mut atn = Atn::new(AtnType::Parser, 3);
         add_state(&mut atn, 0, AtnStateKind::RuleStart);
@@ -344,6 +377,52 @@ mod tests {
                 target: 6,
                 label: 3,
             });
+        atn.state_mut(6)
+            .expect("state 6")
+            .add_transition(Transition::Epsilon { target: 7 });
+        atn
+    }
+
+    fn ambiguous_single_token_decision_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 1);
+        add_state(&mut atn, 0, AtnStateKind::RuleStart);
+        add_state(&mut atn, 1, AtnStateKind::BlockStart);
+        add_state(&mut atn, 2, AtnStateKind::Basic);
+        add_state(&mut atn, 3, AtnStateKind::Basic);
+        add_state(&mut atn, 4, AtnStateKind::Basic);
+        add_state(&mut atn, 5, AtnStateKind::Basic);
+        add_state(&mut atn, 6, AtnStateKind::BlockEnd);
+        add_state(&mut atn, 7, AtnStateKind::RuleStop);
+        atn.set_rule_to_start_state(vec![0]);
+        atn.set_rule_to_stop_state(vec![7]);
+        atn.add_decision_state(1);
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Epsilon { target: 1 });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Epsilon { target: 2 });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Epsilon { target: 4 });
+        atn.state_mut(2)
+            .expect("state 2")
+            .add_transition(Transition::Atom {
+                target: 3,
+                label: 1,
+            });
+        atn.state_mut(3)
+            .expect("state 3")
+            .add_transition(Transition::Epsilon { target: 6 });
+        atn.state_mut(4)
+            .expect("state 4")
+            .add_transition(Transition::Atom {
+                target: 5,
+                label: 1,
+            });
+        atn.state_mut(5)
+            .expect("state 5")
+            .add_transition(Transition::Epsilon { target: 6 });
         atn.state_mut(6)
             .expect("state 6")
             .add_transition(Transition::Epsilon { target: 7 });
