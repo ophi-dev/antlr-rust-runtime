@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::hash::Hasher;
 use std::rc::Rc;
 
@@ -123,36 +123,134 @@ impl PredictionContext {
         }
     }
 
-    /// Merges two prediction contexts while preserving deterministic entry
-    /// order.
-    ///
-    /// This is a compact baseline for parser ATN work: equal contexts are
-    /// reused directly, and unequal singleton/array contexts are flattened into
-    /// a deduplicated array context.
     pub fn merge(left: Rc<Self>, right: Rc<Self>) -> Rc<Self> {
+        Self::merge_with_options(left, right, false, None)
+    }
+
+    /// Merges two prediction contexts using ANTLR's SLL/LL root semantics.
+    ///
+    /// In SLL mode the empty root is a wildcard: `$ + x = $`. In full LL mode
+    /// it is an ordinary array entry: `$ + x = [$, x]`. The optional merge
+    /// cache is intentionally per prediction operation so large conflict-heavy
+    /// parses can drop the cache immediately after `adaptive_predict`.
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn merge_with_options(
+        left: Rc<Self>,
+        right: Rc<Self>,
+        root_is_wildcard: bool,
+        mut cache: Option<&mut PredictionContextMergeCache>,
+    ) -> Rc<Self> {
         if left == right {
             return left;
         }
-        let mut entries = Vec::new();
-        collect_entries(&left, &mut entries);
-        collect_entries(&right, &mut entries);
-        drop((left, right));
-        entries.sort_by(|(left_parent, left_return), (right_parent, right_return)| {
-            left_return
-                .cmp(right_return)
-                .then_with(|| left_parent.cmp(right_parent))
-        });
-        entries.dedup_by(|a, b| a.1 == b.1 && a.0 == b.0);
-        Rc::new(Self::Array {
-            parents: entries
-                .iter()
-                .map(|(parent, _)| Rc::clone(parent))
-                .collect(),
-            return_states: entries
-                .iter()
-                .map(|(_, return_state)| *return_state)
-                .collect(),
-        })
+        if let Some(cache) = cache.as_deref_mut() {
+            if let Some(merged) = cache.get(&left, &right) {
+                return merged;
+            }
+        }
+        let merged = if root_is_wildcard && (left.is_empty() || right.is_empty()) {
+            Self::empty()
+        } else {
+            merge_contexts_uncached(Rc::clone(&left), Rc::clone(&right))
+        };
+        if let Some(cache) = cache {
+            cache.insert(&left, &right, &merged);
+        }
+        merged
+    }
+}
+
+fn merge_contexts_uncached(
+    left: Rc<PredictionContext>,
+    right: Rc<PredictionContext>,
+) -> Rc<PredictionContext> {
+    if left == right {
+        return left;
+    }
+    match (left.as_ref(), right.as_ref()) {
+        (PredictionContext::Empty, PredictionContext::Empty) => PredictionContext::empty(),
+        _ => {
+            let mut entries = Vec::new();
+            collect_entries(&left, &mut entries);
+            collect_entries(&right, &mut entries);
+            drop((left, right));
+            entries.sort_by(|(left_parent, left_return), (right_parent, right_return)| {
+                left_return
+                    .cmp(right_return)
+                    .then_with(|| left_parent.cmp(right_parent))
+            });
+            entries.dedup_by(|a, b| a.1 == b.1 && a.0 == b.0);
+            if entries.len() == 1 {
+                let (parent, return_state) = entries.remove(0);
+                return PredictionContext::singleton(parent, return_state);
+            }
+            Rc::new(PredictionContext::Array {
+                parents: entries
+                    .iter()
+                    .map(|(parent, _)| Rc::clone(parent))
+                    .collect(),
+                return_states: entries
+                    .iter()
+                    .map(|(_, return_state)| *return_state)
+                    .collect(),
+            })
+        }
+    }
+}
+
+/// Per-prediction memo for graph-structured stack merges.
+#[derive(Debug, Default)]
+pub struct PredictionContextMergeCache {
+    entries: BTreeMap<PredictionContextMergeKey, Rc<PredictionContext>>,
+}
+
+impl PredictionContextMergeCache {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    fn get(
+        &self,
+        left: &Rc<PredictionContext>,
+        right: &Rc<PredictionContext>,
+    ) -> Option<Rc<PredictionContext>> {
+        self.entries
+            .get(&PredictionContextMergeKey::new(left, right))
+            .cloned()
+    }
+
+    fn insert(
+        &mut self,
+        left: &Rc<PredictionContext>,
+        right: &Rc<PredictionContext>,
+        merged: &Rc<PredictionContext>,
+    ) {
+        self.entries.insert(
+            PredictionContextMergeKey::new(left, right),
+            Rc::clone(merged),
+        );
+    }
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct PredictionContextMergeKey {
+    left: Rc<PredictionContext>,
+    right: Rc<PredictionContext>,
+}
+
+impl PredictionContextMergeKey {
+    fn new(left: &Rc<PredictionContext>, right: &Rc<PredictionContext>) -> Self {
+        if left <= right {
+            Self {
+                left: Rc::clone(left),
+                right: Rc::clone(right),
+            }
+        } else {
+            Self {
+                left: Rc::clone(right),
+                right: Rc::clone(left),
+            }
+        }
     }
 }
 
@@ -178,11 +276,78 @@ fn collect_entries(
 }
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum SemanticContext {
+    None,
+    Predicate {
+        rule_index: usize,
+        pred_index: usize,
+        context_dependent: bool,
+    },
+    Precedence {
+        precedence: i32,
+    },
+    And(Vec<Self>),
+    Or(Vec<Self>),
+}
+
+impl SemanticContext {
+    pub const fn none() -> Self {
+        Self::None
+    }
+
+    pub fn and(left: Self, right: Self) -> Self {
+        combine_semantic_context(left, right, true)
+    }
+
+    pub fn or(left: Self, right: Self) -> Self {
+        combine_semantic_context(left, right, false)
+    }
+
+    pub const fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
+}
+
+fn combine_semantic_context(
+    left: SemanticContext,
+    right: SemanticContext,
+    and: bool,
+) -> SemanticContext {
+    if left == right {
+        return left;
+    }
+    if left.is_none() {
+        return right;
+    }
+    if right.is_none() {
+        return left;
+    }
+    let mut entries = Vec::new();
+    for context in [left, right] {
+        match (and, context) {
+            (true, SemanticContext::And(children)) | (false, SemanticContext::Or(children)) => {
+                entries.extend(children);
+            }
+            (_, other) => entries.push(other),
+        }
+    }
+    entries.sort();
+    entries.dedup();
+    if and {
+        SemanticContext::And(entries)
+    } else {
+        SemanticContext::Or(entries)
+    }
+}
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct AtnConfig {
     pub state: usize,
     pub alt: usize,
     pub context: Rc<PredictionContext>,
+    pub semantic_context: SemanticContext,
     pub reaches_into_outer_context: usize,
+    pub precedence_filter_suppressed: bool,
 }
 
 impl AtnConfig {
@@ -191,15 +356,32 @@ impl AtnConfig {
             state,
             alt,
             context,
+            semantic_context: SemanticContext::None,
             reaches_into_outer_context: 0,
+            precedence_filter_suppressed: false,
         }
+    }
+
+    #[must_use]
+    pub fn with_semantic_context(mut self, semantic_context: SemanticContext) -> Self {
+        self.semantic_context = semantic_context;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_reaches_into_outer_context(mut self, reaches: usize) -> Self {
+        self.reaches_into_outer_context = reaches;
+        self
     }
 }
 
 #[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct AtnConfigSet {
     configs: Vec<AtnConfig>,
-    config_index: BTreeSet<AtnConfig>,
+    config_index: BTreeMap<AtnConfigKey, usize>,
+    full_context: bool,
+    unique_alt: Option<usize>,
+    conflicting_alts: BTreeSet<usize>,
     has_semantic_context: bool,
     dips_into_outer_context: bool,
     readonly: bool,
@@ -210,18 +392,59 @@ impl AtnConfigSet {
         Self::default()
     }
 
-    /// Adds a configuration if an equivalent `(state, alt, context)` entry is
-    /// not already present.
+    pub const fn new_full_context(full_context: bool) -> Self {
+        Self {
+            configs: Vec::new(),
+            config_index: BTreeMap::new(),
+            full_context,
+            unique_alt: None,
+            conflicting_alts: BTreeSet::new(),
+            has_semantic_context: false,
+            dips_into_outer_context: false,
+            readonly: false,
+        }
+    }
+
     pub fn add(&mut self, config: AtnConfig) -> bool {
+        self.add_with_merge_cache(config, None)
+    }
+
+    /// Adds a configuration, merging prediction contexts for equivalent
+    /// `(state, alt, semantic-context)` keys.
+    pub fn add_with_merge_cache(
+        &mut self,
+        config: AtnConfig,
+        cache: Option<&mut PredictionContextMergeCache>,
+    ) -> bool {
         assert!(!self.readonly, "cannot mutate readonly ATN config set");
-        if self.config_index.insert(config.clone()) {
-            if config.reaches_into_outer_context > 0 {
-                self.dips_into_outer_context = true;
-            }
-            self.configs.push(config);
-            true
-        } else {
+        if !config.semantic_context.is_none() {
+            self.has_semantic_context = true;
+        }
+        if config.reaches_into_outer_context > 0 {
+            self.dips_into_outer_context = true;
+        }
+        let key = AtnConfigKey::from(&config);
+        if let Some(existing_index) = self.config_index.get(&key).copied() {
+            let root_is_wildcard = !self.full_context;
+            let existing = &mut self.configs[existing_index];
+            existing.context = PredictionContext::merge_with_options(
+                Rc::clone(&existing.context),
+                config.context,
+                root_is_wildcard,
+                cache,
+            );
+            existing.reaches_into_outer_context = existing
+                .reaches_into_outer_context
+                .max(config.reaches_into_outer_context);
+            existing.precedence_filter_suppressed |= config.precedence_filter_suppressed;
             false
+        } else {
+            let index = self.configs.len();
+            self.config_index.insert(key, index);
+            self.configs.push(config);
+            self.unique_alt = None;
+            self.conflicting_alts.clear();
+            true
         }
     }
 
@@ -237,8 +460,19 @@ impl AtnConfigSet {
         self.configs.len()
     }
 
-    pub const fn set_readonly(&mut self, readonly: bool) {
+    pub fn set_readonly(&mut self, readonly: bool) {
         self.readonly = readonly;
+        if readonly {
+            self.config_index.clear();
+        }
+    }
+
+    pub const fn is_readonly(&self) -> bool {
+        self.readonly
+    }
+
+    pub const fn full_context(&self) -> bool {
+        self.full_context
     }
 
     pub const fn has_semantic_context(&self) -> bool {
@@ -252,6 +486,94 @@ impl AtnConfigSet {
     pub const fn dips_into_outer_context(&self) -> bool {
         self.dips_into_outer_context
     }
+
+    pub fn unique_alt(&mut self) -> Option<usize> {
+        if self.unique_alt.is_none() {
+            self.unique_alt = unique_alt(self.configs());
+        }
+        self.unique_alt
+    }
+
+    pub fn alts(&self) -> BTreeSet<usize> {
+        self.configs.iter().map(|config| config.alt).collect()
+    }
+
+    pub fn conflicting_alt_subsets(&self) -> Vec<BTreeSet<usize>> {
+        conflicting_alt_subsets(self.configs())
+    }
+
+    pub fn conflicting_alts(&mut self) -> BTreeSet<usize> {
+        if self.conflicting_alts.is_empty() {
+            self.conflicting_alts = self
+                .conflicting_alt_subsets()
+                .into_iter()
+                .filter(|alts| alts.len() > 1)
+                .flatten()
+                .collect();
+        }
+        self.conflicting_alts.clone()
+    }
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct AtnConfigKey {
+    state: usize,
+    alt: usize,
+    semantic_context: SemanticContext,
+}
+
+impl From<&AtnConfig> for AtnConfigKey {
+    fn from(config: &AtnConfig) -> Self {
+        Self {
+            state: config.state,
+            alt: config.alt,
+            semantic_context: config.semantic_context.clone(),
+        }
+    }
+}
+
+pub fn unique_alt(configs: &[AtnConfig]) -> Option<usize> {
+    let mut alt = None;
+    for config in configs {
+        match alt {
+            None => alt = Some(config.alt),
+            Some(existing) if existing == config.alt => {}
+            Some(_) => return None,
+        }
+    }
+    alt
+}
+
+pub fn conflicting_alt_subsets(configs: &[AtnConfig]) -> Vec<BTreeSet<usize>> {
+    let mut by_state_context = BTreeMap::<(usize, Rc<PredictionContext>), BTreeSet<usize>>::new();
+    for config in configs {
+        by_state_context
+            .entry((config.state, Rc::clone(&config.context)))
+            .or_default()
+            .insert(config.alt);
+    }
+    by_state_context.into_values().collect()
+}
+
+pub fn has_sll_conflict_terminating_prediction(configs: &AtnConfigSet) -> bool {
+    if configs
+        .configs()
+        .iter()
+        .all(|config| config.context.is_empty())
+    {
+        return true;
+    }
+    let alt_subsets = configs.conflicting_alt_subsets();
+    alt_subsets.iter().any(|alts| alts.len() > 1)
+        && !has_state_associated_with_one_alt(configs.configs())
+}
+
+fn has_state_associated_with_one_alt(configs: &[AtnConfig]) -> bool {
+    let mut by_state = BTreeMap::<usize, BTreeSet<usize>>::new();
+    for config in configs {
+        by_state.entry(config.state).or_default().insert(config.alt);
+    }
+    by_state.values().any(|alts| alts.len() == 1)
 }
 
 #[cfg(test)]

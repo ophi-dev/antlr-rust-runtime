@@ -3,9 +3,9 @@
 // iterated externally, so the project's `disallowed_types` lint (which
 // guards against non-deterministic iteration order leaking out) does not
 // apply to these uses.
+use std::cell::RefCell;
 #[allow(clippy::disallowed_types)]
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::cell::RefCell;
 use std::hash::{BuildHasherDefault, Hash, Hasher};
 use std::rc::Rc;
 
@@ -124,7 +124,10 @@ mod perf_counters {
             ("outcomes_cloned", OUTCOMES_CLONED.with(Cell::get)),
             ("epsilon_transitions", EPSILON_TRANSITIONS.with(Cell::get)),
             ("rule_transitions", RULE_TRANSITIONS.with(Cell::get)),
-            ("atom_range_transitions", ATOM_RANGE_TRANSITIONS.with(Cell::get)),
+            (
+                "atom_range_transitions",
+                ATOM_RANGE_TRANSITIONS.with(Cell::get),
+            ),
             ("single_trans_body", SINGLE_TRANS_BODY.with(Cell::get)),
             ("multi_trans_body", MULTI_TRANS_BODY.with(Cell::get)),
             ("single_trans_rule", SINGLE_TRANS_RULE.with(Cell::get)),
@@ -172,7 +175,6 @@ pub use perf_counters::{dump as dump_perf_counters, reset as reset_perf_counters
 /// Sixty-four tokens is a small rule-sized window: it keeps startup lazy while
 /// switching long inputs to the cheaper filled-stream path before large fanout.
 const FAST_RECOGNIZER_DEFERRED_FILL_AT: usize = 64;
-
 /// Parser semantic action reached while recognizing one ATN path.
 ///
 /// Generated parsers use `source_state` to dispatch back to the grammar action
@@ -311,6 +313,8 @@ pub enum PredictionMode {
     /// Preserve SLL's first-viable alternative bias at a decision, even when a
     /// later full-context alternative could avoid recovery.
     Sll,
+    /// Full LL prediction with exact ambiguity detection for diagnostic runs.
+    LlExactAmbigDetection,
 }
 
 /// Integer argument metadata for a generated parser rule invocation.
@@ -989,10 +993,7 @@ impl SharedAtnCacheKey {
     }
 }
 
-fn with_shared_first_set_cache<R>(
-    atn: &Atn,
-    f: impl FnOnce(&mut FirstSetCache) -> R,
-) -> R {
+fn with_shared_first_set_cache<R>(atn: &Atn, f: impl FnOnce(&mut FirstSetCache) -> R) -> R {
     SHARED_ATN_CACHES.with(|cell| {
         let key = SharedAtnCacheKey::for_atn(atn);
         let mut map = cell.borrow_mut();
@@ -1001,10 +1002,7 @@ fn with_shared_first_set_cache<R>(
     })
 }
 
-fn with_shared_atn_caches<R>(
-    atn: &Atn,
-    f: impl FnOnce(&mut SharedAtnCache) -> R,
-) -> R {
+fn with_shared_atn_caches<R>(atn: &Atn, f: impl FnOnce(&mut SharedAtnCache) -> R) -> R {
     SHARED_ATN_CACHES.with(|cell| {
         let key = SharedAtnCacheKey::for_atn(atn);
         let mut map = cell.borrow_mut();
@@ -2964,7 +2962,9 @@ where
                 let mut nodes = NodeList::new();
                 if self.fast_token_nodes_enabled {
                     for token_index in inline_consumed_tokens.iter().rev() {
-                        nodes.prepend(Rc::new(FastRecognizedNode::Token { index: *token_index }));
+                        nodes.prepend(Rc::new(FastRecognizedNode::Token {
+                            index: *token_index,
+                        }));
                     }
                 }
                 return vec![FastRecognizeOutcome {
@@ -3212,8 +3212,7 @@ where
         // because they're atom/rule/predicate) push at most one entry, so
         // reserving one slot avoids a reallocation while keeping the
         // unused-slot waste at one element.
-        let mut outcomes: Vec<FastRecognizeOutcome> =
-            Vec::with_capacity(transition_count.min(2));
+        let mut outcomes: Vec<FastRecognizeOutcome> = Vec::with_capacity(transition_count.min(2));
         for (transition_index, transition) in state.transitions.iter().enumerate() {
             if let Some(alt) = ll1_only_alt {
                 // LL(1) determinism: skip every alt except the chosen one.
@@ -3569,7 +3568,11 @@ where
         if needs_cycle_guard {
             visiting.remove(&visit_id);
         }
-        if self.prediction_mode == PredictionMode::Ll && self.fast_recovery_enabled {
+        if matches!(
+            self.prediction_mode,
+            PredictionMode::Ll | PredictionMode::LlExactAmbigDetection
+        ) && self.fast_recovery_enabled
+        {
             // Without recovery enabled every outcome already has empty
             // diagnostics, so the discard pass is a no-op — skipping it
             // saves an iter+retain on each of the ~1M visits.
@@ -3599,9 +3602,9 @@ where
             }
             if !inline_consumed_tokens.is_empty() {
                 for token_index in inline_consumed_tokens.iter().rev() {
-                    outcome
-                        .nodes
-                        .prepend(Rc::new(FastRecognizedNode::Token { index: *token_index }));
+                    outcome.nodes.prepend(Rc::new(FastRecognizedNode::Token {
+                        index: *token_index,
+                    }));
                 }
             }
             outcome
@@ -3964,6 +3967,7 @@ where
 
     /// Attempts to reach `stop_state` and carries semantic actions for the
     /// selected parser path.
+    #[allow(clippy::too_many_lines)]
     fn recognize_state(
         &mut self,
         atn: &Atn,
@@ -4445,7 +4449,10 @@ where
 
         visiting.remove(&visit_key);
         self.record_prediction_diagnostics(atn, state, index, &outcomes);
-        if self.prediction_mode == PredictionMode::Ll {
+        if matches!(
+            self.prediction_mode,
+            PredictionMode::Ll | PredictionMode::LlExactAmbigDetection
+        ) {
             discard_recovered_outcomes_if_clean_path_exists(&mut outcomes);
         }
         dedupe_outcomes(&mut outcomes);
@@ -4641,7 +4648,8 @@ where
                 ));
             }
             let entry = Rc::new(entry);
-            cache.decision_lookahead
+            cache
+                .decision_lookahead
                 .insert(state.state_number, Rc::clone(&entry));
             entry
         });
@@ -5450,7 +5458,7 @@ fn select_best_fast_outcome(
         let outcome_position = (outcome.index, outcome.consumed_eof);
         let best_position = (best.index, best.consumed_eof);
         let better = match prediction_mode {
-            PredictionMode::Ll => outcome_is_better(
+            PredictionMode::Ll | PredictionMode::LlExactAmbigDetection => outcome_is_better(
                 outcome_position,
                 &outcome.diagnostics,
                 best_position,
@@ -5477,7 +5485,7 @@ fn select_best_outcome(
         let outcome_position = (outcome.index, outcome.consumed_eof);
         let best_position = (best.index, best.consumed_eof);
         let better = match prediction_mode {
-            PredictionMode::Ll => {
+            PredictionMode::Ll | PredictionMode::LlExactAmbigDetection => {
                 outcome_is_better(
                     outcome_position,
                     &outcome.diagnostics,

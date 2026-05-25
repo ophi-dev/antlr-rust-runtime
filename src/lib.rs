@@ -25,7 +25,9 @@ pub use parser::{
     BaseParser, Parser, ParserAction, ParserMemberAction, ParserPredicate, ParserReturnAction,
     ParserRuleArg, ParserRuntimeOptions, PredictionMode,
 };
-pub use prediction::{AtnConfig, AtnConfigSet, PredictionContext};
+pub use prediction::{
+    AtnConfig, AtnConfigSet, PredictionContext, PredictionContextMergeCache, SemanticContext,
+};
 pub use recognizer::{Recognizer, RecognizerData};
 pub use token::{
     CommonToken, CommonTokenFactory, DEFAULT_CHANNEL, HIDDEN_CHANNEL, INVALID_TOKEN_TYPE,
