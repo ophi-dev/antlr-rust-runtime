@@ -956,8 +956,37 @@ struct SharedAtnCache {
 }
 
 thread_local! {
-    static SHARED_ATN_CACHES: RefCell<FxHashMap<usize, SharedAtnCache>> =
+    static SHARED_ATN_CACHES: RefCell<FxHashMap<SharedAtnCacheKey, SharedAtnCache>> =
         RefCell::new(FxHashMap::default());
+}
+
+/// Compound key for `SHARED_ATN_CACHES`.
+///
+/// Generated parsers feed us a `&'static Atn` from a `OnceLock<Atn>`, so the
+/// pointer identifies one grammar for the program's lifetime. For the
+/// non-`'static` case (a dropped `Atn` whose allocation is later reused),
+/// the secondary fields below catch the pointer collision: a new grammar
+/// would need to match all of `(states ptr, states len, max_token_type)` to
+/// be mistaken for the dropped one. That combination changing under us
+/// without a rebuild is implausible enough to treat as a bug; bundling them
+/// into the key is otherwise a few extra bytes per lookup.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct SharedAtnCacheKey {
+    atn: usize,
+    states: usize,
+    state_count: usize,
+    max_token_type: i32,
+}
+
+impl SharedAtnCacheKey {
+    fn for_atn(atn: &Atn) -> Self {
+        Self {
+            atn: std::ptr::from_ref::<Atn>(atn) as usize,
+            states: atn.states().as_ptr() as usize,
+            state_count: atn.states().len(),
+            max_token_type: atn.max_token_type(),
+        }
+    }
 }
 
 fn with_shared_first_set_cache<R>(
@@ -965,7 +994,7 @@ fn with_shared_first_set_cache<R>(
     f: impl FnOnce(&mut FirstSetCache) -> R,
 ) -> R {
     SHARED_ATN_CACHES.with(|cell| {
-        let key = std::ptr::from_ref::<Atn>(atn) as usize;
+        let key = SharedAtnCacheKey::for_atn(atn);
         let mut map = cell.borrow_mut();
         let cache = map.entry(key).or_default();
         f(&mut cache.first_set)
@@ -977,7 +1006,7 @@ fn with_shared_atn_caches<R>(
     f: impl FnOnce(&mut SharedAtnCache) -> R,
 ) -> R {
     SHARED_ATN_CACHES.with(|cell| {
-        let key = std::ptr::from_ref::<Atn>(atn) as usize;
+        let key = SharedAtnCacheKey::for_atn(atn);
         let mut map = cell.borrow_mut();
         let cache = map.entry(key).or_default();
         f(cache)
