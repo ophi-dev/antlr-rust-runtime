@@ -440,11 +440,11 @@ pub struct BaseParser<S> {
     /// speculative recognition may revisit the same coordinate, so replay it
     /// once per parser instance.
     invoked_predicates: Vec<(usize, usize)>,
-    /// FIRST-set cache shared across all speculative rule-call lookups in a
-    /// single parser instance. The fast recognizer consults FIRST sets on
-    /// every rule transition; without caching the same DFS would repeat for
-    /// every speculative path that visits the same rule.
-    first_set_cache: FirstSetCache,
+    /// Per-parse rule FIRST-set cache keyed by rule start state. This keeps
+    /// hot rule-transition checks to a vector lookup after the first visit
+    /// while the thread-local shared ATN cache still owns the cross-parse
+    /// computed value.
+    rule_first_set_cache: Vec<Option<Rc<FirstSet>>>,
     /// Per-state expected-symbol cache. `state_expected_symbols` walks every
     /// epsilon-reachable consuming transition and shows up as a hot loop in
     /// `next_recovery_context` and recovery diagnostics on long inputs.
@@ -1888,7 +1888,7 @@ where
             rule_context_stack: Vec::new(),
             precedence_stack: vec![0],
             invoked_predicates: Vec::new(),
-            first_set_cache: FxHashMap::default(),
+            rule_first_set_cache: Vec::new(),
             state_expected_cache: FxHashMap::default(),
             recovery_symbols_intern: FxHashMap::default(),
             decision_lookahead_cache: FxHashMap::default(),
@@ -3550,9 +3550,7 @@ where
                         // the cache when the FIRST-set walk hit a cycle, so
                         // we cannot assume the entry is in the cache after
                         // computing it.
-                        let first = with_shared_first_set_cache(atn, |cache| {
-                            rule_first_set(atn, *target, child_stop, cache)
-                        });
+                        let first = self.cached_rule_first_set(atn, *target, child_stop);
                         if should_skip_rule_via_first_set(
                             &first,
                             symbol,
@@ -4873,6 +4871,30 @@ where
         entry
     }
 
+    fn cached_rule_first_set(
+        &mut self,
+        atn: &Atn,
+        target: usize,
+        child_stop: usize,
+    ) -> Rc<FirstSet> {
+        if self.rule_first_set_cache.len() <= target {
+            self.rule_first_set_cache
+                .resize_with(atn.states().len().max(target + 1), || None);
+        }
+        if let Some(cached) = self
+            .rule_first_set_cache
+            .get(target)
+            .and_then(Option::as_ref)
+        {
+            return Rc::clone(cached);
+        }
+        let first = with_shared_first_set_cache(atn, |cache| {
+            rule_first_set(atn, target, child_stop, cache)
+        });
+        self.rule_first_set_cache[target] = Some(Rc::clone(&first));
+        first
+    }
+
     /// Decides whether a clean one-outcome entry is worth storing in the full
     /// outcome memo table for this parse.
     fn should_memoize_single_outcome(&mut self, key: &FastRecognizeKey) -> bool {
@@ -5216,14 +5238,14 @@ where
     /// the perf wins (caches still amortize within one parse) without making
     /// long-lived parsers leak memory or surface stale ATN data:
     ///
-    /// * `first_set_cache` and `decision_lookahead_cache` are pure functions
-    ///   of the ATN's state graph.
+    /// * `rule_first_set_cache` and `decision_lookahead_cache` are pure
+    ///   functions of the ATN's state graph.
     /// * `state_expected_cache` and `recovery_symbols_intern` together form
     ///   the identity invariant that lets `FastRecognizeKey` hash
     ///   `recovery_symbols` by pointer; they have to be cleared in lockstep
     ///   so a stale interned `Rc` cannot outlive its map entry.
     fn reset_per_parse_caches(&mut self) {
-        self.first_set_cache.clear();
+        self.rule_first_set_cache.clear();
         self.decision_lookahead_cache.clear();
         self.ll1_decision_cache.clear();
         self.single_outcome_memo_mode = SingleOutcomeMemoMode::Probe;
