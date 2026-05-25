@@ -439,11 +439,11 @@ pub struct BaseParser<S> {
     /// current lookahead, letting common SLL decisions reduce to a single
     /// transition walk instead of a full speculative fan-out.
     decision_lookahead_cache: FxHashMap<usize, Rc<DecisionLookahead>>,
-    /// Per-parser fast-path mirror of `SharedAtnCache::ll1_decision_cache`.
+    /// Caches the LL(1) alt selection per `(state, lookahead_token)`.
     /// Each multi-trans visit asks "given this decision state and this
     /// lookahead token, which alt do I commit to?" Hitting this cache
-    /// turns the question into a hashmap probe (no thread-local +
-    /// RefCell + entry dance). Filled lazily from the shared cache.
+    /// turns the question into a hashmap probe instead of re-scanning
+    /// the decision's per-transition FIRST sets every visit.
     ll1_decision_cache: FxHashMap<(usize, i32), Option<usize>>,
     /// Empty recovery-symbols singleton used as the default at rule entry and
     /// after token consumption.
@@ -2953,14 +2953,14 @@ where
                 && !state.precedence_rule_decision
             {
                 match &state.transitions[0] {
-                    Transition::Epsilon { target } => {
-                        if left_recursive_boundary(atn, state, *target).is_none() {
-                            #[cfg(feature = "perf-counters")]
-                            perf_counters::inc(&perf_counters::EPSILON_TRANSITIONS, 1);
-                            state_number = *target;
-                            depth += 1;
-                            continue;
-                        }
+                    Transition::Epsilon { target }
+                        if left_recursive_boundary(atn, state, *target).is_none() =>
+                    {
+                        #[cfg(feature = "perf-counters")]
+                        perf_counters::inc(&perf_counters::EPSILON_TRANSITIONS, 1);
+                        state_number = *target;
+                        depth += 1;
+                        continue;
                     }
                     // Single-atom / range / set / wildcard / not-set states
                     // are common (~17K of ~125K calls on C#) and almost
@@ -5782,32 +5782,36 @@ fn dedupe_clean_fast_outcomes(outcomes: &mut Vec<FastRecognizeOutcome>) {
     // here because BTreeSet's allocation + per-insert balancing dominates
     // O(log n) wins on tiny n. Retains the original order so callers that
     // depend on alt ordering (e.g. fast outcome selection) stay correct.
-    let mut keep_keys: [(usize, bool); 8] = [(0, false); 8];
-    let mut keep_len = 0_usize;
+    //
+    // Beyond the inline buffer we promote to a heap Vec so all kept entries
+    // continue to participate in dedup — leaking duplicates here on
+    // pathological grammars (e.g. ktor's deeply ambiguous Kotlin parse)
+    // explodes the speculative cache one step up the recursion.
+    let mut inline_keys: [(usize, bool); 8] = [(0, false); 8];
+    let mut inline_len = 0_usize;
+    let mut overflow: Vec<(usize, bool)> = Vec::new();
     outcomes.retain(|outcome| {
         let key = (outcome.index, outcome.consumed_eof);
-        if keep_len < keep_keys.len() {
-            for &existing in &keep_keys[..keep_len] {
-                if existing == key {
-                    return false;
-                }
+        for &existing in &inline_keys[..inline_len] {
+            if existing == key {
+                return false;
             }
-            keep_keys[keep_len] = key;
-            keep_len += 1;
-            true
-        } else {
-            // Fallback for the rare case where there are more than 8
-            // distinct outcomes — scan all kept entries.
-            for &existing in &keep_keys[..] {
-                if existing == key {
-                    return false;
-                }
-            }
-            true
         }
+        if !overflow.is_empty() {
+            for &existing in &overflow {
+                if existing == key {
+                    return false;
+                }
+            }
+        }
+        if inline_len < inline_keys.len() {
+            inline_keys[inline_len] = key;
+            inline_len += 1;
+        } else {
+            overflow.push(key);
+        }
+        true
     });
-    let _ = keep_keys;
-    let _ = keep_len;
 }
 
 /// Sorts and removes equivalent endpoints, including their action traces.
