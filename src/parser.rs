@@ -4950,6 +4950,7 @@ where
     fn reset_per_parse_caches(&mut self) {
         self.first_set_cache.clear();
         self.decision_lookahead_cache.clear();
+        self.ll1_decision_cache.clear();
         self.recovery_symbols_intern.clear();
         self.state_expected_cache.clear();
     }
