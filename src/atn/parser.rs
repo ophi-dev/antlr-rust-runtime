@@ -4,6 +4,7 @@ use crate::prediction::{
     AtnConfig, AtnConfigSet, EMPTY_RETURN_STATE, PredictionContext, PredictionContextMergeCache,
     SemanticContext, has_sll_conflict_terminating_prediction,
 };
+use crate::token::TOKEN_EOF;
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
@@ -112,10 +113,17 @@ impl<'a> ParserAtnSimulator<'a> {
     ) -> Result<usize, ParserAtnSimulatorError> {
         let mut reach = AtnConfigSet::new();
         let mut merge_cache = PredictionContextMergeCache::new();
+        let mut skipped_stop_states = Vec::new();
         for config in configs.configs() {
             let Some(state) = self.atn.state(config.state) else {
                 continue;
             };
+            if state.is_rule_stop() {
+                if symbol == TOKEN_EOF {
+                    skipped_stop_states.push(config.clone());
+                }
+                continue;
+            }
             for transition in &state.transitions {
                 if transition.matches(symbol, 1, self.atn.max_token_type()) {
                     let target = AtnConfig {
@@ -129,6 +137,12 @@ impl<'a> ParserAtnSimulator<'a> {
                     self.closure(target, &mut reach, &mut merge_cache)?;
                 }
             }
+        }
+        if symbol == TOKEN_EOF {
+            reach = self.rule_stop_configs(reach, &mut merge_cache);
+        }
+        for config in skipped_stop_states {
+            reach.add_with_merge_cache(config, Some(&mut merge_cache));
         }
         if reach.is_empty() {
             return Err(ParserAtnSimulatorError::NoViableAlt { symbol });
@@ -157,6 +171,29 @@ impl<'a> ParserAtnSimulator<'a> {
             source.add_edge(symbol, target_state);
         }
         Ok(target_state)
+    }
+
+    fn rule_stop_configs(
+        &self,
+        configs: AtnConfigSet,
+        merge_cache: &mut PredictionContextMergeCache,
+    ) -> AtnConfigSet {
+        if configs.configs().iter().all(|config| {
+            self.atn
+                .state(config.state)
+                .is_some_and(AtnState::is_rule_stop)
+        }) {
+            return configs;
+        }
+        let mut result = AtnConfigSet::new();
+        for config in configs.configs().iter().filter(|config| {
+            self.atn
+                .state(config.state)
+                .is_some_and(AtnState::is_rule_stop)
+        }) {
+            result.add_with_merge_cache(config.clone(), Some(merge_cache));
+        }
+        result
     }
 
     fn closure(
@@ -331,6 +368,14 @@ mod tests {
         assert_eq!(state.prediction, Some(1));
     }
 
+    #[test]
+    fn adaptive_predict_keeps_rule_stop_configs_at_eof() {
+        let atn = optional_token_decision_atn();
+        let mut simulator = ParserAtnSimulator::new(&atn);
+
+        assert_eq!(simulator.adaptive_predict(0, [TOKEN_EOF]), Ok(2));
+    }
+
     fn two_token_decision_atn() -> Atn {
         let mut atn = Atn::new(AtnType::Parser, 3);
         add_state(&mut atn, 0, AtnStateKind::RuleStart);
@@ -380,6 +425,37 @@ mod tests {
         atn.state_mut(6)
             .expect("state 6")
             .add_transition(Transition::Epsilon { target: 7 });
+        atn
+    }
+
+    fn optional_token_decision_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 1);
+        add_state(&mut atn, 0, AtnStateKind::RuleStart);
+        add_state(&mut atn, 1, AtnStateKind::BlockStart);
+        add_state(&mut atn, 2, AtnStateKind::Basic);
+        add_state(&mut atn, 3, AtnStateKind::BlockEnd);
+        add_state(&mut atn, 4, AtnStateKind::RuleStop);
+        atn.set_rule_to_start_state(vec![0]);
+        atn.set_rule_to_stop_state(vec![4]);
+        atn.add_decision_state(1);
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Epsilon { target: 1 });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Epsilon { target: 2 });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Epsilon { target: 3 });
+        atn.state_mut(2)
+            .expect("state 2")
+            .add_transition(Transition::Atom {
+                target: 3,
+                label: 1,
+            });
+        atn.state_mut(3)
+            .expect("state 3")
+            .add_transition(Transition::Epsilon { target: 4 });
         atn
     }
 
