@@ -32,10 +32,56 @@ pub trait CharStream: IntStream {
 #[derive(Clone, Debug)]
 pub struct InputStream {
     source: Rc<str>,
-    data: Vec<char>,
-    byte_offsets: Vec<usize>,
+    data: InputData,
     cursor: usize,
     source_name: String,
+}
+
+#[derive(Clone, Debug)]
+enum InputData {
+    Ascii,
+    Unicode {
+        chars: Vec<char>,
+        byte_offsets: Vec<usize>,
+    },
+}
+
+impl InputData {
+    fn new(input: &str) -> Self {
+        if input.is_ascii() {
+            Self::Ascii
+        } else {
+            Self::Unicode {
+                chars: input.chars().collect(),
+                byte_offsets: input.char_indices().map(|(index, _)| index).collect(),
+            }
+        }
+    }
+
+    const fn len(&self, source: &str) -> usize {
+        match self {
+            Self::Ascii => source.len(),
+            Self::Unicode { chars, .. } => chars.len(),
+        }
+    }
+
+    fn get(&self, source: &str, index: usize) -> Option<char> {
+        match self {
+            Self::Ascii => source.as_bytes().get(index).map(|byte| char::from(*byte)),
+            Self::Unicode { chars, .. } => chars.get(index).copied(),
+        }
+    }
+
+    fn byte_bounds(&self, source: &str, start: usize, stop: usize) -> Option<(usize, usize)> {
+        match self {
+            Self::Ascii => Some((start, stop + 1)),
+            Self::Unicode { byte_offsets, .. } => {
+                let start_byte = *byte_offsets.get(start)?;
+                let stop_byte = byte_offsets.get(stop + 1).copied().unwrap_or(source.len());
+                Some((start_byte, stop_byte))
+            }
+        }
+    }
 }
 
 impl InputStream {
@@ -51,16 +97,15 @@ impl InputStream {
         let input = input.as_ref();
         Self {
             source: Rc::from(input),
-            data: input.chars().collect(),
-            byte_offsets: input.char_indices().map(|(index, _)| index).collect(),
+            data: InputData::new(input),
             cursor: 0,
             source_name: source_name.into(),
         }
     }
 
     /// Returns true when the cursor has reached or passed the end of input.
-    pub const fn is_eof(&self) -> bool {
-        self.cursor >= self.data.len()
+    pub fn is_eof(&self) -> bool {
+        self.cursor >= self.data.len(&self.source)
     }
 }
 
@@ -86,7 +131,7 @@ impl IntStream for InputStream {
         };
 
         absolute
-            .and_then(|index| self.data.get(index).copied())
+            .and_then(|index| self.data.get(&self.source, index))
             .map_or(EOF, |ch| ch as i32)
     }
 
@@ -95,11 +140,11 @@ impl IntStream for InputStream {
     }
 
     fn seek(&mut self, index: usize) {
-        self.cursor = index.min(self.data.len());
+        self.cursor = index.min(self.data.len(&self.source));
     }
 
     fn size(&self) -> usize {
-        self.data.len()
+        self.data.len(&self.source)
     }
 
     fn source_name(&self) -> &str {
@@ -117,22 +162,18 @@ impl CharStream for InputStream {
     }
 
     fn text_source_interval(&self, interval: TextInterval) -> Option<(Rc<str>, usize, usize)> {
-        if interval.is_empty() || self.data.is_empty() {
+        let len = self.data.len(&self.source);
+        if interval.is_empty() || len == 0 {
             return None;
         }
 
-        let start = interval.start.min(self.data.len());
-        let stop = interval.stop.min(self.data.len().saturating_sub(1));
+        let start = interval.start.min(len);
+        let stop = interval.stop.min(len.saturating_sub(1));
         if start > stop {
             return None;
         }
 
-        let start_byte = *self.byte_offsets.get(start)?;
-        let stop_byte = self
-            .byte_offsets
-            .get(stop + 1)
-            .copied()
-            .unwrap_or(self.source.len());
+        let (start_byte, stop_byte) = self.data.byte_bounds(&self.source, start, stop)?;
         Some((Rc::clone(&self.source), start_byte, stop_byte))
     }
 }
