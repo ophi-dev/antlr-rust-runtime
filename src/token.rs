@@ -59,8 +59,8 @@ pub struct CommonToken {
     token_index: isize,
     line: usize,
     column: usize,
-    text: Option<String>,
-    source_name: String,
+    text: Option<Rc<str>>,
+    source_name: Rc<str>,
 }
 
 #[derive(Debug)]
@@ -76,7 +76,7 @@ pub struct TokenSpec<'a> {
 }
 
 impl CommonToken {
-    pub const fn new(token_type: i32) -> Self {
+    pub fn new(token_type: i32) -> Self {
         Self {
             token_type,
             channel: DEFAULT_CHANNEL,
@@ -86,11 +86,11 @@ impl CommonToken {
             line: 1,
             column: 0,
             text: None,
-            source_name: String::new(),
+            source_name: Rc::from(""),
         }
     }
 
-    pub fn eof(source_name: impl Into<String>, index: usize, line: usize, column: usize) -> Self {
+    pub fn eof(source_name: impl Into<Rc<str>>, index: usize, line: usize, column: usize) -> Self {
         Self {
             token_type: TOKEN_EOF,
             channel: DEFAULT_CHANNEL,
@@ -99,13 +99,13 @@ impl CommonToken {
             token_index: -1,
             line,
             column,
-            text: Some("<EOF>".to_owned()),
+            text: Some(Rc::from("<EOF>")),
             source_name: source_name.into(),
         }
     }
 
     #[must_use]
-    pub fn with_text(mut self, text: impl Into<String>) -> Self {
+    pub fn with_text(mut self, text: impl Into<Rc<str>>) -> Self {
         self.text = Some(text.into());
         self
     }
@@ -131,7 +131,7 @@ impl CommonToken {
     }
 
     #[must_use]
-    pub fn with_source_name(mut self, source_name: impl Into<String>) -> Self {
+    pub fn with_source_name(mut self, source_name: impl Into<Rc<str>>) -> Self {
         self.source_name = source_name.into();
         self
     }
@@ -175,7 +175,7 @@ impl Token for CommonToken {
     }
 
     fn source_name(&self) -> &str {
-        &self.source_name
+        self.source_name.as_ref()
     }
 }
 

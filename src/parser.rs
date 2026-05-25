@@ -2314,7 +2314,7 @@ where
             } => {
                 let current = self.token_at(*at_index);
                 let token = CommonToken::new(*token_type)
-                    .with_text(text)
+                    .with_text(text.as_str())
                     .with_span(usize::MAX, usize::MAX)
                     .with_position(
                         current.as_ref().map(Token::line).unwrap_or_default(),
@@ -5378,7 +5378,7 @@ where
             } => {
                 let current = self.token_at(*at_index);
                 let token = CommonToken::new(*token_type)
-                    .with_text(text)
+                    .with_text(text.as_str())
                     .with_span(usize::MAX, usize::MAX)
                     .with_position(
                         current.as_ref().map(Token::line).unwrap_or_default(),
