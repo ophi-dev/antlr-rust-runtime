@@ -1,4 +1,5 @@
 use crate::int_stream::{EOF, IntStream, UNKNOWN_SOURCE_NAME};
+use std::rc::Rc;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TextInterval {
@@ -22,11 +23,17 @@ impl TextInterval {
 
 pub trait CharStream: IntStream {
     fn text(&self, interval: TextInterval) -> String;
+
+    fn text_source_interval(&self, _interval: TextInterval) -> Option<(Rc<str>, usize, usize)> {
+        None
+    }
 }
 
 #[derive(Clone, Debug)]
 pub struct InputStream {
+    source: Rc<str>,
     data: Vec<char>,
+    byte_offsets: Vec<usize>,
     cursor: usize,
     source_name: String,
 }
@@ -41,8 +48,11 @@ impl InputStream {
     /// Creates a character stream with an explicit source name for tokens and
     /// diagnostics.
     pub fn with_source_name(input: impl AsRef<str>, source_name: impl Into<String>) -> Self {
+        let input = input.as_ref();
         Self {
-            data: input.as_ref().chars().collect(),
+            source: Rc::from(input),
+            data: input.chars().collect(),
+            byte_offsets: input.char_indices().map(|(index, _)| index).collect(),
             cursor: 0,
             source_name: source_name.into(),
         }
@@ -100,17 +110,30 @@ impl IntStream for InputStream {
 impl CharStream for InputStream {
     /// Returns text for an inclusive interval of Unicode scalar indices.
     fn text(&self, interval: TextInterval) -> String {
+        if let Some((source, start, stop)) = self.text_source_interval(interval) {
+            return source[start..stop].to_owned();
+        }
+        String::new()
+    }
+
+    fn text_source_interval(&self, interval: TextInterval) -> Option<(Rc<str>, usize, usize)> {
         if interval.is_empty() || self.data.is_empty() {
-            return String::new();
+            return None;
         }
 
         let start = interval.start.min(self.data.len());
         let stop = interval.stop.min(self.data.len().saturating_sub(1));
         if start > stop {
-            return String::new();
+            return None;
         }
 
-        self.data[start..=stop].iter().collect()
+        let start_byte = *self.byte_offsets.get(start)?;
+        let stop_byte = self
+            .byte_offsets
+            .get(stop + 1)
+            .copied()
+            .unwrap_or(self.source.len());
+        Some((Rc::clone(&self.source), start_byte, stop_byte))
     }
 }
 

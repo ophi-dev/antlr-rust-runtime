@@ -468,6 +468,10 @@ pub struct BaseParser<S> {
     /// turns the question into a hashmap probe instead of re-scanning
     /// the decision's per-transition FIRST sets every visit.
     ll1_decision_cache: FxHashMap<(usize, i32), Option<usize>>,
+    /// Per-parse cache for whether an ATN state can reach itself without
+    /// consuming input. Only those states need the recursive recognizer's
+    /// `(state, token-index)` cycle guard.
+    empty_cycle_cache: Vec<Option<bool>>,
     /// Probe state for deciding whether clean-pass one-outcome memo entries
     /// are worth storing for the current parse.
     single_outcome_memo_mode: SingleOutcomeMemoMode,
@@ -1261,7 +1265,7 @@ fn ll1_unique_alt(entry: &DecisionLookahead, symbol: i32) -> Option<usize> {
 /// decisions invert that preference and take the nullable alt first. `None`
 /// signals the caller to fall back to per-transition lookahead filtering.
 fn ll1_greedy_alt(entry: &DecisionLookahead, symbol: i32, non_greedy: bool) -> Option<usize> {
-    let mut matching_alt = None;
+    let mut matching_non_nullable_alt = None;
     let mut nullable_alt = None;
     for (index, transition) in entry.transitions.iter().enumerate() {
         if transition.nullable {
@@ -1271,16 +1275,19 @@ fn ll1_greedy_alt(entry: &DecisionLookahead, symbol: i32, non_greedy: bool) -> O
             nullable_alt = Some(index);
         }
         if transition.symbols.contains(symbol) {
-            if matching_alt.is_some() {
+            if transition.nullable {
+                continue;
+            }
+            if matching_non_nullable_alt.is_some() {
                 return None;
             }
-            matching_alt = Some(index);
+            matching_non_nullable_alt = Some(index);
         }
     }
     if non_greedy {
-        nullable_alt.or(matching_alt)
+        nullable_alt.or(matching_non_nullable_alt)
     } else {
-        matching_alt.or(nullable_alt)
+        matching_non_nullable_alt.or(nullable_alt)
     }
 }
 
@@ -1924,6 +1931,7 @@ where
             recovery_symbols_intern: FxHashMap::default(),
             decision_lookahead_cache: FxHashMap::default(),
             ll1_decision_cache: FxHashMap::default(),
+            empty_cycle_cache: Vec::new(),
             single_outcome_memo_mode: SingleOutcomeMemoMode::Probe,
             single_outcome_probe_seen: FxHashSet::default(),
             single_outcome_probe_samples: 0,
@@ -3368,7 +3376,8 @@ where
         // Multi-alt states might contain epsilon-only edges that loop back
         // to the same `(state, index)` (e.g. left-recursive precedence
         // loops); we still need the guard there.
-        let needs_cycle_guard = transition_count > 1;
+        let needs_cycle_guard =
+            transition_count > 1 && self.state_can_reenter_without_consuming(atn, state_number);
         #[cfg(feature = "perf-counters")]
         if needs_cycle_guard {
             perf_counters::inc(&perf_counters::MULTI_TRANS_BODY, 1);
@@ -4942,6 +4951,84 @@ where
         first
     }
 
+    fn state_can_reenter_without_consuming(&mut self, atn: &Atn, state_number: usize) -> bool {
+        if self.empty_cycle_cache.len() <= state_number {
+            self.empty_cycle_cache
+                .resize_with(atn.states().len().max(state_number + 1), || None);
+        }
+        if let Some(cached) = self.empty_cycle_cache[state_number] {
+            return cached;
+        }
+        let mut visited = FxHashSet::with_capacity_and_hasher(64, FxBuildHasher::default());
+        let result = self.empty_path_reaches_state(atn, state_number, state_number, &mut visited);
+        self.empty_cycle_cache[state_number] = Some(result);
+        result
+    }
+
+    fn empty_path_reaches_state(
+        &mut self,
+        atn: &Atn,
+        state_number: usize,
+        target_state: usize,
+        visited: &mut FxHashSet<usize>,
+    ) -> bool {
+        if !visited.insert(state_number) {
+            return false;
+        }
+        let Some(state) = atn.state(state_number) else {
+            return false;
+        };
+        for transition in &state.transitions {
+            match transition {
+                Transition::Atom { .. }
+                | Transition::Range { .. }
+                | Transition::Set { .. }
+                | Transition::NotSet { .. }
+                | Transition::Wildcard { .. } => {}
+                Transition::Rule {
+                    target,
+                    rule_index,
+                    follow_state,
+                    ..
+                } => {
+                    if *target == target_state
+                        || self.empty_path_reaches_state(atn, *target, target_state, visited)
+                    {
+                        return true;
+                    }
+                    let Some(child_stop) = atn.rule_to_stop_state().get(*rule_index).copied()
+                    else {
+                        continue;
+                    };
+                    if self
+                        .cached_rule_first_set(atn, *target, child_stop)
+                        .nullable
+                        && (*follow_state == target_state
+                            || self.empty_path_reaches_state(
+                                atn,
+                                *follow_state,
+                                target_state,
+                                visited,
+                            ))
+                    {
+                        return true;
+                    }
+                }
+                Transition::Epsilon { target }
+                | Transition::Predicate { target, .. }
+                | Transition::Action { target, .. }
+                | Transition::Precedence { target, .. } => {
+                    if *target == target_state
+                        || self.empty_path_reaches_state(atn, *target, target_state, visited)
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+
     /// Decides whether a clean one-outcome entry is worth storing in the full
     /// outcome memo table for this parse.
     fn should_memoize_single_outcome(&mut self, key: &FastRecognizeKey) -> bool {
@@ -5295,6 +5382,7 @@ where
         self.rule_first_set_cache.clear();
         self.decision_lookahead_cache.clear();
         self.ll1_decision_cache.clear();
+        self.empty_cycle_cache.clear();
         self.single_outcome_memo_mode = SingleOutcomeMemoMode::Probe;
         self.single_outcome_probe_seen.clear();
         self.single_outcome_probe_samples = 0;

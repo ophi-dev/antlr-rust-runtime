@@ -350,8 +350,26 @@ where
             if stop == usize::MAX {
                 Some("<EOF>".to_owned())
             } else {
-                Some(self.input.text(TextInterval::new(self.token_start, stop)))
+                None
             }
+        });
+        let source_text = if text.is_none() && stop != usize::MAX {
+            self.input
+                .text_source_interval(TextInterval::new(self.token_start, stop))
+                .and_then(|(input, start_byte, stop_byte)| {
+                    Some(crate::token::TokenSourceText {
+                        input,
+                        start_byte: u32::try_from(start_byte).ok()?,
+                        stop_byte: u32::try_from(stop_byte).ok()?,
+                    })
+                })
+        } else {
+            None
+        };
+        let text = text.or_else(|| {
+            source_text
+                .is_none()
+                .then(|| self.input.text(TextInterval::new(self.token_start, stop)))
         });
         self.factory.create(TokenSpec {
             token_type,
@@ -361,6 +379,7 @@ where
             line: self.token_start_line,
             column: self.token_start_column,
             text,
+            source_text,
             source_name: self.input.source_name(),
         })
     }
