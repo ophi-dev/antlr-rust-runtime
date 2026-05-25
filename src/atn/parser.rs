@@ -1,5 +1,6 @@
 use crate::atn::{Atn, AtnState, Transition};
 use crate::dfa::{Dfa, DfaState};
+use crate::int_stream::IntStream;
 use crate::prediction::{
     AtnConfig, AtnConfigSet, EMPTY_RETURN_STATE, PredictionContext, PredictionContextMergeCache,
     SemanticContext, has_sll_conflict_terminating_prediction,
@@ -50,6 +51,28 @@ impl<'a> ParserAtnSimulator<'a> {
         self.adaptive_predict_with_precedence(decision, 0, lookahead)
     }
 
+    pub fn adaptive_predict_stream<T: IntStream>(
+        &mut self,
+        decision: usize,
+        input: &mut T,
+    ) -> Result<usize, ParserAtnSimulatorError> {
+        self.adaptive_predict_stream_with_precedence(decision, 0, input)
+    }
+
+    pub fn adaptive_predict_stream_with_precedence<T: IntStream>(
+        &mut self,
+        decision: usize,
+        precedence: usize,
+        input: &mut T,
+    ) -> Result<usize, ParserAtnSimulatorError> {
+        let marker = input.mark();
+        let index = input.index();
+        let result = self.adaptive_predict_stream_inner(decision, precedence, input);
+        input.seek(index);
+        input.release(marker);
+        result
+    }
+
     pub fn adaptive_predict_with_precedence(
         &mut self,
         decision: usize,
@@ -86,6 +109,48 @@ impl<'a> ParserAtnSimulator<'a> {
             }
         }
         Err(ParserAtnSimulatorError::PredictionRequiresMoreLookahead)
+    }
+
+    fn adaptive_predict_stream_inner<T: IntStream>(
+        &mut self,
+        decision: usize,
+        precedence: usize,
+        input: &mut T,
+    ) -> Result<usize, ParserAtnSimulatorError> {
+        let Some(&decision_state) = self.atn.decision_to_state().get(decision) else {
+            return Err(ParserAtnSimulatorError::UnknownDecision(decision));
+        };
+        let mut state_number = self.ensure_start_state(decision, decision_state, precedence)?;
+        if let Some(prediction) = self.dfa_prediction(decision, state_number) {
+            return Ok(prediction);
+        }
+        loop {
+            let symbol = input.la(1);
+            if let Some(target) = self
+                .decision_to_dfa
+                .get(decision)
+                .and_then(|dfa| dfa.state(state_number))
+                .and_then(|state| state.edge(symbol))
+            {
+                state_number = target;
+            } else {
+                let configs = self
+                    .decision_to_dfa
+                    .get(decision)
+                    .and_then(|dfa| dfa.state(state_number))
+                    .map(|state| state.configs.clone())
+                    .ok_or(ParserAtnSimulatorError::MissingDfaState(state_number))?;
+                let target = self.compute_target_state(decision, state_number, &configs, symbol)?;
+                state_number = target;
+            }
+            if let Some(prediction) = self.dfa_prediction(decision, state_number) {
+                return Ok(prediction);
+            }
+            if symbol == TOKEN_EOF {
+                return Err(ParserAtnSimulatorError::PredictionRequiresMoreLookahead);
+            }
+            input.consume();
+        }
     }
 
     fn ensure_start_state(
@@ -424,6 +489,17 @@ mod tests {
         assert!(dfa.precedence_start_state(7).is_some());
     }
 
+    #[test]
+    fn adaptive_predict_stream_restores_input_position() {
+        let atn = two_token_decision_atn();
+        let mut simulator = ParserAtnSimulator::new(&atn);
+        let mut input = VecIntStream::new(vec![1, 3, TOKEN_EOF]);
+
+        assert_eq!(simulator.adaptive_predict_stream(0, &mut input), Ok(2));
+        assert_eq!(input.index(), 0);
+        assert_eq!(input.la(1), 1);
+    }
+
     fn two_token_decision_atn() -> Atn {
         let mut atn = Atn::new(AtnType::Parser, 3);
         add_state(&mut atn, 0, AtnStateKind::RuleStart);
@@ -555,5 +631,48 @@ mod tests {
 
     fn add_state(atn: &mut Atn, state_number: usize, kind: AtnStateKind) {
         atn.add_state(AtnState::new(state_number, kind).with_rule_index(0));
+    }
+
+    #[derive(Debug)]
+    struct VecIntStream {
+        symbols: Vec<i32>,
+        index: usize,
+    }
+
+    impl VecIntStream {
+        fn new(symbols: Vec<i32>) -> Self {
+            Self { symbols, index: 0 }
+        }
+    }
+
+    impl IntStream for VecIntStream {
+        fn consume(&mut self) {
+            if self.la(1) != TOKEN_EOF {
+                self.index += 1;
+            }
+        }
+
+        fn la(&mut self, offset: isize) -> i32 {
+            if offset <= 0 {
+                return 0;
+            }
+            let offset = offset.cast_unsigned() - 1;
+            self.symbols
+                .get(self.index + offset)
+                .copied()
+                .unwrap_or(TOKEN_EOF)
+        }
+
+        fn index(&self) -> usize {
+            self.index
+        }
+
+        fn seek(&mut self, index: usize) {
+            self.index = index;
+        }
+
+        fn size(&self) -> usize {
+            self.symbols.len()
+        }
     }
 }
