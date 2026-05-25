@@ -599,6 +599,7 @@ where
     S: TokenSource,
 {{
     base: BaseParser<S>,
+    simulator: antlr4_runtime::ParserAtnSimulator<'static>,
 }}
 
 impl<S> {type_name}<S>
@@ -612,7 +613,8 @@ where
             .with_channel_names(metadata.channel_names().iter().copied())
             .with_mode_names(metadata.mode_names().iter().copied());
 {base_initialization}
-        Self {{ base }}
+        let simulator = antlr4_runtime::ParserAtnSimulator::new(atn());
+        Self {{ base, simulator }}
     }}
 
     pub fn metadata() -> &'static GrammarMetadata {{
