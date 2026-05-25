@@ -1,5 +1,42 @@
 # Development notes
 
+## Inner loop
+
+```bash
+cargo test --locked                                                 # unit tests
+cargo clippy --locked --all-targets --all-features -- -D warnings   # what CI runs
+```
+
+CI's clippy runs with the same `-D warnings` and promotes nursery/pedantic lints
+(`clippy::excessive-nesting`, `clippy::disallowed_types`, …) to errors — reproduce
+locally before pushing.
+
+## Source layout
+
+- `src/lib.rs` — public exports
+- `src/lexer.rs`, `src/atn/lexer.rs` — `BaseLexer` + lexer ATN simulator
+- `src/parser.rs` — `BaseParser` and the recursive `recognize_state_fast` walker
+- `src/atn/`, `src/atn/serialized.rs` — ATN graph + ANTLR `.interp` deserializer
+- `src/prediction.rs` — `PredictionContext`, `AtnConfig`, `PredictionFxHasher`
+- `src/token.rs`, `src/token_stream.rs`, `src/char_stream.rs` — input + token plumbing
+- `src/tree.rs` — public `ParseTree` / `ParserRuleContext`
+- `src/bin/antlr4-rust-gen.rs` — `.interp` → Rust parser code generator
+- `src/bin/antlr4-runtime-testsuite.rs` — conformance harness (see below)
+- `tests/kotlin-parity/` — Kotlin parity dumper + snippets
+- `tools/parse-bench/` — Python harness comparing rust/go/python/tree-sitter parse times
+
+## Generated parser codegen
+
+```bash
+cargo run --release --bin antlr4-rust-gen -- \
+    --lexer  path/to/Foo.interp \
+    --parser path/to/FooParser.interp \
+    --out-dir crates/foo/src/generated
+```
+
+The output crate must depend on this runtime (`antlr-rust-runtime = { path = ... }`).
+Both the kotlin-parity dumper and the parse-bench runner are examples.
+
 ## Kotlin parser parity perf benchmark
 
 Reproduces the timings against the Kotlin grammar from `antlr/grammars-v4`.
@@ -81,6 +118,38 @@ cargo run --release --quiet --bin antlr4-runtime-testsuite -- --case ParserError
 
 Per-case scratch crates land under `target/antlr-runtime-testsuite/<case>/`. Stale dirs from a killed run can fail a re-run with `Os { code: 66, ... DirectoryNotEmpty }` — `rm -rf target/antlr-runtime-testsuite/*` to recover.
 
+## Parse benchmark (vs Go / Python / tree-sitter)
+
+`tools/parse-bench/` runs ANTLR-generated Kotlin and C# parsers and reports
+min/avg parse time per fixture. CI runs it on every PR.
+
+The C# fixtures need an extra grammar checked out (Kotlin is in the one-time
+setup above):
+
+```bash
+git -C /tmp/antlr-cleanroom/grammars-v4 sparse-checkout set kotlin/kotlin csharp/v7
+python3 -m pip install -r tools/parse-bench/requirements.txt
+python3 tools/parse-bench/run.py \
+    --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
+    --grammars-v4 /tmp/antlr-cleanroom/grammars-v4
+```
+
+See `tools/parse-bench/README.md` for `--quick`, `--languages`, `--runtimes`,
+JSON / Markdown output, and the per-runner build details.
+
+## perf-counters feature
+
+```bash
+cargo build --release --features perf-counters
+ANTLR_PERF_DUMP=1 ./your-parser-binary  # dumps RFS_CALLS, MEMO_HITS, OUTCOMES_RETURN_*, …
+```
+
+Opt-in counters compiled out by default; useful for "where did the new ms come
+from?" investigations. Disabled in default builds so they don't tax the inner
+loop.
+
 ## CI parity
 
 CI runs `cargo clippy --locked --all-targets --all-features -- -D warnings`, so reproduce locally with the same flags before pushing — `clippy::excessive-nesting`, `clippy::disallowed_types`, and similar nursery/pedantic lints all promote to errors there.
+
+`AGENTS.md` mirrors this file for Codex / generic agents — keep them in sync when adding sections.

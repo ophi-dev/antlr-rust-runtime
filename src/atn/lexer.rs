@@ -1,4 +1,5 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
+use std::hash::BuildHasherDefault;
 
 use crate::atn::{Atn, AtnStateKind, LexerAction, Transition};
 use crate::char_stream::{CharStream, TextInterval};
@@ -7,12 +8,16 @@ use crate::lexer::{
     BaseLexer, Lexer, LexerCustomAction, LexerDfaActionKey, LexerDfaCachedAccept,
     LexerDfaCachedState, LexerDfaCachedTransition, LexerDfaConfigKey, LexerDfaKey, LexerPredicate,
 };
+use crate::prediction::PredictionFxHasher;
 use crate::token::{CommonToken, DEFAULT_CHANNEL, INVALID_TOKEN_TYPE, TokenFactory};
+
+#[allow(clippy::disallowed_types)]
+type FxHashSet<K> = HashSet<K, BuildHasherDefault<PredictionFxHasher>>;
 
 const MIN_CHAR_VALUE: i32 = 0;
 const MAX_CHAR_VALUE: i32 = 0x0010_FFFF;
 
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 struct LexerConfig {
     state: usize,
     position: usize,
@@ -23,7 +28,7 @@ struct LexerConfig {
     actions: Vec<LexerActionTrace>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 struct LexerActionTrace {
     action_index: usize,
     position: usize,
@@ -100,7 +105,7 @@ impl LexerActionResult {
 /// Accumulates one epsilon-closure expansion, including whether predicate
 /// evaluation made the closure input-position-sensitive.
 struct ClosureState {
-    seen: BTreeSet<LexerConfig>,
+    seen: FxHashSet<LexerConfig>,
     closed: Vec<LexerConfig>,
     has_semantic_context: bool,
 }
@@ -723,7 +728,7 @@ where
     P: FnMut(&BaseLexer<I, F>, LexerPredicate) -> bool,
 {
     let mut state = ClosureState {
-        seen: BTreeSet::new(),
+        seen: FxHashSet::default(),
         closed: Vec::new(),
         has_semantic_context: false,
     };

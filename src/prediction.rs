@@ -1,7 +1,67 @@
 use std::collections::BTreeSet;
+use std::hash::Hasher;
 use std::rc::Rc;
 
 pub const EMPTY_RETURN_STATE: usize = usize::MAX;
+
+/// Lightweight `FxHash`-style hasher.
+///
+/// Used by `BaseLexer`'s DFA-trace map and the `epsilon_closure` `seen`
+/// set to avoid the `SipHash` overhead of `std::collections::HashMap`'s
+/// default hasher on the hot lexer path.
+#[derive(Debug, Default)]
+pub struct PredictionFxHasher {
+    hash: u64,
+}
+
+const FX_ROT: u32 = 5;
+const FX_SEED: u64 = 0x51_7c_c1_b7_27_22_0a_95;
+
+impl Hasher for PredictionFxHasher {
+    #[inline]
+    fn write(&mut self, bytes: &[u8]) {
+        let mut bytes = bytes;
+        while bytes.len() >= 8 {
+            let (head, rest) = bytes.split_at(8);
+            let word = u64::from_le_bytes(head.try_into().expect("8-byte chunk"));
+            self.hash = (self.hash.rotate_left(FX_ROT) ^ word).wrapping_mul(FX_SEED);
+            bytes = rest;
+        }
+        for &b in bytes {
+            self.hash = (self.hash.rotate_left(FX_ROT) ^ u64::from(b)).wrapping_mul(FX_SEED);
+        }
+    }
+
+    #[inline]
+    fn write_u8(&mut self, value: u8) {
+        self.hash = (self.hash.rotate_left(FX_ROT) ^ u64::from(value)).wrapping_mul(FX_SEED);
+    }
+
+    #[inline]
+    fn write_u32(&mut self, value: u32) {
+        self.hash = (self.hash.rotate_left(FX_ROT) ^ u64::from(value)).wrapping_mul(FX_SEED);
+    }
+
+    #[inline]
+    fn write_u64(&mut self, value: u64) {
+        self.hash = (self.hash.rotate_left(FX_ROT) ^ value).wrapping_mul(FX_SEED);
+    }
+
+    #[inline]
+    fn write_usize(&mut self, value: usize) {
+        self.hash = (self.hash.rotate_left(FX_ROT) ^ value as u64).wrapping_mul(FX_SEED);
+    }
+
+    #[inline]
+    fn write_i32(&mut self, value: i32) {
+        self.write_u32(i32::cast_unsigned(value));
+    }
+
+    #[inline]
+    fn finish(&self) -> u64 {
+        self.hash
+    }
+}
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum PredictionContext {

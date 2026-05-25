@@ -359,9 +359,19 @@ impl IntervalSet {
 
     /// Returns true when `value` falls inside any stored interval.
     pub fn contains(&self, value: i32) -> bool {
-        self.ranges
-            .iter()
-            .any(|(start, stop)| (*start..=*stop).contains(&value))
+        // Ranges are kept sorted and coalesced by `normalize`, so the first
+        // range whose `start > value` cannot contain `value` and neither can
+        // any range after it. Binary searching for that boundary turns
+        // membership lookup from O(n) to O(log n), which matters because
+        // parser/lexer hot paths call this once per `Set`/`NotSet`/`Wildcard`
+        // transition probe.
+        match self
+            .ranges
+            .binary_search_by(|(start, _)| start.cmp(&value))
+        {
+            Ok(_) => true,
+            Err(pos) => pos > 0 && self.ranges[pos - 1].1 >= value,
+        }
     }
 
     pub fn ranges(&self) -> &[(i32, i32)] {

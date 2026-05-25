@@ -5,6 +5,7 @@
 // apply to these uses.
 #[allow(clippy::disallowed_types)]
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::cell::RefCell;
 use std::hash::{BuildHasherDefault, Hash, Hasher};
 use std::rc::Rc;
 
@@ -83,6 +84,89 @@ use crate::vocabulary::Vocabulary;
 /// non-viable. Long expression-regression descriptors legitimately walk tens
 /// of thousands of ATN edges.
 const RECOGNITION_DEPTH_LIMIT: usize = 100_000;
+
+#[cfg(feature = "perf-counters")]
+mod perf_counters {
+    use std::cell::Cell;
+    thread_local! {
+        pub(super) static RFS_CALLS: Cell<u64> = const { Cell::new(0) };
+        pub(super) static RFS_MEMO_HITS: Cell<u64> = const { Cell::new(0) };
+        pub(super) static RFS_MEMO_MISSES: Cell<u64> = const { Cell::new(0) };
+        pub(super) static RFS_VISITING_CYCLE: Cell<u64> = const { Cell::new(0) };
+        pub(super) static MEMO_INSERTED: Cell<u64> = const { Cell::new(0) };
+        pub(super) static OUTCOMES_PUSHED: Cell<u64> = const { Cell::new(0) };
+        pub(super) static OUTCOMES_CLONED: Cell<u64> = const { Cell::new(0) };
+    }
+    pub(super) fn inc(c: &'static std::thread::LocalKey<Cell<u64>>, n: u64) {
+        c.with(|v| v.set(v.get() + n));
+    }
+    thread_local! {
+        pub(super) static EPSILON_TRANSITIONS: Cell<u64> = const { Cell::new(0) };
+        pub(super) static RULE_TRANSITIONS: Cell<u64> = const { Cell::new(0) };
+        pub(super) static ATOM_RANGE_TRANSITIONS: Cell<u64> = const { Cell::new(0) };
+        pub(super) static SINGLE_TRANS_BODY: Cell<u64> = const { Cell::new(0) };
+        pub(super) static MULTI_TRANS_BODY: Cell<u64> = const { Cell::new(0) };
+        pub(super) static SINGLE_TRANS_RULE: Cell<u64> = const { Cell::new(0) };
+        pub(super) static SINGLE_TRANS_ATOM: Cell<u64> = const { Cell::new(0) };
+        pub(super) static SINGLE_TRANS_OTHER: Cell<u64> = const { Cell::new(0) };
+        pub(super) static OUTCOMES_RETURN_0: Cell<u64> = const { Cell::new(0) };
+        pub(super) static OUTCOMES_RETURN_1: Cell<u64> = const { Cell::new(0) };
+        pub(super) static OUTCOMES_RETURN_N: Cell<u64> = const { Cell::new(0) };
+    }
+    pub(super) fn snapshot() -> [(&'static str, u64); 18] {
+        [
+            ("rfs_calls", RFS_CALLS.with(Cell::get)),
+            ("rfs_memo_hits", RFS_MEMO_HITS.with(Cell::get)),
+            ("rfs_memo_misses", RFS_MEMO_MISSES.with(Cell::get)),
+            ("rfs_visiting_cycle", RFS_VISITING_CYCLE.with(Cell::get)),
+            ("memo_inserted", MEMO_INSERTED.with(Cell::get)),
+            ("outcomes_pushed", OUTCOMES_PUSHED.with(Cell::get)),
+            ("outcomes_cloned", OUTCOMES_CLONED.with(Cell::get)),
+            ("epsilon_transitions", EPSILON_TRANSITIONS.with(Cell::get)),
+            ("rule_transitions", RULE_TRANSITIONS.with(Cell::get)),
+            ("atom_range_transitions", ATOM_RANGE_TRANSITIONS.with(Cell::get)),
+            ("single_trans_body", SINGLE_TRANS_BODY.with(Cell::get)),
+            ("multi_trans_body", MULTI_TRANS_BODY.with(Cell::get)),
+            ("single_trans_rule", SINGLE_TRANS_RULE.with(Cell::get)),
+            ("single_trans_atom", SINGLE_TRANS_ATOM.with(Cell::get)),
+            ("single_trans_other", SINGLE_TRANS_OTHER.with(Cell::get)),
+            ("outcomes_return_0", OUTCOMES_RETURN_0.with(Cell::get)),
+            ("outcomes_return_1", OUTCOMES_RETURN_1.with(Cell::get)),
+            ("outcomes_return_n", OUTCOMES_RETURN_N.with(Cell::get)),
+        ]
+    }
+    pub fn reset() {
+        RFS_CALLS.with(|c| c.set(0));
+        RFS_MEMO_HITS.with(|c| c.set(0));
+        RFS_MEMO_MISSES.with(|c| c.set(0));
+        RFS_VISITING_CYCLE.with(|c| c.set(0));
+        MEMO_INSERTED.with(|c| c.set(0));
+        OUTCOMES_PUSHED.with(|c| c.set(0));
+        OUTCOMES_CLONED.with(|c| c.set(0));
+        EPSILON_TRANSITIONS.with(|c| c.set(0));
+        RULE_TRANSITIONS.with(|c| c.set(0));
+        ATOM_RANGE_TRANSITIONS.with(|c| c.set(0));
+        SINGLE_TRANS_BODY.with(|c| c.set(0));
+        MULTI_TRANS_BODY.with(|c| c.set(0));
+        SINGLE_TRANS_RULE.with(|c| c.set(0));
+        SINGLE_TRANS_ATOM.with(|c| c.set(0));
+        SINGLE_TRANS_OTHER.with(|c| c.set(0));
+        OUTCOMES_RETURN_0.with(|c| c.set(0));
+        OUTCOMES_RETURN_1.with(|c| c.set(0));
+        OUTCOMES_RETURN_N.with(|c| c.set(0));
+    }
+    pub fn dump() {
+        for (name, value) in snapshot() {
+            #[allow(clippy::print_stderr)]
+            {
+                eprintln!("perf {name}={value}");
+            }
+        }
+    }
+}
+
+#[cfg(feature = "perf-counters")]
+pub use perf_counters::{dump as dump_perf_counters, reset as reset_perf_counters};
 /// Preserve lazy lexing for short or failing inputs, but eagerly fill once the
 /// fast recognizer has probed far enough that per-token stream sync dominates.
 /// Sixty-four tokens is a small rule-sized window: it keeps startup lazy while
@@ -355,6 +439,12 @@ pub struct BaseParser<S> {
     /// current lookahead, letting common SLL decisions reduce to a single
     /// transition walk instead of a full speculative fan-out.
     decision_lookahead_cache: FxHashMap<usize, Rc<DecisionLookahead>>,
+    /// Caches the LL(1) alt selection per `(state, lookahead_token)`.
+    /// Each multi-trans visit asks "given this decision state and this
+    /// lookahead token, which alt do I commit to?" Hitting this cache
+    /// turns the question into a hashmap probe instead of re-scanning
+    /// the decision's per-transition FIRST sets every visit.
+    ll1_decision_cache: FxHashMap<(usize, i32), Option<usize>>,
     /// Empty recovery-symbols singleton used as the default at rule entry and
     /// after token consumption.
     empty_recovery_symbols: Rc<BTreeSet<i32>>,
@@ -437,10 +527,15 @@ struct FastRecognizeOutcome {
 /// same head-first order as the original `Vec<FastRecognizedNode>` they
 /// replaced. Shared tails across speculative outcomes amortize the cost of
 /// chaining a child rule's nodes onto every follow outcome.
+///
+/// `One` is an inline single-element variant: most outcomes carry only one
+/// node (a single token or a single rule wrapper), so storing that node
+/// directly avoids allocating an `Rc<NodeList>` tail wrapper.
 #[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 enum NodeList {
     #[default]
     Empty,
+    One(Rc<FastRecognizedNode>),
     Cons {
         head: Rc<FastRecognizedNode>,
         tail: Rc<Self>,
@@ -456,9 +551,12 @@ impl NodeList {
     /// Prepends `node` and returns the new list. Both shared tails and the
     /// new head are reference-counted so this is `O(1)`.
     fn cons(self, node: Rc<FastRecognizedNode>) -> Self {
-        Self::Cons {
-            head: node,
-            tail: Rc::new(self),
+        match self {
+            Self::Empty => Self::One(node),
+            existing @ (Self::One(_) | Self::Cons { .. }) => Self::Cons {
+                head: node,
+                tail: Rc::new(existing),
+            },
         }
     }
 
@@ -476,9 +574,18 @@ impl NodeList {
     fn to_vec(&self) -> Vec<Rc<FastRecognizedNode>> {
         let mut out = Vec::new();
         let mut cursor = self;
-        while let Self::Cons { head, tail } = cursor {
-            out.push(Rc::clone(head));
-            cursor = tail.as_ref();
+        loop {
+            match cursor {
+                Self::Empty => break,
+                Self::One(node) => {
+                    out.push(Rc::clone(node));
+                    break;
+                }
+                Self::Cons { head, tail } => {
+                    out.push(Rc::clone(head));
+                    cursor = tail.as_ref();
+                }
+            }
         }
         out
     }
@@ -527,6 +634,10 @@ impl<'a> Iterator for NodeListIter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         match self.cursor {
             NodeList::Empty => None,
+            NodeList::One(node) => {
+                self.cursor = &NodeList::Empty;
+                Some(node)
+            }
             NodeList::Cons { head, tail } => {
                 self.cursor = tail.as_ref();
                 Some(head)
@@ -830,6 +941,78 @@ struct FirstSet {
 /// `BTreeSet<i32>`.
 type FirstSetCache = FxHashMap<(usize, usize), Rc<FirstSet>>;
 
+// Thread-local FIRST-set caches keyed by the ATN pointer. The FIRST set
+// and decision-lookahead entries are purely functions of the grammar's
+// ATN, so caching across parses lets repeated parsing of the same grammar
+// (the common case for a CLI tool or language server) avoid redoing the
+// closure work. Generated parsers hand us a `&'static Atn` whose address
+// is stable, which is what we hash on.
+type DecisionLookaheadCache = FxHashMap<usize, Rc<DecisionLookahead>>;
+
+#[derive(Default)]
+struct SharedAtnCache {
+    first_set: FirstSetCache,
+    decision_lookahead: DecisionLookaheadCache,
+}
+
+thread_local! {
+    static SHARED_ATN_CACHES: RefCell<FxHashMap<SharedAtnCacheKey, SharedAtnCache>> =
+        RefCell::new(FxHashMap::default());
+}
+
+/// Compound key for `SHARED_ATN_CACHES`.
+///
+/// Generated parsers feed us a `&'static Atn` from a `OnceLock<Atn>`, so the
+/// pointer identifies one grammar for the program's lifetime. For the
+/// non-`'static` case (a dropped `Atn` whose allocation is later reused),
+/// the secondary fields below catch the pointer collision: a new grammar
+/// would need to match all of `(states ptr, states len, max_token_type)` to
+/// be mistaken for the dropped one. That combination changing under us
+/// without a rebuild is implausible enough to treat as a bug; bundling them
+/// into the key is otherwise a few extra bytes per lookup.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct SharedAtnCacheKey {
+    atn: usize,
+    states: usize,
+    state_count: usize,
+    max_token_type: i32,
+}
+
+impl SharedAtnCacheKey {
+    fn for_atn(atn: &Atn) -> Self {
+        Self {
+            atn: std::ptr::from_ref::<Atn>(atn) as usize,
+            states: atn.states().as_ptr() as usize,
+            state_count: atn.states().len(),
+            max_token_type: atn.max_token_type(),
+        }
+    }
+}
+
+fn with_shared_first_set_cache<R>(
+    atn: &Atn,
+    f: impl FnOnce(&mut FirstSetCache) -> R,
+) -> R {
+    SHARED_ATN_CACHES.with(|cell| {
+        let key = SharedAtnCacheKey::for_atn(atn);
+        let mut map = cell.borrow_mut();
+        let cache = map.entry(key).or_default();
+        f(&mut cache.first_set)
+    })
+}
+
+fn with_shared_atn_caches<R>(
+    atn: &Atn,
+    f: impl FnOnce(&mut SharedAtnCache) -> R,
+) -> R {
+    SHARED_ATN_CACHES.with(|cell| {
+        let key = SharedAtnCacheKey::for_atn(atn);
+        let mut map = cell.borrow_mut();
+        let cache = map.entry(key).or_default();
+        f(cache)
+    })
+}
+
 /// Per-decision-state cached look-1 sets for each outgoing transition.
 ///
 /// At a multi-alternative state, the recognizer would otherwise speculatively
@@ -1017,6 +1200,36 @@ fn transition_first_set(
 /// transition is pruned, its FIRST set is folded into `expected` so failed
 /// parses produce the same `mismatched input ... expecting ...` diagnostic
 /// the no-prefilter baseline would emit.
+/// Returns the unique alt index (0-based) when `symbol` falls into exactly
+/// one transition's FIRST set and no transition is nullable. Used as an
+/// LL(1) commit point: when prediction is unambiguous from the lookahead
+/// alone, the recursive recognizer can skip every other alt without paying
+/// for the per-transition filter probe.
+///
+/// `None` signals the caller to fall back to per-transition lookahead
+/// filtering. Returning `Some` for an alt whose transition cannot actually
+/// match would prune the only viable parse path; this is why we require
+/// strict disjointness *and* no nullable transitions in the decision.
+fn ll1_unique_alt(entry: &DecisionLookahead, symbol: i32) -> Option<usize> {
+    let mut chosen: Option<usize> = None;
+    for (i, t) in entry.transitions.iter().enumerate() {
+        // Nullable transitions can match without consuming `symbol`, so
+        // they're always potentially viable. Bail and fall back to the
+        // standard filter loop.
+        if t.nullable {
+            return None;
+        }
+        if t.symbols.contains(symbol) {
+            if chosen.is_some() {
+                // Two transitions both contain this symbol — not LL(1).
+                return None;
+            }
+            chosen = Some(i);
+        }
+    }
+    chosen
+}
+
 fn should_skip_via_lookahead(
     transition: &Transition,
     transition_index: usize,
@@ -1518,8 +1731,8 @@ struct FastRecoveryRequest<'a, 'b> {
     expected_symbols: Rc<BTreeSet<i32>>,
     target: usize,
     request: FastRecognizeRequest,
-    visiting: &'b mut FxHashSet<FastRecognizeKey>,
-    memo: &'b mut FxHashMap<FastRecognizeKey, Vec<FastRecognizeOutcome>>,
+    visiting: &'b mut FxHashSet<(usize, usize)>,
+    memo: &'b mut FxHashMap<FastRecognizeKey, Rc<[FastRecognizeOutcome]>>,
     expected: &'b mut ExpectedTokens,
 }
 
@@ -1527,8 +1740,8 @@ struct FastCurrentTokenDeletionRequest<'a, 'b> {
     atn: &'a Atn,
     expected_symbols: Rc<BTreeSet<i32>>,
     request: FastRecognizeRequest,
-    visiting: &'b mut FxHashSet<FastRecognizeKey>,
-    memo: &'b mut FxHashMap<FastRecognizeKey, Vec<FastRecognizeOutcome>>,
+    visiting: &'b mut FxHashSet<(usize, usize)>,
+    memo: &'b mut FxHashMap<FastRecognizeKey, Rc<[FastRecognizeOutcome]>>,
     expected: &'b mut ExpectedTokens,
 }
 
@@ -1618,6 +1831,7 @@ where
             state_expected_cache: FxHashMap::default(),
             recovery_symbols_intern: FxHashMap::default(),
             decision_lookahead_cache: FxHashMap::default(),
+            ll1_decision_cache: FxHashMap::default(),
             empty_recovery_symbols: Rc::new(BTreeSet::new()),
             fast_first_set_prefilter: true,
             fast_recovery_enabled: true,
@@ -1820,8 +2034,11 @@ where
         // count here. Do not restore an up-front fill just to size this map:
         // the fixed floor avoids small-input churn, and large inputs grow the
         // cache after the deferred-fill threshold without forcing startup
-        // tokenization.
-        let memo_capacity = self.input.size().saturating_mul(4).clamp(65_536, 262_144);
+        // tokenization. The 8x multiplier matches the empirical
+        // memo-insert / token ratio on heavy grammars (C# averages ~6× and
+        // Kotlin ~12× memo entries per token), so the table avoids one
+        // rehash on the typical hot path.
+        let memo_capacity = self.input.size().saturating_mul(8).clamp(65_536, 524_288);
         let mut visiting = FxHashSet::with_capacity_and_hasher(256, FxBuildHasher::default());
         let mut memo = FxHashMap::with_capacity_and_hasher(memo_capacity, FxBuildHasher::default());
         let mut expected = ExpectedTokens::default();
@@ -1843,6 +2060,11 @@ where
             &mut memo,
             &mut expected,
         );
+        #[cfg(feature = "perf-counters")]
+        if std::env::var("ANTLR_PERF_DUMP").is_ok() {
+            perf_counters::dump();
+            perf_counters::reset();
+        }
         match select_best_fast_outcome(outcomes.into_iter(), self.prediction_mode) {
             Some(outcome) => Ok((outcome, expected)),
             None => Err(expected),
@@ -2693,59 +2915,229 @@ where
 
     /// Attempts to reach `stop_state` from `state_number` without committing
     /// token consumption to the parser's public stream position.
+    #[allow(clippy::too_many_lines)]
     fn recognize_state_fast(
         &mut self,
         atn: &Atn,
         request: FastRecognizeRequest,
-        visiting: &mut FxHashSet<FastRecognizeKey>,
-        memo: &mut FxHashMap<FastRecognizeKey, Vec<FastRecognizeOutcome>>,
+        visiting: &mut FxHashSet<(usize, usize)>,
+        memo: &mut FxHashMap<FastRecognizeKey, Rc<[FastRecognizeOutcome]>>,
         expected: &mut ExpectedTokens,
     ) -> Vec<FastRecognizeOutcome> {
+        #[cfg(feature = "perf-counters")]
+        perf_counters::inc(&perf_counters::RFS_CALLS, 1);
         let FastRecognizeRequest {
-            state_number,
+            mut state_number,
             stop_state,
-            index,
+            mut index,
             rule_start_index,
             decision_start_index,
             precedence,
-            depth,
+            mut depth,
             recovery_symbols,
             recovery_state,
         } = request;
-        if depth > RECOGNITION_DEPTH_LIMIT {
-            return Vec::new();
+        // Walk straight-line epsilon chains in a loop instead of recursing
+        // into `recognize_state_fast` for each intermediate state. ATN
+        // serialization places long sequences of `BasicBlock` epsilon
+        // transitions between decisions: turning that chain into a loop
+        // collapses many recursive calls (and their memo lookups, vec
+        // allocations, and visit-set churn) into a single function frame.
+        // The loop exits as soon as we hit the original state's logic
+        // (multi-alt, decision, rule call, atom/range/set, precedence) so
+        // existing fanout, recovery, and memoization still apply unchanged.
+        //
+        // The inline case also handles single-atom-match states on the
+        // happy-pass path: when the lone consuming transition matches the
+        // current lookahead, advance the index and continue without paying
+        // for a full `recognize_state_fast` recursion. We track tokens we
+        // consumed inline in `inline_consumed_tokens` so they can be
+        // prepended onto the eventual outcome list once we hit a state
+        // whose handling falls outside this fast loop.
+        let mut inline_consumed_tokens: Vec<usize> = Vec::new();
+        let mut inline_consumed_eof = false;
+        loop {
+            if depth > RECOGNITION_DEPTH_LIMIT {
+                return Vec::new();
+            }
+            if state_number == stop_state {
+                let mut nodes = NodeList::new();
+                if self.fast_token_nodes_enabled {
+                    for token_index in inline_consumed_tokens.iter().rev() {
+                        nodes.prepend(Rc::new(FastRecognizedNode::Token { index: *token_index }));
+                    }
+                }
+                return vec![FastRecognizeOutcome {
+                    index,
+                    consumed_eof: inline_consumed_eof,
+                    diagnostics: Vec::new(),
+                    nodes,
+                }];
+            }
+            let Some(state) = atn.state(state_number) else {
+                return Vec::new();
+            };
+            if state.transitions.len() == 1
+                && !starts_prediction_decision(state)
+                && !state.precedence_rule_decision
+            {
+                match &state.transitions[0] {
+                    Transition::Epsilon { target }
+                        if left_recursive_boundary(atn, state, *target).is_none() =>
+                    {
+                        #[cfg(feature = "perf-counters")]
+                        perf_counters::inc(&perf_counters::EPSILON_TRANSITIONS, 1);
+                        state_number = *target;
+                        depth += 1;
+                        continue;
+                    }
+                    // Single-atom / range / set / wildcard / not-set states
+                    // are common (~17K of ~125K calls on C#) and almost
+                    // always succeed in pass 1: no fanout, no recovery, no
+                    // diagnostics. Inline the token match and continue
+                    // walking instead of recursing — the recursive path
+                    // would just allocate a Vec, build one outcome, prepend
+                    // a Token node, and return. Skip pass 2 (recovery
+                    // enabled): there the failure branch matters and the
+                    // existing recursive code records expected symbols.
+                    Transition::Atom { target, .. }
+                    | Transition::Range { target, .. }
+                    | Transition::Set { target, .. }
+                    | Transition::NotSet { target, .. }
+                    | Transition::Wildcard { target, .. }
+                        if !self.fast_recovery_enabled =>
+                    {
+                        let symbol = self.token_type_at(index);
+                        let transition = &state.transitions[0];
+                        if transition.matches(symbol, 1, atn.max_token_type()) {
+                            #[cfg(feature = "perf-counters")]
+                            perf_counters::inc(&perf_counters::ATOM_RANGE_TRANSITIONS, 1);
+                            if self.fast_token_nodes_enabled {
+                                inline_consumed_tokens.push(index);
+                            }
+                            inline_consumed_eof |= symbol == TOKEN_EOF;
+                            index = self.consume_index(index, symbol);
+                            state_number = *target;
+                            depth += 1;
+                            continue;
+                        }
+                        // Fall through to break and let the regular
+                        // body handle the no-match case (returns empty).
+                    }
+                    _ => {}
+                }
+            }
+            break;
         }
-        if state_number == stop_state {
-            return vec![FastRecognizeOutcome {
+        // If we collected token nodes inline but bail to the recursive
+        // body (decision state, rule call, etc.), the outcomes returned
+        // below will need those token nodes prepended.
+        let inline_pending = !inline_consumed_tokens.is_empty() || inline_consumed_eof;
+        // In pass 1 (`fast_recovery_enabled == false`) the recovery-related
+        // fields and the rule/decision boundary indices are pure plumbing —
+        // they only affect the recovery branch and the no-viable diagnostic
+        // recording, neither of which fires when recovery is off. Zeroing
+        // them in the memo key collapses calls that visit the same
+        // `(state, index)` from different rule-call sites onto one cache
+        // entry, which is the dominant cost on large grammars (e.g. C#) where
+        // many rules eventually delegate into the same `expression` /
+        // `primary_expression` / `type` branches.
+        let key = if self.fast_recovery_enabled {
+            FastRecognizeKey {
+                state_number,
+                stop_state,
                 index,
-                consumed_eof: false,
-                diagnostics: Vec::new(),
-                nodes: NodeList::new(),
-            }];
-        }
-        let key = FastRecognizeKey {
-            state_number,
-            stop_state,
-            index,
-            rule_start_index,
-            decision_start_index,
-            precedence,
-            recovery_symbols_id: Rc::as_ptr(&recovery_symbols) as usize,
-            recovery_state,
+                rule_start_index,
+                decision_start_index,
+                precedence,
+                recovery_symbols_id: Rc::as_ptr(&recovery_symbols) as usize,
+                recovery_state,
+            }
+        } else {
+            FastRecognizeKey {
+                state_number,
+                stop_state,
+                index,
+                rule_start_index: 0,
+                decision_start_index: None,
+                precedence,
+                recovery_symbols_id: 0,
+                recovery_state: None,
+            }
         };
         if let Some(outcomes) = memo.get(&key) {
-            return outcomes.clone();
+            #[cfg(feature = "perf-counters")]
+            {
+                perf_counters::inc(&perf_counters::RFS_MEMO_HITS, 1);
+                perf_counters::inc(&perf_counters::OUTCOMES_CLONED, outcomes.len() as u64);
+            }
+            // Materialize a fresh `Vec` from the cached slice; the caller
+            // mutates per-outcome state (eof flags, prepended nodes) so we
+            // can't hand them the shared backing.
+            if !inline_consumed_tokens.is_empty() || inline_consumed_eof {
+                let inline_eof = inline_consumed_eof;
+                let inline_tokens = &inline_consumed_tokens;
+                return outcomes
+                    .iter()
+                    .cloned()
+                    .map(|mut outcome| {
+                        if inline_eof {
+                            outcome.consumed_eof = true;
+                        }
+                        if self.fast_token_nodes_enabled {
+                            for token_index in inline_tokens.iter().rev() {
+                                outcome.nodes.prepend(Rc::new(FastRecognizedNode::Token {
+                                    index: *token_index,
+                                }));
+                            }
+                        }
+                        outcome
+                    })
+                    .collect();
+            }
+            return outcomes.to_vec();
         }
+        #[cfg(feature = "perf-counters")]
+        perf_counters::inc(&perf_counters::RFS_MEMO_MISSES, 1);
 
-        let visit_key = key.clone();
-        if !visiting.insert(visit_key.clone()) {
-            return Vec::new();
-        }
-
+        // Cycle detection: only insert into the visiting set for states
+        // that *could* re-enter without consuming — multi-alternative
+        // states. Single-transition states are walked in the loop above and
+        // never form cycles (the loop only advances toward the rule stop).
+        // Multi-alt states might contain epsilon-only edges that loop back
+        // to the same `(state, index)` (e.g. left-recursive precedence
+        // loops); we still need the guard there.
         let Some(state) = atn.state(state_number) else {
-            visiting.remove(&visit_key);
             return Vec::new();
         };
+        let needs_cycle_guard = state.transitions.len() > 1;
+        #[cfg(feature = "perf-counters")]
+        if needs_cycle_guard {
+            perf_counters::inc(&perf_counters::MULTI_TRANS_BODY, 1);
+        } else {
+            perf_counters::inc(&perf_counters::SINGLE_TRANS_BODY, 1);
+            match &state.transitions[0] {
+                Transition::Rule { .. } => {
+                    perf_counters::inc(&perf_counters::SINGLE_TRANS_RULE, 1);
+                }
+                Transition::Atom { .. }
+                | Transition::Range { .. }
+                | Transition::Set { .. }
+                | Transition::NotSet { .. }
+                | Transition::Wildcard { .. } => {
+                    perf_counters::inc(&perf_counters::SINGLE_TRANS_ATOM, 1);
+                }
+                _ => {
+                    perf_counters::inc(&perf_counters::SINGLE_TRANS_OTHER, 1);
+                }
+            }
+        }
+        let visit_id = (state_number, index);
+        if needs_cycle_guard && !visiting.insert(visit_id) {
+            #[cfg(feature = "perf-counters")]
+            perf_counters::inc(&perf_counters::RFS_VISITING_CYCLE, 1);
+            return Vec::new();
+        }
         let next_decision_start_index = if starts_prediction_decision(state) {
             Some(index)
         } else {
@@ -2775,7 +3167,8 @@ where
         //   * left-recursive precedence loops (the precedence transition's
         //     gating is dynamic),
         //   * states with too few alternatives to benefit.
-        let lookahead_filter = if state.transitions.len() > 1
+        let transition_count = state.transitions.len();
+        let lookahead_filter = if transition_count > 1
             && self.fast_first_set_prefilter
             && !state.precedence_rule_decision
             && (!self.fast_recovery_enabled || state.kind != AtnStateKind::RuleStart)
@@ -2791,11 +3184,43 @@ where
         } else {
             None
         };
+        // LL(1) fast path: when the FIRST sets for the decision are disjoint
+        // and none is nullable, the lookahead deterministically selects one
+        // alternative. The recursive recognizer can then commit to that single
+        // alt without iterating every transition through `should_skip_via_lookahead`
+        // — saving (transition_count - 1) filter probes per visit.
+        //
+        // Result is cached per `(state, lookahead_token)` on the parser
+        // instance, so subsequent visits skip the FIRST-set scan entirely.
+        let ll1_only_alt: Option<usize> = if transition_count > 1
+            && let Some((symbol, entry)) = lookahead_filter.as_ref()
+        {
+            let key = (state.state_number, *symbol);
+            if let Some(&cached) = self.ll1_decision_cache.get(&key) {
+                cached
+            } else {
+                let result = ll1_unique_alt(entry, *symbol);
+                self.ll1_decision_cache.insert(key, result);
+                result
+            }
+        } else {
+            None
+        };
         let lookahead_filter = lookahead_filter.as_ref();
-        let transition_count = state.transitions.len();
-        let mut outcomes = Vec::with_capacity(transition_count);
+        // Pre-size only when we expect at least one outcome to land — most
+        // single-transition fall-throughs (the loop above didn't catch
+        // because they're atom/rule/predicate) push at most one entry, so
+        // reserving one slot avoids a reallocation while keeping the
+        // unused-slot waste at one element.
+        let mut outcomes: Vec<FastRecognizeOutcome> =
+            Vec::with_capacity(transition_count.min(2));
         for (transition_index, transition) in state.transitions.iter().enumerate() {
-            if should_skip_via_lookahead(
+            if let Some(alt) = ll1_only_alt {
+                // LL(1) determinism: skip every alt except the chosen one.
+                if alt != transition_index {
+                    continue;
+                }
+            } else if should_skip_via_lookahead(
                 transition,
                 transition_index,
                 lookahead_filter,
@@ -2809,6 +3234,8 @@ where
                 Transition::Epsilon { target }
                 | Transition::Predicate { target, .. }
                 | Transition::Action { target, .. } => {
+                    #[cfg(feature = "perf-counters")]
+                    perf_counters::inc(&perf_counters::EPSILON_TRANSITIONS, 1);
                     let boundary = left_recursive_boundary(atn, state, *target);
                     outcomes.extend(
                         self.recognize_state_fast(
@@ -2882,6 +3309,8 @@ where
                     precedence: rule_precedence,
                     ..
                 } => {
+                    #[cfg(feature = "perf-counters")]
+                    perf_counters::inc(&perf_counters::RULE_TRANSITIONS, 1);
                     let Some(child_stop) = atn.rule_to_stop_state().get(*rule_index).copied()
                     else {
                         continue;
@@ -2899,33 +3328,29 @@ where
                     // of conjuring a missing token at child-rule entry).
                     let symbol = self.token_type_at(index);
                     if self.fast_first_set_prefilter {
-                        let first_key = (*target, child_stop);
-                        if !self.first_set_cache.contains_key(&first_key) {
-                            let _ =
-                                rule_first_set(atn, *target, child_stop, &mut self.first_set_cache);
-                        }
-                        if let Some(first) = self.first_set_cache.get(&first_key) {
-                            if should_skip_rule_via_first_set(
-                                first,
-                                symbol,
-                                self.fast_recovery_enabled,
-                                index,
-                                expected,
-                            ) {
-                                continue;
-                            }
-                        } else {
-                            let first =
-                                rule_first_set(atn, *target, child_stop, &mut self.first_set_cache);
-                            if should_skip_rule_via_first_set(
-                                &first,
-                                symbol,
-                                self.fast_recovery_enabled,
-                                index,
-                                expected,
-                            ) {
-                                continue;
-                            }
+                        // Probe the shared cross-parse cache first; build
+                        // the entry on miss and intern it there. The
+                        // computation is purely a function of the ATN, so
+                        // the cached entry is reused across parses (and
+                        // freshly-instantiated parser values that share
+                        // the same `&'static Atn`).
+                        //
+                        // `rule_first_set` returns the computed entry
+                        // directly — it intentionally skips inserting into
+                        // the cache when the FIRST-set walk hit a cycle, so
+                        // we cannot assume the entry is in the cache after
+                        // computing it.
+                        let first = with_shared_first_set_cache(atn, |cache| {
+                            rule_first_set(atn, *target, child_stop, cache)
+                        });
+                        if should_skip_rule_via_first_set(
+                            &first,
+                            symbol,
+                            self.fast_recovery_enabled,
+                            index,
+                            expected,
+                        ) {
+                            continue;
                         }
                     }
                     let expected_before_child =
@@ -2987,11 +3412,16 @@ where
                             stop_index: self.rule_stop_token_index(child_index, child_consumed_eof),
                             children: child.nodes,
                         });
+                        let child_diags_empty = child_diagnostics.is_empty();
                         outcomes.extend(follow_outcomes.into_iter().map(|mut outcome| {
                             outcome.consumed_eof |= child_consumed_eof;
-                            let mut diagnostics = child_diagnostics.clone();
-                            diagnostics.append(&mut outcome.diagnostics);
-                            outcome.diagnostics = diagnostics;
+                            // Skip the prepend dance when there's nothing to
+                            // merge from the child — common case in pass 1.
+                            if !child_diags_empty {
+                                let mut diagnostics = child_diagnostics.clone();
+                                diagnostics.append(&mut outcome.diagnostics);
+                                outcome.diagnostics = diagnostics;
+                            }
                             outcome.nodes.prepend(Rc::clone(&child_node));
                             outcome
                         }));
@@ -3002,6 +3432,8 @@ where
                 | Transition::Set { target, .. }
                 | Transition::NotSet { target, .. }
                 | Transition::Wildcard { target, .. } => {
+                    #[cfg(feature = "perf-counters")]
+                    perf_counters::inc(&perf_counters::ATOM_RANGE_TRANSITIONS, 1);
                     let symbol = self.token_type_at(index);
                     if transition.matches(symbol, 1, atn.max_token_type()) {
                         let next_index = self.consume_index(index, symbol);
@@ -3036,6 +3468,16 @@ where
                             }),
                         );
                     } else {
+                        if !self.fast_recovery_enabled {
+                            // In pass 1 there is no recovery to attempt; the
+                            // recovery branch below would never run, and the
+                            // `expected_symbols` computation is just there
+                            // to gate that branch. Skipping it eliminates
+                            // ~1× `state_expected_symbols` lookup per failed
+                            // atom transition (≈82K on mono-statement.cs)
+                            // for zero observable behavior change.
+                            continue;
+                        }
                         let expected_symbols = fast_recovery_expected_symbols(
                             self,
                             atn,
@@ -3045,7 +3487,7 @@ where
                         if expected_symbols.contains(&symbol) {
                             continue;
                         }
-                        if self.fast_recovery_enabled {
+                        {
                             expected.record_transition(index, transition, atn.max_token_type());
                             record_no_viable_if_ambiguous(
                                 expected,
@@ -3124,8 +3566,13 @@ where
             }
         }
 
-        visiting.remove(&visit_key);
-        if self.prediction_mode == PredictionMode::Ll {
+        if needs_cycle_guard {
+            visiting.remove(&visit_id);
+        }
+        if self.prediction_mode == PredictionMode::Ll && self.fast_recovery_enabled {
+            // Without recovery enabled every outcome already has empty
+            // diagnostics, so the discard pass is a no-op — skipping it
+            // saves an iter+retain on each of the ~1M visits.
             discard_recovered_fast_outcomes_if_clean_path_exists(&mut outcomes);
         }
         if self.fast_recovery_enabled {
@@ -3133,8 +3580,62 @@ where
         } else {
             dedupe_clean_fast_outcomes(&mut outcomes);
         }
-        if self.fast_recovery_enabled || !outcomes.is_empty() {
-            memo.insert(key, outcomes.clone());
+        // Skip memoization for single-transition states whose outcome is
+        // unambiguous: they only get re-entered if the caller revisits the
+        // exact same call site, which is rare since the loop above already
+        // collapsed straight-line epsilon walks. Multi-alternative states
+        // are where backtracking actually revisits the same coordinate, so
+        // we still memoize there. With recovery on we keep the existing
+        // memoization unconditionally because the recovery branch may
+        // record diagnostics that the cache must surface to repeated
+        // failed visits.
+        let should_memoize = self.fast_recovery_enabled || transition_count > 1;
+        // Apply inline pending state to each outcome before returning.
+        // Tokens consumed inline by the loop-collapse don't appear in the
+        // recursive recognizer's output, so we need to prepend them here.
+        let apply_inline_pending = |mut outcome: FastRecognizeOutcome| -> FastRecognizeOutcome {
+            if inline_consumed_eof {
+                outcome.consumed_eof = true;
+            }
+            if !inline_consumed_tokens.is_empty() {
+                for token_index in inline_consumed_tokens.iter().rev() {
+                    outcome
+                        .nodes
+                        .prepend(Rc::new(FastRecognizedNode::Token { index: *token_index }));
+                }
+            }
+            outcome
+        };
+        if should_memoize && (self.fast_recovery_enabled || !outcomes.is_empty()) {
+            #[cfg(feature = "perf-counters")]
+            {
+                perf_counters::inc(&perf_counters::MEMO_INSERTED, 1);
+                perf_counters::inc(&perf_counters::OUTCOMES_PUSHED, outcomes.len() as u64);
+                match outcomes.len() {
+                    0 => perf_counters::inc(&perf_counters::OUTCOMES_RETURN_0, 1),
+                    1 => perf_counters::inc(&perf_counters::OUTCOMES_RETURN_1, 1),
+                    _ => perf_counters::inc(&perf_counters::OUTCOMES_RETURN_N, 1),
+                }
+            }
+            // The memo is keyed by the loop-exit `(state_number, index)` so
+            // the inline-consumed tokens belong to *this* call's output, not
+            // the cached result. Memoize the bare outcomes (without the
+            // inline-pending data), then prepend the inline data on return.
+            let stored: Rc<[FastRecognizeOutcome]> = Rc::from(outcomes);
+            memo.insert(key, Rc::clone(&stored));
+            if inline_pending {
+                return stored.iter().cloned().map(apply_inline_pending).collect();
+            }
+            return stored.to_vec();
+        }
+        #[cfg(feature = "perf-counters")]
+        match outcomes.len() {
+            0 => perf_counters::inc(&perf_counters::OUTCOMES_RETURN_0, 1),
+            1 => perf_counters::inc(&perf_counters::OUTCOMES_RETURN_1, 1),
+            _ => perf_counters::inc(&perf_counters::OUTCOMES_RETURN_N, 1),
+        }
+        if inline_pending {
+            return outcomes.into_iter().map(apply_inline_pending).collect();
         }
         outcomes
     }
@@ -4115,21 +4616,35 @@ where
         state: &AtnState,
         rule_stop_state: usize,
     ) -> Rc<DecisionLookahead> {
+        // Hit the parser-instance cache first. Decision lookahead is purely
+        // a function of the ATN/state, so on a warm cache we skip the
+        // thread-local + RefCell + HashMap-entry dance through
+        // SHARED_ATN_CACHES — which on multi-trans-heavy grammars (C# does
+        // ~58K multi-trans visits per parse) shows up as RefCell borrow and
+        // hashmap-entry overhead in profiles.
         if let Some(cached) = self.decision_lookahead_cache.get(&state.state_number) {
             return Rc::clone(cached);
         }
-        let mut entry = DecisionLookahead {
-            transitions: Vec::with_capacity(state.transitions.len()),
-        };
-        for transition in &state.transitions {
-            entry.transitions.push(transition_first_set(
-                atn,
-                transition,
-                rule_stop_state,
-                &mut self.first_set_cache,
-            ));
-        }
-        let entry = Rc::new(entry);
+        let entry = with_shared_atn_caches(atn, |cache| {
+            if let Some(cached) = cache.decision_lookahead.get(&state.state_number) {
+                return Rc::clone(cached);
+            }
+            let mut entry = DecisionLookahead {
+                transitions: Vec::with_capacity(state.transitions.len()),
+            };
+            for transition in &state.transitions {
+                entry.transitions.push(transition_first_set(
+                    atn,
+                    transition,
+                    rule_stop_state,
+                    &mut cache.first_set,
+                ));
+            }
+            let entry = Rc::new(entry);
+            cache.decision_lookahead
+                .insert(state.state_number, Rc::clone(&entry));
+            entry
+        });
         self.decision_lookahead_cache
             .insert(state.state_number, Rc::clone(&entry));
         entry
@@ -4461,6 +4976,7 @@ where
     fn reset_per_parse_caches(&mut self) {
         self.first_set_cache.clear();
         self.decision_lookahead_cache.clear();
+        self.ll1_decision_cache.clear();
         self.recovery_symbols_intern.clear();
         self.state_expected_cache.clear();
     }
@@ -5289,8 +5805,40 @@ fn dedupe_clean_fast_outcomes(outcomes: &mut Vec<FastRecognizeOutcome>) {
     if outcomes.len() < 2 {
         return;
     }
-    let mut seen = BTreeSet::new();
-    outcomes.retain(|outcome| seen.insert((outcome.index, outcome.consumed_eof)));
+    // Most outcomes lists are 2-4 entries; an inline scan beats BTreeSet
+    // here because BTreeSet's allocation + per-insert balancing dominates
+    // O(log n) wins on tiny n. Retains the original order so callers that
+    // depend on alt ordering (e.g. fast outcome selection) stay correct.
+    //
+    // Beyond the inline buffer we promote to a heap Vec so all kept entries
+    // continue to participate in dedup — leaking duplicates here on
+    // pathological grammars (e.g. ktor's deeply ambiguous Kotlin parse)
+    // explodes the speculative cache one step up the recursion.
+    let mut inline_keys: [(usize, bool); 8] = [(0, false); 8];
+    let mut inline_len = 0_usize;
+    let mut overflow: Vec<(usize, bool)> = Vec::new();
+    outcomes.retain(|outcome| {
+        let key = (outcome.index, outcome.consumed_eof);
+        for &existing in &inline_keys[..inline_len] {
+            if existing == key {
+                return false;
+            }
+        }
+        if !overflow.is_empty() {
+            for &existing in &overflow {
+                if existing == key {
+                    return false;
+                }
+            }
+        }
+        if inline_len < inline_keys.len() {
+            inline_keys[inline_len] = key;
+            inline_len += 1;
+        } else {
+            overflow.push(key);
+        }
+        true
+    });
 }
 
 /// Sorts and removes equivalent endpoints, including their action traces.

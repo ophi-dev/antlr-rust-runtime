@@ -19,6 +19,7 @@ path = "src/lib.rs"
 [features]
 default = []
 std = []
+perf-counters = []
 
 [dependencies]
 thiserror = "2"
