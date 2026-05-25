@@ -490,11 +490,8 @@ fn render_parser(
             .expect("writing to a string cannot fail");
         }
         if !needs_slow_path && after_action.is_empty() {
-            writeln!(
-                rule_methods,
-                "        self.base.parse_atn_rule(atn(), {index})"
-            )
-            .expect("writing to a string cannot fail");
+            writeln!(rule_methods, "        self.parse_rule({index})")
+                .expect("writing to a string cannot fail");
         } else {
             if needs_slow_path {
                 if has_predicate_dispatch || has_return_actions {
@@ -542,7 +539,7 @@ fn render_parser(
             } else {
                 writeln!(
                     rule_methods,
-                    "        let tree = self.base.parse_atn_rule(atn(), {index})?;"
+                    "        let tree = self.parse_rule({index})?;"
                 )
                 .expect("writing to a string cannot fail");
             }
@@ -599,7 +596,6 @@ where
     S: TokenSource,
 {{
     base: BaseParser<S>,
-    #[allow(dead_code)]
     simulator: Option<antlr4_runtime::ParserAtnSimulator<'static>>,
 }}
 
@@ -625,6 +621,18 @@ where
     fn simulator(&mut self) -> &mut antlr4_runtime::ParserAtnSimulator<'static> {{
         self.simulator
             .get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new(atn()))
+    }}
+
+    fn parse_rule(&mut self, rule_index: usize) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{
+        if std::env::var_os("ANTLR4_RUST_ADAPTIVE_DIRECT").is_some() {{
+            let simulator = self
+                .simulator
+                .get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new(atn()));
+            self.base
+                .parse_atn_rule_adaptive_or_fallback(atn(), simulator, rule_index)
+        }} else {{
+            self.base.parse_atn_rule(atn(), rule_index)
+        }}
     }}
 
 {rule_methods}

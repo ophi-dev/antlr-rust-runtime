@@ -262,6 +262,15 @@ impl<'a> ParserAtnSimulator<'a> {
             reach.add_with_merge_cache(config, Some(&mut merge_cache));
         }
         if reach.is_empty() {
+            if let Some(prediction) = self.alt_that_finished_decision_entry_rule(configs) {
+                let mut dfa_state = DfaState::new(configs.clone());
+                dfa_state.mark_accept(prediction);
+                let target_state = self.decision_to_dfa[decision].add_state(dfa_state);
+                if let Some(source) = self.decision_to_dfa[decision].state_mut(source_state) {
+                    source.add_edge(symbol, target_state);
+                }
+                return Ok(target_state);
+            }
             return Err(ParserAtnSimulatorError::NoViableAlt { symbol });
         }
         let prediction = reach.unique_alt();
@@ -288,6 +297,22 @@ impl<'a> ParserAtnSimulator<'a> {
             source.add_edge(symbol, target_state);
         }
         Ok(target_state)
+    }
+
+    fn alt_that_finished_decision_entry_rule(&self, configs: &AtnConfigSet) -> Option<usize> {
+        configs
+            .configs()
+            .iter()
+            .filter(|config| {
+                config.reaches_into_outer_context > 0
+                    || self
+                        .atn
+                        .state(config.state)
+                        .is_some_and(AtnState::is_rule_stop)
+                        && config.context.has_empty_path()
+            })
+            .map(|config| config.alt)
+            .min()
     }
 
     fn rule_stop_configs(
@@ -332,14 +357,15 @@ impl<'a> ParserAtnSimulator<'a> {
                 self.closure_at_rule_stop(config, configs, merge_cache)?;
                 continue;
             }
-            if state.transitions.iter().any(Transition::is_epsilon) {
-                for transition in &state.transitions {
-                    if transition.is_epsilon() {
-                        stack.push(self.epsilon_target_config(&config, transition));
-                    }
+            let epsilon_only = !state.transitions.is_empty()
+                && state.transitions.iter().all(Transition::is_epsilon);
+            if !epsilon_only {
+                configs.add_with_merge_cache(config.clone(), Some(merge_cache));
+            }
+            for transition in &state.transitions {
+                if transition.is_epsilon() {
+                    stack.push(self.epsilon_target_config(&config, transition));
                 }
-            } else {
-                configs.add_with_merge_cache(config, Some(merge_cache));
             }
         }
         Ok(())
@@ -515,6 +541,14 @@ mod tests {
     }
 
     #[test]
+    fn adaptive_predict_uses_finished_entry_rule_alt_on_error_edge() {
+        let atn = prefix_alt_decision_atn();
+        let mut simulator = ParserAtnSimulator::new(&atn);
+
+        assert_eq!(simulator.adaptive_predict(0, [1, 3]), Ok(1));
+    }
+
+    #[test]
     fn adaptive_predict_uses_precedence_dfa_start_states() {
         let mut atn = two_token_decision_atn();
         atn.state_mut(1)
@@ -674,6 +708,35 @@ mod tests {
         atn.state_mut(6)
             .expect("state 6")
             .add_transition(Transition::Epsilon { target: 7 });
+        atn
+    }
+
+    fn prefix_alt_decision_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 3);
+        add_state(&mut atn, 0, AtnStateKind::BlockStart);
+        add_state(&mut atn, 1, AtnStateKind::Basic);
+        add_state(&mut atn, 2, AtnStateKind::RuleStop);
+        atn.set_rule_to_start_state(vec![0]);
+        atn.set_rule_to_stop_state(vec![2]);
+        atn.add_decision_state(0);
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Atom {
+                target: 2,
+                label: 1,
+            });
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Atom {
+                target: 1,
+                label: 1,
+            });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Atom {
+                target: 2,
+                label: 2,
+            });
         atn
     }
 

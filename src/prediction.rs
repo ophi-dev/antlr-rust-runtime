@@ -123,6 +123,14 @@ impl PredictionContext {
         }
     }
 
+    pub fn has_empty_path(&self) -> bool {
+        match self {
+            Self::Empty => true,
+            Self::Singleton { return_state, .. } => *return_state == EMPTY_RETURN_STATE,
+            Self::Array { return_states, .. } => return_states.contains(&EMPTY_RETURN_STATE),
+        }
+    }
+
     pub fn merge(left: Rc<Self>, right: Rc<Self>) -> Rc<Self> {
         Self::merge_with_options(left, right, false, None)
     }

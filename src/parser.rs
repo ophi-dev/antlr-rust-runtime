@@ -71,6 +71,7 @@ type FxHashMap<K, V> = HashMap<K, V, FxBuildHasher>;
 #[allow(clippy::disallowed_types)]
 type FxHashSet<K> = HashSet<K, FxBuildHasher>;
 
+use crate::atn::parser::ParserAtnSimulator;
 use crate::atn::{Atn, AtnState, AtnStateKind, Transition};
 use crate::errors::AntlrError;
 use crate::int_stream::IntStream;
@@ -84,6 +85,10 @@ use crate::vocabulary::Vocabulary;
 /// non-viable. Long expression-regression descriptors legitimately walk tens
 /// of thousands of ATN edges.
 const RECOGNITION_DEPTH_LIMIT: usize = 100_000;
+/// Whole-rule direct adaptive execution is allowed to give up and fall back to
+/// the existing recognizer. Keep the guard at the same order of magnitude as
+/// speculative recognition so malformed cyclic ATNs cannot spin forever.
+const ADAPTIVE_DIRECT_STEP_LIMIT: usize = RECOGNITION_DEPTH_LIMIT;
 /// Probe window for deciding whether clean-pass one-outcome memo entries are
 /// reusable enough to keep caching. Large C# parses mostly produce one-shot
 /// entries; small ambiguous Kotlin loops repeatedly hit the same keys.
@@ -1828,6 +1833,42 @@ struct PredicateFailureRecovery<'a> {
     rule_alt_number: usize,
 }
 
+#[derive(Debug)]
+enum DirectAdaptiveParseControl {
+    Fallback(DirectAdaptiveFallback),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DirectAdaptiveFallback {
+    Action,
+    FullContext,
+    InvalidAlt,
+    LeftRecursiveBoundary,
+    MissingAtn,
+    NoTransition,
+    Predicate,
+    Prediction,
+    Precedence,
+    RuleStop,
+    SemanticContext,
+    StepLimit,
+    TokenMismatch,
+    UnknownDecision,
+}
+
+type DirectAdaptiveParseResult<T> = Result<T, DirectAdaptiveParseControl>;
+
+struct DirectAdaptiveParser<'atn, 'sim, S>
+where
+    S: TokenSource,
+{
+    parser: &'sim mut BaseParser<S>,
+    atn: &'atn Atn,
+    simulator: &'sim mut ParserAtnSimulator<'atn>,
+    decision_by_state: Vec<Option<usize>>,
+    steps: usize,
+}
+
 impl<S> BaseParser<S>
 where
     S: TokenSource,
@@ -2022,6 +2063,48 @@ where
             line: current.as_ref().map(Token::line).unwrap_or_default(),
             column: current.as_ref().map(Token::column).unwrap_or_default(),
             message: format!("rule failed predicate: {}", message.into()),
+        }
+    }
+
+    /// Attempts to execute a whole generated rule by committing simulator
+    /// decisions directly. Unsupported constructs or decisions that need
+    /// full-context / predicate evaluation restore the input cursor and fall
+    /// back to [`Self::parse_atn_rule`].
+    pub fn parse_atn_rule_adaptive_or_fallback<'atn>(
+        &mut self,
+        atn: &'atn Atn,
+        simulator: &mut ParserAtnSimulator<'atn>,
+        rule_index: usize,
+    ) -> Result<ParseTree, AntlrError> {
+        let start_index = self.current_visible_index();
+        self.clear_prediction_diagnostics();
+        self.reset_per_parse_caches();
+        let mut decision_by_state = vec![None; atn.states().len()];
+        for (decision, &state_number) in atn.decision_to_state().iter().enumerate() {
+            if let Some(slot) = decision_by_state.get_mut(state_number) {
+                *slot = Some(decision);
+            }
+        }
+
+        let result = DirectAdaptiveParser {
+            parser: self,
+            atn,
+            simulator,
+            decision_by_state,
+            steps: 0,
+        }
+        .parse_rule(rule_index, -1, 0);
+
+        match result {
+            Ok(tree) => {
+                report_token_source_errors(&self.input.drain_source_errors());
+                Ok(tree)
+            }
+            Err(DirectAdaptiveParseControl::Fallback(reason)) => {
+                let _ = reason;
+                self.input.seek(start_index);
+                self.parse_atn_rule(atn, rule_index)
+            }
         }
     }
 
@@ -5311,6 +5394,264 @@ where
     }
 }
 
+impl<S> DirectAdaptiveParser<'_, '_, S>
+where
+    S: TokenSource,
+{
+    fn parse_rule(
+        &mut self,
+        rule_index: usize,
+        invoking_state: isize,
+        precedence: i32,
+    ) -> DirectAdaptiveParseResult<ParseTree> {
+        let start_state = *self.atn.rule_to_start_state().get(rule_index).ok_or(
+            DirectAdaptiveParseControl::Fallback(DirectAdaptiveFallback::MissingAtn),
+        )?;
+        let stop_state = *self
+            .atn
+            .rule_to_stop_state()
+            .get(rule_index)
+            .filter(|state| **state != usize::MAX)
+            .ok_or(DirectAdaptiveParseControl::Fallback(
+                DirectAdaptiveFallback::MissingAtn,
+            ))?;
+        let start_index = self.parser.current_visible_index();
+        let mut context = ParserRuleContext::new(rule_index, invoking_state);
+        if let Some(token) = self.parser.token_at(start_index) {
+            context.set_start(token);
+        }
+
+        let mut children = Vec::new();
+        let mut state_number = start_state;
+        let mut consumed_eof = false;
+        while state_number != stop_state {
+            self.step()?;
+            let (transition, boundary) = self.next_transition(state_number, precedence)?;
+            if boundary.is_some() {
+                return Err(DirectAdaptiveParseControl::Fallback(
+                    DirectAdaptiveFallback::LeftRecursiveBoundary,
+                ));
+            }
+            match transition {
+                Transition::Epsilon { target } => {
+                    state_number = target;
+                }
+                Transition::Precedence {
+                    target,
+                    precedence: transition_precedence,
+                } => {
+                    if transition_precedence < precedence {
+                        return Err(DirectAdaptiveParseControl::Fallback(
+                            DirectAdaptiveFallback::Precedence,
+                        ));
+                    }
+                    state_number = target;
+                }
+                Transition::Rule {
+                    rule_index,
+                    follow_state,
+                    precedence: rule_precedence,
+                    ..
+                } => {
+                    let child = self.parse_rule(
+                        rule_index,
+                        invoking_state_number(state_number),
+                        rule_precedence,
+                    )?;
+                    if self.parser.build_parse_trees {
+                        children.push(child);
+                    }
+                    state_number = follow_state;
+                }
+                Transition::Atom { .. }
+                | Transition::Range { .. }
+                | Transition::Set { .. }
+                | Transition::NotSet { .. }
+                | Transition::Wildcard { .. } => {
+                    let (matched_eof, child) = self.consume_transition(&transition)?;
+                    consumed_eof |= matched_eof;
+                    if let Some(child) = child {
+                        children.push(child);
+                    }
+                    state_number = transition.target();
+                }
+                Transition::Predicate { .. } => {
+                    return Err(DirectAdaptiveParseControl::Fallback(
+                        DirectAdaptiveFallback::Predicate,
+                    ));
+                }
+                Transition::Action { .. } => {
+                    return Err(DirectAdaptiveParseControl::Fallback(
+                        DirectAdaptiveFallback::Action,
+                    ));
+                }
+            }
+        }
+
+        let stop_index = self
+            .parser
+            .rule_stop_token_index(self.parser.input.index(), consumed_eof);
+        if let Some(token) = stop_index.and_then(|index| self.parser.token_at(index)) {
+            context.set_stop(token);
+        }
+        if self.parser.build_parse_trees {
+            for child in children {
+                context.add_child(child);
+            }
+        }
+        Ok(self.parser.rule_node(context))
+    }
+
+    const fn step(&mut self) -> DirectAdaptiveParseResult<()> {
+        self.steps += 1;
+        if self.steps > ADAPTIVE_DIRECT_STEP_LIMIT {
+            return Err(DirectAdaptiveParseControl::Fallback(
+                DirectAdaptiveFallback::StepLimit,
+            ));
+        }
+        Ok(())
+    }
+
+    fn next_transition(
+        &mut self,
+        state_number: usize,
+        precedence: i32,
+    ) -> DirectAdaptiveParseResult<(Transition, Option<usize>)> {
+        let state = self
+            .atn
+            .state(state_number)
+            .ok_or(DirectAdaptiveParseControl::Fallback(
+                DirectAdaptiveFallback::MissingAtn,
+            ))?;
+        if state.is_rule_stop() {
+            return Err(DirectAdaptiveParseControl::Fallback(
+                DirectAdaptiveFallback::RuleStop,
+            ));
+        }
+        let transition_index =
+            self.transition_index(state_number, state.transitions.len(), precedence)?;
+        let transition = state.transitions.get(transition_index).cloned().ok_or(
+            DirectAdaptiveParseControl::Fallback(DirectAdaptiveFallback::NoTransition),
+        )?;
+        let boundary = match &transition {
+            Transition::Epsilon { target } | Transition::Precedence { target, .. } => {
+                left_recursive_boundary(self.atn, state, *target)
+            }
+            _ => None,
+        };
+        Ok((transition, boundary))
+    }
+
+    fn transition_index(
+        &mut self,
+        state_number: usize,
+        transition_count: usize,
+        precedence: i32,
+    ) -> DirectAdaptiveParseResult<usize> {
+        match transition_count {
+            0 => Err(DirectAdaptiveParseControl::Fallback(
+                DirectAdaptiveFallback::NoTransition,
+            )),
+            1 => Ok(0),
+            _ => {
+                if let Some(alt) = self.ll1_transition_index(state_number, transition_count)? {
+                    return Ok(alt);
+                }
+                let decision = self
+                    .decision_by_state
+                    .get(state_number)
+                    .and_then(|decision| *decision)
+                    .ok_or(DirectAdaptiveParseControl::Fallback(
+                        DirectAdaptiveFallback::UnknownDecision,
+                    ))?;
+                let prediction = self
+                    .simulator
+                    .adaptive_predict_stream_info_with_precedence(
+                        decision,
+                        direct_precedence(precedence),
+                        &mut self.parser.input,
+                    )
+                    .map_err(|_| {
+                        DirectAdaptiveParseControl::Fallback(DirectAdaptiveFallback::Prediction)
+                    })?;
+                if prediction.requires_full_context {
+                    return Err(DirectAdaptiveParseControl::Fallback(
+                        DirectAdaptiveFallback::FullContext,
+                    ));
+                }
+                if prediction.has_semantic_context {
+                    return Err(DirectAdaptiveParseControl::Fallback(
+                        DirectAdaptiveFallback::SemanticContext,
+                    ));
+                }
+                prediction
+                    .alt
+                    .checked_sub(1)
+                    .filter(|index| *index < transition_count)
+                    .ok_or(DirectAdaptiveParseControl::Fallback(
+                        DirectAdaptiveFallback::InvalidAlt,
+                    ))
+            }
+        }
+    }
+
+    fn ll1_transition_index(
+        &mut self,
+        state_number: usize,
+        transition_count: usize,
+    ) -> DirectAdaptiveParseResult<Option<usize>> {
+        let state = self
+            .atn
+            .state(state_number)
+            .ok_or(DirectAdaptiveParseControl::Fallback(
+                DirectAdaptiveFallback::MissingAtn,
+            ))?;
+        if state.precedence_rule_decision {
+            return Ok(None);
+        }
+        let Some(rule_stop) = state
+            .rule_index
+            .and_then(|rule_index| self.atn.rule_to_stop_state().get(rule_index).copied())
+        else {
+            return Ok(None);
+        };
+        let symbol = self.parser.input.la_token(1);
+        let entry = self
+            .parser
+            .cached_decision_lookahead(self.atn, state, rule_stop);
+        Ok(ll1_unique_alt(&entry, symbol).filter(|alt| *alt < transition_count))
+    }
+
+    fn consume_transition(
+        &mut self,
+        transition: &Transition,
+    ) -> DirectAdaptiveParseResult<(bool, Option<ParseTree>)> {
+        let symbol = self.parser.input.la_token(1);
+        if !transition.matches(symbol, 1, self.atn.max_token_type()) {
+            return Err(DirectAdaptiveParseControl::Fallback(
+                DirectAdaptiveFallback::TokenMismatch,
+            ));
+        }
+        let token =
+            self.parser
+                .input
+                .lt(1)
+                .cloned()
+                .ok_or(DirectAdaptiveParseControl::Fallback(
+                    DirectAdaptiveFallback::TokenMismatch,
+                ))?;
+        let matched_eof = symbol == TOKEN_EOF;
+        if !matched_eof {
+            self.parser.consume();
+        }
+        let child = self
+            .parser
+            .build_parse_trees
+            .then(|| ParseTree::Terminal(TerminalNode::new(token)));
+        Ok((matched_eof, child))
+    }
+}
+
 /// Detects the loop edge where ANTLR would call `pushNewRecursionContext` for a
 /// transformed left-recursive rule.
 fn left_recursive_boundary(atn: &Atn, state: &AtnState, target: usize) -> Option<usize> {
@@ -5492,6 +5833,10 @@ fn recognized_nodes_stop_index(nodes: &[RecognizedNode]) -> Option<usize> {
 /// ANTLR parse-tree contexts, saturating only for impossible platform widths.
 fn invoking_state_number(state_number: usize) -> isize {
     isize::try_from(state_number).unwrap_or(isize::MAX)
+}
+
+fn direct_precedence(precedence: i32) -> usize {
+    usize::try_from(precedence.max(0)).unwrap_or_default()
 }
 
 const fn recognized_node_stop_index(node: &RecognizedNode) -> Option<usize> {
@@ -6059,6 +6404,7 @@ where
 mod tests {
     use super::*;
     use crate::atn::AtnType;
+    use crate::atn::parser::ParserAtnSimulator;
     use crate::atn::serialized::{AtnDeserializer, SerializedAtn};
     use crate::token::{CommonToken, HIDDEN_CHANNEL, Token};
     use crate::token_stream::CommonTokenStream;
@@ -6160,6 +6506,79 @@ mod tests {
         ]))
         .deserialize()
         .expect("artificial parser ATN should deserialize")
+    }
+
+    fn two_alt_decision_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 2);
+        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
+        atn.add_state(AtnState::new(1, AtnStateKind::BlockStart).with_rule_index(0));
+        atn.add_state(AtnState::new(2, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(3, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(4, AtnStateKind::BlockEnd).with_rule_index(0));
+        atn.add_state(AtnState::new(5, AtnStateKind::RuleStop).with_rule_index(0));
+        atn.set_rule_to_start_state(vec![0]);
+        atn.set_rule_to_stop_state(vec![5]);
+        atn.add_decision_state(1);
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Epsilon { target: 1 });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Atom {
+                target: 2,
+                label: 1,
+            });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Atom {
+                target: 3,
+                label: 2,
+            });
+        atn.state_mut(2)
+            .expect("state 2")
+            .add_transition(Transition::Epsilon { target: 4 });
+        atn.state_mut(3)
+            .expect("state 3")
+            .add_transition(Transition::Epsilon { target: 4 });
+        atn.state_mut(4)
+            .expect("state 4")
+            .add_transition(Transition::Epsilon { target: 5 });
+        atn
+    }
+
+    fn predicate_after_token_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 2);
+        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
+        atn.add_state(AtnState::new(1, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(2, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(3, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(4, AtnStateKind::RuleStop).with_rule_index(0));
+        atn.set_rule_to_start_state(vec![0]);
+        atn.set_rule_to_stop_state(vec![4]);
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Atom {
+                target: 1,
+                label: 1,
+            });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Predicate {
+                target: 2,
+                rule_index: 0,
+                pred_index: 0,
+                context_dependent: false,
+            });
+        atn.state_mut(2)
+            .expect("state 2")
+            .add_transition(Transition::Atom {
+                target: 3,
+                label: 2,
+            });
+        atn.state_mut(3)
+            .expect("state 3")
+            .add_transition(Transition::Epsilon { target: 4 });
+        atn
     }
 
     #[test]
@@ -6337,6 +6756,41 @@ mod tests {
                 .token_type(),
             TOKEN_EOF
         );
+    }
+
+    #[test]
+    fn adaptive_direct_rule_uses_simulator_decision() {
+        let atn = two_alt_decision_atn();
+        let mut simulator = ParserAtnSimulator::new(&atn);
+        let mut parser = mini_parser(vec![
+            CommonToken::new(2).with_text("y"),
+            CommonToken::eof("parser-test", 1, 1, 1),
+        ]);
+
+        let tree = parser
+            .parse_atn_rule_adaptive_or_fallback(&atn, &mut simulator, 0)
+            .expect("direct adaptive rule should parse");
+
+        assert_eq!(tree.text(), "y");
+        assert_eq!(parser.input.index(), 1);
+    }
+
+    #[test]
+    fn adaptive_direct_rule_restores_input_on_fallback() {
+        let atn = predicate_after_token_atn();
+        let mut simulator = ParserAtnSimulator::new(&atn);
+        let mut parser = mini_parser(vec![
+            CommonToken::new(1).with_text("x"),
+            CommonToken::new(2).with_text("y"),
+            CommonToken::eof("parser-test", 2, 1, 2),
+        ]);
+
+        let tree = parser
+            .parse_atn_rule_adaptive_or_fallback(&atn, &mut simulator, 0)
+            .expect("fallback recognizer should parse");
+
+        assert_eq!(tree.text(), "xy");
+        assert_eq!(parser.input.index(), 2);
     }
 
     #[test]
