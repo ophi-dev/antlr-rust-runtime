@@ -623,6 +623,10 @@ impl NodeList {
         NodeListIter { cursor: self }
     }
 
+    fn len(&self) -> usize {
+        self.iter().count()
+    }
+
     fn has_left_recursive_boundary(&self) -> bool {
         self.iter().any(|node| {
             matches!(
@@ -1235,22 +1239,49 @@ fn transition_first_set(
 /// strict disjointness *and* no nullable transitions in the decision.
 fn ll1_unique_alt(entry: &DecisionLookahead, symbol: i32) -> Option<usize> {
     let mut chosen: Option<usize> = None;
-    for (i, t) in entry.transitions.iter().enumerate() {
-        // Nullable transitions can match without consuming `symbol`, so
-        // they're always potentially viable. Bail and fall back to the
-        // standard filter loop.
-        if t.nullable {
+    for (index, transition) in entry.transitions.iter().enumerate() {
+        if transition.nullable {
             return None;
         }
-        if t.symbols.contains(symbol) {
+        if transition.symbols.contains(symbol) {
             if chosen.is_some() {
-                // Two transitions both contain this symbol — not LL(1).
                 return None;
             }
-            chosen = Some(i);
+            chosen = Some(index);
         }
     }
     chosen
+}
+
+/// Returns the unique greedy alt index (0-based) selected by the current
+/// lookahead.
+///
+/// For greedy decisions ANTLR takes the consuming alternative when the current
+/// symbol can start one, otherwise it takes the unique nullable exit. Non-greedy
+/// decisions invert that preference and take the nullable alt first. `None`
+/// signals the caller to fall back to per-transition lookahead filtering.
+fn ll1_greedy_alt(entry: &DecisionLookahead, symbol: i32, non_greedy: bool) -> Option<usize> {
+    let mut matching_alt = None;
+    let mut nullable_alt = None;
+    for (index, transition) in entry.transitions.iter().enumerate() {
+        if transition.nullable {
+            if nullable_alt.is_some() {
+                return None;
+            }
+            nullable_alt = Some(index);
+        }
+        if transition.symbols.contains(symbol) {
+            if matching_alt.is_some() {
+                return None;
+            }
+            matching_alt = Some(index);
+        }
+    }
+    if non_greedy {
+        nullable_alt.or(matching_alt)
+    } else {
+        matching_alt.or(nullable_alt)
+    }
 }
 
 fn should_skip_via_lookahead(
@@ -2176,7 +2207,15 @@ where
         report_parser_diagnostics(&self.prediction_diagnostics);
         report_parser_diagnostics(&outcome.diagnostics);
         report_token_source_errors(&self.input.drain_source_errors());
-        let mut context = ParserRuleContext::new(rule_index, self.state());
+        let mut context = ParserRuleContext::with_child_capacity(
+            rule_index,
+            self.state(),
+            if self.build_parse_trees {
+                outcome.nodes.len()
+            } else {
+                0
+            },
+        );
         if let Some(token) = self.token_at(start_index) {
             context.set_start(token);
         }
@@ -2329,7 +2368,11 @@ where
                 stop_index,
                 children,
             } => {
-                let mut context = ParserRuleContext::new(*rule_index, *invoking_state);
+                let mut context = ParserRuleContext::with_child_capacity(
+                    *rule_index,
+                    *invoking_state,
+                    children.len(),
+                );
                 if let Some(token) = self.token_at(*start_index) {
                     context.set_start(token);
                 }
@@ -2368,7 +2411,11 @@ where
                 stop_index,
                 children,
             } => {
-                let mut context = ParserRuleContext::new(*rule_index, *invoking_state);
+                let mut context = ParserRuleContext::with_child_capacity(
+                    *rule_index,
+                    *invoking_state,
+                    children.len(),
+                );
                 if let Some(token) = self.token_at(*start_index) {
                     context.set_start(token);
                 }
@@ -5442,11 +5489,6 @@ where
                 DirectAdaptiveFallback::MissingAtn,
             ))?;
         let start_index = self.parser.current_visible_index();
-        let mut context = ParserRuleContext::new(rule_index, invoking_state);
-        if let Some(token) = self.parser.token_at(start_index) {
-            context.set_start(token);
-        }
-
         let mut children = Vec::new();
         let mut state_number = start_state;
         let mut consumed_eof = false;
@@ -5514,6 +5556,18 @@ where
             }
         }
 
+        let mut context = ParserRuleContext::with_child_capacity(
+            rule_index,
+            invoking_state,
+            if self.parser.build_parse_trees {
+                children.len()
+            } else {
+                0
+            },
+        );
+        if let Some(token) = self.parser.token_at(start_index) {
+            context.set_start(token);
+        }
         let stop_index = self
             .parser
             .rule_stop_token_index(self.parser.input.index(), consumed_eof);
@@ -5645,7 +5699,7 @@ where
         let entry = self
             .parser
             .cached_decision_lookahead(self.atn, state, rule_stop);
-        Ok(ll1_unique_alt(&entry, symbol).filter(|alt| *alt < transition_count))
+        Ok(ll1_greedy_alt(&entry, symbol, state.non_greedy).filter(|alt| *alt < transition_count))
     }
 
     fn consume_transition(
@@ -6651,6 +6705,29 @@ mod tests {
 
         parser.exit_rule();
         assert!(parser.rule_context_stack.is_empty());
+    }
+
+    #[test]
+    fn greedy_ll1_alt_handles_nullable_loop_exit() {
+        let mut body_symbols = TokenBitSet::default();
+        body_symbols.insert(1);
+        let entry = DecisionLookahead {
+            transitions: vec![
+                TransitionLookSet {
+                    symbols: body_symbols,
+                    nullable: false,
+                },
+                TransitionLookSet {
+                    symbols: TokenBitSet::default(),
+                    nullable: true,
+                },
+            ],
+        };
+
+        assert_eq!(ll1_unique_alt(&entry, 2), None);
+        assert_eq!(ll1_greedy_alt(&entry, 2, false), Some(1));
+        assert_eq!(ll1_greedy_alt(&entry, 1, false), Some(0));
+        assert_eq!(ll1_greedy_alt(&entry, 1, true), Some(1));
     }
 
     #[test]

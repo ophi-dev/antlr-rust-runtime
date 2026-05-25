@@ -199,6 +199,23 @@ impl ParserRuleContext {
         }
     }
 
+    pub(crate) fn with_child_capacity(
+        rule_index: usize,
+        invoking_state: isize,
+        capacity: usize,
+    ) -> Self {
+        Self {
+            rule_index,
+            invoking_state,
+            alt_number: 0,
+            start: None,
+            stop: None,
+            int_returns: None,
+            children: Vec::with_capacity(capacity),
+            exception: None,
+        }
+    }
+
     pub const fn rule_index(&self) -> usize {
         self.rule_index
     }
