@@ -3240,6 +3240,11 @@ where
         // body (decision state, rule call, etc.), the outcomes returned
         // below will need those token nodes prepended.
         let inline_pending = !inline_consumed_tokens.is_empty() || inline_consumed_eof;
+        let Some(state) = atn.state(state_number) else {
+            return Vec::new();
+        };
+        let transition_count = state.transitions.len();
+        let memo_lookup_enabled = self.fast_recovery_enabled || transition_count > 1;
         // In pass 1 (`fast_recovery_enabled == false`) the recovery-related
         // fields and the rule/decision boundary indices are pure plumbing —
         // they only affect the recovery branch and the no-viable diagnostic
@@ -3272,40 +3277,42 @@ where
                 recovery_state: None,
             }
         };
-        if let Some(outcomes) = memo.get(&key) {
-            #[cfg(feature = "perf-counters")]
-            {
-                perf_counters::inc(&perf_counters::RFS_MEMO_HITS, 1);
-                perf_counters::inc(&perf_counters::OUTCOMES_CLONED, outcomes.len() as u64);
-            }
-            // Materialize a fresh `Vec` from the cached slice; the caller
-            // mutates per-outcome state (eof flags, prepended nodes) so we
-            // can't hand them the shared backing.
-            if !inline_consumed_tokens.is_empty() || inline_consumed_eof {
-                let inline_eof = inline_consumed_eof;
-                let inline_tokens = &inline_consumed_tokens;
-                return outcomes
-                    .iter()
-                    .cloned()
-                    .map(|mut outcome| {
-                        if inline_eof {
-                            outcome.consumed_eof = true;
-                        }
-                        if self.fast_token_nodes_enabled {
-                            for token_index in inline_tokens.iter().rev() {
-                                outcome.nodes.prepend(Rc::new(FastRecognizedNode::Token {
-                                    index: *token_index,
-                                }));
+        if memo_lookup_enabled {
+            if let Some(outcomes) = memo.get(&key) {
+                #[cfg(feature = "perf-counters")]
+                {
+                    perf_counters::inc(&perf_counters::RFS_MEMO_HITS, 1);
+                    perf_counters::inc(&perf_counters::OUTCOMES_CLONED, outcomes.len() as u64);
+                }
+                // Materialize a fresh `Vec` from the cached slice; the caller
+                // mutates per-outcome state (eof flags, prepended nodes) so we
+                // can't hand them the shared backing.
+                if !inline_consumed_tokens.is_empty() || inline_consumed_eof {
+                    let inline_eof = inline_consumed_eof;
+                    let inline_tokens = &inline_consumed_tokens;
+                    return outcomes
+                        .iter()
+                        .cloned()
+                        .map(|mut outcome| {
+                            if inline_eof {
+                                outcome.consumed_eof = true;
                             }
-                        }
-                        outcome
-                    })
-                    .collect();
+                            if self.fast_token_nodes_enabled {
+                                for token_index in inline_tokens.iter().rev() {
+                                    outcome.nodes.prepend(Rc::new(FastRecognizedNode::Token {
+                                        index: *token_index,
+                                    }));
+                                }
+                            }
+                            outcome
+                        })
+                        .collect();
+                }
+                return outcomes.to_vec();
             }
-            return outcomes.to_vec();
+            #[cfg(feature = "perf-counters")]
+            perf_counters::inc(&perf_counters::RFS_MEMO_MISSES, 1);
         }
-        #[cfg(feature = "perf-counters")]
-        perf_counters::inc(&perf_counters::RFS_MEMO_MISSES, 1);
 
         // Cycle detection: only insert into the visiting set for states
         // that *could* re-enter without consuming — multi-alternative
@@ -3314,10 +3321,7 @@ where
         // Multi-alt states might contain epsilon-only edges that loop back
         // to the same `(state, index)` (e.g. left-recursive precedence
         // loops); we still need the guard there.
-        let Some(state) = atn.state(state_number) else {
-            return Vec::new();
-        };
-        let needs_cycle_guard = state.transitions.len() > 1;
+        let needs_cycle_guard = transition_count > 1;
         #[cfg(feature = "perf-counters")]
         if needs_cycle_guard {
             perf_counters::inc(&perf_counters::MULTI_TRANS_BODY, 1);
