@@ -15,7 +15,7 @@ pub mod token_stream;
 pub mod tree;
 pub mod vocabulary;
 
-pub use atn::parser::{ParserAtnSimulator, ParserAtnSimulatorError};
+pub use atn::parser::{ParserAtnPrediction, ParserAtnSimulator, ParserAtnSimulatorError};
 pub use char_stream::{CharStream, InputStream, TextInterval};
 pub use dfa::{Dfa, DfaState};
 pub use errors::{AntlrError, ConsoleErrorListener, ErrorListener};

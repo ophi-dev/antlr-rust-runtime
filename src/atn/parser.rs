@@ -15,6 +15,13 @@ pub struct ParserAtnSimulator<'a> {
     decision_to_dfa: Vec<Dfa>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ParserAtnPrediction {
+    pub alt: usize,
+    pub requires_full_context: bool,
+    pub has_semantic_context: bool,
+}
+
 impl<'a> ParserAtnSimulator<'a> {
     pub fn new(atn: &'a Atn) -> Self {
         let decision_to_dfa = atn
@@ -65,6 +72,16 @@ impl<'a> ParserAtnSimulator<'a> {
         precedence: usize,
         input: &mut T,
     ) -> Result<usize, ParserAtnSimulatorError> {
+        self.adaptive_predict_stream_info_with_precedence(decision, precedence, input)
+            .map(|prediction| prediction.alt)
+    }
+
+    pub fn adaptive_predict_stream_info_with_precedence<T: IntStream>(
+        &mut self,
+        decision: usize,
+        precedence: usize,
+        input: &mut T,
+    ) -> Result<ParserAtnPrediction, ParserAtnSimulatorError> {
         let marker = input.mark();
         let index = input.index();
         let result = self.adaptive_predict_stream_inner(decision, precedence, input);
@@ -79,11 +96,21 @@ impl<'a> ParserAtnSimulator<'a> {
         precedence: usize,
         lookahead: impl IntoIterator<Item = i32>,
     ) -> Result<usize, ParserAtnSimulatorError> {
+        self.adaptive_predict_info_with_precedence(decision, precedence, lookahead)
+            .map(|prediction| prediction.alt)
+    }
+
+    pub fn adaptive_predict_info_with_precedence(
+        &mut self,
+        decision: usize,
+        precedence: usize,
+        lookahead: impl IntoIterator<Item = i32>,
+    ) -> Result<ParserAtnPrediction, ParserAtnSimulatorError> {
         let Some(&decision_state) = self.atn.decision_to_state().get(decision) else {
             return Err(ParserAtnSimulatorError::UnknownDecision(decision));
         };
         let mut state_number = self.ensure_start_state(decision, decision_state, precedence)?;
-        if let Some(prediction) = self.dfa_prediction(decision, state_number) {
+        if let Some(prediction) = self.dfa_prediction_info(decision, state_number) {
             return Ok(prediction);
         }
         for symbol in lookahead {
@@ -104,7 +131,7 @@ impl<'a> ParserAtnSimulator<'a> {
                 let target = self.compute_target_state(decision, state_number, &configs, symbol)?;
                 state_number = target;
             }
-            if let Some(prediction) = self.dfa_prediction(decision, state_number) {
+            if let Some(prediction) = self.dfa_prediction_info(decision, state_number) {
                 return Ok(prediction);
             }
         }
@@ -116,12 +143,12 @@ impl<'a> ParserAtnSimulator<'a> {
         decision: usize,
         precedence: usize,
         input: &mut T,
-    ) -> Result<usize, ParserAtnSimulatorError> {
+    ) -> Result<ParserAtnPrediction, ParserAtnSimulatorError> {
         let Some(&decision_state) = self.atn.decision_to_state().get(decision) else {
             return Err(ParserAtnSimulatorError::UnknownDecision(decision));
         };
         let mut state_number = self.ensure_start_state(decision, decision_state, precedence)?;
-        if let Some(prediction) = self.dfa_prediction(decision, state_number) {
+        if let Some(prediction) = self.dfa_prediction_info(decision, state_number) {
             return Ok(prediction);
         }
         loop {
@@ -143,7 +170,7 @@ impl<'a> ParserAtnSimulator<'a> {
                 let target = self.compute_target_state(decision, state_number, &configs, symbol)?;
                 state_number = target;
             }
-            if let Some(prediction) = self.dfa_prediction(decision, state_number) {
+            if let Some(prediction) = self.dfa_prediction_info(decision, state_number) {
                 return Ok(prediction);
             }
             if symbol == TOKEN_EOF {
@@ -392,11 +419,21 @@ impl<'a> ParserAtnSimulator<'a> {
         }
     }
 
-    fn dfa_prediction(&self, decision: usize, state_number: usize) -> Option<usize> {
+    fn dfa_prediction_info(
+        &self,
+        decision: usize,
+        state_number: usize,
+    ) -> Option<ParserAtnPrediction> {
         self.decision_to_dfa
             .get(decision)
             .and_then(|dfa| dfa.state(state_number))
-            .and_then(|state| state.prediction)
+            .and_then(|state| {
+                state.prediction.map(|alt| ParserAtnPrediction {
+                    alt,
+                    requires_full_context: state.requires_full_context,
+                    has_semantic_context: state.configs.has_semantic_context(),
+                })
+            })
     }
 }
 
@@ -445,6 +482,17 @@ mod tests {
         let mut simulator = ParserAtnSimulator::new(&atn);
 
         assert_eq!(simulator.adaptive_predict(0, [1]), Ok(1));
+        let prediction = simulator
+            .adaptive_predict_info_with_precedence(0, 0, [1])
+            .expect("prediction");
+        assert_eq!(
+            prediction,
+            ParserAtnPrediction {
+                alt: 1,
+                requires_full_context: true,
+                has_semantic_context: false,
+            }
+        );
 
         let dfa = &simulator.decision_dfas()[0];
         let start = dfa.start_state().expect("start state");
