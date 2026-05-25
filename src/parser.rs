@@ -417,6 +417,8 @@ pub struct BaseParser<S> {
     prediction_diagnostics: Vec<ParserDiagnostic>,
     reported_prediction_diagnostics: BTreeSet<(usize, usize, String)>,
     int_members: BTreeMap<usize, i64>,
+    rule_context_stack: Vec<usize>,
+    precedence_stack: Vec<i32>,
     /// Predicate side effects are observable in a few target-template tests;
     /// speculative recognition may revisit the same coordinate, so replay it
     /// once per parser instance.
@@ -1824,6 +1826,8 @@ where
             prediction_diagnostics: Vec::new(),
             reported_prediction_diagnostics: BTreeSet::new(),
             int_members: BTreeMap::new(),
+            rule_context_stack: Vec::new(),
+            precedence_stack: vec![0],
             invoked_predicates: Vec::new(),
             first_set_cache: FxHashMap::default(),
             state_expected_cache: FxHashMap::default(),
@@ -1899,6 +1903,104 @@ where
 
     pub const fn rule_node(&self, context: ParserRuleContext) -> ParseTree {
         ParseTree::Rule(RuleNode::new(context))
+    }
+
+    /// Enters a generated parser rule and returns the context object the
+    /// generated method should populate.
+    pub fn enter_rule(&mut self, state: isize, rule_index: usize) -> ParserRuleContext {
+        self.set_state(state);
+        self.rule_context_stack.push(rule_index);
+        ParserRuleContext::new(rule_index, state)
+    }
+
+    /// Exits the current generated parser rule.
+    pub fn exit_rule(&mut self) {
+        self.rule_context_stack.pop();
+    }
+
+    /// Enters a generated left-recursive rule at `precedence`.
+    pub fn enter_recursion_rule(
+        &mut self,
+        state: isize,
+        rule_index: usize,
+        precedence: i32,
+    ) -> ParserRuleContext {
+        self.precedence_stack.push(precedence);
+        self.enter_rule(state, rule_index)
+    }
+
+    /// Replaces the current context while expanding a left-recursive rule.
+    pub fn push_new_recursion_context(
+        &mut self,
+        state: isize,
+        rule_index: usize,
+    ) -> ParserRuleContext {
+        self.set_state(state);
+        ParserRuleContext::new(rule_index, state)
+    }
+
+    /// Leaves a generated left-recursive rule.
+    pub fn unroll_recursion_context(&mut self) {
+        if self.precedence_stack.len() > 1 {
+            self.precedence_stack.pop();
+        }
+        self.exit_rule();
+    }
+
+    /// Implements generated `precpred(_ctx, k)` checks.
+    pub fn precpred(&self, precedence: i32) -> bool {
+        precedence >= self.precedence_stack.last().copied().unwrap_or_default()
+    }
+
+    /// Matches any non-EOF token.
+    pub fn match_wildcard(&mut self) -> Result<ParseTree, AntlrError> {
+        let current = self
+            .input
+            .lt(1)
+            .cloned()
+            .ok_or_else(|| AntlrError::ParserError {
+                line: 0,
+                column: 0,
+                message: "missing current token".to_owned(),
+            })?;
+        if current.token_type() == TOKEN_EOF {
+            return Err(AntlrError::MismatchedInput {
+                expected: "wildcard".to_owned(),
+                found: self.vocabulary().display_name(TOKEN_EOF),
+            });
+        }
+        self.consume();
+        Ok(ParseTree::Terminal(TerminalNode::new(current)))
+    }
+
+    /// Generated parser synchronization hook. The current interpreter owns
+    /// recovery; direct generated methods can call this as a no-op until the
+    /// generated recovery strategy is expanded.
+    #[allow(clippy::unnecessary_wraps)]
+    pub fn sync(&mut self, state: isize) -> Result<(), AntlrError> {
+        self.set_state(state);
+        Ok(())
+    }
+
+    /// Builds a generated no-viable-alternative parser error.
+    pub fn no_viable_alternative_error(&mut self, start_index: usize) -> AntlrError {
+        let error_index = self.input.index();
+        let diagnostic = self.no_viable_alternative(start_index, error_index);
+        AntlrError::ParserError {
+            line: diagnostic.line,
+            column: diagnostic.column,
+            message: diagnostic.message,
+        }
+    }
+
+    /// Builds a generated failed-predicate parser error.
+    pub fn failed_predicate_error(&mut self, message: impl Into<String>) -> AntlrError {
+        let current = self.input.lt(1).cloned();
+        AntlrError::ParserError {
+            line: current.as_ref().map(Token::line).unwrap_or_default(),
+            column: current.as_ref().map(Token::column).unwrap_or_default(),
+            message: format!("rule failed predicate: {}", message.into()),
+        }
     }
 
     /// Parses a generated rule by interpreting the parser ATN from the rule's
@@ -6022,6 +6124,41 @@ mod tests {
             "x"
         );
         assert!(parser.match_token(1).is_err());
+    }
+
+    #[test]
+    fn generated_rule_api_tracks_state_and_precedence() {
+        let mut parser = mini_parser(vec![CommonToken::eof("parser-test", 1, 1, 1)]);
+
+        let context = parser.enter_rule(7, 2);
+        assert_eq!(context.rule_index(), 2);
+        assert_eq!(parser.state(), 7);
+        assert_eq!(parser.rule_context_stack, vec![2]);
+
+        let recursive = parser.enter_recursion_rule(11, 3, 4);
+        assert_eq!(recursive.rule_index(), 3);
+        assert!(parser.precpred(4));
+        assert!(parser.precpred(5));
+        assert!(!parser.precpred(3));
+
+        let next = parser.push_new_recursion_context(13, 3);
+        assert_eq!(next.invoking_state(), 13);
+        parser.unroll_recursion_context();
+        assert_eq!(parser.precedence_stack, vec![0]);
+        assert_eq!(parser.rule_context_stack, vec![2]);
+
+        parser.exit_rule();
+        assert!(parser.rule_context_stack.is_empty());
+    }
+
+    #[test]
+    fn wildcard_matches_non_eof_only() {
+        let mut parser = mini_parser(vec![
+            CommonToken::new(1).with_text("x"),
+            CommonToken::eof("parser-test", 1, 1, 1),
+        ]);
+        assert_eq!(parser.match_wildcard().expect("wildcard").text(), "x");
+        assert!(parser.match_wildcard().is_err());
     }
 
     #[test]
