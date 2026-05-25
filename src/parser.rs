@@ -84,6 +84,18 @@ use crate::vocabulary::Vocabulary;
 /// non-viable. Long expression-regression descriptors legitimately walk tens
 /// of thousands of ATN edges.
 const RECOGNITION_DEPTH_LIMIT: usize = 100_000;
+/// Probe window for deciding whether clean-pass one-outcome memo entries are
+/// reusable enough to keep caching. Large C# parses mostly produce one-shot
+/// entries; small ambiguous Kotlin loops repeatedly hit the same keys.
+const CLEAN_SINGLE_OUTCOME_MEMO_PROBE_LIMIT: usize = 4096;
+const CLEAN_SINGLE_OUTCOME_MEMO_REPEAT_LIMIT: usize = 8;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SingleOutcomeMemoMode {
+    Probe,
+    Promote,
+    Sparse,
+}
 
 #[cfg(feature = "perf-counters")]
 mod perf_counters {
@@ -451,6 +463,12 @@ pub struct BaseParser<S> {
     /// turns the question into a hashmap probe instead of re-scanning
     /// the decision's per-transition FIRST sets every visit.
     ll1_decision_cache: FxHashMap<(usize, i32), Option<usize>>,
+    /// Probe state for deciding whether clean-pass one-outcome memo entries
+    /// are worth storing for the current parse.
+    single_outcome_memo_mode: SingleOutcomeMemoMode,
+    single_outcome_probe_seen: FxHashSet<FastRecognizeKey>,
+    single_outcome_probe_samples: usize,
+    single_outcome_probe_repeats: usize,
     /// Empty recovery-symbols singleton used as the default at rule entry and
     /// after token consumption.
     empty_recovery_symbols: Rc<BTreeSet<i32>>,
@@ -1834,6 +1852,10 @@ where
             recovery_symbols_intern: FxHashMap::default(),
             decision_lookahead_cache: FxHashMap::default(),
             ll1_decision_cache: FxHashMap::default(),
+            single_outcome_memo_mode: SingleOutcomeMemoMode::Probe,
+            single_outcome_probe_seen: FxHashSet::default(),
+            single_outcome_probe_samples: 0,
+            single_outcome_probe_repeats: 0,
             empty_recovery_symbols: Rc::new(BTreeSet::new()),
             fast_first_set_prefilter: true,
             fast_recovery_enabled: true,
@@ -3694,7 +3716,10 @@ where
         // memoization unconditionally because the recovery branch may
         // record diagnostics that the cache must surface to repeated
         // failed visits.
-        let should_memoize = self.fast_recovery_enabled || transition_count > 1;
+        let should_memoize = self.fast_recovery_enabled
+            || (transition_count > 1
+                && (outcomes.len() > 1
+                    || (outcomes.len() == 1 && self.should_memoize_single_outcome(&key))));
         // Apply inline pending state to each outcome before returning.
         // Tokens consumed inline by the loop-collapse don't appear in the
         // recursive recognizer's output, so we need to prepend them here.
@@ -4760,6 +4785,32 @@ where
         entry
     }
 
+    /// Decides whether a clean one-outcome entry is worth storing in the full
+    /// outcome memo table for this parse.
+    fn should_memoize_single_outcome(&mut self, key: &FastRecognizeKey) -> bool {
+        match self.single_outcome_memo_mode {
+            SingleOutcomeMemoMode::Promote => true,
+            SingleOutcomeMemoMode::Sparse => false,
+            SingleOutcomeMemoMode::Probe => {
+                self.single_outcome_probe_samples += 1;
+                if !self.single_outcome_probe_seen.insert(key.clone()) {
+                    self.single_outcome_probe_repeats += 1;
+                }
+                if self.single_outcome_probe_repeats >= CLEAN_SINGLE_OUTCOME_MEMO_REPEAT_LIMIT {
+                    self.single_outcome_memo_mode = SingleOutcomeMemoMode::Promote;
+                    self.single_outcome_probe_seen.clear();
+                    return true;
+                }
+                if self.single_outcome_probe_samples >= CLEAN_SINGLE_OUTCOME_MEMO_PROBE_LIMIT {
+                    self.single_outcome_memo_mode = SingleOutcomeMemoMode::Sparse;
+                    self.single_outcome_probe_seen.clear();
+                    return false;
+                }
+                true
+            }
+        }
+    }
+
     /// Clones the visible token at an absolute token-stream index.
     fn token_at(&mut self, index: usize) -> Option<CommonToken> {
         self.input.get(index).cloned()
@@ -5087,6 +5138,10 @@ where
         self.first_set_cache.clear();
         self.decision_lookahead_cache.clear();
         self.ll1_decision_cache.clear();
+        self.single_outcome_memo_mode = SingleOutcomeMemoMode::Probe;
+        self.single_outcome_probe_seen.clear();
+        self.single_outcome_probe_samples = 0;
+        self.single_outcome_probe_repeats = 0;
         self.recovery_symbols_intern.clear();
         self.state_expected_cache.clear();
     }
@@ -6149,6 +6204,40 @@ mod tests {
 
         parser.exit_rule();
         assert!(parser.rule_context_stack.is_empty());
+    }
+
+    #[test]
+    fn single_outcome_memo_probe_selects_sparse_or_promote_mode() {
+        let key = |state_number| FastRecognizeKey {
+            state_number,
+            stop_state: 10,
+            index: state_number,
+            rule_start_index: 0,
+            decision_start_index: None,
+            precedence: 0,
+            recovery_symbols_id: 0,
+            recovery_state: None,
+        };
+
+        let mut sparse = mini_parser(vec![CommonToken::eof("parser-test", 1, 1, 1)]);
+        for state_number in 0..(CLEAN_SINGLE_OUTCOME_MEMO_PROBE_LIMIT - 1) {
+            assert!(sparse.should_memoize_single_outcome(&key(state_number)));
+        }
+        assert!(!sparse.should_memoize_single_outcome(&key(CLEAN_SINGLE_OUTCOME_MEMO_PROBE_LIMIT)));
+        assert_eq!(
+            sparse.single_outcome_memo_mode,
+            SingleOutcomeMemoMode::Sparse
+        );
+
+        let mut promote = mini_parser(vec![CommonToken::eof("parser-test", 1, 1, 1)]);
+        let repeated = key(1);
+        for _ in 0..=CLEAN_SINGLE_OUTCOME_MEMO_REPEAT_LIMIT {
+            assert!(promote.should_memoize_single_outcome(&repeated));
+        }
+        assert_eq!(
+            promote.single_outcome_memo_mode,
+            SingleOutcomeMemoMode::Promote
+        );
     }
 
     #[test]
