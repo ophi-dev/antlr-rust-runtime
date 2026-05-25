@@ -3718,7 +3718,8 @@ where
         // failed visits.
         let should_memoize = self.fast_recovery_enabled
             || (transition_count > 1
-                && (outcomes.len() > 1
+                && (outcomes.is_empty()
+                    || outcomes.len() > 1
                     || (outcomes.len() == 1 && self.should_memoize_single_outcome(&key))));
         // Apply inline pending state to each outcome before returning.
         // Tokens consumed inline by the loop-collapse don't appear in the
@@ -3736,7 +3737,7 @@ where
             }
             outcome
         };
-        if should_memoize && (self.fast_recovery_enabled || !outcomes.is_empty()) {
+        if should_memoize {
             #[cfg(feature = "perf-counters")]
             {
                 perf_counters::inc(&perf_counters::MEMO_INSERTED, 1);
@@ -6057,6 +6058,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::atn::AtnType;
     use crate::atn::serialized::{AtnDeserializer, SerializedAtn};
     use crate::token::{CommonToken, HIDDEN_CHANNEL, Token};
     use crate::token_stream::CommonTokenStream;
@@ -6238,6 +6240,58 @@ mod tests {
             promote.single_outcome_memo_mode,
             SingleOutcomeMemoMode::Promote
         );
+    }
+
+    #[test]
+    fn clean_empty_multi_alt_outcomes_are_memoized() {
+        let mut atn = Atn::new(AtnType::Parser, 2);
+        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
+        atn.add_state(AtnState::new(1, AtnStateKind::BlockStart).with_rule_index(0));
+        atn.add_state(AtnState::new(2, AtnStateKind::RuleStop).with_rule_index(0));
+        atn.set_rule_to_start_state(vec![0]);
+        atn.set_rule_to_stop_state(vec![2]);
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Epsilon { target: 1 });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Atom {
+                target: 2,
+                label: 1,
+            });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Atom {
+                target: 2,
+                label: 2,
+            });
+
+        let mut parser = mini_parser(vec![CommonToken::eof("parser-test", 0, 1, 0)]);
+        parser.fast_recovery_enabled = false;
+        let mut visiting = FxHashSet::default();
+        let mut memo = FxHashMap::default();
+        let mut expected = ExpectedTokens::default();
+        let outcomes = parser.recognize_state_fast(
+            &atn,
+            FastRecognizeRequest {
+                state_number: 1,
+                stop_state: 2,
+                index: 0,
+                rule_start_index: 0,
+                decision_start_index: None,
+                precedence: 0,
+                depth: 0,
+                recovery_symbols: parser.empty_recovery_symbols(),
+                recovery_state: None,
+            },
+            &mut visiting,
+            &mut memo,
+            &mut expected,
+        );
+
+        assert!(outcomes.is_empty());
+        assert_eq!(memo.len(), 1);
+        assert!(memo.values().next().expect("memo entry").is_empty());
     }
 
     #[test]
