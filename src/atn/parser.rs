@@ -22,7 +22,14 @@ impl<'a> ParserAtnSimulator<'a> {
             .copied()
             .enumerate()
             .map(|(decision, state)| {
-                Dfa::with_max_token_type(state, decision, atn.max_token_type())
+                let mut dfa = Dfa::with_max_token_type(state, decision, atn.max_token_type());
+                if atn
+                    .state(state)
+                    .is_some_and(|state| state.precedence_rule_decision)
+                {
+                    dfa.set_precedence_dfa(true);
+                }
+                dfa
             })
             .collect();
         Self {
@@ -40,10 +47,19 @@ impl<'a> ParserAtnSimulator<'a> {
         decision: usize,
         lookahead: impl IntoIterator<Item = i32>,
     ) -> Result<usize, ParserAtnSimulatorError> {
+        self.adaptive_predict_with_precedence(decision, 0, lookahead)
+    }
+
+    pub fn adaptive_predict_with_precedence(
+        &mut self,
+        decision: usize,
+        precedence: usize,
+        lookahead: impl IntoIterator<Item = i32>,
+    ) -> Result<usize, ParserAtnSimulatorError> {
         let Some(&decision_state) = self.atn.decision_to_state().get(decision) else {
             return Err(ParserAtnSimulatorError::UnknownDecision(decision));
         };
-        let mut state_number = self.ensure_start_state(decision, decision_state)?;
+        let mut state_number = self.ensure_start_state(decision, decision_state, precedence)?;
         if let Some(prediction) = self.dfa_prediction(decision, state_number) {
             return Ok(prediction);
         }
@@ -76,8 +92,13 @@ impl<'a> ParserAtnSimulator<'a> {
         &mut self,
         decision: usize,
         decision_state: usize,
+        precedence: usize,
     ) -> Result<usize, ParserAtnSimulatorError> {
-        if let Some(start) = self.decision_to_dfa[decision].start_state() {
+        if self.decision_to_dfa[decision].is_precedence_dfa() {
+            if let Some(start) = self.decision_to_dfa[decision].precedence_start_state(precedence) {
+                return Ok(start);
+            }
+        } else if let Some(start) = self.decision_to_dfa[decision].start_state() {
             return Ok(start);
         }
         let decision_state = self
@@ -86,7 +107,11 @@ impl<'a> ParserAtnSimulator<'a> {
             .ok_or(ParserAtnSimulatorError::MissingAtnState(decision_state))?;
         let configs = self.compute_start_state(decision_state)?;
         let state_number = self.decision_to_dfa[decision].add_state(DfaState::new(configs));
-        self.decision_to_dfa[decision].set_start_state(state_number);
+        if self.decision_to_dfa[decision].is_precedence_dfa() {
+            self.decision_to_dfa[decision].set_precedence_start_state(precedence, state_number);
+        } else {
+            self.decision_to_dfa[decision].set_start_state(state_number);
+        }
         Ok(state_number)
     }
 
@@ -374,6 +399,29 @@ mod tests {
         let mut simulator = ParserAtnSimulator::new(&atn);
 
         assert_eq!(simulator.adaptive_predict(0, [TOKEN_EOF]), Ok(2));
+    }
+
+    #[test]
+    fn adaptive_predict_uses_precedence_dfa_start_states() {
+        let mut atn = two_token_decision_atn();
+        atn.state_mut(1)
+            .expect("decision state")
+            .precedence_rule_decision = true;
+        let mut simulator = ParserAtnSimulator::new(&atn);
+
+        assert_eq!(
+            simulator.adaptive_predict_with_precedence(0, 3, [1, 2]),
+            Ok(1)
+        );
+        assert_eq!(
+            simulator.adaptive_predict_with_precedence(0, 7, [1, 3]),
+            Ok(2)
+        );
+
+        let dfa = &simulator.decision_dfas()[0];
+        assert!(dfa.is_precedence_dfa());
+        assert!(dfa.precedence_start_state(3).is_some());
+        assert!(dfa.precedence_start_state(7).is_some());
     }
 
     fn two_token_decision_atn() -> Atn {
