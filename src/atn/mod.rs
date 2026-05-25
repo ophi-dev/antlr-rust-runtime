@@ -6,6 +6,7 @@
 //! these compact Rust structures for simulation.
 
 pub mod lexer;
+pub mod parser;
 pub mod serialized;
 
 /// Distinguishes lexer ATNs from parser ATNs in serialized grammar metadata.
