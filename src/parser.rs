@@ -1702,7 +1702,7 @@ struct FastRecoveryRequest<'a, 'b> {
     expected_symbols: Rc<BTreeSet<i32>>,
     target: usize,
     request: FastRecognizeRequest,
-    visiting: &'b mut FxHashSet<u64>,
+    visiting: &'b mut FxHashSet<(usize, usize)>,
     memo: &'b mut FxHashMap<FastRecognizeKey, Rc<[FastRecognizeOutcome]>>,
     expected: &'b mut ExpectedTokens,
 }
@@ -1711,7 +1711,7 @@ struct FastCurrentTokenDeletionRequest<'a, 'b> {
     atn: &'a Atn,
     expected_symbols: Rc<BTreeSet<i32>>,
     request: FastRecognizeRequest,
-    visiting: &'b mut FxHashSet<u64>,
+    visiting: &'b mut FxHashSet<(usize, usize)>,
     memo: &'b mut FxHashMap<FastRecognizeKey, Rc<[FastRecognizeOutcome]>>,
     expected: &'b mut ExpectedTokens,
 }
@@ -2891,7 +2891,7 @@ where
         &mut self,
         atn: &Atn,
         request: FastRecognizeRequest,
-        visiting: &mut FxHashSet<u64>,
+        visiting: &mut FxHashSet<(usize, usize)>,
         memo: &mut FxHashMap<FastRecognizeKey, Rc<[FastRecognizeOutcome]>>,
         expected: &mut ExpectedTokens,
     ) -> Vec<FastRecognizeOutcome> {
@@ -3103,14 +3103,11 @@ where
                 }
             }
         }
-        let visit_id = (state_number as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)
-            ^ (index as u64);
-        if needs_cycle_guard {
-            if !visiting.insert(visit_id) {
-                #[cfg(feature = "perf-counters")]
-                perf_counters::inc(&perf_counters::RFS_VISITING_CYCLE, 1);
-                return Vec::new();
-            }
+        let visit_id = (state_number, index);
+        if needs_cycle_guard && !visiting.insert(visit_id) {
+            #[cfg(feature = "perf-counters")]
+            perf_counters::inc(&perf_counters::RFS_VISITING_CYCLE, 1);
+            return Vec::new();
         }
         let next_decision_start_index = if starts_prediction_decision(state) {
             Some(index)
