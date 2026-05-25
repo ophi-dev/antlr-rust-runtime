@@ -599,6 +599,7 @@ where
     S: TokenSource,
 {{
     base: BaseParser<S>,
+    #[allow(dead_code)]
     simulator: Option<antlr4_runtime::ParserAtnSimulator<'static>>,
 }}
 
@@ -620,6 +621,7 @@ where
         &METADATA
     }}
 
+    #[allow(dead_code)]
     fn simulator(&mut self) -> &mut antlr4_runtime::ParserAtnSimulator<'static> {{
         self.simulator
             .get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new(atn()))
