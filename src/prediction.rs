@@ -54,7 +54,7 @@ impl Hasher for PredictionFxHasher {
 
     #[inline]
     fn write_i32(&mut self, value: i32) {
-        self.write_u32(value.cast_unsigned());
+        self.write_u32(i32::cast_unsigned(value));
     }
 
     #[inline]
