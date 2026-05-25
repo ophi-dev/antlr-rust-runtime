@@ -3302,20 +3302,20 @@ where
                     // of conjuring a missing token at child-rule entry).
                     let symbol = self.token_type_at(index);
                     if self.fast_first_set_prefilter {
-                        let first_key = (*target, child_stop);
                         // Probe the shared cross-parse cache first; build
                         // the entry on miss and intern it there. The
                         // computation is purely a function of the ATN, so
                         // the cached entry is reused across parses (and
                         // freshly-instantiated parser values that share
                         // the same `&'static Atn`).
+                        //
+                        // `rule_first_set` returns the computed entry
+                        // directly — it intentionally skips inserting into
+                        // the cache when the FIRST-set walk hit a cycle, so
+                        // we cannot assume the entry is in the cache after
+                        // computing it.
                         let first = with_shared_first_set_cache(atn, |cache| {
-                            if !cache.contains_key(&first_key) {
-                                rule_first_set(atn, *target, child_stop, cache);
-                            }
-                            Rc::clone(cache.get(&first_key).expect(
-                                "rule_first_set inserts the FIRST entry before returning",
-                            ))
+                            rule_first_set(atn, *target, child_stop, cache)
                         });
                         if should_skip_rule_via_first_set(
                             &first,
