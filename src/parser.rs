@@ -544,7 +544,7 @@ enum RecognizedNode {
 struct FastRecognizeOutcome {
     index: usize,
     consumed_eof: bool,
-    diagnostics: Vec<ParserDiagnostic>,
+    diagnostics: FastDiagnostics,
     /// Speculative parse-tree fragment built up as the recognizer climbs.
     /// The list is held as a persistent cons-list of `Rc`-wrapped nodes so
     /// prepending while chaining recognition outcomes is `O(1)` and cloning
@@ -554,6 +554,61 @@ struct FastRecognizeOutcome {
     /// thousands of nodes per speculative path; without the persistent-list
     /// shape recognition becomes super-linear in path length.
     nodes: NodeList,
+}
+
+#[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
+#[allow(clippy::box_collection)]
+struct FastDiagnostics(Option<Box<Vec<ParserDiagnostic>>>);
+
+impl FastDiagnostics {
+    const fn new() -> Self {
+        Self(None)
+    }
+
+    #[cfg(test)]
+    fn from_vec(diagnostics: Vec<ParserDiagnostic>) -> Self {
+        if diagnostics.is_empty() {
+            Self::new()
+        } else {
+            Self(Some(Box::new(diagnostics)))
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.0
+            .as_ref()
+            .is_none_or(|diagnostics| diagnostics.is_empty())
+    }
+
+    fn as_slice(&self) -> &[ParserDiagnostic] {
+        self.0.as_deref().map_or(&[], Vec::as_slice)
+    }
+
+    fn insert(&mut self, index: usize, diagnostic: ParserDiagnostic) {
+        self.0
+            .get_or_insert_with(Box::default)
+            .insert(index, diagnostic);
+    }
+
+    fn append(&mut self, other: &mut Self) {
+        if other.is_empty() {
+            return;
+        }
+        self.0
+            .get_or_insert_with(Box::default)
+            .append(other.0.get_or_insert_with(Box::default));
+        if other.is_empty() {
+            other.0 = None;
+        }
+    }
+}
+
+impl std::ops::Deref for FastDiagnostics {
+    type Target = [ParserDiagnostic];
+
+    fn deref(&self) -> &Self::Target {
+        self.as_slice()
+    }
 }
 
 /// Persistent cons-list of fast-recognizer nodes. The list keeps nodes in the
@@ -3232,7 +3287,7 @@ where
                 return vec![FastRecognizeOutcome {
                     index,
                     consumed_eof: inline_consumed_eof,
-                    diagnostics: Vec::new(),
+                    diagnostics: FastDiagnostics::new(),
                     nodes,
                 }];
             }
@@ -7032,17 +7087,17 @@ mod tests {
         let first = FastRecognizeOutcome {
             index: 1,
             consumed_eof: false,
-            diagnostics: vec![ParserDiagnostic {
+            diagnostics: FastDiagnostics::from_vec(vec![ParserDiagnostic {
                 line: 1,
                 column: 0,
                 message: "mismatched input 'x'".to_owned(),
-            }],
+            }]),
             nodes: NodeList::new(),
         };
         let second = FastRecognizeOutcome {
             index: first.index,
             consumed_eof: first.consumed_eof,
-            diagnostics: Vec::new(),
+            diagnostics: FastDiagnostics::new(),
             nodes: NodeList::new(),
         };
 
@@ -7055,7 +7110,7 @@ mod tests {
         let eof_second = FastRecognizeOutcome {
             index: second.index,
             consumed_eof: true,
-            diagnostics: Vec::new(),
+            diagnostics: FastDiagnostics::new(),
             nodes: NodeList::new(),
         };
         let selected =
