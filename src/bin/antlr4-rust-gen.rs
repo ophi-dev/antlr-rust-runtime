@@ -1083,16 +1083,17 @@ fn render_generated_rule_dispatch(
     let mut out = String::new();
     writeln!(
         out,
-        "    #[allow(dead_code)]\n    fn parse_generated_rule(&mut self, rule_index: usize, precedence: i32) -> Option<Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError>> {{"
+        "    #[allow(dead_code)]\n    fn parse_generated_rule(&mut self, rule_index: usize, precedence: i32, allow_fallback: bool) -> Option<Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError>> {{"
     )
     .expect("writing to a string cannot fail");
     writeln!(out, "        let _ = precedence;").expect("writing to a string cannot fail");
+    writeln!(out, "        let _ = allow_fallback;").expect("writing to a string cannot fail");
     writeln!(out, "        match rule_index {{").expect("writing to a string cannot fail");
     for rule in rules.iter().flatten() {
         let index = rule.rule_index;
         writeln!(
             out,
-            "            {index} => Some(self.parse_generated_rule_{index}_dispatch(precedence)),"
+            "            {index} => Some(self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback)),"
         )
         .expect("writing to a string cannot fail");
     }
@@ -1103,19 +1104,22 @@ fn render_generated_rule_dispatch(
         let index = rule.rule_index;
         writeln!(
             out,
-            "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}_dispatch(&mut self, precedence: i32) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{"
+            "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}_dispatch(&mut self, precedence: i32, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{"
         )
         .expect("writing to a string cannot fail");
         if rule.left_recursive {
             writeln!(
                 out,
-                "        self.parse_generated_rule_{index}_precedence(precedence)"
+                "        self.parse_generated_rule_{index}_precedence(precedence, allow_fallback)"
             )
             .expect("writing to a string cannot fail");
         } else {
             writeln!(out, "        let _ = precedence;").expect("writing to a string cannot fail");
-            writeln!(out, "        self.parse_generated_rule_{index}()")
-                .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "        self.parse_generated_rule_{index}(allow_fallback)"
+            )
+            .expect("writing to a string cannot fail");
         }
         writeln!(out, "    }}").expect("writing to a string cannot fail");
         render_generated_rule_method(&mut out, rule, inline_action_statements);
@@ -1136,7 +1140,7 @@ fn render_generated_rule_method(
     let entry_state = rule.entry_state;
     writeln!(
         out,
-        "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{"
+        "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}(&mut self, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{"
     )
     .expect("writing to a string cannot fail");
     writeln!(
@@ -1170,12 +1174,17 @@ fn render_generated_rule_method(
         "            Ok(()) => Ok(self.base.finish_rule(__ctx, __consumed_eof)),"
     )
     .expect("writing to a string cannot fail");
-    writeln!(out, "            Err(_) => {{").expect("writing to a string cannot fail");
+    writeln!(out, "            Err(__error) => {{").expect("writing to a string cannot fail");
     writeln!(out, "                self.base.exit_rule();")
         .expect("writing to a string cannot fail");
     writeln!(
         out,
         "                if let Some(__error) = __sync_error {{ return Err(__error); }}"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                if !allow_fallback {{ return Err(__error); }}"
     )
     .expect("writing to a string cannot fail");
     writeln!(
@@ -1199,18 +1208,18 @@ fn render_generated_left_recursive_rule_method(
     let entry_state = rule.entry_state;
     writeln!(
         out,
-        "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{"
+        "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}(&mut self, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{"
     )
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "        self.parse_generated_rule_{index}_precedence(0)"
+        "        self.parse_generated_rule_{index}_precedence(0, allow_fallback)"
     )
     .expect("writing to a string cannot fail");
     writeln!(out, "    }}").expect("writing to a string cannot fail");
     writeln!(
         out,
-        "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}_precedence(&mut self, __precedence: i32) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{"
+        "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}_precedence(&mut self, __precedence: i32, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{"
     )
     .expect("writing to a string cannot fail");
     writeln!(
@@ -1244,12 +1253,17 @@ fn render_generated_left_recursive_rule_method(
         "            Ok(()) => Ok(self.base.finish_recursion_rule(__ctx, __consumed_eof)),"
     )
     .expect("writing to a string cannot fail");
-    writeln!(out, "            Err(_) => {{").expect("writing to a string cannot fail");
+    writeln!(out, "            Err(__error) => {{").expect("writing to a string cannot fail");
     writeln!(out, "                self.base.unroll_recursion_context();")
         .expect("writing to a string cannot fail");
     writeln!(
         out,
         "                if let Some(__error) = __sync_error {{ return Err(__error); }}"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                if !allow_fallback {{ return Err(__error); }}"
     )
     .expect("writing to a string cannot fail");
     writeln!(
@@ -1352,11 +1366,10 @@ fn render_generated_step(
                 "{pad}let __invoking_marker = self.base.push_invoking_state({source_state}isize);"
             )
             .expect("writing to a string cannot fail");
-            writeln!(
-                out,
-                "{pad}let __child = self.parse_rule_precedence({rule_index}, {precedence});"
-            )
-            .expect("writing to a string cannot fail");
+            let child_call =
+                format!("self.parse_rule_precedence_from_generated({rule_index}, {precedence})");
+            writeln!(out, "{pad}let __child = {child_call};")
+                .expect("writing to a string cannot fail");
             writeln!(
                 out,
                 "{pad}self.base.discard_invoking_state(__invoking_marker);"
@@ -1655,6 +1668,66 @@ fn render_generated_left_recursive_loop(
     writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
 }
 
+/// Renders dispatch for rule-level `@after` actions. Keeping this behind
+/// `parse_rule_precedence` lets generated nested rule calls preserve the same
+/// action behavior as public rule entrypoints.
+fn render_parser_after_action_dispatch(after_actions: &[Vec<ActionTemplate>]) -> String {
+    let active_rules = after_actions
+        .iter()
+        .enumerate()
+        .filter_map(|(index, actions)| (!actions.is_empty()).then_some(index))
+        .collect::<Vec<_>>();
+    let matches_expr = if active_rules.is_empty() {
+        "false".to_owned()
+    } else {
+        format!(
+            "matches!(rule_index, {})",
+            active_rules
+                .iter()
+                .map(usize::to_string)
+                .collect::<Vec<_>>()
+                .join(" | ")
+        )
+    };
+
+    let mut out = String::new();
+    writeln!(
+        out,
+        "    #[allow(dead_code)]\n    fn has_after_actions(rule_index: usize) -> bool {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "        let _ = rule_index;").expect("writing to a string cannot fail");
+    writeln!(out, "        {matches_expr}").expect("writing to a string cannot fail");
+    writeln!(out, "    }}").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "\n    #[allow(dead_code)]\n    fn run_after_actions(&mut self, rule_index: usize, tree: &antlr4_runtime::ParseTree, start_index: usize, stop_index: Option<usize>) {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "        let _ = (tree, start_index, stop_index);")
+        .expect("writing to a string cannot fail");
+    writeln!(out, "        match rule_index {{").expect("writing to a string cannot fail");
+    for (index, actions) in after_actions.iter().enumerate() {
+        if actions.is_empty() {
+            continue;
+        }
+        writeln!(out, "            {index} => {{").expect("writing to a string cannot fail");
+        for template in actions {
+            writeln!(
+                out,
+                "                {}",
+                render_parser_after_action_statement(template, index)
+            )
+            .expect("writing to a string cannot fail");
+        }
+        writeln!(out, "            }}").expect("writing to a string cannot fail");
+    }
+    writeln!(out, "            _ => {{}}").expect("writing to a string cannot fail");
+    writeln!(out, "        }}").expect("writing to a string cannot fail");
+    writeln!(out, "    }}").expect("writing to a string cannot fail");
+    out
+}
+
 #[allow(clippy::fn_params_excessive_bools, clippy::too_many_arguments)]
 fn render_parser_parse_rule_fallback(
     init_action_rules: &[usize],
@@ -1777,7 +1850,7 @@ fn render_parser(
     let has_predicate_dispatch = !predicates.is_empty();
     let has_return_actions = !return_actions.is_empty();
     let track_alt_numbers = grammar_source.is_some_and(uses_alt_number_contexts);
-    let direct_rules_allowed = !track_alt_numbers && after_actions.iter().all(Vec::is_empty);
+    let direct_rules_allowed = !track_alt_numbers;
     let generated_rule_enabled = (0..data.rule_names.len())
         .map(|index| direct_rules_allowed && init_actions.get(index).is_none_or(Option::is_none))
         .collect::<Vec<_>>();
@@ -1809,6 +1882,7 @@ fn render_parser(
         has_predicate_dispatch,
         has_return_actions,
     )?;
+    let after_action_dispatch = render_parser_after_action_dispatch(&after_actions);
     let adaptive_direct_allowed = !has_action_dispatch
         && !track_alt_numbers
         && !has_predicate_dispatch
@@ -1817,49 +1891,14 @@ fn render_parser(
     let base_initialization = render_parser_base_initialization(&int_members);
     let mut rule_methods = String::new();
     for (index, rule) in data.rule_names.iter().enumerate() {
-        let after_action = after_actions.get(index).map_or(&[][..], Vec::as_slice);
-        let uses_after_interval = after_action.iter().any(ActionTemplate::uses_rule_interval);
         writeln!(
             rule_methods,
             "    pub fn {}(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{",
             rust_function_name(rule)
         )
         .expect("writing to a string cannot fail");
-        if uses_after_interval {
-            writeln!(
-                rule_methods,
-                "        let start_index = antlr4_runtime::IntStream::index(self.base.input());"
-            )
+        writeln!(rule_methods, "        self.parse_rule({index})")
             .expect("writing to a string cannot fail");
-        }
-        if after_action.is_empty() {
-            writeln!(rule_methods, "        self.parse_rule({index})")
-                .expect("writing to a string cannot fail");
-        } else {
-            writeln!(
-                rule_methods,
-                "        let tree = self.parse_rule({index})?;"
-            )
-            .expect("writing to a string cannot fail");
-            if !after_action.is_empty() {
-                if uses_after_interval {
-                    writeln!(
-                        rule_methods,
-                        "        let stop_index = antlr4_runtime::IntStream::index(self.base.input()).checked_sub(1);"
-                    )
-                    .expect("writing to a string cannot fail");
-                }
-                for template in after_action {
-                    writeln!(
-                        rule_methods,
-                        "        {}",
-                        render_parser_after_action_statement(template, index)
-                    )
-                    .expect("writing to a string cannot fail");
-                }
-            }
-            writeln!(rule_methods, "        Ok(tree)").expect("writing to a string cannot fail");
-        }
         writeln!(rule_methods, "    }}").expect("writing to a string cannot fail");
     }
 
@@ -1921,6 +1960,8 @@ where
             .get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new(atn()))
     }}
 
+{after_action_dispatch}
+
     #[allow(dead_code)]
     fn parse_rule(&mut self, rule_index: usize) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{
         self.parse_rule_precedence(rule_index, 0)
@@ -1928,10 +1969,31 @@ where
 
     #[allow(dead_code)]
     fn parse_rule_precedence(&mut self, rule_index: usize, precedence: i32) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{
-        if let Some(result) = self.parse_generated_rule(rule_index, precedence) {{
-            return result;
+        self.parse_rule_precedence_inner(rule_index, precedence, true)
+    }}
+
+    #[allow(dead_code)]
+    fn parse_rule_precedence_from_generated(&mut self, rule_index: usize, precedence: i32) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{
+        self.parse_rule_precedence_inner(rule_index, precedence, false)
+    }}
+
+    #[allow(dead_code)]
+    fn parse_rule_precedence_inner(&mut self, rule_index: usize, precedence: i32, allow_generated_fallback: bool) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{
+        let __after_start_index = if Self::has_after_actions(rule_index) {{
+            Some(antlr4_runtime::IntStream::index(self.base.input()))
+        }} else {{
+            None
+        }};
+        let __tree = if let Some(result) = self.parse_generated_rule(rule_index, precedence, allow_generated_fallback) {{
+            result?
+        }} else {{
+            self.parse_interpreted_rule_precedence(rule_index, precedence)?
+        }};
+        if let Some(start_index) = __after_start_index {{
+            let stop_index = antlr4_runtime::IntStream::index(self.base.input()).checked_sub(1);
+            self.run_after_actions(rule_index, &__tree, start_index, stop_index);
         }}
-        self.parse_interpreted_rule_precedence(rule_index, precedence)
+        Ok(__tree)
     }}
 
     #[allow(dead_code)]
@@ -2069,20 +2131,6 @@ enum ActionTemplate {
 }
 
 impl ActionTemplate {
-    /// Reports whether an `@after` action needs the rule's input interval
-    /// captured before and after parsing.
-    fn uses_rule_interval(&self) -> bool {
-        matches!(
-            self,
-            Self::Text { .. }
-                | Self::TextWithPrefix { .. }
-                | Self::RuleTextWithPrefix { .. }
-                | Self::TokenText { .. }
-                | Self::TokenTextWithPrefix { .. }
-                | Self::TokenDisplay { .. }
-        ) || matches!(self, Self::Sequence(actions) if actions.iter().any(Self::uses_rule_interval))
-    }
-
     /// Reports whether a parser action can be emitted directly at its ATN
     /// action-transition site without needing the completed parse tree or
     /// interpreter-only state.
@@ -5194,11 +5242,11 @@ atn:
         );
 
         let rendered = render_generated_rule_dispatch(&[Some(body)], &BTreeMap::new());
-        assert!(rendered.contains("parse_generated_rule_0_precedence(precedence)"));
+        assert!(rendered.contains("parse_generated_rule_0_precedence(precedence, allow_fallback)"));
         assert!(
             rendered.contains("push_new_recursion_context_with_previous(0isize, 0, &mut __ctx)")
         );
-        assert!(rendered.contains("parse_rule_precedence(0, 3)"));
+        assert!(rendered.contains("parse_rule_precedence_from_generated(0, 3)"));
         assert!(rendered.contains("precpred(_ctx, 2)"));
         assert!(
             rendered
@@ -5416,6 +5464,28 @@ atn:
         ));
         assert!(fallback.contains("for action in actions { self.run_action(action, &tree); }"));
         assert!(fallback.contains("Ok(tree)"));
+    }
+
+    #[test]
+    fn renders_after_actions_inside_parse_rule_dispatch() {
+        let rendered = render_parser(
+            "TParser",
+            &minimal_parser_data(),
+            Some(r#"parser grammar T; s @after {<InputText():writeln()>} : ;"#),
+        )
+        .expect("parser should render");
+
+        assert!(rendered.contains("matches!(rule_index, 0)"));
+        assert!(rendered.contains("let __after_start_index"));
+        assert!(
+            rendered
+                .contains("self.run_after_actions(rule_index, &__tree, start_index, stop_index);")
+        );
+        assert!(rendered.contains(
+            "let text = self.base.text_interval(start_index, stop_index); println!(\"{}\", text);"
+        ));
+        assert!(rendered.contains("parse_generated_rule_0"));
+        assert!(!rendered.contains("let tree = self.parse_rule(0)?;"));
     }
 
     #[test]
