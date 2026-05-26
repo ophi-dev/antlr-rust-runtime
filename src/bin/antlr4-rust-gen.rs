@@ -491,6 +491,7 @@ fn parser_generated_rules(
     inline_action_states: &BTreeSet<usize>,
     action_states: &BTreeSet<usize>,
     predicate_coordinates: &BTreeSet<(usize, usize)>,
+    require_generated_callees: bool,
 ) -> io::Result<Vec<Option<GeneratedParserRule>>> {
     let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
         .deserialize()
@@ -503,7 +504,7 @@ fn parser_generated_rules(
         action_states,
         predicate_coordinates,
     };
-    Ok((0..data.rule_names.len())
+    let mut rules = (0..data.rule_names.len())
         .map(|rule_index| {
             if enabled_rules.get(rule_index).copied().unwrap_or_default() {
                 compile_generated_parser_rule(&context, rule_index)
@@ -511,7 +512,45 @@ fn parser_generated_rules(
                 None
             }
         })
-        .collect())
+        .collect::<Vec<_>>();
+    if require_generated_callees {
+        drop_rules_calling_disabled_rules(&mut rules);
+    }
+    Ok(rules)
+}
+
+fn drop_rules_calling_disabled_rules(rules: &mut [Option<GeneratedParserRule>]) {
+    loop {
+        let enabled = rules.iter().map(Option::is_some).collect::<Vec<_>>();
+        let drop_index = rules.iter().filter_map(Option::as_ref).find_map(|rule| {
+            generated_steps_call_disabled_rule(&rule.steps, &enabled).then_some(rule.rule_index)
+        });
+        let Some(rule_index) = drop_index else {
+            return;
+        };
+        rules[rule_index] = None;
+    }
+}
+
+fn generated_steps_call_disabled_rule(steps: &[GeneratedParserStep], enabled: &[bool]) -> bool {
+    steps.iter().any(|step| match step {
+        GeneratedParserStep::CallRule { rule_index, .. } => {
+            !enabled.get(*rule_index).copied().unwrap_or_default()
+        }
+        GeneratedParserStep::Decision { alts, .. } => alts
+            .iter()
+            .any(|alt| generated_steps_call_disabled_rule(alt, enabled)),
+        GeneratedParserStep::StarLoop { body, .. }
+        | GeneratedParserStep::LeftRecursiveLoop { body, .. } => {
+            generated_steps_call_disabled_rule(body, enabled)
+        }
+        GeneratedParserStep::MatchToken(_)
+        | GeneratedParserStep::MatchSet(_)
+        | GeneratedParserStep::MatchNotSet(_)
+        | GeneratedParserStep::MatchWildcard
+        | GeneratedParserStep::Precedence(_)
+        | GeneratedParserStep::Action { .. } => false,
+    })
 }
 
 fn decision_by_state(atn: &Atn) -> Vec<Option<usize>> {
@@ -1653,9 +1692,9 @@ fn render_parser(
         .iter()
         .map(|(source_state, _)| *source_state)
         .collect::<BTreeSet<_>>();
-    let predicate_coordinates = predicates
-        .iter()
-        .map(|((rule_index, pred_index), _)| (*rule_index, *pred_index))
+    let predicate_coordinates = grammar_source
+        .map_or_else(|| Ok(Vec::new()), |_| lexer_predicate_transitions(data))?
+        .into_iter()
         .collect::<BTreeSet<_>>();
     let has_init_actions = init_actions.iter().any(Option::is_some);
     let has_action_dispatch = !actions.is_empty() || has_init_actions;
@@ -1672,6 +1711,7 @@ fn render_parser(
         &inline_action_states,
         &action_states,
         &predicate_coordinates,
+        has_action_dispatch || has_predicate_dispatch || has_return_actions,
     )?;
     let generated_rule_dispatch =
         render_generated_rule_dispatch(&generated_rules, &inline_action_statements);
@@ -5088,6 +5128,35 @@ atn:
             rendered
                 .contains("adaptive_predict_stream_info_with_context(0, __prediction_precedence")
         );
+    }
+
+    #[test]
+    fn drops_generated_rules_that_call_disabled_rules() {
+        let mut rules = vec![
+            Some(GeneratedParserRule {
+                rule_index: 0,
+                entry_state: 0,
+                left_recursive: false,
+                steps: vec![GeneratedParserStep::CallRule {
+                    source_state: 4,
+                    rule_index: 1,
+                    precedence: 0,
+                }],
+            }),
+            None,
+            Some(GeneratedParserRule {
+                rule_index: 2,
+                entry_state: 10,
+                left_recursive: false,
+                steps: vec![GeneratedParserStep::MatchToken(1)],
+            }),
+        ];
+
+        drop_rules_calling_disabled_rules(&mut rules);
+
+        assert!(rules[0].is_none());
+        assert!(rules[1].is_none());
+        assert!(rules[2].is_some());
     }
 
     #[test]

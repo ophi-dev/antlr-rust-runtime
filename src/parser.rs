@@ -2928,6 +2928,10 @@ where
         self.clear_prediction_diagnostics();
         self.reset_per_parse_caches();
         let init_action_rules = init_action_rules.iter().copied().collect::<BTreeSet<_>>();
+        let invoking_state = self.pending_invoking_states.pop();
+        let local_int_arg = invoking_state
+            .and_then(|state| usize::try_from(state).ok())
+            .and_then(|state| rule_local_int_arg(rule_args, state, rule_index, None));
         let mut visiting = BTreeSet::new();
         let mut memo = BTreeMap::new();
         let mut expected = ExpectedTokens::default();
@@ -2946,7 +2950,7 @@ where
                 rule_args,
                 member_actions,
                 return_actions,
-                local_int_arg: None,
+                local_int_arg,
                 member_values,
                 return_values,
                 rule_alt_number: 0,
@@ -2977,7 +2981,8 @@ where
                 ParserAction::new_rule_init(rule_index, start_index, Some(start_state)),
             );
         }
-        let mut context = ParserRuleContext::new(rule_index, self.state());
+        let mut context =
+            ParserRuleContext::new(rule_index, invoking_state.unwrap_or_else(|| self.state()));
         if track_alt_numbers {
             context.set_alt_number(outcome.alt_number);
         }
