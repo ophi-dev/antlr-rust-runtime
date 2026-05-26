@@ -1,5 +1,6 @@
-use std::collections::{BTreeMap, BTreeSet};
-use std::hash::Hasher;
+use std::cmp::Ordering;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::hash::{BuildHasherDefault, Hash, Hasher};
 use std::rc::Rc;
 
 pub const EMPTY_RETURN_STATE: usize = usize::MAX;
@@ -63,22 +64,30 @@ impl Hasher for PredictionFxHasher {
     }
 }
 
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+type FxHashMap<K, V> = HashMap<K, V, BuildHasherDefault<PredictionFxHasher>>;
+
+#[derive(Clone, Debug)]
 pub enum PredictionContext {
-    Empty,
+    Empty {
+        cached_hash: u64,
+    },
     Singleton {
         parent: Rc<Self>,
         return_state: usize,
+        cached_hash: u64,
     },
     Array {
         parents: Vec<Rc<Self>>,
         return_states: Vec<usize>,
+        cached_hash: u64,
     },
 }
 
 impl PredictionContext {
     pub fn empty() -> Rc<Self> {
-        Rc::new(Self::Empty)
+        Rc::new(Self::Empty {
+            cached_hash: prediction_context_empty_hash(),
+        })
     }
 
     pub fn singleton(parent: Rc<Self>, return_state: usize) -> Rc<Self> {
@@ -86,37 +95,54 @@ impl PredictionContext {
             Self::empty()
         } else {
             Rc::new(Self::Singleton {
+                cached_hash: prediction_context_singleton_hash(&parent, return_state),
                 parent,
                 return_state,
             })
         }
     }
 
+    fn array(parents: Vec<Rc<Self>>, return_states: Vec<usize>) -> Rc<Self> {
+        Rc::new(Self::Array {
+            cached_hash: prediction_context_array_hash(&parents, &return_states),
+            parents,
+            return_states,
+        })
+    }
+
+    pub const fn cached_hash(&self) -> u64 {
+        match self {
+            Self::Empty { cached_hash }
+            | Self::Singleton { cached_hash, .. }
+            | Self::Array { cached_hash, .. } => *cached_hash,
+        }
+    }
+
     pub const fn len(&self) -> usize {
         match self {
-            Self::Empty => 1,
+            Self::Empty { .. } => 1,
             Self::Singleton { .. } => 1,
             Self::Array { return_states, .. } => return_states.len(),
         }
     }
 
     pub const fn is_empty(&self) -> bool {
-        matches!(self, Self::Empty)
+        matches!(self, Self::Empty { .. })
     }
 
     pub fn return_state(&self, index: usize) -> Option<usize> {
         match self {
-            Self::Empty if index == 0 => Some(EMPTY_RETURN_STATE),
+            Self::Empty { .. } if index == 0 => Some(EMPTY_RETURN_STATE),
             Self::Singleton { return_state, .. } if index == 0 => Some(*return_state),
             Self::Array { return_states, .. } => return_states.get(index).copied(),
-            Self::Empty => None,
+            Self::Empty { .. } => None,
             Self::Singleton { .. } => None,
         }
     }
 
     pub fn parent(&self, index: usize) -> Option<Rc<Self>> {
         match self {
-            Self::Empty => None,
+            Self::Empty { .. } => None,
             Self::Singleton { parent, .. } if index == 0 => Some(Rc::clone(parent)),
             Self::Array { parents, .. } => parents.get(index).cloned(),
             Self::Singleton { .. } => None,
@@ -125,7 +151,7 @@ impl PredictionContext {
 
     pub fn has_empty_path(&self) -> bool {
         match self {
-            Self::Empty => true,
+            Self::Empty { .. } => true,
             Self::Singleton { return_state, .. } => *return_state == EMPTY_RETURN_STATE,
             Self::Array { return_states, .. } => return_states.contains(&EMPTY_RETURN_STATE),
         }
@@ -176,40 +202,192 @@ fn merge_contexts_uncached(
         return left;
     }
     match (left.as_ref(), right.as_ref()) {
-        (PredictionContext::Empty, PredictionContext::Empty) => PredictionContext::empty(),
+        (PredictionContext::Empty { .. }, PredictionContext::Empty { .. }) => {
+            PredictionContext::empty()
+        }
         _ => {
             let mut entries = Vec::new();
             collect_entries(&left, &mut entries);
             collect_entries(&right, &mut entries);
             drop((left, right));
-            entries.sort_by(|(left_parent, left_return), (right_parent, right_return)| {
-                left_return
-                    .cmp(right_return)
-                    .then_with(|| left_parent.cmp(right_parent))
-            });
-            entries.dedup_by(|a, b| a.1 == b.1 && a.0 == b.0);
+            entries.sort_by_key(|(parent, return_state)| (*return_state, parent.cached_hash()));
+            let mut deduplicated: Vec<(Rc<PredictionContext>, usize)> =
+                Vec::with_capacity(entries.len());
+            for (parent, return_state) in entries {
+                let parent_hash = parent.cached_hash();
+                let mut duplicate = false;
+                for (existing_parent, existing_return_state) in deduplicated.iter().rev() {
+                    if *existing_return_state != return_state
+                        || existing_parent.cached_hash() != parent_hash
+                    {
+                        break;
+                    }
+                    if existing_parent == &parent {
+                        duplicate = true;
+                        break;
+                    }
+                }
+                if !duplicate {
+                    deduplicated.push((parent, return_state));
+                }
+            }
+            let mut entries = deduplicated;
             if entries.len() == 1 {
                 let (parent, return_state) = entries.remove(0);
                 return PredictionContext::singleton(parent, return_state);
             }
-            Rc::new(PredictionContext::Array {
-                parents: entries
-                    .iter()
-                    .map(|(parent, _)| Rc::clone(parent))
-                    .collect(),
-                return_states: entries
-                    .iter()
-                    .map(|(_, return_state)| *return_state)
-                    .collect(),
-            })
+            let parents = entries
+                .iter()
+                .map(|(parent, _)| Rc::clone(parent))
+                .collect();
+            let return_states = entries
+                .iter()
+                .map(|(_, return_state)| *return_state)
+                .collect();
+            PredictionContext::array(parents, return_states)
         }
     }
+}
+
+impl PartialEq for PredictionContext {
+    fn eq(&self, other: &Self) -> bool {
+        if std::ptr::eq(self, other) {
+            return true;
+        }
+        if self.cached_hash() != other.cached_hash() {
+            return false;
+        }
+        match (self, other) {
+            (Self::Empty { .. }, Self::Empty { .. }) => true,
+            (
+                Self::Singleton {
+                    parent,
+                    return_state,
+                    ..
+                },
+                Self::Singleton {
+                    parent: other_parent,
+                    return_state: other_return_state,
+                    ..
+                },
+            ) => return_state == other_return_state && parent == other_parent,
+            (
+                Self::Array {
+                    parents,
+                    return_states,
+                    ..
+                },
+                Self::Array {
+                    parents: other_parents,
+                    return_states: other_return_states,
+                    ..
+                },
+            ) => return_states == other_return_states && parents == other_parents,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for PredictionContext {}
+
+impl Hash for PredictionContext {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_u64(self.cached_hash());
+    }
+}
+
+impl Ord for PredictionContext {
+    fn cmp(&self, other: &Self) -> Ordering {
+        if std::ptr::eq(self, other) {
+            return Ordering::Equal;
+        }
+        self.cached_hash()
+            .cmp(&other.cached_hash())
+            .then_with(|| prediction_context_variant(self).cmp(&prediction_context_variant(other)))
+            .then_with(|| match (self, other) {
+                (Self::Empty { .. }, Self::Empty { .. }) => Ordering::Equal,
+                (
+                    Self::Singleton {
+                        parent,
+                        return_state,
+                        ..
+                    },
+                    Self::Singleton {
+                        parent: other_parent,
+                        return_state: other_return_state,
+                        ..
+                    },
+                ) => return_state
+                    .cmp(other_return_state)
+                    .then_with(|| parent.cmp(other_parent)),
+                (
+                    Self::Array {
+                        parents,
+                        return_states,
+                        ..
+                    },
+                    Self::Array {
+                        parents: other_parents,
+                        return_states: other_return_states,
+                        ..
+                    },
+                ) => return_states
+                    .cmp(other_return_states)
+                    .then_with(|| parents.cmp(other_parents)),
+                _ => Ordering::Equal,
+            })
+    }
+}
+
+impl PartialOrd for PredictionContext {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+const fn prediction_context_variant(context: &PredictionContext) -> u8 {
+    match context {
+        PredictionContext::Empty { .. } => 0,
+        PredictionContext::Singleton { .. } => 1,
+        PredictionContext::Array { .. } => 2,
+    }
+}
+
+fn prediction_context_empty_hash() -> u64 {
+    let mut hasher = PredictionFxHasher::default();
+    hasher.write_u8(0);
+    hasher.finish()
+}
+
+fn prediction_context_singleton_hash(parent: &Rc<PredictionContext>, return_state: usize) -> u64 {
+    let mut hasher = PredictionFxHasher::default();
+    hasher.write_u8(1);
+    hasher.write_u64(parent.cached_hash());
+    hasher.write_usize(return_state);
+    hasher.finish()
+}
+
+fn prediction_context_array_hash(
+    parents: &[Rc<PredictionContext>],
+    return_states: &[usize],
+) -> u64 {
+    let mut hasher = PredictionFxHasher::default();
+    hasher.write_u8(2);
+    hasher.write_usize(parents.len());
+    for parent in parents {
+        hasher.write_u64(parent.cached_hash());
+    }
+    hasher.write_usize(return_states.len());
+    for return_state in return_states {
+        hasher.write_usize(*return_state);
+    }
+    hasher.finish()
 }
 
 /// Per-prediction memo for graph-structured stack merges.
 #[derive(Debug, Default)]
 pub struct PredictionContextMergeCache {
-    entries: BTreeMap<PredictionContextMergeKey, Rc<PredictionContext>>,
+    entries: FxHashMap<PredictionContextMergeKey, Rc<PredictionContext>>,
 }
 
 impl PredictionContextMergeCache {
@@ -222,8 +400,10 @@ impl PredictionContextMergeCache {
         left: &Rc<PredictionContext>,
         right: &Rc<PredictionContext>,
     ) -> Option<Rc<PredictionContext>> {
+        let key = PredictionContextMergeKey::new(left, right);
         self.entries
-            .get(&PredictionContextMergeKey::new(left, right))
+            .get(&key)
+            .or_else(|| self.entries.get(&key.reversed()))
             .cloned()
     }
 
@@ -240,26 +420,54 @@ impl PredictionContextMergeCache {
     }
 }
 
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug)]
 struct PredictionContextMergeKey {
     left: Rc<PredictionContext>,
     right: Rc<PredictionContext>,
+    left_hash: u64,
+    right_hash: u64,
 }
 
 impl PredictionContextMergeKey {
     fn new(left: &Rc<PredictionContext>, right: &Rc<PredictionContext>) -> Self {
-        if left <= right {
-            Self {
-                left: Rc::clone(left),
-                right: Rc::clone(right),
-            }
-        } else {
-            Self {
-                left: Rc::clone(right),
-                right: Rc::clone(left),
-            }
+        Self {
+            left: Rc::clone(left),
+            right: Rc::clone(right),
+            left_hash: prediction_context_hash(left),
+            right_hash: prediction_context_hash(right),
         }
     }
+
+    fn reversed(&self) -> Self {
+        Self {
+            left: Rc::clone(&self.right),
+            right: Rc::clone(&self.left),
+            left_hash: self.right_hash,
+            right_hash: self.left_hash,
+        }
+    }
+}
+
+impl PartialEq for PredictionContextMergeKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.left_hash == other.left_hash
+            && self.right_hash == other.right_hash
+            && self.left == other.left
+            && self.right == other.right
+    }
+}
+
+impl Eq for PredictionContextMergeKey {}
+
+impl Hash for PredictionContextMergeKey {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_u64(self.left_hash);
+        state.write_u64(self.right_hash);
+    }
+}
+
+fn prediction_context_hash(context: &Rc<PredictionContext>) -> u64 {
+    context.cached_hash()
 }
 
 fn collect_entries(
@@ -267,14 +475,18 @@ fn collect_entries(
     entries: &mut Vec<(Rc<PredictionContext>, usize)>,
 ) {
     match context.as_ref() {
-        PredictionContext::Empty => entries.push((Rc::clone(context), EMPTY_RETURN_STATE)),
+        PredictionContext::Empty { .. } => {
+            entries.push((Rc::clone(context), EMPTY_RETURN_STATE));
+        }
         PredictionContext::Singleton {
             parent,
             return_state,
+            ..
         } => entries.push((Rc::clone(parent), *return_state)),
         PredictionContext::Array {
             parents,
             return_states,
+            ..
         } => {
             for (parent, return_state) in parents.iter().zip(return_states) {
                 entries.push((Rc::clone(parent), *return_state));
@@ -649,10 +861,7 @@ mod tests {
         let empty = PredictionContext::empty();
         let parent_one = PredictionContext::singleton(Rc::clone(&empty), 1);
         let parent_two = PredictionContext::singleton(Rc::clone(&empty), 2);
-        let left = Rc::new(PredictionContext::Array {
-            parents: vec![Rc::clone(&parent_one), parent_two],
-            return_states: vec![42, 42],
-        });
+        let left = PredictionContext::array(vec![Rc::clone(&parent_one), parent_two], vec![42, 42]);
         let right = PredictionContext::singleton(Rc::clone(&parent_one), 42);
 
         let merged = PredictionContext::merge(left, right);

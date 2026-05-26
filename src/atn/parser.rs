@@ -3,11 +3,14 @@ use crate::dfa::{Dfa, DfaState};
 use crate::int_stream::IntStream;
 use crate::prediction::{
     AtnConfig, AtnConfigSet, EMPTY_RETURN_STATE, PredictionContext, PredictionContextMergeCache,
-    SemanticContext, has_sll_conflict_terminating_prediction,
+    PredictionFxHasher, SemanticContext, has_sll_conflict_terminating_prediction,
 };
 use crate::token::TOKEN_EOF;
-use std::collections::BTreeSet;
+use std::collections::HashSet;
+use std::hash::BuildHasherDefault;
 use std::rc::Rc;
+
+type FxHashSet<T> = HashSet<T, BuildHasherDefault<PredictionFxHasher>>;
 
 #[derive(Debug)]
 pub struct ParserAtnSimulator<'a> {
@@ -629,7 +632,7 @@ impl<'a> ParserAtnSimulator<'a> {
         precedence: i32,
     ) {
         let mut stack = vec![config];
-        let mut visited = BTreeSet::new();
+        let mut visited = FxHashSet::default();
         while let Some(config) = stack.pop() {
             if !visited.insert(config.clone()) {
                 continue;
@@ -638,7 +641,7 @@ impl<'a> ParserAtnSimulator<'a> {
                 continue;
             };
             if state.is_rule_stop() {
-                self.closure_at_rule_stop(config, configs, merge_cache, precedence);
+                self.closure_at_rule_stop(config, configs, merge_cache, &mut stack);
                 continue;
             }
             let epsilon_only = !state.transitions.is_empty()
@@ -739,7 +742,7 @@ impl<'a> ParserAtnSimulator<'a> {
         config: AtnConfig,
         configs: &mut AtnConfigSet,
         merge_cache: &mut PredictionContextMergeCache,
-        precedence: i32,
+        stack: &mut Vec<AtnConfig>,
     ) {
         if config.context.is_empty() {
             configs.add_with_merge_cache(config, Some(merge_cache));
@@ -765,7 +768,7 @@ impl<'a> ParserAtnSimulator<'a> {
                 reaches_into_outer_context: config.reaches_into_outer_context,
                 precedence_filter_suppressed: config.precedence_filter_suppressed,
             };
-            self.closure(next, configs, merge_cache, precedence);
+            stack.push(next);
         }
     }
 
