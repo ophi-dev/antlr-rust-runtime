@@ -1098,6 +1098,7 @@ fn compile_generated_parser_transition(
 fn render_generated_rule_dispatch(
     rules: &[Option<GeneratedParserRule>],
     inline_action_statements: &BTreeMap<usize, String>,
+    init_action_statements: &BTreeMap<usize, String>,
     track_alt_numbers: bool,
 ) -> String {
     let mut out = String::new();
@@ -1142,7 +1143,13 @@ fn render_generated_rule_dispatch(
             .expect("writing to a string cannot fail");
         }
         writeln!(out, "    }}").expect("writing to a string cannot fail");
-        render_generated_rule_method(&mut out, rule, inline_action_statements, track_alt_numbers);
+        render_generated_rule_method(
+            &mut out,
+            rule,
+            inline_action_statements,
+            init_action_statements,
+            track_alt_numbers,
+        );
     }
     out
 }
@@ -1151,6 +1158,7 @@ fn render_generated_rule_method(
     out: &mut String,
     rule: &GeneratedParserRule,
     inline_action_statements: &BTreeMap<usize, String>,
+    init_action_statements: &BTreeMap<usize, String>,
     track_alt_numbers: bool,
 ) {
     if rule.left_recursive {
@@ -1158,6 +1166,7 @@ fn render_generated_rule_method(
             out,
             rule,
             inline_action_statements,
+            init_action_statements,
             track_alt_numbers,
         );
         return;
@@ -1201,11 +1210,15 @@ fn render_generated_rule_method(
     writeln!(out, "            Ok(())").expect("writing to a string cannot fail");
     writeln!(out, "        }})();").expect("writing to a string cannot fail");
     writeln!(out, "        match __result {{").expect("writing to a string cannot fail");
+    writeln!(out, "            Ok(()) => {{").expect("writing to a string cannot fail");
     writeln!(
         out,
-        "            Ok(()) => Ok(self.base.finish_rule(__ctx, __consumed_eof)),"
+        "                let __tree = self.base.finish_rule(__ctx, __consumed_eof);"
     )
     .expect("writing to a string cannot fail");
+    render_generated_init_action(out, index, entry_state, init_action_statements, 4);
+    writeln!(out, "                Ok(__tree)").expect("writing to a string cannot fail");
+    writeln!(out, "            }}").expect("writing to a string cannot fail");
     writeln!(out, "            Err(__error) => {{").expect("writing to a string cannot fail");
     writeln!(out, "                self.base.exit_rule();")
         .expect("writing to a string cannot fail");
@@ -1235,6 +1248,7 @@ fn render_generated_left_recursive_rule_method(
     out: &mut String,
     rule: &GeneratedParserRule,
     inline_action_statements: &BTreeMap<usize, String>,
+    init_action_statements: &BTreeMap<usize, String>,
     track_alt_numbers: bool,
 ) {
     let index = rule.rule_index;
@@ -1287,11 +1301,15 @@ fn render_generated_left_recursive_rule_method(
     writeln!(out, "            Ok(())").expect("writing to a string cannot fail");
     writeln!(out, "        }})();").expect("writing to a string cannot fail");
     writeln!(out, "        match __result {{").expect("writing to a string cannot fail");
+    writeln!(out, "            Ok(()) => {{").expect("writing to a string cannot fail");
     writeln!(
         out,
-        "            Ok(()) => Ok(self.base.finish_recursion_rule(__ctx, __consumed_eof)),"
+        "                let __tree = self.base.finish_recursion_rule(__ctx, __consumed_eof);"
     )
     .expect("writing to a string cannot fail");
+    render_generated_init_action(out, index, entry_state, init_action_statements, 4);
+    writeln!(out, "                Ok(__tree)").expect("writing to a string cannot fail");
+    writeln!(out, "            }}").expect("writing to a string cannot fail");
     writeln!(out, "            Err(__error) => {{").expect("writing to a string cannot fail");
     writeln!(out, "                self.base.unroll_recursion_context();")
         .expect("writing to a string cannot fail");
@@ -1318,6 +1336,33 @@ fn render_generated_left_recursive_rule_method(
     writeln!(out, "            }}").expect("writing to a string cannot fail");
     writeln!(out, "        }}").expect("writing to a string cannot fail");
     writeln!(out, "    }}").expect("writing to a string cannot fail");
+}
+
+fn render_generated_init_action(
+    out: &mut String,
+    rule_index: usize,
+    entry_state: usize,
+    init_action_statements: &BTreeMap<usize, String>,
+    indent: usize,
+) {
+    let Some(statement) = init_action_statements.get(&rule_index) else {
+        return;
+    };
+    if statement.is_empty() {
+        return;
+    }
+    let pad = "    ".repeat(indent);
+    if statement.contains("_tree") {
+        writeln!(out, "{pad}let _tree = &__tree;").expect("writing to a string cannot fail");
+    }
+    if statement.contains("action.") {
+        writeln!(
+            out,
+            "{pad}let action = antlr4_runtime::ParserAction::new_rule_init({rule_index}, __rule_start, Some({entry_state}));"
+        )
+        .expect("writing to a string cannot fail");
+    }
+    writeln!(out, "{pad}{statement}").expect("writing to a string cannot fail");
 }
 
 fn render_generated_steps(
@@ -1940,6 +1985,7 @@ fn render_parser(
     let member_actions = parser_member_actions(&actions, &int_members)?;
     let return_actions = parser_return_actions(&actions);
     let inline_action_statements = inline_parser_action_statements(&actions, &int_members)?;
+    let init_action_statements = init_parser_action_statements(&init_actions, &int_members)?;
     let inline_action_states = inline_action_statements
         .keys()
         .copied()
@@ -1957,9 +2003,7 @@ fn render_parser(
     let has_predicate_dispatch = !predicates.is_empty();
     let has_return_actions = !return_actions.is_empty();
     let track_alt_numbers = grammar_source.is_some_and(uses_alt_number_contexts);
-    let generated_rule_enabled = (0..data.rule_names.len())
-        .map(|index| init_actions.get(index).is_none_or(Option::is_none))
-        .collect::<Vec<_>>();
+    let generated_rule_enabled = vec![true; data.rule_names.len()];
     let generated_rules = parser_generated_rules(
         data,
         &generated_rule_enabled,
@@ -1971,6 +2015,7 @@ fn render_parser(
     let generated_rule_dispatch = render_generated_rule_dispatch(
         &generated_rules,
         &inline_action_statements,
+        &init_action_statements,
         track_alt_numbers,
     );
     let init_action_rules = init_actions
@@ -3813,6 +3858,20 @@ fn inline_parser_action_statements(
     Ok(statements)
 }
 
+fn init_parser_action_statements(
+    init_actions: &[Option<ActionTemplate>],
+    members: &[IntMemberTemplate],
+) -> io::Result<BTreeMap<usize, String>> {
+    let mut statements = BTreeMap::new();
+    for (rule_index, action) in init_actions.iter().enumerate() {
+        let Some(action) = action else {
+            continue;
+        };
+        statements.insert(rule_index, render_action_statement(action, members)?);
+    }
+    Ok(statements)
+}
+
 fn collect_return_actions(
     source_state: usize,
     action: &ActionTemplate,
@@ -5230,15 +5289,19 @@ atn:
             }]
         );
 
-        let rendered =
-            render_generated_rule_dispatch(&[Some(body.clone())], &BTreeMap::new(), false);
+        let rendered = render_generated_rule_dispatch(
+            &[Some(body.clone())],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            false,
+        );
         assert!(rendered.contains("parse_generated_rule_0"));
         assert!(rendered.contains("sync_decision(atn(), 1)"));
         assert!(rendered.contains("adaptive_predict_stream_info_with_context(0, 0"));
         assert!(!rendered.contains("requires_full_context"));
 
         let rendered_with_alt_numbers =
-            render_generated_rule_dispatch(&[Some(body)], &BTreeMap::new(), true);
+            render_generated_rule_dispatch(&[Some(body)], &BTreeMap::new(), &BTreeMap::new(), true);
         assert!(rendered_with_alt_numbers.contains("__ctx.set_alt_number(1);"));
         assert!(rendered_with_alt_numbers.contains("__ctx.set_alt_number(2);"));
     }
@@ -5261,7 +5324,12 @@ atn:
             }]
         );
 
-        let rendered = render_generated_rule_dispatch(&[Some(body)], &BTreeMap::new(), false);
+        let rendered = render_generated_rule_dispatch(
+            &[Some(body)],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            false,
+        );
         assert!(rendered.contains("loop {"));
         assert!(rendered.contains("sync_decision(atn(), 1)"));
         assert!(rendered.contains("1 => {"));
@@ -5363,7 +5431,12 @@ atn:
             ]
         );
 
-        let rendered = render_generated_rule_dispatch(&[Some(body)], &BTreeMap::new(), false);
+        let rendered = render_generated_rule_dispatch(
+            &[Some(body)],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            false,
+        );
         assert!(rendered.contains("parse_generated_rule_0_precedence(precedence, allow_fallback)"));
         assert!(
             rendered.contains("push_new_recursion_context_with_previous(0isize, 0, &mut __ctx)")
@@ -5630,6 +5703,24 @@ s : ;
     }
 
     #[test]
+    fn renders_generated_rule_init_actions_on_success() {
+        let rendered = render_parser(
+            "TParser",
+            &minimal_parser_data(),
+            Some(
+                r#"parser grammar T;
+s @init {<GetExpectedTokenNames():writeln()>} : ;
+"#,
+            ),
+        )
+        .expect("parser should render");
+
+        assert!(rendered.contains("parse_generated_rule_0"));
+        assert!(rendered.contains("ParserAction::new_rule_init(0, __rule_start, Some(0))"));
+        assert!(rendered.contains("self.base.expected_tokens_at_state(atn(), state)"));
+    }
+
+    #[test]
     fn renders_inline_action_event_only_when_statement_uses_it() {
         let rule = GeneratedParserRule {
             rule_index: 0,
@@ -5654,7 +5745,8 @@ s : ;
         );
         statements.insert(6, "println!(\"alt 2\");".to_owned());
 
-        let rendered = render_generated_rule_dispatch(&[Some(rule)], &statements, false);
+        let rendered =
+            render_generated_rule_dispatch(&[Some(rule)], &statements, &BTreeMap::new(), false);
 
         assert!(rendered.contains("parser_action_at_current(4, 0"));
         assert!(!rendered.contains("parser_action_at_current(6, 0"));
