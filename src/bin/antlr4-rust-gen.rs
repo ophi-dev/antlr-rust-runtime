@@ -1184,6 +1184,7 @@ fn render_generated_rule_dispatch(
     rules: &[Option<GeneratedParserRule>],
     inline_action_statements: &BTreeMap<usize, String>,
     init_action_statements: &BTreeMap<usize, String>,
+    return_action_statements: &BTreeMap<usize, Vec<(String, i64)>>,
     track_alt_numbers: bool,
 ) -> String {
     let mut out = String::new();
@@ -1233,6 +1234,7 @@ fn render_generated_rule_dispatch(
             rule,
             inline_action_statements,
             init_action_statements,
+            return_action_statements,
             track_alt_numbers,
         );
     }
@@ -1244,6 +1246,7 @@ fn render_generated_rule_method(
     rule: &GeneratedParserRule,
     inline_action_statements: &BTreeMap<usize, String>,
     init_action_statements: &BTreeMap<usize, String>,
+    return_action_statements: &BTreeMap<usize, Vec<(String, i64)>>,
     track_alt_numbers: bool,
 ) {
     if rule.left_recursive {
@@ -1252,6 +1255,7 @@ fn render_generated_rule_method(
             rule,
             inline_action_statements,
             init_action_statements,
+            return_action_statements,
             track_alt_numbers,
         );
         return;
@@ -1300,6 +1304,7 @@ fn render_generated_rule_method(
         &rule.steps,
         3,
         inline_action_statements,
+        return_action_statements,
         track_alt_numbers,
     );
     writeln!(out, "            Ok(())").expect("writing to a string cannot fail");
@@ -1354,6 +1359,7 @@ fn render_generated_left_recursive_rule_method(
     rule: &GeneratedParserRule,
     inline_action_statements: &BTreeMap<usize, String>,
     init_action_statements: &BTreeMap<usize, String>,
+    return_action_statements: &BTreeMap<usize, Vec<(String, i64)>>,
     track_alt_numbers: bool,
 ) {
     let index = rule.rule_index;
@@ -1411,6 +1417,7 @@ fn render_generated_left_recursive_rule_method(
         &rule.steps,
         3,
         inline_action_statements,
+        return_action_statements,
         track_alt_numbers,
     );
     writeln!(out, "            Ok(())").expect("writing to a string cannot fail");
@@ -1487,6 +1494,7 @@ fn render_generated_steps(
     steps: &[GeneratedParserStep],
     indent: usize,
     inline_action_statements: &BTreeMap<usize, String>,
+    return_action_statements: &BTreeMap<usize, Vec<(String, i64)>>,
     track_alt_numbers: bool,
 ) {
     for step in steps {
@@ -1495,6 +1503,7 @@ fn render_generated_steps(
             step,
             indent,
             inline_action_statements,
+            return_action_statements,
             track_alt_numbers,
         );
     }
@@ -1505,6 +1514,7 @@ fn render_generated_step(
     step: &GeneratedParserStep,
     indent: usize,
     inline_action_statements: &BTreeMap<usize, String>,
+    return_action_statements: &BTreeMap<usize, Vec<(String, i64)>>,
     track_alt_numbers: bool,
 ) {
     let pad = "    ".repeat(indent);
@@ -1623,6 +1633,7 @@ fn render_generated_step(
                     writeln!(out, "{pad}{statement}").expect("writing to a string cannot fail");
                 }
             }
+            render_generated_return_actions(out, *source_state, return_action_statements, indent);
             writeln!(
                 out,
                 "{pad}self.generated_actions.push(GeneratedAction::Parser(action));"
@@ -1647,6 +1658,7 @@ fn render_generated_step(
                 },
                 indent,
                 inline_action_statements,
+                return_action_statements,
                 track_alt_numbers,
             );
         }
@@ -1671,6 +1683,7 @@ fn render_generated_step(
                 },
                 indent,
                 inline_action_statements,
+                return_action_statements,
                 track_alt_numbers,
             );
         }
@@ -1693,9 +1706,30 @@ fn render_generated_step(
                 },
                 indent,
                 inline_action_statements,
+                return_action_statements,
                 track_alt_numbers,
             );
         }
+    }
+}
+
+fn render_generated_return_actions(
+    out: &mut String,
+    source_state: usize,
+    return_action_statements: &BTreeMap<usize, Vec<(String, i64)>>,
+    indent: usize,
+) {
+    let Some(actions) = return_action_statements.get(&source_state) else {
+        return;
+    };
+    let pad = "    ".repeat(indent);
+    for (name, value) in actions {
+        writeln!(
+            out,
+            "{pad}__ctx.set_int_return(\"{}\", {value});",
+            rust_string(name)
+        )
+        .expect("writing to a string cannot fail");
     }
 }
 
@@ -1704,6 +1738,7 @@ fn render_generated_decision(
     decision_info: DecisionRender<'_>,
     indent: usize,
     inline_action_statements: &BTreeMap<usize, String>,
+    return_action_statements: &BTreeMap<usize, Vec<(String, i64)>>,
     track_alt_numbers: bool,
 ) {
     let DecisionRender {
@@ -1768,6 +1803,7 @@ fn render_generated_decision(
             steps,
             indent + 2,
             inline_action_statements,
+            return_action_statements,
             track_alt_numbers,
         );
         writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
@@ -1807,6 +1843,7 @@ fn render_generated_star_loop(
     loop_info: StarLoopRender<'_>,
     indent: usize,
     inline_action_statements: &BTreeMap<usize, String>,
+    return_action_statements: &BTreeMap<usize, Vec<(String, i64)>>,
     track_alt_numbers: bool,
 ) {
     let StarLoopRender {
@@ -1870,6 +1907,7 @@ fn render_generated_star_loop(
         body,
         indent + 3,
         inline_action_statements,
+        return_action_statements,
         track_alt_numbers,
     );
     writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
@@ -1896,6 +1934,7 @@ fn render_generated_left_recursive_loop(
     loop_info: LeftRecursiveLoopRender<'_>,
     indent: usize,
     inline_action_statements: &BTreeMap<usize, String>,
+    return_action_statements: &BTreeMap<usize, Vec<(String, i64)>>,
     track_alt_numbers: bool,
 ) {
     let LeftRecursiveLoopRender {
@@ -1951,6 +1990,7 @@ fn render_generated_left_recursive_loop(
         body,
         indent + 3,
         inline_action_statements,
+        return_action_statements,
         track_alt_numbers,
     );
     writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
@@ -2173,6 +2213,7 @@ fn render_parser(
         &generated_rules,
         &inline_action_statements,
         &init_action_statements,
+        &generated_return_action_statements(&return_actions),
         track_alt_numbers,
     );
     let init_action_rules = init_actions
@@ -4153,6 +4194,19 @@ fn collect_return_actions(
     }
 }
 
+fn generated_return_action_statements(
+    actions: &[(usize, String, i64)],
+) -> BTreeMap<usize, Vec<(String, i64)>> {
+    let mut statements = BTreeMap::<usize, Vec<(String, i64)>>::new();
+    for (source_state, name, value) in actions {
+        statements
+            .entry(*source_state)
+            .or_default()
+            .push((name.clone(), *value));
+    }
+    statements
+}
+
 fn collect_member_actions(
     source_state: usize,
     action: &ActionTemplate,
@@ -5560,6 +5614,7 @@ atn:
             &[Some(body.clone())],
             &BTreeMap::new(),
             &BTreeMap::new(),
+            &BTreeMap::new(),
             false,
         );
         assert!(rendered.contains("parse_generated_rule_0"));
@@ -5567,8 +5622,13 @@ atn:
         assert!(rendered.contains("adaptive_predict_stream_info_with_context(0, 0"));
         assert!(!rendered.contains("requires_full_context"));
 
-        let rendered_with_alt_numbers =
-            render_generated_rule_dispatch(&[Some(body)], &BTreeMap::new(), &BTreeMap::new(), true);
+        let rendered_with_alt_numbers = render_generated_rule_dispatch(
+            &[Some(body)],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            true,
+        );
         assert!(rendered_with_alt_numbers.contains("__ctx.set_alt_number(1);"));
         assert!(rendered_with_alt_numbers.contains("__ctx.set_alt_number(2);"));
     }
@@ -5594,6 +5654,7 @@ atn:
 
         let rendered = render_generated_rule_dispatch(
             &[Some(body)],
+            &BTreeMap::new(),
             &BTreeMap::new(),
             &BTreeMap::new(),
             false,
@@ -5703,6 +5764,7 @@ atn:
 
         let rendered = render_generated_rule_dispatch(
             &[Some(body)],
+            &BTreeMap::new(),
             &BTreeMap::new(),
             &BTreeMap::new(),
             false,
@@ -6110,13 +6172,44 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
         );
         statements.insert(6, "println!(\"alt 2\");".to_owned());
 
-        let rendered =
-            render_generated_rule_dispatch(&[Some(rule)], &statements, &BTreeMap::new(), false);
+        let rendered = render_generated_rule_dispatch(
+            &[Some(rule)],
+            &statements,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            false,
+        );
 
         assert!(rendered.contains("parser_action_at_current(4, 0"));
         assert!(rendered.contains("parser_action_at_current(6, 0"));
         assert!(rendered.contains("self.generated_actions.push(GeneratedAction::Parser(action));"));
         assert!(rendered.contains("println!(\"alt 2\");"));
+    }
+
+    #[test]
+    fn renders_generated_return_actions_on_context() {
+        let rule = GeneratedParserRule {
+            rule_index: 1,
+            entry_state: 2,
+            left_recursive: false,
+            steps: vec![GeneratedParserStep::Action {
+                source_state: 9,
+                rule_index: 1,
+            }],
+        };
+        let mut return_actions = BTreeMap::new();
+        return_actions.insert(9, vec![("y".to_owned(), 1000)]);
+
+        let rendered = render_generated_rule_dispatch(
+            &[None, Some(rule)],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &return_actions,
+            false,
+        );
+
+        assert!(rendered.contains("__ctx.set_int_return(\"y\", 1000);"));
+        assert!(rendered.contains("self.generated_actions.push(GeneratedAction::Parser(action));"));
     }
 
     #[test]
