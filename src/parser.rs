@@ -75,6 +75,7 @@ use crate::atn::parser::ParserAtnSimulator;
 use crate::atn::{Atn, AtnState, AtnStateKind, Transition};
 use crate::errors::AntlrError;
 use crate::int_stream::IntStream;
+use crate::prediction::PredictionContext;
 use crate::recognizer::{Recognizer, RecognizerData};
 use crate::token::{CommonToken, TOKEN_EOF, Token, TokenSource, TokenSourceError};
 use crate::token_stream::CommonTokenStream;
@@ -440,7 +441,8 @@ pub struct BaseParser<S> {
     prediction_diagnostics: Vec<ParserDiagnostic>,
     reported_prediction_diagnostics: BTreeSet<(usize, usize, String)>,
     int_members: BTreeMap<usize, i64>,
-    rule_context_stack: Vec<usize>,
+    rule_context_stack: Vec<RuleContextFrame>,
+    pending_invoking_states: Vec<isize>,
     precedence_stack: Vec<i32>,
     /// Predicate side effects are observable in a few target-template tests;
     /// speculative recognition may revisit the same coordinate, so replay it
@@ -504,6 +506,12 @@ pub struct BaseParser<S> {
     /// selected rule spans after recognition, avoiding many speculative `Rc`
     /// nodes that are thrown away with losing paths.
     fast_token_nodes_enabled: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct RuleContextFrame {
+    rule_index: usize,
+    invoking_state: isize,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -693,12 +701,8 @@ impl NodeList {
     }
 
     fn has_left_recursive_boundary(&self) -> bool {
-        self.iter().any(|node| {
-            matches!(
-                node.as_ref(),
-                FastRecognizedNode::LeftRecursiveBoundary { .. }
-            )
-        })
+        self.iter()
+            .any(|node| fast_node_has_left_recursive_boundary(node.as_ref()))
     }
 
     fn has_explicit_token_node(&self) -> bool {
@@ -1867,6 +1871,16 @@ struct FastCurrentTokenDeletionRequest<'a, 'b> {
     expected: &'b mut ExpectedTokens,
 }
 
+#[derive(Clone, Copy)]
+struct FastChildRuleFailureRecoveryRequest<'a> {
+    atn: &'a Atn,
+    rule_index: usize,
+    start_index: usize,
+    follow_state: usize,
+    stop_state: usize,
+    expected: &'a ExpectedTokens,
+}
+
 struct RecoveryRequest<'a, 'b> {
     atn: &'a Atn,
     transition: &'a Transition,
@@ -1984,6 +1998,7 @@ where
             reported_prediction_diagnostics: BTreeSet::new(),
             int_members: BTreeMap::new(),
             rule_context_stack: Vec::new(),
+            pending_invoking_states: Vec::new(),
             precedence_stack: vec![0],
             invoked_predicates: Vec::new(),
             rule_first_set_cache: Vec::new(),
@@ -2131,18 +2146,58 @@ where
     /// generated method should populate.
     pub fn enter_rule(&mut self, state: isize, rule_index: usize) -> ParserRuleContext {
         self.set_state(state);
-        self.rule_context_stack.push(rule_index);
+        let invoking_state = self.pending_invoking_states.pop().unwrap_or(state);
+        self.rule_context_stack.push(RuleContextFrame {
+            rule_index,
+            invoking_state,
+        });
         let start_index = self.current_visible_index();
-        let mut context = ParserRuleContext::new(rule_index, state);
+        let mut context = ParserRuleContext::new(rule_index, invoking_state);
         if let Some(token) = self.token_at(start_index) {
             context.set_start(token);
         }
         context
     }
 
+    /// Records the ATN source state for the next generated rule invocation.
+    ///
+    /// ANTLR's full-context prediction reconstructs caller follow states from
+    /// each active rule context's invoking state. Generated Rust rule methods are
+    /// plain functions, so the caller supplies that ATN state just before making a
+    /// rule call; `enter_rule` consumes it when the callee starts.
+    pub fn push_invoking_state(&mut self, invoking_state: isize) -> usize {
+        let marker = self.pending_invoking_states.len();
+        self.pending_invoking_states.push(invoking_state);
+        marker
+    }
+
+    /// Discards an invoking-state marker if the callee did not consume it.
+    pub fn discard_invoking_state(&mut self, marker: usize) {
+        self.pending_invoking_states.truncate(marker);
+    }
+
     /// Exits the current generated parser rule.
     pub fn exit_rule(&mut self) {
         self.rule_context_stack.pop();
+    }
+
+    /// Converts the active generated-parser rule stack into an ANTLR prediction
+    /// context for full-context adaptive prediction.
+    pub fn prediction_context(&self, atn: &Atn) -> Rc<PredictionContext> {
+        let mut context = PredictionContext::empty();
+        for frame in self.rule_context_stack.iter().skip(1) {
+            let Ok(state_number) = usize::try_from(frame.invoking_state) else {
+                continue;
+            };
+            let Some(Transition::Rule { follow_state, .. }) = atn
+                .state(state_number)
+                .and_then(|state| state.transitions.first())
+            else {
+                continue;
+            };
+            context = PredictionContext::singleton(context, *follow_state);
+        }
+        context
     }
 
     /// Adds a generated parser child only when parse-tree construction is
@@ -2340,6 +2395,10 @@ where
         let first_pass = self.fast_recognize_top(atn, start_state, stop_state, start_index);
         self.fast_token_nodes_enabled = true;
         self.fast_recovery_enabled = true;
+        let needs_tree_retry = matches!(
+            &first_pass,
+            Ok((outcome, _)) if self.build_parse_trees && outcome.nodes.has_left_recursive_boundary()
+        );
         let needs_retry = match &first_pass {
             // The FIRST-set prefilter trims speculative rule calls that can't
             // match the current lookahead — useful for perf on grammars with
@@ -2350,15 +2409,25 @@ where
             // either produced no outcome at all or produced a recovered
             // outcome (diagnostics non-empty), since the second pass might
             // surface a child-level recovery with cleaner diagnostics or
-            // closer parity to ANTLR's tree shape.
+            // closer parity to ANTLR's tree shape. Left-recursive tree
+            // boundaries also need the token-node pass; otherwise the fold has
+            // no concrete left operand to wrap into ANTLR's recursive context.
             Err(_) => true,
-            Ok((outcome, _)) => !outcome.diagnostics.is_empty(),
+            Ok((outcome, _)) => !outcome.diagnostics.is_empty() || needs_tree_retry,
         };
         let (outcome, _expected) = if needs_retry {
             self.fast_first_set_prefilter = false;
             let retry = self.fast_recognize_top(atn, start_state, stop_state, start_index);
             self.fast_first_set_prefilter = true;
-            select_better_top_outcome(first_pass, retry).map_err(|expected| {
+            let selected = if needs_tree_retry {
+                match retry {
+                    ok @ Ok(_) => ok,
+                    Err(_) => first_pass,
+                }
+            } else {
+                select_better_top_outcome(first_pass, retry)
+            };
+            selected.map_err(|expected| {
                 let error = self.recognition_error(rule_index, start_index, &expected);
                 report_token_source_errors(&self.input.drain_source_errors());
                 error
@@ -3328,6 +3397,71 @@ where
             .collect()
     }
 
+    /// Converts a failed child rule into a recovered fast-recognizer outcome so
+    /// the parent can keep its child rule context and continue at a sync token.
+    fn fast_child_rule_failure_recovery(
+        &mut self,
+        rule_index: usize,
+        start_index: usize,
+        sync_symbols: &BTreeSet<i32>,
+        expected: &ExpectedTokens,
+    ) -> Option<FastRecognizeOutcome> {
+        let (error_index, message) = self.expected_error_message(rule_index, start_index, expected);
+        let token = self.token_at(error_index);
+        let mut next_index = error_index;
+        loop {
+            let symbol = self.token_type_at(next_index);
+            if sync_symbols.contains(&symbol) {
+                if next_index == error_index {
+                    return None;
+                }
+                break;
+            }
+            if symbol == TOKEN_EOF {
+                break;
+            }
+            let after = self.consume_index(next_index, symbol);
+            if after == next_index {
+                break;
+            }
+            next_index = after;
+        }
+        let mut diagnostics = FastDiagnostics::new();
+        diagnostics.insert(0, diagnostic_for_token(token.as_ref(), message));
+        let mut nodes = NodeList::new();
+        if self.fast_token_nodes_enabled {
+            nodes.prepend(Rc::new(FastRecognizedNode::ErrorToken {
+                index: error_index,
+            }));
+        }
+        Some(FastRecognizeOutcome {
+            index: next_index,
+            consumed_eof: false,
+            diagnostics,
+            nodes,
+        })
+    }
+
+    /// Adapts the optional child-rule recovery result to the fast-recognizer
+    /// outcome list used by rule-call transitions.
+    fn fast_child_rule_failure_recovery_outcomes(
+        &mut self,
+        request: FastChildRuleFailureRecoveryRequest<'_>,
+    ) -> Vec<FastRecognizeOutcome> {
+        let FastChildRuleFailureRecoveryRequest {
+            atn,
+            rule_index,
+            start_index,
+            follow_state,
+            stop_state,
+            expected,
+        } = request;
+        let sync_symbols = state_sync_symbols(atn, follow_state, stop_state);
+        self.fast_child_rule_failure_recovery(rule_index, start_index, &sync_symbols, expected)
+            .into_iter()
+            .collect()
+    }
+
     /// Attempts to reach `stop_state` from `state_number` without committing
     /// token consumption to the parser's public stream position.
     #[allow(clippy::too_many_lines)]
@@ -3789,7 +3923,7 @@ where
                     }
                     let expected_before_child =
                         self.fast_recovery_enabled.then(|| expected.clone());
-                    let children = self.recognize_state_fast(
+                    let mut children = self.recognize_state_fast(
                         atn,
                         FastRecognizeRequest {
                             state_number: *target,
@@ -3806,6 +3940,18 @@ where
                         memo,
                         expected,
                     );
+                    if children.is_empty() && self.fast_recovery_enabled {
+                        children = self.fast_child_rule_failure_recovery_outcomes(
+                            FastChildRuleFailureRecoveryRequest {
+                                atn,
+                                rule_index: *rule_index,
+                                start_index: index,
+                                follow_state: *follow_state,
+                                stop_state,
+                                expected,
+                            },
+                        );
+                    }
                     if let Some(expected_before_child) = expected_before_child {
                         if children
                             .iter()
@@ -6095,6 +6241,16 @@ fn fold_fast_left_recursive_boundaries(
     folded
 }
 
+fn fast_node_has_left_recursive_boundary(node: &FastRecognizedNode) -> bool {
+    match node {
+        FastRecognizedNode::LeftRecursiveBoundary { .. } => true,
+        FastRecognizedNode::Rule { children, .. } => children.has_left_recursive_boundary(),
+        FastRecognizedNode::Token { .. }
+        | FastRecognizedNode::ErrorToken { .. }
+        | FastRecognizedNode::MissingToken { .. } => false,
+    }
+}
+
 fn fast_recognized_nodes_start_index(nodes: &[Rc<FastRecognizedNode>]) -> Option<usize> {
     nodes
         .iter()
@@ -6959,7 +7115,13 @@ mod tests {
         let context = parser.enter_rule(7, 2);
         assert_eq!(context.rule_index(), 2);
         assert_eq!(parser.state(), 7);
-        assert_eq!(parser.rule_context_stack, vec![2]);
+        assert_eq!(
+            parser.rule_context_stack,
+            vec![RuleContextFrame {
+                rule_index: 2,
+                invoking_state: 7
+            }]
+        );
 
         let recursive = parser.enter_recursion_rule(11, 3, 4);
         assert_eq!(recursive.rule_index(), 3);
@@ -6971,7 +7133,13 @@ mod tests {
         assert_eq!(next.invoking_state(), 13);
         parser.unroll_recursion_context();
         assert_eq!(parser.precedence_stack, vec![0]);
-        assert_eq!(parser.rule_context_stack, vec![2]);
+        assert_eq!(
+            parser.rule_context_stack,
+            vec![RuleContextFrame {
+                rule_index: 2,
+                invoking_state: 7
+            }]
+        );
 
         parser.exit_rule();
         assert!(parser.rule_context_stack.is_empty());

@@ -437,7 +437,10 @@ enum GeneratedParserStep {
         source_state: usize,
         rule_index: usize,
     },
-    CallRule(usize),
+    CallRule {
+        source_state: usize,
+        rule_index: usize,
+    },
     Decision {
         decision: usize,
         alts: Vec<Vec<Self>>,
@@ -742,7 +745,7 @@ fn steps_may_consume(steps: &[GeneratedParserStep]) -> bool {
         | GeneratedParserStep::MatchSet(_)
         | GeneratedParserStep::MatchNotSet(_)
         | GeneratedParserStep::MatchWildcard
-        | GeneratedParserStep::CallRule(_) => true,
+        | GeneratedParserStep::CallRule { .. } => true,
         GeneratedParserStep::Action { .. } => false,
         GeneratedParserStep::Decision { alts, .. } => alts.iter().any(|alt| steps_may_consume(alt)),
         GeneratedParserStep::StarLoop { body, .. } => steps_may_consume(body),
@@ -783,7 +786,10 @@ fn compile_generated_parser_transition(
             follow_state,
             ..
         } => Some((
-            Some(GeneratedParserStep::CallRule(*rule_index)),
+            Some(GeneratedParserStep::CallRule {
+                source_state,
+                rule_index: *rule_index,
+            }),
             *follow_state,
         )),
         Transition::Action {
@@ -946,9 +952,23 @@ fn render_generated_step(
             writeln!(out, "{pad}self.base.add_parse_child(&mut __ctx, __child);")
                 .expect("writing to a string cannot fail");
         }
-        GeneratedParserStep::CallRule(rule_index) => {
-            writeln!(out, "{pad}let __child = self.parse_rule({rule_index})?;")
+        GeneratedParserStep::CallRule {
+            source_state,
+            rule_index,
+        } => {
+            writeln!(
+                out,
+                "{pad}let __invoking_marker = self.base.push_invoking_state({source_state}isize);"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(out, "{pad}let __child = self.parse_rule({rule_index});")
                 .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}self.base.discard_invoking_state(__invoking_marker);"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(out, "{pad}let __child = __child?;").expect("writing to a string cannot fail");
             writeln!(out, "{pad}self.base.add_parse_child(&mut __ctx, __child);")
                 .expect("writing to a string cannot fail");
         }
@@ -1008,12 +1028,17 @@ fn render_generated_decision(
     writeln!(out, "{pad}let __prediction = {{").expect("writing to a string cannot fail");
     writeln!(
         out,
+        "{pad}    let __prediction_context = self.base.prediction_context(atn());"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
         "{pad}    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new(atn()));"
     )
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "{pad}    __simulator.adaptive_predict_stream_info_with_precedence({decision}, 0, self.base.input())"
+        "{pad}    __simulator.adaptive_predict_stream_info_with_context({decision}, 0, self.base.input(), &__prediction_context)"
     )
     .expect("writing to a string cannot fail");
     writeln!(
@@ -1063,12 +1088,17 @@ fn render_generated_star_loop(
     writeln!(out, "{pad}    let __prediction = {{").expect("writing to a string cannot fail");
     writeln!(
         out,
+        "{pad}        let __prediction_context = self.base.prediction_context(atn());"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
         "{pad}        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new(atn()));"
     )
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "{pad}        __simulator.adaptive_predict_stream_info_with_precedence({decision}, 0, self.base.input())"
+        "{pad}        __simulator.adaptive_predict_stream_info_with_context({decision}, 0, self.base.input(), &__prediction_context)"
     )
     .expect("writing to a string cannot fail");
     writeln!(
@@ -4497,7 +4527,7 @@ atn:
 
         let rendered = render_generated_rule_dispatch(&[Some(body)], &BTreeMap::new());
         assert!(rendered.contains("parse_generated_rule_0"));
-        assert!(rendered.contains("adaptive_predict_stream_info_with_precedence(0, 0"));
+        assert!(rendered.contains("adaptive_predict_stream_info_with_context(0, 0"));
         assert!(!rendered.contains("requires_full_context"));
     }
 
@@ -4521,7 +4551,7 @@ atn:
         assert!(rendered.contains("loop {"));
         assert!(rendered.contains("1 => {"));
         assert!(rendered.contains("2 => break,"));
-        assert!(rendered.contains("adaptive_predict_stream_info_with_precedence(0, 0"));
+        assert!(rendered.contains("adaptive_predict_stream_info_with_context(0, 0"));
     }
 
     #[test]
