@@ -435,6 +435,10 @@ enum GeneratedParserStep {
     MatchNotSet(Vec<(i32, i32)>),
     MatchWildcard,
     Precedence(i32),
+    Predicate {
+        rule_index: usize,
+        pred_index: usize,
+    },
     Action {
         source_state: usize,
         rule_index: usize,
@@ -457,6 +461,7 @@ enum GeneratedParserStep {
         enter_alt: usize,
         exit_alt: usize,
         track_alt_number: bool,
+        allow_semantic_context: bool,
         body: Vec<Self>,
     },
     LeftRecursiveLoop {
@@ -485,6 +490,7 @@ struct StarLoopRender<'a> {
     decision: usize,
     alts: (usize, usize),
     track_alt_number: bool,
+    allow_semantic_context: bool,
     body: &'a [GeneratedParserStep],
 }
 
@@ -502,6 +508,13 @@ struct GeneratedParserCompileContext<'a> {
     inline_action_states: &'a BTreeSet<usize>,
     action_states: &'a BTreeSet<usize>,
     predicate_coordinates: &'a BTreeSet<(usize, usize)>,
+    generated_predicate_coordinates: &'a BTreeSet<(usize, usize)>,
+}
+
+#[derive(Clone, Copy)]
+struct PredicateCoordinateSets<'a> {
+    all: &'a BTreeSet<(usize, usize)>,
+    generated: &'a BTreeSet<(usize, usize)>,
 }
 
 /// Compiles the parser ATN subset that is safe to emit as recursive-descent
@@ -513,7 +526,7 @@ fn parser_generated_rules(
     enabled_rules: &[bool],
     inline_action_states: &BTreeSet<usize>,
     action_states: &BTreeSet<usize>,
-    predicate_coordinates: &BTreeSet<(usize, usize)>,
+    predicate_coordinates: PredicateCoordinateSets<'_>,
     require_generated_callees: bool,
 ) -> io::Result<Vec<Option<GeneratedParserRule>>> {
     let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
@@ -525,7 +538,8 @@ fn parser_generated_rules(
         decision_by_state: &decision_by_state,
         inline_action_states,
         action_states,
-        predicate_coordinates,
+        predicate_coordinates: predicate_coordinates.all,
+        generated_predicate_coordinates: predicate_coordinates.generated,
     };
     let mut rules = (0..data.rule_names.len())
         .map(|rule_index| {
@@ -572,6 +586,7 @@ fn generated_steps_call_disabled_rule(steps: &[GeneratedParserStep], enabled: &[
         | GeneratedParserStep::MatchNotSet(_)
         | GeneratedParserStep::MatchWildcard
         | GeneratedParserStep::Precedence(_)
+        | GeneratedParserStep::Predicate { .. }
         | GeneratedParserStep::Action { .. } => false,
     })
 }
@@ -700,6 +715,7 @@ fn compile_generated_left_recursive_loop(
         context.inline_action_states,
         context.action_states,
         context.predicate_coordinates,
+        context.generated_predicate_coordinates,
     )?;
     let mut body = enter_step.into_iter().collect::<Vec<_>>();
     body.extend(compile_generated_parser_path(
@@ -719,6 +735,7 @@ fn compile_generated_left_recursive_loop(
         context.inline_action_states,
         context.action_states,
         context.predicate_coordinates,
+        context.generated_predicate_coordinates,
     )?;
     if exit_step.is_some() {
         return None;
@@ -770,6 +787,7 @@ fn compile_generated_parser_path(
             context.inline_action_states,
             context.action_states,
             context.predicate_coordinates,
+            context.generated_predicate_coordinates,
         )?;
         let mut steps = step.into_iter().collect::<Vec<_>>();
         steps.extend(compile_generated_parser_path(
@@ -818,6 +836,7 @@ fn compile_generated_parser_block_decision(
             context.inline_action_states,
             context.action_states,
             context.predicate_coordinates,
+            context.generated_predicate_coordinates,
         )?;
         let mut alt_visited = visited.clone();
         let mut alt_steps = step.into_iter().collect::<Vec<_>>();
@@ -834,7 +853,7 @@ fn compile_generated_parser_block_decision(
         state: state.state_number,
         decision,
         track_alt_number: state_tracks_alt_number(state),
-        allow_semantic_context: false,
+        allow_semantic_context: alts.iter().any(|alt| steps_contain_predicate(alt)),
         alts,
     }];
     steps.extend(compile_generated_parser_path(
@@ -872,6 +891,7 @@ fn compile_generated_parser_star_loop(
         context.inline_action_states,
         context.action_states,
         context.predicate_coordinates,
+        context.generated_predicate_coordinates,
     )?;
     let mut body_visited = BTreeSet::new();
     let mut body = enter_step.into_iter().collect::<Vec<_>>();
@@ -891,6 +911,7 @@ fn compile_generated_parser_star_loop(
         context.inline_action_states,
         context.action_states,
         context.predicate_coordinates,
+        context.generated_predicate_coordinates,
     )?;
     if exit_step.is_some() {
         return None;
@@ -902,6 +923,7 @@ fn compile_generated_parser_star_loop(
         enter_alt,
         exit_alt,
         track_alt_number: state_tracks_alt_number(state),
+        allow_semantic_context: steps_contain_predicate(&body),
         body,
     }];
     steps.extend(compile_generated_parser_path(
@@ -940,6 +962,7 @@ fn compile_generated_parser_plus_loop(
         context.inline_action_states,
         context.action_states,
         context.predicate_coordinates,
+        context.generated_predicate_coordinates,
     )?;
     let mut body_visited = BTreeSet::new();
     let mut body = enter_step.into_iter().collect::<Vec<_>>();
@@ -960,6 +983,7 @@ fn compile_generated_parser_plus_loop(
         context.inline_action_states,
         context.action_states,
         context.predicate_coordinates,
+        context.generated_predicate_coordinates,
     )?;
     if exit_step.is_some() {
         return None;
@@ -971,6 +995,7 @@ fn compile_generated_parser_plus_loop(
         enter_alt,
         exit_alt,
         track_alt_number: state_tracks_alt_number(state),
+        allow_semantic_context: steps_contain_predicate(&body),
         body,
     }];
     steps.extend(compile_generated_parser_path(
@@ -989,7 +1014,9 @@ fn steps_may_consume(steps: &[GeneratedParserStep]) -> bool {
         | GeneratedParserStep::MatchNotSet(_)
         | GeneratedParserStep::MatchWildcard
         | GeneratedParserStep::CallRule { .. } => true,
-        GeneratedParserStep::Action { .. } | GeneratedParserStep::Precedence(_) => false,
+        GeneratedParserStep::Action { .. }
+        | GeneratedParserStep::Precedence(_)
+        | GeneratedParserStep::Predicate { .. } => false,
         GeneratedParserStep::Decision { alts, .. } => alts.iter().any(|alt| steps_may_consume(alt)),
         GeneratedParserStep::StarLoop { body, .. }
         | GeneratedParserStep::LeftRecursiveLoop { body, .. } => steps_may_consume(body),
@@ -1009,8 +1036,15 @@ fn allow_semantic_context_in_decisions(steps: &mut [GeneratedParserStep]) {
                     allow_semantic_context_in_decisions(alt);
                 }
             }
-            GeneratedParserStep::StarLoop { body, .. }
-            | GeneratedParserStep::LeftRecursiveLoop { body, .. } => {
+            GeneratedParserStep::StarLoop {
+                allow_semantic_context,
+                body,
+                ..
+            } => {
+                *allow_semantic_context = true;
+                allow_semantic_context_in_decisions(body);
+            }
+            GeneratedParserStep::LeftRecursiveLoop { body, .. } => {
                 allow_semantic_context_in_decisions(body);
             }
             GeneratedParserStep::MatchToken(_)
@@ -1018,10 +1052,29 @@ fn allow_semantic_context_in_decisions(steps: &mut [GeneratedParserStep]) {
             | GeneratedParserStep::MatchNotSet(_)
             | GeneratedParserStep::MatchWildcard
             | GeneratedParserStep::Precedence(_)
+            | GeneratedParserStep::Predicate { .. }
             | GeneratedParserStep::Action { .. }
             | GeneratedParserStep::CallRule { .. } => {}
         }
     }
+}
+
+fn steps_contain_predicate(steps: &[GeneratedParserStep]) -> bool {
+    steps.iter().any(|step| match step {
+        GeneratedParserStep::Predicate { .. } => true,
+        GeneratedParserStep::Decision { alts, .. } => {
+            alts.iter().any(|alt| steps_contain_predicate(alt))
+        }
+        GeneratedParserStep::StarLoop { body, .. }
+        | GeneratedParserStep::LeftRecursiveLoop { body, .. } => steps_contain_predicate(body),
+        GeneratedParserStep::MatchToken(_)
+        | GeneratedParserStep::MatchSet(_)
+        | GeneratedParserStep::MatchNotSet(_)
+        | GeneratedParserStep::MatchWildcard
+        | GeneratedParserStep::Precedence(_)
+        | GeneratedParserStep::Action { .. }
+        | GeneratedParserStep::CallRule { .. } => false,
+    })
 }
 
 fn compile_generated_parser_transition(
@@ -1030,6 +1083,7 @@ fn compile_generated_parser_transition(
     inline_action_states: &BTreeSet<usize>,
     action_states: &BTreeSet<usize>,
     predicate_coordinates: &BTreeSet<(usize, usize)>,
+    generated_predicate_coordinates: &BTreeSet<(usize, usize)>,
 ) -> Option<(Option<GeneratedParserStep>, usize)> {
     match transition {
         Transition::Epsilon { target } => Some((None, *target)),
@@ -1082,6 +1136,18 @@ fn compile_generated_parser_transition(
             action_index: None,
             ..
         } if !action_states.contains(&source_state) => Some((None, *target)),
+        Transition::Predicate {
+            target,
+            rule_index,
+            pred_index,
+            ..
+        } if generated_predicate_coordinates.contains(&(*rule_index, *pred_index)) => Some((
+            Some(GeneratedParserStep::Predicate {
+                rule_index: *rule_index,
+                pred_index: *pred_index,
+            }),
+            *target,
+        )),
         Transition::Predicate {
             rule_index,
             pred_index,
@@ -1448,6 +1514,27 @@ fn render_generated_step(
             .expect("writing to a string cannot fail");
             writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
         }
+        GeneratedParserStep::Predicate {
+            rule_index,
+            pred_index,
+        } => {
+            writeln!(
+                out,
+                "{pad}if !self.base.parser_semantic_predicate_matches(PARSER_PREDICATES, {rule_index}, {pred_index}) {{"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}    let __message = self.base.parser_semantic_predicate_failure_message({rule_index}, {pred_index}, PARSER_PREDICATES).unwrap_or(\"semantic predicate\");"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}    return Err(self.base.failed_predicate_error(__message));"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
+        }
         GeneratedParserStep::CallRule {
             source_state,
             rule_index,
@@ -1517,6 +1604,7 @@ fn render_generated_step(
             enter_alt,
             exit_alt,
             track_alt_number,
+            allow_semantic_context,
             body,
         } => {
             render_generated_star_loop(
@@ -1526,6 +1614,7 @@ fn render_generated_step(
                     decision: *decision,
                     alts: (*enter_alt, *exit_alt),
                     track_alt_number: *track_alt_number,
+                    allow_semantic_context: *allow_semantic_context,
                     body,
                 },
                 indent,
@@ -1673,6 +1762,7 @@ fn render_generated_star_loop(
         decision,
         alts,
         track_alt_number,
+        allow_semantic_context,
         body,
     } = loop_info;
     let (enter_alt, exit_alt) = alts;
@@ -1705,14 +1795,16 @@ fn render_generated_star_loop(
         "{pad}    }}.map_err(|_| self.base.no_viable_alternative_error(__decision_start))?;"
     )
     .expect("writing to a string cannot fail");
-    writeln!(out, "{pad}    if __prediction.has_semantic_context {{")
+    if !allow_semantic_context {
+        writeln!(out, "{pad}    if __prediction.has_semantic_context {{")
+            .expect("writing to a string cannot fail");
+        writeln!(
+            out,
+            "{pad}        return Err(self.base.no_viable_alternative_error(__decision_start));"
+        )
         .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "{pad}        return Err(self.base.no_viable_alternative_error(__decision_start));"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
+        writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
+    }
     writeln!(out, "{pad}    match __prediction.alt {{").expect("writing to a string cannot fail");
     writeln!(out, "{pad}        {enter_alt} => {{").expect("writing to a string cannot fail");
     render_generated_alt_number_assignment(
@@ -1998,6 +2090,12 @@ fn render_parser(
         .map_or_else(|| Ok(Vec::new()), |_| lexer_predicate_transitions(data))?
         .into_iter()
         .collect::<BTreeSet<_>>();
+    let generated_predicate_coordinates = predicates
+        .iter()
+        .filter_map(|(coordinate, predicate)| {
+            can_generate_parser_predicate(predicate).then_some(*coordinate)
+        })
+        .collect::<BTreeSet<_>>();
     let has_init_actions = init_actions.iter().any(Option::is_some);
     let has_action_dispatch = !actions.is_empty() || has_init_actions;
     let has_predicate_dispatch = !predicates.is_empty();
@@ -2009,7 +2107,10 @@ fn render_parser(
         &generated_rule_enabled,
         &inline_action_states,
         &action_states,
-        &predicate_coordinates,
+        PredicateCoordinateSets {
+            all: &predicate_coordinates,
+            generated: &generated_predicate_coordinates,
+        },
         has_action_dispatch || has_predicate_dispatch || has_return_actions,
     )?;
     let generated_rule_dispatch = render_generated_rule_dispatch(
@@ -2037,6 +2138,8 @@ fn render_parser(
         has_return_actions,
     )?;
     let after_action_dispatch = render_parser_after_action_dispatch(&after_actions);
+    let parser_predicate_constant =
+        render_parser_predicate_constant(&predicates, data, &int_members)?;
     let adaptive_direct_allowed = !has_action_dispatch
         && !track_alt_numbers
         && !has_predicate_dispatch
@@ -2068,6 +2171,7 @@ use std::sync::OnceLock;
 {token_constants}
 {rule_constants}
 {metadata}
+{parser_predicate_constant}
 
 static ATN_CELL: OnceLock<Atn> = OnceLock::new();
 
@@ -2340,6 +2444,19 @@ enum PredicateTemplate {
         offset: isize,
         token_name: String,
     },
+}
+
+const fn can_generate_parser_predicate(predicate: &PredicateTemplate) -> bool {
+    matches!(
+        predicate,
+        PredicateTemplate::True
+            | PredicateTemplate::False
+            | PredicateTemplate::FalseWithMessage { .. }
+            | PredicateTemplate::Invoke { .. }
+            | PredicateTemplate::MemberModuloEquals { .. }
+            | PredicateTemplate::LookaheadTextEquals { .. }
+            | PredicateTemplate::LookaheadNotEquals { .. }
+    )
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -4985,6 +5102,18 @@ fn render_usize_array(values: &[usize]) -> String {
     format!("[{items}]")
 }
 
+/// Renders parser predicate metadata shared by generated predicate checks.
+fn render_parser_predicate_constant(
+    predicates: &[((usize, usize), PredicateTemplate)],
+    data: &InterpData,
+    members: &[IntMemberTemplate],
+) -> io::Result<String> {
+    let predicates = render_parser_predicate_array(predicates, data, members)?;
+    Ok(format!(
+        "#[allow(dead_code)]\nconst PARSER_PREDICATES: &[(usize, usize, antlr4_runtime::ParserPredicate)] = &{predicates};\n"
+    ))
+}
+
 /// Renders parser predicate metadata as an inline slice consumed by the runtime
 /// parser interpreter.
 fn render_parser_predicate_array(
@@ -5242,12 +5371,14 @@ atn:
         let decision_by_state = decision_by_state(atn);
         let action_states = BTreeSet::new();
         let predicate_coordinates = BTreeSet::new();
+        let generated_predicate_coordinates = BTreeSet::new();
         let context = GeneratedParserCompileContext {
             atn,
             decision_by_state: &decision_by_state,
             inline_action_states,
             action_states: &action_states,
             predicate_coordinates: &predicate_coordinates,
+            generated_predicate_coordinates: &generated_predicate_coordinates,
         };
         compile_generated_parser_rule(&context, rule_index)
     }
@@ -5320,6 +5451,7 @@ atn:
                 enter_alt: 1,
                 exit_alt: 2,
                 track_alt_number: true,
+                allow_semantic_context: false,
                 body: vec![GeneratedParserStep::MatchToken(1)],
             }]
         );
@@ -5354,6 +5486,7 @@ atn:
                     enter_alt: 1,
                     exit_alt: 2,
                     track_alt_number: false,
+                    allow_semantic_context: false,
                     body: vec![GeneratedParserStep::MatchToken(1)],
                 }
             ]
@@ -5386,6 +5519,7 @@ atn:
                     enter_alt: 1,
                     exit_alt: 2,
                     track_alt_number: false,
+                    allow_semantic_context: false,
                     body: vec![body_decision],
                 }
             ]
@@ -5491,6 +5625,7 @@ atn:
                 &range,
                 &BTreeSet::new(),
                 &BTreeSet::new(),
+                &BTreeSet::new(),
                 &BTreeSet::new()
             ),
             Some((Some(GeneratedParserStep::MatchSet(vec![(2, 4)])), 7))
@@ -5504,6 +5639,7 @@ atn:
             compile_generated_parser_transition(
                 3,
                 &set_transition,
+                &BTreeSet::new(),
                 &BTreeSet::new(),
                 &BTreeSet::new(),
                 &BTreeSet::new()
@@ -5526,6 +5662,7 @@ atn:
                 &action,
                 &BTreeSet::new(),
                 &BTreeSet::new(),
+                &BTreeSet::new(),
                 &BTreeSet::new()
             ),
             None
@@ -5538,6 +5675,7 @@ atn:
                 4,
                 &action,
                 &inline_actions,
+                &BTreeSet::new(),
                 &BTreeSet::new(),
                 &BTreeSet::new()
             ),
@@ -5565,6 +5703,7 @@ atn:
                 &action,
                 &BTreeSet::new(),
                 &BTreeSet::new(),
+                &BTreeSet::new(),
                 &BTreeSet::new()
             ),
             Some((None, 8))
@@ -5587,6 +5726,7 @@ atn:
                 &action,
                 &BTreeSet::new(),
                 &action_states,
+                &BTreeSet::new(),
                 &BTreeSet::new()
             ),
             None
@@ -5608,6 +5748,7 @@ atn:
                 &predicate,
                 &BTreeSet::new(),
                 &BTreeSet::new(),
+                &BTreeSet::new(),
                 &BTreeSet::new()
             ),
             Some((None, 8))
@@ -5615,7 +5756,38 @@ atn:
     }
 
     #[test]
-    fn rejects_known_parser_predicate_transitions() {
+    fn compiles_generated_parser_predicate_transitions() {
+        let predicate = Transition::Predicate {
+            target: 8,
+            rule_index: 2,
+            pred_index: 1,
+            context_dependent: false,
+        };
+        let mut predicates = BTreeSet::new();
+        predicates.insert((2, 1));
+        let generated_predicates = predicates.clone();
+
+        assert_eq!(
+            compile_generated_parser_transition(
+                4,
+                &predicate,
+                &BTreeSet::new(),
+                &BTreeSet::new(),
+                &predicates,
+                &generated_predicates
+            ),
+            Some((
+                Some(GeneratedParserStep::Predicate {
+                    rule_index: 2,
+                    pred_index: 1,
+                }),
+                8
+            ))
+        );
+    }
+
+    #[test]
+    fn rejects_known_parser_predicates_without_generated_metadata() {
         let predicate = Transition::Predicate {
             target: 8,
             rule_index: 2,
@@ -5631,7 +5803,8 @@ atn:
                 &predicate,
                 &BTreeSet::new(),
                 &BTreeSet::new(),
-                &predicates
+                &predicates,
+                &BTreeSet::new()
             ),
             None
         );

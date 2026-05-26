@@ -2293,6 +2293,37 @@ where
         precedence >= self.precedence_stack.last().copied().unwrap_or_default()
     }
 
+    /// Evaluates a generated parser semantic predicate at the current input
+    /// position.
+    pub fn parser_semantic_predicate_matches(
+        &mut self,
+        predicates: &[(usize, usize, ParserPredicate)],
+        rule_index: usize,
+        pred_index: usize,
+    ) -> bool {
+        let index = self.input.index();
+        let member_values = self.int_members.clone();
+        self.parser_predicate_matches(PredicateEval {
+            index,
+            rule_index,
+            pred_index,
+            predicates,
+            local_int_arg: None,
+            member_values: &member_values,
+        })
+    }
+
+    /// Returns a generated fail-option message for a parser semantic
+    /// predicate coordinate.
+    pub fn parser_semantic_predicate_failure_message(
+        &self,
+        rule_index: usize,
+        pred_index: usize,
+        predicates: &[(usize, usize, ParserPredicate)],
+    ) -> Option<&'static str> {
+        self.parser_predicate_failure_message(rule_index, pred_index, predicates)
+    }
+
     /// Matches any non-EOF token.
     pub fn match_wildcard(&mut self) -> Result<ParseTree, AntlrError> {
         let current = self
