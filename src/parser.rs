@@ -2888,6 +2888,18 @@ where
         rule_index: usize,
         options: ParserRuntimeOptions<'_>,
     ) -> Result<(ParseTree, Vec<ParserAction>), AntlrError> {
+        self.parse_atn_rule_with_runtime_options_and_precedence(atn, rule_index, 0, options)
+    }
+
+    /// Parses a generated rule with action replay, parser predicate support,
+    /// and an initial left-recursive precedence threshold.
+    pub fn parse_atn_rule_with_runtime_options_and_precedence(
+        &mut self,
+        atn: &Atn,
+        rule_index: usize,
+        precedence: i32,
+        options: ParserRuntimeOptions<'_>,
+    ) -> Result<(ParseTree, Vec<ParserAction>), AntlrError> {
         let ParserRuntimeOptions {
             init_action_rules,
             track_alt_numbers,
@@ -2940,7 +2952,7 @@ where
                 rule_alt_number: 0,
                 track_alt_numbers,
                 consumed_eof: false,
-                precedence: 0,
+                precedence,
                 depth: 0,
                 recovery_symbols: BTreeSet::new(),
                 recovery_state: None,

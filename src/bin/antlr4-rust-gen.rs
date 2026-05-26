@@ -1541,7 +1541,7 @@ fn render_parser_parse_rule_fallback(
     if has_predicate_dispatch || has_return_actions {
         writeln!(
             out,
-            "let (tree, actions) = self.base.parse_atn_rule_with_runtime_options(atn(), rule_index, antlr4_runtime::ParserRuntimeOptions {{ init_action_rules: &{}, track_alt_numbers: {track_alt_numbers}, predicates: &{}, rule_args: &{}, member_actions: &{}, return_actions: &{} }})?;",
+            "let (tree, actions) = self.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence, antlr4_runtime::ParserRuntimeOptions {{ init_action_rules: &{}, track_alt_numbers: {track_alt_numbers}, predicates: &{}, rule_args: &{}, member_actions: &{}, return_actions: &{} }})?;",
             render_usize_array(init_action_rules),
             render_parser_predicate_array(predicates, data, int_members)?,
             render_parser_rule_arg_array(rule_args),
@@ -1552,25 +1552,27 @@ fn render_parser_parse_rule_fallback(
     } else if track_alt_numbers {
         writeln!(
             out,
-            "let (tree, actions) = self.base.parse_atn_rule_with_action_options(atn(), rule_index, &{}, true)?;",
+            "let (tree, actions) = self.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence, antlr4_runtime::ParserRuntimeOptions {{ init_action_rules: &{}, track_alt_numbers: true, ..antlr4_runtime::ParserRuntimeOptions::default() }})?;",
             render_usize_array(init_action_rules)
         )
         .expect("writing to a string cannot fail");
     } else if !init_action_rules.is_empty() {
         writeln!(
             out,
-            "let (tree, actions) = self.base.parse_atn_rule_with_action_inits(atn(), rule_index, &{})?;",
+            "let (tree, actions) = self.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence, antlr4_runtime::ParserRuntimeOptions {{ init_action_rules: &{}, ..antlr4_runtime::ParserRuntimeOptions::default() }})?;",
             render_usize_array(init_action_rules)
         )
         .expect("writing to a string cannot fail");
     } else if has_action_dispatch {
         writeln!(
             out,
-            "let (tree, actions) = self.base.parse_atn_rule_with_actions(atn(), rule_index)?;"
+            "let (tree, actions) = self.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence, antlr4_runtime::ParserRuntimeOptions::default())?;"
         )
         .expect("writing to a string cannot fail");
     } else {
-        return Ok("self.base.parse_atn_rule(atn(), rule_index)".to_owned());
+        return Ok(
+            "self.base.parse_atn_rule_with_precedence(atn(), rule_index, precedence)".to_owned(),
+        );
     }
 
     if has_action_dispatch {
@@ -1804,9 +1806,7 @@ where
 
     #[allow(dead_code)]
     fn parse_interpreted_rule_precedence(&mut self, rule_index: usize, precedence: i32) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{
-        if precedence != 0 {{
-            self.base.parse_atn_rule_with_precedence(atn(), rule_index, precedence)
-        }} else if {adaptive_direct_allowed} && std::env::var_os("ANTLR4_RUST_ADAPTIVE_DIRECT").is_some() {{
+        if precedence == 0 && {adaptive_direct_allowed} && std::env::var_os("ANTLR4_RUST_ADAPTIVE_DIRECT").is_some() {{
             let simulator = self
                 .simulator
                 .get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new(atn()));
@@ -5185,7 +5185,9 @@ atn:
         )
         .expect("fallback should render");
 
-        assert!(fallback.contains("parse_atn_rule_with_actions(atn(), rule_index)?"));
+        assert!(fallback.contains(
+            "parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence"
+        ));
         assert!(fallback.contains("for action in actions { self.run_action(action, &tree); }"));
         assert!(fallback.contains("Ok(tree)"));
     }
