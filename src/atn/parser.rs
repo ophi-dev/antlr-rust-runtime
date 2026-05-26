@@ -638,7 +638,7 @@ impl<'a> ParserAtnSimulator<'a> {
                 continue;
             };
             if state.is_rule_stop() {
-                self.closure_at_rule_stop(config, configs, &mut stack, merge_cache);
+                self.closure_at_rule_stop(config, configs, merge_cache, precedence);
                 continue;
             }
             let epsilon_only = !state.transitions.is_empty()
@@ -738,8 +738,8 @@ impl<'a> ParserAtnSimulator<'a> {
         &self,
         config: AtnConfig,
         configs: &mut AtnConfigSet,
-        stack: &mut Vec<AtnConfig>,
         merge_cache: &mut PredictionContextMergeCache,
+        precedence: i32,
     ) {
         if config.context.is_empty() {
             configs.add_with_merge_cache(config, Some(merge_cache));
@@ -765,7 +765,7 @@ impl<'a> ParserAtnSimulator<'a> {
                 reaches_into_outer_context: config.reaches_into_outer_context,
                 precedence_filter_suppressed: config.precedence_filter_suppressed,
             };
-            stack.push(next);
+            self.closure(next, configs, merge_cache, precedence);
         }
     }
 

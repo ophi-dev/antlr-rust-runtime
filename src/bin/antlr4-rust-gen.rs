@@ -486,7 +486,6 @@ struct StarLoopRender<'a> {
 
 #[derive(Clone, Copy)]
 struct LeftRecursiveLoopRender<'a> {
-    state: usize,
     decision: usize,
     alts: (usize, usize),
     rule: (usize, usize),
@@ -1424,18 +1423,17 @@ fn render_generated_step(
             );
         }
         GeneratedParserStep::LeftRecursiveLoop {
-            state,
             decision,
             enter_alt,
             exit_alt,
             rule_index,
             entry_state,
             body,
+            ..
         } => {
             render_generated_left_recursive_loop(
                 out,
                 LeftRecursiveLoopRender {
-                    state: *state,
                     decision: *decision,
                     alts: (*enter_alt, *exit_alt),
                     rule: (*rule_index, *entry_state),
@@ -1461,7 +1459,9 @@ fn render_generated_decision(
         alts,
     } = decision_info;
     let pad = "    ".repeat(indent);
-    render_generated_sync_decision(out, &pad, state);
+    if !allow_semantic_context {
+        render_generated_sync_decision(out, &pad, state);
+    }
     writeln!(
         out,
         "{pad}let __decision_start = antlr4_runtime::IntStream::index(self.base.input());"
@@ -1596,7 +1596,6 @@ fn render_generated_left_recursive_loop(
     inline_action_statements: &BTreeMap<usize, String>,
 ) {
     let LeftRecursiveLoopRender {
-        state,
         decision,
         alts,
         rule,
@@ -1606,7 +1605,6 @@ fn render_generated_left_recursive_loop(
     let (rule_index, entry_state) = rule;
     let pad = "    ".repeat(indent);
     writeln!(out, "{pad}loop {{").expect("writing to a string cannot fail");
-    render_generated_sync_decision(out, &format!("{pad}    "), state);
     writeln!(
         out,
         "{pad}    let __decision_start = antlr4_runtime::IntStream::index(self.base.input());"
