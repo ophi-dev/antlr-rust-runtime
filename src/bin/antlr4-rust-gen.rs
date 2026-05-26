@@ -795,9 +795,8 @@ fn compile_generated_parser_transition(
             }),
             *target,
         )),
-        Transition::Predicate { .. }
-        | Transition::Action { .. }
-        | Transition::Precedence { .. } => None,
+        Transition::Predicate { target, .. } => Some((None, *target)),
+        Transition::Action { .. } | Transition::Precedence { .. } => None,
     }
 }
 
@@ -4618,6 +4617,21 @@ atn:
                 }),
                 8
             ))
+        );
+    }
+
+    #[test]
+    fn compiles_parser_predicates_as_viable_when_no_metadata_is_active() {
+        let predicate = Transition::Predicate {
+            target: 8,
+            rule_index: 2,
+            pred_index: 1,
+            context_dependent: false,
+        };
+
+        assert_eq!(
+            compile_generated_parser_transition(4, &predicate, &BTreeSet::new()),
+            Some((None, 8))
         );
     }
 
