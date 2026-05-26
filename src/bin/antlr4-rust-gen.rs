@@ -573,6 +573,14 @@ fn compile_generated_parser_decision_state(
             decision_by_state,
             visited,
         ),
+        AtnStateKind::PlusLoopBack => compile_generated_parser_plus_loop(
+            atn,
+            state,
+            decision,
+            stop_state,
+            decision_by_state,
+            visited,
+        ),
         _ => None,
     }
 }
@@ -620,14 +628,72 @@ fn compile_generated_parser_star_loop(
     decision_by_state: &[Option<usize>],
     visited: &mut BTreeSet<usize>,
 ) -> Option<Vec<GeneratedParserStep>> {
-    let loop_back_state = state.loop_back_state?;
     let mut enter = None;
     let mut exit = None;
     for (index, transition) in state.transitions.iter().enumerate() {
         let alt = index + 1;
         let target = transition.target();
-        let target_kind = atn.state(target)?.kind;
+        let target_state = atn.state(target)?;
+        let target_kind = target_state.kind;
         if target_kind == AtnStateKind::LoopEnd {
+            exit = Some((alt, transition, target_state.loop_back_state?));
+        } else {
+            enter = Some((alt, transition));
+        }
+    }
+
+    let (enter_alt, enter_transition) = enter?;
+    let (exit_alt, exit_transition, loop_back_state) = exit?;
+    let (enter_step, enter_target) = compile_generated_parser_transition(enter_transition)?;
+    let mut body_visited = BTreeSet::new();
+    let mut body = enter_step.into_iter().collect::<Vec<_>>();
+    body.extend(compile_generated_parser_path(
+        atn,
+        enter_target,
+        loop_back_state,
+        decision_by_state,
+        &mut body_visited,
+    )?);
+    if !steps_may_consume(&body) {
+        return None;
+    }
+
+    let (exit_step, exit_target) = compile_generated_parser_transition(exit_transition)?;
+    if exit_step.is_some() {
+        return None;
+    }
+
+    let mut steps = vec![GeneratedParserStep::StarLoop {
+        decision,
+        enter_alt,
+        exit_alt,
+        body,
+    }];
+    steps.extend(compile_generated_parser_path(
+        atn,
+        exit_target,
+        stop_state,
+        decision_by_state,
+        visited,
+    )?);
+    Some(steps)
+}
+
+fn compile_generated_parser_plus_loop(
+    atn: &Atn,
+    state: &antlr4_runtime::atn::AtnState,
+    decision: usize,
+    stop_state: usize,
+    decision_by_state: &[Option<usize>],
+    visited: &mut BTreeSet<usize>,
+) -> Option<Vec<GeneratedParserStep>> {
+    let mut enter = None;
+    let mut exit = None;
+    for (index, transition) in state.transitions.iter().enumerate() {
+        let alt = index + 1;
+        let target = transition.target();
+        let target_state = atn.state(target)?;
+        if target_state.kind == AtnStateKind::LoopEnd {
             exit = Some((alt, transition));
         } else {
             enter = Some((alt, transition));
@@ -636,12 +702,12 @@ fn compile_generated_parser_star_loop(
 
     let (enter_alt, enter_transition) = enter?;
     let (enter_step, enter_target) = compile_generated_parser_transition(enter_transition)?;
-    let mut body_visited = visited.clone();
+    let mut body_visited = BTreeSet::new();
     let mut body = enter_step.into_iter().collect::<Vec<_>>();
     body.extend(compile_generated_parser_path(
         atn,
         enter_target,
-        loop_back_state,
+        state.state_number,
         decision_by_state,
         &mut body_visited,
     )?);
@@ -4333,6 +4399,26 @@ atn:
     }
 
     #[test]
+    fn compiles_plus_loop_back_with_adaptive_prediction() {
+        let atn = plus_loop_atn();
+        let body = compile_generated_parser_rule(&atn, 0, &decision_by_state(&atn))
+            .expect("plus loop rule should compile");
+
+        assert_eq!(
+            body.steps,
+            [
+                GeneratedParserStep::MatchToken(1),
+                GeneratedParserStep::StarLoop {
+                    decision: 0,
+                    enter_alt: 1,
+                    exit_alt: 2,
+                    body: vec![GeneratedParserStep::MatchToken(1)],
+                }
+            ]
+        );
+    }
+
+    #[test]
     fn compiles_token_set_transitions() {
         let range = Transition::Range {
             target: 7,
@@ -4585,11 +4671,11 @@ continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#,
     fn star_loop_atn() -> Atn {
         let mut atn = Atn::new(AtnType::Parser, 2);
         atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
-        let mut loop_entry = AtnState::new(1, AtnStateKind::StarLoopEntry).with_rule_index(0);
-        loop_entry.loop_back_state = Some(4);
-        atn.add_state(loop_entry);
+        atn.add_state(AtnState::new(1, AtnStateKind::StarLoopEntry).with_rule_index(0));
         atn.add_state(AtnState::new(2, AtnStateKind::Basic).with_rule_index(0));
-        atn.add_state(AtnState::new(3, AtnStateKind::LoopEnd).with_rule_index(0));
+        let mut loop_end = AtnState::new(3, AtnStateKind::LoopEnd).with_rule_index(0);
+        loop_end.loop_back_state = Some(4);
+        atn.add_state(loop_end);
         atn.add_state(AtnState::new(4, AtnStateKind::StarLoopBack).with_rule_index(0));
         atn.add_state(AtnState::new(5, AtnStateKind::RuleStop).with_rule_index(0));
         atn.state_mut(0)
@@ -4616,6 +4702,49 @@ continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#,
         atn.add_decision_state(1);
         atn.set_rule_to_start_state(vec![0]);
         atn.set_rule_to_stop_state(vec![5]);
+        atn
+    }
+
+    fn plus_loop_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 2);
+        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
+        let mut plus_start = AtnState::new(1, AtnStateKind::PlusBlockStart).with_rule_index(0);
+        plus_start.end_state = Some(3);
+        atn.add_state(plus_start);
+        atn.add_state(AtnState::new(2, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(3, AtnStateKind::BlockEnd).with_rule_index(0));
+        atn.add_state(AtnState::new(4, AtnStateKind::PlusLoopBack).with_rule_index(0));
+        let mut loop_end = AtnState::new(5, AtnStateKind::LoopEnd).with_rule_index(0);
+        loop_end.loop_back_state = Some(4);
+        atn.add_state(loop_end);
+        atn.add_state(AtnState::new(6, AtnStateKind::RuleStop).with_rule_index(0));
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Epsilon { target: 1 });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Epsilon { target: 2 });
+        atn.state_mut(2)
+            .expect("state 2")
+            .add_transition(Transition::Atom {
+                target: 3,
+                label: 1,
+            });
+        atn.state_mut(3)
+            .expect("state 3")
+            .add_transition(Transition::Epsilon { target: 4 });
+        atn.state_mut(4)
+            .expect("state 4")
+            .add_transition(Transition::Epsilon { target: 1 });
+        atn.state_mut(4)
+            .expect("state 4")
+            .add_transition(Transition::Epsilon { target: 5 });
+        atn.state_mut(5)
+            .expect("state 5")
+            .add_transition(Transition::Epsilon { target: 6 });
+        atn.add_decision_state(4);
+        atn.set_rule_to_start_state(vec![0]);
+        atn.set_rule_to_stop_state(vec![6]);
         atn
     }
 }
