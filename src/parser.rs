@@ -2218,6 +2218,20 @@ where
         self.rule_node(context)
     }
 
+    /// Finishes a generated left-recursive parser rule and returns its parse-tree node.
+    pub fn finish_recursion_rule(
+        &mut self,
+        mut context: ParserRuleContext,
+        consumed_eof: bool,
+    ) -> ParseTree {
+        let stop_index = self.rule_stop_token_index(self.input.index(), consumed_eof);
+        if let Some(token) = stop_index.and_then(|index| self.token_at(index)) {
+            context.set_stop(token);
+        }
+        self.unroll_recursion_context();
+        self.rule_node(context)
+    }
+
     /// Enters a generated left-recursive rule at `precedence`.
     pub fn enter_recursion_rule(
         &mut self,
@@ -2237,6 +2251,33 @@ where
     ) -> ParserRuleContext {
         self.set_state(state);
         ParserRuleContext::new(rule_index, state)
+    }
+
+    /// Wraps the previous left-recursive context before parsing the next
+    /// recursive operator alternative.
+    pub fn push_new_recursion_context_with_previous(
+        &mut self,
+        state: isize,
+        rule_index: usize,
+        current: &mut ParserRuleContext,
+    ) {
+        self.set_state(state);
+        if let Some(stop) = self
+            .rule_stop_token_index(self.input.index(), false)
+            .and_then(|index| self.token_at(index))
+        {
+            current.set_stop(stop);
+        }
+        let invoking_state = current.invoking_state();
+        let start = current.start().cloned();
+        let mut replacement = ParserRuleContext::new(rule_index, invoking_state);
+        if let Some(start) = start {
+            replacement.set_start(start);
+        }
+        let previous = std::mem::replace(current, replacement);
+        if self.build_parse_trees {
+            current.add_child(self.rule_node(previous));
+        }
     }
 
     /// Leaves a generated left-recursive rule.
@@ -2371,6 +2412,17 @@ where
         atn: &Atn,
         rule_index: usize,
     ) -> Result<ParseTree, AntlrError> {
+        self.parse_atn_rule_with_precedence(atn, rule_index, 0)
+    }
+
+    /// Parses a generated rule by interpreting the parser ATN with an initial
+    /// left-recursive precedence threshold.
+    pub fn parse_atn_rule_with_precedence(
+        &mut self,
+        atn: &Atn,
+        rule_index: usize,
+        precedence: i32,
+    ) -> Result<ParseTree, AntlrError> {
         let start_state = atn
             .rule_to_start_state()
             .get(rule_index)
@@ -2392,7 +2444,8 @@ where
         self.reset_per_parse_caches();
         self.fast_recovery_enabled = false;
         self.fast_token_nodes_enabled = false;
-        let first_pass = self.fast_recognize_top(atn, start_state, stop_state, start_index);
+        let first_pass =
+            self.fast_recognize_top(atn, start_state, stop_state, start_index, precedence);
         self.fast_token_nodes_enabled = true;
         self.fast_recovery_enabled = true;
         let needs_tree_retry = matches!(
@@ -2417,7 +2470,8 @@ where
         };
         let (outcome, _expected) = if needs_retry {
             self.fast_first_set_prefilter = false;
-            let retry = self.fast_recognize_top(atn, start_state, stop_state, start_index);
+            let retry =
+                self.fast_recognize_top(atn, start_state, stop_state, start_index, precedence);
             self.fast_first_set_prefilter = true;
             let selected = if needs_tree_retry {
                 match retry {
@@ -2505,6 +2559,7 @@ where
         start_state: usize,
         stop_state: usize,
         start_index: usize,
+        precedence: i32,
     ) -> Result<(FastRecognizeOutcome, ExpectedTokens), ExpectedTokens> {
         // `input.size()` is intentionally only the currently buffered token
         // count here. Do not restore an up-front fill just to size this map:
@@ -2527,7 +2582,7 @@ where
                 index: start_index,
                 rule_start_index: start_index,
                 decision_start_index: None,
-                precedence: 0,
+                precedence,
                 depth: 0,
                 recovery_symbols: empty_recovery,
                 recovery_state: None,
