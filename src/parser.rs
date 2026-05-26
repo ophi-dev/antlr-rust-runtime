@@ -3259,8 +3259,9 @@ where
         // collapses many recursive calls (and their memo lookups, vec
         // allocations, and visit-set churn) into a single function frame.
         // The loop exits as soon as we hit the original state's logic
-        // (multi-alt, decision, rule call, atom/range/set, precedence) so
-        // existing fanout, recovery, and memoization still apply unchanged.
+        // (multi-alt, decision, rule call, unmatched atom/range/set, gated
+        // precedence) so existing fanout, recovery, and memoization still
+        // apply unchanged.
         //
         // The inline case also handles single-atom-match states on the
         // happy-pass path: when the lone consuming transition matches the
@@ -3300,7 +3301,21 @@ where
             {
                 match &state.transitions[0] {
                     Transition::Epsilon { target }
+                    | Transition::Predicate { target, .. }
+                    | Transition::Action { target, .. }
                         if left_recursive_boundary(atn, state, *target).is_none() =>
+                    {
+                        #[cfg(feature = "perf-counters")]
+                        perf_counters::inc(&perf_counters::EPSILON_TRANSITIONS, 1);
+                        state_number = *target;
+                        depth += 1;
+                        continue;
+                    }
+                    Transition::Precedence {
+                        target,
+                        precedence: transition_precedence,
+                    } if *transition_precedence >= precedence
+                        && left_recursive_boundary(atn, state, *target).is_none() =>
                     {
                         #[cfg(feature = "perf-counters")]
                         perf_counters::inc(&perf_counters::EPSILON_TRANSITIONS, 1);
