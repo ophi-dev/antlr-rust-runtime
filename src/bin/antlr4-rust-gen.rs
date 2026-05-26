@@ -452,17 +452,20 @@ enum GeneratedParserStep {
 /// covered.
 fn parser_generated_rules(
     data: &InterpData,
-    enabled: bool,
+    enabled_rules: &[bool],
 ) -> io::Result<Vec<Option<GeneratedParserRule>>> {
-    if !enabled {
-        return Ok(vec![None; data.rule_names.len()]);
-    }
     let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
         .deserialize()
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     let decision_by_state = decision_by_state(&atn);
     Ok((0..data.rule_names.len())
-        .map(|rule_index| compile_generated_parser_rule(&atn, rule_index, &decision_by_state))
+        .map(|rule_index| {
+            if enabled_rules.get(rule_index).copied().unwrap_or_default() {
+                compile_generated_parser_rule(&atn, rule_index, &decision_by_state)
+            } else {
+                None
+            }
+        })
         .collect())
 }
 
@@ -1046,6 +1049,73 @@ fn render_generated_star_loop(
     writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
 }
 
+#[allow(clippy::fn_params_excessive_bools, clippy::too_many_arguments)]
+fn render_parser_parse_rule_fallback(
+    init_action_rules: &[usize],
+    track_alt_numbers: bool,
+    predicates: &[((usize, usize), PredicateTemplate)],
+    data: &InterpData,
+    int_members: &[IntMemberTemplate],
+    rule_args: &[(usize, usize, RuleArgTemplate)],
+    member_actions: &[(usize, usize, i64)],
+    return_actions: &[(usize, String, i64)],
+    has_action_dispatch: bool,
+    has_predicate_dispatch: bool,
+    has_return_actions: bool,
+) -> io::Result<String> {
+    let mut out = String::new();
+    if has_predicate_dispatch || has_return_actions {
+        writeln!(
+            out,
+            "let (tree, actions) = self.base.parse_atn_rule_with_runtime_options(atn(), rule_index, antlr4_runtime::ParserRuntimeOptions {{ init_action_rules: &{}, track_alt_numbers: {track_alt_numbers}, predicates: &{}, rule_args: &{}, member_actions: &{}, return_actions: &{} }})?;",
+            render_usize_array(init_action_rules),
+            render_parser_predicate_array(predicates, data, int_members)?,
+            render_parser_rule_arg_array(rule_args),
+            render_parser_member_action_array(member_actions),
+            render_parser_return_action_array(return_actions, data)?
+        )
+        .expect("writing to a string cannot fail");
+    } else if track_alt_numbers {
+        writeln!(
+            out,
+            "let (tree, actions) = self.base.parse_atn_rule_with_action_options(atn(), rule_index, &{}, true)?;",
+            render_usize_array(init_action_rules)
+        )
+        .expect("writing to a string cannot fail");
+    } else if !init_action_rules.is_empty() {
+        writeln!(
+            out,
+            "let (tree, actions) = self.base.parse_atn_rule_with_action_inits(atn(), rule_index, &{})?;",
+            render_usize_array(init_action_rules)
+        )
+        .expect("writing to a string cannot fail");
+    } else if has_action_dispatch {
+        writeln!(
+            out,
+            "let (tree, actions) = self.base.parse_atn_rule_with_actions(atn(), rule_index)?;"
+        )
+        .expect("writing to a string cannot fail");
+    } else {
+        return Ok("self.base.parse_atn_rule(atn(), rule_index)".to_owned());
+    }
+
+    if has_action_dispatch {
+        writeln!(
+            out,
+            "for action in actions {{ self.run_action(action, &tree); }}"
+        )
+        .expect("writing to a string cannot fail");
+    } else {
+        writeln!(out, "let _ = actions;").expect("writing to a string cannot fail");
+    }
+    writeln!(out, "Ok(tree)").expect("writing to a string cannot fail");
+    Ok(out
+        .lines()
+        .map(|line| format!("        {line}"))
+        .collect::<Vec<_>>()
+        .join("\n"))
+}
+
 /// Renders a Rust parser module with one public method per grammar rule.
 ///
 /// Parser methods use generated recursive-descent bodies for the ATN subset
@@ -1086,29 +1156,43 @@ fn render_parser(
     let has_predicate_dispatch = !predicates.is_empty();
     let has_return_actions = !return_actions.is_empty();
     let track_alt_numbers = grammar_source.is_some_and(uses_alt_number_contexts);
-    let generate_direct_rules = !has_action_dispatch
-        && !track_alt_numbers
+    let direct_rules_allowed = !track_alt_numbers
         && !has_predicate_dispatch
         && !has_return_actions
         && after_actions.iter().all(Vec::is_empty);
-    let generated_rules = parser_generated_rules(data, generate_direct_rules)?;
+    let generated_rule_enabled = (0..data.rule_names.len())
+        .map(|index| direct_rules_allowed && init_actions.get(index).is_none_or(Option::is_none))
+        .collect::<Vec<_>>();
+    let generated_rules = parser_generated_rules(data, &generated_rule_enabled)?;
     let generated_rule_dispatch = render_generated_rule_dispatch(&generated_rules);
     let init_action_rules = init_actions
         .iter()
         .enumerate()
         .filter_map(|(index, action)| action.as_ref().map(|_| index))
         .collect::<Vec<_>>();
+    let parse_rule_fallback = render_parser_parse_rule_fallback(
+        &init_action_rules,
+        track_alt_numbers,
+        &predicates,
+        data,
+        &int_members,
+        &rule_args,
+        &member_actions,
+        &return_actions,
+        has_action_dispatch,
+        has_predicate_dispatch,
+        has_return_actions,
+    )?;
+    let adaptive_direct_allowed = !has_action_dispatch
+        && !track_alt_numbers
+        && !has_predicate_dispatch
+        && !has_return_actions;
     let action_method = render_parser_action_method(&actions, &init_actions, &int_members)?;
     let base_initialization = render_parser_base_initialization(&int_members);
     let mut rule_methods = String::new();
     for (index, rule) in data.rule_names.iter().enumerate() {
         let after_action = after_actions.get(index).map_or(&[][..], Vec::as_slice);
         let uses_after_interval = after_action.iter().any(ActionTemplate::uses_rule_interval);
-        let needs_slow_path = has_action_dispatch
-            || track_alt_numbers
-            || has_predicate_dispatch
-            || has_return_actions
-            || after_action.iter().any(ActionTemplate::needs_nested_tree);
         writeln!(
             rule_methods,
             "    pub fn {}(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{",
@@ -1122,60 +1206,15 @@ fn render_parser(
             )
             .expect("writing to a string cannot fail");
         }
-        if !needs_slow_path && after_action.is_empty() {
+        if after_action.is_empty() {
             writeln!(rule_methods, "        self.parse_rule({index})")
                 .expect("writing to a string cannot fail");
         } else {
-            if needs_slow_path {
-                if has_predicate_dispatch || has_return_actions {
-                    writeln!(
-                        rule_methods,
-                        "        let (tree, actions) = self.base.parse_atn_rule_with_runtime_options(atn(), {index}, antlr4_runtime::ParserRuntimeOptions {{ init_action_rules: &{}, track_alt_numbers: {track_alt_numbers}, predicates: &{}, rule_args: &{}, member_actions: &{}, return_actions: &{} }})?;",
-                        render_usize_array(&init_action_rules),
-                        render_parser_predicate_array(&predicates, data, &int_members)?,
-                        render_parser_rule_arg_array(&rule_args),
-                        render_parser_member_action_array(&member_actions),
-                        render_parser_return_action_array(&return_actions, data)?
-                    )
-                    .expect("writing to a string cannot fail");
-                } else if track_alt_numbers {
-                    writeln!(
-                        rule_methods,
-                        "        let (tree, actions) = self.base.parse_atn_rule_with_action_options(atn(), {index}, &{}, true)?;",
-                        render_usize_array(&init_action_rules)
-                    )
-                    .expect("writing to a string cannot fail");
-                } else if has_init_actions {
-                    writeln!(
-                        rule_methods,
-                        "        let (tree, actions) = self.base.parse_atn_rule_with_action_inits(atn(), {index}, &{})?;",
-                        render_usize_array(&init_action_rules)
-                    )
-                    .expect("writing to a string cannot fail");
-                } else {
-                    writeln!(
-                        rule_methods,
-                        "        let (tree, actions) = self.base.parse_atn_rule_with_actions(atn(), {index})?;"
-                    )
-                    .expect("writing to a string cannot fail");
-                }
-                if has_action_dispatch {
-                    writeln!(
-                        rule_methods,
-                        "        for action in actions {{ self.run_action(action, &tree); }}"
-                    )
-                    .expect("writing to a string cannot fail");
-                } else {
-                    writeln!(rule_methods, "        let _ = actions;")
-                        .expect("writing to a string cannot fail");
-                }
-            } else {
-                writeln!(
-                    rule_methods,
-                    "        let tree = self.parse_rule({index})?;"
-                )
-                .expect("writing to a string cannot fail");
-            }
+            writeln!(
+                rule_methods,
+                "        let tree = self.parse_rule({index})?;"
+            )
+            .expect("writing to a string cannot fail");
             if !after_action.is_empty() {
                 if uses_after_interval {
                     writeln!(
@@ -1261,14 +1300,14 @@ where
         if let Some(result) = self.parse_generated_rule(rule_index) {{
             return result;
         }}
-        if std::env::var_os("ANTLR4_RUST_ADAPTIVE_DIRECT").is_some() {{
+        if {adaptive_direct_allowed} && std::env::var_os("ANTLR4_RUST_ADAPTIVE_DIRECT").is_some() {{
             let simulator = self
                 .simulator
                 .get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new(atn()));
             self.base
                 .parse_atn_rule_adaptive_or_fallback(atn(), simulator, rule_index)
         }} else {{
-            self.base.parse_atn_rule(atn(), rule_index)
+{parse_rule_fallback}
         }}
     }}
 
@@ -1401,20 +1440,6 @@ impl ActionTemplate {
                 | Self::TokenTextWithPrefix { .. }
                 | Self::TokenDisplay { .. }
         ) || matches!(self, Self::Sequence(actions) if actions.iter().any(Self::uses_rule_interval))
-    }
-
-    /// Reports whether rendering the action requires a nested parse tree
-    /// instead of the faster flat rule tree.
-    fn needs_nested_tree(&self) -> bool {
-        matches!(
-            self,
-            Self::StringTree { .. }
-                | Self::RuleTextWithPrefix { .. }
-                | Self::RuleInvocationStack { .. }
-                | Self::ListenerWalk { .. }
-                | Self::RuleValue { .. }
-                | Self::RuleReturnValue { .. }
-        ) || matches!(self, Self::Sequence(actions) if actions.iter().any(Self::needs_nested_tree))
     }
 }
 
@@ -4436,6 +4461,28 @@ atn:
     }
 
     #[test]
+    fn parse_rule_fallback_runs_parser_actions() {
+        let fallback = render_parser_parse_rule_fallback(
+            &[],
+            false,
+            &[],
+            &minimal_parser_data(),
+            &[],
+            &[],
+            &[],
+            &[],
+            true,
+            false,
+            false,
+        )
+        .expect("fallback should render");
+
+        assert!(fallback.contains("parse_atn_rule_with_actions(atn(), rule_index)?"));
+        assert!(fallback.contains("for action in actions { self.run_action(action, &tree); }"));
+        assert!(fallback.contains("Ok(tree)"));
+    }
+
+    #[test]
     fn parses_nested_template_action_block() {
         let block = next_template_block(
             r#"s @after {<AssertIsList({<ContextListFunction("$ctx","x")>})>} : 'x' ;"#,
@@ -4741,5 +4788,30 @@ continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#,
         atn.set_rule_to_start_state(vec![0]);
         atn.set_rule_to_stop_state(vec![6]);
         atn
+    }
+
+    fn minimal_parser_data() -> InterpData {
+        InterpData {
+            literal_names: vec![None, Some("'a'".to_owned())],
+            symbolic_names: vec![None, Some("A".to_owned())],
+            rule_names: vec!["s".to_owned()],
+            channel_names: vec!["DEFAULT_TOKEN_CHANNEL".to_owned()],
+            mode_names: vec!["DEFAULT_MODE".to_owned()],
+            atn: vec![
+                4, 1, 1, // version, parser grammar, max token type
+                2, // states
+                2, 0, // rule start
+                7, 0, // rule stop
+                0, // non-greedy states
+                0, // precedence states
+                1, // rules
+                0, // rule 0 start
+                0, // modes
+                0, // sets
+                1, // transitions
+                0, 1, 1, 0, 0, 0, // epsilon
+                0, // decisions
+            ],
+        }
     }
 }
