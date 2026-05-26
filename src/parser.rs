@@ -2248,6 +2248,18 @@ where
         }
     }
 
+    /// Builds a generated parser-action event at the current input position.
+    pub fn parser_action_at_current(
+        &mut self,
+        source_state: usize,
+        rule_index: usize,
+        start_index: usize,
+        consumed_eof: bool,
+    ) -> ParserAction {
+        let stop_index = self.rule_stop_token_index(self.input.index(), consumed_eof);
+        ParserAction::new(source_state, rule_index, start_index, stop_index)
+    }
+
     /// Attempts to execute a whole generated rule by committing simulator
     /// decisions directly. Unsupported constructs or decisions that need
     /// full-context / predicate evaluation restore the input cursor and fall
@@ -7279,6 +7291,25 @@ mod tests {
 
         assert_eq!(parser.rule_stop_token_index(1, true), Some(1));
         assert_eq!(parser.rule_stop_token_index(1, false), Some(0));
+    }
+
+    #[test]
+    fn generated_parser_action_uses_current_rule_stop_boundary() {
+        let mut parser = mini_parser(vec![
+            CommonToken::new(1).with_text("x"),
+            CommonToken::eof("parser-test", 1, 1, 1),
+        ]);
+
+        parser.match_token(1).expect("token should match");
+        let action = parser.parser_action_at_current(7, 0, 0, false);
+        assert_eq!(action.source_state(), 7);
+        assert_eq!(action.rule_index(), 0);
+        assert_eq!(action.start_index(), 0);
+        assert_eq!(action.stop_index(), Some(0));
+
+        parser.match_eof().expect("EOF should match");
+        let action = parser.parser_action_at_current(8, 0, 0, true);
+        assert_eq!(action.stop_index(), Some(1));
     }
 
     #[test]

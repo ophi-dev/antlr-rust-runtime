@@ -433,6 +433,10 @@ enum GeneratedParserStep {
     MatchSet(Vec<(i32, i32)>),
     MatchNotSet(Vec<(i32, i32)>),
     MatchWildcard,
+    Action {
+        source_state: usize,
+        rule_index: usize,
+    },
     CallRule(usize),
     Decision {
         decision: usize,
@@ -446,6 +450,12 @@ enum GeneratedParserStep {
     },
 }
 
+struct GeneratedParserCompileContext<'a> {
+    atn: &'a Atn,
+    decision_by_state: &'a [Option<usize>],
+    inline_action_states: &'a BTreeSet<usize>,
+}
+
 /// Compiles the parser ATN subset that is safe to emit as recursive-descent
 /// Rust today. Unsupported states deliberately return `None` so the generated
 /// method can keep using the interpreter fallback until more ATN shapes are
@@ -453,15 +463,21 @@ enum GeneratedParserStep {
 fn parser_generated_rules(
     data: &InterpData,
     enabled_rules: &[bool],
+    inline_action_states: &BTreeSet<usize>,
 ) -> io::Result<Vec<Option<GeneratedParserRule>>> {
     let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
         .deserialize()
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     let decision_by_state = decision_by_state(&atn);
+    let context = GeneratedParserCompileContext {
+        atn: &atn,
+        decision_by_state: &decision_by_state,
+        inline_action_states,
+    };
     Ok((0..data.rule_names.len())
         .map(|rule_index| {
             if enabled_rules.get(rule_index).copied().unwrap_or_default() {
-                compile_generated_parser_rule(&atn, rule_index, &decision_by_state)
+                compile_generated_parser_rule(&context, rule_index)
             } else {
                 None
             }
@@ -480,24 +496,17 @@ fn decision_by_state(atn: &Atn) -> Vec<Option<usize>> {
 }
 
 fn compile_generated_parser_rule(
-    atn: &Atn,
+    context: &GeneratedParserCompileContext<'_>,
     rule_index: usize,
-    decision_by_state: &[Option<usize>],
 ) -> Option<GeneratedParserRule> {
-    let entry_state = atn.rule_to_start_state().get(rule_index).copied()?;
-    let stop_state = atn.rule_to_stop_state().get(rule_index).copied()?;
-    let start = atn.state(entry_state)?;
+    let entry_state = context.atn.rule_to_start_state().get(rule_index).copied()?;
+    let stop_state = context.atn.rule_to_stop_state().get(rule_index).copied()?;
+    let start = context.atn.state(entry_state)?;
     if start.left_recursive_rule {
         return None;
     }
     let mut visited = BTreeSet::new();
-    let steps = compile_generated_parser_path(
-        atn,
-        entry_state,
-        stop_state,
-        decision_by_state,
-        &mut visited,
-    )?;
+    let steps = compile_generated_parser_path(context, entry_state, stop_state, &mut visited)?;
     Some(GeneratedParserRule {
         rule_index,
         entry_state,
@@ -506,10 +515,9 @@ fn compile_generated_parser_rule(
 }
 
 fn compile_generated_parser_path(
-    atn: &Atn,
+    context: &GeneratedParserCompileContext<'_>,
     state_number: usize,
     stop_state: usize,
-    decision_by_state: &[Option<usize>],
     visited: &mut BTreeSet<usize>,
 ) -> Option<Vec<GeneratedParserStep>> {
     if state_number == stop_state {
@@ -519,29 +527,27 @@ fn compile_generated_parser_path(
         return None;
     }
 
-    let state = atn.state(state_number)?;
-    let steps = if let Some(decision) = decision_by_state.get(state_number).copied().flatten() {
-        compile_generated_parser_decision_state(
-            atn,
-            state,
-            decision,
-            stop_state,
-            decision_by_state,
-            visited,
-        )?
+    let state = context.atn.state(state_number)?;
+    let steps = if let Some(decision) = context
+        .decision_by_state
+        .get(state_number)
+        .copied()
+        .flatten()
+    {
+        compile_generated_parser_decision_state(context, state, decision, stop_state, visited)?
     } else {
         let transition = state.transitions.first()?;
         if state.transitions.len() != 1 {
             return None;
         }
-        let (step, target) = compile_generated_parser_transition(transition)?;
+        let (step, target) = compile_generated_parser_transition(
+            state_number,
+            transition,
+            context.inline_action_states,
+        )?;
         let mut steps = step.into_iter().collect::<Vec<_>>();
         steps.extend(compile_generated_parser_path(
-            atn,
-            target,
-            stop_state,
-            decision_by_state,
-            visited,
+            context, target, stop_state, visited,
         )?);
         steps
     };
@@ -550,63 +556,47 @@ fn compile_generated_parser_path(
 }
 
 fn compile_generated_parser_decision_state(
-    atn: &Atn,
+    context: &GeneratedParserCompileContext<'_>,
     state: &antlr4_runtime::atn::AtnState,
     decision: usize,
     stop_state: usize,
-    decision_by_state: &[Option<usize>],
     visited: &mut BTreeSet<usize>,
 ) -> Option<Vec<GeneratedParserStep>> {
     match state.kind {
         AtnStateKind::BlockStart | AtnStateKind::StarBlockStart => {
-            compile_generated_parser_block_decision(
-                atn,
-                state,
-                decision,
-                stop_state,
-                decision_by_state,
-                visited,
-            )
+            compile_generated_parser_block_decision(context, state, decision, stop_state, visited)
         }
-        AtnStateKind::StarLoopEntry => compile_generated_parser_star_loop(
-            atn,
-            state,
-            decision,
-            stop_state,
-            decision_by_state,
-            visited,
-        ),
-        AtnStateKind::PlusLoopBack => compile_generated_parser_plus_loop(
-            atn,
-            state,
-            decision,
-            stop_state,
-            decision_by_state,
-            visited,
-        ),
+        AtnStateKind::StarLoopEntry => {
+            compile_generated_parser_star_loop(context, state, decision, stop_state, visited)
+        }
+        AtnStateKind::PlusLoopBack => {
+            compile_generated_parser_plus_loop(context, state, decision, stop_state, visited)
+        }
         _ => None,
     }
 }
 
 fn compile_generated_parser_block_decision(
-    atn: &Atn,
+    context: &GeneratedParserCompileContext<'_>,
     state: &antlr4_runtime::atn::AtnState,
     decision: usize,
     stop_state: usize,
-    decision_by_state: &[Option<usize>],
     visited: &mut BTreeSet<usize>,
 ) -> Option<Vec<GeneratedParserStep>> {
     let end_state = state.end_state?;
     let mut alts = Vec::with_capacity(state.transitions.len());
     for transition in &state.transitions {
-        let (step, target) = compile_generated_parser_transition(transition)?;
+        let (step, target) = compile_generated_parser_transition(
+            state.state_number,
+            transition,
+            context.inline_action_states,
+        )?;
         let mut alt_visited = visited.clone();
         let mut alt_steps = step.into_iter().collect::<Vec<_>>();
         alt_steps.extend(compile_generated_parser_path(
-            atn,
+            context,
             target,
             end_state,
-            decision_by_state,
             &mut alt_visited,
         )?);
         alts.push(alt_steps);
@@ -614,21 +604,16 @@ fn compile_generated_parser_block_decision(
 
     let mut steps = vec![GeneratedParserStep::Decision { decision, alts }];
     steps.extend(compile_generated_parser_path(
-        atn,
-        end_state,
-        stop_state,
-        decision_by_state,
-        visited,
+        context, end_state, stop_state, visited,
     )?);
     Some(steps)
 }
 
 fn compile_generated_parser_star_loop(
-    atn: &Atn,
+    context: &GeneratedParserCompileContext<'_>,
     state: &antlr4_runtime::atn::AtnState,
     decision: usize,
     stop_state: usize,
-    decision_by_state: &[Option<usize>],
     visited: &mut BTreeSet<usize>,
 ) -> Option<Vec<GeneratedParserStep>> {
     let mut enter = None;
@@ -636,7 +621,7 @@ fn compile_generated_parser_star_loop(
     for (index, transition) in state.transitions.iter().enumerate() {
         let alt = index + 1;
         let target = transition.target();
-        let target_state = atn.state(target)?;
+        let target_state = context.atn.state(target)?;
         let target_kind = target_state.kind;
         if target_kind == AtnStateKind::LoopEnd {
             exit = Some((alt, transition, target_state.loop_back_state?));
@@ -647,21 +632,28 @@ fn compile_generated_parser_star_loop(
 
     let (enter_alt, enter_transition) = enter?;
     let (exit_alt, exit_transition, loop_back_state) = exit?;
-    let (enter_step, enter_target) = compile_generated_parser_transition(enter_transition)?;
+    let (enter_step, enter_target) = compile_generated_parser_transition(
+        state.state_number,
+        enter_transition,
+        context.inline_action_states,
+    )?;
     let mut body_visited = BTreeSet::new();
     let mut body = enter_step.into_iter().collect::<Vec<_>>();
     body.extend(compile_generated_parser_path(
-        atn,
+        context,
         enter_target,
         loop_back_state,
-        decision_by_state,
         &mut body_visited,
     )?);
     if !steps_may_consume(&body) {
         return None;
     }
 
-    let (exit_step, exit_target) = compile_generated_parser_transition(exit_transition)?;
+    let (exit_step, exit_target) = compile_generated_parser_transition(
+        state.state_number,
+        exit_transition,
+        context.inline_action_states,
+    )?;
     if exit_step.is_some() {
         return None;
     }
@@ -673,21 +665,19 @@ fn compile_generated_parser_star_loop(
         body,
     }];
     steps.extend(compile_generated_parser_path(
-        atn,
+        context,
         exit_target,
         stop_state,
-        decision_by_state,
         visited,
     )?);
     Some(steps)
 }
 
 fn compile_generated_parser_plus_loop(
-    atn: &Atn,
+    context: &GeneratedParserCompileContext<'_>,
     state: &antlr4_runtime::atn::AtnState,
     decision: usize,
     stop_state: usize,
-    decision_by_state: &[Option<usize>],
     visited: &mut BTreeSet<usize>,
 ) -> Option<Vec<GeneratedParserStep>> {
     let mut enter = None;
@@ -695,7 +685,7 @@ fn compile_generated_parser_plus_loop(
     for (index, transition) in state.transitions.iter().enumerate() {
         let alt = index + 1;
         let target = transition.target();
-        let target_state = atn.state(target)?;
+        let target_state = context.atn.state(target)?;
         if target_state.kind == AtnStateKind::LoopEnd {
             exit = Some((alt, transition));
         } else {
@@ -704,14 +694,17 @@ fn compile_generated_parser_plus_loop(
     }
 
     let (enter_alt, enter_transition) = enter?;
-    let (enter_step, enter_target) = compile_generated_parser_transition(enter_transition)?;
+    let (enter_step, enter_target) = compile_generated_parser_transition(
+        state.state_number,
+        enter_transition,
+        context.inline_action_states,
+    )?;
     let mut body_visited = BTreeSet::new();
     let mut body = enter_step.into_iter().collect::<Vec<_>>();
     body.extend(compile_generated_parser_path(
-        atn,
+        context,
         enter_target,
         state.state_number,
-        decision_by_state,
         &mut body_visited,
     )?);
     if !steps_may_consume(&body) {
@@ -719,7 +712,11 @@ fn compile_generated_parser_plus_loop(
     }
 
     let (exit_alt, exit_transition) = exit?;
-    let (exit_step, exit_target) = compile_generated_parser_transition(exit_transition)?;
+    let (exit_step, exit_target) = compile_generated_parser_transition(
+        state.state_number,
+        exit_transition,
+        context.inline_action_states,
+    )?;
     if exit_step.is_some() {
         return None;
     }
@@ -731,10 +728,9 @@ fn compile_generated_parser_plus_loop(
         body,
     }];
     steps.extend(compile_generated_parser_path(
-        atn,
+        context,
         exit_target,
         stop_state,
-        decision_by_state,
         visited,
     )?);
     Some(steps)
@@ -747,13 +743,16 @@ fn steps_may_consume(steps: &[GeneratedParserStep]) -> bool {
         | GeneratedParserStep::MatchNotSet(_)
         | GeneratedParserStep::MatchWildcard
         | GeneratedParserStep::CallRule(_) => true,
+        GeneratedParserStep::Action { .. } => false,
         GeneratedParserStep::Decision { alts, .. } => alts.iter().any(|alt| steps_may_consume(alt)),
         GeneratedParserStep::StarLoop { body, .. } => steps_may_consume(body),
     })
 }
 
 fn compile_generated_parser_transition(
+    source_state: usize,
     transition: &Transition,
+    inline_action_states: &BTreeSet<usize>,
 ) -> Option<(Option<GeneratedParserStep>, usize)> {
     match transition {
         Transition::Epsilon { target } => Some((None, *target)),
@@ -787,13 +786,25 @@ fn compile_generated_parser_transition(
             Some(GeneratedParserStep::CallRule(*rule_index)),
             *follow_state,
         )),
+        Transition::Action {
+            target, rule_index, ..
+        } if inline_action_states.contains(&source_state) => Some((
+            Some(GeneratedParserStep::Action {
+                source_state,
+                rule_index: *rule_index,
+            }),
+            *target,
+        )),
         Transition::Predicate { .. }
         | Transition::Action { .. }
         | Transition::Precedence { .. } => None,
     }
 }
 
-fn render_generated_rule_dispatch(rules: &[Option<GeneratedParserRule>]) -> String {
+fn render_generated_rule_dispatch(
+    rules: &[Option<GeneratedParserRule>],
+    inline_action_statements: &BTreeMap<usize, String>,
+) -> String {
     let mut out = String::new();
     writeln!(
         out,
@@ -813,12 +824,16 @@ fn render_generated_rule_dispatch(rules: &[Option<GeneratedParserRule>]) -> Stri
     writeln!(out, "        }}").expect("writing to a string cannot fail");
     writeln!(out, "    }}").expect("writing to a string cannot fail");
     for rule in rules.iter().flatten() {
-        render_generated_rule_method(&mut out, rule);
+        render_generated_rule_method(&mut out, rule, inline_action_statements);
     }
     out
 }
 
-fn render_generated_rule_method(out: &mut String, rule: &GeneratedParserRule) {
+fn render_generated_rule_method(
+    out: &mut String,
+    rule: &GeneratedParserRule,
+    inline_action_statements: &BTreeMap<usize, String>,
+) {
     let index = rule.rule_index;
     let entry_state = rule.entry_state;
     writeln!(
@@ -843,7 +858,7 @@ fn render_generated_rule_method(out: &mut String, rule: &GeneratedParserRule) {
         "        let __result = (|| -> Result<(), antlr4_runtime::AntlrError> {{"
     )
     .expect("writing to a string cannot fail");
-    render_generated_steps(out, &rule.steps, 3);
+    render_generated_steps(out, &rule.steps, 3, inline_action_statements);
     writeln!(out, "            Ok(())").expect("writing to a string cannot fail");
     writeln!(out, "        }})();").expect("writing to a string cannot fail");
     writeln!(out, "        match __result {{").expect("writing to a string cannot fail");
@@ -860,23 +875,30 @@ fn render_generated_rule_method(out: &mut String, rule: &GeneratedParserRule) {
         "                antlr4_runtime::IntStream::seek(self.base.input(), __rule_start);"
     )
     .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "                self.base.parse_atn_rule(atn(), {index})"
-    )
-    .expect("writing to a string cannot fail");
+    writeln!(out, "                self.parse_interpreted_rule({index})")
+        .expect("writing to a string cannot fail");
     writeln!(out, "            }}").expect("writing to a string cannot fail");
     writeln!(out, "        }}").expect("writing to a string cannot fail");
     writeln!(out, "    }}").expect("writing to a string cannot fail");
 }
 
-fn render_generated_steps(out: &mut String, steps: &[GeneratedParserStep], indent: usize) {
+fn render_generated_steps(
+    out: &mut String,
+    steps: &[GeneratedParserStep],
+    indent: usize,
+    inline_action_statements: &BTreeMap<usize, String>,
+) {
     for step in steps {
-        render_generated_step(out, step, indent);
+        render_generated_step(out, step, indent, inline_action_statements);
     }
 }
 
-fn render_generated_step(out: &mut String, step: &GeneratedParserStep, indent: usize) {
+fn render_generated_step(
+    out: &mut String,
+    step: &GeneratedParserStep,
+    indent: usize,
+    inline_action_statements: &BTreeMap<usize, String>,
+) {
     let pad = "    ".repeat(indent);
     match step {
         GeneratedParserStep::MatchToken(token_type) => {
@@ -931,8 +953,27 @@ fn render_generated_step(out: &mut String, step: &GeneratedParserStep, indent: u
             writeln!(out, "{pad}self.base.add_parse_child(&mut __ctx, __child);")
                 .expect("writing to a string cannot fail");
         }
+        GeneratedParserStep::Action {
+            source_state,
+            rule_index,
+        } => {
+            let Some(statement) = inline_action_statements.get(source_state) else {
+                return;
+            };
+            if statement.is_empty() {
+                return;
+            }
+            if statement.contains("action.") {
+                writeln!(
+                    out,
+                    "{pad}let action = self.base.parser_action_at_current({source_state}, {rule_index}, __rule_start, __consumed_eof);"
+                )
+                .expect("writing to a string cannot fail");
+            }
+            writeln!(out, "{pad}{statement}").expect("writing to a string cannot fail");
+        }
         GeneratedParserStep::Decision { decision, alts } => {
-            render_generated_decision(out, *decision, alts, indent);
+            render_generated_decision(out, *decision, alts, indent, inline_action_statements);
         }
         GeneratedParserStep::StarLoop {
             decision,
@@ -940,7 +981,14 @@ fn render_generated_step(out: &mut String, step: &GeneratedParserStep, indent: u
             exit_alt,
             body,
         } => {
-            render_generated_star_loop(out, *decision, *enter_alt, *exit_alt, body, indent);
+            render_generated_star_loop(
+                out,
+                *decision,
+                (*enter_alt, *exit_alt),
+                body,
+                indent,
+                inline_action_statements,
+            );
         }
     }
 }
@@ -950,6 +998,7 @@ fn render_generated_decision(
     decision: usize,
     alts: &[Vec<GeneratedParserStep>],
     indent: usize,
+    inline_action_statements: &BTreeMap<usize, String>,
 ) {
     let pad = "    ".repeat(indent);
     writeln!(
@@ -985,7 +1034,7 @@ fn render_generated_decision(
     for (index, steps) in alts.iter().enumerate() {
         let alt = index + 1;
         writeln!(out, "{pad}    {alt} => {{").expect("writing to a string cannot fail");
-        render_generated_steps(out, steps, indent + 2);
+        render_generated_steps(out, steps, indent + 2, inline_action_statements);
         writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
     }
     writeln!(
@@ -999,11 +1048,12 @@ fn render_generated_decision(
 fn render_generated_star_loop(
     out: &mut String,
     decision: usize,
-    enter_alt: usize,
-    exit_alt: usize,
+    alts: (usize, usize),
     body: &[GeneratedParserStep],
     indent: usize,
+    inline_action_statements: &BTreeMap<usize, String>,
 ) {
+    let (enter_alt, exit_alt) = alts;
     let pad = "    ".repeat(indent);
     writeln!(out, "{pad}loop {{").expect("writing to a string cannot fail");
     writeln!(
@@ -1037,7 +1087,7 @@ fn render_generated_star_loop(
     writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
     writeln!(out, "{pad}    match __prediction.alt {{").expect("writing to a string cannot fail");
     writeln!(out, "{pad}        {enter_alt} => {{").expect("writing to a string cannot fail");
-    render_generated_steps(out, body, indent + 3);
+    render_generated_steps(out, body, indent + 3, inline_action_statements);
     writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
     writeln!(out, "{pad}        {exit_alt} => break,").expect("writing to a string cannot fail");
     writeln!(
@@ -1151,6 +1201,11 @@ fn render_parser(
     let int_members = grammar_source.map_or_else(Vec::new, parser_int_members);
     let member_actions = parser_member_actions(&actions, &int_members)?;
     let return_actions = parser_return_actions(&actions);
+    let inline_action_statements = inline_parser_action_statements(&actions, &int_members)?;
+    let inline_action_states = inline_action_statements
+        .keys()
+        .copied()
+        .collect::<BTreeSet<_>>();
     let has_init_actions = init_actions.iter().any(Option::is_some);
     let has_action_dispatch = !actions.is_empty() || has_init_actions;
     let has_predicate_dispatch = !predicates.is_empty();
@@ -1163,8 +1218,10 @@ fn render_parser(
     let generated_rule_enabled = (0..data.rule_names.len())
         .map(|index| direct_rules_allowed && init_actions.get(index).is_none_or(Option::is_none))
         .collect::<Vec<_>>();
-    let generated_rules = parser_generated_rules(data, &generated_rule_enabled)?;
-    let generated_rule_dispatch = render_generated_rule_dispatch(&generated_rules);
+    let generated_rules =
+        parser_generated_rules(data, &generated_rule_enabled, &inline_action_states)?;
+    let generated_rule_dispatch =
+        render_generated_rule_dispatch(&generated_rules, &inline_action_statements);
     let init_action_rules = init_actions
         .iter()
         .enumerate()
@@ -1300,6 +1357,11 @@ where
         if let Some(result) = self.parse_generated_rule(rule_index) {{
             return result;
         }}
+        self.parse_interpreted_rule(rule_index)
+    }}
+
+    #[allow(dead_code)]
+    fn parse_interpreted_rule(&mut self, rule_index: usize) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{
         if {adaptive_direct_allowed} && std::env::var_os("ANTLR4_RUST_ADAPTIVE_DIRECT").is_some() {{
             let simulator = self
                 .simulator
@@ -1440,6 +1502,23 @@ impl ActionTemplate {
                 | Self::TokenTextWithPrefix { .. }
                 | Self::TokenDisplay { .. }
         ) || matches!(self, Self::Sequence(actions) if actions.iter().any(Self::uses_rule_interval))
+    }
+
+    /// Reports whether a parser action can be emitted directly at its ATN
+    /// action-transition site without needing the completed parse tree or
+    /// interpreter-only state.
+    fn can_run_inline(&self) -> bool {
+        matches!(
+            self,
+            Self::Noop
+                | Self::Text { .. }
+                | Self::TextWithPrefix { .. }
+                | Self::TokenText { .. }
+                | Self::TokenTextWithPrefix { .. }
+                | Self::Literal { .. }
+                | Self::AddMember { .. }
+                | Self::MemberValue { .. }
+        ) || matches!(self, Self::Sequence(actions) if actions.iter().all(Self::can_run_inline))
     }
 }
 
@@ -2993,6 +3072,20 @@ fn parser_return_actions(actions: &[(usize, ActionTemplate)]) -> Vec<(usize, Str
     return_actions
 }
 
+/// Renders parser actions that are safe to execute from generated rule bodies.
+fn inline_parser_action_statements(
+    actions: &[(usize, ActionTemplate)],
+    members: &[IntMemberTemplate],
+) -> io::Result<BTreeMap<usize, String>> {
+    let mut statements = BTreeMap::new();
+    for (source_state, action) in actions {
+        if action.can_run_inline() {
+            statements.insert(*source_state, render_action_statement(action, members)?);
+        }
+    }
+    Ok(statements)
+}
+
 fn collect_return_actions(
     source_state: usize,
     action: &ActionTemplate,
@@ -4355,10 +4448,24 @@ atn:
         assert!(is_rust_keyword("Self"));
     }
 
+    fn compile_test_parser_rule(
+        atn: &Atn,
+        rule_index: usize,
+        inline_action_states: &BTreeSet<usize>,
+    ) -> Option<GeneratedParserRule> {
+        let decision_by_state = decision_by_state(atn);
+        let context = GeneratedParserCompileContext {
+            atn,
+            decision_by_state: &decision_by_state,
+            inline_action_states,
+        };
+        compile_generated_parser_rule(&context, rule_index)
+    }
+
     #[test]
     fn compiles_linear_parser_rule_body() {
         let atn = linear_rule_atn();
-        let body = compile_generated_parser_rule(&atn, 0, &decision_by_state(&atn))
+        let body = compile_test_parser_rule(&atn, 0, &BTreeSet::new())
             .expect("linear rule should compile");
 
         assert_eq!(body.rule_index, 0);
@@ -4375,7 +4482,7 @@ atn:
     #[test]
     fn compiles_block_decision_with_adaptive_prediction() {
         let atn = block_decision_atn();
-        let body = compile_generated_parser_rule(&atn, 0, &decision_by_state(&atn))
+        let body = compile_test_parser_rule(&atn, 0, &BTreeSet::new())
             .expect("block decision rule should compile");
 
         assert_eq!(
@@ -4389,7 +4496,7 @@ atn:
             }]
         );
 
-        let rendered = render_generated_rule_dispatch(&[Some(body)]);
+        let rendered = render_generated_rule_dispatch(&[Some(body)], &BTreeMap::new());
         assert!(rendered.contains("parse_generated_rule_0"));
         assert!(rendered.contains("adaptive_predict_stream_info_with_precedence(0, 0"));
         assert!(!rendered.contains("requires_full_context"));
@@ -4398,7 +4505,7 @@ atn:
     #[test]
     fn compiles_star_loop_with_adaptive_prediction() {
         let atn = star_loop_atn();
-        let body = compile_generated_parser_rule(&atn, 0, &decision_by_state(&atn))
+        let body = compile_test_parser_rule(&atn, 0, &BTreeSet::new())
             .expect("star loop rule should compile");
 
         assert_eq!(
@@ -4411,7 +4518,7 @@ atn:
             }]
         );
 
-        let rendered = render_generated_rule_dispatch(&[Some(body)]);
+        let rendered = render_generated_rule_dispatch(&[Some(body)], &BTreeMap::new());
         assert!(rendered.contains("loop {"));
         assert!(rendered.contains("1 => {"));
         assert!(rendered.contains("2 => break,"));
@@ -4421,7 +4528,7 @@ atn:
     #[test]
     fn compiles_plus_loop_back_with_adaptive_prediction() {
         let atn = plus_loop_atn();
-        let body = compile_generated_parser_rule(&atn, 0, &decision_by_state(&atn))
+        let body = compile_test_parser_rule(&atn, 0, &BTreeSet::new())
             .expect("plus loop rule should compile");
 
         assert_eq!(
@@ -4446,7 +4553,7 @@ atn:
             stop: 4,
         };
         assert_eq!(
-            compile_generated_parser_transition(&range),
+            compile_generated_parser_transition(3, &range, &BTreeSet::new()),
             Some((Some(GeneratedParserStep::MatchSet(vec![(2, 4)])), 7))
         );
 
@@ -4455,8 +4562,35 @@ atn:
         set.add_range(5, 6);
         let set_transition = Transition::Set { target: 8, set };
         assert_eq!(
-            compile_generated_parser_transition(&set_transition),
+            compile_generated_parser_transition(3, &set_transition, &BTreeSet::new()),
             Some((Some(GeneratedParserStep::MatchSet(vec![(1, 1), (5, 6)])), 8))
+        );
+    }
+
+    #[test]
+    fn compiles_inline_action_transitions_only_for_allowed_states() {
+        let action = Transition::Action {
+            target: 8,
+            rule_index: 2,
+            action_index: Some(0),
+            context_dependent: false,
+        };
+        assert_eq!(
+            compile_generated_parser_transition(4, &action, &BTreeSet::new()),
+            None
+        );
+
+        let mut inline_actions = BTreeSet::new();
+        inline_actions.insert(4);
+        assert_eq!(
+            compile_generated_parser_transition(4, &action, &inline_actions),
+            Some((
+                Some(GeneratedParserStep::Action {
+                    source_state: 4,
+                    rule_index: 2,
+                }),
+                8
+            ))
         );
     }
 
@@ -4480,6 +4614,69 @@ atn:
         assert!(fallback.contains("parse_atn_rule_with_actions(atn(), rule_index)?"));
         assert!(fallback.contains("for action in actions { self.run_action(action, &tree); }"));
         assert!(fallback.contains("Ok(tree)"));
+    }
+
+    #[test]
+    fn renders_inline_action_event_only_when_statement_uses_it() {
+        let rule = GeneratedParserRule {
+            rule_index: 0,
+            entry_state: 0,
+            steps: vec![
+                GeneratedParserStep::Action {
+                    source_state: 4,
+                    rule_index: 0,
+                },
+                GeneratedParserStep::Action {
+                    source_state: 6,
+                    rule_index: 0,
+                },
+            ],
+        };
+        let mut statements = BTreeMap::new();
+        statements.insert(
+            4,
+            "let text = self.base.text_interval(action.start_index(), action.stop_index()); print!(\"{}\", text);"
+                .to_owned(),
+        );
+        statements.insert(6, "println!(\"alt 2\");".to_owned());
+
+        let rendered = render_generated_rule_dispatch(&[Some(rule)], &statements);
+
+        assert!(rendered.contains("parser_action_at_current(4, 0"));
+        assert!(!rendered.contains("parser_action_at_current(6, 0"));
+        assert!(rendered.contains("println!(\"alt 2\");"));
+    }
+
+    #[test]
+    fn classifies_inline_safe_parser_actions() {
+        assert!(ActionTemplate::Text { newline: true }.can_run_inline());
+        assert!(
+            ActionTemplate::Sequence(vec![
+                ActionTemplate::Literal {
+                    value: "x".to_owned(),
+                    newline: false,
+                },
+                ActionTemplate::MemberValue {
+                    member: "i".to_owned(),
+                    newline: true,
+                },
+            ])
+            .can_run_inline()
+        );
+        assert!(
+            !ActionTemplate::StringTree {
+                target: StringTreeTarget::Current,
+                newline: true,
+            }
+            .can_run_inline()
+        );
+        assert!(
+            !ActionTemplate::Sequence(vec![
+                ActionTemplate::Noop,
+                ActionTemplate::ExpectedTokenNames { newline: true },
+            ])
+            .can_run_inline()
+        );
     }
 
     #[test]
