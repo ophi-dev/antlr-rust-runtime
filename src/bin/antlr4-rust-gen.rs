@@ -563,7 +563,7 @@ fn compile_generated_parser_decision_state(
     visited: &mut BTreeSet<usize>,
 ) -> Option<Vec<GeneratedParserStep>> {
     match state.kind {
-        AtnStateKind::BlockStart | AtnStateKind::StarBlockStart => {
+        AtnStateKind::BlockStart | AtnStateKind::PlusBlockStart | AtnStateKind::StarBlockStart => {
             compile_generated_parser_block_decision(context, state, decision, stop_state, visited)
         }
         AtnStateKind::StarLoopEntry => {
@@ -4546,6 +4546,33 @@ atn:
     }
 
     #[test]
+    fn compiles_plus_block_body_decision_with_adaptive_prediction() {
+        let atn = plus_block_decision_atn();
+        let body = compile_test_parser_rule(&atn, 0, &BTreeSet::new())
+            .expect("plus block decision rule should compile");
+
+        let body_decision = GeneratedParserStep::Decision {
+            decision: 0,
+            alts: vec![
+                vec![GeneratedParserStep::MatchToken(1)],
+                vec![GeneratedParserStep::MatchToken(2)],
+            ],
+        };
+        assert_eq!(
+            body.steps,
+            [
+                body_decision.clone(),
+                GeneratedParserStep::StarLoop {
+                    decision: 1,
+                    enter_alt: 1,
+                    exit_alt: 2,
+                    body: vec![body_decision],
+                }
+            ]
+        );
+    }
+
+    #[test]
     fn compiles_token_set_transitions() {
         let range = Transition::Range {
             target: 7,
@@ -4984,6 +5011,60 @@ continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#,
         atn.add_decision_state(4);
         atn.set_rule_to_start_state(vec![0]);
         atn.set_rule_to_stop_state(vec![6]);
+        atn
+    }
+
+    fn plus_block_decision_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 2);
+        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
+        let mut plus_start = AtnState::new(1, AtnStateKind::PlusBlockStart).with_rule_index(0);
+        plus_start.end_state = Some(4);
+        atn.add_state(plus_start);
+        atn.add_state(AtnState::new(2, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(3, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(4, AtnStateKind::BlockEnd).with_rule_index(0));
+        atn.add_state(AtnState::new(5, AtnStateKind::PlusLoopBack).with_rule_index(0));
+        let mut loop_end = AtnState::new(6, AtnStateKind::LoopEnd).with_rule_index(0);
+        loop_end.loop_back_state = Some(5);
+        atn.add_state(loop_end);
+        atn.add_state(AtnState::new(7, AtnStateKind::RuleStop).with_rule_index(0));
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Epsilon { target: 1 });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Epsilon { target: 2 });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Epsilon { target: 3 });
+        atn.state_mut(2)
+            .expect("state 2")
+            .add_transition(Transition::Atom {
+                target: 4,
+                label: 1,
+            });
+        atn.state_mut(3)
+            .expect("state 3")
+            .add_transition(Transition::Atom {
+                target: 4,
+                label: 2,
+            });
+        atn.state_mut(4)
+            .expect("state 4")
+            .add_transition(Transition::Epsilon { target: 5 });
+        atn.state_mut(5)
+            .expect("state 5")
+            .add_transition(Transition::Epsilon { target: 1 });
+        atn.state_mut(5)
+            .expect("state 5")
+            .add_transition(Transition::Epsilon { target: 6 });
+        atn.state_mut(6)
+            .expect("state 6")
+            .add_transition(Transition::Epsilon { target: 7 });
+        atn.add_decision_state(1);
+        atn.add_decision_state(5);
+        atn.set_rule_to_start_state(vec![0]);
+        atn.set_rule_to_stop_state(vec![7]);
         atn
     }
 
