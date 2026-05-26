@@ -430,11 +430,19 @@ struct GeneratedParserRule {
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum GeneratedParserStep {
     MatchToken(i32),
+    MatchSet(Vec<(i32, i32)>),
+    MatchNotSet(Vec<(i32, i32)>),
     MatchWildcard,
     CallRule(usize),
     Decision {
         decision: usize,
         alts: Vec<Vec<Self>>,
+    },
+    StarLoop {
+        decision: usize,
+        enter_alt: usize,
+        exit_alt: usize,
+        body: Vec<Self>,
     },
 }
 
@@ -510,7 +518,7 @@ fn compile_generated_parser_path(
 
     let state = atn.state(state_number)?;
     let steps = if let Some(decision) = decision_by_state.get(state_number).copied().flatten() {
-        compile_generated_parser_decision(
+        compile_generated_parser_decision_state(
             atn,
             state,
             decision,
@@ -538,7 +546,7 @@ fn compile_generated_parser_path(
     Some(steps)
 }
 
-fn compile_generated_parser_decision(
+fn compile_generated_parser_decision_state(
     atn: &Atn,
     state: &antlr4_runtime::atn::AtnState,
     decision: usize,
@@ -546,9 +554,37 @@ fn compile_generated_parser_decision(
     decision_by_state: &[Option<usize>],
     visited: &mut BTreeSet<usize>,
 ) -> Option<Vec<GeneratedParserStep>> {
-    if state.kind != AtnStateKind::BlockStart {
-        return None;
+    match state.kind {
+        AtnStateKind::BlockStart | AtnStateKind::StarBlockStart => {
+            compile_generated_parser_block_decision(
+                atn,
+                state,
+                decision,
+                stop_state,
+                decision_by_state,
+                visited,
+            )
+        }
+        AtnStateKind::StarLoopEntry => compile_generated_parser_star_loop(
+            atn,
+            state,
+            decision,
+            stop_state,
+            decision_by_state,
+            visited,
+        ),
+        _ => None,
     }
+}
+
+fn compile_generated_parser_block_decision(
+    atn: &Atn,
+    state: &antlr4_runtime::atn::AtnState,
+    decision: usize,
+    stop_state: usize,
+    decision_by_state: &[Option<usize>],
+    visited: &mut BTreeSet<usize>,
+) -> Option<Vec<GeneratedParserStep>> {
     let end_state = state.end_state?;
     let mut alts = Vec::with_capacity(state.transitions.len());
     for transition in &state.transitions {
@@ -576,7 +612,78 @@ fn compile_generated_parser_decision(
     Some(steps)
 }
 
-const fn compile_generated_parser_transition(
+fn compile_generated_parser_star_loop(
+    atn: &Atn,
+    state: &antlr4_runtime::atn::AtnState,
+    decision: usize,
+    stop_state: usize,
+    decision_by_state: &[Option<usize>],
+    visited: &mut BTreeSet<usize>,
+) -> Option<Vec<GeneratedParserStep>> {
+    let loop_back_state = state.loop_back_state?;
+    let mut enter = None;
+    let mut exit = None;
+    for (index, transition) in state.transitions.iter().enumerate() {
+        let alt = index + 1;
+        let target = transition.target();
+        let target_kind = atn.state(target)?.kind;
+        if target_kind == AtnStateKind::LoopEnd {
+            exit = Some((alt, transition));
+        } else {
+            enter = Some((alt, transition));
+        }
+    }
+
+    let (enter_alt, enter_transition) = enter?;
+    let (enter_step, enter_target) = compile_generated_parser_transition(enter_transition)?;
+    let mut body_visited = visited.clone();
+    let mut body = enter_step.into_iter().collect::<Vec<_>>();
+    body.extend(compile_generated_parser_path(
+        atn,
+        enter_target,
+        loop_back_state,
+        decision_by_state,
+        &mut body_visited,
+    )?);
+    if !steps_may_consume(&body) {
+        return None;
+    }
+
+    let (exit_alt, exit_transition) = exit?;
+    let (exit_step, exit_target) = compile_generated_parser_transition(exit_transition)?;
+    if exit_step.is_some() {
+        return None;
+    }
+
+    let mut steps = vec![GeneratedParserStep::StarLoop {
+        decision,
+        enter_alt,
+        exit_alt,
+        body,
+    }];
+    steps.extend(compile_generated_parser_path(
+        atn,
+        exit_target,
+        stop_state,
+        decision_by_state,
+        visited,
+    )?);
+    Some(steps)
+}
+
+fn steps_may_consume(steps: &[GeneratedParserStep]) -> bool {
+    steps.iter().any(|step| match step {
+        GeneratedParserStep::MatchToken(_)
+        | GeneratedParserStep::MatchSet(_)
+        | GeneratedParserStep::MatchNotSet(_)
+        | GeneratedParserStep::MatchWildcard
+        | GeneratedParserStep::CallRule(_) => true,
+        GeneratedParserStep::Decision { alts, .. } => alts.iter().any(|alt| steps_may_consume(alt)),
+        GeneratedParserStep::StarLoop { body, .. } => steps_may_consume(body),
+    })
+}
+
+fn compile_generated_parser_transition(
     transition: &Transition,
 ) -> Option<(Option<GeneratedParserStep>, usize)> {
     match transition {
@@ -584,6 +691,22 @@ const fn compile_generated_parser_transition(
         Transition::Atom { target, label } => {
             Some((Some(GeneratedParserStep::MatchToken(*label)), *target))
         }
+        Transition::Range {
+            target,
+            start,
+            stop,
+        } => Some((
+            Some(GeneratedParserStep::MatchSet(vec![(*start, *stop)])),
+            *target,
+        )),
+        Transition::Set { target, set } => Some((
+            Some(GeneratedParserStep::MatchSet(set.ranges().to_vec())),
+            *target,
+        )),
+        Transition::NotSet { target, set } => Some((
+            Some(GeneratedParserStep::MatchNotSet(set.ranges().to_vec())),
+            *target,
+        )),
         Transition::Wildcard { target } => {
             Some((Some(GeneratedParserStep::MatchWildcard), *target))
         }
@@ -595,10 +718,7 @@ const fn compile_generated_parser_transition(
             Some(GeneratedParserStep::CallRule(*rule_index)),
             *follow_state,
         )),
-        Transition::Range { .. }
-        | Transition::Set { .. }
-        | Transition::NotSet { .. }
-        | Transition::Predicate { .. }
+        Transition::Predicate { .. }
         | Transition::Action { .. }
         | Transition::Precedence { .. } => None,
     }
@@ -703,6 +823,33 @@ fn render_generated_step(out: &mut String, step: &GeneratedParserStep, indent: u
             writeln!(out, "{pad}self.base.add_parse_child(&mut __ctx, __child);")
                 .expect("writing to a string cannot fail");
         }
+        GeneratedParserStep::MatchSet(intervals) => {
+            let intervals = render_i32_ranges(intervals);
+            writeln!(
+                out,
+                "{pad}let __matched_eof = self.base.la(1) == antlr4_runtime::token::TOKEN_EOF;"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}let __child = self.base.match_set(&{intervals})?;"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(out, "{pad}if __matched_eof {{ __consumed_eof = true; }}")
+                .expect("writing to a string cannot fail");
+            writeln!(out, "{pad}self.base.add_parse_child(&mut __ctx, __child);")
+                .expect("writing to a string cannot fail");
+        }
+        GeneratedParserStep::MatchNotSet(intervals) => {
+            let intervals = render_i32_ranges(intervals);
+            writeln!(
+                out,
+                "{pad}let __child = self.base.match_not_set(&{intervals}, 1, atn().max_token_type())?;"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(out, "{pad}self.base.add_parse_child(&mut __ctx, __child);")
+                .expect("writing to a string cannot fail");
+        }
         GeneratedParserStep::MatchWildcard => {
             writeln!(out, "{pad}let __child = self.base.match_wildcard()?;")
                 .expect("writing to a string cannot fail");
@@ -717,6 +864,14 @@ fn render_generated_step(out: &mut String, step: &GeneratedParserStep, indent: u
         }
         GeneratedParserStep::Decision { decision, alts } => {
             render_generated_decision(out, *decision, alts, indent);
+        }
+        GeneratedParserStep::StarLoop {
+            decision,
+            enter_alt,
+            exit_alt,
+            body,
+        } => {
+            render_generated_star_loop(out, *decision, *enter_alt, *exit_alt, body, indent);
         }
     }
 }
@@ -772,6 +927,62 @@ fn render_generated_decision(
         "{pad}    _ => return Err(self.base.no_viable_alternative_error(__decision_start)),"
     )
     .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
+}
+
+fn render_generated_star_loop(
+    out: &mut String,
+    decision: usize,
+    enter_alt: usize,
+    exit_alt: usize,
+    body: &[GeneratedParserStep],
+    indent: usize,
+) {
+    let pad = "    ".repeat(indent);
+    writeln!(out, "{pad}loop {{").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}    let __decision_start = antlr4_runtime::IntStream::index(self.base.input());"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    let __prediction = {{").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new(atn()));"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}        __simulator.adaptive_predict_stream_info_with_precedence({decision}, 0, self.base.input())"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}    }}.map_err(|_| self.base.no_viable_alternative_error(__decision_start))?;"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}    if __prediction.requires_full_context || __prediction.has_semantic_context {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}        return Err(self.base.no_viable_alternative_error(__decision_start));"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    match __prediction.alt {{").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}        {enter_alt} => {{").expect("writing to a string cannot fail");
+    render_generated_steps(out, body, indent + 3);
+    writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}        {exit_alt} => break,").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}        _ => return Err(self.base.no_viable_alternative_error(__decision_start)),"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
     writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
 }
 
@@ -3789,6 +4000,17 @@ fn render_i32_slice(values: &[i32]) -> String {
     format!("[{items}]")
 }
 
+/// Renders an inline `[(i32, i32); N]` expression for generated token-set
+/// matches.
+fn render_i32_ranges(values: &[(i32, i32)]) -> String {
+    let items = values
+        .iter()
+        .map(|(start, stop)| format!("({start}, {stop})"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("[{items}]")
+}
+
 /// Renders an inline `[usize; N]` expression for generated parser helpers.
 fn render_usize_array(values: &[usize]) -> String {
     let items = values
@@ -4005,7 +4227,7 @@ fn grammar_name_from_path(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use antlr4_runtime::atn::{AtnState, AtnType};
+    use antlr4_runtime::atn::{AtnState, AtnType, IntervalSet};
 
     #[test]
     fn parses_interp_sections() {
@@ -4085,6 +4307,51 @@ atn:
         let rendered = render_generated_rule_dispatch(&[Some(body)]);
         assert!(rendered.contains("parse_generated_rule_0"));
         assert!(rendered.contains("adaptive_predict_stream_info_with_precedence(0, 0"));
+    }
+
+    #[test]
+    fn compiles_star_loop_with_adaptive_prediction() {
+        let atn = star_loop_atn();
+        let body = compile_generated_parser_rule(&atn, 0, &decision_by_state(&atn))
+            .expect("star loop rule should compile");
+
+        assert_eq!(
+            body.steps,
+            [GeneratedParserStep::StarLoop {
+                decision: 0,
+                enter_alt: 1,
+                exit_alt: 2,
+                body: vec![GeneratedParserStep::MatchToken(1)],
+            }]
+        );
+
+        let rendered = render_generated_rule_dispatch(&[Some(body)]);
+        assert!(rendered.contains("loop {"));
+        assert!(rendered.contains("1 => {"));
+        assert!(rendered.contains("2 => break,"));
+        assert!(rendered.contains("adaptive_predict_stream_info_with_precedence(0, 0"));
+    }
+
+    #[test]
+    fn compiles_token_set_transitions() {
+        let range = Transition::Range {
+            target: 7,
+            start: 2,
+            stop: 4,
+        };
+        assert_eq!(
+            compile_generated_parser_transition(&range),
+            Some((Some(GeneratedParserStep::MatchSet(vec![(2, 4)])), 7))
+        );
+
+        let mut set = IntervalSet::new();
+        set.add(1);
+        set.add_range(5, 6);
+        let set_transition = Transition::Set { target: 8, set };
+        assert_eq!(
+            compile_generated_parser_transition(&set_transition),
+            Some((Some(GeneratedParserStep::MatchSet(vec![(1, 1), (5, 6)])), 8))
+        );
     }
 
     #[test]
@@ -4308,6 +4575,43 @@ continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#,
             });
         atn.state_mut(4)
             .expect("state 4")
+            .add_transition(Transition::Epsilon { target: 5 });
+        atn.add_decision_state(1);
+        atn.set_rule_to_start_state(vec![0]);
+        atn.set_rule_to_stop_state(vec![5]);
+        atn
+    }
+
+    fn star_loop_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 2);
+        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
+        let mut loop_entry = AtnState::new(1, AtnStateKind::StarLoopEntry).with_rule_index(0);
+        loop_entry.loop_back_state = Some(4);
+        atn.add_state(loop_entry);
+        atn.add_state(AtnState::new(2, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(3, AtnStateKind::LoopEnd).with_rule_index(0));
+        atn.add_state(AtnState::new(4, AtnStateKind::StarLoopBack).with_rule_index(0));
+        atn.add_state(AtnState::new(5, AtnStateKind::RuleStop).with_rule_index(0));
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Epsilon { target: 1 });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Epsilon { target: 2 });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Epsilon { target: 3 });
+        atn.state_mut(2)
+            .expect("state 2")
+            .add_transition(Transition::Atom {
+                target: 4,
+                label: 1,
+            });
+        atn.state_mut(4)
+            .expect("state 4")
+            .add_transition(Transition::Epsilon { target: 1 });
+        atn.state_mut(3)
+            .expect("state 3")
             .add_transition(Transition::Epsilon { target: 5 });
         atn.add_decision_state(1);
         atn.set_rule_to_start_state(vec![0]);

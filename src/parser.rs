@@ -102,6 +102,12 @@ enum SingleOutcomeMemoMode {
     Sparse,
 }
 
+fn interval_set_contains(intervals: &[(i32, i32)], symbol: i32) -> bool {
+    intervals
+        .iter()
+        .any(|(start, stop)| (*start..=*stop).contains(&symbol))
+}
+
 #[cfg(feature = "perf-counters")]
 mod perf_counters {
     use std::cell::Cell;
@@ -2056,6 +2062,66 @@ where
 
     pub fn match_eof(&mut self) -> Result<ParseTree, AntlrError> {
         self.match_token(TOKEN_EOF)
+    }
+
+    pub fn match_set(&mut self, intervals: &[(i32, i32)]) -> Result<ParseTree, AntlrError> {
+        self.match_interval_condition(intervals, |symbol| interval_set_contains(intervals, symbol))
+    }
+
+    pub fn match_not_set(
+        &mut self,
+        intervals: &[(i32, i32)],
+        min_vocabulary: i32,
+        max_vocabulary: i32,
+    ) -> Result<ParseTree, AntlrError> {
+        self.match_interval_condition(intervals, |symbol| {
+            (min_vocabulary..=max_vocabulary).contains(&symbol)
+                && !interval_set_contains(intervals, symbol)
+        })
+    }
+
+    fn match_interval_condition(
+        &mut self,
+        intervals: &[(i32, i32)],
+        matches: impl FnOnce(i32) -> bool,
+    ) -> Result<ParseTree, AntlrError> {
+        let current = self
+            .input
+            .lt(1)
+            .cloned()
+            .ok_or_else(|| AntlrError::ParserError {
+                line: 0,
+                column: 0,
+                message: "missing current token".to_owned(),
+            })?;
+        if matches(current.token_type()) {
+            self.consume();
+            Ok(ParseTree::Terminal(TerminalNode::new(current)))
+        } else {
+            Err(AntlrError::MismatchedInput {
+                expected: self.interval_display(intervals),
+                found: self.vocabulary().display_name(current.token_type()),
+            })
+        }
+    }
+
+    fn interval_display(&self, intervals: &[(i32, i32)]) -> String {
+        let values = intervals
+            .iter()
+            .map(|(start, stop)| {
+                if start == stop {
+                    self.vocabulary().display_name(*start)
+                } else {
+                    format!(
+                        "{}..{}",
+                        self.vocabulary().display_name(*start),
+                        self.vocabulary().display_name(*stop)
+                    )
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("{{{values}}}")
     }
 
     pub const fn rule_node(&self, context: ParserRuleContext) -> ParseTree {
@@ -6861,6 +6927,23 @@ mod tests {
             "x"
         );
         assert!(parser.match_token(1).is_err());
+    }
+
+    #[test]
+    fn parser_matches_token_sets() {
+        let mut parser = mini_parser(vec![
+            CommonToken::new(1).with_text("x"),
+            CommonToken::eof("parser-test", 1, 1, 1),
+        ]);
+
+        assert_eq!(
+            parser
+                .match_set(&[(1, 1), (3, 4)])
+                .expect("token set should match")
+                .text(),
+            "x"
+        );
+        assert!(parser.match_not_set(&[(1, 1)], 1, 4).is_err());
     }
 
     #[test]
