@@ -2040,6 +2040,17 @@ where
         self.int_members.get(&member).copied()
     }
 
+    /// Captures generated integer members before speculative generated parser
+    /// execution.
+    pub fn int_members_checkpoint(&self) -> BTreeMap<usize, i64> {
+        self.int_members.clone()
+    }
+
+    /// Restores generated integer members after generated parser fallback.
+    pub fn restore_int_members(&mut self, members: BTreeMap<usize, i64>) {
+        self.int_members = members;
+    }
+
     /// Adds `delta` to a generated integer member and returns the new value.
     pub fn add_int_member(&mut self, member: usize, delta: i64) -> i64 {
         let value = self.int_members.entry(member).or_default();

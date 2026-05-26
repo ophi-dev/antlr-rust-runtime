@@ -507,14 +507,41 @@ struct GeneratedParserCompileContext<'a> {
     decision_by_state: &'a [Option<usize>],
     inline_action_states: &'a BTreeSet<usize>,
     action_states: &'a BTreeSet<usize>,
+    generated_action_states: &'a BTreeSet<usize>,
     predicate_coordinates: &'a BTreeSet<(usize, usize)>,
     generated_predicate_coordinates: &'a BTreeSet<(usize, usize)>,
+}
+
+#[derive(Clone, Copy)]
+struct ActionStateSets<'a> {
+    all: &'a BTreeSet<usize>,
+    generated: &'a BTreeSet<usize>,
+    inline: &'a BTreeSet<usize>,
 }
 
 #[derive(Clone, Copy)]
 struct PredicateCoordinateSets<'a> {
     all: &'a BTreeSet<(usize, usize)>,
     generated: &'a BTreeSet<(usize, usize)>,
+}
+
+const fn generated_action_state_sets<'a>(
+    context: &GeneratedParserCompileContext<'a>,
+) -> ActionStateSets<'a> {
+    ActionStateSets {
+        all: context.action_states,
+        generated: context.generated_action_states,
+        inline: context.inline_action_states,
+    }
+}
+
+const fn generated_predicate_coordinate_sets<'a>(
+    context: &GeneratedParserCompileContext<'a>,
+) -> PredicateCoordinateSets<'a> {
+    PredicateCoordinateSets {
+        all: context.predicate_coordinates,
+        generated: context.generated_predicate_coordinates,
+    }
 }
 
 /// Compiles the parser ATN subset that is safe to emit as recursive-descent
@@ -524,8 +551,7 @@ struct PredicateCoordinateSets<'a> {
 fn parser_generated_rules(
     data: &InterpData,
     enabled_rules: &[bool],
-    inline_action_states: &BTreeSet<usize>,
-    action_states: &BTreeSet<usize>,
+    action_states: ActionStateSets<'_>,
     predicate_coordinates: PredicateCoordinateSets<'_>,
     require_generated_callees: bool,
 ) -> io::Result<Vec<Option<GeneratedParserRule>>> {
@@ -536,8 +562,9 @@ fn parser_generated_rules(
     let context = GeneratedParserCompileContext {
         atn: &atn,
         decision_by_state: &decision_by_state,
-        inline_action_states,
-        action_states,
+        inline_action_states: action_states.inline,
+        action_states: action_states.all,
+        generated_action_states: action_states.generated,
         predicate_coordinates: predicate_coordinates.all,
         generated_predicate_coordinates: predicate_coordinates.generated,
     };
@@ -712,10 +739,8 @@ fn compile_generated_left_recursive_loop(
     let (enter_step, enter_target) = compile_generated_parser_transition(
         state.state_number,
         enter_transition,
-        context.inline_action_states,
-        context.action_states,
-        context.predicate_coordinates,
-        context.generated_predicate_coordinates,
+        generated_action_state_sets(context),
+        generated_predicate_coordinate_sets(context),
     )?;
     let mut body = enter_step.into_iter().collect::<Vec<_>>();
     body.extend(compile_generated_parser_path(
@@ -732,10 +757,8 @@ fn compile_generated_left_recursive_loop(
     let (exit_step, _) = compile_generated_parser_transition(
         state.state_number,
         exit_transition,
-        context.inline_action_states,
-        context.action_states,
-        context.predicate_coordinates,
-        context.generated_predicate_coordinates,
+        generated_action_state_sets(context),
+        generated_predicate_coordinate_sets(context),
     )?;
     if exit_step.is_some() {
         return None;
@@ -784,10 +807,8 @@ fn compile_generated_parser_path(
         let (step, target) = compile_generated_parser_transition(
             state_number,
             transition,
-            context.inline_action_states,
-            context.action_states,
-            context.predicate_coordinates,
-            context.generated_predicate_coordinates,
+            generated_action_state_sets(context),
+            generated_predicate_coordinate_sets(context),
         )?;
         let mut steps = step.into_iter().collect::<Vec<_>>();
         steps.extend(compile_generated_parser_path(
@@ -833,10 +854,8 @@ fn compile_generated_parser_block_decision(
         let (step, target) = compile_generated_parser_transition(
             state.state_number,
             transition,
-            context.inline_action_states,
-            context.action_states,
-            context.predicate_coordinates,
-            context.generated_predicate_coordinates,
+            generated_action_state_sets(context),
+            generated_predicate_coordinate_sets(context),
         )?;
         let mut alt_visited = visited.clone();
         let mut alt_steps = step.into_iter().collect::<Vec<_>>();
@@ -888,10 +907,8 @@ fn compile_generated_parser_star_loop(
     let (enter_step, enter_target) = compile_generated_parser_transition(
         state.state_number,
         enter_transition,
-        context.inline_action_states,
-        context.action_states,
-        context.predicate_coordinates,
-        context.generated_predicate_coordinates,
+        generated_action_state_sets(context),
+        generated_predicate_coordinate_sets(context),
     )?;
     let mut body_visited = BTreeSet::new();
     let mut body = enter_step.into_iter().collect::<Vec<_>>();
@@ -908,10 +925,8 @@ fn compile_generated_parser_star_loop(
     let (exit_step, exit_target) = compile_generated_parser_transition(
         state.state_number,
         exit_transition,
-        context.inline_action_states,
-        context.action_states,
-        context.predicate_coordinates,
-        context.generated_predicate_coordinates,
+        generated_action_state_sets(context),
+        generated_predicate_coordinate_sets(context),
     )?;
     if exit_step.is_some() {
         return None;
@@ -959,10 +974,8 @@ fn compile_generated_parser_plus_loop(
     let (enter_step, enter_target) = compile_generated_parser_transition(
         state.state_number,
         enter_transition,
-        context.inline_action_states,
-        context.action_states,
-        context.predicate_coordinates,
-        context.generated_predicate_coordinates,
+        generated_action_state_sets(context),
+        generated_predicate_coordinate_sets(context),
     )?;
     let mut body_visited = BTreeSet::new();
     let mut body = enter_step.into_iter().collect::<Vec<_>>();
@@ -980,10 +993,8 @@ fn compile_generated_parser_plus_loop(
     let (exit_step, exit_target) = compile_generated_parser_transition(
         state.state_number,
         exit_transition,
-        context.inline_action_states,
-        context.action_states,
-        context.predicate_coordinates,
-        context.generated_predicate_coordinates,
+        generated_action_state_sets(context),
+        generated_predicate_coordinate_sets(context),
     )?;
     if exit_step.is_some() {
         return None;
@@ -1080,10 +1091,8 @@ fn steps_contain_predicate(steps: &[GeneratedParserStep]) -> bool {
 fn compile_generated_parser_transition(
     source_state: usize,
     transition: &Transition,
-    inline_action_states: &BTreeSet<usize>,
-    action_states: &BTreeSet<usize>,
-    predicate_coordinates: &BTreeSet<(usize, usize)>,
-    generated_predicate_coordinates: &BTreeSet<(usize, usize)>,
+    action_states: ActionStateSets<'_>,
+    predicate_coordinates: PredicateCoordinateSets<'_>,
 ) -> Option<(Option<GeneratedParserStep>, usize)> {
     match transition {
         Transition::Epsilon { target } => Some((None, *target)),
@@ -1124,7 +1133,7 @@ fn compile_generated_parser_transition(
         )),
         Transition::Action {
             target, rule_index, ..
-        } if inline_action_states.contains(&source_state) => Some((
+        } if action_states.generated.contains(&source_state) => Some((
             Some(GeneratedParserStep::Action {
                 source_state,
                 rule_index: *rule_index,
@@ -1135,24 +1144,34 @@ fn compile_generated_parser_transition(
             target,
             action_index: None,
             ..
-        } if !action_states.contains(&source_state) => Some((None, *target)),
+        } if !action_states.all.contains(&source_state) => Some((None, *target)),
         Transition::Predicate {
             target,
             rule_index,
             pred_index,
             ..
-        } if generated_predicate_coordinates.contains(&(*rule_index, *pred_index)) => Some((
-            Some(GeneratedParserStep::Predicate {
-                rule_index: *rule_index,
-                pred_index: *pred_index,
-            }),
-            *target,
-        )),
+        } if predicate_coordinates
+            .generated
+            .contains(&(*rule_index, *pred_index)) =>
+        {
+            Some((
+                Some(GeneratedParserStep::Predicate {
+                    rule_index: *rule_index,
+                    pred_index: *pred_index,
+                }),
+                *target,
+            ))
+        }
         Transition::Predicate {
             rule_index,
             pred_index,
             ..
-        } if predicate_coordinates.contains(&(*rule_index, *pred_index)) => None,
+        } if predicate_coordinates
+            .all
+            .contains(&(*rule_index, *pred_index)) =>
+        {
+            None
+        }
         Transition::Predicate { target, .. } => Some((None, *target)),
         Transition::Precedence { target, precedence } => {
             Some((Some(GeneratedParserStep::Precedence(*precedence)), *target))
@@ -1170,7 +1189,7 @@ fn render_generated_rule_dispatch(
     let mut out = String::new();
     writeln!(
         out,
-        "    #[allow(dead_code)]\n    fn parse_generated_rule(&mut self, rule_index: usize, precedence: i32, allow_fallback: bool) -> Option<Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError>> {{"
+        "    #[allow(dead_code)]\n    fn parse_generated_rule(&mut self, rule_index: usize, precedence: i32, allow_fallback: bool) -> Option<Result<antlr4_runtime::ParseTree, GeneratedRuleError>> {{"
     )
     .expect("writing to a string cannot fail");
     writeln!(out, "        let _ = precedence;").expect("writing to a string cannot fail");
@@ -1191,7 +1210,7 @@ fn render_generated_rule_dispatch(
         let index = rule.rule_index;
         writeln!(
             out,
-            "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}_dispatch(&mut self, precedence: i32, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{"
+            "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}_dispatch(&mut self, precedence: i32, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {{"
         )
         .expect("writing to a string cannot fail");
         if rule.left_recursive {
@@ -1241,12 +1260,22 @@ fn render_generated_rule_method(
     let entry_state = rule.entry_state;
     writeln!(
         out,
-        "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}(&mut self, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{"
+        "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}(&mut self, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {{"
     )
     .expect("writing to a string cannot fail");
     writeln!(
         out,
         "        let __rule_start = antlr4_runtime::IntStream::index(self.base.input());"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "        let __generated_action_marker = self.generated_actions.len();"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "        let __generated_member_checkpoint = self.base.int_members_checkpoint();"
     )
     .expect("writing to a string cannot fail");
     writeln!(
@@ -1290,21 +1319,31 @@ fn render_generated_rule_method(
         .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "                if let Some(__error) = __sync_error {{ return Err(__error); }}"
+        "                self.generated_actions.truncate(__generated_action_marker);"
     )
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "                if !allow_fallback {{ return Err(__error); }}"
+        "                self.base.restore_int_members(__generated_member_checkpoint);"
     )
     .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                if let Some(__error) = __sync_error {{ return Err(GeneratedRuleError::Fatal(__error)); }}"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "                let _ = allow_fallback;")
+        .expect("writing to a string cannot fail");
     writeln!(
         out,
         "                antlr4_runtime::IntStream::seek(self.base.input(), __rule_start);"
     )
     .expect("writing to a string cannot fail");
-    writeln!(out, "                self.parse_interpreted_rule({index})")
-        .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                Err(GeneratedRuleError::Recoverable(__error))"
+    )
+    .expect("writing to a string cannot fail");
     writeln!(out, "            }}").expect("writing to a string cannot fail");
     writeln!(out, "        }}").expect("writing to a string cannot fail");
     writeln!(out, "    }}").expect("writing to a string cannot fail");
@@ -1321,7 +1360,7 @@ fn render_generated_left_recursive_rule_method(
     let entry_state = rule.entry_state;
     writeln!(
         out,
-        "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}(&mut self, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{"
+        "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}(&mut self, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {{"
     )
     .expect("writing to a string cannot fail");
     writeln!(
@@ -1332,12 +1371,22 @@ fn render_generated_left_recursive_rule_method(
     writeln!(out, "    }}").expect("writing to a string cannot fail");
     writeln!(
         out,
-        "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}_precedence(&mut self, __precedence: i32, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{"
+        "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}_precedence(&mut self, __precedence: i32, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {{"
     )
     .expect("writing to a string cannot fail");
     writeln!(
         out,
         "        let __rule_start = antlr4_runtime::IntStream::index(self.base.input());"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "        let __generated_action_marker = self.generated_actions.len();"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "        let __generated_member_checkpoint = self.base.int_members_checkpoint();"
     )
     .expect("writing to a string cannot fail");
     writeln!(
@@ -1381,14 +1430,21 @@ fn render_generated_left_recursive_rule_method(
         .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "                if let Some(__error) = __sync_error {{ return Err(__error); }}"
+        "                self.generated_actions.truncate(__generated_action_marker);"
     )
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "                if !allow_fallback {{ return Err(__error); }}"
+        "                self.base.restore_int_members(__generated_member_checkpoint);"
     )
     .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                if let Some(__error) = __sync_error {{ return Err(GeneratedRuleError::Fatal(__error)); }}"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "                let _ = allow_fallback;")
+        .expect("writing to a string cannot fail");
     writeln!(
         out,
         "                antlr4_runtime::IntStream::seek(self.base.input(), __rule_start);"
@@ -1396,7 +1452,7 @@ fn render_generated_left_recursive_rule_method(
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "                self.parse_interpreted_rule_precedence({index}, __precedence)"
+        "                Err(GeneratedRuleError::Recoverable(__error))"
     )
     .expect("writing to a string cannot fail");
     writeln!(out, "            }}").expect("writing to a string cannot fail");
@@ -1418,17 +1474,12 @@ fn render_generated_init_action(
         return;
     }
     let pad = "    ".repeat(indent);
-    if statement.contains("_tree") {
-        writeln!(out, "{pad}let _tree = &__tree;").expect("writing to a string cannot fail");
-    }
-    if statement.contains("action.") {
-        writeln!(
-            out,
-            "{pad}let action = antlr4_runtime::ParserAction::new_rule_init({rule_index}, __rule_start, Some({entry_state}));"
-        )
-        .expect("writing to a string cannot fail");
-    }
-    writeln!(out, "{pad}{statement}").expect("writing to a string cannot fail");
+    let _ = statement;
+    writeln!(
+        out,
+        "{pad}self.generated_actions.push(GeneratedAction::Parser(antlr4_runtime::ParserAction::new_rule_init({rule_index}, __rule_start, Some({entry_state}))));"
+    )
+    .expect("writing to a string cannot fail");
 }
 
 fn render_generated_steps(
@@ -1562,20 +1613,21 @@ fn render_generated_step(
             source_state,
             rule_index,
         } => {
-            let Some(statement) = inline_action_statements.get(source_state) else {
-                return;
-            };
-            if statement.is_empty() {
-                return;
+            writeln!(
+                out,
+                "{pad}let action = self.base.parser_action_at_current({source_state}, {rule_index}, __rule_start, __consumed_eof);"
+            )
+            .expect("writing to a string cannot fail");
+            if let Some(statement) = inline_action_statements.get(source_state) {
+                if !statement.is_empty() {
+                    writeln!(out, "{pad}{statement}").expect("writing to a string cannot fail");
+                }
             }
-            if statement.contains("action.") {
-                writeln!(
-                    out,
-                    "{pad}let action = self.base.parser_action_at_current({source_state}, {rule_index}, __rule_start, __consumed_eof);"
-                )
-                .expect("writing to a string cannot fail");
-            }
-            writeln!(out, "{pad}{statement}").expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}self.generated_actions.push(GeneratedAction::Parser(action));"
+            )
+            .expect("writing to a string cannot fail");
         }
         GeneratedParserStep::Decision {
             state,
@@ -2086,6 +2138,7 @@ fn render_parser(
         .iter()
         .map(|(source_state, _)| *source_state)
         .collect::<BTreeSet<_>>();
+    let generated_action_states = action_states.clone();
     let predicate_coordinates = grammar_source
         .map_or_else(|| Ok(Vec::new()), |_| lexer_predicate_transitions(data))?
         .into_iter()
@@ -2105,8 +2158,11 @@ fn render_parser(
     let generated_rules = parser_generated_rules(
         data,
         &generated_rule_enabled,
-        &inline_action_states,
-        &action_states,
+        ActionStateSets {
+            all: &action_states,
+            generated: &generated_action_states,
+            inline: &inline_action_states,
+        },
         PredicateCoordinateSets {
             all: &predicate_coordinates,
             generated: &generated_predicate_coordinates,
@@ -2192,6 +2248,34 @@ where
 {{
     base: BaseParser<S>,
     simulator: Option<antlr4_runtime::ParserAtnSimulator<'static>>,
+    generated_actions: Vec<GeneratedAction>,
+}}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug)]
+enum GeneratedAction {{
+    Parser(antlr4_runtime::ParserAction),
+    After {{
+        rule_index: usize,
+        tree: antlr4_runtime::ParseTree,
+        start_index: usize,
+        stop_index: Option<usize>,
+    }},
+}}
+
+#[allow(dead_code)]
+#[derive(Debug)]
+enum GeneratedRuleError {{
+    Recoverable(antlr4_runtime::AntlrError),
+    Fatal(antlr4_runtime::AntlrError),
+}}
+
+impl GeneratedRuleError {{
+    fn into_error(self) -> antlr4_runtime::AntlrError {{
+        match self {{
+            Self::Recoverable(error) | Self::Fatal(error) => error,
+        }}
+    }}
 }}
 
 impl<S> {type_name}<S>
@@ -2205,7 +2289,7 @@ where
             .with_channel_names(metadata.channel_names().iter().copied())
             .with_mode_names(metadata.mode_names().iter().copied());
 {base_initialization}
-        Self {{ base, simulator: None }}
+        Self {{ base, simulator: None, generated_actions: Vec::new() }}
     }}
 
     pub fn metadata() -> &'static GrammarMetadata {{
@@ -2216,6 +2300,16 @@ where
     fn simulator(&mut self) -> &mut antlr4_runtime::ParserAtnSimulator<'static> {{
         self.simulator
             .get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new(atn()))
+    }}
+
+    #[allow(dead_code)]
+    fn run_generated_action(&mut self, action: GeneratedAction, tree: &antlr4_runtime::ParseTree) {{
+        match action {{
+            GeneratedAction::Parser(action) => self.run_action(action, tree),
+            GeneratedAction::After {{ rule_index, tree, start_index, stop_index }} => {{
+                self.run_after_actions(rule_index, &tree, start_index, stop_index);
+            }}
+        }}
     }}
 
 {after_action_dispatch}
@@ -2237,23 +2331,56 @@ where
 
     #[allow(dead_code)]
     fn parse_rule_precedence_inner(&mut self, rule_index: usize, precedence: i32, allow_generated_fallback: bool) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{
+        let __rule_start = antlr4_runtime::IntStream::index(self.base.input());
+        let __generated_action_marker = self.generated_actions.len();
+        let __generated_member_checkpoint = self.base.int_members_checkpoint();
         let __after_start_index = if Self::has_after_actions(rule_index) {{
-            Some(antlr4_runtime::IntStream::index(self.base.input()))
+            Some(__rule_start)
         }} else {{
             None
         }};
-        let __tree = if !self.base.report_diagnostic_errors() {{
+        let (__tree, __from_generated) = if !self.base.report_diagnostic_errors() {{
             if let Some(result) = self.parse_generated_rule(rule_index, precedence, allow_generated_fallback) {{
-                result?
+                match result {{
+                    Ok(tree) => (tree, true),
+                    Err(GeneratedRuleError::Recoverable(_error)) if allow_generated_fallback => {{
+                        self.generated_actions.truncate(__generated_action_marker);
+                        self.base.restore_int_members(__generated_member_checkpoint.clone());
+                        antlr4_runtime::IntStream::seek(self.base.input(), __rule_start);
+                        (self.parse_interpreted_rule_precedence(rule_index, precedence)?, false)
+                    }}
+                    Err(error) => {{
+                        self.generated_actions.truncate(__generated_action_marker);
+                        self.base.restore_int_members(__generated_member_checkpoint);
+                        antlr4_runtime::IntStream::seek(self.base.input(), __rule_start);
+                        return Err(error.into_error());
+                    }}
+                }}
             }} else {{
-                self.parse_interpreted_rule_precedence(rule_index, precedence)?
+                (self.parse_interpreted_rule_precedence(rule_index, precedence)?, false)
             }}
         }} else {{
-            self.parse_interpreted_rule_precedence(rule_index, precedence)?
+            (self.parse_interpreted_rule_precedence(rule_index, precedence)?, false)
         }};
         if let Some(start_index) = __after_start_index {{
             let stop_index = antlr4_runtime::IntStream::index(self.base.input()).checked_sub(1);
-            self.run_after_actions(rule_index, &__tree, start_index, stop_index);
+            if __from_generated {{
+                self.generated_actions.push(GeneratedAction::After {{
+                    rule_index,
+                    tree: __tree.clone(),
+                    start_index,
+                    stop_index,
+                }});
+            }} else {{
+                self.run_after_actions(rule_index, &__tree, start_index, stop_index);
+            }}
+        }}
+        if __from_generated && allow_generated_fallback {{
+            let __generated_actions = self.generated_actions.split_off(__generated_action_marker);
+            self.base.restore_int_members(__generated_member_checkpoint);
+            for __action in __generated_actions {{
+                self.run_generated_action(__action, &__tree);
+            }}
         }}
         Ok(__tree)
     }}
@@ -4248,7 +4375,10 @@ fn render_parser_action_method(
 ) -> io::Result<String> {
     let has_init_actions = init_actions.iter().any(Option::is_some);
     if actions.is_empty() && !has_init_actions {
-        return Ok(String::new());
+        return Ok(
+            "    fn run_action(&mut self, _action: antlr4_runtime::ParserAction, _tree: &antlr4_runtime::ParseTree) {}\n"
+                .to_owned(),
+        );
     }
     let mut init_arms = String::new();
     for (rule_index, template) in init_actions.iter().enumerate() {
@@ -5374,6 +5504,7 @@ atn:
     ) -> Option<GeneratedParserRule> {
         let decision_by_state = decision_by_state(atn);
         let action_states = BTreeSet::new();
+        let generated_action_states = BTreeSet::new();
         let predicate_coordinates = BTreeSet::new();
         let generated_predicate_coordinates = BTreeSet::new();
         let context = GeneratedParserCompileContext {
@@ -5381,6 +5512,7 @@ atn:
             decision_by_state: &decision_by_state,
             inline_action_states,
             action_states: &action_states,
+            generated_action_states: &generated_action_states,
             predicate_coordinates: &predicate_coordinates,
             generated_predicate_coordinates: &generated_predicate_coordinates,
         };
@@ -5627,10 +5759,15 @@ atn:
             compile_generated_parser_transition(
                 3,
                 &range,
-                &BTreeSet::new(),
-                &BTreeSet::new(),
-                &BTreeSet::new(),
-                &BTreeSet::new()
+                ActionStateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                    inline: &BTreeSet::new(),
+                },
+                PredicateCoordinateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                }
             ),
             Some((Some(GeneratedParserStep::MatchSet(vec![(2, 4)])), 7))
         );
@@ -5643,17 +5780,22 @@ atn:
             compile_generated_parser_transition(
                 3,
                 &set_transition,
-                &BTreeSet::new(),
-                &BTreeSet::new(),
-                &BTreeSet::new(),
-                &BTreeSet::new()
+                ActionStateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                    inline: &BTreeSet::new(),
+                },
+                PredicateCoordinateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                }
             ),
             Some((Some(GeneratedParserStep::MatchSet(vec![(1, 1), (5, 6)])), 8))
         );
     }
 
     #[test]
-    fn compiles_inline_action_transitions_only_for_allowed_states() {
+    fn compiles_generated_action_transitions_only_for_allowed_states() {
         let action = Transition::Action {
             target: 8,
             rule_index: 2,
@@ -5664,24 +5806,34 @@ atn:
             compile_generated_parser_transition(
                 4,
                 &action,
-                &BTreeSet::new(),
-                &BTreeSet::new(),
-                &BTreeSet::new(),
-                &BTreeSet::new()
+                ActionStateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                    inline: &BTreeSet::new(),
+                },
+                PredicateCoordinateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                }
             ),
             None
         );
 
-        let mut inline_actions = BTreeSet::new();
-        inline_actions.insert(4);
+        let mut generated_actions = BTreeSet::new();
+        generated_actions.insert(4);
         assert_eq!(
             compile_generated_parser_transition(
                 4,
                 &action,
-                &inline_actions,
-                &BTreeSet::new(),
-                &BTreeSet::new(),
-                &BTreeSet::new()
+                ActionStateSets {
+                    all: &BTreeSet::new(),
+                    generated: &generated_actions,
+                    inline: &BTreeSet::new(),
+                },
+                PredicateCoordinateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                }
             ),
             Some((
                 Some(GeneratedParserStep::Action {
@@ -5705,10 +5857,15 @@ atn:
             compile_generated_parser_transition(
                 4,
                 &action,
-                &BTreeSet::new(),
-                &BTreeSet::new(),
-                &BTreeSet::new(),
-                &BTreeSet::new()
+                ActionStateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                    inline: &BTreeSet::new(),
+                },
+                PredicateCoordinateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                }
             ),
             Some((None, 8))
         );
@@ -5728,10 +5885,15 @@ atn:
             compile_generated_parser_transition(
                 4,
                 &action,
-                &BTreeSet::new(),
-                &action_states,
-                &BTreeSet::new(),
-                &BTreeSet::new()
+                ActionStateSets {
+                    all: &action_states,
+                    generated: &BTreeSet::new(),
+                    inline: &BTreeSet::new(),
+                },
+                PredicateCoordinateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                }
             ),
             None
         );
@@ -5750,10 +5912,15 @@ atn:
             compile_generated_parser_transition(
                 4,
                 &predicate,
-                &BTreeSet::new(),
-                &BTreeSet::new(),
-                &BTreeSet::new(),
-                &BTreeSet::new()
+                ActionStateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                    inline: &BTreeSet::new(),
+                },
+                PredicateCoordinateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                }
             ),
             Some((None, 8))
         );
@@ -5775,10 +5942,15 @@ atn:
             compile_generated_parser_transition(
                 4,
                 &predicate,
-                &BTreeSet::new(),
-                &BTreeSet::new(),
-                &predicates,
-                &generated_predicates
+                ActionStateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                    inline: &BTreeSet::new(),
+                },
+                PredicateCoordinateSets {
+                    all: &predicates,
+                    generated: &generated_predicates,
+                }
             ),
             Some((
                 Some(GeneratedParserStep::Predicate {
@@ -5805,10 +5977,15 @@ atn:
             compile_generated_parser_transition(
                 4,
                 &predicate,
-                &BTreeSet::new(),
-                &BTreeSet::new(),
-                &predicates,
-                &BTreeSet::new()
+                ActionStateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                    inline: &BTreeSet::new(),
+                },
+                PredicateCoordinateSets {
+                    all: &predicates,
+                    generated: &BTreeSet::new(),
+                }
             ),
             None
         );
@@ -5909,7 +6086,7 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
     }
 
     #[test]
-    fn renders_inline_action_event_only_when_statement_uses_it() {
+    fn renders_generated_actions_as_buffered_events() {
         let rule = GeneratedParserRule {
             rule_index: 0,
             entry_state: 0,
@@ -5937,7 +6114,8 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
             render_generated_rule_dispatch(&[Some(rule)], &statements, &BTreeMap::new(), false);
 
         assert!(rendered.contains("parser_action_at_current(4, 0"));
-        assert!(!rendered.contains("parser_action_at_current(6, 0"));
+        assert!(rendered.contains("parser_action_at_current(6, 0"));
+        assert!(rendered.contains("self.generated_actions.push(GeneratedAction::Parser(action));"));
         assert!(rendered.contains("println!(\"alt 2\");"));
     }
 
