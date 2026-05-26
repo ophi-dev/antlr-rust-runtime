@@ -75,7 +75,7 @@ use crate::atn::parser::ParserAtnSimulator;
 use crate::atn::{Atn, AtnState, AtnStateKind, Transition};
 use crate::errors::AntlrError;
 use crate::int_stream::IntStream;
-use crate::prediction::PredictionContext;
+use crate::prediction::{EMPTY_RETURN_STATE, PredictionContext};
 use crate::recognizer::{Recognizer, RecognizerData};
 use crate::token::{CommonToken, TOKEN_EOF, Token, TokenSource, TokenSourceError};
 use crate::token_stream::CommonTokenStream;
@@ -85,7 +85,7 @@ use crate::vocabulary::Vocabulary;
 /// Upper bound for the recursive metadata recognizer before it treats a path as
 /// non-viable. Long expression-regression descriptors legitimately walk tens
 /// of thousands of ATN edges.
-const RECOGNITION_DEPTH_LIMIT: usize = 100_000;
+const RECOGNITION_DEPTH_LIMIT: usize = 32_768;
 /// Whole-rule direct adaptive execution is allowed to give up and fall back to
 /// the existing recognizer. Keep the guard at the same order of magnitude as
 /// speculative recognition so malformed cyclic ATNs cannot spin forever.
@@ -2321,6 +2321,89 @@ where
     pub fn sync(&mut self, state: isize) -> Result<(), AntlrError> {
         self.set_state(state);
         Ok(())
+    }
+
+    /// Synchronizes a generated parser decision against the ATN lookahead set.
+    ///
+    /// ANTLR generated parsers call the error strategy before optional and loop
+    /// decisions. When the current token cannot start any alternative, follow a
+    /// nullable exit, or be deleted before a later synchronization token, the
+    /// generated Rust method reports that decision-level mismatch instead of
+    /// descending into a child rule that cannot start at the current token.
+    pub fn sync_decision(&mut self, atn: &Atn, state_number: usize) -> Result<(), AntlrError> {
+        self.set_state(isize::try_from(state_number).unwrap_or(isize::MAX));
+        let Some(state) = atn.state(state_number) else {
+            return Ok(());
+        };
+        let Some(rule_index) = state.rule_index else {
+            return Ok(());
+        };
+        let Some(rule_stop) = atn.rule_to_stop_state().get(rule_index).copied() else {
+            return Ok(());
+        };
+        let entry = self.cached_decision_lookahead(atn, state, rule_stop);
+        let mut expected = BTreeSet::new();
+        let mut nullable = false;
+        for transition in &entry.transitions {
+            transition.symbols.extend_btree_set(&mut expected);
+            nullable |= transition.nullable;
+        }
+        if nullable {
+            expected.extend(self.context_expected_symbols(atn));
+        }
+        let symbol = self.la(1);
+        if expected.is_empty() || expected.contains(&symbol) {
+            return Ok(());
+        }
+        if symbol != TOKEN_EOF {
+            let mut cursor = self.input.index();
+            loop {
+                let current = self.token_type_at(cursor);
+                if current == TOKEN_EOF {
+                    break;
+                }
+                let next = self.consume_index(cursor, current);
+                if next == cursor {
+                    break;
+                }
+                if expected.contains(&self.token_type_at(next)) {
+                    return Ok(());
+                }
+                cursor = next;
+            }
+        }
+        let current = self.input.lt(1).cloned();
+        Err(AntlrError::ParserError {
+            line: current.as_ref().map(Token::line).unwrap_or_default(),
+            column: current.as_ref().map(Token::column).unwrap_or_default(),
+            message: format!(
+                "mismatched input {} expecting {}",
+                current
+                    .as_ref()
+                    .map_or_else(|| "'<EOF>'".to_owned(), token_input_display),
+                self.expected_symbols_display(&expected)
+            ),
+        })
+    }
+
+    fn context_expected_symbols(&self, atn: &Atn) -> BTreeSet<i32> {
+        let context = self.prediction_context(atn);
+        let mut expected = BTreeSet::new();
+        if context.is_empty() {
+            expected.insert(TOKEN_EOF);
+            return expected;
+        }
+        for index in 0..context.len() {
+            let Some(return_state) = context.return_state(index) else {
+                continue;
+            };
+            if return_state == EMPTY_RETURN_STATE {
+                expected.insert(TOKEN_EOF);
+            } else {
+                expected.extend(state_expected_symbols(atn, return_state));
+            }
+        }
+        expected
     }
 
     /// Builds a generated no-viable-alternative parser error.

@@ -445,17 +445,20 @@ enum GeneratedParserStep {
         precedence: i32,
     },
     Decision {
+        state: usize,
         decision: usize,
         allow_semantic_context: bool,
         alts: Vec<Vec<Self>>,
     },
     StarLoop {
+        state: usize,
         decision: usize,
         enter_alt: usize,
         exit_alt: usize,
         body: Vec<Self>,
     },
     LeftRecursiveLoop {
+        state: usize,
         decision: usize,
         enter_alt: usize,
         exit_alt: usize,
@@ -466,7 +469,24 @@ enum GeneratedParserStep {
 }
 
 #[derive(Clone, Copy)]
+struct DecisionRender<'a> {
+    state: usize,
+    decision: usize,
+    allow_semantic_context: bool,
+    alts: &'a [Vec<GeneratedParserStep>],
+}
+
+#[derive(Clone, Copy)]
+struct StarLoopRender<'a> {
+    state: usize,
+    decision: usize,
+    alts: (usize, usize),
+    body: &'a [GeneratedParserStep],
+}
+
+#[derive(Clone, Copy)]
 struct LeftRecursiveLoopRender<'a> {
+    state: usize,
     decision: usize,
     alts: (usize, usize),
     rule: (usize, usize),
@@ -691,6 +711,7 @@ fn compile_generated_left_recursive_loop(
 
     Some((
         GeneratedParserStep::LeftRecursiveLoop {
+            state: state.state_number,
             decision,
             enter_alt,
             exit_alt,
@@ -795,6 +816,7 @@ fn compile_generated_parser_block_decision(
     }
 
     let mut steps = vec![GeneratedParserStep::Decision {
+        state: state.state_number,
         decision,
         allow_semantic_context: false,
         alts,
@@ -859,6 +881,7 @@ fn compile_generated_parser_star_loop(
     }
 
     let mut steps = vec![GeneratedParserStep::StarLoop {
+        state: state.state_number,
         decision,
         enter_alt,
         exit_alt,
@@ -926,6 +949,7 @@ fn compile_generated_parser_plus_loop(
     }
 
     let mut steps = vec![GeneratedParserStep::StarLoop {
+        state: state.state_number,
         decision,
         enter_alt,
         exit_alt,
@@ -1130,6 +1154,11 @@ fn render_generated_rule_method(
         .expect("writing to a string cannot fail");
     writeln!(
         out,
+        "        let mut __sync_error: Option<antlr4_runtime::AntlrError> = None;"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
         "        let __result = (|| -> Result<(), antlr4_runtime::AntlrError> {{"
     )
     .expect("writing to a string cannot fail");
@@ -1145,6 +1174,11 @@ fn render_generated_rule_method(
     writeln!(out, "            Err(_) => {{").expect("writing to a string cannot fail");
     writeln!(out, "                self.base.exit_rule();")
         .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                if let Some(__error) = __sync_error {{ return Err(__error); }}"
+    )
+    .expect("writing to a string cannot fail");
     writeln!(
         out,
         "                antlr4_runtime::IntStream::seek(self.base.input(), __rule_start);"
@@ -1194,6 +1228,11 @@ fn render_generated_left_recursive_rule_method(
         .expect("writing to a string cannot fail");
     writeln!(
         out,
+        "        let mut __sync_error: Option<antlr4_runtime::AntlrError> = None;"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
         "        let __result = (|| -> Result<(), antlr4_runtime::AntlrError> {{"
     )
     .expect("writing to a string cannot fail");
@@ -1209,6 +1248,11 @@ fn render_generated_left_recursive_rule_method(
     writeln!(out, "            Err(_) => {{").expect("writing to a string cannot fail");
     writeln!(out, "                self.base.unroll_recursion_context();")
         .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                if let Some(__error) = __sync_error {{ return Err(__error); }}"
+    )
+    .expect("writing to a string cannot fail");
     writeln!(
         out,
         "                antlr4_runtime::IntStream::seek(self.base.input(), __rule_start);"
@@ -1343,20 +1387,25 @@ fn render_generated_step(
             writeln!(out, "{pad}{statement}").expect("writing to a string cannot fail");
         }
         GeneratedParserStep::Decision {
+            state,
             decision,
             allow_semantic_context,
             alts,
         } => {
             render_generated_decision(
                 out,
-                *decision,
-                *allow_semantic_context,
-                alts,
+                DecisionRender {
+                    state: *state,
+                    decision: *decision,
+                    allow_semantic_context: *allow_semantic_context,
+                    alts,
+                },
                 indent,
                 inline_action_statements,
             );
         }
         GeneratedParserStep::StarLoop {
+            state,
             decision,
             enter_alt,
             exit_alt,
@@ -1364,14 +1413,18 @@ fn render_generated_step(
         } => {
             render_generated_star_loop(
                 out,
-                *decision,
-                (*enter_alt, *exit_alt),
-                body,
+                StarLoopRender {
+                    state: *state,
+                    decision: *decision,
+                    alts: (*enter_alt, *exit_alt),
+                    body,
+                },
                 indent,
                 inline_action_statements,
             );
         }
         GeneratedParserStep::LeftRecursiveLoop {
+            state,
             decision,
             enter_alt,
             exit_alt,
@@ -1382,6 +1435,7 @@ fn render_generated_step(
             render_generated_left_recursive_loop(
                 out,
                 LeftRecursiveLoopRender {
+                    state: *state,
                     decision: *decision,
                     alts: (*enter_alt, *exit_alt),
                     rule: (*rule_index, *entry_state),
@@ -1396,13 +1450,18 @@ fn render_generated_step(
 
 fn render_generated_decision(
     out: &mut String,
-    decision: usize,
-    allow_semantic_context: bool,
-    alts: &[Vec<GeneratedParserStep>],
+    decision_info: DecisionRender<'_>,
     indent: usize,
     inline_action_statements: &BTreeMap<usize, String>,
 ) {
+    let DecisionRender {
+        state,
+        decision,
+        allow_semantic_context,
+        alts,
+    } = decision_info;
     let pad = "    ".repeat(indent);
+    render_generated_sync_decision(out, &pad, state);
     writeln!(
         out,
         "{pad}let __decision_start = antlr4_runtime::IntStream::index(self.base.input());"
@@ -1454,17 +1513,34 @@ fn render_generated_decision(
     writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
 }
 
+fn render_generated_sync_decision(out: &mut String, pad: &str, state: usize) {
+    writeln!(
+        out,
+        "{pad}if let Err(__error) = self.base.sync_decision(atn(), {state}) {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    __sync_error = Some(__error.clone());")
+        .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    return Err(__error);").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
+}
+
 fn render_generated_star_loop(
     out: &mut String,
-    decision: usize,
-    alts: (usize, usize),
-    body: &[GeneratedParserStep],
+    loop_info: StarLoopRender<'_>,
     indent: usize,
     inline_action_statements: &BTreeMap<usize, String>,
 ) {
+    let StarLoopRender {
+        state,
+        decision,
+        alts,
+        body,
+    } = loop_info;
     let (enter_alt, exit_alt) = alts;
     let pad = "    ".repeat(indent);
     writeln!(out, "{pad}loop {{").expect("writing to a string cannot fail");
+    render_generated_sync_decision(out, &format!("{pad}    "), state);
     writeln!(
         out,
         "{pad}    let __decision_start = antlr4_runtime::IntStream::index(self.base.input());"
@@ -1520,6 +1596,7 @@ fn render_generated_left_recursive_loop(
     inline_action_statements: &BTreeMap<usize, String>,
 ) {
     let LeftRecursiveLoopRender {
+        state,
         decision,
         alts,
         rule,
@@ -1529,6 +1606,7 @@ fn render_generated_left_recursive_loop(
     let (rule_index, entry_state) = rule;
     let pad = "    ".repeat(indent);
     writeln!(out, "{pad}loop {{").expect("writing to a string cannot fail");
+    render_generated_sync_decision(out, &format!("{pad}    "), state);
     writeln!(
         out,
         "{pad}    let __decision_start = antlr4_runtime::IntStream::index(self.base.input());"
@@ -2011,17 +2089,8 @@ impl ActionTemplate {
     /// action-transition site without needing the completed parse tree or
     /// interpreter-only state.
     fn can_run_inline(&self) -> bool {
-        matches!(
-            self,
-            Self::Noop
-                | Self::Text { .. }
-                | Self::TextWithPrefix { .. }
-                | Self::TokenText { .. }
-                | Self::TokenTextWithPrefix { .. }
-                | Self::Literal { .. }
-                | Self::AddMember { .. }
-                | Self::MemberValue { .. }
-        ) || matches!(self, Self::Sequence(actions) if actions.iter().all(Self::can_run_inline))
+        matches!(self, Self::Noop | Self::AddMember { .. })
+            || matches!(self, Self::Sequence(actions) if actions.iter().all(Self::can_run_inline))
     }
 }
 
@@ -4995,6 +5064,7 @@ atn:
         assert_eq!(
             body.steps,
             [GeneratedParserStep::Decision {
+                state: 1,
                 decision: 0,
                 allow_semantic_context: false,
                 alts: vec![
@@ -5006,6 +5076,7 @@ atn:
 
         let rendered = render_generated_rule_dispatch(&[Some(body)], &BTreeMap::new());
         assert!(rendered.contains("parse_generated_rule_0"));
+        assert!(rendered.contains("sync_decision(atn(), 1)"));
         assert!(rendered.contains("adaptive_predict_stream_info_with_context(0, 0"));
         assert!(!rendered.contains("requires_full_context"));
     }
@@ -5019,6 +5090,7 @@ atn:
         assert_eq!(
             body.steps,
             [GeneratedParserStep::StarLoop {
+                state: 1,
                 decision: 0,
                 enter_alt: 1,
                 exit_alt: 2,
@@ -5028,6 +5100,7 @@ atn:
 
         let rendered = render_generated_rule_dispatch(&[Some(body)], &BTreeMap::new());
         assert!(rendered.contains("loop {"));
+        assert!(rendered.contains("sync_decision(atn(), 1)"));
         assert!(rendered.contains("1 => {"));
         assert!(rendered.contains("2 => break,"));
         assert!(rendered.contains("adaptive_predict_stream_info_with_context(0, 0"));
@@ -5044,6 +5117,7 @@ atn:
             [
                 GeneratedParserStep::MatchToken(1),
                 GeneratedParserStep::StarLoop {
+                    state: 4,
                     decision: 0,
                     enter_alt: 1,
                     exit_alt: 2,
@@ -5060,6 +5134,7 @@ atn:
             .expect("plus block decision rule should compile");
 
         let body_decision = GeneratedParserStep::Decision {
+            state: 1,
             decision: 0,
             allow_semantic_context: false,
             alts: vec![
@@ -5072,6 +5147,7 @@ atn:
             [
                 body_decision.clone(),
                 GeneratedParserStep::StarLoop {
+                    state: 5,
                     decision: 1,
                     enter_alt: 1,
                     exit_alt: 2,
@@ -5095,12 +5171,14 @@ atn:
             [
                 GeneratedParserStep::MatchToken(1),
                 GeneratedParserStep::LeftRecursiveLoop {
+                    state: 2,
                     decision: 0,
                     enter_alt: 1,
                     exit_alt: 2,
                     rule_index: 0,
                     entry_state: 0,
                     body: vec![GeneratedParserStep::Decision {
+                        state: 3,
                         decision: 1,
                         allow_semantic_context: true,
                         alts: vec![vec![
@@ -5376,18 +5454,22 @@ atn:
 
     #[test]
     fn classifies_inline_safe_parser_actions() {
-        assert!(ActionTemplate::Text { newline: true }.can_run_inline());
         assert!(
             ActionTemplate::Sequence(vec![
-                ActionTemplate::Literal {
-                    value: "x".to_owned(),
-                    newline: false,
-                },
-                ActionTemplate::MemberValue {
+                ActionTemplate::Noop,
+                ActionTemplate::AddMember {
                     member: "i".to_owned(),
-                    newline: true,
+                    value: 1,
                 },
             ])
+            .can_run_inline()
+        );
+        assert!(!ActionTemplate::Text { newline: true }.can_run_inline());
+        assert!(
+            !ActionTemplate::MemberValue {
+                member: "i".to_owned(),
+                newline: true,
+            }
             .can_run_inline()
         );
         assert!(
