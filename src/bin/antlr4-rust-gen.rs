@@ -6,7 +6,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use antlr4_runtime::atn::serialized::{AtnDeserializer, SerializedAtn};
-use antlr4_runtime::atn::{LexerAction, Transition};
+use antlr4_runtime::atn::{Atn, AtnStateKind, LexerAction, Transition};
 
 #[path = "../bin_support/rust_names.rs"]
 mod rust_names;
@@ -420,11 +420,366 @@ where
     ))
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct GeneratedParserRule {
+    rule_index: usize,
+    entry_state: usize,
+    steps: Vec<GeneratedParserStep>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum GeneratedParserStep {
+    MatchToken(i32),
+    MatchWildcard,
+    CallRule(usize),
+    Decision {
+        decision: usize,
+        alts: Vec<Vec<Self>>,
+    },
+}
+
+/// Compiles the parser ATN subset that is safe to emit as recursive-descent
+/// Rust today. Unsupported states deliberately return `None` so the generated
+/// method can keep using the interpreter fallback until more ATN shapes are
+/// covered.
+fn parser_generated_rules(
+    data: &InterpData,
+    enabled: bool,
+) -> io::Result<Vec<Option<GeneratedParserRule>>> {
+    if !enabled {
+        return Ok(vec![None; data.rule_names.len()]);
+    }
+    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
+        .deserialize()
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    let decision_by_state = decision_by_state(&atn);
+    Ok((0..data.rule_names.len())
+        .map(|rule_index| compile_generated_parser_rule(&atn, rule_index, &decision_by_state))
+        .collect())
+}
+
+fn decision_by_state(atn: &Atn) -> Vec<Option<usize>> {
+    let mut decision_by_state = vec![None; atn.states().len()];
+    for (decision, &state_number) in atn.decision_to_state().iter().enumerate() {
+        if let Some(slot) = decision_by_state.get_mut(state_number) {
+            *slot = Some(decision);
+        }
+    }
+    decision_by_state
+}
+
+fn compile_generated_parser_rule(
+    atn: &Atn,
+    rule_index: usize,
+    decision_by_state: &[Option<usize>],
+) -> Option<GeneratedParserRule> {
+    let entry_state = atn.rule_to_start_state().get(rule_index).copied()?;
+    let stop_state = atn.rule_to_stop_state().get(rule_index).copied()?;
+    let start = atn.state(entry_state)?;
+    if start.left_recursive_rule {
+        return None;
+    }
+    let mut visited = BTreeSet::new();
+    let steps = compile_generated_parser_path(
+        atn,
+        entry_state,
+        stop_state,
+        decision_by_state,
+        &mut visited,
+    )?;
+    Some(GeneratedParserRule {
+        rule_index,
+        entry_state,
+        steps,
+    })
+}
+
+fn compile_generated_parser_path(
+    atn: &Atn,
+    state_number: usize,
+    stop_state: usize,
+    decision_by_state: &[Option<usize>],
+    visited: &mut BTreeSet<usize>,
+) -> Option<Vec<GeneratedParserStep>> {
+    if state_number == stop_state {
+        return Some(Vec::new());
+    }
+    if !visited.insert(state_number) {
+        return None;
+    }
+
+    let state = atn.state(state_number)?;
+    let steps = if let Some(decision) = decision_by_state.get(state_number).copied().flatten() {
+        compile_generated_parser_decision(
+            atn,
+            state,
+            decision,
+            stop_state,
+            decision_by_state,
+            visited,
+        )?
+    } else {
+        let transition = state.transitions.first()?;
+        if state.transitions.len() != 1 {
+            return None;
+        }
+        let (step, target) = compile_generated_parser_transition(transition)?;
+        let mut steps = step.into_iter().collect::<Vec<_>>();
+        steps.extend(compile_generated_parser_path(
+            atn,
+            target,
+            stop_state,
+            decision_by_state,
+            visited,
+        )?);
+        steps
+    };
+    visited.remove(&state_number);
+    Some(steps)
+}
+
+fn compile_generated_parser_decision(
+    atn: &Atn,
+    state: &antlr4_runtime::atn::AtnState,
+    decision: usize,
+    stop_state: usize,
+    decision_by_state: &[Option<usize>],
+    visited: &mut BTreeSet<usize>,
+) -> Option<Vec<GeneratedParserStep>> {
+    if state.kind != AtnStateKind::BlockStart {
+        return None;
+    }
+    let end_state = state.end_state?;
+    let mut alts = Vec::with_capacity(state.transitions.len());
+    for transition in &state.transitions {
+        let (step, target) = compile_generated_parser_transition(transition)?;
+        let mut alt_visited = visited.clone();
+        let mut alt_steps = step.into_iter().collect::<Vec<_>>();
+        alt_steps.extend(compile_generated_parser_path(
+            atn,
+            target,
+            end_state,
+            decision_by_state,
+            &mut alt_visited,
+        )?);
+        alts.push(alt_steps);
+    }
+
+    let mut steps = vec![GeneratedParserStep::Decision { decision, alts }];
+    steps.extend(compile_generated_parser_path(
+        atn,
+        end_state,
+        stop_state,
+        decision_by_state,
+        visited,
+    )?);
+    Some(steps)
+}
+
+const fn compile_generated_parser_transition(
+    transition: &Transition,
+) -> Option<(Option<GeneratedParserStep>, usize)> {
+    match transition {
+        Transition::Epsilon { target } => Some((None, *target)),
+        Transition::Atom { target, label } => {
+            Some((Some(GeneratedParserStep::MatchToken(*label)), *target))
+        }
+        Transition::Wildcard { target } => {
+            Some((Some(GeneratedParserStep::MatchWildcard), *target))
+        }
+        Transition::Rule {
+            rule_index,
+            follow_state,
+            ..
+        } => Some((
+            Some(GeneratedParserStep::CallRule(*rule_index)),
+            *follow_state,
+        )),
+        Transition::Range { .. }
+        | Transition::Set { .. }
+        | Transition::NotSet { .. }
+        | Transition::Predicate { .. }
+        | Transition::Action { .. }
+        | Transition::Precedence { .. } => None,
+    }
+}
+
+fn render_generated_rule_dispatch(rules: &[Option<GeneratedParserRule>]) -> String {
+    let mut out = String::new();
+    writeln!(
+        out,
+        "    #[allow(dead_code)]\n    fn parse_generated_rule(&mut self, rule_index: usize) -> Option<Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError>> {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "        match rule_index {{").expect("writing to a string cannot fail");
+    for rule in rules.iter().flatten() {
+        let index = rule.rule_index;
+        writeln!(
+            out,
+            "            {index} => Some(self.parse_generated_rule_{index}()),"
+        )
+        .expect("writing to a string cannot fail");
+    }
+    writeln!(out, "            _ => None,").expect("writing to a string cannot fail");
+    writeln!(out, "        }}").expect("writing to a string cannot fail");
+    writeln!(out, "    }}").expect("writing to a string cannot fail");
+    for rule in rules.iter().flatten() {
+        render_generated_rule_method(&mut out, rule);
+    }
+    out
+}
+
+fn render_generated_rule_method(out: &mut String, rule: &GeneratedParserRule) {
+    let index = rule.rule_index;
+    let entry_state = rule.entry_state;
+    writeln!(
+        out,
+        "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "        let __rule_start = antlr4_runtime::IntStream::index(self.base.input());"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "        let mut __ctx = self.base.enter_rule({entry_state}isize, {index});"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "        let mut __consumed_eof = false;")
+        .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "        let __result = (|| -> Result<(), antlr4_runtime::AntlrError> {{"
+    )
+    .expect("writing to a string cannot fail");
+    render_generated_steps(out, &rule.steps, 3);
+    writeln!(out, "            Ok(())").expect("writing to a string cannot fail");
+    writeln!(out, "        }})();").expect("writing to a string cannot fail");
+    writeln!(out, "        match __result {{").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "            Ok(()) => Ok(self.base.finish_rule(__ctx, __consumed_eof)),"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "            Err(_) => {{").expect("writing to a string cannot fail");
+    writeln!(out, "                self.base.exit_rule();")
+        .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                antlr4_runtime::IntStream::seek(self.base.input(), __rule_start);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                self.base.parse_atn_rule(atn(), {index})"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "            }}").expect("writing to a string cannot fail");
+    writeln!(out, "        }}").expect("writing to a string cannot fail");
+    writeln!(out, "    }}").expect("writing to a string cannot fail");
+}
+
+fn render_generated_steps(out: &mut String, steps: &[GeneratedParserStep], indent: usize) {
+    for step in steps {
+        render_generated_step(out, step, indent);
+    }
+}
+
+fn render_generated_step(out: &mut String, step: &GeneratedParserStep, indent: usize) {
+    let pad = "    ".repeat(indent);
+    match step {
+        GeneratedParserStep::MatchToken(token_type) => {
+            writeln!(
+                out,
+                "{pad}let __child = self.base.match_token({token_type})?;"
+            )
+            .expect("writing to a string cannot fail");
+            if *token_type == antlr4_runtime::token::TOKEN_EOF {
+                writeln!(out, "{pad}__consumed_eof = true;")
+                    .expect("writing to a string cannot fail");
+            }
+            writeln!(out, "{pad}self.base.add_parse_child(&mut __ctx, __child);")
+                .expect("writing to a string cannot fail");
+        }
+        GeneratedParserStep::MatchWildcard => {
+            writeln!(out, "{pad}let __child = self.base.match_wildcard()?;")
+                .expect("writing to a string cannot fail");
+            writeln!(out, "{pad}self.base.add_parse_child(&mut __ctx, __child);")
+                .expect("writing to a string cannot fail");
+        }
+        GeneratedParserStep::CallRule(rule_index) => {
+            writeln!(out, "{pad}let __child = self.parse_rule({rule_index})?;")
+                .expect("writing to a string cannot fail");
+            writeln!(out, "{pad}self.base.add_parse_child(&mut __ctx, __child);")
+                .expect("writing to a string cannot fail");
+        }
+        GeneratedParserStep::Decision { decision, alts } => {
+            render_generated_decision(out, *decision, alts, indent);
+        }
+    }
+}
+
+fn render_generated_decision(
+    out: &mut String,
+    decision: usize,
+    alts: &[Vec<GeneratedParserStep>],
+    indent: usize,
+) {
+    let pad = "    ".repeat(indent);
+    writeln!(
+        out,
+        "{pad}let __decision_start = antlr4_runtime::IntStream::index(self.base.input());"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}let __prediction = {{").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new(atn()));"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}    __simulator.adaptive_predict_stream_info_with_precedence({decision}, 0, self.base.input())"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}}}.map_err(|_| self.base.no_viable_alternative_error(__decision_start))?;"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}if __prediction.requires_full_context || __prediction.has_semantic_context {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}    return Err(self.base.no_viable_alternative_error(__decision_start));"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}match __prediction.alt {{").expect("writing to a string cannot fail");
+    for (index, steps) in alts.iter().enumerate() {
+        let alt = index + 1;
+        writeln!(out, "{pad}    {alt} => {{").expect("writing to a string cannot fail");
+        render_generated_steps(out, steps, indent + 2);
+        writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
+    }
+    writeln!(
+        out,
+        "{pad}    _ => return Err(self.base.no_viable_alternative_error(__decision_start)),"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
+}
+
 /// Renders a Rust parser module with one public method per grammar rule.
 ///
-/// Parser methods currently route through the runtime parser interpreter entry
-/// point. As the parser ATN simulator matures, the generated surface can remain
-/// stable while the interpreter becomes semantically complete.
+/// Parser methods use generated recursive-descent bodies for the ATN subset
+/// covered by `parser_generated_rules` and keep the interpreter fallback for
+/// unsupported constructs while the generated surface is expanded.
 fn render_parser(
     grammar_name: &str,
     data: &InterpData,
@@ -460,6 +815,13 @@ fn render_parser(
     let has_predicate_dispatch = !predicates.is_empty();
     let has_return_actions = !return_actions.is_empty();
     let track_alt_numbers = grammar_source.is_some_and(uses_alt_number_contexts);
+    let generate_direct_rules = !has_action_dispatch
+        && !track_alt_numbers
+        && !has_predicate_dispatch
+        && !has_return_actions
+        && after_actions.iter().all(Vec::is_empty);
+    let generated_rules = parser_generated_rules(data, generate_direct_rules)?;
+    let generated_rule_dispatch = render_generated_rule_dispatch(&generated_rules);
     let init_action_rules = init_actions
         .iter()
         .enumerate()
@@ -623,7 +985,11 @@ where
             .get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new(atn()))
     }}
 
+    #[allow(dead_code)]
     fn parse_rule(&mut self, rule_index: usize) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{
+        if let Some(result) = self.parse_generated_rule(rule_index) {{
+            return result;
+        }}
         if std::env::var_os("ANTLR4_RUST_ADAPTIVE_DIRECT").is_some() {{
             let simulator = self
                 .simulator
@@ -634,6 +1000,8 @@ where
             self.base.parse_atn_rule(atn(), rule_index)
         }}
     }}
+
+{generated_rule_dispatch}
 
 {rule_methods}
 
@@ -3637,6 +4005,7 @@ fn grammar_name_from_path(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use antlr4_runtime::atn::{AtnState, AtnType};
 
     #[test]
     fn parses_interp_sections() {
@@ -3677,6 +4046,45 @@ atn:
         assert_eq!(rust_function_name("try"), "r#try");
         assert_eq!(rust_function_name("Self"), "r#self");
         assert!(is_rust_keyword("Self"));
+    }
+
+    #[test]
+    fn compiles_linear_parser_rule_body() {
+        let atn = linear_rule_atn();
+        let body = compile_generated_parser_rule(&atn, 0, &decision_by_state(&atn))
+            .expect("linear rule should compile");
+
+        assert_eq!(body.rule_index, 0);
+        assert_eq!(body.entry_state, 0);
+        assert_eq!(
+            body.steps,
+            [
+                GeneratedParserStep::MatchToken(1),
+                GeneratedParserStep::MatchToken(antlr4_runtime::token::TOKEN_EOF)
+            ]
+        );
+    }
+
+    #[test]
+    fn compiles_block_decision_with_adaptive_prediction() {
+        let atn = block_decision_atn();
+        let body = compile_generated_parser_rule(&atn, 0, &decision_by_state(&atn))
+            .expect("block decision rule should compile");
+
+        assert_eq!(
+            body.steps,
+            [GeneratedParserStep::Decision {
+                decision: 0,
+                alts: vec![
+                    vec![GeneratedParserStep::MatchToken(1)],
+                    vec![GeneratedParserStep::MatchToken(2)]
+                ],
+            }]
+        );
+
+        let rendered = render_generated_rule_dispatch(&[Some(body)]);
+        assert!(rendered.contains("parse_generated_rule_0"));
+        assert!(rendered.contains("adaptive_predict_stream_info_with_precedence(0, 0"));
     }
 
     #[test]
@@ -3839,5 +4247,71 @@ continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#,
             parse_boolean_member_not_predicate(r#"GetMember("enumKeyword"):Not()"#),
             Some(PredicateTemplate::False)
         );
+    }
+
+    fn linear_rule_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 2);
+        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
+        atn.add_state(AtnState::new(1, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(2, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(3, AtnStateKind::RuleStop).with_rule_index(0));
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Epsilon { target: 1 });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Atom {
+                target: 2,
+                label: 1,
+            });
+        atn.state_mut(2)
+            .expect("state 2")
+            .add_transition(Transition::Atom {
+                target: 3,
+                label: antlr4_runtime::token::TOKEN_EOF,
+            });
+        atn.set_rule_to_start_state(vec![0]);
+        atn.set_rule_to_stop_state(vec![3]);
+        atn
+    }
+
+    fn block_decision_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 2);
+        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
+        let mut decision = AtnState::new(1, AtnStateKind::BlockStart).with_rule_index(0);
+        decision.end_state = Some(4);
+        atn.add_state(decision);
+        atn.add_state(AtnState::new(2, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(3, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(4, AtnStateKind::BlockEnd).with_rule_index(0));
+        atn.add_state(AtnState::new(5, AtnStateKind::RuleStop).with_rule_index(0));
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Epsilon { target: 1 });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Epsilon { target: 2 });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Epsilon { target: 3 });
+        atn.state_mut(2)
+            .expect("state 2")
+            .add_transition(Transition::Atom {
+                target: 4,
+                label: 1,
+            });
+        atn.state_mut(3)
+            .expect("state 3")
+            .add_transition(Transition::Atom {
+                target: 4,
+                label: 2,
+            });
+        atn.state_mut(4)
+            .expect("state 4")
+            .add_transition(Transition::Epsilon { target: 5 });
+        atn.add_decision_state(1);
+        atn.set_rule_to_start_state(vec![0]);
+        atn.set_rule_to_stop_state(vec![5]);
+        atn
     }
 }

@@ -2067,12 +2067,35 @@ where
     pub fn enter_rule(&mut self, state: isize, rule_index: usize) -> ParserRuleContext {
         self.set_state(state);
         self.rule_context_stack.push(rule_index);
-        ParserRuleContext::new(rule_index, state)
+        let start_index = self.current_visible_index();
+        let mut context = ParserRuleContext::new(rule_index, state);
+        if let Some(token) = self.token_at(start_index) {
+            context.set_start(token);
+        }
+        context
     }
 
     /// Exits the current generated parser rule.
     pub fn exit_rule(&mut self) {
         self.rule_context_stack.pop();
+    }
+
+    /// Adds a generated parser child only when parse-tree construction is
+    /// enabled.
+    pub fn add_parse_child(&self, context: &mut ParserRuleContext, child: ParseTree) {
+        if self.build_parse_trees {
+            context.add_child(child);
+        }
+    }
+
+    /// Finishes a generated parser rule and returns its parse-tree node.
+    pub fn finish_rule(&mut self, mut context: ParserRuleContext, consumed_eof: bool) -> ParseTree {
+        let stop_index = self.rule_stop_token_index(self.input.index(), consumed_eof);
+        if let Some(token) = stop_index.and_then(|index| self.token_at(index)) {
+            context.set_stop(token);
+        }
+        self.exit_rule();
+        self.rule_node(context)
     }
 
     /// Enters a generated left-recursive rule at `precedence`.
