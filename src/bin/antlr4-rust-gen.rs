@@ -2242,8 +2242,12 @@ where
         }} else {{
             None
         }};
-        let __tree = if let Some(result) = self.parse_generated_rule(rule_index, precedence, allow_generated_fallback) {{
-            result?
+        let __tree = if !self.base.report_diagnostic_errors() {{
+            if let Some(result) = self.parse_generated_rule(rule_index, precedence, allow_generated_fallback) {{
+                result?
+            }} else {{
+                self.parse_interpreted_rule_precedence(rule_index, precedence)?
+            }}
         }} else {{
             self.parse_interpreted_rule_precedence(rule_index, precedence)?
         }};
@@ -5873,6 +5877,17 @@ s : ;
 
         assert!(rendered.contains("parse_generated_rule_0"));
         assert!(rendered.contains("track_alt_numbers: true"));
+    }
+
+    #[test]
+    fn generated_parser_falls_back_for_diagnostic_reporting() {
+        let rendered =
+            render_parser("TParser", &minimal_parser_data(), None).expect("parser should render");
+
+        assert!(rendered.contains("if !self.base.report_diagnostic_errors()"));
+        assert!(
+            rendered.contains("self.parse_interpreted_rule_precedence(rule_index, precedence)?")
+        );
     }
 
     #[test]
