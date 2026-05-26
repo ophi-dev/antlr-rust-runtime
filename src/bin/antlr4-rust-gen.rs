@@ -447,6 +447,7 @@ enum GeneratedParserStep {
     Decision {
         state: usize,
         decision: usize,
+        track_alt_number: bool,
         allow_semantic_context: bool,
         alts: Vec<Vec<Self>>,
     },
@@ -455,6 +456,7 @@ enum GeneratedParserStep {
         decision: usize,
         enter_alt: usize,
         exit_alt: usize,
+        track_alt_number: bool,
         body: Vec<Self>,
     },
     LeftRecursiveLoop {
@@ -472,6 +474,7 @@ enum GeneratedParserStep {
 struct DecisionRender<'a> {
     state: usize,
     decision: usize,
+    track_alt_number: bool,
     allow_semantic_context: bool,
     alts: &'a [Vec<GeneratedParserStep>],
 }
@@ -481,6 +484,7 @@ struct StarLoopRender<'a> {
     state: usize,
     decision: usize,
     alts: (usize, usize),
+    track_alt_number: bool,
     body: &'a [GeneratedParserStep],
 }
 
@@ -580,6 +584,18 @@ fn decision_by_state(atn: &Atn) -> Vec<Option<usize>> {
         }
     }
     decision_by_state
+}
+
+const fn state_tracks_alt_number(state: &antlr4_runtime::atn::AtnState) -> bool {
+    matches!(
+        state.kind,
+        AtnStateKind::Basic
+            | AtnStateKind::BlockStart
+            | AtnStateKind::PlusBlockStart
+            | AtnStateKind::StarBlockStart
+            | AtnStateKind::StarLoopEntry
+    ) && !state.precedence_rule_decision
+        && state.transitions.len() > 1
 }
 
 fn compile_generated_parser_rule(
@@ -817,6 +833,7 @@ fn compile_generated_parser_block_decision(
     let mut steps = vec![GeneratedParserStep::Decision {
         state: state.state_number,
         decision,
+        track_alt_number: state_tracks_alt_number(state),
         allow_semantic_context: false,
         alts,
     }];
@@ -884,6 +901,7 @@ fn compile_generated_parser_star_loop(
         decision,
         enter_alt,
         exit_alt,
+        track_alt_number: state_tracks_alt_number(state),
         body,
     }];
     steps.extend(compile_generated_parser_path(
@@ -952,6 +970,7 @@ fn compile_generated_parser_plus_loop(
         decision,
         enter_alt,
         exit_alt,
+        track_alt_number: state_tracks_alt_number(state),
         body,
     }];
     steps.extend(compile_generated_parser_path(
@@ -1079,6 +1098,7 @@ fn compile_generated_parser_transition(
 fn render_generated_rule_dispatch(
     rules: &[Option<GeneratedParserRule>],
     inline_action_statements: &BTreeMap<usize, String>,
+    track_alt_numbers: bool,
 ) -> String {
     let mut out = String::new();
     writeln!(
@@ -1122,7 +1142,7 @@ fn render_generated_rule_dispatch(
             .expect("writing to a string cannot fail");
         }
         writeln!(out, "    }}").expect("writing to a string cannot fail");
-        render_generated_rule_method(&mut out, rule, inline_action_statements);
+        render_generated_rule_method(&mut out, rule, inline_action_statements, track_alt_numbers);
     }
     out
 }
@@ -1131,9 +1151,15 @@ fn render_generated_rule_method(
     out: &mut String,
     rule: &GeneratedParserRule,
     inline_action_statements: &BTreeMap<usize, String>,
+    track_alt_numbers: bool,
 ) {
     if rule.left_recursive {
-        render_generated_left_recursive_rule_method(out, rule, inline_action_statements);
+        render_generated_left_recursive_rule_method(
+            out,
+            rule,
+            inline_action_statements,
+            track_alt_numbers,
+        );
         return;
     }
     let index = rule.rule_index;
@@ -1165,7 +1191,13 @@ fn render_generated_rule_method(
         "        let __result = (|| -> Result<(), antlr4_runtime::AntlrError> {{"
     )
     .expect("writing to a string cannot fail");
-    render_generated_steps(out, &rule.steps, 3, inline_action_statements);
+    render_generated_steps(
+        out,
+        &rule.steps,
+        3,
+        inline_action_statements,
+        track_alt_numbers,
+    );
     writeln!(out, "            Ok(())").expect("writing to a string cannot fail");
     writeln!(out, "        }})();").expect("writing to a string cannot fail");
     writeln!(out, "        match __result {{").expect("writing to a string cannot fail");
@@ -1203,6 +1235,7 @@ fn render_generated_left_recursive_rule_method(
     out: &mut String,
     rule: &GeneratedParserRule,
     inline_action_statements: &BTreeMap<usize, String>,
+    track_alt_numbers: bool,
 ) {
     let index = rule.rule_index;
     let entry_state = rule.entry_state;
@@ -1244,7 +1277,13 @@ fn render_generated_left_recursive_rule_method(
         "        let __result = (|| -> Result<(), antlr4_runtime::AntlrError> {{"
     )
     .expect("writing to a string cannot fail");
-    render_generated_steps(out, &rule.steps, 3, inline_action_statements);
+    render_generated_steps(
+        out,
+        &rule.steps,
+        3,
+        inline_action_statements,
+        track_alt_numbers,
+    );
     writeln!(out, "            Ok(())").expect("writing to a string cannot fail");
     writeln!(out, "        }})();").expect("writing to a string cannot fail");
     writeln!(out, "        match __result {{").expect("writing to a string cannot fail");
@@ -1286,9 +1325,16 @@ fn render_generated_steps(
     steps: &[GeneratedParserStep],
     indent: usize,
     inline_action_statements: &BTreeMap<usize, String>,
+    track_alt_numbers: bool,
 ) {
     for step in steps {
-        render_generated_step(out, step, indent, inline_action_statements);
+        render_generated_step(
+            out,
+            step,
+            indent,
+            inline_action_statements,
+            track_alt_numbers,
+        );
     }
 }
 
@@ -1297,6 +1343,7 @@ fn render_generated_step(
     step: &GeneratedParserStep,
     indent: usize,
     inline_action_statements: &BTreeMap<usize, String>,
+    track_alt_numbers: bool,
 ) {
     let pad = "    ".repeat(indent);
     match step {
@@ -1401,6 +1448,7 @@ fn render_generated_step(
         GeneratedParserStep::Decision {
             state,
             decision,
+            track_alt_number,
             allow_semantic_context,
             alts,
         } => {
@@ -1409,11 +1457,13 @@ fn render_generated_step(
                 DecisionRender {
                     state: *state,
                     decision: *decision,
+                    track_alt_number: *track_alt_number,
                     allow_semantic_context: *allow_semantic_context,
                     alts,
                 },
                 indent,
                 inline_action_statements,
+                track_alt_numbers,
             );
         }
         GeneratedParserStep::StarLoop {
@@ -1421,6 +1471,7 @@ fn render_generated_step(
             decision,
             enter_alt,
             exit_alt,
+            track_alt_number,
             body,
         } => {
             render_generated_star_loop(
@@ -1429,10 +1480,12 @@ fn render_generated_step(
                     state: *state,
                     decision: *decision,
                     alts: (*enter_alt, *exit_alt),
+                    track_alt_number: *track_alt_number,
                     body,
                 },
                 indent,
                 inline_action_statements,
+                track_alt_numbers,
             );
         }
         GeneratedParserStep::LeftRecursiveLoop {
@@ -1454,6 +1507,7 @@ fn render_generated_step(
                 },
                 indent,
                 inline_action_statements,
+                track_alt_numbers,
             );
         }
     }
@@ -1464,10 +1518,12 @@ fn render_generated_decision(
     decision_info: DecisionRender<'_>,
     indent: usize,
     inline_action_statements: &BTreeMap<usize, String>,
+    track_alt_numbers: bool,
 ) {
     let DecisionRender {
         state,
         decision,
+        track_alt_number,
         allow_semantic_context,
         alts,
     } = decision_info;
@@ -1515,7 +1571,19 @@ fn render_generated_decision(
     for (index, steps) in alts.iter().enumerate() {
         let alt = index + 1;
         writeln!(out, "{pad}    {alt} => {{").expect("writing to a string cannot fail");
-        render_generated_steps(out, steps, indent + 2, inline_action_statements);
+        render_generated_alt_number_assignment(
+            out,
+            &format!("{pad}        "),
+            alt,
+            track_alt_numbers && track_alt_number,
+        );
+        render_generated_steps(
+            out,
+            steps,
+            indent + 2,
+            inline_action_statements,
+            track_alt_numbers,
+        );
         writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
     }
     writeln!(
@@ -1523,6 +1591,16 @@ fn render_generated_decision(
         "{pad}    _ => return Err(self.base.no_viable_alternative_error(__decision_start)),"
     )
     .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
+}
+
+fn render_generated_alt_number_assignment(out: &mut String, pad: &str, alt: usize, enabled: bool) {
+    if !enabled {
+        return;
+    }
+    writeln!(out, "{pad}if __ctx.alt_number() == 0 {{").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    __ctx.set_alt_number({alt});")
+        .expect("writing to a string cannot fail");
     writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
 }
 
@@ -1543,11 +1621,13 @@ fn render_generated_star_loop(
     loop_info: StarLoopRender<'_>,
     indent: usize,
     inline_action_statements: &BTreeMap<usize, String>,
+    track_alt_numbers: bool,
 ) {
     let StarLoopRender {
         state,
         decision,
         alts,
+        track_alt_number,
         body,
     } = loop_info;
     let (enter_alt, exit_alt) = alts;
@@ -1590,9 +1670,29 @@ fn render_generated_star_loop(
     writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
     writeln!(out, "{pad}    match __prediction.alt {{").expect("writing to a string cannot fail");
     writeln!(out, "{pad}        {enter_alt} => {{").expect("writing to a string cannot fail");
-    render_generated_steps(out, body, indent + 3, inline_action_statements);
+    render_generated_alt_number_assignment(
+        out,
+        &format!("{pad}            "),
+        enter_alt,
+        track_alt_numbers && track_alt_number,
+    );
+    render_generated_steps(
+        out,
+        body,
+        indent + 3,
+        inline_action_statements,
+        track_alt_numbers,
+    );
     writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
-    writeln!(out, "{pad}        {exit_alt} => break,").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}        {exit_alt} => {{").expect("writing to a string cannot fail");
+    render_generated_alt_number_assignment(
+        out,
+        &format!("{pad}            "),
+        exit_alt,
+        track_alt_numbers && track_alt_number,
+    );
+    writeln!(out, "{pad}            break;").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
     writeln!(
         out,
         "{pad}        _ => return Err(self.base.no_viable_alternative_error(__decision_start)),"
@@ -1607,6 +1707,7 @@ fn render_generated_left_recursive_loop(
     loop_info: LeftRecursiveLoopRender<'_>,
     indent: usize,
     inline_action_statements: &BTreeMap<usize, String>,
+    track_alt_numbers: bool,
 ) {
     let LeftRecursiveLoopRender {
         decision,
@@ -1656,7 +1757,13 @@ fn render_generated_left_recursive_loop(
         "{pad}            self.base.push_new_recursion_context_with_previous({entry_state}isize, {rule_index}, &mut __ctx);"
     )
     .expect("writing to a string cannot fail");
-    render_generated_steps(out, body, indent + 3, inline_action_statements);
+    render_generated_steps(
+        out,
+        body,
+        indent + 3,
+        inline_action_statements,
+        track_alt_numbers,
+    );
     writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
     writeln!(out, "{pad}        {exit_alt} => break,").expect("writing to a string cannot fail");
     writeln!(
@@ -1850,9 +1957,8 @@ fn render_parser(
     let has_predicate_dispatch = !predicates.is_empty();
     let has_return_actions = !return_actions.is_empty();
     let track_alt_numbers = grammar_source.is_some_and(uses_alt_number_contexts);
-    let direct_rules_allowed = !track_alt_numbers;
     let generated_rule_enabled = (0..data.rule_names.len())
-        .map(|index| direct_rules_allowed && init_actions.get(index).is_none_or(Option::is_none))
+        .map(|index| init_actions.get(index).is_none_or(Option::is_none))
         .collect::<Vec<_>>();
     let generated_rules = parser_generated_rules(
         data,
@@ -1862,8 +1968,11 @@ fn render_parser(
         &predicate_coordinates,
         has_action_dispatch || has_predicate_dispatch || has_return_actions,
     )?;
-    let generated_rule_dispatch =
-        render_generated_rule_dispatch(&generated_rules, &inline_action_statements);
+    let generated_rule_dispatch = render_generated_rule_dispatch(
+        &generated_rules,
+        &inline_action_statements,
+        track_alt_numbers,
+    );
     let init_action_rules = init_actions
         .iter()
         .enumerate()
@@ -5112,6 +5221,7 @@ atn:
             [GeneratedParserStep::Decision {
                 state: 1,
                 decision: 0,
+                track_alt_number: true,
                 allow_semantic_context: false,
                 alts: vec![
                     vec![GeneratedParserStep::MatchToken(1)],
@@ -5120,11 +5230,17 @@ atn:
             }]
         );
 
-        let rendered = render_generated_rule_dispatch(&[Some(body)], &BTreeMap::new());
+        let rendered =
+            render_generated_rule_dispatch(&[Some(body.clone())], &BTreeMap::new(), false);
         assert!(rendered.contains("parse_generated_rule_0"));
         assert!(rendered.contains("sync_decision(atn(), 1)"));
         assert!(rendered.contains("adaptive_predict_stream_info_with_context(0, 0"));
         assert!(!rendered.contains("requires_full_context"));
+
+        let rendered_with_alt_numbers =
+            render_generated_rule_dispatch(&[Some(body)], &BTreeMap::new(), true);
+        assert!(rendered_with_alt_numbers.contains("__ctx.set_alt_number(1);"));
+        assert!(rendered_with_alt_numbers.contains("__ctx.set_alt_number(2);"));
     }
 
     #[test]
@@ -5140,15 +5256,17 @@ atn:
                 decision: 0,
                 enter_alt: 1,
                 exit_alt: 2,
+                track_alt_number: true,
                 body: vec![GeneratedParserStep::MatchToken(1)],
             }]
         );
 
-        let rendered = render_generated_rule_dispatch(&[Some(body)], &BTreeMap::new());
+        let rendered = render_generated_rule_dispatch(&[Some(body)], &BTreeMap::new(), false);
         assert!(rendered.contains("loop {"));
         assert!(rendered.contains("sync_decision(atn(), 1)"));
         assert!(rendered.contains("1 => {"));
-        assert!(rendered.contains("2 => break,"));
+        assert!(rendered.contains("2 => {"));
+        assert!(rendered.contains("break;"));
         assert!(rendered.contains("adaptive_predict_stream_info_with_context(0, 0"));
     }
 
@@ -5167,6 +5285,7 @@ atn:
                     decision: 0,
                     enter_alt: 1,
                     exit_alt: 2,
+                    track_alt_number: false,
                     body: vec![GeneratedParserStep::MatchToken(1)],
                 }
             ]
@@ -5182,6 +5301,7 @@ atn:
         let body_decision = GeneratedParserStep::Decision {
             state: 1,
             decision: 0,
+            track_alt_number: true,
             allow_semantic_context: false,
             alts: vec![
                 vec![GeneratedParserStep::MatchToken(1)],
@@ -5197,6 +5317,7 @@ atn:
                     decision: 1,
                     enter_alt: 1,
                     exit_alt: 2,
+                    track_alt_number: false,
                     body: vec![body_decision],
                 }
             ]
@@ -5226,6 +5347,7 @@ atn:
                     body: vec![GeneratedParserStep::Decision {
                         state: 3,
                         decision: 1,
+                        track_alt_number: false,
                         allow_semantic_context: true,
                         alts: vec![vec![
                             GeneratedParserStep::Precedence(2),
@@ -5241,7 +5363,7 @@ atn:
             ]
         );
 
-        let rendered = render_generated_rule_dispatch(&[Some(body)], &BTreeMap::new());
+        let rendered = render_generated_rule_dispatch(&[Some(body)], &BTreeMap::new(), false);
         assert!(rendered.contains("parse_generated_rule_0_precedence(precedence, allow_fallback)"));
         assert!(
             rendered.contains("push_new_recursion_context_with_previous(0isize, 0, &mut __ctx)")
@@ -5489,6 +5611,25 @@ atn:
     }
 
     #[test]
+    fn context_superclass_does_not_disable_generated_rules() {
+        let rendered = render_parser(
+            "TParser",
+            &minimal_parser_data(),
+            Some(
+                r#"parser grammar T;
+options { contextSuperClass=MyRuleNode; }
+<TreeNodeWithAltNumField(X="T")>
+s : ;
+"#,
+            ),
+        )
+        .expect("parser should render");
+
+        assert!(rendered.contains("parse_generated_rule_0"));
+        assert!(rendered.contains("track_alt_numbers: true"));
+    }
+
+    #[test]
     fn renders_inline_action_event_only_when_statement_uses_it() {
         let rule = GeneratedParserRule {
             rule_index: 0,
@@ -5513,7 +5654,7 @@ atn:
         );
         statements.insert(6, "println!(\"alt 2\");".to_owned());
 
-        let rendered = render_generated_rule_dispatch(&[Some(rule)], &statements);
+        let rendered = render_generated_rule_dispatch(&[Some(rule)], &statements, false);
 
         assert!(rendered.contains("parser_action_at_current(4, 0"));
         assert!(!rendered.contains("parser_action_at_current(6, 0"));
