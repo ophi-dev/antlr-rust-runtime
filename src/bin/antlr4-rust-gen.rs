@@ -970,11 +970,8 @@ fn render_generated_decision(
         "{pad}}}.map_err(|_| self.base.no_viable_alternative_error(__decision_start))?;"
     )
     .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "{pad}if __prediction.requires_full_context || __prediction.has_semantic_context {{"
-    )
-    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}if __prediction.has_semantic_context {{")
+        .expect("writing to a string cannot fail");
     writeln!(
         out,
         "{pad}    return Err(self.base.no_viable_alternative_error(__decision_start));"
@@ -1027,11 +1024,8 @@ fn render_generated_star_loop(
         "{pad}    }}.map_err(|_| self.base.no_viable_alternative_error(__decision_start))?;"
     )
     .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "{pad}    if __prediction.requires_full_context || __prediction.has_semantic_context {{"
-    )
-    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    if __prediction.has_semantic_context {{")
+        .expect("writing to a string cannot fail");
     writeln!(
         out,
         "{pad}        return Err(self.base.no_viable_alternative_error(__decision_start));"
@@ -4373,6 +4367,7 @@ atn:
         let rendered = render_generated_rule_dispatch(&[Some(body)]);
         assert!(rendered.contains("parse_generated_rule_0"));
         assert!(rendered.contains("adaptive_predict_stream_info_with_precedence(0, 0"));
+        assert!(!rendered.contains("requires_full_context"));
     }
 
     #[test]

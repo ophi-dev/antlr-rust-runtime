@@ -1940,7 +1940,6 @@ enum DirectAdaptiveParseControl {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum DirectAdaptiveFallback {
     Action,
-    FullContext,
     InvalidAlt,
     LeftRecursiveBoundary,
     MissingAtn,
@@ -5901,11 +5900,6 @@ where
                     .map_err(|_| {
                         DirectAdaptiveParseControl::Fallback(DirectAdaptiveFallback::Prediction)
                     })?;
-                if prediction.requires_full_context {
-                    return Err(DirectAdaptiveParseControl::Fallback(
-                        DirectAdaptiveFallback::FullContext,
-                    ));
-                }
                 if prediction.has_semantic_context {
                     return Err(DirectAdaptiveParseControl::Fallback(
                         DirectAdaptiveFallback::SemanticContext,

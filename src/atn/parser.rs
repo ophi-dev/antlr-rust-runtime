@@ -22,6 +22,49 @@ pub struct ParserAtnPrediction {
     pub has_semantic_context: bool,
 }
 
+#[derive(Debug)]
+struct LookaheadIntStream {
+    symbols: Vec<i32>,
+    index: usize,
+}
+
+impl LookaheadIntStream {
+    const fn new(symbols: Vec<i32>) -> Self {
+        Self { symbols, index: 0 }
+    }
+}
+
+impl IntStream for LookaheadIntStream {
+    fn consume(&mut self) {
+        if self.la(1) != TOKEN_EOF {
+            self.index += 1;
+        }
+    }
+
+    fn la(&mut self, offset: isize) -> i32 {
+        if offset <= 0 {
+            return 0;
+        }
+        let offset = offset.cast_unsigned() - 1;
+        self.symbols
+            .get(self.index + offset)
+            .copied()
+            .unwrap_or(TOKEN_EOF)
+    }
+
+    fn index(&self) -> usize {
+        self.index
+    }
+
+    fn seek(&mut self, index: usize) {
+        self.index = index.min(self.symbols.len());
+    }
+
+    fn size(&self) -> usize {
+        self.symbols.len()
+    }
+}
+
 impl<'a> ParserAtnSimulator<'a> {
     pub fn new(atn: &'a Atn) -> Self {
         let decision_to_dfa = atn
@@ -84,7 +127,7 @@ impl<'a> ParserAtnSimulator<'a> {
     ) -> Result<ParserAtnPrediction, ParserAtnSimulatorError> {
         let marker = input.mark();
         let index = input.index();
-        let result = self.adaptive_predict_stream_inner(decision, precedence, input);
+        let result = self.adaptive_predict_stream_inner(decision, precedence, input, index);
         input.seek(index);
         input.release(marker);
         result
@@ -106,36 +149,8 @@ impl<'a> ParserAtnSimulator<'a> {
         precedence: usize,
         lookahead: impl IntoIterator<Item = i32>,
     ) -> Result<ParserAtnPrediction, ParserAtnSimulatorError> {
-        let Some(&decision_state) = self.atn.decision_to_state().get(decision) else {
-            return Err(ParserAtnSimulatorError::UnknownDecision(decision));
-        };
-        let mut state_number = self.ensure_start_state(decision, decision_state, precedence)?;
-        if let Some(prediction) = self.dfa_prediction_info(decision, state_number) {
-            return Ok(prediction);
-        }
-        for symbol in lookahead {
-            if let Some(target) = self
-                .decision_to_dfa
-                .get(decision)
-                .and_then(|dfa| dfa.state(state_number))
-                .and_then(|state| state.edge(symbol))
-            {
-                state_number = target;
-            } else {
-                let configs = self
-                    .decision_to_dfa
-                    .get(decision)
-                    .and_then(|dfa| dfa.state(state_number))
-                    .map(|state| state.configs.clone())
-                    .ok_or(ParserAtnSimulatorError::MissingDfaState(state_number))?;
-                let target = self.compute_target_state(decision, state_number, &configs, symbol)?;
-                state_number = target;
-            }
-            if let Some(prediction) = self.dfa_prediction_info(decision, state_number) {
-                return Ok(prediction);
-            }
-        }
-        Err(ParserAtnSimulatorError::PredictionRequiresMoreLookahead)
+        let mut input = LookaheadIntStream::new(lookahead.into_iter().collect());
+        self.adaptive_predict_stream_info_with_precedence(decision, precedence, &mut input)
     }
 
     fn adaptive_predict_stream_inner<T: IntStream>(
@@ -143,12 +158,19 @@ impl<'a> ParserAtnSimulator<'a> {
         decision: usize,
         precedence: usize,
         input: &mut T,
+        start_index: usize,
     ) -> Result<ParserAtnPrediction, ParserAtnSimulatorError> {
         let Some(&decision_state) = self.atn.decision_to_state().get(decision) else {
             return Err(ParserAtnSimulatorError::UnknownDecision(decision));
         };
         let mut state_number = self.ensure_start_state(decision, decision_state, precedence)?;
-        if let Some(prediction) = self.dfa_prediction_info(decision, state_number) {
+        if let Some(prediction) = self.prediction_or_full_context(
+            decision,
+            decision_state,
+            state_number,
+            input,
+            start_index,
+        )? {
             return Ok(prediction);
         }
         loop {
@@ -170,7 +192,13 @@ impl<'a> ParserAtnSimulator<'a> {
                 let target = self.compute_target_state(decision, state_number, &configs, symbol)?;
                 state_number = target;
             }
-            if let Some(prediction) = self.dfa_prediction_info(decision, state_number) {
+            if let Some(prediction) = self.prediction_or_full_context(
+                decision,
+                decision_state,
+                state_number,
+                input,
+                start_index,
+            )? {
                 return Ok(prediction);
             }
             if symbol == TOKEN_EOF {
@@ -178,6 +206,26 @@ impl<'a> ParserAtnSimulator<'a> {
             }
             input.consume();
         }
+    }
+
+    fn prediction_or_full_context<T: IntStream>(
+        &self,
+        decision: usize,
+        decision_state: usize,
+        state_number: usize,
+        input: &mut T,
+        start_index: usize,
+    ) -> Result<Option<ParserAtnPrediction>, ParserAtnSimulatorError> {
+        let Some(prediction) = self.dfa_prediction_info(decision, state_number) else {
+            return Ok(None);
+        };
+        if prediction.requires_full_context && !prediction.has_semantic_context {
+            input.seek(start_index);
+            return self
+                .adaptive_predict_full_context(decision_state, input)
+                .map(Some);
+        }
+        Ok(Some(prediction))
     }
 
     fn ensure_start_state(
@@ -211,7 +259,15 @@ impl<'a> ParserAtnSimulator<'a> {
         &self,
         decision_state: &AtnState,
     ) -> Result<AtnConfigSet, ParserAtnSimulatorError> {
-        let mut configs = AtnConfigSet::new();
+        self.compute_start_state_with_context(decision_state, false)
+    }
+
+    fn compute_start_state_with_context(
+        &self,
+        decision_state: &AtnState,
+        full_context: bool,
+    ) -> Result<AtnConfigSet, ParserAtnSimulatorError> {
+        let mut configs = AtnConfigSet::new_full_context(full_context);
         let mut merge_cache = PredictionContextMergeCache::new();
         for (index, transition) in decision_state.transitions.iter().enumerate() {
             let alt = index + 1;
@@ -221,6 +277,53 @@ impl<'a> ParserAtnSimulator<'a> {
         Ok(configs)
     }
 
+    fn adaptive_predict_full_context<T: IntStream>(
+        &self,
+        decision_state: usize,
+        input: &mut T,
+    ) -> Result<ParserAtnPrediction, ParserAtnSimulatorError> {
+        let decision_state = self
+            .atn
+            .state(decision_state)
+            .ok_or(ParserAtnSimulatorError::MissingAtnState(decision_state))?;
+        let mut configs = self.compute_start_state_with_context(decision_state, true)?;
+        loop {
+            if let Some(alt) = configs.unique_alt() {
+                return Ok(ParserAtnPrediction {
+                    alt,
+                    requires_full_context: true,
+                    has_semantic_context: configs.has_semantic_context(),
+                });
+            }
+            let symbol = input.la(1);
+            let reach = self.compute_reach_set(&configs, symbol, true)?;
+            if reach.is_empty() {
+                return Err(ParserAtnSimulatorError::NoViableAlt { symbol });
+            }
+            configs = reach;
+            if let Some(alt) = configs.unique_alt() {
+                return Ok(ParserAtnPrediction {
+                    alt,
+                    requires_full_context: true,
+                    has_semantic_context: configs.has_semantic_context(),
+                });
+            }
+            if symbol == TOKEN_EOF || self.configs_all_reached_rule_stop(&configs) {
+                let alt = configs
+                    .alts()
+                    .into_iter()
+                    .next()
+                    .ok_or(ParserAtnSimulatorError::PredictionRequiresMoreLookahead)?;
+                return Ok(ParserAtnPrediction {
+                    alt,
+                    requires_full_context: true,
+                    has_semantic_context: configs.has_semantic_context(),
+                });
+            }
+            input.consume();
+        }
+    }
+
     fn compute_target_state(
         &mut self,
         decision: usize,
@@ -228,39 +331,7 @@ impl<'a> ParserAtnSimulator<'a> {
         configs: &AtnConfigSet,
         symbol: i32,
     ) -> Result<usize, ParserAtnSimulatorError> {
-        let mut reach = AtnConfigSet::new();
-        let mut merge_cache = PredictionContextMergeCache::new();
-        let mut skipped_stop_states = Vec::new();
-        for config in configs.configs() {
-            let Some(state) = self.atn.state(config.state) else {
-                continue;
-            };
-            if state.is_rule_stop() {
-                if symbol == TOKEN_EOF {
-                    skipped_stop_states.push(config.clone());
-                }
-                continue;
-            }
-            for transition in &state.transitions {
-                if transition.matches(symbol, 1, self.atn.max_token_type()) {
-                    let target = AtnConfig {
-                        state: transition.target(),
-                        alt: config.alt,
-                        context: Rc::clone(&config.context),
-                        semantic_context: config.semantic_context.clone(),
-                        reaches_into_outer_context: config.reaches_into_outer_context,
-                        precedence_filter_suppressed: config.precedence_filter_suppressed,
-                    };
-                    self.closure(target, &mut reach, &mut merge_cache)?;
-                }
-            }
-        }
-        if symbol == TOKEN_EOF {
-            reach = self.rule_stop_configs(reach, &mut merge_cache);
-        }
-        for config in skipped_stop_states {
-            reach.add_with_merge_cache(config, Some(&mut merge_cache));
-        }
+        let mut reach = self.compute_reach_set(configs, symbol, false)?;
         if reach.is_empty() {
             if let Some(prediction) = self.alt_that_finished_decision_entry_rule(configs) {
                 let mut dfa_state = DfaState::new(configs.clone());
@@ -299,6 +370,48 @@ impl<'a> ParserAtnSimulator<'a> {
         Ok(target_state)
     }
 
+    fn compute_reach_set(
+        &self,
+        configs: &AtnConfigSet,
+        symbol: i32,
+        full_context: bool,
+    ) -> Result<AtnConfigSet, ParserAtnSimulatorError> {
+        let mut reach = AtnConfigSet::new_full_context(full_context);
+        let mut merge_cache = PredictionContextMergeCache::new();
+        let mut skipped_stop_states = Vec::new();
+        for config in configs.configs() {
+            let Some(state) = self.atn.state(config.state) else {
+                continue;
+            };
+            if state.is_rule_stop() {
+                if symbol == TOKEN_EOF {
+                    skipped_stop_states.push(config.clone());
+                }
+                continue;
+            }
+            for transition in &state.transitions {
+                if transition.matches(symbol, 1, self.atn.max_token_type()) {
+                    let target = AtnConfig {
+                        state: transition.target(),
+                        alt: config.alt,
+                        context: Rc::clone(&config.context),
+                        semantic_context: config.semantic_context.clone(),
+                        reaches_into_outer_context: config.reaches_into_outer_context,
+                        precedence_filter_suppressed: config.precedence_filter_suppressed,
+                    };
+                    self.closure(target, &mut reach, &mut merge_cache)?;
+                }
+            }
+        }
+        if symbol == TOKEN_EOF {
+            reach = self.rule_stop_configs(reach, &mut merge_cache);
+        }
+        for config in skipped_stop_states {
+            reach.add_with_merge_cache(config, Some(&mut merge_cache));
+        }
+        Ok(reach)
+    }
+
     fn alt_that_finished_decision_entry_rule(&self, configs: &AtnConfigSet) -> Option<usize> {
         configs
             .configs()
@@ -327,7 +440,7 @@ impl<'a> ParserAtnSimulator<'a> {
         }) {
             return configs;
         }
-        let mut result = AtnConfigSet::new();
+        let mut result = AtnConfigSet::new_full_context(configs.full_context());
         for config in configs.configs().iter().filter(|config| {
             self.atn
                 .state(config.state)
@@ -336,6 +449,14 @@ impl<'a> ParserAtnSimulator<'a> {
             result.add_with_merge_cache(config.clone(), Some(merge_cache));
         }
         result
+    }
+
+    fn configs_all_reached_rule_stop(&self, configs: &AtnConfigSet) -> bool {
+        configs.configs().iter().all(|config| {
+            self.atn
+                .state(config.state)
+                .is_some_and(AtnState::is_rule_stop)
+        })
     }
 
     fn closure(
@@ -580,6 +701,27 @@ mod tests {
         assert_eq!(simulator.adaptive_predict_stream(0, &mut input), Ok(2));
         assert_eq!(input.index(), 0);
         assert_eq!(input.la(1), 1);
+    }
+
+    #[test]
+    fn adaptive_predict_stream_retries_full_context_conflict() {
+        let atn = ambiguous_single_token_decision_atn();
+        let mut simulator = ParserAtnSimulator::new(&atn);
+        let mut input = VecIntStream::new(vec![1, TOKEN_EOF]);
+
+        let prediction = simulator
+            .adaptive_predict_stream_info_with_precedence(0, 0, &mut input)
+            .expect("prediction");
+
+        assert_eq!(
+            prediction,
+            ParserAtnPrediction {
+                alt: 1,
+                requires_full_context: true,
+                has_semantic_context: false,
+            }
+        );
+        assert_eq!(input.index(), 0);
     }
 
     fn two_token_decision_atn() -> Atn {
