@@ -438,7 +438,10 @@ enum GeneratedParserStep {
         intervals: Vec<(i32, i32)>,
         follow_state: usize,
     },
-    MatchNotSet(Vec<(i32, i32)>),
+    MatchNotSet {
+        intervals: Vec<(i32, i32)>,
+        follow_state: usize,
+    },
     MatchWildcard,
     Precedence(i32),
     Predicate {
@@ -630,7 +633,7 @@ fn generated_steps_call_disabled_rule(steps: &[GeneratedParserStep], enabled: &[
         }
         GeneratedParserStep::MatchToken { .. }
         | GeneratedParserStep::MatchSet { .. }
-        | GeneratedParserStep::MatchNotSet(_)
+        | GeneratedParserStep::MatchNotSet { .. }
         | GeneratedParserStep::MatchWildcard
         | GeneratedParserStep::Precedence(_)
         | GeneratedParserStep::Predicate { .. }
@@ -1053,7 +1056,7 @@ fn steps_may_consume(steps: &[GeneratedParserStep]) -> bool {
     steps.iter().any(|step| match step {
         GeneratedParserStep::MatchToken { .. }
         | GeneratedParserStep::MatchSet { .. }
-        | GeneratedParserStep::MatchNotSet(_)
+        | GeneratedParserStep::MatchNotSet { .. }
         | GeneratedParserStep::MatchWildcard
         | GeneratedParserStep::CallRule { .. } => true,
         GeneratedParserStep::Action { .. }
@@ -1091,7 +1094,7 @@ fn allow_semantic_context_in_decisions(steps: &mut [GeneratedParserStep]) {
             }
             GeneratedParserStep::MatchToken { .. }
             | GeneratedParserStep::MatchSet { .. }
-            | GeneratedParserStep::MatchNotSet(_)
+            | GeneratedParserStep::MatchNotSet { .. }
             | GeneratedParserStep::MatchWildcard
             | GeneratedParserStep::Precedence(_)
             | GeneratedParserStep::Predicate { .. }
@@ -1111,7 +1114,7 @@ fn steps_contain_predicate(steps: &[GeneratedParserStep]) -> bool {
         | GeneratedParserStep::LeftRecursiveLoop { body, .. } => steps_contain_predicate(body),
         GeneratedParserStep::MatchToken { .. }
         | GeneratedParserStep::MatchSet { .. }
-        | GeneratedParserStep::MatchNotSet(_)
+        | GeneratedParserStep::MatchNotSet { .. }
         | GeneratedParserStep::MatchWildcard
         | GeneratedParserStep::Precedence(_)
         | GeneratedParserStep::Action { .. }
@@ -1174,7 +1177,10 @@ fn compile_generated_parser_transition(
             *target,
         )),
         Transition::NotSet { target, set } => Some((
-            Some(GeneratedParserStep::MatchNotSet(set.ranges().to_vec())),
+            Some(GeneratedParserStep::MatchNotSet {
+                intervals: set.ranges().to_vec(),
+                follow_state: *target,
+            }),
             *target,
         )),
         Transition::Wildcard { target } => {
@@ -1733,15 +1739,28 @@ fn render_generated_step(
             )
             .expect("writing to a string cannot fail");
         }
-        GeneratedParserStep::MatchNotSet(intervals) => {
+        GeneratedParserStep::MatchNotSet {
+            intervals,
+            follow_state,
+        } => {
             let intervals = render_i32_ranges(intervals);
             writeln!(
                 out,
-                "{pad}let __child = self.base.match_not_set(&{intervals}, 1, atn().max_token_type())?;"
+                "{pad}let __matched_eof = self.base.la(1) == antlr4_runtime::token::TOKEN_EOF;"
             )
             .expect("writing to a string cannot fail");
-            writeln!(out, "{pad}self.base.add_parse_child(&mut __ctx, __child);")
+            writeln!(
+                out,
+                "{pad}let __children = self.base.match_not_set_recovering(&{intervals}, 1, atn().max_token_type(), {follow_state}, atn())?;"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(out, "{pad}if __matched_eof {{ __consumed_eof = true; }}")
                 .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}for __child in __children {{ self.base.add_parse_child(&mut __ctx, __child); }}"
+            )
+            .expect("writing to a string cannot fail");
         }
         GeneratedParserStep::MatchWildcard => {
             writeln!(out, "{pad}let __child = self.base.match_wildcard()?;")
@@ -2155,7 +2174,7 @@ fn leading_predicates(steps: &[GeneratedParserStep]) -> Vec<(usize, usize)> {
             GeneratedParserStep::Action { .. } | GeneratedParserStep::Precedence(_) => {}
             GeneratedParserStep::MatchToken { .. }
             | GeneratedParserStep::MatchSet { .. }
-            | GeneratedParserStep::MatchNotSet(_)
+            | GeneratedParserStep::MatchNotSet { .. }
             | GeneratedParserStep::MatchWildcard
             | GeneratedParserStep::CallRule { .. }
             | GeneratedParserStep::Decision { .. }
@@ -2178,7 +2197,7 @@ fn leading_lookahead_condition(steps: &[GeneratedParserStep], la_symbol: &str) -
             GeneratedParserStep::MatchSet { intervals, .. } => {
                 return Some(intervals_condition(la_symbol, intervals));
             }
-            GeneratedParserStep::MatchNotSet(intervals) => {
+            GeneratedParserStep::MatchNotSet { intervals, .. } => {
                 let excluded = intervals_condition(la_symbol, intervals);
                 return Some(format!(
                     "{la_symbol} != antlr4_runtime::TOKEN_EOF && !({excluded})"
@@ -2572,7 +2591,7 @@ fn loop_entry_condition(body: &[GeneratedParserStep]) -> Option<String> {
         GeneratedParserStep::Action { .. }
         | GeneratedParserStep::MatchToken { .. }
         | GeneratedParserStep::MatchSet { .. }
-        | GeneratedParserStep::MatchNotSet(_)
+        | GeneratedParserStep::MatchNotSet { .. }
         | GeneratedParserStep::MatchWildcard
         | GeneratedParserStep::CallRule { .. }
         | GeneratedParserStep::StarLoop { .. }
@@ -6315,6 +6334,13 @@ atn:
         }
     }
 
+    fn mns(intervals: Vec<(i32, i32)>, follow_state: usize) -> GeneratedParserStep {
+        GeneratedParserStep::MatchNotSet {
+            intervals,
+            follow_state,
+        }
+    }
+
     #[test]
     fn compiles_linear_parser_rule_body() {
         let atn = linear_rule_atn();
@@ -6610,6 +6636,30 @@ atn:
                 }
             ),
             Some((Some(ms(vec![(1, 1), (5, 6)], 8)), 8))
+        );
+
+        let mut not_set = IntervalSet::new();
+        not_set.add(1);
+        let not_set_transition = Transition::NotSet {
+            target: 9,
+            set: not_set,
+        };
+        assert_eq!(
+            compile_generated_parser_transition(
+                3,
+                &[],
+                &not_set_transition,
+                ActionStateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                    inline: &BTreeSet::new(),
+                },
+                PredicateCoordinateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                }
+            ),
+            Some((Some(mns(vec![(1, 1)], 9)), 9))
         );
     }
 

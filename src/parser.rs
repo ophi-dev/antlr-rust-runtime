@@ -117,6 +117,16 @@ fn interval_symbols(intervals: &[(i32, i32)]) -> BTreeSet<i32> {
     symbols
 }
 
+fn interval_complement_symbols(
+    intervals: &[(i32, i32)],
+    min_vocabulary: i32,
+    max_vocabulary: i32,
+) -> BTreeSet<i32> {
+    (min_vocabulary..=max_vocabulary)
+        .filter(|symbol| !interval_set_contains(intervals, *symbol))
+        .collect()
+}
+
 #[cfg(feature = "perf-counters")]
 mod perf_counters {
     use std::cell::Cell;
@@ -2202,8 +2212,9 @@ where
 
     /// Emits diagnostics recorded by committed generated parser recovery.
     pub fn report_generated_parser_diagnostics(&mut self) {
-        let diagnostics = std::mem::take(&mut self.generated_parser_diagnostics);
-        report_parser_diagnostics(&diagnostics);
+        let parser_diagnostics = std::mem::take(&mut self.generated_parser_diagnostics);
+        let token_errors = self.input.drain_source_errors();
+        report_generated_diagnostics(&parser_diagnostics, &token_errors);
     }
 
     /// Buffers ANTLR-style ambiguity diagnostics discovered by generated
@@ -2376,6 +2387,38 @@ where
         })
     }
 
+    pub fn match_not_set_recovering(
+        &mut self,
+        intervals: &[(i32, i32)],
+        min_vocabulary: i32,
+        max_vocabulary: i32,
+        follow_state: usize,
+        atn: &Atn,
+    ) -> Result<Vec<ParseTree>, AntlrError> {
+        let current = self
+            .input
+            .lt(1)
+            .cloned()
+            .ok_or_else(|| AntlrError::ParserError {
+                line: 0,
+                column: 0,
+                message: "missing current token".to_owned(),
+            })?;
+        if (min_vocabulary..=max_vocabulary).contains(&current.token_type())
+            && !interval_set_contains(intervals, current.token_type())
+        {
+            self.generated_sync_expected = None;
+            self.consume();
+            return Ok(vec![ParseTree::Terminal(TerminalNode::new(current))]);
+        }
+        let expected_symbols =
+            interval_complement_symbols(intervals, min_vocabulary, max_vocabulary);
+        self.recover_generated_match(current, &expected_symbols, follow_state, atn, |symbol| {
+            (min_vocabulary..=max_vocabulary).contains(&symbol)
+                && !interval_set_contains(intervals, symbol)
+        })
+    }
+
     fn recover_generated_match(
         &mut self,
         current: CommonToken,
@@ -2405,7 +2448,9 @@ where
         }
         let follow_symbols = self.generated_recovery_follow_symbols(atn, follow_state);
         if follow_symbols.contains(&current.token_type())
-            && (current.token_type() != TOKEN_EOF || self.rule_context_stack.len() > 1)
+            && (current.token_type() != TOKEN_EOF
+                || self.rule_context_stack.len() > 1
+                || expected_symbols.is_empty())
         {
             let message = format!(
                 "missing {expected_display} at {}",
@@ -7220,6 +7265,64 @@ fn report_parser_diagnostics(diagnostics: &[ParserDiagnostic]) {
     }
 }
 
+/// Emits generated parser diagnostics and lexer diagnostics in the same
+/// source-position order as ANTLR's lazy token stream reports them.
+#[allow(clippy::print_stderr)]
+fn report_generated_diagnostics(
+    parser_diagnostics: &[ParserDiagnostic],
+    token_errors: &[TokenSourceError],
+) {
+    #[derive(Clone, Copy)]
+    enum DiagnosticSource {
+        Token(usize),
+        Parser(usize),
+    }
+
+    let mut ordered = Vec::with_capacity(parser_diagnostics.len() + token_errors.len());
+    ordered.extend(token_errors.iter().enumerate().map(|(index, error)| {
+        (
+            error.line,
+            error.column,
+            0_usize,
+            index,
+            DiagnosticSource::Token(index),
+        )
+    }));
+    ordered.extend(
+        parser_diagnostics
+            .iter()
+            .enumerate()
+            .map(|(index, diagnostic)| {
+                (
+                    diagnostic.line,
+                    diagnostic.column,
+                    1_usize,
+                    index,
+                    DiagnosticSource::Parser(index),
+                )
+            }),
+    );
+    ordered.sort_by_key(|(line, column, source_order, index, _)| {
+        (*line, *column, *source_order, *index)
+    });
+
+    for (_, _, _, _, source) in ordered {
+        match source {
+            DiagnosticSource::Token(index) => {
+                let error = &token_errors[index];
+                eprintln!("line {}:{} {}", error.line, error.column, error.message);
+            }
+            DiagnosticSource::Parser(index) => {
+                let diagnostic = &parser_diagnostics[index];
+                eprintln!(
+                    "line {}:{} {}",
+                    diagnostic.line, diagnostic.column, diagnostic.message
+                );
+            }
+        }
+    }
+}
+
 /// Emits buffered token-source diagnostics after parser diagnostics that were
 /// discovered while speculatively reading the same token stream.
 #[allow(clippy::print_stderr)]
@@ -7740,6 +7843,7 @@ where
 mod tests {
     use super::*;
     use crate::atn::AtnType;
+    use crate::atn::IntervalSet;
     use crate::atn::parser::ParserAtnSimulator;
     use crate::atn::serialized::{AtnDeserializer, SerializedAtn};
     use crate::token::{CommonToken, HIDDEN_CHANNEL, Token};
@@ -7992,6 +8096,23 @@ mod tests {
         atn
     }
 
+    fn complement_set_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 1);
+        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
+        atn.add_state(AtnState::new(1, AtnStateKind::RuleStop).with_rule_index(0));
+        atn.set_rule_to_start_state(vec![0]);
+        atn.set_rule_to_stop_state(vec![1]);
+        let mut excluded = IntervalSet::new();
+        excluded.add(1);
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::NotSet {
+                target: 1,
+                set: excluded,
+            });
+        atn
+    }
+
     #[test]
     fn parser_matches_token_and_reports_mismatch() {
         let source = Source {
@@ -8134,6 +8255,31 @@ mod tests {
                 line: 1,
                 column: 3,
                 message: "missing 'Y' at '<EOF>'".to_owned(),
+            }]
+        );
+    }
+
+    #[test]
+    fn generated_match_not_set_recovers_empty_complement_at_eof() {
+        let atn = complement_set_atn();
+        let mut parser = mini_parser(vec![CommonToken::eof("parser-test", 1, 1, 1)]);
+        parser.rule_context_stack = vec![RuleContextFrame {
+            rule_index: 0,
+            invoking_state: 0,
+        }];
+
+        let node = parser
+            .match_not_set_recovering(&[(1, 1)], 1, 1, 1, &atn)
+            .expect("empty complement should recover at EOF");
+
+        assert_eq!(node.len(), 1);
+        assert_eq!(parser.la(1), TOKEN_EOF);
+        assert_eq!(
+            parser.generated_parser_diagnostics,
+            [ParserDiagnostic {
+                line: 1,
+                column: 1,
+                message: "missing {} at '<EOF>'".to_owned(),
             }]
         );
     }
