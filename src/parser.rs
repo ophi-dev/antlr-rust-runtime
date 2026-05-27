@@ -459,6 +459,11 @@ pub struct BaseParser<S> {
     /// Keying on `state_number` and sharing the result through `Rc` removes
     /// repeated DFS plus per-call `BTreeSet` allocations.
     state_expected_cache: FxHashMap<usize, Rc<BTreeSet<i32>>>,
+    /// Per-state cache for whether a return state can finish its owning rule
+    /// without consuming more input. Generated-parser sync uses this to walk
+    /// parent prediction contexts for nullable exits without paying repeated
+    /// epsilon-closure searches on every loop or optional decision.
+    rule_stop_reach_cache: Vec<Option<bool>>,
     /// Per-parser interner for `recovery_symbols` sets. Speculative recursion
     /// threads the same epsilon-recovery context through hundreds of follow
     /// states; sharing `Rc<BTreeSet<i32>>` instances lets clones reduce to a
@@ -1021,6 +1026,40 @@ fn state_expected_symbols(atn: &Atn, state_number: usize) -> BTreeSet<i32> {
         }
     }
     symbols
+}
+
+fn state_can_reach_rule_stop(atn: &Atn, state_number: usize) -> bool {
+    let Some(rule_index) = atn.state(state_number).and_then(|state| state.rule_index) else {
+        return false;
+    };
+    let Some(&stop_state) = atn.rule_to_stop_state().get(rule_index) else {
+        return false;
+    };
+    epsilon_reaches_state(atn, state_number, stop_state)
+}
+
+fn epsilon_reaches_state(atn: &Atn, start: usize, target: usize) -> bool {
+    let mut stack = vec![start];
+    let mut visited = BTreeSet::new();
+    while let Some(current) = stack.pop() {
+        if current == target {
+            return true;
+        }
+        if !visited.insert(current) {
+            continue;
+        }
+        let Some(state) = atn.state(current) else {
+            continue;
+        };
+        stack.extend(
+            state
+                .transitions
+                .iter()
+                .filter(|transition| transition.is_epsilon())
+                .map(Transition::target),
+        );
+    }
+    false
 }
 
 /// FIRST set for a rule entry plus whether the rule is nullable.
@@ -2007,6 +2046,7 @@ where
             invoked_predicates: Vec::new(),
             rule_first_set_cache: Vec::new(),
             state_expected_cache: FxHashMap::default(),
+            rule_stop_reach_cache: Vec::new(),
             recovery_symbols_intern: FxHashMap::default(),
             decision_lookahead_cache: FxHashMap::default(),
             ll1_decision_cache: FxHashMap::default(),
@@ -2481,12 +2521,22 @@ where
         })
     }
 
-    fn context_expected_symbols(&self, atn: &Atn) -> BTreeSet<i32> {
+    fn context_expected_symbols(&mut self, atn: &Atn) -> BTreeSet<i32> {
         let context = self.prediction_context(atn);
         let mut expected = BTreeSet::new();
+        self.collect_context_expected_symbols(atn, &context, &mut expected);
+        expected
+    }
+
+    fn collect_context_expected_symbols(
+        &mut self,
+        atn: &Atn,
+        context: &Rc<PredictionContext>,
+        expected: &mut BTreeSet<i32>,
+    ) {
         if context.is_empty() {
             expected.insert(TOKEN_EOF);
-            return expected;
+            return;
         }
         for index in 0..context.len() {
             let Some(return_state) = context.return_state(index) else {
@@ -2494,11 +2544,15 @@ where
             };
             if return_state == EMPTY_RETURN_STATE {
                 expected.insert(TOKEN_EOF);
-            } else {
-                expected.extend(state_expected_symbols(atn, return_state));
+                continue;
+            }
+            expected.extend(self.cached_state_expected_symbols(atn, return_state).iter());
+            if self.cached_state_can_reach_rule_stop(atn, return_state)
+                && let Some(parent) = context.parent(index)
+            {
+                self.collect_context_expected_symbols(atn, &parent, expected);
             }
         }
-        expected
     }
 
     /// Builds a generated no-viable-alternative parser error.
@@ -5419,6 +5473,19 @@ where
         entry
     }
 
+    fn cached_state_can_reach_rule_stop(&mut self, atn: &Atn, state_number: usize) -> bool {
+        if self.rule_stop_reach_cache.len() <= state_number {
+            self.rule_stop_reach_cache
+                .resize_with(atn.states().len().max(state_number + 1), || None);
+        }
+        if let Some(reaches) = self.rule_stop_reach_cache[state_number] {
+            return reaches;
+        }
+        let reaches = state_can_reach_rule_stop(atn, state_number);
+        self.rule_stop_reach_cache[state_number] = Some(reaches);
+        reaches
+    }
+
     /// Returns the parser's empty `recovery_symbols` singleton so callers can
     /// share an `Rc` instead of allocating new `BTreeSet`s for the common case.
     fn empty_recovery_symbols(&self) -> Rc<BTreeSet<i32>> {
@@ -5940,7 +6007,8 @@ where
     ///
     /// * `rule_first_set_cache` and `decision_lookahead_cache` are pure
     ///   functions of the ATN's state graph.
-    /// * `state_expected_cache` and `recovery_symbols_intern` together form
+    /// * `state_expected_cache`, `rule_stop_reach_cache`, and
+    ///   `recovery_symbols_intern` together form
     ///   the identity invariant that lets `FastRecognizeKey` hash
     ///   `recovery_symbols` by pointer; they have to be cleared in lockstep
     ///   so a stale interned `Rc` cannot outlive its map entry.
@@ -5949,6 +6017,7 @@ where
         self.decision_lookahead_cache.clear();
         self.ll1_decision_cache.clear();
         self.empty_cycle_cache.clear();
+        self.rule_stop_reach_cache.clear();
         self.single_outcome_memo_mode = SingleOutcomeMemoMode::Probe;
         self.single_outcome_probe_seen.clear();
         self.single_outcome_probe_samples = 0;
@@ -7320,6 +7389,54 @@ mod tests {
         atn
     }
 
+    fn nested_nullable_context_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 1);
+        for state_number in 0..=20 {
+            let kind = match state_number {
+                0 | 10 | 16 => AtnStateKind::RuleStart,
+                9 | 15 | 20 => AtnStateKind::RuleStop,
+                _ => AtnStateKind::Basic,
+            };
+            let rule_index = match state_number {
+                0..=9 => 0,
+                10..=15 => 1,
+                _ => 2,
+            };
+            atn.add_state(AtnState::new(state_number, kind).with_rule_index(rule_index));
+        }
+        atn.set_rule_to_start_state(vec![0, 10, 16]);
+        atn.set_rule_to_stop_state(vec![9, 15, 20]);
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Rule {
+                target: 10,
+                rule_index: 1,
+                follow_state: 8,
+                precedence: 0,
+            });
+        atn.state_mut(8)
+            .expect("state 8")
+            .add_transition(Transition::Atom {
+                target: 9,
+                label: 1,
+            });
+        atn.state_mut(8)
+            .expect("state 8")
+            .add_transition(Transition::Epsilon { target: 9 });
+        atn.state_mut(2)
+            .expect("state 2")
+            .add_transition(Transition::Rule {
+                target: 16,
+                rule_index: 2,
+                follow_state: 14,
+                precedence: 0,
+            });
+        atn.state_mut(14)
+            .expect("state 14")
+            .add_transition(Transition::Epsilon { target: 15 });
+        atn
+    }
+
     #[test]
     fn parser_matches_token_and_reports_mismatch() {
         let source = Source {
@@ -7393,6 +7510,31 @@ mod tests {
 
         parser.exit_rule();
         assert!(parser.rule_context_stack.is_empty());
+    }
+
+    #[test]
+    fn context_expected_symbols_walks_nullable_parent_contexts() {
+        let atn = nested_nullable_context_atn();
+        let mut parser = mini_parser(vec![CommonToken::eof("parser-test", 1, 1, 1)]);
+        parser.rule_context_stack = vec![
+            RuleContextFrame {
+                rule_index: 0,
+                invoking_state: 0,
+            },
+            RuleContextFrame {
+                rule_index: 1,
+                invoking_state: 1,
+            },
+            RuleContextFrame {
+                rule_index: 2,
+                invoking_state: 2,
+            },
+        ];
+
+        let expected = parser.context_expected_symbols(&atn);
+
+        assert!(expected.contains(&1));
+        assert!(expected.contains(&TOKEN_EOF));
     }
 
     #[test]
