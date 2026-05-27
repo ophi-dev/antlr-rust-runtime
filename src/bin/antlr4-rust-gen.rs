@@ -2417,6 +2417,7 @@ where
             }}
         }}
         if __from_generated && allow_generated_fallback {{
+            self.base.report_token_source_errors();
             let __generated_actions = self.generated_actions.split_off(__generated_action_marker);
             self.base.restore_int_members(__generated_member_checkpoint);
             for __action in __generated_actions {{
@@ -6127,6 +6128,15 @@ s : ;
         assert!(
             rendered.contains("self.parse_interpreted_rule_precedence(rule_index, precedence)?")
         );
+    }
+
+    #[test]
+    fn generated_parser_reports_lexer_errors_on_outer_success() {
+        let rendered =
+            render_parser("TParser", &minimal_parser_data(), None).expect("parser should render");
+
+        assert!(rendered.contains("if __from_generated && allow_generated_fallback {"));
+        assert!(rendered.contains("self.base.report_token_source_errors();"));
     }
 
     #[test]

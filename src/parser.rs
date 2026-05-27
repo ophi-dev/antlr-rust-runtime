@@ -2022,6 +2022,12 @@ where
         &mut self.input
     }
 
+    /// Emits diagnostics buffered by the token stream while generated parser
+    /// code was fetching lexer tokens directly.
+    pub fn report_token_source_errors(&mut self) {
+        report_token_source_errors(&self.input.drain_source_errors());
+    }
+
     pub fn la(&mut self, offset: isize) -> i32 {
         self.input.la_token(offset)
     }
