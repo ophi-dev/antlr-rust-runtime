@@ -1974,6 +1974,7 @@ fn render_generated_decision(
     if allow_semantic_context {
         render_generated_semantic_prediction_filter(out, &pad, alts);
     }
+    render_generated_decision_diagnostic_report(out, &pad, state, alts);
     writeln!(out, "{pad}match __prediction.alt {{").expect("writing to a string cannot fail");
     for (index, steps) in alts.iter().enumerate() {
         let alt = index + 1;
@@ -1997,6 +1998,43 @@ fn render_generated_decision(
     writeln!(
         out,
         "{pad}    _ => return Err(self.base.no_viable_alternative_error(__decision_start)),"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
+}
+
+fn render_generated_decision_diagnostic_report(
+    out: &mut String,
+    pad: &str,
+    state: usize,
+    alts: &[Vec<GeneratedParserStep>],
+) {
+    let alt_conditions = alts
+        .iter()
+        .map(|steps| semantic_alt_candidate_condition_with_la(steps, "__diagnostic_la"))
+        .collect::<Vec<_>>();
+    if alt_conditions
+        .iter()
+        .any(|condition| condition == "true" || condition == "false")
+    {
+        return;
+    }
+    writeln!(out, "{pad}if self.base.report_diagnostic_errors() {{")
+        .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    let __diagnostic_la = self.base.la(1);")
+        .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    let mut __diagnostic_alts = Vec::new();")
+        .expect("writing to a string cannot fail");
+    for (index, condition) in alt_conditions.iter().enumerate() {
+        let alt = index + 1;
+        writeln!(out, "{pad}    if {condition} {{").expect("writing to a string cannot fail");
+        writeln!(out, "{pad}        __diagnostic_alts.push({alt});")
+            .expect("writing to a string cannot fail");
+        writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
+    }
+    writeln!(
+        out,
+        "{pad}    self.base.record_generated_ambiguity_diagnostic(atn(), {state}, __decision_start, __decision_start, &__diagnostic_alts);"
     )
     .expect("writing to a string cannot fail");
     writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
@@ -2059,11 +2097,6 @@ fn render_generated_semantic_prediction_filter(
         "{pad}            let __error = self.base.no_viable_alternative_error(__decision_start);"
     )
     .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "{pad}            __sync_error = Some(__error.clone());"
-    )
-    .expect("writing to a string cannot fail");
     writeln!(out, "{pad}            return Err(__error);")
         .expect("writing to a string cannot fail");
     writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
@@ -2085,6 +2118,13 @@ fn render_semantic_alt_search(out: &mut String, pad: &str, alt_conditions: &[Str
 }
 
 fn semantic_alt_candidate_condition(steps: &[GeneratedParserStep]) -> String {
+    semantic_alt_candidate_condition_with_la(steps, "__semantic_la")
+}
+
+fn semantic_alt_candidate_condition_with_la(
+    steps: &[GeneratedParserStep],
+    la_symbol: &str,
+) -> String {
     let predicates = leading_predicates(steps);
     let mut conditions = predicates
         .into_iter()
@@ -2094,7 +2134,7 @@ fn semantic_alt_candidate_condition(steps: &[GeneratedParserStep]) -> String {
             )
         })
         .collect::<Vec<_>>();
-    if let Some(lookahead) = leading_lookahead_condition(steps) {
+    if let Some(lookahead) = leading_lookahead_condition(steps, la_symbol) {
         conditions.push(lookahead);
     }
     if conditions.is_empty() {
@@ -2126,26 +2166,26 @@ fn leading_predicates(steps: &[GeneratedParserStep]) -> Vec<(usize, usize)> {
     predicates
 }
 
-fn leading_lookahead_condition(steps: &[GeneratedParserStep]) -> Option<String> {
+fn leading_lookahead_condition(steps: &[GeneratedParserStep], la_symbol: &str) -> Option<String> {
     for step in steps {
         match step {
             GeneratedParserStep::Predicate { .. }
             | GeneratedParserStep::Action { .. }
             | GeneratedParserStep::Precedence(_) => {}
             GeneratedParserStep::MatchToken { token_type, .. } => {
-                return Some(format!("__semantic_la == {token_type}"));
+                return Some(format!("{la_symbol} == {token_type}"));
             }
             GeneratedParserStep::MatchSet { intervals, .. } => {
-                return Some(intervals_condition("__semantic_la", intervals));
+                return Some(intervals_condition(la_symbol, intervals));
             }
             GeneratedParserStep::MatchNotSet(intervals) => {
-                let excluded = intervals_condition("__semantic_la", intervals);
+                let excluded = intervals_condition(la_symbol, intervals);
                 return Some(format!(
-                    "__semantic_la != antlr4_runtime::TOKEN_EOF && !({excluded})"
+                    "{la_symbol} != antlr4_runtime::TOKEN_EOF && !({excluded})"
                 ));
             }
             GeneratedParserStep::MatchWildcard => {
-                return Some("__semantic_la != antlr4_runtime::TOKEN_EOF".to_owned());
+                return Some(format!("{la_symbol} != antlr4_runtime::TOKEN_EOF"));
             }
             GeneratedParserStep::CallRule { .. }
             | GeneratedParserStep::Decision { .. }
@@ -7087,7 +7127,48 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
             rendered.contains("antlr4_runtime::ParserAtnPrediction { alt: __alt, ..__prediction }")
         );
         assert!(rendered.contains("no_viable_alternative_error(__decision_start)"));
-        assert!(rendered.contains("__sync_error = Some(__error.clone())"));
+        assert!(!rendered.contains("__sync_error = Some(__error.clone())"));
+    }
+
+    #[test]
+    fn generated_decision_reports_exact_ambiguity_diagnostics() {
+        let alts = vec![
+            vec![mt(2, 4)],
+            vec![mt(2, 5)],
+            vec![
+                GeneratedParserStep::Predicate {
+                    rule_index: 1,
+                    pred_index: 0,
+                },
+                mt(2, 6),
+            ],
+        ];
+        let mut rendered = String::new();
+
+        render_generated_decision(
+            &mut rendered,
+            DecisionRender {
+                state: 16,
+                decision: 0,
+                track_alt_number: false,
+                allow_semantic_context: true,
+                force_context: false,
+                alts: &alts,
+            },
+            0,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            false,
+        );
+
+        assert!(rendered.contains("if self.base.report_diagnostic_errors()"));
+        assert!(rendered.contains("let __diagnostic_la = self.base.la(1);"));
+        assert!(rendered.contains("if __diagnostic_la == 2"));
+        assert!(rendered.contains("__diagnostic_alts.push(1);"));
+        assert!(rendered.contains("__diagnostic_alts.push(2);"));
+        assert!(rendered.contains(
+            "record_generated_ambiguity_diagnostic(atn(), 16, __decision_start, __decision_start, &__diagnostic_alts)"
+        ));
     }
 
     #[test]

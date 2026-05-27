@@ -2206,6 +2206,57 @@ where
         report_parser_diagnostics(&diagnostics);
     }
 
+    /// Buffers ANTLR-style ambiguity diagnostics discovered by generated
+    /// decision code.
+    pub fn record_generated_ambiguity_diagnostic(
+        &mut self,
+        atn: &Atn,
+        state_number: usize,
+        start_index: usize,
+        stop_index: usize,
+        alts: &[usize],
+    ) {
+        if !self.report_diagnostic_errors || alts.len() < 2 {
+            return;
+        }
+        let Some(decision) = atn
+            .decision_to_state()
+            .iter()
+            .position(|candidate| *candidate == state_number)
+        else {
+            return;
+        };
+        let Some(rule_index) = atn.state(state_number).and_then(|state| state.rule_index) else {
+            return;
+        };
+        let rule_name = self
+            .rule_names()
+            .get(rule_index)
+            .map_or_else(|| "<unknown>".to_owned(), Clone::clone);
+        let input = display_input_text(&self.input.text(start_index, stop_index));
+        let alts = alts
+            .iter()
+            .map(usize::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+        let key = (decision, start_index, format!("{alts}:{input}"));
+        if !self.reported_prediction_diagnostics.insert(key) {
+            return;
+        }
+        let start_token = self.token_at(start_index);
+        let stop_token = self.token_at(stop_index);
+        self.generated_parser_diagnostics.push(diagnostic_for_token(
+            start_token.as_ref(),
+            format!("reportAttemptingFullContext d={decision} ({rule_name}), input='{input}'"),
+        ));
+        self.generated_parser_diagnostics.push(diagnostic_for_token(
+            stop_token.as_ref(),
+            format!(
+                "reportAmbiguity d={decision} ({rule_name}): ambigAlts={{{alts}}}, input='{input}'"
+            ),
+        ));
+    }
+
     pub fn la(&mut self, offset: isize) -> i32 {
         self.input.la_token(offset)
     }
@@ -2560,7 +2611,7 @@ where
         error: AntlrError,
     ) {
         let diagnostic = self.generated_rule_error_diagnostic(error);
-        self.generated_parser_diagnostics.push(diagnostic);
+        self.push_generated_parser_diagnostic(diagnostic);
         self.generated_sync_expected = None;
         let recovery_symbols = self.context_expected_symbols(atn);
         loop {
@@ -2574,6 +2625,17 @@ where
             self.consume();
             self.add_parse_child(context, ParseTree::Error(ErrorNode::new(token)));
         }
+    }
+
+    fn push_generated_parser_diagnostic(&mut self, diagnostic: ParserDiagnostic) {
+        if self
+            .generated_parser_diagnostics
+            .iter()
+            .any(|existing| existing == &diagnostic)
+        {
+            return;
+        }
+        self.generated_parser_diagnostics.push(diagnostic);
     }
 
     fn generated_rule_error_diagnostic(&mut self, error: AntlrError) -> ParserDiagnostic {
