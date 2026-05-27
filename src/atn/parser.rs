@@ -460,7 +460,7 @@ impl<'a> ParserAtnSimulator<'a> {
         for (index, transition) in decision_state.transitions.iter().enumerate() {
             let alt = index + 1;
             let config = AtnConfig::new(transition.target(), alt, Rc::clone(initial_context));
-            self.closure(config, &mut configs, merge_cache, precedence);
+            self.closure(config, &mut configs, merge_cache, precedence, false);
         }
         configs
     }
@@ -609,7 +609,13 @@ impl<'a> ParserAtnSimulator<'a> {
                         reaches_into_outer_context: config.reaches_into_outer_context,
                         precedence_filter_suppressed: config.precedence_filter_suppressed,
                     };
-                    self.closure(target, &mut reach, merge_cache, precedence);
+                    self.closure(
+                        target,
+                        &mut reach,
+                        merge_cache,
+                        precedence,
+                        symbol == TOKEN_EOF,
+                    );
                 }
             }
         }
@@ -685,6 +691,7 @@ impl<'a> ParserAtnSimulator<'a> {
         configs: &mut AtnConfigSet,
         merge_cache: &mut PredictionContextMergeCache,
         precedence: i32,
+        treat_eof_as_epsilon: bool,
     ) {
         let mut stack = vec![config];
         let mut visited = FxHashSet::<ClosureConfigKey>::default();
@@ -722,6 +729,17 @@ impl<'a> ParserAtnSimulator<'a> {
                         }
                         stack.push(target);
                     }
+                } else if treat_eof_as_epsilon
+                    && transition.matches(TOKEN_EOF, 1, self.atn.max_token_type())
+                {
+                    stack.push(AtnConfig {
+                        state: transition.target(),
+                        alt: config.alt,
+                        context: Rc::clone(&config.context),
+                        semantic_context: config.semantic_context.clone(),
+                        reaches_into_outer_context: config.reaches_into_outer_context,
+                        precedence_filter_suppressed: config.precedence_filter_suppressed,
+                    });
                 }
             }
         }
@@ -1003,6 +1021,14 @@ mod tests {
     }
 
     #[test]
+    fn adaptive_predict_treats_repeated_eof_as_epsilon_after_first_eof() {
+        let atn = multiple_eof_decision_atn();
+        let mut simulator = ParserAtnSimulator::new(&atn);
+
+        assert_eq!(simulator.adaptive_predict(0, [1, TOKEN_EOF]), Ok(1));
+    }
+
+    #[test]
     fn adaptive_predict_uses_finished_entry_rule_alt_on_error_edge() {
         let atn = prefix_alt_decision_atn();
         let mut simulator = ParserAtnSimulator::new(&atn);
@@ -1150,6 +1176,7 @@ mod tests {
             &mut configs,
             &mut merge_cache,
             0,
+            false,
         );
 
         assert_eq!(configs.len(), 1);
@@ -1392,6 +1419,72 @@ mod tests {
             .add_transition(Transition::Atom {
                 target: 2,
                 label: 2,
+            });
+        atn
+    }
+
+    fn multiple_eof_decision_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 2);
+        for state_number in 0..=10 {
+            let kind = match state_number {
+                0 => AtnStateKind::RuleStart,
+                1 => AtnStateKind::BlockStart,
+                7 => AtnStateKind::BlockEnd,
+                10 => AtnStateKind::RuleStop,
+                _ => AtnStateKind::Basic,
+            };
+            add_state(&mut atn, state_number, kind);
+        }
+        atn.set_rule_to_start_state(vec![0]);
+        atn.set_rule_to_stop_state(vec![10]);
+        atn.add_decision_state(1);
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Epsilon { target: 1 });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Epsilon { target: 2 });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Epsilon { target: 4 });
+        atn.state_mut(2)
+            .expect("state 2")
+            .add_transition(Transition::Atom {
+                target: 3,
+                label: 1,
+            });
+        atn.state_mut(3)
+            .expect("state 3")
+            .add_transition(Transition::Epsilon { target: 7 });
+        atn.state_mut(4)
+            .expect("state 4")
+            .add_transition(Transition::Atom {
+                target: 5,
+                label: 1,
+            });
+        atn.state_mut(5)
+            .expect("state 5")
+            .add_transition(Transition::Atom {
+                target: 6,
+                label: 2,
+            });
+        atn.state_mut(6)
+            .expect("state 6")
+            .add_transition(Transition::Epsilon { target: 7 });
+        atn.state_mut(7)
+            .expect("state 7")
+            .add_transition(Transition::Epsilon { target: 8 });
+        atn.state_mut(8)
+            .expect("state 8")
+            .add_transition(Transition::Atom {
+                target: 9,
+                label: TOKEN_EOF,
+            });
+        atn.state_mut(9)
+            .expect("state 9")
+            .add_transition(Transition::Atom {
+                target: 10,
+                label: TOKEN_EOF,
             });
         atn
     }
