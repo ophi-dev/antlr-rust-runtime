@@ -109,6 +109,14 @@ fn interval_set_contains(intervals: &[(i32, i32)], symbol: i32) -> bool {
         .any(|(start, stop)| (*start..=*stop).contains(&symbol))
 }
 
+fn interval_symbols(intervals: &[(i32, i32)]) -> BTreeSet<i32> {
+    let mut symbols = BTreeSet::new();
+    for (start, stop) in intervals {
+        symbols.extend(*start..=*stop);
+    }
+    symbols
+}
+
 #[cfg(feature = "perf-counters")]
 mod perf_counters {
     use std::cell::Cell;
@@ -2160,8 +2168,9 @@ where
     pub fn match_token_recovering(
         &mut self,
         token_type: i32,
+        follow_state: usize,
         atn: &Atn,
-    ) -> Result<ParseTree, AntlrError> {
+    ) -> Result<Vec<ParseTree>, AntlrError> {
         let current = self
             .input
             .lt(1)
@@ -2173,31 +2182,109 @@ where
             })?;
         if current.token_type() == token_type {
             self.consume();
-            return Ok(ParseTree::Terminal(TerminalNode::new(current)));
+            return Ok(vec![ParseTree::Terminal(TerminalNode::new(current))]);
         }
-        if self
-            .context_expected_symbols(atn)
-            .contains(&current.token_type())
+        let mut expected_symbols = BTreeSet::new();
+        expected_symbols.insert(token_type);
+        self.recover_generated_match(current, &expected_symbols, follow_state, atn, |symbol| {
+            symbol == token_type
+        })
+    }
+
+    pub fn match_set_recovering(
+        &mut self,
+        intervals: &[(i32, i32)],
+        follow_state: usize,
+        atn: &Atn,
+    ) -> Result<Vec<ParseTree>, AntlrError> {
+        let current = self
+            .input
+            .lt(1)
+            .cloned()
+            .ok_or_else(|| AntlrError::ParserError {
+                line: 0,
+                column: 0,
+                message: "missing current token".to_owned(),
+            })?;
+        if interval_set_contains(intervals, current.token_type()) {
+            self.consume();
+            return Ok(vec![ParseTree::Terminal(TerminalNode::new(current))]);
+        }
+        let expected_symbols = interval_symbols(intervals);
+        self.recover_generated_match(current, &expected_symbols, follow_state, atn, |symbol| {
+            interval_set_contains(intervals, symbol)
+        })
+    }
+
+    fn recover_generated_match(
+        &mut self,
+        current: CommonToken,
+        expected_symbols: &BTreeSet<i32>,
+        follow_state: usize,
+        atn: &Atn,
+        matches: impl Fn(i32) -> bool,
+    ) -> Result<Vec<ParseTree>, AntlrError> {
+        let expected_display = self.expected_symbols_display(expected_symbols);
+        if current.token_type() != TOKEN_EOF
+            && let Some(next) = self.input.lt(2).cloned()
+            && matches(next.token_type())
         {
-            let mut expected_symbols = BTreeSet::new();
-            expected_symbols.insert(token_type);
-            let expected_display = self.expected_symbols_display(&expected_symbols);
+            let message = format!(
+                "extraneous input {} expecting {expected_display}",
+                token_input_display(&current)
+            );
+            self.generated_parser_diagnostics
+                .push(diagnostic_for_token(Some(&current), message));
+            self.consume();
+            self.consume();
+            return Ok(vec![
+                ParseTree::Error(ErrorNode::new(current)),
+                ParseTree::Terminal(TerminalNode::new(next)),
+            ]);
+        }
+        let follow_symbols = self.generated_recovery_follow_symbols(atn, follow_state);
+        if follow_symbols.contains(&current.token_type())
+            && (current.token_type() != TOKEN_EOF || self.rule_context_stack.len() > 1)
+        {
             let message = format!(
                 "missing {expected_display} at {}",
                 token_input_display(&current)
             );
             self.generated_parser_diagnostics
                 .push(diagnostic_for_token(Some(&current), message));
+            let token_type = expected_symbols.iter().next().copied().unwrap_or(TOKEN_EOF);
+            let mut missing_symbol = BTreeSet::new();
+            missing_symbol.insert(token_type);
+            let missing_display = self.expected_symbols_display(&missing_symbol);
             let token = CommonToken::new(token_type)
-                .with_text(format!("<missing {expected_display}>"))
+                .with_text(format!("<missing {missing_display}>"))
                 .with_span(usize::MAX, usize::MAX)
                 .with_position(current.line(), current.column());
-            return Ok(ParseTree::Error(ErrorNode::new(token)));
+            return Ok(vec![ParseTree::Error(ErrorNode::new(token))]);
         }
-        Err(AntlrError::MismatchedInput {
-            expected: self.vocabulary().display_name(token_type),
-            found: self.vocabulary().display_name(current.token_type()),
+        Err(AntlrError::ParserError {
+            line: current.line(),
+            column: current.column(),
+            message: format!(
+                "mismatched input {} expecting {expected_display}",
+                token_input_display(&current)
+            ),
         })
+    }
+
+    fn generated_recovery_follow_symbols(
+        &mut self,
+        atn: &Atn,
+        follow_state: usize,
+    ) -> BTreeSet<i32> {
+        let mut follow = self
+            .cached_state_expected_symbols(atn, follow_state)
+            .as_ref()
+            .clone();
+        if self.cached_state_can_reach_rule_stop(atn, follow_state) {
+            follow.extend(self.context_expected_symbols(atn));
+        }
+        follow
     }
 
     pub fn match_eof(&mut self) -> Result<ParseTree, AntlrError> {
@@ -7659,10 +7746,11 @@ mod tests {
         ];
 
         let node = parser
-            .match_token_recovering(2, &atn)
+            .match_token_recovering(2, 5, &atn)
             .expect("generated match should insert missing token");
 
-        assert_eq!(node.text(), "<missing 'Y'>");
+        assert_eq!(node.len(), 1);
+        assert_eq!(node[0].text(), "<missing 'Y'>");
         assert_eq!(parser.la(1), TOKEN_EOF);
         assert_eq!(
             parser.generated_parser_diagnostics,

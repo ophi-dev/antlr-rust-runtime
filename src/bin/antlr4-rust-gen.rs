@@ -430,8 +430,14 @@ struct GeneratedParserRule {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum GeneratedParserStep {
-    MatchToken(i32),
-    MatchSet(Vec<(i32, i32)>),
+    MatchToken {
+        token_type: i32,
+        follow_state: usize,
+    },
+    MatchSet {
+        intervals: Vec<(i32, i32)>,
+        follow_state: usize,
+    },
     MatchNotSet(Vec<(i32, i32)>),
     MatchWildcard,
     Precedence(i32),
@@ -612,8 +618,8 @@ fn generated_steps_call_disabled_rule(steps: &[GeneratedParserStep], enabled: &[
         | GeneratedParserStep::LeftRecursiveLoop { body, .. } => {
             generated_steps_call_disabled_rule(body, enabled)
         }
-        GeneratedParserStep::MatchToken(_)
-        | GeneratedParserStep::MatchSet(_)
+        GeneratedParserStep::MatchToken { .. }
+        | GeneratedParserStep::MatchSet { .. }
         | GeneratedParserStep::MatchNotSet(_)
         | GeneratedParserStep::MatchWildcard
         | GeneratedParserStep::Precedence(_)
@@ -1027,8 +1033,8 @@ fn compile_generated_parser_plus_loop(
 
 fn steps_may_consume(steps: &[GeneratedParserStep]) -> bool {
     steps.iter().any(|step| match step {
-        GeneratedParserStep::MatchToken(_)
-        | GeneratedParserStep::MatchSet(_)
+        GeneratedParserStep::MatchToken { .. }
+        | GeneratedParserStep::MatchSet { .. }
         | GeneratedParserStep::MatchNotSet(_)
         | GeneratedParserStep::MatchWildcard
         | GeneratedParserStep::CallRule { .. } => true,
@@ -1065,8 +1071,8 @@ fn allow_semantic_context_in_decisions(steps: &mut [GeneratedParserStep]) {
             GeneratedParserStep::LeftRecursiveLoop { body, .. } => {
                 allow_semantic_context_in_decisions(body);
             }
-            GeneratedParserStep::MatchToken(_)
-            | GeneratedParserStep::MatchSet(_)
+            GeneratedParserStep::MatchToken { .. }
+            | GeneratedParserStep::MatchSet { .. }
             | GeneratedParserStep::MatchNotSet(_)
             | GeneratedParserStep::MatchWildcard
             | GeneratedParserStep::Precedence(_)
@@ -1085,8 +1091,8 @@ fn steps_contain_predicate(steps: &[GeneratedParserStep]) -> bool {
         }
         GeneratedParserStep::StarLoop { body, .. }
         | GeneratedParserStep::LeftRecursiveLoop { body, .. } => steps_contain_predicate(body),
-        GeneratedParserStep::MatchToken(_)
-        | GeneratedParserStep::MatchSet(_)
+        GeneratedParserStep::MatchToken { .. }
+        | GeneratedParserStep::MatchSet { .. }
         | GeneratedParserStep::MatchNotSet(_)
         | GeneratedParserStep::MatchWildcard
         | GeneratedParserStep::Precedence(_)
@@ -1103,19 +1109,29 @@ fn compile_generated_parser_transition(
 ) -> Option<(Option<GeneratedParserStep>, usize)> {
     match transition {
         Transition::Epsilon { target } => Some((None, *target)),
-        Transition::Atom { target, label } => {
-            Some((Some(GeneratedParserStep::MatchToken(*label)), *target))
-        }
+        Transition::Atom { target, label } => Some((
+            Some(GeneratedParserStep::MatchToken {
+                token_type: *label,
+                follow_state: *target,
+            }),
+            *target,
+        )),
         Transition::Range {
             target,
             start,
             stop,
         } => Some((
-            Some(GeneratedParserStep::MatchSet(vec![(*start, *stop)])),
+            Some(GeneratedParserStep::MatchSet {
+                intervals: vec![(*start, *stop)],
+                follow_state: *target,
+            }),
             *target,
         )),
         Transition::Set { target, set } => Some((
-            Some(GeneratedParserStep::MatchSet(set.ranges().to_vec())),
+            Some(GeneratedParserStep::MatchSet {
+                intervals: set.ranges().to_vec(),
+                follow_state: *target,
+            }),
             *target,
         )),
         Transition::NotSet { target, set } => Some((
@@ -1546,20 +1562,29 @@ fn render_generated_step(
 ) {
     let pad = "    ".repeat(indent);
     match step {
-        GeneratedParserStep::MatchToken(token_type) => {
+        GeneratedParserStep::MatchToken {
+            token_type,
+            follow_state,
+        } => {
             writeln!(
                 out,
-                "{pad}let __child = self.base.match_token_recovering({token_type}, atn())?;"
+                "{pad}let __children = self.base.match_token_recovering({token_type}, {follow_state}, atn())?;"
             )
             .expect("writing to a string cannot fail");
             if *token_type == antlr4_runtime::token::TOKEN_EOF {
                 writeln!(out, "{pad}__consumed_eof = true;")
                     .expect("writing to a string cannot fail");
             }
-            writeln!(out, "{pad}self.base.add_parse_child(&mut __ctx, __child);")
-                .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}for __child in __children {{ self.base.add_parse_child(&mut __ctx, __child); }}"
+            )
+            .expect("writing to a string cannot fail");
         }
-        GeneratedParserStep::MatchSet(intervals) => {
+        GeneratedParserStep::MatchSet {
+            intervals,
+            follow_state,
+        } => {
             let intervals = render_i32_ranges(intervals);
             writeln!(
                 out,
@@ -1568,13 +1593,16 @@ fn render_generated_step(
             .expect("writing to a string cannot fail");
             writeln!(
                 out,
-                "{pad}let __child = self.base.match_set(&{intervals})?;"
+                "{pad}let __children = self.base.match_set_recovering(&{intervals}, {follow_state}, atn())?;"
             )
             .expect("writing to a string cannot fail");
             writeln!(out, "{pad}if __matched_eof {{ __consumed_eof = true; }}")
                 .expect("writing to a string cannot fail");
-            writeln!(out, "{pad}self.base.add_parse_child(&mut __ctx, __child);")
-                .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}for __child in __children {{ self.base.add_parse_child(&mut __ctx, __child); }}"
+            )
+            .expect("writing to a string cannot fail");
         }
         GeneratedParserStep::MatchNotSet(intervals) => {
             let intervals = render_i32_ranges(intervals);
@@ -5715,6 +5743,20 @@ atn:
         compile_generated_parser_rule(&context, rule_index)
     }
 
+    fn mt(token_type: i32, follow_state: usize) -> GeneratedParserStep {
+        GeneratedParserStep::MatchToken {
+            token_type,
+            follow_state,
+        }
+    }
+
+    fn ms(intervals: Vec<(i32, i32)>, follow_state: usize) -> GeneratedParserStep {
+        GeneratedParserStep::MatchSet {
+            intervals,
+            follow_state,
+        }
+    }
+
     #[test]
     fn compiles_linear_parser_rule_body() {
         let atn = linear_rule_atn();
@@ -5725,10 +5767,7 @@ atn:
         assert_eq!(body.entry_state, 0);
         assert_eq!(
             body.steps,
-            [
-                GeneratedParserStep::MatchToken(1),
-                GeneratedParserStep::MatchToken(antlr4_runtime::token::TOKEN_EOF)
-            ]
+            [mt(1, 2), mt(antlr4_runtime::token::TOKEN_EOF, 3)]
         );
 
         let rendered = render_generated_rule_dispatch(
@@ -5738,7 +5777,7 @@ atn:
             &BTreeMap::new(),
             false,
         );
-        assert!(rendered.contains("match_token_recovering(1, atn())"));
+        assert!(rendered.contains("match_token_recovering(1, 2, atn())"));
         assert!(rendered.contains("generated_diagnostics_checkpoint()"));
         assert!(rendered.contains("restore_generated_diagnostics(__generated_diagnostic_marker)"));
     }
@@ -5757,10 +5796,7 @@ atn:
                 track_alt_number: true,
                 allow_semantic_context: false,
                 force_context: false,
-                alts: vec![
-                    vec![GeneratedParserStep::MatchToken(1)],
-                    vec![GeneratedParserStep::MatchToken(2)]
-                ],
+                alts: vec![vec![mt(1, 4)], vec![mt(2, 4)]],
             }]
         );
 
@@ -5804,7 +5840,7 @@ atn:
                 track_alt_number: true,
                 allow_semantic_context: false,
                 force_context: false,
-                body: vec![GeneratedParserStep::MatchToken(1)],
+                body: vec![mt(1, 4)],
             }]
         );
 
@@ -5834,7 +5870,7 @@ atn:
         assert_eq!(
             body.steps,
             [
-                GeneratedParserStep::MatchToken(1),
+                mt(1, 3),
                 GeneratedParserStep::StarLoop {
                     state: 4,
                     decision: 0,
@@ -5843,7 +5879,7 @@ atn:
                     track_alt_number: false,
                     allow_semantic_context: false,
                     force_context: false,
-                    body: vec![GeneratedParserStep::MatchToken(1)],
+                    body: vec![mt(1, 3)],
                 }
             ]
         );
@@ -5861,10 +5897,7 @@ atn:
             track_alt_number: true,
             allow_semantic_context: false,
             force_context: false,
-            alts: vec![
-                vec![GeneratedParserStep::MatchToken(1)],
-                vec![GeneratedParserStep::MatchToken(2)],
-            ],
+            alts: vec![vec![mt(1, 4)], vec![mt(2, 4)]],
         };
         assert_eq!(
             body.steps,
@@ -5896,7 +5929,7 @@ atn:
         assert_eq!(
             body.steps,
             [
-                GeneratedParserStep::MatchToken(1),
+                mt(1, 2),
                 GeneratedParserStep::LeftRecursiveLoop {
                     state: 2,
                     decision: 0,
@@ -5912,7 +5945,7 @@ atn:
                         force_context: false,
                         alts: vec![vec![
                             GeneratedParserStep::Precedence(2),
-                            GeneratedParserStep::MatchToken(2),
+                            mt(2, 10),
                             GeneratedParserStep::CallRule {
                                 source_state: 10,
                                 rule_index: 0,
@@ -5961,7 +5994,7 @@ atn:
                 rule_index: 2,
                 entry_state: 10,
                 left_recursive: false,
-                steps: vec![GeneratedParserStep::MatchToken(1)],
+                steps: vec![mt(1, 0)],
             }),
         ];
 
@@ -5993,7 +6026,7 @@ atn:
                     generated: &BTreeSet::new(),
                 }
             ),
-            Some((Some(GeneratedParserStep::MatchSet(vec![(2, 4)])), 7))
+            Some((Some(ms(vec![(2, 4)], 7)), 7))
         );
 
         let mut set = IntervalSet::new();
@@ -6014,7 +6047,7 @@ atn:
                     generated: &BTreeSet::new(),
                 }
             ),
-            Some((Some(GeneratedParserStep::MatchSet(vec![(1, 1), (5, 6)])), 8))
+            Some((Some(ms(vec![(1, 1), (5, 6)], 8)), 8))
         );
     }
 
@@ -6373,7 +6406,7 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
 
     #[test]
     fn generated_decision_does_not_reject_semantic_context_metadata() {
-        let alts = vec![vec![GeneratedParserStep::MatchToken(1)], vec![]];
+        let alts = vec![vec![mt(1, 0)], vec![]];
         let mut rendered = String::new();
 
         render_generated_decision(
