@@ -2330,6 +2330,13 @@ fn render_generated_star_loop(
         render_generated_sll_then_context_prediction_with_indent(out, &inner_pad, decision, 1);
         writeln!(out, "{pad}    }};").expect("writing to a string cannot fail");
     }
+    render_generated_loop_semantic_prediction_filter(
+        out,
+        &format!("{pad}    "),
+        enter_alt,
+        exit_alt,
+        body,
+    );
     writeln!(out, "{pad}    match __prediction.alt {{").expect("writing to a string cannot fail");
     writeln!(out, "{pad}        {enter_alt} => {{").expect("writing to a string cannot fail");
     render_generated_alt_number_assignment(
@@ -2441,6 +2448,13 @@ fn render_generated_left_recursive_loop(
     )
     .expect("writing to a string cannot fail");
     writeln!(out, "{pad}    }};").expect("writing to a string cannot fail");
+    render_generated_loop_semantic_prediction_filter(
+        out,
+        &format!("{pad}    "),
+        enter_alt,
+        exit_alt,
+        body,
+    );
     writeln!(out, "{pad}    match __prediction.alt {{").expect("writing to a string cannot fail");
     writeln!(out, "{pad}        {enter_alt} => {{").expect("writing to a string cannot fail");
     writeln!(
@@ -2465,6 +2479,38 @@ fn render_generated_left_recursive_loop(
     .expect("writing to a string cannot fail");
     writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
     writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
+}
+
+fn render_generated_loop_semantic_prediction_filter(
+    out: &mut String,
+    pad: &str,
+    enter_alt: usize,
+    exit_alt: usize,
+    body: &[GeneratedParserStep],
+) {
+    if leading_predicates(body).is_empty() {
+        return;
+    }
+    let condition = semantic_alt_candidate_condition(body);
+    writeln!(
+        out,
+        "{pad}let __prediction = if __prediction.alt == {enter_alt} {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    let __semantic_la = self.base.la(1);")
+        .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    if {condition} {{").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}        __prediction").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    }} else {{").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}        antlr4_runtime::ParserAtnPrediction {{ alt: {exit_alt}, ..__prediction }}"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}}} else {{").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    __prediction").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}}};").expect("writing to a string cannot fail");
 }
 
 /// Renders dispatch for rule-level `@after` actions. Keeping this behind
@@ -7015,6 +7061,44 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
         );
         assert!(rendered.contains("no_viable_alternative_error(__decision_start)"));
         assert!(rendered.contains("__sync_error = Some(__error.clone())"));
+    }
+
+    #[test]
+    fn generated_loop_filters_failed_leading_predicate_to_exit_alt() {
+        let body = vec![
+            GeneratedParserStep::Predicate {
+                rule_index: 1,
+                pred_index: 0,
+            },
+            mt(3, 4),
+        ];
+        let mut rendered = String::new();
+
+        render_generated_star_loop(
+            &mut rendered,
+            StarLoopRender {
+                state: 1,
+                decision: 0,
+                alts: (1, 2),
+                track_alt_number: false,
+                allow_semantic_context: true,
+                force_context: false,
+                body: &body,
+            },
+            0,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            false,
+        );
+
+        assert!(rendered.contains("if __prediction.alt == 1"));
+        assert!(rendered.contains(
+            "parser_semantic_predicate_matches_with_local(PARSER_PREDICATES, 1, 0, __precedence)"
+        ));
+        assert!(rendered.contains("__semantic_la == 3"));
+        assert!(
+            rendered.contains("antlr4_runtime::ParserAtnPrediction { alt: 2, ..__prediction }")
+        );
     }
 
     #[test]
