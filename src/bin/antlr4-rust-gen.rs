@@ -2982,28 +2982,24 @@ where
         }} else {{
             None
         }};
-        let (__tree, __from_generated) = if !self.base.report_diagnostic_errors() || __generated_only {{
-            if let Some(result) = self.parse_generated_rule(rule_index, precedence, allow_generated_fallback) {{
-                match result {{
-                    Ok(tree) => (tree, true),
-                    Err(GeneratedRuleError::Recoverable(_error)) if allow_generated_fallback && !__generated_only => {{
-                        self.generated_actions.truncate(__generated_action_marker);
-                        self.base.restore_int_members(__generated_member_checkpoint.clone());
-                        antlr4_runtime::IntStream::seek(self.base.input(), __rule_start);
-                        (self.parse_interpreted_rule_precedence(rule_index, precedence)?, false)
-                    }}
-                    Err(error) => {{
-                        self.generated_actions.truncate(__generated_action_marker);
-                        self.base.restore_int_members(__generated_member_checkpoint);
-                        antlr4_runtime::IntStream::seek(self.base.input(), __rule_start);
-                        return Err(error.into_error());
-                    }}
+        let (__tree, __from_generated) = if let Some(result) = self.parse_generated_rule(rule_index, precedence, allow_generated_fallback) {{
+            match result {{
+                Ok(tree) => (tree, true),
+                Err(GeneratedRuleError::Recoverable(_error)) if allow_generated_fallback && !__generated_only => {{
+                    self.generated_actions.truncate(__generated_action_marker);
+                    self.base.restore_int_members(__generated_member_checkpoint.clone());
+                    antlr4_runtime::IntStream::seek(self.base.input(), __rule_start);
+                    (self.parse_interpreted_rule_precedence(rule_index, precedence)?, false)
                 }}
-            }} else if __generated_only {{
-                return Err(antlr4_runtime::AntlrError::Unsupported(format!("generated parser did not emit rule {{}}", rule_index)));
-            }} else {{
-                (self.parse_interpreted_rule_precedence(rule_index, precedence)?, false)
+                Err(error) => {{
+                    self.generated_actions.truncate(__generated_action_marker);
+                    self.base.restore_int_members(__generated_member_checkpoint);
+                    antlr4_runtime::IntStream::seek(self.base.input(), __rule_start);
+                    return Err(error.into_error());
+                }}
             }}
+        }} else if __generated_only {{
+            return Err(antlr4_runtime::AntlrError::Unsupported(format!("generated parser did not emit rule {{}}", rule_index)));
         }} else {{
             (self.parse_interpreted_rule_precedence(rule_index, precedence)?, false)
         }};
@@ -3022,7 +3018,6 @@ where
         }}
         if __from_generated && allow_generated_fallback {{
             self.base.report_generated_parser_diagnostics();
-            self.base.report_token_source_errors();
             let __generated_actions = self.generated_actions.split_off(__generated_action_marker);
             self.base.restore_int_members(__generated_member_checkpoint);
             for __action in __generated_actions {{
@@ -7012,11 +7007,11 @@ s : ;
     }
 
     #[test]
-    fn generated_parser_falls_back_for_diagnostic_reporting() {
+    fn generated_parser_handles_diagnostic_reporting() {
         let rendered =
             render_parser("TParser", &minimal_parser_data(), None).expect("parser should render");
 
-        assert!(rendered.contains("if !self.base.report_diagnostic_errors() || __generated_only"));
+        assert!(!rendered.contains("if !self.base.report_diagnostic_errors() || __generated_only"));
         assert!(
             rendered.contains("self.parse_interpreted_rule_precedence(rule_index, precedence)?")
         );
@@ -7042,7 +7037,7 @@ s : ;
 
         assert!(rendered.contains("if __from_generated && allow_generated_fallback {"));
         assert!(rendered.contains("self.base.report_generated_parser_diagnostics();"));
-        assert!(rendered.contains("self.base.report_token_source_errors();"));
+        assert!(!rendered.contains("self.base.report_token_source_errors();"));
     }
 
     #[test]
