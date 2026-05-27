@@ -71,7 +71,7 @@ type FxHashMap<K, V> = HashMap<K, V, FxBuildHasher>;
 #[allow(clippy::disallowed_types)]
 type FxHashSet<K> = HashSet<K, FxBuildHasher>;
 
-use crate::atn::parser::ParserAtnSimulator;
+use crate::atn::parser::{ParserAtnPrediction, ParserAtnSimulator};
 use crate::atn::{Atn, AtnState, AtnStateKind, Transition};
 use crate::errors::AntlrError;
 use crate::int_stream::IntStream;
@@ -2390,18 +2390,34 @@ where
             return Ok(());
         };
         let entry = self.cached_decision_lookahead(atn, state, rule_stop);
-        let mut expected = BTreeSet::new();
+        let symbol = self.la(1);
+        let mut has_expected_symbols = false;
         let mut nullable = false;
         for transition in &entry.transitions {
-            transition.symbols.extend_btree_set(&mut expected);
+            if transition.symbols.contains(symbol) {
+                return Ok(());
+            }
+            has_expected_symbols |= !transition.symbols.is_empty();
             nullable |= transition.nullable;
         }
+        let context_expected = nullable.then(|| self.context_expected_symbols(atn));
         if nullable {
-            expected.extend(self.context_expected_symbols(atn));
+            if context_expected
+                .as_ref()
+                .is_some_and(|expected| expected.contains(&symbol))
+            {
+                return Ok(());
+            }
         }
-        let symbol = self.la(1);
-        if expected.is_empty() || expected.contains(&symbol) {
+        if !has_expected_symbols && context_expected.as_ref().is_none_or(BTreeSet::is_empty) {
             return Ok(());
+        }
+        let mut expected = BTreeSet::new();
+        for transition in &entry.transitions {
+            transition.symbols.extend_btree_set(&mut expected);
+        }
+        if let Some(context_expected) = context_expected {
+            expected.extend(context_expected);
         }
         if symbol != TOKEN_EOF {
             let mut cursor = self.input.index();
@@ -2431,6 +2447,33 @@ where
                     .map_or_else(|| "'<EOF>'".to_owned(), token_input_display),
                 self.expected_symbols_display(&expected)
             ),
+        })
+    }
+
+    /// Returns a generated-parser prediction when one token of lookahead
+    /// uniquely selects an alternative for `state_number`.
+    ///
+    /// This mirrors the interpreter's LL(1) commit point and lets generated
+    /// recursive-descent methods avoid invoking the adaptive simulator for
+    /// simple optional/block/loop decisions.
+    pub fn ll1_decision_prediction(
+        &mut self,
+        atn: &Atn,
+        state_number: usize,
+    ) -> Option<ParserAtnPrediction> {
+        let state = atn.state(state_number)?;
+        if state.precedence_rule_decision {
+            return None;
+        }
+        let rule_stop = state
+            .rule_index
+            .and_then(|rule_index| atn.rule_to_stop_state().get(rule_index).copied())?;
+        let symbol = self.la(1);
+        let entry = self.cached_decision_lookahead(atn, state, rule_stop);
+        ll1_greedy_alt(&entry, symbol, state.non_greedy).map(|alt| ParserAtnPrediction {
+            alt: alt + 1,
+            requires_full_context: false,
+            has_semantic_context: false,
         })
     }
 

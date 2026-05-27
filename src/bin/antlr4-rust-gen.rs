@@ -453,6 +453,7 @@ enum GeneratedParserStep {
         decision: usize,
         track_alt_number: bool,
         allow_semantic_context: bool,
+        force_context: bool,
         alts: Vec<Vec<Self>>,
     },
     StarLoop {
@@ -462,6 +463,7 @@ enum GeneratedParserStep {
         exit_alt: usize,
         track_alt_number: bool,
         allow_semantic_context: bool,
+        force_context: bool,
         body: Vec<Self>,
     },
     LeftRecursiveLoop {
@@ -481,6 +483,7 @@ struct DecisionRender<'a> {
     decision: usize,
     track_alt_number: bool,
     allow_semantic_context: bool,
+    force_context: bool,
     alts: &'a [Vec<GeneratedParserStep>],
 }
 
@@ -491,6 +494,7 @@ struct StarLoopRender<'a> {
     alts: (usize, usize),
     track_alt_number: bool,
     allow_semantic_context: bool,
+    force_context: bool,
     body: &'a [GeneratedParserStep],
 }
 
@@ -873,6 +877,7 @@ fn compile_generated_parser_block_decision(
         decision,
         track_alt_number: state_tracks_alt_number(state),
         allow_semantic_context: alts.iter().any(|alt| steps_contain_predicate(alt)),
+        force_context: state.non_greedy,
         alts,
     }];
     steps.extend(compile_generated_parser_path(
@@ -939,6 +944,7 @@ fn compile_generated_parser_star_loop(
         exit_alt,
         track_alt_number: state_tracks_alt_number(state),
         allow_semantic_context: steps_contain_predicate(&body),
+        force_context: state.non_greedy,
         body,
     }];
     steps.extend(compile_generated_parser_path(
@@ -1007,6 +1013,7 @@ fn compile_generated_parser_plus_loop(
         exit_alt,
         track_alt_number: state_tracks_alt_number(state),
         allow_semantic_context: steps_contain_predicate(&body),
+        force_context: state.non_greedy,
         body,
     }];
     steps.extend(compile_generated_parser_path(
@@ -1645,6 +1652,7 @@ fn render_generated_step(
             decision,
             track_alt_number,
             allow_semantic_context,
+            force_context,
             alts,
         } => {
             render_generated_decision(
@@ -1654,6 +1662,7 @@ fn render_generated_step(
                     decision: *decision,
                     track_alt_number: *track_alt_number,
                     allow_semantic_context: *allow_semantic_context,
+                    force_context: *force_context,
                     alts,
                 },
                 indent,
@@ -1669,6 +1678,7 @@ fn render_generated_step(
             exit_alt,
             track_alt_number,
             allow_semantic_context,
+            force_context,
             body,
         } => {
             render_generated_star_loop(
@@ -1679,6 +1689,7 @@ fn render_generated_step(
                     alts: (*enter_alt, *exit_alt),
                     track_alt_number: *track_alt_number,
                     allow_semantic_context: *allow_semantic_context,
+                    force_context: *force_context,
                     body,
                 },
                 indent,
@@ -1746,6 +1757,7 @@ fn render_generated_decision(
         decision,
         track_alt_number,
         allow_semantic_context,
+        force_context,
         alts,
     } = decision_info;
     let pad = "    ".repeat(indent);
@@ -1757,27 +1769,19 @@ fn render_generated_decision(
         "{pad}let __decision_start = antlr4_runtime::IntStream::index(self.base.input());"
     )
     .expect("writing to a string cannot fail");
-    writeln!(out, "{pad}let __prediction = {{").expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "{pad}    let __prediction_context = self.base.prediction_context(atn());"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "{pad}    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new(atn()));"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "{pad}    __simulator.adaptive_predict_stream_info_with_context({decision}, 0, self.base.input(), &__prediction_context)"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "{pad}}}.map_err(|_| self.base.no_viable_alternative_error(__decision_start))?;"
-    )
-    .expect("writing to a string cannot fail");
+    if allow_semantic_context || force_context {
+        render_generated_adaptive_prediction(out, &pad, decision);
+    } else {
+        writeln!(
+            out,
+            "{pad}let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), {state}) {{"
+        )
+        .expect("writing to a string cannot fail");
+        writeln!(out, "{pad}    __prediction").expect("writing to a string cannot fail");
+        writeln!(out, "{pad}}} else {{").expect("writing to a string cannot fail");
+        render_generated_sll_then_context_prediction_with_indent(out, &pad, decision, 1);
+        writeln!(out, "{pad}}};").expect("writing to a string cannot fail");
+    }
     if !allow_semantic_context {
         writeln!(out, "{pad}if __prediction.has_semantic_context {{")
             .expect("writing to a string cannot fail");
@@ -1838,6 +1842,73 @@ fn render_generated_sync_decision(out: &mut String, pad: &str, state: usize) {
     writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
 }
 
+fn render_generated_adaptive_prediction(out: &mut String, pad: &str, decision: usize) {
+    writeln!(out, "{pad}let __prediction = {{").expect("writing to a string cannot fail");
+    render_generated_adaptive_prediction_with_indent(out, pad, decision, 1);
+    writeln!(out, "{pad}}};").expect("writing to a string cannot fail");
+}
+
+fn render_generated_adaptive_prediction_with_indent(
+    out: &mut String,
+    pad: &str,
+    decision: usize,
+    extra_indent: usize,
+) {
+    let nested = format!("{pad}{}", "    ".repeat(extra_indent));
+    writeln!(
+        out,
+        "{nested}let __prediction_context = self.base.prediction_context(atn());"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{nested}let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new(atn()));"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{nested}__simulator.adaptive_predict_stream_info_with_context({decision}, 0, self.base.input(), &__prediction_context)"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{nested}    .map_err(|_| self.base.no_viable_alternative_error(__decision_start))?"
+    )
+    .expect("writing to a string cannot fail");
+}
+
+fn render_generated_sll_then_context_prediction_with_indent(
+    out: &mut String,
+    pad: &str,
+    decision: usize,
+    extra_indent: usize,
+) {
+    let nested = format!("{pad}{}", "    ".repeat(extra_indent));
+    writeln!(out, "{nested}let __prediction = {{").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{nested}    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new(atn()));"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{nested}    __simulator.adaptive_predict_stream_info_with_precedence({decision}, 0, self.base.input())"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{nested}        .map_err(|_| self.base.no_viable_alternative_error(__decision_start))?"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{nested}}};").expect("writing to a string cannot fail");
+    writeln!(out, "{nested}if __prediction.requires_full_context {{")
+        .expect("writing to a string cannot fail");
+    render_generated_adaptive_prediction_with_indent(out, pad, decision, extra_indent + 1);
+    writeln!(out, "{nested}}} else {{").expect("writing to a string cannot fail");
+    writeln!(out, "{nested}    __prediction").expect("writing to a string cannot fail");
+    writeln!(out, "{nested}}}").expect("writing to a string cannot fail");
+}
+
 fn render_generated_star_loop(
     out: &mut String,
     loop_info: StarLoopRender<'_>,
@@ -1852,6 +1923,7 @@ fn render_generated_star_loop(
         alts,
         track_alt_number,
         allow_semantic_context,
+        force_context,
         body,
     } = loop_info;
     let (enter_alt, exit_alt) = alts;
@@ -1863,27 +1935,20 @@ fn render_generated_star_loop(
         "{pad}    let __decision_start = antlr4_runtime::IntStream::index(self.base.input());"
     )
     .expect("writing to a string cannot fail");
-    writeln!(out, "{pad}    let __prediction = {{").expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "{pad}        let __prediction_context = self.base.prediction_context(atn());"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "{pad}        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new(atn()));"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "{pad}        __simulator.adaptive_predict_stream_info_with_context({decision}, 0, self.base.input(), &__prediction_context)"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "{pad}    }}.map_err(|_| self.base.no_viable_alternative_error(__decision_start))?;"
-    )
-    .expect("writing to a string cannot fail");
+    let inner_pad = format!("{pad}    ");
+    if allow_semantic_context || force_context {
+        render_generated_adaptive_prediction(out, &inner_pad, decision);
+    } else {
+        writeln!(
+            out,
+            "{pad}    let __prediction = if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), {state}) {{"
+        )
+        .expect("writing to a string cannot fail");
+        writeln!(out, "{pad}        __prediction").expect("writing to a string cannot fail");
+        writeln!(out, "{pad}    }} else {{").expect("writing to a string cannot fail");
+        render_generated_sll_then_context_prediction_with_indent(out, &inner_pad, decision, 1);
+        writeln!(out, "{pad}    }};").expect("writing to a string cannot fail");
+    }
     if !allow_semantic_context {
         writeln!(out, "{pad}    if __prediction.has_semantic_context {{")
             .expect("writing to a string cannot fail");
@@ -2561,6 +2626,7 @@ enum ActionTemplate {
     Sequence(Vec<Self>),
 }
 
+#[cfg(test)]
 impl ActionTemplate {
     /// Reports whether a parser action can be emitted directly at its ATN
     /// action-transition site without needing the completed parse tree or
@@ -4141,11 +4207,50 @@ fn inline_parser_action_statements(
 ) -> io::Result<BTreeMap<usize, String>> {
     let mut statements = BTreeMap::new();
     for (source_state, action) in actions {
-        if action.can_run_inline() {
-            statements.insert(*source_state, render_action_statement(action, members)?);
+        let statement = render_inline_parser_action_statement(action, members)?;
+        if !statement.is_empty() {
+            statements.insert(*source_state, statement);
         }
     }
     Ok(statements)
+}
+
+fn render_inline_parser_action_statement(
+    action: &ActionTemplate,
+    members: &[IntMemberTemplate],
+) -> io::Result<String> {
+    match action {
+        ActionTemplate::AddMember { member, value } => {
+            let member = member_id(members, member)?;
+            Ok(format!("self.base.add_int_member({member}, {value});"))
+        }
+        ActionTemplate::Sequence(actions) => {
+            let mut rendered = Vec::new();
+            for action in actions {
+                let statement = render_inline_parser_action_statement(action, members)?;
+                if !statement.is_empty() {
+                    rendered.push(statement);
+                }
+            }
+            Ok(rendered.join(" "))
+        }
+        ActionTemplate::Noop
+        | ActionTemplate::Text { .. }
+        | ActionTemplate::TextWithPrefix { .. }
+        | ActionTemplate::RuleTextWithPrefix { .. }
+        | ActionTemplate::StringTree { .. }
+        | ActionTemplate::RuleInvocationStack { .. }
+        | ActionTemplate::ListenerWalk { .. }
+        | ActionTemplate::RuleValue { .. }
+        | ActionTemplate::RuleReturnValue { .. }
+        | ActionTemplate::SetIntReturn { .. }
+        | ActionTemplate::TokenText { .. }
+        | ActionTemplate::TokenTextWithPrefix { .. }
+        | ActionTemplate::TokenDisplay { .. }
+        | ActionTemplate::ExpectedTokenNames { .. }
+        | ActionTemplate::Literal { .. }
+        | ActionTemplate::MemberValue { .. } => Ok(String::new()),
+    }
 }
 
 fn init_parser_action_statements(
@@ -5604,6 +5709,7 @@ atn:
                 decision: 0,
                 track_alt_number: true,
                 allow_semantic_context: false,
+                force_context: false,
                 alts: vec![
                     vec![GeneratedParserStep::MatchToken(1)],
                     vec![GeneratedParserStep::MatchToken(2)]
@@ -5620,8 +5726,9 @@ atn:
         );
         assert!(rendered.contains("parse_generated_rule_0"));
         assert!(rendered.contains("sync_decision(atn(), 1)"));
+        assert!(rendered.contains("ll1_decision_prediction(atn(), 1)"));
+        assert!(rendered.contains("adaptive_predict_stream_info_with_precedence(0, 0"));
         assert!(rendered.contains("adaptive_predict_stream_info_with_context(0, 0"));
-        assert!(!rendered.contains("requires_full_context"));
 
         let rendered_with_alt_numbers = render_generated_rule_dispatch(
             &[Some(body)],
@@ -5649,6 +5756,7 @@ atn:
                 exit_alt: 2,
                 track_alt_number: true,
                 allow_semantic_context: false,
+                force_context: false,
                 body: vec![GeneratedParserStep::MatchToken(1)],
             }]
         );
@@ -5665,6 +5773,8 @@ atn:
         assert!(rendered.contains("1 => {"));
         assert!(rendered.contains("2 => {"));
         assert!(rendered.contains("break;"));
+        assert!(rendered.contains("ll1_decision_prediction(atn(), 1)"));
+        assert!(rendered.contains("adaptive_predict_stream_info_with_precedence(0, 0"));
         assert!(rendered.contains("adaptive_predict_stream_info_with_context(0, 0"));
     }
 
@@ -5685,6 +5795,7 @@ atn:
                     exit_alt: 2,
                     track_alt_number: false,
                     allow_semantic_context: false,
+                    force_context: false,
                     body: vec![GeneratedParserStep::MatchToken(1)],
                 }
             ]
@@ -5702,6 +5813,7 @@ atn:
             decision: 0,
             track_alt_number: true,
             allow_semantic_context: false,
+            force_context: false,
             alts: vec![
                 vec![GeneratedParserStep::MatchToken(1)],
                 vec![GeneratedParserStep::MatchToken(2)],
@@ -5718,6 +5830,7 @@ atn:
                     exit_alt: 2,
                     track_alt_number: false,
                     allow_semantic_context: false,
+                    force_context: false,
                     body: vec![body_decision],
                 }
             ]
@@ -5749,6 +5862,7 @@ atn:
                         decision: 1,
                         track_alt_number: false,
                         allow_semantic_context: true,
+                        force_context: false,
                         alts: vec![vec![
                             GeneratedParserStep::Precedence(2),
                             GeneratedParserStep::MatchToken(2),
@@ -6256,6 +6370,30 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
             ])
             .can_run_inline()
         );
+    }
+
+    #[test]
+    fn extracts_inline_member_mutations_from_mixed_parser_actions() {
+        let members = vec![IntMemberTemplate {
+            name: "i".to_owned(),
+            initial_value: 0,
+        }];
+        let statement = render_inline_parser_action_statement(
+            &ActionTemplate::Sequence(vec![
+                ActionTemplate::AddMember {
+                    member: "i".to_owned(),
+                    value: 1,
+                },
+                ActionTemplate::MemberValue {
+                    member: "i".to_owned(),
+                    newline: true,
+                },
+            ]),
+            &members,
+        )
+        .expect("statement");
+
+        assert_eq!(statement, "self.base.add_int_member(0, 1);");
     }
 
     #[test]

@@ -775,6 +775,23 @@ pub fn conflicting_alt_subsets(configs: &[AtnConfig]) -> Vec<BTreeSet<usize>> {
     by_state_context.into_values().collect()
 }
 
+pub fn resolves_to_just_one_viable_alt(configs: &[AtnConfig]) -> Option<usize> {
+    single_viable_alt(&conflicting_alt_subsets(configs))
+}
+
+fn single_viable_alt(alt_subsets: &[BTreeSet<usize>]) -> Option<usize> {
+    let mut result = None;
+    for alts in alt_subsets {
+        let min_alt = alts.iter().next().copied()?;
+        match result {
+            None => result = Some(min_alt),
+            Some(existing) if existing == min_alt => {}
+            Some(_) => return None,
+        }
+    }
+    result
+}
+
 pub fn has_sll_conflict_terminating_prediction(
     configs: &AtnConfigSet,
     is_rule_stop_state: impl Fn(usize) -> bool,
@@ -832,6 +849,29 @@ mod tests {
         assert!(has_sll_conflict_terminating_prediction(&set, |state| {
             matches!(state, 10 | 11)
         }));
+    }
+
+    #[test]
+    fn viable_alt_resolves_to_shared_conflict_minimum() {
+        let empty = PredictionContext::empty();
+        let mut set = AtnConfigSet::new_full_context(true);
+        set.add(AtnConfig::new(10, 1, Rc::clone(&empty)));
+        set.add(AtnConfig::new(10, 2, Rc::clone(&empty)));
+        set.add(AtnConfig::new(11, 1, empty));
+
+        assert_eq!(resolves_to_just_one_viable_alt(set.configs()), Some(1));
+    }
+
+    #[test]
+    fn viable_alt_keeps_looking_for_different_conflict_minimums() {
+        let empty = PredictionContext::empty();
+        let mut set = AtnConfigSet::new_full_context(true);
+        set.add(AtnConfig::new(10, 1, Rc::clone(&empty)));
+        set.add(AtnConfig::new(10, 2, Rc::clone(&empty)));
+        set.add(AtnConfig::new(11, 2, Rc::clone(&empty)));
+        set.add(AtnConfig::new(11, 3, empty));
+
+        assert_eq!(resolves_to_just_one_viable_alt(set.configs()), None);
     }
 
     #[test]
