@@ -2488,10 +2488,9 @@ fn render_generated_loop_semantic_prediction_filter(
     exit_alt: usize,
     body: &[GeneratedParserStep],
 ) {
-    if leading_predicates(body).is_empty() {
+    let Some(condition) = loop_entry_condition(body) else {
         return;
-    }
-    let condition = semantic_alt_candidate_condition(body);
+    };
     writeln!(
         out,
         "{pad}let __prediction = if __prediction.alt == {enter_alt} {{"
@@ -2511,6 +2510,34 @@ fn render_generated_loop_semantic_prediction_filter(
     writeln!(out, "{pad}}} else {{").expect("writing to a string cannot fail");
     writeln!(out, "{pad}    __prediction").expect("writing to a string cannot fail");
     writeln!(out, "{pad}}};").expect("writing to a string cannot fail");
+}
+
+fn loop_entry_condition(body: &[GeneratedParserStep]) -> Option<String> {
+    let step = body.first()?;
+    match step {
+        GeneratedParserStep::Predicate { .. } | GeneratedParserStep::Precedence(_) => {
+            Some(semantic_alt_candidate_condition(body))
+        }
+        GeneratedParserStep::Decision { alts, .. } => {
+            if !alts.iter().any(|alt| steps_contain_predicate(alt)) {
+                return None;
+            }
+            Some(
+                alts.iter()
+                    .map(|alt| format!("({})", semantic_alt_candidate_condition(alt)))
+                    .collect::<Vec<_>>()
+                    .join(" || "),
+            )
+        }
+        GeneratedParserStep::Action { .. }
+        | GeneratedParserStep::MatchToken { .. }
+        | GeneratedParserStep::MatchSet { .. }
+        | GeneratedParserStep::MatchNotSet(_)
+        | GeneratedParserStep::MatchWildcard
+        | GeneratedParserStep::CallRule { .. }
+        | GeneratedParserStep::StarLoop { .. }
+        | GeneratedParserStep::LeftRecursiveLoop { .. } => None,
+    }
 }
 
 /// Renders dispatch for rule-level `@after` actions. Keeping this behind
@@ -7096,6 +7123,54 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
             "parser_semantic_predicate_matches_with_local(PARSER_PREDICATES, 1, 0, __precedence)"
         ));
         assert!(rendered.contains("__semantic_la == 3"));
+        assert!(
+            rendered.contains("antlr4_runtime::ParserAtnPrediction { alt: 2, ..__prediction }")
+        );
+    }
+
+    #[test]
+    fn generated_loop_filters_first_nested_predicated_decision() {
+        let body = vec![GeneratedParserStep::Decision {
+            state: 1,
+            decision: 0,
+            track_alt_number: false,
+            allow_semantic_context: true,
+            force_context: false,
+            alts: vec![
+                vec![mt(1, 4)],
+                vec![mt(3, 4)],
+                vec![
+                    GeneratedParserStep::Predicate {
+                        rule_index: 2,
+                        pred_index: 0,
+                    },
+                    mt(2, 4),
+                ],
+            ],
+        }];
+        let mut rendered = String::new();
+
+        render_generated_star_loop(
+            &mut rendered,
+            StarLoopRender {
+                state: 1,
+                decision: 1,
+                alts: (1, 2),
+                track_alt_number: false,
+                allow_semantic_context: true,
+                force_context: false,
+                body: &body,
+            },
+            0,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            false,
+        );
+
+        assert!(rendered.contains("(__semantic_la == 1) || (__semantic_la == 3)"));
+        assert!(rendered.contains(
+            "(self.base.parser_semantic_predicate_matches_with_local(PARSER_PREDICATES, 2, 0, __precedence) && __semantic_la == 2)"
+        ));
         assert!(
             rendered.contains("antlr4_runtime::ParserAtnPrediction { alt: 2, ..__prediction }")
         );
