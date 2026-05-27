@@ -1971,6 +1971,9 @@ fn render_generated_decision(
         render_generated_sll_then_context_prediction_with_indent(out, &pad, decision, 1);
         writeln!(out, "{pad}}};").expect("writing to a string cannot fail");
     }
+    if allow_semantic_context {
+        render_generated_semantic_prediction_filter(out, &pad, alts);
+    }
     writeln!(out, "{pad}match __prediction.alt {{").expect("writing to a string cannot fail");
     for (index, steps) in alts.iter().enumerate() {
         let alt = index + 1;
@@ -1997,6 +2000,177 @@ fn render_generated_decision(
     )
     .expect("writing to a string cannot fail");
     writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
+}
+
+fn render_generated_semantic_prediction_filter(
+    out: &mut String,
+    pad: &str,
+    alts: &[Vec<GeneratedParserStep>],
+) {
+    let alt_has_predicates = alts
+        .iter()
+        .map(|steps| !leading_predicates(steps).is_empty())
+        .collect::<Vec<_>>();
+    if !alt_has_predicates
+        .iter()
+        .any(|has_predicate| *has_predicate)
+    {
+        return;
+    }
+    let alt_conditions = alts
+        .iter()
+        .map(|steps| semantic_alt_candidate_condition(steps))
+        .collect::<Vec<_>>();
+    writeln!(
+        out,
+        "{pad}let __prediction = if __prediction.has_semantic_context {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    let __semantic_la = self.base.la(1);")
+        .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}    let __semantic_alt = match __prediction.alt {{"
+    )
+    .expect("writing to a string cannot fail");
+    for (index, condition) in alt_conditions.iter().enumerate() {
+        if !alt_has_predicates[index] {
+            continue;
+        }
+        let alt = index + 1;
+        writeln!(out, "{pad}        {alt} if {condition} => Some({alt}),")
+            .expect("writing to a string cannot fail");
+        writeln!(out, "{pad}        {alt} => {{").expect("writing to a string cannot fail");
+        render_semantic_alt_search(out, pad, &alt_conditions);
+        writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
+    }
+    writeln!(out, "{pad}        _ => Some(__prediction.alt),")
+        .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    }};").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    match __semantic_alt {{").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}        Some(__alt) => antlr4_runtime::ParserAtnPrediction {{ alt: __alt, ..__prediction }},"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}        None => {{").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}            let __error = self.base.no_viable_alternative_error(__decision_start);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}            __sync_error = Some(__error.clone());"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}            return Err(__error);")
+        .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}}} else {{").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    __prediction").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}}};").expect("writing to a string cannot fail");
+}
+
+fn render_semantic_alt_search(out: &mut String, pad: &str, alt_conditions: &[String]) {
+    for (index, condition) in alt_conditions.iter().enumerate() {
+        let alt = index + 1;
+        writeln!(out, "{pad}            if {condition} {{")
+            .expect("writing to a string cannot fail");
+        writeln!(out, "{pad}                Some({alt})").expect("writing to a string cannot fail");
+        writeln!(out, "{pad}            }} else").expect("writing to a string cannot fail");
+    }
+    writeln!(out, "{pad}            {{ None }}").expect("writing to a string cannot fail");
+}
+
+fn semantic_alt_candidate_condition(steps: &[GeneratedParserStep]) -> String {
+    let predicates = leading_predicates(steps);
+    let mut conditions = predicates
+        .into_iter()
+        .map(|(rule_index, pred_index)| {
+            format!(
+                "self.base.parser_semantic_predicate_matches_with_local(PARSER_PREDICATES, {rule_index}, {pred_index}, __precedence)"
+            )
+        })
+        .collect::<Vec<_>>();
+    if let Some(lookahead) = leading_lookahead_condition(steps) {
+        conditions.push(lookahead);
+    }
+    if conditions.is_empty() {
+        "true".to_owned()
+    } else {
+        conditions.join(" && ")
+    }
+}
+
+fn leading_predicates(steps: &[GeneratedParserStep]) -> Vec<(usize, usize)> {
+    let mut predicates = Vec::new();
+    for step in steps {
+        match step {
+            GeneratedParserStep::Predicate {
+                rule_index,
+                pred_index,
+            } => predicates.push((*rule_index, *pred_index)),
+            GeneratedParserStep::Action { .. } | GeneratedParserStep::Precedence(_) => {}
+            GeneratedParserStep::MatchToken { .. }
+            | GeneratedParserStep::MatchSet { .. }
+            | GeneratedParserStep::MatchNotSet(_)
+            | GeneratedParserStep::MatchWildcard
+            | GeneratedParserStep::CallRule { .. }
+            | GeneratedParserStep::Decision { .. }
+            | GeneratedParserStep::StarLoop { .. }
+            | GeneratedParserStep::LeftRecursiveLoop { .. } => break,
+        }
+    }
+    predicates
+}
+
+fn leading_lookahead_condition(steps: &[GeneratedParserStep]) -> Option<String> {
+    for step in steps {
+        match step {
+            GeneratedParserStep::Predicate { .. }
+            | GeneratedParserStep::Action { .. }
+            | GeneratedParserStep::Precedence(_) => {}
+            GeneratedParserStep::MatchToken { token_type, .. } => {
+                return Some(format!("__semantic_la == {token_type}"));
+            }
+            GeneratedParserStep::MatchSet { intervals, .. } => {
+                return Some(intervals_condition("__semantic_la", intervals));
+            }
+            GeneratedParserStep::MatchNotSet(intervals) => {
+                let excluded = intervals_condition("__semantic_la", intervals);
+                return Some(format!(
+                    "__semantic_la != antlr4_runtime::TOKEN_EOF && !({excluded})"
+                ));
+            }
+            GeneratedParserStep::MatchWildcard => {
+                return Some("__semantic_la != antlr4_runtime::TOKEN_EOF".to_owned());
+            }
+            GeneratedParserStep::CallRule { .. }
+            | GeneratedParserStep::Decision { .. }
+            | GeneratedParserStep::StarLoop { .. }
+            | GeneratedParserStep::LeftRecursiveLoop { .. } => return None,
+        }
+    }
+    None
+}
+
+fn intervals_condition(symbol: &str, intervals: &[(i32, i32)]) -> String {
+    if intervals.is_empty() {
+        return "false".to_owned();
+    }
+    intervals
+        .iter()
+        .map(|(start, stop)| {
+            if start == stop {
+                format!("{symbol} == {start}")
+            } else {
+                format!("({start}..={stop}).contains(&{symbol})")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" || ")
 }
 
 fn render_generated_alt_number_assignment(out: &mut String, pad: &str, alt: usize, enabled: bool) {
@@ -6715,6 +6889,58 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
         assert!(rendered.contains("ll1_decision_prediction(atn(), 1)"));
         assert!(rendered.contains("prediction_mode() != antlr4_runtime::PredictionMode::Sll"));
         assert!(!rendered.contains("has_semantic_context"));
+    }
+
+    #[test]
+    fn generated_decision_filters_semantic_predicate_alts() {
+        let alts = vec![
+            vec![
+                GeneratedParserStep::Predicate {
+                    rule_index: 1,
+                    pred_index: 0,
+                },
+                mt(1, 2),
+            ],
+            vec![
+                GeneratedParserStep::Predicate {
+                    rule_index: 1,
+                    pred_index: 1,
+                },
+                mt(1, 3),
+            ],
+            vec![mt(2, 4)],
+        ];
+        let mut rendered = String::new();
+
+        render_generated_decision(
+            &mut rendered,
+            DecisionRender {
+                state: 1,
+                decision: 0,
+                track_alt_number: false,
+                allow_semantic_context: true,
+                force_context: false,
+                alts: &alts,
+            },
+            0,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            false,
+        );
+
+        assert!(rendered.contains("if __prediction.has_semantic_context"));
+        assert!(rendered.contains(
+            "parser_semantic_predicate_matches_with_local(PARSER_PREDICATES, 1, 0, __precedence)"
+        ));
+        assert!(rendered.contains(
+            "parser_semantic_predicate_matches_with_local(PARSER_PREDICATES, 1, 1, __precedence)"
+        ));
+        assert!(rendered.contains("__semantic_la == 1"));
+        assert!(
+            rendered.contains("antlr4_runtime::ParserAtnPrediction { alt: __alt, ..__prediction }")
+        );
+        assert!(rendered.contains("no_viable_alternative_error(__decision_start)"));
+        assert!(rendered.contains("__sync_error = Some(__error.clone())"));
     }
 
     #[test]
