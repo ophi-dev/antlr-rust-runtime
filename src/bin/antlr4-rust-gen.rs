@@ -1782,16 +1782,6 @@ fn render_generated_decision(
         render_generated_sll_then_context_prediction_with_indent(out, &pad, decision, 1);
         writeln!(out, "{pad}}};").expect("writing to a string cannot fail");
     }
-    if !allow_semantic_context {
-        writeln!(out, "{pad}if __prediction.has_semantic_context {{")
-            .expect("writing to a string cannot fail");
-        writeln!(
-            out,
-            "{pad}    return Err(self.base.no_viable_alternative_error(__decision_start));"
-        )
-        .expect("writing to a string cannot fail");
-        writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
-    }
     writeln!(out, "{pad}match __prediction.alt {{").expect("writing to a string cannot fail");
     for (index, steps) in alts.iter().enumerate() {
         let alt = index + 1;
@@ -1901,8 +1891,11 @@ fn render_generated_sll_then_context_prediction_with_indent(
     )
     .expect("writing to a string cannot fail");
     writeln!(out, "{nested}}};").expect("writing to a string cannot fail");
-    writeln!(out, "{nested}if __prediction.requires_full_context {{")
-        .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{nested}if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {{"
+    )
+    .expect("writing to a string cannot fail");
     render_generated_adaptive_prediction_with_indent(out, pad, decision, extra_indent + 1);
     writeln!(out, "{nested}}} else {{").expect("writing to a string cannot fail");
     writeln!(out, "{nested}    __prediction").expect("writing to a string cannot fail");
@@ -1948,16 +1941,6 @@ fn render_generated_star_loop(
         writeln!(out, "{pad}    }} else {{").expect("writing to a string cannot fail");
         render_generated_sll_then_context_prediction_with_indent(out, &inner_pad, decision, 1);
         writeln!(out, "{pad}    }};").expect("writing to a string cannot fail");
-    }
-    if !allow_semantic_context {
-        writeln!(out, "{pad}    if __prediction.has_semantic_context {{")
-            .expect("writing to a string cannot fail");
-        writeln!(
-            out,
-            "{pad}        return Err(self.base.no_viable_alternative_error(__decision_start));"
-        )
-        .expect("writing to a string cannot fail");
-        writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
     }
     writeln!(out, "{pad}    match __prediction.alt {{").expect("writing to a string cannot fail");
     writeln!(out, "{pad}        {enter_alt} => {{").expect("writing to a string cannot fail");
@@ -6308,6 +6291,32 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
         assert!(rendered.contains("parser_action_at_current(6, 0"));
         assert!(rendered.contains("self.generated_actions.push(GeneratedAction::Parser(action));"));
         assert!(rendered.contains("println!(\"alt 2\");"));
+    }
+
+    #[test]
+    fn generated_decision_does_not_reject_semantic_context_metadata() {
+        let alts = vec![vec![GeneratedParserStep::MatchToken(1)], vec![]];
+        let mut rendered = String::new();
+
+        render_generated_decision(
+            &mut rendered,
+            DecisionRender {
+                state: 1,
+                decision: 0,
+                track_alt_number: false,
+                allow_semantic_context: false,
+                force_context: false,
+                alts: &alts,
+            },
+            0,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            false,
+        );
+
+        assert!(rendered.contains("ll1_decision_prediction(atn(), 1)"));
+        assert!(rendered.contains("prediction_mode() != antlr4_runtime::PredictionMode::Sll"));
+        assert!(!rendered.contains("has_semantic_context"));
     }
 
     #[test]

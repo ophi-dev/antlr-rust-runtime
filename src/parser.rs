@@ -1325,10 +1325,11 @@ fn ll1_unique_alt(entry: &DecisionLookahead, symbol: i32) -> Option<usize> {
 /// Returns the unique greedy alt index (0-based) selected by the current
 /// lookahead.
 ///
-/// For greedy decisions ANTLR takes the consuming alternative when the current
-/// symbol can start one, otherwise it takes the unique nullable exit. Non-greedy
-/// decisions invert that preference and take the nullable alt first. `None`
-/// signals the caller to fall back to per-transition lookahead filtering.
+/// The shortcut is intentionally conservative around nullable exits. If the
+/// current symbol can start a consuming alternative and an empty alternative is
+/// also present, one-token lookahead is not enough to know whether the symbol
+/// belongs to the current construct or to its caller's follow set. `None`
+/// signals the caller to fall back to adaptive prediction.
 fn ll1_greedy_alt(entry: &DecisionLookahead, symbol: i32, non_greedy: bool) -> Option<usize> {
     let mut matching_non_nullable_alt = None;
     let mut nullable_alt = None;
@@ -1348,6 +1349,9 @@ fn ll1_greedy_alt(entry: &DecisionLookahead, symbol: i32, non_greedy: bool) -> O
             }
             matching_non_nullable_alt = Some(index);
         }
+    }
+    if matching_non_nullable_alt.is_some() && nullable_alt.is_some() {
+        return None;
     }
     if non_greedy {
         nullable_alt.or(matching_non_nullable_alt)
@@ -7410,8 +7414,8 @@ mod tests {
 
         assert_eq!(ll1_unique_alt(&entry, 2), None);
         assert_eq!(ll1_greedy_alt(&entry, 2, false), Some(1));
-        assert_eq!(ll1_greedy_alt(&entry, 1, false), Some(0));
-        assert_eq!(ll1_greedy_alt(&entry, 1, true), Some(1));
+        assert_eq!(ll1_greedy_alt(&entry, 1, false), None);
+        assert_eq!(ll1_greedy_alt(&entry, 1, true), None);
     }
 
     #[test]

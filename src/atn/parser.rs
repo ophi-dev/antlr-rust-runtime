@@ -42,6 +42,27 @@ struct DfaEdge {
     source_state: usize,
 }
 
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct ClosureConfigKey {
+    state: usize,
+    alt: usize,
+    context: Rc<PredictionContext>,
+    semantic_context: SemanticContext,
+    precedence_filter_suppressed: bool,
+}
+
+impl From<&AtnConfig> for ClosureConfigKey {
+    fn from(config: &AtnConfig) -> Self {
+        Self {
+            state: config.state,
+            alt: config.alt,
+            context: Rc::clone(&config.context),
+            semantic_context: config.semantic_context.clone(),
+            precedence_filter_suppressed: config.precedence_filter_suppressed,
+        }
+    }
+}
+
 #[derive(Debug)]
 struct LookaheadIntStream {
     symbols: Vec<i32>,
@@ -339,7 +360,7 @@ impl<'a> ParserAtnSimulator<'a> {
         Some(ParserAtnPrediction {
             alt,
             requires_full_context: false,
-            has_semantic_context: configs.has_semantic_context(),
+            has_semantic_context: configs_have_semantic_context_for_alt(configs, alt),
         })
     }
 
@@ -432,7 +453,7 @@ impl<'a> ParserAtnSimulator<'a> {
                 return Ok(ParserAtnPrediction {
                     alt,
                     requires_full_context: true,
-                    has_semantic_context: configs.has_semantic_context(),
+                    has_semantic_context: configs_have_semantic_context_for_alt(&configs, alt),
                 });
             }
             let symbol = input.la(1);
@@ -445,7 +466,7 @@ impl<'a> ParserAtnSimulator<'a> {
                 return Ok(ParserAtnPrediction {
                     alt,
                     requires_full_context: true,
-                    has_semantic_context: configs.has_semantic_context(),
+                    has_semantic_context: configs_have_semantic_context_for_alt(&configs, alt),
                 });
             }
             if !configs.has_semantic_context()
@@ -454,7 +475,7 @@ impl<'a> ParserAtnSimulator<'a> {
                 return Ok(ParserAtnPrediction {
                     alt,
                     requires_full_context: true,
-                    has_semantic_context: configs.has_semantic_context(),
+                    has_semantic_context: configs_have_semantic_context_for_alt(&configs, alt),
                 });
             }
             if symbol == TOKEN_EOF || self.configs_all_reached_rule_stop(&configs) {
@@ -466,7 +487,7 @@ impl<'a> ParserAtnSimulator<'a> {
                 return Ok(ParserAtnPrediction {
                     alt,
                     requires_full_context: true,
-                    has_semantic_context: configs.has_semantic_context(),
+                    has_semantic_context: configs_have_semantic_context_for_alt(&configs, alt),
                 });
             }
             input.consume();
@@ -630,16 +651,18 @@ impl<'a> ParserAtnSimulator<'a> {
         precedence: i32,
     ) {
         let mut stack = vec![config];
-        let mut visited = FxHashSet::default();
+        let mut visited = FxHashSet::<ClosureConfigKey>::default();
         while let Some(config) = stack.pop() {
-            if !visited.insert(config.clone()) {
+            if !visited.insert(ClosureConfigKey::from(&config)) {
                 continue;
             }
             let Some(state) = self.atn.state(config.state) else {
                 continue;
             };
-            if state.is_rule_stop() {
-                self.closure_at_rule_stop(config, configs, merge_cache, &mut stack);
+            let at_rule_stop = state.is_rule_stop();
+            if at_rule_stop
+                && self.closure_at_rule_stop(config.clone(), configs, merge_cache, &mut stack)
+            {
                 continue;
             }
             let epsilon_only = !state.transitions.is_empty()
@@ -654,9 +677,13 @@ impl<'a> ParserAtnSimulator<'a> {
                     continue;
                 }
                 if transition.is_epsilon() {
-                    if let Some(target) =
+                    if let Some(mut target) =
                         self.epsilon_target_config(&config, transition, precedence)
                     {
+                        if at_rule_stop {
+                            target.reaches_into_outer_context =
+                                target.reaches_into_outer_context.saturating_add(1);
+                        }
                         stack.push(target);
                     }
                 }
@@ -741,17 +768,27 @@ impl<'a> ParserAtnSimulator<'a> {
         configs: &mut AtnConfigSet,
         merge_cache: &mut PredictionContextMergeCache,
         stack: &mut Vec<AtnConfig>,
-    ) {
+    ) -> bool {
         if config.context.is_empty() {
-            configs.add_with_merge_cache(config, Some(merge_cache));
-            return;
+            if configs.full_context() {
+                configs.add_with_merge_cache(config, Some(merge_cache));
+                return true;
+            }
+            return false;
         }
+        let mut handled_all_paths = true;
         for index in 0..config.context.len() {
             let Some(return_state) = config.context.return_state(index) else {
                 continue;
             };
             if return_state == EMPTY_RETURN_STATE {
-                configs.add_with_merge_cache(config.clone(), Some(merge_cache));
+                if configs.full_context() {
+                    let mut empty_context_config = config.clone();
+                    empty_context_config.context = PredictionContext::empty();
+                    configs.add_with_merge_cache(empty_context_config, Some(merge_cache));
+                } else {
+                    handled_all_paths = false;
+                }
                 continue;
             }
             let parent = config
@@ -768,6 +805,7 @@ impl<'a> ParserAtnSimulator<'a> {
             };
             stack.push(next);
         }
+        handled_all_paths
     }
 
     fn epsilon_target_config(
@@ -835,10 +873,20 @@ impl<'a> ParserAtnSimulator<'a> {
                 state.prediction.map(|alt| ParserAtnPrediction {
                     alt,
                     requires_full_context: state.requires_full_context,
-                    has_semantic_context: state.configs.has_semantic_context(),
+                    has_semantic_context: configs_have_semantic_context_for_alt(
+                        &state.configs,
+                        alt,
+                    ),
                 })
             })
     }
+}
+
+fn configs_have_semantic_context_for_alt(configs: &AtnConfigSet, alt: usize) -> bool {
+    configs
+        .configs()
+        .iter()
+        .any(|config| config.alt == alt && !config.semantic_context.is_none())
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -995,6 +1043,56 @@ mod tests {
 
         assert_eq!(reach.alts(), std::iter::once(2).collect());
         assert!(simulator.configs_all_reached_rule_stop(&reach));
+    }
+
+    #[test]
+    fn sll_closure_follows_empty_context_rule_stop_exits() {
+        let mut atn = Atn::new(AtnType::Parser, 1);
+        add_state(&mut atn, 0, AtnStateKind::RuleStop);
+        add_state(&mut atn, 1, AtnStateKind::Basic);
+        add_state(&mut atn, 2, AtnStateKind::Basic);
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Epsilon { target: 1 });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Atom {
+                target: 2,
+                label: 1,
+            });
+
+        let simulator = ParserAtnSimulator::new(&atn);
+        let mut configs = AtnConfigSet::new_full_context(false);
+        let mut merge_cache = PredictionContextMergeCache::new();
+        simulator.closure(
+            AtnConfig::new(0, 2, PredictionContext::empty()),
+            &mut configs,
+            &mut merge_cache,
+            0,
+        );
+
+        assert_eq!(configs.len(), 1);
+        let config = &configs.configs()[0];
+        assert_eq!(config.state, 1);
+        assert_eq!(config.alt, 2);
+        assert_eq!(config.reaches_into_outer_context, 1);
+    }
+
+    #[test]
+    fn semantic_context_flag_is_scoped_to_predicted_alt() {
+        let empty = PredictionContext::empty();
+        let mut configs = AtnConfigSet::new();
+        configs.add(AtnConfig::new(1, 1, Rc::clone(&empty)));
+        configs.add(AtnConfig::new(2, 2, empty).with_semantic_context(
+            SemanticContext::Predicate {
+                rule_index: 0,
+                pred_index: 0,
+                context_dependent: false,
+            },
+        ));
+
+        assert!(!configs_have_semantic_context_for_alt(&configs, 1));
+        assert!(configs_have_semantic_context_for_alt(&configs, 2));
     }
 
     #[test]
