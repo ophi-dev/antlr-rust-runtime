@@ -2443,6 +2443,67 @@ where
         self.rule_node(context)
     }
 
+    /// Recovers a generated rule catch block after a committed mismatch.
+    ///
+    /// ANTLR's generated parsers catch recognition errors inside each rule,
+    /// report the original error, then consume unexpected tokens until the
+    /// caller's recovery set can resume. Tokens consumed during recovery become
+    /// error nodes in the current rule context.
+    pub fn recover_generated_rule(
+        &mut self,
+        context: &mut ParserRuleContext,
+        atn: &Atn,
+        error: AntlrError,
+    ) {
+        let diagnostic = self.generated_rule_error_diagnostic(error);
+        self.generated_parser_diagnostics.push(diagnostic);
+        self.generated_sync_expected = None;
+        let recovery_symbols = self.context_expected_symbols(atn);
+        loop {
+            let symbol = self.la(1);
+            if symbol == TOKEN_EOF || recovery_symbols.contains(&symbol) {
+                break;
+            }
+            let Some(token) = self.input.lt(1).cloned() else {
+                break;
+            };
+            self.consume();
+            self.add_parse_child(context, ParseTree::Error(ErrorNode::new(token)));
+        }
+    }
+
+    fn generated_rule_error_diagnostic(&mut self, error: AntlrError) -> ParserDiagnostic {
+        match error {
+            AntlrError::ParserError {
+                line,
+                column,
+                message,
+            } => ParserDiagnostic {
+                line,
+                column,
+                message,
+            },
+            AntlrError::MismatchedInput { expected, found } => diagnostic_for_token(
+                self.input.lt(1),
+                format!("mismatched input {found} expecting {expected}"),
+            ),
+            AntlrError::NoViableAlternative { input } => diagnostic_for_token(
+                self.input.lt(1),
+                format!("no viable alternative at input {input}"),
+            ),
+            AntlrError::LexerError {
+                line,
+                column,
+                message,
+            } => ParserDiagnostic {
+                line,
+                column,
+                message,
+            },
+            AntlrError::Unsupported(message) => diagnostic_for_token(self.input.lt(1), message),
+        }
+    }
+
     /// Finishes a generated left-recursive parser rule and returns its parse-tree node.
     pub fn finish_recursion_rule(
         &mut self,
@@ -7816,6 +7877,59 @@ mod tests {
                 message: "missing 'Y' at '<EOF>'".to_owned(),
             }]
         );
+    }
+
+    #[test]
+    fn generated_rule_recovery_consumes_to_parent_follow() {
+        let atn = generated_match_recovery_atn();
+        let data = RecognizerData::new(
+            "Mini.g4",
+            Vocabulary::new(
+                [None, Some("'X'"), Some("'Y'"), Some("'Z'")],
+                [None, Some("X"), Some("Y"), Some("Z")],
+                [None::<&str>, None, None, None],
+            ),
+        );
+        let mut parser = BaseParser::new(
+            CommonTokenStream::new(Source {
+                tokens: vec![
+                    CommonToken::new(3).with_text("z"),
+                    CommonToken::eof("parser-test", 1, 1, 1),
+                ],
+                index: 0,
+            }),
+            data,
+        );
+        let _parent = parser.enter_rule(0, 0);
+        let marker = parser.push_invoking_state(1);
+        let mut child = parser.enter_rule(4, 1);
+        parser.discard_invoking_state(marker);
+
+        parser.recover_generated_rule(
+            &mut child,
+            &atn,
+            AntlrError::ParserError {
+                line: 1,
+                column: 0,
+                message: "mismatched input 'z' expecting {'X', 'Y'}".to_owned(),
+            },
+        );
+        let tree = parser.finish_rule(child, false);
+
+        assert_eq!(parser.la(1), TOKEN_EOF);
+        assert_eq!(
+            tree.to_string_tree(&["s".to_owned(), "a".to_owned()]),
+            "(a z)"
+        );
+        assert_eq!(
+            parser.generated_parser_diagnostics,
+            [ParserDiagnostic {
+                line: 1,
+                column: 0,
+                message: "mismatched input 'z' expecting {'X', 'Y'}".to_owned(),
+            }]
+        );
+        parser.exit_rule();
     }
 
     #[test]

@@ -1348,40 +1348,79 @@ fn render_generated_rule_method(
     writeln!(out, "                Ok(__tree)").expect("writing to a string cannot fail");
     writeln!(out, "            }}").expect("writing to a string cannot fail");
     writeln!(out, "            Err(__error) => {{").expect("writing to a string cannot fail");
-    writeln!(out, "                self.base.exit_rule();")
+    writeln!(
+        out,
+        "                if let Some(__error) = __sync_error {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "                    self.base.exit_rule();")
         .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "                self.generated_actions.truncate(__generated_action_marker);"
+        "                    self.generated_actions.truncate(__generated_action_marker);"
     )
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "                self.base.restore_int_members(__generated_member_checkpoint);"
+        "                    self.base.restore_int_members(__generated_member_checkpoint);"
     )
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "                self.base.restore_generated_diagnostics(__generated_diagnostic_marker);"
+        "                    self.base.restore_generated_diagnostics(__generated_diagnostic_marker);"
     )
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "                if let Some(__error) = __sync_error {{ return Err(GeneratedRuleError::Fatal(__error)); }}"
+        "                    return Err(GeneratedRuleError::Fatal(__error));"
     )
     .expect("writing to a string cannot fail");
-    writeln!(out, "                let _ = allow_fallback;")
+    writeln!(out, "                }}").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                if allow_fallback && !Self::generated_only() {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "                    self.base.exit_rule();")
         .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "                antlr4_runtime::IntStream::seek(self.base.input(), __rule_start);"
+        "                    self.generated_actions.truncate(__generated_action_marker);"
     )
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "                Err(GeneratedRuleError::Recoverable(__error))"
+        "                    self.base.restore_int_members(__generated_member_checkpoint);"
     )
     .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                    self.base.restore_generated_diagnostics(__generated_diagnostic_marker);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                    antlr4_runtime::IntStream::seek(self.base.input(), __rule_start);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                    return Err(GeneratedRuleError::Recoverable(__error));"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "                }}").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                self.base.recover_generated_rule(&mut __ctx, atn(), __error);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                let __tree = self.base.finish_rule(__ctx, __consumed_eof);"
+    )
+    .expect("writing to a string cannot fail");
+    render_generated_init_action(out, index, entry_state, init_action_statements, 4);
+    writeln!(out, "                Ok(__tree)").expect("writing to a string cannot fail");
     writeln!(out, "            }}").expect("writing to a string cannot fail");
     writeln!(out, "        }}").expect("writing to a string cannot fail");
     writeln!(out, "    }}").expect("writing to a string cannot fail");
@@ -1471,40 +1510,85 @@ fn render_generated_left_recursive_rule_method(
     writeln!(out, "                Ok(__tree)").expect("writing to a string cannot fail");
     writeln!(out, "            }}").expect("writing to a string cannot fail");
     writeln!(out, "            Err(__error) => {{").expect("writing to a string cannot fail");
-    writeln!(out, "                self.base.unroll_recursion_context();")
-        .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "                self.generated_actions.truncate(__generated_action_marker);"
+        "                if let Some(__error) = __sync_error {{"
     )
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "                self.base.restore_int_members(__generated_member_checkpoint);"
+        "                    self.base.unroll_recursion_context();"
     )
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "                self.base.restore_generated_diagnostics(__generated_diagnostic_marker);"
+        "                    self.generated_actions.truncate(__generated_action_marker);"
     )
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "                if let Some(__error) = __sync_error {{ return Err(GeneratedRuleError::Fatal(__error)); }}"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(out, "                let _ = allow_fallback;")
-        .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "                antlr4_runtime::IntStream::seek(self.base.input(), __rule_start);"
+        "                    self.base.restore_int_members(__generated_member_checkpoint);"
     )
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "                Err(GeneratedRuleError::Recoverable(__error))"
+        "                    self.base.restore_generated_diagnostics(__generated_diagnostic_marker);"
     )
     .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                    return Err(GeneratedRuleError::Fatal(__error));"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "                }}").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                if allow_fallback && !Self::generated_only() {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                    self.base.unroll_recursion_context();"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                    self.generated_actions.truncate(__generated_action_marker);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                    self.base.restore_int_members(__generated_member_checkpoint);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                    self.base.restore_generated_diagnostics(__generated_diagnostic_marker);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                    antlr4_runtime::IntStream::seek(self.base.input(), __rule_start);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                    return Err(GeneratedRuleError::Recoverable(__error));"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "                }}").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                self.base.recover_generated_rule(&mut __ctx, atn(), __error);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                let __tree = self.base.finish_recursion_rule(__ctx, __consumed_eof);"
+    )
+    .expect("writing to a string cannot fail");
+    render_generated_init_action(out, index, entry_state, init_action_statements, 4);
+    writeln!(out, "                Ok(__tree)").expect("writing to a string cannot fail");
     writeln!(out, "            }}").expect("writing to a string cannot fail");
     writeln!(out, "        }}").expect("writing to a string cannot fail");
     writeln!(out, "    }}").expect("writing to a string cannot fail");
