@@ -3023,6 +3023,10 @@ enum ActionTemplate {
         value: String,
         newline: bool,
     },
+    SetMember {
+        member: String,
+        value: i64,
+    },
     AddMember {
         member: String,
         value: i64,
@@ -3040,8 +3044,10 @@ impl ActionTemplate {
     /// action-transition site without needing the completed parse tree or
     /// interpreter-only state.
     fn can_run_inline(&self) -> bool {
-        matches!(self, Self::Noop | Self::AddMember { .. })
-            || matches!(self, Self::Sequence(actions) if actions.iter().all(Self::can_run_inline))
+        matches!(
+            self,
+            Self::Noop | Self::SetMember { .. } | Self::AddMember { .. }
+        ) || matches!(self, Self::Sequence(actions) if actions.iter().all(Self::can_run_inline))
     }
 }
 
@@ -3079,6 +3085,11 @@ enum PredicateTemplate {
         value: i64,
         equals: bool,
     },
+    MemberEquals {
+        member: String,
+        value: i64,
+        equals: bool,
+    },
     LookaheadTextEquals {
         offset: isize,
         text: String,
@@ -3103,6 +3114,7 @@ const fn can_generate_parser_predicate(predicate: &PredicateTemplate) -> bool {
             | PredicateTemplate::LocalIntEquals { .. }
             | PredicateTemplate::LocalIntLessOrEqual { .. }
             | PredicateTemplate::MemberModuloEquals { .. }
+            | PredicateTemplate::MemberEquals { .. }
             | PredicateTemplate::LookaheadTextEquals { .. }
             | PredicateTemplate::LookaheadNotEquals { .. }
     )
@@ -3835,6 +3847,7 @@ fn parse_action_template(body: &str) -> Option<ActionTemplate> {
             .or_else(|| parse_token_text(body))
             .or_else(|| parse_token_display(body))
             .or_else(|| parse_add_member(body))
+            .or_else(|| parse_set_member(body))
             .or_else(|| parse_member_value(body))
             .or_else(|| parse_noop_action(body))
             .or_else(|| parse_write_literal(body)),
@@ -3864,6 +3877,20 @@ fn parse_add_member(body: &str) -> Option<ActionTemplate> {
         return None;
     };
     Some(ActionTemplate::AddMember {
+        member: parse_template_string(member)?,
+        value: parse_template_string(value)?.parse::<i64>().ok()?,
+    })
+}
+
+fn parse_set_member(body: &str) -> Option<ActionTemplate> {
+    let arguments = body
+        .strip_prefix("SetMember(")
+        .and_then(|value| value.strip_suffix(')'))
+        .map(split_template_arguments)?;
+    let [member, value] = arguments.as_slice() else {
+        return None;
+    };
+    Some(ActionTemplate::SetMember {
         member: parse_template_string(member)?,
         value: parse_template_string(value)?.parse::<i64>().ok()?,
     })
@@ -3916,6 +3943,7 @@ fn parse_predicate_template(body: &str) -> Option<PredicateTemplate> {
             .or_else(|| parse_val_equals_predicate(body))
             .or_else(|| parse_raw_local_int_less_or_equal_predicate(body))
             .or_else(|| parse_mod_member_predicate(body))
+            .or_else(|| parse_member_predicate(body))
             .or_else(|| parse_boolean_member_not_predicate(body))
             .or_else(|| parse_lt_equals_predicate(body))
             .or_else(|| parse_la_not_equals_predicate(body)),
@@ -3985,6 +4013,30 @@ fn parse_mod_member_predicate(body: &str) -> Option<PredicateTemplate> {
     Some(PredicateTemplate::MemberModuloEquals {
         member: parse_template_string(member)?,
         modulus: parse_template_string(modulus)?.parse::<i64>().ok()?,
+        value: parse_template_string(value)?.parse::<i64>().ok()?,
+        equals,
+    })
+}
+
+fn parse_member_predicate(body: &str) -> Option<PredicateTemplate> {
+    let (equals, arguments) = if let Some(arguments) = body
+        .strip_prefix("MemberEquals(")
+        .and_then(|value| value.strip_suffix(')'))
+    {
+        (true, arguments)
+    } else {
+        (
+            false,
+            body.strip_prefix("MemberNotEquals(")
+                .and_then(|value| value.strip_suffix(')'))?,
+        )
+    };
+    let arguments = split_template_arguments(arguments);
+    let [member, value] = arguments.as_slice() else {
+        return None;
+    };
+    Some(PredicateTemplate::MemberEquals {
+        member: parse_template_string(member)?,
         value: parse_template_string(value)?.parse::<i64>().ok()?,
         equals,
     })
@@ -4208,8 +4260,7 @@ fn parse_noop_action(body: &str) -> Option<ActionTemplate> {
         || body.starts_with("InitIntVar(")
         || body.starts_with("IntArg(")
         || body.starts_with("Production(")
-        || body.starts_with("Result(")
-        || body.starts_with("SetMember("))
+        || body.starts_with("Result("))
         && body.ends_with(')')
     {
         return Some(ActionTemplate::Noop);
@@ -4654,6 +4705,10 @@ fn render_inline_parser_action_statement(
     members: &[IntMemberTemplate],
 ) -> io::Result<String> {
     match action {
+        ActionTemplate::SetMember { member, value } => {
+            let member = member_id(members, member)?;
+            Ok(format!("self.base.set_int_member({member}, {value});"))
+        }
         ActionTemplate::AddMember { member, value } => {
             let member = member_id(members, member)?;
             Ok(format!("self.base.add_int_member({member}, {value});"))
@@ -4729,6 +4784,7 @@ fn collect_return_actions(
         | ActionTemplate::TokenDisplay { .. }
         | ActionTemplate::ExpectedTokenNames { .. }
         | ActionTemplate::Literal { .. }
+        | ActionTemplate::SetMember { .. }
         | ActionTemplate::AddMember { .. }
         | ActionTemplate::MemberValue { .. } => {}
     }
@@ -4778,6 +4834,7 @@ fn collect_member_actions(
         | ActionTemplate::TokenDisplay { .. }
         | ActionTemplate::ExpectedTokenNames { .. }
         | ActionTemplate::Literal { .. }
+        | ActionTemplate::SetMember { .. }
         | ActionTemplate::MemberValue { .. } => {}
     }
     Ok(())
@@ -4896,6 +4953,7 @@ fn render_lexer_action_statement(template: &ActionTemplate) -> String {
         ActionTemplate::RuleValue { .. } => String::new(),
         ActionTemplate::RuleReturnValue { .. } => String::new(),
         ActionTemplate::SetIntReturn { .. } => String::new(),
+        ActionTemplate::SetMember { .. } => String::new(),
         ActionTemplate::AddMember { .. } => String::new(),
         ActionTemplate::MemberValue { .. } => String::new(),
         ActionTemplate::Sequence(actions) => actions
@@ -4953,6 +5011,7 @@ fn render_lexer_predicate_expression(template: &PredicateTemplate) -> String {
         | PredicateTemplate::LocalIntEquals { .. }
         | PredicateTemplate::LocalIntLessOrEqual { .. }
         | PredicateTemplate::MemberModuloEquals { .. }
+        | PredicateTemplate::MemberEquals { .. }
         | PredicateTemplate::LookaheadTextEquals { .. }
         | PredicateTemplate::LookaheadNotEquals { .. } => {
             unreachable!("lookahead parser predicates are not lexer predicates")
@@ -5115,6 +5174,10 @@ fn render_action_statement(
             let write = if *newline { "println!" } else { "print!" };
             Ok(format!("{write}(\"{}\");", rust_string(value)))
         }
+        ActionTemplate::SetMember { member, value } => {
+            let member = member_id(members, member)?;
+            Ok(format!("self.base.set_int_member({member}, {value});"))
+        }
         ActionTemplate::AddMember { member, value } => {
             let member = member_id(members, member)?;
             Ok(format!("self.base.add_int_member({member}, {value});"))
@@ -5231,6 +5294,7 @@ fn render_parser_after_action_statement(template: &ActionTemplate, rule_index: u
             format!("{write}(\"{}\");", rust_string(value))
         }
         ActionTemplate::SetIntReturn { .. }
+        | ActionTemplate::SetMember { .. }
         | ActionTemplate::AddMember { .. }
         | ActionTemplate::MemberValue { .. } => String::new(),
         ActionTemplate::Sequence(actions) => actions
@@ -5878,6 +5942,16 @@ fn render_parser_predicate_array(
                 let member = member_id(members, member)?;
                 format!(
                     "antlr4_runtime::ParserPredicate::MemberModuloEquals {{ member: {member}, modulus: {modulus}, value: {value}, equals: {equals} }}"
+                )
+            }
+            PredicateTemplate::MemberEquals {
+                member,
+                value,
+                equals,
+            } => {
+                let member = member_id(members, member)?;
+                format!(
+                    "antlr4_runtime::ParserPredicate::MemberEquals {{ member: {member}, value: {value}, equals: {equals} }}"
                 )
             }
             PredicateTemplate::TextEquals(_) => {
@@ -7027,6 +7101,17 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
         .expect("statement");
 
         assert_eq!(statement, "self.base.add_int_member(0, 1);");
+
+        let statement = render_inline_parser_action_statement(
+            &ActionTemplate::SetMember {
+                member: "i".to_owned(),
+                value: 3,
+            },
+            &members,
+        )
+        .expect("statement");
+
+        assert_eq!(statement, "self.base.set_int_member(0, 3);");
     }
 
     #[test]
@@ -7167,7 +7252,7 @@ continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#,
     fn parses_member_scaffolding_templates() {
         assert!(matches!(
             parse_action_template(r#"SetMember("i","1")"#),
-            Some(ActionTemplate::Noop)
+            Some(ActionTemplate::SetMember { member, value }) if member == "i" && value == 1
         ));
         assert_eq!(
             parse_invoke_predicate(r#"True():Invoke_pred()"#),
@@ -7204,6 +7289,14 @@ continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#,
         assert_eq!(
             parse_boolean_member_not_predicate(r#"GetMember("enumKeyword"):Not()"#),
             Some(PredicateTemplate::False)
+        );
+        assert_eq!(
+            parse_member_predicate(r#"MemberEquals("i","1")"#),
+            Some(PredicateTemplate::MemberEquals {
+                member: "i".to_owned(),
+                value: 1,
+                equals: true,
+            })
         );
     }
 

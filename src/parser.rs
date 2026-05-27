@@ -334,6 +334,12 @@ pub enum ParserPredicate {
         value: i64,
         equals: bool,
     },
+    /// Compares a generated parser integer member with a literal value.
+    MemberEquals {
+        member: usize,
+        value: i64,
+        equals: bool,
+    },
 }
 
 /// Prediction strategy requested by generated parser harnesses.
@@ -6311,6 +6317,14 @@ where
                     return false;
                 }
                 let actual = member_values.get(member).copied().unwrap_or_default() % *modulus;
+                (actual == *value) == *equals
+            }
+            ParserPredicate::MemberEquals {
+                member,
+                value,
+                equals,
+            } => {
+                let actual = member_values.get(member).copied().unwrap_or_default();
                 (actual == *value) == *equals
             }
         }
