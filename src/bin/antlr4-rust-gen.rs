@@ -452,7 +452,7 @@ enum GeneratedParserStep {
     CallRule {
         source_state: usize,
         rule_index: usize,
-        precedence: i32,
+        precedence: GeneratedRuleCallPrecedence,
     },
     Decision {
         state: usize,
@@ -481,6 +481,12 @@ enum GeneratedParserStep {
         entry_state: usize,
         body: Vec<Self>,
     },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum GeneratedRuleCallPrecedence {
+    Literal(i32),
+    InheritLocal,
 }
 
 #[derive(Clone, Copy)]
@@ -515,6 +521,7 @@ struct LeftRecursiveLoopRender<'a> {
 struct GeneratedParserCompileContext<'a> {
     atn: &'a Atn,
     decision_by_state: &'a [Option<usize>],
+    rule_args: &'a [(usize, usize, RuleArgTemplate)],
     inline_action_states: &'a BTreeSet<usize>,
     action_states: &'a BTreeSet<usize>,
     generated_action_states: &'a BTreeSet<usize>,
@@ -561,6 +568,7 @@ const fn generated_predicate_coordinate_sets<'a>(
 fn parser_generated_rules(
     data: &InterpData,
     enabled_rules: &[bool],
+    rule_args: &[(usize, usize, RuleArgTemplate)],
     action_states: ActionStateSets<'_>,
     predicate_coordinates: PredicateCoordinateSets<'_>,
     require_generated_callees: bool,
@@ -572,6 +580,7 @@ fn parser_generated_rules(
     let context = GeneratedParserCompileContext {
         atn: &atn,
         decision_by_state: &decision_by_state,
+        rule_args,
         inline_action_states: action_states.inline,
         action_states: action_states.all,
         generated_action_states: action_states.generated,
@@ -748,6 +757,7 @@ fn compile_generated_left_recursive_loop(
     let (exit_alt, exit_transition, exit_target, loop_back_state) = exit?;
     let (enter_step, enter_target) = compile_generated_parser_transition(
         state.state_number,
+        context.rule_args,
         enter_transition,
         generated_action_state_sets(context),
         generated_predicate_coordinate_sets(context),
@@ -766,6 +776,7 @@ fn compile_generated_left_recursive_loop(
 
     let (exit_step, _) = compile_generated_parser_transition(
         state.state_number,
+        context.rule_args,
         exit_transition,
         generated_action_state_sets(context),
         generated_predicate_coordinate_sets(context),
@@ -816,6 +827,7 @@ fn compile_generated_parser_path(
         }
         let (step, target) = compile_generated_parser_transition(
             state_number,
+            context.rule_args,
             transition,
             generated_action_state_sets(context),
             generated_predicate_coordinate_sets(context),
@@ -863,6 +875,7 @@ fn compile_generated_parser_block_decision(
     for transition in &state.transitions {
         let (step, target) = compile_generated_parser_transition(
             state.state_number,
+            context.rule_args,
             transition,
             generated_action_state_sets(context),
             generated_predicate_coordinate_sets(context),
@@ -917,6 +930,7 @@ fn compile_generated_parser_star_loop(
     let (exit_alt, exit_transition, loop_back_state) = exit?;
     let (enter_step, enter_target) = compile_generated_parser_transition(
         state.state_number,
+        context.rule_args,
         enter_transition,
         generated_action_state_sets(context),
         generated_predicate_coordinate_sets(context),
@@ -935,6 +949,7 @@ fn compile_generated_parser_star_loop(
 
     let (exit_step, exit_target) = compile_generated_parser_transition(
         state.state_number,
+        context.rule_args,
         exit_transition,
         generated_action_state_sets(context),
         generated_predicate_coordinate_sets(context),
@@ -985,6 +1000,7 @@ fn compile_generated_parser_plus_loop(
     let (enter_alt, enter_transition) = enter?;
     let (enter_step, enter_target) = compile_generated_parser_transition(
         state.state_number,
+        context.rule_args,
         enter_transition,
         generated_action_state_sets(context),
         generated_predicate_coordinate_sets(context),
@@ -1004,6 +1020,7 @@ fn compile_generated_parser_plus_loop(
     let (exit_alt, exit_transition) = exit?;
     let (exit_step, exit_target) = compile_generated_parser_transition(
         state.state_number,
+        context.rule_args,
         exit_transition,
         generated_action_state_sets(context),
         generated_predicate_coordinate_sets(context),
@@ -1101,8 +1118,29 @@ fn steps_contain_predicate(steps: &[GeneratedParserStep]) -> bool {
     })
 }
 
+fn generated_rule_call_precedence(
+    rule_args: &[(usize, usize, RuleArgTemplate)],
+    source_state: usize,
+    rule_index: usize,
+    transition_precedence: i32,
+) -> Option<GeneratedRuleCallPrecedence> {
+    let Some((_, _, arg)) = rule_args
+        .iter()
+        .find(|(arg_source, arg_rule, _)| *arg_source == source_state && *arg_rule == rule_index)
+    else {
+        return Some(GeneratedRuleCallPrecedence::Literal(transition_precedence));
+    };
+    match arg {
+        RuleArgTemplate::Literal(value) => i32::try_from(*value)
+            .ok()
+            .map(GeneratedRuleCallPrecedence::Literal),
+        RuleArgTemplate::InheritLocal => Some(GeneratedRuleCallPrecedence::InheritLocal),
+    }
+}
+
 fn compile_generated_parser_transition(
     source_state: usize,
+    rule_args: &[(usize, usize, RuleArgTemplate)],
     transition: &Transition,
     action_states: ActionStateSets<'_>,
     predicate_coordinates: PredicateCoordinateSets<'_>,
@@ -1150,7 +1188,12 @@ fn compile_generated_parser_transition(
             Some(GeneratedParserStep::CallRule {
                 source_state,
                 rule_index: *rule_index,
-                precedence: *precedence,
+                precedence: generated_rule_call_precedence(
+                    rule_args,
+                    source_state,
+                    *rule_index,
+                    *precedence,
+                )?,
             }),
             *follow_state,
         )),
@@ -1247,7 +1290,7 @@ fn render_generated_rule_dispatch(
             writeln!(out, "        let _ = precedence;").expect("writing to a string cannot fail");
             writeln!(
                 out,
-                "        self.parse_generated_rule_{index}(allow_fallback)"
+                "        self.parse_generated_rule_{index}(precedence, allow_fallback)"
             )
             .expect("writing to a string cannot fail");
         }
@@ -1287,9 +1330,10 @@ fn render_generated_rule_method(
     let entry_state = rule.entry_state;
     writeln!(
         out,
-        "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}(&mut self, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {{"
+        "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}(&mut self, __precedence: i32, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {{"
     )
     .expect("writing to a string cannot fail");
+    writeln!(out, "        let _ = __precedence;").expect("writing to a string cannot fail");
     writeln!(
         out,
         "        let __rule_start = antlr4_runtime::IntStream::index(self.base.input());"
@@ -1720,7 +1764,7 @@ fn render_generated_step(
         } => {
             writeln!(
                 out,
-                "{pad}if !self.base.parser_semantic_predicate_matches(PARSER_PREDICATES, {rule_index}, {pred_index}) {{"
+                "{pad}if !self.base.parser_semantic_predicate_matches_with_local(PARSER_PREDICATES, {rule_index}, {pred_index}, __precedence) {{"
             )
             .expect("writing to a string cannot fail");
             writeln!(
@@ -1745,6 +1789,10 @@ fn render_generated_step(
                 "{pad}let __invoking_marker = self.base.push_invoking_state({source_state}isize);"
             )
             .expect("writing to a string cannot fail");
+            let precedence = match precedence {
+                GeneratedRuleCallPrecedence::Literal(value) => value.to_string(),
+                GeneratedRuleCallPrecedence::InheritLocal => "__precedence".to_owned(),
+            };
             let child_call =
                 format!("self.parse_rule_precedence_from_generated({rule_index}, {precedence})");
             writeln!(out, "{pad}let __child = {child_call};")
@@ -2403,6 +2451,7 @@ fn render_parser(
     let generated_rules = parser_generated_rules(
         data,
         &generated_rule_enabled,
+        &rule_args,
         ActionStateSets {
             all: &action_states,
             generated: &generated_action_states,
@@ -2841,6 +2890,8 @@ const fn can_generate_parser_predicate(predicate: &PredicateTemplate) -> bool {
             | PredicateTemplate::False
             | PredicateTemplate::FalseWithMessage { .. }
             | PredicateTemplate::Invoke { .. }
+            | PredicateTemplate::LocalIntEquals { .. }
+            | PredicateTemplate::LocalIntLessOrEqual { .. }
             | PredicateTemplate::MemberModuloEquals { .. }
             | PredicateTemplate::LookaheadTextEquals { .. }
             | PredicateTemplate::LookaheadNotEquals { .. }
@@ -5843,6 +5894,7 @@ atn:
         let context = GeneratedParserCompileContext {
             atn,
             decision_by_state: &decision_by_state,
+            rule_args: &[],
             inline_action_states,
             action_states: &action_states,
             generated_action_states: &generated_action_states,
@@ -6058,7 +6110,7 @@ atn:
                             GeneratedParserStep::CallRule {
                                 source_state: 10,
                                 rule_index: 0,
-                                precedence: 3,
+                                precedence: GeneratedRuleCallPrecedence::Literal(3),
                             },
                         ]],
                     }],
@@ -6095,7 +6147,7 @@ atn:
                 steps: vec![GeneratedParserStep::CallRule {
                     source_state: 4,
                     rule_index: 1,
-                    precedence: 0,
+                    precedence: GeneratedRuleCallPrecedence::Literal(0),
                 }],
             }),
             None,
@@ -6124,6 +6176,7 @@ atn:
         assert_eq!(
             compile_generated_parser_transition(
                 3,
+                &[],
                 &range,
                 ActionStateSets {
                     all: &BTreeSet::new(),
@@ -6145,6 +6198,7 @@ atn:
         assert_eq!(
             compile_generated_parser_transition(
                 3,
+                &[],
                 &set_transition,
                 ActionStateSets {
                     all: &BTreeSet::new(),
@@ -6171,6 +6225,7 @@ atn:
         assert_eq!(
             compile_generated_parser_transition(
                 4,
+                &[],
                 &action,
                 ActionStateSets {
                     all: &BTreeSet::new(),
@@ -6190,6 +6245,7 @@ atn:
         assert_eq!(
             compile_generated_parser_transition(
                 4,
+                &[],
                 &action,
                 ActionStateSets {
                     all: &BTreeSet::new(),
@@ -6212,6 +6268,66 @@ atn:
     }
 
     #[test]
+    fn compiles_rule_call_precedence_from_rule_args() {
+        let rule = Transition::Rule {
+            target: 1,
+            rule_index: 2,
+            follow_state: 8,
+            precedence: 0,
+        };
+
+        assert_eq!(
+            compile_generated_parser_transition(
+                4,
+                &[(4, 2, RuleArgTemplate::Literal(6))],
+                &rule,
+                ActionStateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                    inline: &BTreeSet::new(),
+                },
+                PredicateCoordinateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                }
+            ),
+            Some((
+                Some(GeneratedParserStep::CallRule {
+                    source_state: 4,
+                    rule_index: 2,
+                    precedence: GeneratedRuleCallPrecedence::Literal(6),
+                }),
+                8
+            ))
+        );
+
+        assert_eq!(
+            compile_generated_parser_transition(
+                4,
+                &[(4, 2, RuleArgTemplate::InheritLocal)],
+                &rule,
+                ActionStateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                    inline: &BTreeSet::new(),
+                },
+                PredicateCoordinateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                }
+            ),
+            Some((
+                Some(GeneratedParserStep::CallRule {
+                    source_state: 4,
+                    rule_index: 2,
+                    precedence: GeneratedRuleCallPrecedence::InheritLocal,
+                }),
+                8
+            ))
+        );
+    }
+
+    #[test]
     fn compiles_synthetic_noop_action_transitions_as_epsilon() {
         let action = Transition::Action {
             target: 8,
@@ -6222,6 +6338,7 @@ atn:
         assert_eq!(
             compile_generated_parser_transition(
                 4,
+                &[],
                 &action,
                 ActionStateSets {
                     all: &BTreeSet::new(),
@@ -6250,6 +6367,7 @@ atn:
         assert_eq!(
             compile_generated_parser_transition(
                 4,
+                &[],
                 &action,
                 ActionStateSets {
                     all: &action_states,
@@ -6277,6 +6395,7 @@ atn:
         assert_eq!(
             compile_generated_parser_transition(
                 4,
+                &[],
                 &predicate,
                 ActionStateSets {
                     all: &BTreeSet::new(),
@@ -6307,6 +6426,7 @@ atn:
         assert_eq!(
             compile_generated_parser_transition(
                 4,
+                &[],
                 &predicate,
                 ActionStateSets {
                     all: &BTreeSet::new(),
@@ -6342,6 +6462,7 @@ atn:
         assert_eq!(
             compile_generated_parser_transition(
                 4,
+                &[],
                 &predicate,
                 ActionStateSets {
                     all: &BTreeSet::new(),

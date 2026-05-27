@@ -2587,6 +2587,33 @@ where
         rule_index: usize,
         pred_index: usize,
     ) -> bool {
+        self.parser_semantic_predicate_matches_inner(predicates, rule_index, pred_index, None)
+    }
+
+    /// Evaluates a generated parser semantic predicate with the current integer
+    /// rule argument exposed as `$_p`/`$i` metadata where applicable.
+    pub fn parser_semantic_predicate_matches_with_local(
+        &mut self,
+        predicates: &[(usize, usize, ParserPredicate)],
+        rule_index: usize,
+        pred_index: usize,
+        local_int_arg: i32,
+    ) -> bool {
+        self.parser_semantic_predicate_matches_inner(
+            predicates,
+            rule_index,
+            pred_index,
+            Some((rule_index, i64::from(local_int_arg))),
+        )
+    }
+
+    fn parser_semantic_predicate_matches_inner(
+        &mut self,
+        predicates: &[(usize, usize, ParserPredicate)],
+        rule_index: usize,
+        pred_index: usize,
+        local_int_arg: Option<(usize, i64)>,
+    ) -> bool {
         let index = self.input.index();
         let member_values = self.int_members.clone();
         self.parser_predicate_matches(PredicateEval {
@@ -2594,7 +2621,7 @@ where
             rule_index,
             pred_index,
             predicates,
-            local_int_arg: None,
+            local_int_arg,
             member_values: &member_values,
         })
     }
