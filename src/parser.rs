@@ -440,6 +440,7 @@ pub struct BaseParser<S> {
     prediction_mode: PredictionMode,
     prediction_diagnostics: Vec<ParserDiagnostic>,
     reported_prediction_diagnostics: BTreeSet<(usize, usize, String)>,
+    generated_parser_diagnostics: Vec<ParserDiagnostic>,
     int_members: BTreeMap<usize, i64>,
     rule_context_stack: Vec<RuleContextFrame>,
     pending_invoking_states: Vec<isize>,
@@ -2039,6 +2040,7 @@ where
             prediction_mode: PredictionMode::Ll,
             prediction_diagnostics: Vec::new(),
             reported_prediction_diagnostics: BTreeSet::new(),
+            generated_parser_diagnostics: Vec::new(),
             int_members: BTreeMap::new(),
             rule_context_stack: Vec::new(),
             pending_invoking_states: Vec::new(),
@@ -2070,6 +2072,23 @@ where
     /// code was fetching lexer tokens directly.
     pub fn report_token_source_errors(&mut self) {
         report_token_source_errors(&self.input.drain_source_errors());
+    }
+
+    /// Captures the current generated-parser diagnostic buffer length before a
+    /// speculative generated rule path.
+    pub const fn generated_diagnostics_checkpoint(&self) -> usize {
+        self.generated_parser_diagnostics.len()
+    }
+
+    /// Restores generated-parser diagnostics after a speculative rule path failed.
+    pub fn restore_generated_diagnostics(&mut self, marker: usize) {
+        self.generated_parser_diagnostics.truncate(marker);
+    }
+
+    /// Emits diagnostics recorded by committed generated parser recovery.
+    pub fn report_generated_parser_diagnostics(&mut self) {
+        let diagnostics = std::mem::take(&mut self.generated_parser_diagnostics);
+        report_parser_diagnostics(&diagnostics);
     }
 
     pub fn la(&mut self, offset: isize) -> i32 {
@@ -2133,6 +2152,52 @@ where
                 found: self.vocabulary().display_name(current.token_type()),
             })
         }
+    }
+
+    /// Matches a token from generated recursive-descent code, including ANTLR's
+    /// single-token insertion recovery when the active rule context can legally
+    /// continue at the current input symbol.
+    pub fn match_token_recovering(
+        &mut self,
+        token_type: i32,
+        atn: &Atn,
+    ) -> Result<ParseTree, AntlrError> {
+        let current = self
+            .input
+            .lt(1)
+            .cloned()
+            .ok_or_else(|| AntlrError::ParserError {
+                line: 0,
+                column: 0,
+                message: "missing current token".to_owned(),
+            })?;
+        if current.token_type() == token_type {
+            self.consume();
+            return Ok(ParseTree::Terminal(TerminalNode::new(current)));
+        }
+        if self
+            .context_expected_symbols(atn)
+            .contains(&current.token_type())
+        {
+            let mut expected_symbols = BTreeSet::new();
+            expected_symbols.insert(token_type);
+            let expected_display = self.expected_symbols_display(&expected_symbols);
+            let message = format!(
+                "missing {expected_display} at {}",
+                token_input_display(&current)
+            );
+            self.generated_parser_diagnostics
+                .push(diagnostic_for_token(Some(&current), message));
+            let token = CommonToken::new(token_type)
+                .with_text(format!("<missing {expected_display}>"))
+                .with_span(usize::MAX, usize::MAX)
+                .with_position(current.line(), current.column());
+            return Ok(ParseTree::Error(ErrorNode::new(token)));
+        }
+        Err(AntlrError::MismatchedInput {
+            expected: self.vocabulary().display_name(token_type),
+            found: self.vocabulary().display_name(current.token_type()),
+        })
     }
 
     pub fn match_eof(&mut self) -> Result<ParseTree, AntlrError> {
@@ -7437,6 +7502,33 @@ mod tests {
         atn
     }
 
+    fn generated_match_recovery_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 2);
+        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
+        atn.add_state(AtnState::new(1, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(2, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(3, AtnStateKind::RuleStop).with_rule_index(0));
+        atn.add_state(AtnState::new(4, AtnStateKind::RuleStart).with_rule_index(1));
+        atn.add_state(AtnState::new(5, AtnStateKind::RuleStop).with_rule_index(1));
+        atn.set_rule_to_start_state(vec![0, 4]);
+        atn.set_rule_to_stop_state(vec![3, 5]);
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Rule {
+                target: 4,
+                rule_index: 1,
+                follow_state: 2,
+                precedence: 0,
+            });
+        atn.state_mut(2)
+            .expect("state 2")
+            .add_transition(Transition::Atom {
+                target: 3,
+                label: TOKEN_EOF,
+            });
+        atn
+    }
+
     #[test]
     fn parser_matches_token_and_reports_mismatch() {
         let source = Source {
@@ -7535,6 +7627,51 @@ mod tests {
 
         assert!(expected.contains(&1));
         assert!(expected.contains(&TOKEN_EOF));
+    }
+
+    #[test]
+    fn generated_match_token_recovers_missing_token_from_context_follow() {
+        let atn = generated_match_recovery_atn();
+        let data = RecognizerData::new(
+            "Mini.g4",
+            Vocabulary::new(
+                [None, Some("'X'"), Some("'Y'")],
+                [None, Some("X"), Some("Y")],
+                [None::<&str>, None, None],
+            ),
+        );
+        let mut parser = BaseParser::new(
+            CommonTokenStream::new(Source {
+                tokens: vec![CommonToken::eof("parser-test", 3, 1, 3)],
+                index: 0,
+            }),
+            data,
+        );
+        parser.rule_context_stack = vec![
+            RuleContextFrame {
+                rule_index: 0,
+                invoking_state: 0,
+            },
+            RuleContextFrame {
+                rule_index: 1,
+                invoking_state: 1,
+            },
+        ];
+
+        let node = parser
+            .match_token_recovering(2, &atn)
+            .expect("generated match should insert missing token");
+
+        assert_eq!(node.text(), "<missing 'Y'>");
+        assert_eq!(parser.la(1), TOKEN_EOF);
+        assert_eq!(
+            parser.generated_parser_diagnostics,
+            [ParserDiagnostic {
+                line: 1,
+                column: 3,
+                message: "missing 'Y' at '<EOF>'".to_owned(),
+            }]
+        );
     }
 
     #[test]

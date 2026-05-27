@@ -1291,6 +1291,11 @@ fn render_generated_rule_method(
     .expect("writing to a string cannot fail");
     writeln!(
         out,
+        "        let __generated_diagnostic_marker = self.base.generated_diagnostics_checkpoint();"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
         "        let mut __ctx = self.base.enter_rule({entry_state}isize, {index});"
     )
     .expect("writing to a string cannot fail");
@@ -1337,6 +1342,11 @@ fn render_generated_rule_method(
     writeln!(
         out,
         "                self.base.restore_int_members(__generated_member_checkpoint);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                self.base.restore_generated_diagnostics(__generated_diagnostic_marker);"
     )
     .expect("writing to a string cannot fail");
     writeln!(
@@ -1404,6 +1414,11 @@ fn render_generated_left_recursive_rule_method(
     .expect("writing to a string cannot fail");
     writeln!(
         out,
+        "        let __generated_diagnostic_marker = self.base.generated_diagnostics_checkpoint();"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
         "        let mut __ctx = self.base.enter_recursion_rule({entry_state}isize, {index}, __precedence);"
     )
     .expect("writing to a string cannot fail");
@@ -1450,6 +1465,11 @@ fn render_generated_left_recursive_rule_method(
     writeln!(
         out,
         "                self.base.restore_int_members(__generated_member_checkpoint);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                self.base.restore_generated_diagnostics(__generated_diagnostic_marker);"
     )
     .expect("writing to a string cannot fail");
     writeln!(
@@ -1529,7 +1549,7 @@ fn render_generated_step(
         GeneratedParserStep::MatchToken(token_type) => {
             writeln!(
                 out,
-                "{pad}let __child = self.base.match_token({token_type})?;"
+                "{pad}let __child = self.base.match_token_recovering({token_type}, atn())?;"
             )
             .expect("writing to a string cannot fail");
             if *token_type == antlr4_runtime::token::TOKEN_EOF {
@@ -2473,6 +2493,7 @@ where
             }}
         }}
         if __from_generated && allow_generated_fallback {{
+            self.base.report_generated_parser_diagnostics();
             self.base.report_token_source_errors();
             let __generated_actions = self.generated_actions.split_off(__generated_action_marker);
             self.base.restore_int_members(__generated_member_checkpoint);
@@ -3488,7 +3509,9 @@ fn parse_predicate_template(body: &str) -> Option<PredicateTemplate> {
     match body {
         "True()" => Some(PredicateTemplate::True),
         "False()" => Some(PredicateTemplate::False),
-        _ => parse_text_equals_predicate(body)
+        r#"ParserPropertyCall({$parser}, "Property()")"# => Some(PredicateTemplate::True),
+        _ => parse_raw_boolean_predicate(body)
+            .or_else(|| parse_text_equals_predicate(body))
             .or_else(|| parse_token_start_column_equals_predicate(body))
             .or_else(|| parse_column_compare_predicate(body))
             .or_else(|| parse_invoke_predicate(body))
@@ -3499,6 +3522,28 @@ fn parse_predicate_template(body: &str) -> Option<PredicateTemplate> {
             .or_else(|| parse_lt_equals_predicate(body))
             .or_else(|| parse_la_not_equals_predicate(body)),
     }
+}
+
+fn parse_raw_boolean_predicate(body: &str) -> Option<PredicateTemplate> {
+    match body {
+        "true" => return Some(PredicateTemplate::True),
+        "false" => return Some(PredicateTemplate::False),
+        _ => {}
+    }
+    let (equals, left, right) = if let Some((left, right)) = body.split_once("==") {
+        (true, left, right)
+    } else {
+        let (left, right) = body.split_once("!=")?;
+        (false, left, right)
+    };
+    let left = left.trim().parse::<i64>().ok()?;
+    let right = right.trim().parse::<i64>().ok()?;
+    let value = if equals { left == right } else { left != right };
+    Some(if value {
+        PredicateTemplate::True
+    } else {
+        PredicateTemplate::False
+    })
 }
 
 /// Returns the call body for an action made of exactly one target template.
@@ -5685,6 +5730,17 @@ atn:
                 GeneratedParserStep::MatchToken(antlr4_runtime::token::TOKEN_EOF)
             ]
         );
+
+        let rendered = render_generated_rule_dispatch(
+            &[Some(body)],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            false,
+        );
+        assert!(rendered.contains("match_token_recovering(1, atn())"));
+        assert!(rendered.contains("generated_diagnostics_checkpoint()"));
+        assert!(rendered.contains("restore_generated_diagnostics(__generated_diagnostic_marker)"));
     }
 
     #[test]
@@ -6254,6 +6310,7 @@ s : ;
             render_parser("TParser", &minimal_parser_data(), None).expect("parser should render");
 
         assert!(rendered.contains("if __from_generated && allow_generated_fallback {"));
+        assert!(rendered.contains("self.base.report_generated_parser_diagnostics();"));
         assert!(rendered.contains("self.base.report_token_source_errors();"));
     }
 
@@ -6573,6 +6630,22 @@ continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#,
         assert_eq!(
             parse_invoke_predicate(r#"False():Invoke_pred()"#),
             Some(PredicateTemplate::Invoke { value: false })
+        );
+        assert_eq!(
+            parse_predicate_template(r#"ParserPropertyCall({$parser}, "Property()")"#),
+            Some(PredicateTemplate::True)
+        );
+        assert_eq!(
+            parse_predicate_template("true"),
+            Some(PredicateTemplate::True)
+        );
+        assert_eq!(
+            parse_predicate_template("0==0"),
+            Some(PredicateTemplate::True)
+        );
+        assert_eq!(
+            parse_predicate_template("0 != 0"),
+            Some(PredicateTemplate::False)
         );
         assert_eq!(
             parse_val_equals_predicate(r#"ValEquals("$i","2")"#),
