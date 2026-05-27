@@ -2392,6 +2392,11 @@ where
     }}
 
     #[allow(dead_code)]
+    fn generated_only() -> bool {{
+        std::env::var_os("ANTLR4_RUST_GENERATED_ONLY").is_some()
+    }}
+
+    #[allow(dead_code)]
     fn run_generated_action(&mut self, action: GeneratedAction, tree: &antlr4_runtime::ParseTree) {{
         match action {{
             GeneratedAction::Parser(action) => self.run_action(action, tree),
@@ -2423,16 +2428,17 @@ where
         let __rule_start = antlr4_runtime::IntStream::index(self.base.input());
         let __generated_action_marker = self.generated_actions.len();
         let __generated_member_checkpoint = self.base.int_members_checkpoint();
+        let __generated_only = Self::generated_only();
         let __after_start_index = if Self::has_after_actions(rule_index) {{
             Some(__rule_start)
         }} else {{
             None
         }};
-        let (__tree, __from_generated) = if !self.base.report_diagnostic_errors() {{
+        let (__tree, __from_generated) = if !self.base.report_diagnostic_errors() || __generated_only {{
             if let Some(result) = self.parse_generated_rule(rule_index, precedence, allow_generated_fallback) {{
                 match result {{
                     Ok(tree) => (tree, true),
-                    Err(GeneratedRuleError::Recoverable(_error)) if allow_generated_fallback => {{
+                    Err(GeneratedRuleError::Recoverable(_error)) if allow_generated_fallback && !__generated_only => {{
                         self.generated_actions.truncate(__generated_action_marker);
                         self.base.restore_int_members(__generated_member_checkpoint.clone());
                         antlr4_runtime::IntStream::seek(self.base.input(), __rule_start);
@@ -2445,6 +2451,8 @@ where
                         return Err(error.into_error());
                     }}
                 }}
+            }} else if __generated_only {{
+                return Err(antlr4_runtime::AntlrError::Unsupported(format!("generated parser did not emit rule {{}}", rule_index)));
             }} else {{
                 (self.parse_interpreted_rule_precedence(rule_index, precedence)?, false)
             }}
@@ -6221,10 +6229,23 @@ s : ;
         let rendered =
             render_parser("TParser", &minimal_parser_data(), None).expect("parser should render");
 
-        assert!(rendered.contains("if !self.base.report_diagnostic_errors()"));
+        assert!(rendered.contains("if !self.base.report_diagnostic_errors() || __generated_only"));
         assert!(
             rendered.contains("self.parse_interpreted_rule_precedence(rule_index, precedence)?")
         );
+    }
+
+    #[test]
+    fn generated_only_mode_disables_interpreter_fallback() {
+        let rendered =
+            render_parser("TParser", &minimal_parser_data(), None).expect("parser should render");
+
+        assert!(rendered.contains("ANTLR4_RUST_GENERATED_ONLY"));
+        assert!(rendered.contains("let __generated_only = Self::generated_only();"));
+        assert!(rendered.contains(
+            "Err(GeneratedRuleError::Recoverable(_error)) if allow_generated_fallback && !__generated_only"
+        ));
+        assert!(rendered.contains("generated parser did not emit rule {}"));
     }
 
     #[test]

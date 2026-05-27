@@ -34,6 +34,15 @@ struct PredictionCheck<'a> {
     start_index: usize,
     precedence: i32,
     outer_context: &'a Rc<PredictionContext>,
+    force_full_context_retry: bool,
+}
+
+#[derive(Clone, Copy)]
+struct AdaptivePredictRequest<'a> {
+    decision: usize,
+    precedence: usize,
+    outer_context: &'a Rc<PredictionContext>,
+    force_full_context_retry: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -167,7 +176,22 @@ impl<'a> ParserAtnSimulator<'a> {
         input: &mut T,
     ) -> Result<ParserAtnPrediction, ParserAtnSimulatorError> {
         let empty = PredictionContext::empty();
-        self.adaptive_predict_stream_info_with_context(decision, precedence, input, &empty)
+        let marker = input.mark();
+        let index = input.index();
+        let mut merge_cache = PredictionContextMergeCache::new();
+        let result = self.adaptive_predict_stream_inner(
+            AdaptivePredictRequest {
+                decision,
+                precedence,
+                outer_context: &empty,
+                force_full_context_retry: false,
+            },
+            input,
+            &mut merge_cache,
+        );
+        input.seek(index);
+        input.release(marker);
+        result
     }
 
     pub fn adaptive_predict_stream_info_with_context<T: IntStream>(
@@ -181,10 +205,13 @@ impl<'a> ParserAtnSimulator<'a> {
         let index = input.index();
         let mut merge_cache = PredictionContextMergeCache::new();
         let result = self.adaptive_predict_stream_inner(
-            decision,
-            precedence,
+            AdaptivePredictRequest {
+                decision,
+                precedence,
+                outer_context,
+                force_full_context_retry: true,
+            },
             input,
-            outer_context,
             &mut merge_cache,
         );
         input.seek(index);
@@ -214,12 +241,16 @@ impl<'a> ParserAtnSimulator<'a> {
 
     fn adaptive_predict_stream_inner<T: IntStream>(
         &mut self,
-        decision: usize,
-        precedence: usize,
+        request: AdaptivePredictRequest<'_>,
         input: &mut T,
-        outer_context: &Rc<PredictionContext>,
         merge_cache: &mut PredictionContextMergeCache,
     ) -> Result<ParserAtnPrediction, ParserAtnSimulatorError> {
+        let AdaptivePredictRequest {
+            decision,
+            precedence,
+            outer_context,
+            force_full_context_retry,
+        } = request;
         let Some(&decision_state) = self.atn.decision_to_state().get(decision) else {
             return Err(ParserAtnSimulatorError::UnknownDecision(decision));
         };
@@ -236,6 +267,7 @@ impl<'a> ParserAtnSimulator<'a> {
                 start_index,
                 precedence,
                 outer_context,
+                force_full_context_retry,
             },
             merge_cache,
         )? {
@@ -278,6 +310,7 @@ impl<'a> ParserAtnSimulator<'a> {
                     start_index,
                     precedence,
                     outer_context,
+                    force_full_context_retry,
                 },
                 merge_cache,
             )? {
@@ -303,6 +336,7 @@ impl<'a> ParserAtnSimulator<'a> {
             start_index,
             precedence,
             outer_context,
+            force_full_context_retry,
         } = check;
         if outer_context.is_empty()
             && let Some(prediction) =
@@ -313,7 +347,9 @@ impl<'a> ParserAtnSimulator<'a> {
         let Some(prediction) = self.dfa_prediction_info(decision, state_number) else {
             return Ok(None);
         };
-        if prediction.requires_full_context && !prediction.has_semantic_context {
+        if prediction.requires_full_context
+            && (force_full_context_retry || !prediction.has_semantic_context)
+        {
             input.seek(start_index);
             return self
                 .adaptive_predict_full_context(
@@ -1022,6 +1058,51 @@ mod tests {
             prediction,
             ParserAtnPrediction {
                 alt: 1,
+                requires_full_context: true,
+                has_semantic_context: false,
+            }
+        );
+        assert_eq!(input.index(), 0);
+    }
+
+    #[test]
+    fn context_prediction_retries_full_context_for_semantic_dfa_conflict() {
+        let atn = two_token_decision_atn();
+        let mut simulator = ParserAtnSimulator::new(&atn);
+        let empty = PredictionContext::empty();
+        let mut start_configs = AtnConfigSet::new();
+        start_configs.add(AtnConfig::new(2, 1, Rc::clone(&empty)));
+        let start = simulator.decision_to_dfa[0].add_state(DfaState::new(start_configs));
+        simulator.decision_to_dfa[0].set_start_state(start);
+
+        let mut accept_configs = AtnConfigSet::new();
+        accept_configs.add(
+            AtnConfig::new(3, 1, Rc::clone(&empty)).with_semantic_context(
+                SemanticContext::Predicate {
+                    rule_index: 0,
+                    pred_index: 0,
+                    context_dependent: false,
+                },
+            ),
+        );
+        let mut accept_state = DfaState::new(accept_configs);
+        accept_state.mark_accept(1);
+        accept_state.requires_full_context = true;
+        let accept = simulator.decision_to_dfa[0].add_state(accept_state);
+        simulator.decision_to_dfa[0]
+            .state_mut(start)
+            .expect("start state")
+            .add_edge(1, accept);
+
+        let mut input = VecIntStream::new(vec![1, 3, TOKEN_EOF]);
+        let prediction = simulator
+            .adaptive_predict_stream_info_with_context(0, 0, &mut input, &empty)
+            .expect("prediction");
+
+        assert_eq!(
+            prediction,
+            ParserAtnPrediction {
+                alt: 2,
                 requires_full_context: true,
                 has_semantic_context: false,
             }
