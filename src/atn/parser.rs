@@ -727,7 +727,7 @@ impl<'a> ParserAtnSimulator<'a> {
             }
             for (index, transition) in state.transitions.iter().enumerate() {
                 if index == 0
-                    && self.can_drop_loop_entry_edge_in_left_recursive_rule(&config, state)
+                    && can_drop_left_recursive_loop_entry_edge(self.atn, state, &config.context)
                 {
                     continue;
                 }
@@ -755,77 +755,6 @@ impl<'a> ParserAtnSimulator<'a> {
                 }
             }
         }
-    }
-
-    fn can_drop_loop_entry_edge_in_left_recursive_rule(
-        &self,
-        config: &AtnConfig,
-        state: &AtnState,
-    ) -> bool {
-        if state.kind != AtnStateKind::StarLoopEntry
-            || !state.precedence_rule_decision
-            || config.context.is_empty()
-            || config.context.has_empty_path()
-        {
-            return false;
-        }
-        let Some(rule_index) = state.rule_index else {
-            return false;
-        };
-        for index in 0..config.context.len() {
-            let Some(return_state_number) = config.context.return_state(index) else {
-                return false;
-            };
-            let Some(return_state) = self.atn.state(return_state_number) else {
-                return false;
-            };
-            if return_state.rule_index != Some(rule_index) {
-                return false;
-            }
-        }
-        let Some(block_end_state_number) = state
-            .transitions
-            .first()
-            .and_then(|transition| self.atn.state(transition.target()))
-            .and_then(|decision_start| decision_start.end_state)
-        else {
-            return false;
-        };
-        for index in 0..config.context.len() {
-            let return_state_number = config
-                .context
-                .return_state(index)
-                .expect("return state checked above");
-            let return_state = self
-                .atn
-                .state(return_state_number)
-                .expect("return state checked above");
-            if return_state.state_number == block_end_state_number {
-                continue;
-            }
-            if return_state.transitions.len() != 1 || !return_state.transitions[0].is_epsilon() {
-                return false;
-            }
-            let return_target = return_state.transitions[0].target();
-            if return_state.kind == AtnStateKind::BlockEnd && return_target == state.state_number {
-                continue;
-            }
-            if return_target == block_end_state_number {
-                continue;
-            }
-            let Some(return_target_state) = self.atn.state(return_target) else {
-                return false;
-            };
-            if return_target_state.kind == AtnStateKind::BlockEnd
-                && return_target_state.transitions.len() == 1
-                && return_target_state.transitions[0].is_epsilon()
-                && return_target_state.transitions[0].target() == state.state_number
-            {
-                continue;
-            }
-            return false;
-        }
-        true
     }
 
     fn closure_at_rule_stop(
@@ -946,6 +875,77 @@ impl<'a> ParserAtnSimulator<'a> {
                 })
             })
     }
+}
+
+/// Reports whether closure should skip the loop-entry branch for a
+/// left-recursive rule under the current caller context.
+pub(crate) fn can_drop_left_recursive_loop_entry_edge(
+    atn: &Atn,
+    state: &AtnState,
+    context: &PredictionContext,
+) -> bool {
+    if state.kind != AtnStateKind::StarLoopEntry
+        || !state.precedence_rule_decision
+        || context.is_empty()
+        || context.has_empty_path()
+    {
+        return false;
+    }
+    let Some(rule_index) = state.rule_index else {
+        return false;
+    };
+    for index in 0..context.len() {
+        let Some(return_state_number) = context.return_state(index) else {
+            return false;
+        };
+        let Some(return_state) = atn.state(return_state_number) else {
+            return false;
+        };
+        if return_state.rule_index != Some(rule_index) {
+            return false;
+        }
+    }
+    let Some(block_end_state_number) = state
+        .transitions
+        .first()
+        .and_then(|transition| atn.state(transition.target()))
+        .and_then(|decision_start| decision_start.end_state)
+    else {
+        return false;
+    };
+    for index in 0..context.len() {
+        let return_state_number = context
+            .return_state(index)
+            .expect("return state checked above");
+        let return_state = atn
+            .state(return_state_number)
+            .expect("return state checked above");
+        if return_state.state_number == block_end_state_number {
+            continue;
+        }
+        if return_state.transitions.len() != 1 || !return_state.transitions[0].is_epsilon() {
+            return false;
+        }
+        let return_target = return_state.transitions[0].target();
+        if return_state.kind == AtnStateKind::BlockEnd && return_target == state.state_number {
+            continue;
+        }
+        if return_target == block_end_state_number {
+            continue;
+        }
+        let Some(return_target_state) = atn.state(return_target) else {
+            return false;
+        };
+        if return_target_state.kind == AtnStateKind::BlockEnd
+            && return_target_state.transitions.len() == 1
+            && return_target_state.transitions[0].is_epsilon()
+            && return_target_state.transitions[0].target() == state.state_number
+        {
+            continue;
+        }
+        return false;
+    }
+    true
 }
 
 fn configs_have_semantic_context_for_alt(configs: &AtnConfigSet, alt: usize) -> bool {
@@ -1229,22 +1229,24 @@ mod tests {
     #[test]
     fn left_recursive_loop_entry_drop_requires_same_rule_return() {
         let atn = left_recursive_loop_entry_atn();
-        let simulator = ParserAtnSimulator::new(&atn);
         let loop_entry = atn.state(1).expect("loop entry");
         let same_rule_context = PredictionContext::singleton(PredictionContext::empty(), 4);
         let other_rule_context = PredictionContext::singleton(PredictionContext::empty(), 5);
 
-        assert!(simulator.can_drop_loop_entry_edge_in_left_recursive_rule(
-            &AtnConfig::new(1, 1, same_rule_context),
+        assert!(can_drop_left_recursive_loop_entry_edge(
+            &atn,
             loop_entry,
+            &same_rule_context
         ));
-        assert!(!simulator.can_drop_loop_entry_edge_in_left_recursive_rule(
-            &AtnConfig::new(1, 1, other_rule_context),
+        assert!(!can_drop_left_recursive_loop_entry_edge(
+            &atn,
             loop_entry,
+            &other_rule_context
         ));
-        assert!(!simulator.can_drop_loop_entry_edge_in_left_recursive_rule(
-            &AtnConfig::new(1, 1, PredictionContext::empty()),
+        assert!(!can_drop_left_recursive_loop_entry_edge(
+            &atn,
             loop_entry,
+            &PredictionContext::empty()
         ));
     }
 

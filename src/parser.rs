@@ -1644,6 +1644,65 @@ fn state_can_reach_symbol_with_precedence(
     })
 }
 
+fn context_can_match_symbol_before_state(
+    atn: &Atn,
+    context: &PredictionContext,
+    stop_state_number: usize,
+    symbol: i32,
+) -> bool {
+    (0..context.len()).any(|index| {
+        context.return_state(index).is_some_and(|return_state| {
+            let parent = context
+                .parent(index)
+                .unwrap_or_else(PredictionContext::empty);
+            state_or_parent_can_match_symbol_before_state(
+                atn,
+                return_state,
+                &parent,
+                stop_state_number,
+                symbol,
+                &mut BTreeSet::new(),
+            )
+        })
+    })
+}
+
+fn state_or_parent_can_match_symbol_before_state(
+    atn: &Atn,
+    state_number: usize,
+    parent: &Rc<PredictionContext>,
+    stop_state_number: usize,
+    symbol: i32,
+    visited: &mut BTreeSet<usize>,
+) -> bool {
+    if state_number == EMPTY_RETURN_STATE {
+        return false;
+    }
+    if state_number == stop_state_number {
+        return context_can_match_symbol_before_state(atn, parent, stop_state_number, symbol);
+    }
+    if !visited.insert(state_number) {
+        return false;
+    }
+    let Some(state) = atn.state(state_number) else {
+        return false;
+    };
+    state.transitions.iter().any(|transition| {
+        if transition.matches(symbol, 1, atn.max_token_type()) {
+            return true;
+        }
+        transition.is_epsilon()
+            && state_or_parent_can_match_symbol_before_state(
+                atn,
+                transition.target(),
+                parent,
+                stop_state_number,
+                symbol,
+                visited,
+            )
+    })
+}
+
 /// Carries recovery expectations and their restart state through epsilon-only
 /// paths. ANTLR can report and repair at the decision state even when the
 /// failed consuming transition is nested under block or loop epsilon edges.
@@ -2630,6 +2689,10 @@ where
         let Some(state) = atn.state(state_number) else {
             return false;
         };
+        let context = self.prediction_context(atn);
+        if context_can_match_symbol_before_state(atn, &context, state_number, symbol) {
+            return false;
+        }
         state.transitions.iter().any(|transition| {
             let target = transition.target();
             if atn
