@@ -1871,12 +1871,21 @@ fn render_generated_alt_number_assignment(out: &mut String, pad: &str, alt: usiz
 fn render_generated_sync_decision(out: &mut String, pad: &str, state: usize) {
     writeln!(
         out,
-        "{pad}if let Err(__error) = self.base.sync_decision(atn(), {state}) {{"
+        "{pad}match self.base.sync_decision(atn(), {state}, __ctx.children().is_empty()) {{"
     )
     .expect("writing to a string cannot fail");
-    writeln!(out, "{pad}    __sync_error = Some(__error.clone());")
+    writeln!(out, "{pad}    Ok(__sync_children) => {{").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}        for __child in __sync_children {{ self.base.add_parse_child(&mut __ctx, __child); }}"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    Err(__error) => {{").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}        __sync_error = Some(__error.clone());")
         .expect("writing to a string cannot fail");
-    writeln!(out, "{pad}    return Err(__error);").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}        return Err(__error);").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
     writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
 }
 
@@ -1908,11 +1917,19 @@ fn render_generated_adaptive_prediction_with_indent(
         "{nested}__simulator.adaptive_predict_stream_info_with_context({decision}, 0, self.base.input(), &__prediction_context)"
     )
     .expect("writing to a string cannot fail");
+    writeln!(out, "{nested}    .map_err(|__error| match __error {{")
+        .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "{nested}    .map_err(|_| self.base.no_viable_alternative_error(__decision_start))?"
+        "{nested}        antlr4_runtime::ParserAtnSimulatorError::NoViableAlt {{ index, .. }} => self.base.no_viable_alternative_error_at(__decision_start, index),"
     )
     .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{nested}        _ => self.base.no_viable_alternative_error(__decision_start),"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{nested}    }})?").expect("writing to a string cannot fail");
 }
 
 fn render_generated_sll_then_context_prediction_with_indent(
@@ -1933,11 +1950,19 @@ fn render_generated_sll_then_context_prediction_with_indent(
         "{nested}    __simulator.adaptive_predict_stream_info_with_precedence({decision}, 0, self.base.input())"
     )
     .expect("writing to a string cannot fail");
+    writeln!(out, "{nested}        .map_err(|__error| match __error {{")
+        .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "{nested}        .map_err(|_| self.base.no_viable_alternative_error(__decision_start))?"
+        "{nested}            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt {{ index, .. }} => self.base.no_viable_alternative_error_at(__decision_start, index),"
     )
     .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{nested}            _ => self.base.no_viable_alternative_error(__decision_start),"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{nested}        }})?").expect("writing to a string cannot fail");
     writeln!(out, "{nested}}};").expect("writing to a string cannot fail");
     writeln!(
         out,
@@ -5808,7 +5833,7 @@ atn:
             false,
         );
         assert!(rendered.contains("parse_generated_rule_0"));
-        assert!(rendered.contains("sync_decision(atn(), 1)"));
+        assert!(rendered.contains("sync_decision(atn(), 1, __ctx.children().is_empty())"));
         assert!(rendered.contains("ll1_decision_prediction(atn(), 1)"));
         assert!(rendered.contains("adaptive_predict_stream_info_with_precedence(0, 0"));
         assert!(rendered.contains("adaptive_predict_stream_info_with_context(0, 0"));
@@ -5852,7 +5877,7 @@ atn:
             false,
         );
         assert!(rendered.contains("loop {"));
-        assert!(rendered.contains("sync_decision(atn(), 1)"));
+        assert!(rendered.contains("sync_decision(atn(), 1, __ctx.children().is_empty())"));
         assert!(rendered.contains("1 => {"));
         assert!(rendered.contains("2 => {"));
         assert!(rendered.contains("break;"));

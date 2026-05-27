@@ -449,6 +449,7 @@ pub struct BaseParser<S> {
     prediction_diagnostics: Vec<ParserDiagnostic>,
     reported_prediction_diagnostics: BTreeSet<(usize, usize, String)>,
     generated_parser_diagnostics: Vec<ParserDiagnostic>,
+    generated_sync_expected: Option<BTreeSet<i32>>,
     int_members: BTreeMap<usize, i64>,
     rule_context_stack: Vec<RuleContextFrame>,
     pending_invoking_states: Vec<isize>,
@@ -2049,6 +2050,7 @@ where
             prediction_diagnostics: Vec::new(),
             reported_prediction_diagnostics: BTreeSet::new(),
             generated_parser_diagnostics: Vec::new(),
+            generated_sync_expected: None,
             int_members: BTreeMap::new(),
             rule_context_stack: Vec::new(),
             pending_invoking_states: Vec::new(),
@@ -2091,6 +2093,7 @@ where
     /// Restores generated-parser diagnostics after a speculative rule path failed.
     pub fn restore_generated_diagnostics(&mut self, marker: usize) {
         self.generated_parser_diagnostics.truncate(marker);
+        self.generated_sync_expected = None;
     }
 
     /// Emits diagnostics recorded by committed generated parser recovery.
@@ -2181,6 +2184,7 @@ where
                 message: "missing current token".to_owned(),
             })?;
         if current.token_type() == token_type {
+            self.generated_sync_expected = None;
             self.consume();
             return Ok(vec![ParseTree::Terminal(TerminalNode::new(current))]);
         }
@@ -2207,6 +2211,7 @@ where
                 message: "missing current token".to_owned(),
             })?;
         if interval_set_contains(intervals, current.token_type()) {
+            self.generated_sync_expected = None;
             self.consume();
             return Ok(vec![ParseTree::Terminal(TerminalNode::new(current))]);
         }
@@ -2235,6 +2240,7 @@ where
             );
             self.generated_parser_diagnostics
                 .push(diagnostic_for_token(Some(&current), message));
+            self.generated_sync_expected = None;
             self.consume();
             self.consume();
             return Ok(vec![
@@ -2252,6 +2258,7 @@ where
             );
             self.generated_parser_diagnostics
                 .push(diagnostic_for_token(Some(&current), message));
+            self.generated_sync_expected = None;
             let token_type = expected_symbols.iter().next().copied().unwrap_or(TOKEN_EOF);
             let mut missing_symbol = BTreeSet::new();
             missing_symbol.insert(token_type);
@@ -2262,11 +2269,16 @@ where
                 .with_position(current.line(), current.column());
             return Ok(vec![ParseTree::Error(ErrorNode::new(token))]);
         }
+        let mismatch_expected = self
+            .generated_sync_expected
+            .take()
+            .unwrap_or_else(|| expected_symbols.clone());
+        let mismatch_expected_display = self.expected_symbols_display(&mismatch_expected);
         Err(AntlrError::ParserError {
             line: current.line(),
             column: current.column(),
             message: format!(
-                "mismatched input {} expecting {expected_display}",
+                "mismatched input {} expecting {mismatch_expected_display}",
                 token_input_display(&current)
             ),
         })
@@ -2574,16 +2586,22 @@ where
     /// nullable exit, or be deleted before a later synchronization token, the
     /// generated Rust method reports that decision-level mismatch instead of
     /// descending into a child rule that cannot start at the current token.
-    pub fn sync_decision(&mut self, atn: &Atn, state_number: usize) -> Result<(), AntlrError> {
+    pub fn sync_decision(
+        &mut self,
+        atn: &Atn,
+        state_number: usize,
+        current_context_empty: bool,
+    ) -> Result<Vec<ParseTree>, AntlrError> {
         self.set_state(isize::try_from(state_number).unwrap_or(isize::MAX));
+        self.generated_sync_expected = None;
         let Some(state) = atn.state(state_number) else {
-            return Ok(());
+            return Ok(Vec::new());
         };
         let Some(rule_index) = state.rule_index else {
-            return Ok(());
+            return Ok(Vec::new());
         };
         let Some(rule_stop) = atn.rule_to_stop_state().get(rule_index).copied() else {
-            return Ok(());
+            return Ok(Vec::new());
         };
         let entry = self.cached_decision_lookahead(atn, state, rule_stop);
         let symbol = self.la(1);
@@ -2591,7 +2609,7 @@ where
         let mut nullable = false;
         for transition in &entry.transitions {
             if transition.symbols.contains(symbol) {
-                return Ok(());
+                return Ok(Vec::new());
             }
             has_expected_symbols |= !transition.symbols.is_empty();
             nullable |= transition.nullable;
@@ -2602,11 +2620,11 @@ where
                 .as_ref()
                 .is_some_and(|expected| expected.contains(&symbol))
             {
-                return Ok(());
+                return Ok(Vec::new());
             }
         }
         if !has_expected_symbols && context_expected.as_ref().is_none_or(BTreeSet::is_empty) {
-            return Ok(());
+            return Ok(Vec::new());
         }
         let mut expected = BTreeSet::new();
         for transition in &entry.transitions {
@@ -2615,22 +2633,48 @@ where
         if let Some(context_expected) = context_expected {
             expected.extend(context_expected);
         }
-        if symbol != TOKEN_EOF {
+        let can_delete_in_place =
+            !(nullable && current_context_empty && self.rule_context_stack.len() > 1);
+        if symbol != TOKEN_EOF && can_delete_in_place {
             let mut cursor = self.input.index();
+            let mut skipped = Vec::new();
             loop {
                 let current = self.token_type_at(cursor);
                 if current == TOKEN_EOF {
                     break;
                 }
+                skipped.push(cursor);
                 let next = self.consume_index(cursor, current);
                 if next == cursor {
                     break;
                 }
-                if expected.contains(&self.token_type_at(next)) {
-                    return Ok(());
+                let next_symbol = self.token_type_at(next);
+                if next_symbol != TOKEN_EOF && expected.contains(&next_symbol) {
+                    let current = self.input.lt(1).cloned();
+                    let message = format!(
+                        "extraneous input {} expecting {}",
+                        current
+                            .as_ref()
+                            .map_or_else(|| "'<EOF>'".to_owned(), token_input_display),
+                        self.expected_symbols_display(&expected)
+                    );
+                    self.generated_parser_diagnostics
+                        .push(diagnostic_for_token(current.as_ref(), message));
+                    let mut children = Vec::with_capacity(skipped.len());
+                    for index in skipped {
+                        if let Some(token) = self.token_at(index) {
+                            self.consume();
+                            children.push(ParseTree::Error(ErrorNode::new(token)));
+                        }
+                    }
+                    return Ok(children);
                 }
                 cursor = next;
             }
+        }
+        if nullable {
+            self.generated_sync_expected = Some(expected);
+            return Ok(Vec::new());
         }
         let current = self.input.lt(1).cloned();
         Err(AntlrError::ParserError {
@@ -2710,6 +2754,18 @@ where
     /// Builds a generated no-viable-alternative parser error.
     pub fn no_viable_alternative_error(&mut self, start_index: usize) -> AntlrError {
         let error_index = self.input.index();
+        self.no_viable_alternative_error_at(start_index, error_index)
+    }
+
+    /// Builds a generated no-viable-alternative parser error at the simulator's
+    /// failing lookahead index. `adaptive_predict` restores the input cursor
+    /// before returning, so generated parsers have to pass the recorded index
+    /// explicitly to preserve ANTLR's LL(k) diagnostic span.
+    pub fn no_viable_alternative_error_at(
+        &mut self,
+        start_index: usize,
+        error_index: usize,
+    ) -> AntlrError {
         let diagnostic = self.no_viable_alternative(start_index, error_index);
         AntlrError::ParserError {
             line: diagnostic.line,

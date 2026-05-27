@@ -289,7 +289,7 @@ impl<'a> ParserAtnSimulator<'a> {
                     .and_then(|dfa| dfa.state(state_number))
                     .map(|state| state.configs.clone())
                     .ok_or(ParserAtnSimulatorError::MissingDfaState(state_number))?;
-                let target = self.compute_target_state(
+                let target = match self.compute_target_state(
                     DfaEdge {
                         decision,
                         source_state: state_number,
@@ -298,7 +298,16 @@ impl<'a> ParserAtnSimulator<'a> {
                     symbol,
                     precedence,
                     merge_cache,
-                )?;
+                ) {
+                    Ok(target) => target,
+                    Err(ParserAtnSimulatorError::NoViableAlt { symbol, .. }) => {
+                        return Err(ParserAtnSimulatorError::NoViableAlt {
+                            symbol,
+                            index: input.index(),
+                        });
+                    }
+                    Err(error) => return Err(error),
+                };
                 state_number = target;
             }
             if let Some(prediction) = self.prediction_or_full_context(
@@ -495,7 +504,10 @@ impl<'a> ParserAtnSimulator<'a> {
             let symbol = input.la(1);
             let reach = self.compute_reach_set(&configs, symbol, true, precedence, merge_cache);
             if reach.is_empty() {
-                return Err(ParserAtnSimulatorError::NoViableAlt { symbol });
+                return Err(ParserAtnSimulatorError::NoViableAlt {
+                    symbol,
+                    index: input.index(),
+                });
             }
             configs = reach;
             if let Some(alt) = configs.unique_alt() {
@@ -551,7 +563,7 @@ impl<'a> ParserAtnSimulator<'a> {
                 }
                 return Ok(target_state);
             }
-            return Err(ParserAtnSimulatorError::NoViableAlt { symbol });
+            return Err(ParserAtnSimulatorError::NoViableAlt { symbol, index: 0 });
         }
         let prediction = reach.unique_alt();
         let conflict_prediction = prediction.or_else(|| {
@@ -947,7 +959,7 @@ fn configs_have_semantic_context_for_alt(configs: &AtnConfigSet, alt: usize) -> 
 pub enum ParserAtnSimulatorError {
     MissingAtnState(usize),
     MissingDfaState(usize),
-    NoViableAlt { symbol: i32 },
+    NoViableAlt { symbol: i32, index: usize },
     PredictionRequiresMoreLookahead,
     UnknownDecision(usize),
 }
@@ -978,7 +990,10 @@ mod tests {
 
         assert_eq!(
             simulator.adaptive_predict(0, [4]),
-            Err(ParserAtnSimulatorError::NoViableAlt { symbol: 4 })
+            Err(ParserAtnSimulatorError::NoViableAlt {
+                symbol: 4,
+                index: 0
+            })
         );
     }
 
