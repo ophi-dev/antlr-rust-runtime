@@ -512,6 +512,7 @@ struct StarLoopRender<'a> {
 
 #[derive(Clone, Copy)]
 struct LeftRecursiveLoopRender<'a> {
+    state: usize,
     decision: usize,
     alts: (usize, usize),
     rule: (usize, usize),
@@ -1769,12 +1770,18 @@ fn render_generated_step(
             .expect("writing to a string cannot fail");
             writeln!(
                 out,
-                "{pad}    let __message = self.base.parser_semantic_predicate_failure_message({rule_index}, {pred_index}, PARSER_PREDICATES).unwrap_or(\"semantic predicate\");"
+                "{pad}    if let Some(__message) = self.base.parser_semantic_predicate_failure_message({rule_index}, {pred_index}, PARSER_PREDICATES) {{"
             )
             .expect("writing to a string cannot fail");
             writeln!(
                 out,
-                "{pad}    return Err(self.base.failed_predicate_error(__message));"
+                "{pad}        return Err(self.base.failed_predicate_option_error({rule_index}, __message));"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}    return Err(self.base.failed_predicate_error(\"semantic predicate\"));"
             )
             .expect("writing to a string cannot fail");
             writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
@@ -1879,6 +1886,7 @@ fn render_generated_step(
             );
         }
         GeneratedParserStep::LeftRecursiveLoop {
+            state,
             decision,
             enter_alt,
             exit_alt,
@@ -1890,6 +1898,7 @@ fn render_generated_step(
             render_generated_left_recursive_loop(
                 out,
                 LeftRecursiveLoopRender {
+                    state: *state,
                     decision: *decision,
                     alts: (*enter_alt, *exit_alt),
                     rule: (*rule_index, *entry_state),
@@ -2191,13 +2200,14 @@ fn render_generated_left_recursive_loop(
     track_alt_numbers: bool,
 ) {
     let LeftRecursiveLoopRender {
+        state,
         decision,
         alts,
         rule,
         body,
     } = loop_info;
-    let (enter_alt, exit_alt) = alts;
     let (rule_index, entry_state) = rule;
+    let (enter_alt, exit_alt) = alts;
     let pad = "    ".repeat(indent);
     writeln!(out, "{pad}loop {{").expect("writing to a string cannot fail");
     writeln!(
@@ -2210,7 +2220,7 @@ fn render_generated_left_recursive_loop(
         "{pad}    let __prediction_precedence = if __precedence <= 0 {{ 0 }} else {{ __precedence as usize }};"
     )
     .expect("writing to a string cannot fail");
-    writeln!(out, "{pad}    let __prediction = {{").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    let __prediction = match {{").expect("writing to a string cannot fail");
     writeln!(
         out,
         "{pad}        let __prediction_context = self.base.prediction_context(atn());"
@@ -2226,11 +2236,37 @@ fn render_generated_left_recursive_loop(
         "{pad}        __simulator.adaptive_predict_stream_info_with_context({decision}, __prediction_precedence, self.base.input(), &__prediction_context)"
     )
     .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    }} {{").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}        Ok(__prediction) => __prediction,")
+        .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "{pad}    }}.map_err(|_| self.base.no_viable_alternative_error(__decision_start))?;"
+        "{pad}        Err(antlr4_runtime::ParserAtnSimulatorError::NoViableAlt {{ .. }}) if self.base.left_recursive_loop_enter_matches(atn(), {state}, __precedence) => {{"
     )
     .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}            antlr4_runtime::ParserAtnPrediction {{ alt: {enter_alt}, requires_full_context: true, has_semantic_context: true }}"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}        Err(antlr4_runtime::ParserAtnSimulatorError::NoViableAlt {{ .. }}) => {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}            antlr4_runtime::ParserAtnPrediction {{ alt: {exit_alt}, requires_full_context: true, has_semantic_context: false }}"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}        Err(_) => return Err(self.base.no_viable_alternative_error(__decision_start)),"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    }};").expect("writing to a string cannot fail");
     writeln!(out, "{pad}    match __prediction.alt {{").expect("writing to a string cannot fail");
     writeln!(out, "{pad}        {enter_alt} => {{").expect("writing to a string cannot fail");
     writeln!(
@@ -6135,6 +6171,8 @@ atn:
             rendered
                 .contains("adaptive_predict_stream_info_with_context(0, __prediction_precedence")
         );
+        assert!(rendered.contains("left_recursive_loop_enter_matches(atn(), 2, __precedence)"));
+        assert!(rendered.contains("ParserAtnSimulatorError::NoViableAlt { .. }"));
     }
 
     #[test]
@@ -6446,6 +6484,25 @@ atn:
                 8
             ))
         );
+    }
+
+    #[test]
+    fn renders_fail_option_parser_predicate_error() {
+        let mut rendered = String::new();
+        render_generated_step(
+            &mut rendered,
+            &GeneratedParserStep::Predicate {
+                rule_index: 2,
+                pred_index: 1,
+            },
+            0,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            false,
+        );
+
+        assert!(rendered.contains("failed_predicate_option_error(2, __message)"));
+        assert!(rendered.contains("failed_predicate_error(\"semantic predicate\")"));
     }
 
     #[test]

@@ -1605,6 +1605,45 @@ fn state_sync_symbols_inner(
     }
 }
 
+fn state_can_reach_symbol_with_precedence(
+    atn: &Atn,
+    state_number: usize,
+    symbol: i32,
+    precedence: i32,
+    visited: &mut BTreeSet<usize>,
+) -> bool {
+    if !visited.insert(state_number) {
+        return false;
+    }
+    let Some(state) = atn.state(state_number) else {
+        return false;
+    };
+    state.transitions.iter().any(|transition| {
+        if transition.matches(symbol, 1, atn.max_token_type()) {
+            return true;
+        }
+        if !transition.is_epsilon() {
+            return false;
+        }
+        if matches!(
+            transition,
+            Transition::Precedence {
+                precedence: transition_precedence,
+                ..
+            } if *transition_precedence < precedence
+        ) {
+            return false;
+        }
+        state_can_reach_symbol_with_precedence(
+            atn,
+            transition.target(),
+            symbol,
+            precedence,
+            visited,
+        )
+    })
+}
+
 /// Carries recovery expectations and their restart state through epsilon-only
 /// paths. ANTLR can report and repair at the decision state even when the
 /// failed consuming transition is nested under block or loop epsilon edges.
@@ -2574,6 +2613,41 @@ where
         self.exit_rule();
     }
 
+    /// Checks whether a generated left-recursive loop has an operator
+    /// alternative that can start at the current token under the active
+    /// precedence. The operator block still performs adaptive prediction; this
+    /// guard only decides whether the loop should enter or exit.
+    pub fn left_recursive_loop_enter_matches(
+        &mut self,
+        atn: &Atn,
+        state_number: usize,
+        precedence: i32,
+    ) -> bool {
+        let symbol = self.la(1);
+        if symbol == TOKEN_EOF {
+            return false;
+        }
+        let Some(state) = atn.state(state_number) else {
+            return false;
+        };
+        state.transitions.iter().any(|transition| {
+            let target = transition.target();
+            if atn
+                .state(target)
+                .is_some_and(|state| state.kind == AtnStateKind::LoopEnd)
+            {
+                return false;
+            }
+            state_can_reach_symbol_with_precedence(
+                atn,
+                target,
+                symbol,
+                precedence,
+                &mut BTreeSet::new(),
+            )
+        })
+    }
+
     /// Implements generated `precpred(_ctx, k)` checks.
     pub fn precpred(&self, precedence: i32) -> bool {
         precedence >= self.precedence_stack.last().copied().unwrap_or_default()
@@ -2869,6 +2943,25 @@ where
             line: current.as_ref().map(Token::line).unwrap_or_default(),
             column: current.as_ref().map(Token::column).unwrap_or_default(),
             message: format!("rule failed predicate: {}", message.into()),
+        }
+    }
+
+    /// Builds a generated parser error for a semantic predicate with ANTLR's
+    /// `<fail='...'>` option.
+    pub fn failed_predicate_option_error(
+        &mut self,
+        rule_index: usize,
+        message: impl Into<String>,
+    ) -> AntlrError {
+        let current = self.input.lt(1).cloned();
+        let rule_name = self
+            .rule_names()
+            .get(rule_index)
+            .map_or_else(|| rule_index.to_string(), Clone::clone);
+        AntlrError::ParserError {
+            line: current.as_ref().map(Token::line).unwrap_or_default(),
+            column: current.as_ref().map(Token::column).unwrap_or_default(),
+            message: format!("rule {rule_name} {}", message.into()),
         }
     }
 
