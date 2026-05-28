@@ -2192,7 +2192,7 @@ fn semantic_alt_candidate_condition_with_la(
         .into_iter()
         .map(|(rule_index, pred_index)| {
             format!(
-                "self.base.parser_semantic_predicate_matches_with_local(PARSER_PREDICATES, {rule_index}, {pred_index}, __precedence)"
+                "self.base.parser_semantic_predicate_matches_with_context_and_local(PARSER_PREDICATES, {rule_index}, {pred_index}, &__ctx, __precedence)"
             )
         })
         .collect::<Vec<_>>();
@@ -7284,10 +7284,10 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
 
         assert!(rendered.contains("if __prediction.has_semantic_context"));
         assert!(rendered.contains(
-            "parser_semantic_predicate_matches_with_local(PARSER_PREDICATES, 1, 0, __precedence)"
+            "parser_semantic_predicate_matches_with_context_and_local(PARSER_PREDICATES, 1, 0, &__ctx, __precedence)"
         ));
         assert!(rendered.contains(
-            "parser_semantic_predicate_matches_with_local(PARSER_PREDICATES, 1, 1, __precedence)"
+            "parser_semantic_predicate_matches_with_context_and_local(PARSER_PREDICATES, 1, 1, &__ctx, __precedence)"
         ));
         assert!(rendered.contains("__semantic_la == 1"));
         assert!(
@@ -7368,7 +7368,7 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
 
         assert!(rendered.contains("if __prediction.alt == 1"));
         assert!(rendered.contains(
-            "parser_semantic_predicate_matches_with_local(PARSER_PREDICATES, 1, 0, __precedence)"
+            "parser_semantic_predicate_matches_with_context_and_local(PARSER_PREDICATES, 1, 0, &__ctx, __precedence)"
         ));
         assert!(rendered.contains("__semantic_la == 3"));
         assert!(
@@ -7417,7 +7417,7 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
 
         assert!(rendered.contains("(__semantic_la == 1) || (__semantic_la == 3)"));
         assert!(rendered.contains(
-            "(self.base.parser_semantic_predicate_matches_with_local(PARSER_PREDICATES, 2, 0, __precedence) && __semantic_la == 2)"
+            "(self.base.parser_semantic_predicate_matches_with_context_and_local(PARSER_PREDICATES, 2, 0, &__ctx, __precedence) && __semantic_la == 2)"
         ));
         assert!(
             rendered.contains("antlr4_runtime::ParserAtnPrediction { alt: 2, ..__prediction }")
