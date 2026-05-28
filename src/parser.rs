@@ -327,6 +327,17 @@ pub enum ParserPredicate {
         offset: isize,
         token_type: i32,
     },
+    /// Checks that the last two consumed visible tokens were adjacent in the
+    /// token stream. Used by C# parser predicates for split operator tokens.
+    TokenPairAdjacent,
+    /// Checks a generated parser context child by rule index and text.
+    ///
+    /// If the child is absent the predicate succeeds, matching target helpers
+    /// that treat incomplete or non-matching contexts as non-restrictive.
+    ContextChildRuleTextNotEquals {
+        rule_index: usize,
+        text: &'static str,
+    },
     /// Compares the current rule invocation's integer argument with a literal
     /// value from a supported `ValEquals("$i", "...")` target template.
     LocalIntEquals {
@@ -2099,6 +2110,7 @@ struct PredicateEval<'a> {
     rule_index: usize,
     pred_index: usize,
     predicates: &'a [(usize, usize, ParserPredicate)],
+    context: Option<&'a ParserRuleContext>,
     local_int_arg: Option<(usize, i64)>,
     member_values: &'a BTreeMap<usize, i64>,
 }
@@ -2871,7 +2883,31 @@ where
             rule_index,
             pred_index,
             predicates,
+            context: None,
             local_int_arg,
+            member_values: &member_values,
+        })
+    }
+
+    /// Evaluates a generated parser semantic predicate with access to the
+    /// current generated rule context.
+    pub fn parser_semantic_predicate_matches_with_context_and_local(
+        &mut self,
+        predicates: &[(usize, usize, ParserPredicate)],
+        rule_index: usize,
+        pred_index: usize,
+        context: &ParserRuleContext,
+        local_int_arg: i32,
+    ) -> bool {
+        let index = self.input.index();
+        let member_values = self.int_members.clone();
+        self.parser_predicate_matches(PredicateEval {
+            index,
+            rule_index,
+            pred_index,
+            predicates,
+            context: Some(context),
+            local_int_arg: Some((rule_index, i64::from(local_int_arg))),
             member_values: &member_values,
         })
     }
@@ -5544,6 +5580,7 @@ where
                         rule_index: *rule_index,
                         pred_index: *pred_index,
                         predicates,
+                        context: None,
                         local_int_arg,
                         member_values: &member_values,
                     };
@@ -6378,6 +6415,7 @@ where
             rule_index,
             pred_index,
             predicates,
+            context,
             local_int_arg,
             member_values,
         } = eval;
@@ -6408,6 +6446,25 @@ where
             ParserPredicate::LookaheadNotEquals { offset, token_type } => {
                 self.la(*offset) != *token_type
             }
+            ParserPredicate::TokenPairAdjacent => {
+                let Some(first) = self.input.lt(-2).map(Token::token_index) else {
+                    return false;
+                };
+                let Some(second) = self.input.lt(-1).map(Token::token_index) else {
+                    return false;
+                };
+                first + 1 == second
+            }
+            ParserPredicate::ContextChildRuleTextNotEquals { rule_index, text } => context
+                .and_then(|context| {
+                    context.children().iter().find_map(|child| match child {
+                        ParseTree::Rule(rule) if rule.context().rule_index() == *rule_index => {
+                            Some(child.text())
+                        }
+                        ParseTree::Rule(_) | ParseTree::Terminal(_) | ParseTree::Error(_) => None,
+                    })
+                })
+                .is_none_or(|actual| actual != *text),
             ParserPredicate::LocalIntEquals { value } => {
                 local_int_arg.is_none_or(|(_, actual)| actual == *value)
             }
@@ -8186,6 +8243,64 @@ mod tests {
 
         parser.exit_rule();
         assert!(parser.rule_context_stack.is_empty());
+    }
+
+    #[test]
+    fn parser_predicates_support_token_adjacency() {
+        let mut parser = mini_parser(vec![
+            CommonToken::new(1).with_text("=").with_span(0, 0),
+            CommonToken::new(1).with_text(">").with_span(1, 1),
+            CommonToken::eof("parser-test", 2, 1, 2),
+        ]);
+        parser.consume();
+        parser.consume();
+
+        let predicates = [(0, 0, ParserPredicate::TokenPairAdjacent)];
+
+        assert!(parser.parser_semantic_predicate_matches(&predicates, 0, 0));
+
+        let mut parser = mini_parser(vec![
+            CommonToken::new(1).with_text("=").with_span(0, 0),
+            CommonToken::new(1)
+                .with_text(" ")
+                .with_channel(HIDDEN_CHANNEL)
+                .with_span(1, 1),
+            CommonToken::new(1).with_text(">").with_span(2, 2),
+            CommonToken::eof("parser-test", 3, 1, 3),
+        ]);
+        parser.consume();
+        parser.consume();
+
+        assert!(!parser.parser_semantic_predicate_matches(&predicates, 0, 0));
+    }
+
+    #[test]
+    fn parser_predicates_support_context_child_text_checks() {
+        let mut parser = mini_parser(vec![CommonToken::eof("parser-test", 1, 1, 1)]);
+        let mut context = ParserRuleContext::new(1, 0);
+        let mut child_context = ParserRuleContext::new(2, 0);
+        child_context.add_child(ParseTree::Terminal(TerminalNode::new(
+            CommonToken::new(1).with_text("var"),
+        )));
+        context.add_child(ParseTree::Rule(RuleNode::new(child_context)));
+        let predicates = [(
+            1,
+            0,
+            ParserPredicate::ContextChildRuleTextNotEquals {
+                rule_index: 2,
+                text: "var",
+            },
+        )];
+
+        assert!(
+            !parser.parser_semantic_predicate_matches_with_context_and_local(
+                &predicates,
+                1,
+                0,
+                &context,
+                0,
+            )
+        );
     }
 
     #[test]

@@ -1827,7 +1827,7 @@ fn render_generated_step(
         } => {
             writeln!(
                 out,
-                "{pad}if !self.base.parser_semantic_predicate_matches_with_local(PARSER_PREDICATES, {rule_index}, {pred_index}, __precedence) {{"
+                "{pad}if !self.base.parser_semantic_predicate_matches_with_context_and_local(PARSER_PREDICATES, {rule_index}, {pred_index}, &__ctx, __precedence) {{"
             )
             .expect("writing to a string cannot fail");
             writeln!(
@@ -3290,6 +3290,11 @@ enum PredicateTemplate {
         offset: isize,
         token_name: String,
     },
+    TokenPairAdjacent,
+    ContextChildRuleTextNotEquals {
+        rule_name: String,
+        text: String,
+    },
 }
 
 const fn can_generate_parser_predicate(predicate: &PredicateTemplate) -> bool {
@@ -3305,6 +3310,8 @@ const fn can_generate_parser_predicate(predicate: &PredicateTemplate) -> bool {
             | PredicateTemplate::MemberEquals { .. }
             | PredicateTemplate::LookaheadTextEquals { .. }
             | PredicateTemplate::LookaheadNotEquals { .. }
+            | PredicateTemplate::TokenPairAdjacent
+            | PredicateTemplate::ContextChildRuleTextNotEquals { .. }
     )
 }
 
@@ -4133,6 +4140,7 @@ fn parse_predicate_template(body: &str) -> Option<PredicateTemplate> {
             .or_else(|| parse_mod_member_predicate(body))
             .or_else(|| parse_member_predicate(body))
             .or_else(|| parse_boolean_member_not_predicate(body))
+            .or_else(|| parse_csharp_parser_predicate(body))
             .or_else(|| parse_lt_equals_predicate(body))
             .or_else(|| parse_la_not_equals_predicate(body)),
     }
@@ -4273,6 +4281,21 @@ fn parse_invoke_predicate(body: &str) -> Option<PredicateTemplate> {
         "True()" => Some(PredicateTemplate::Invoke { value: true }),
         "False()" => Some(PredicateTemplate::Invoke { value: false }),
         r#"ValEquals("$i","99")"# => Some(PredicateTemplate::Invoke { value: true }),
+        _ => None,
+    }
+}
+
+fn parse_csharp_parser_predicate(body: &str) -> Option<PredicateTemplate> {
+    match body.trim() {
+        "this.IsRightArrow()" | "this.IsRightShift()" | "this.IsRightShiftAssignment()" => {
+            Some(PredicateTemplate::TokenPairAdjacent)
+        }
+        "this.IsLocalVariableDeclaration()" => {
+            Some(PredicateTemplate::ContextChildRuleTextNotEquals {
+                rule_name: "local_variable_type".to_owned(),
+                text: "var".to_owned(),
+            })
+        }
         _ => None,
     }
 }
@@ -5201,7 +5224,9 @@ fn render_lexer_predicate_expression(template: &PredicateTemplate) -> String {
         | PredicateTemplate::MemberModuloEquals { .. }
         | PredicateTemplate::MemberEquals { .. }
         | PredicateTemplate::LookaheadTextEquals { .. }
-        | PredicateTemplate::LookaheadNotEquals { .. } => {
+        | PredicateTemplate::LookaheadNotEquals { .. }
+        | PredicateTemplate::TokenPairAdjacent
+        | PredicateTemplate::ContextChildRuleTextNotEquals { .. } => {
             unreachable!("lookahead parser predicates are not lexer predicates")
         }
     }
@@ -6173,6 +6198,25 @@ fn render_parser_predicate_array(
                     "antlr4_runtime::ParserPredicate::LookaheadNotEquals {{ offset: {offset}, token_type: {token_type} }}"
                 )
             }
+            PredicateTemplate::TokenPairAdjacent => {
+                "antlr4_runtime::ParserPredicate::TokenPairAdjacent".to_owned()
+            }
+            PredicateTemplate::ContextChildRuleTextNotEquals { rule_name, text } => {
+                let rule_index = data
+                    .rule_names
+                    .iter()
+                    .position(|name| name == rule_name)
+                    .ok_or_else(|| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            format!("unknown predicate rule {rule_name}"),
+                        )
+                    })?;
+                format!(
+                    "antlr4_runtime::ParserPredicate::ContextChildRuleTextNotEquals {{ rule_index: {rule_index}, text: \"{}\" }}",
+                    rust_string(text)
+                )
+            }
         };
         items.push(format!("({rule_index}, {pred_index}, {expression})"));
     }
@@ -6968,6 +7012,11 @@ atn:
             false,
         );
 
+        assert!(
+            rendered.contains(
+                "parser_semantic_predicate_matches_with_context_and_local(PARSER_PREDICATES, 2, 1, &__ctx, __precedence)"
+            )
+        );
         assert!(rendered.contains("failed_predicate_option_error(2, __message)"));
         assert!(rendered.contains("failed_predicate_error(\"semantic predicate\")"));
     }
@@ -7654,6 +7703,17 @@ continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#,
                 member: "i".to_owned(),
                 value: 1,
                 equals: true,
+            })
+        );
+        assert_eq!(
+            parse_predicate_template("this.IsRightArrow()"),
+            Some(PredicateTemplate::TokenPairAdjacent)
+        );
+        assert_eq!(
+            parse_predicate_template("this.IsLocalVariableDeclaration()"),
+            Some(PredicateTemplate::ContextChildRuleTextNotEquals {
+                rule_name: "local_variable_type".to_owned(),
+                text: "var".to_owned(),
             })
         );
     }
