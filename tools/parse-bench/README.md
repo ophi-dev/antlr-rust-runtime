@@ -44,6 +44,7 @@ Longer local run with reports:
 python3 tools/parse-bench/run.py \
   --iters 20 \
   --warmups 3 \
+  --rust-generated-only \
   --json target/parse-bench/results.json \
   --markdown target/parse-bench/results.md
 ```
@@ -57,6 +58,9 @@ The script regenerates parsers into `target/parse-bench`, builds:
 
 The output table reports `min` and `avg` parse time per fixture and a relative
 ratio against `rust-antlr` for the same fixture.
+Use `--rust-generated-only` for Adaptive LL delivery evidence so the Rust
+generator fails if any parser rule lacks a generated body and the Rust runner
+fails if a generated parser path falls back to the interpreter.
 
 ## PR Watchdog
 

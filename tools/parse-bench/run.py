@@ -119,12 +119,19 @@ class Measurement:
     description: str
 
 
-def run(cmd: list[str], *, cwd: Path | None = None, quiet: bool = False) -> subprocess.CompletedProcess[str]:
+def run(
+    cmd: list[str],
+    *,
+    cwd: Path | None = None,
+    env: dict[str, str] | None = None,
+    quiet: bool = False,
+) -> subprocess.CompletedProcess[str]:
     if not quiet:
         print("+ " + " ".join(cmd))
     completed = subprocess.run(
         cmd,
         cwd=cwd,
+        env=env,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -268,6 +275,7 @@ def generate_rust_modules(
     spec: LanguageSpec,
     interp_dir: Path,
     rust_generated_dir: Path,
+    require_generated_parser: bool,
 ) -> None:
     cmd = [
         "cargo",
@@ -286,6 +294,8 @@ def generate_rust_modules(
         "--out-dir",
         str(rust_generated_dir),
     ]
+    if require_generated_parser:
+        cmd.append("--require-generated-parser")
     run(cmd)
 
 
@@ -735,7 +745,7 @@ def prepare_work(
             copy_grammar(spec, args.grammars_v4, base_grammar)
             interp_dir = work_dir / "generated" / spec.name / "interp"
             generate_antlr(args.antlr_jar, spec, base_grammar, interp_dir, None)
-            generate_rust_modules(spec, interp_dir, rust_generated)
+            generate_rust_modules(spec, interp_dir, rust_generated, args.rust_generated_only)
 
         if "python-antlr" in runtimes:
             py_grammar = work_dir / "grammars" / spec.name / "python"
@@ -812,6 +822,10 @@ def measure_fixture(
     runner: Path,
     args: argparse.Namespace,
 ) -> Measurement:
+    env = None
+    if runtime == "rust-antlr" and args.rust_generated_only:
+        env = os.environ.copy()
+        env["ANTLR4_RUST_GENERATED_ONLY"] = "1"
     if runtime in {"python-antlr", "tree-sitter"}:
         cmd = [args.python, str(runner)]
     else:
@@ -828,7 +842,7 @@ def measure_fixture(
             str(args.warmups),
         ]
     )
-    completed = run(cmd, quiet=True)
+    completed = run(cmd, env=env, quiet=True)
     match = RUNNER_OUTPUT.search(completed.stdout)
     if match is None:
         raise SystemExit(
@@ -890,6 +904,7 @@ def write_json(results: list[Measurement], args: argparse.Namespace) -> None:
         "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "iters": args.iters,
         "warmups": args.warmups,
+        "rust_generated_only": args.rust_generated_only,
         "repo": str(ROOT),
         "grammars_v4": {
             "path": str(args.grammars_v4),
@@ -914,6 +929,7 @@ def write_markdown(results: list[Measurement], args: argparse.Namespace) -> None
         "",
         f"- Iterations: `{args.iters}`",
         f"- Warmups: `{args.warmups}`",
+        f"- Rust generated-only: `{'yes' if args.rust_generated_only else 'no'}`",
         f"- grammars-v4: `{git_rev(args.grammars_v4) or args.grammars_v4}`",
         "",
         "| Language | Fixture | Runtime | Bytes | Min ms | Avg ms | vs Rust |",
@@ -966,6 +982,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--iters", type=int, default=10)
     parser.add_argument("--warmups", type=int, default=2)
     parser.add_argument("--quick", action="store_true", help="Use 3 timed iterations and 1 warmup.")
+    parser.add_argument(
+        "--rust-generated-only",
+        action="store_true",
+        help=(
+            "Require all Rust parser rules to be generated, then run rust-antlr "
+            "with ANTLR4_RUST_GENERATED_ONLY=1 so missing coverage fails instead "
+            "of falling back to the interpreter."
+        ),
+    )
     parser.add_argument("--json", type=Path, help="Write machine-readable results.")
     parser.add_argument("--markdown", type=Path, help="Write a Markdown table report.")
     return parser.parse_args()

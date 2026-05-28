@@ -55,7 +55,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .parser_name
             .clone()
             .unwrap_or_else(|| grammar_name_from_path(&parser));
-        let module = render_parser(&grammar_name, &data, grammar_source.as_deref())?;
+        let module = render_parser_with_options(
+            &grammar_name,
+            &data,
+            grammar_source.as_deref(),
+            ParserRenderOptions {
+                require_generated_parser: args.require_generated_parser,
+            },
+        )?;
         fs::write(
             args.out_dir
                 .join(format!("{}.rs", module_name(&grammar_name))),
@@ -74,6 +81,7 @@ struct Args {
     parser_name: Option<String>,
     grammar: Option<PathBuf>,
     out_dir: PathBuf,
+    require_generated_parser: bool,
 }
 
 impl Args {
@@ -91,6 +99,7 @@ impl Args {
         let mut parser_name = None;
         let mut grammar = None;
         let mut out_dir = None;
+        let mut require_generated_parser = false;
 
         let mut iter = env::args().skip(1);
         while let Some(arg) = iter.next() {
@@ -101,6 +110,7 @@ impl Args {
                 "--parser-name" => parser_name = Some(next_arg(&mut iter, "--parser-name")?),
                 "--grammar" => grammar = Some(PathBuf::from(next_arg(&mut iter, "--grammar")?)),
                 "--out-dir" => out_dir = Some(PathBuf::from(next_arg(&mut iter, "--out-dir")?)),
+                "--require-generated-parser" => require_generated_parser = true,
                 "--help" | "-h" => return Err(usage()),
                 other => return Err(format!("unknown argument {other}\n\n{}", usage())),
             }
@@ -120,6 +130,7 @@ impl Args {
             parser_name,
             grammar,
             out_dir: out_dir.unwrap_or_else(|| PathBuf::from(".")),
+            require_generated_parser,
         })
     }
 }
@@ -130,7 +141,7 @@ fn next_arg(iter: &mut impl Iterator<Item = String>, flag: &str) -> Result<Strin
 }
 
 fn usage() -> String {
-    "usage: antlr4-rust-gen [--lexer Lexer.interp] [--parser Parser.interp] [--grammar Grammar.g4] [--out-dir DIR]"
+    "usage: antlr4-rust-gen [--lexer Lexer.interp] [--parser Parser.interp] [--grammar Grammar.g4] [--out-dir DIR] [--require-generated-parser]"
         .to_owned()
 }
 
@@ -533,6 +544,11 @@ struct GeneratedParserCompileContext<'a> {
     generated_predicate_coordinates: &'a BTreeSet<(usize, usize)>,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+struct ParserRenderOptions {
+    require_generated_parser: bool,
+}
+
 #[derive(Clone, Copy)]
 struct ActionStateSets<'a> {
     all: &'a BTreeSet<usize>,
@@ -617,6 +633,33 @@ fn drop_rules_calling_disabled_rules(rules: &mut [Option<GeneratedParserRule>]) 
         };
         rules[rule_index] = None;
     }
+}
+
+fn require_all_parser_rules_generated(
+    rules: &[Option<GeneratedParserRule>],
+    data: &InterpData,
+) -> io::Result<()> {
+    let missing = rules
+        .iter()
+        .enumerate()
+        .filter(|(_, rule)| rule.is_none())
+        .map(|(index, _)| {
+            data.rule_names
+                .get(index)
+                .map_or_else(|| index.to_string(), Clone::clone)
+        })
+        .collect::<Vec<_>>();
+    if missing.is_empty() {
+        return Ok(());
+    }
+    Err(io::Error::new(
+        io::ErrorKind::InvalidData,
+        format!(
+            "generated parser did not emit {} rule(s): {}",
+            missing.len(),
+            missing.join(", ")
+        ),
+    ))
 }
 
 fn generated_steps_call_disabled_rule(steps: &[GeneratedParserStep], enabled: &[bool]) -> bool {
@@ -2733,10 +2776,25 @@ fn render_parser_parse_rule_fallback(
 /// Parser methods use generated recursive-descent bodies for the ATN subset
 /// covered by `parser_generated_rules` and keep the interpreter fallback for
 /// unsupported constructs while the generated surface is expanded.
+#[cfg(test)]
 fn render_parser(
     grammar_name: &str,
     data: &InterpData,
     grammar_source: Option<&str>,
+) -> io::Result<String> {
+    render_parser_with_options(
+        grammar_name,
+        data,
+        grammar_source,
+        ParserRenderOptions::default(),
+    )
+}
+
+fn render_parser_with_options(
+    grammar_name: &str,
+    data: &InterpData,
+    grammar_source: Option<&str>,
+    options: ParserRenderOptions,
 ) -> io::Result<String> {
     let type_name = rust_type_name(grammar_name);
     let metadata = render_metadata(grammar_name, data);
@@ -2805,6 +2863,9 @@ fn render_parser(
         },
         has_action_dispatch || has_predicate_dispatch || has_return_actions,
     )?;
+    if options.require_generated_parser {
+        require_all_parser_rules_generated(&generated_rules, data)?;
+    }
     let generated_rule_dispatch = render_generated_rule_dispatch(
         &generated_rules,
         &inline_action_statements,
@@ -7028,6 +7089,18 @@ s : ;
             "Err(GeneratedRuleError::Recoverable(_error)) if allow_generated_fallback && !__generated_only"
         ));
         assert!(rendered.contains("generated parser did not emit rule {}"));
+    }
+
+    #[test]
+    fn require_generated_parser_reports_missing_rules() {
+        let error = require_all_parser_rules_generated(&[None], &minimal_parser_data())
+            .expect_err("missing generated rule should fail strict mode");
+
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert_eq!(
+            error.to_string(),
+            "generated parser did not emit 1 rule(s): s"
+        );
     }
 
     #[test]
