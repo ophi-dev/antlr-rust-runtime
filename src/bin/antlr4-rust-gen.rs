@@ -1384,6 +1384,7 @@ fn render_generated_rule_method(
     )
     .expect("writing to a string cannot fail");
     writeln!(out, "        let _ = __precedence;").expect("writing to a string cannot fail");
+    writeln!(out, "        let _ = allow_fallback;").expect("writing to a string cannot fail");
     writeln!(
         out,
         "        let __rule_start = antlr4_runtime::IntStream::index(self.base.input());"
@@ -1472,39 +1473,6 @@ fn render_generated_rule_method(
     writeln!(out, "                }}").expect("writing to a string cannot fail");
     writeln!(
         out,
-        "                if allow_fallback && !Self::generated_only() {{"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(out, "                    self.base.exit_rule();")
-        .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "                    self.generated_actions.truncate(__generated_action_marker);"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "                    self.base.restore_int_members(__generated_member_checkpoint);"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "                    self.base.restore_generated_diagnostics(__generated_diagnostic_marker);"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "                    antlr4_runtime::IntStream::seek(self.base.input(), __rule_start);"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "                    return Err(GeneratedRuleError::Recoverable(__error));"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(out, "                }}").expect("writing to a string cannot fail");
-    writeln!(
-        out,
         "                self.base.recover_generated_rule(&mut __ctx, atn(), __error);"
     )
     .expect("writing to a string cannot fail");
@@ -1546,6 +1514,7 @@ fn render_generated_left_recursive_rule_method(
         "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}_precedence(&mut self, __precedence: i32, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {{"
     )
     .expect("writing to a string cannot fail");
+    writeln!(out, "        let _ = allow_fallback;").expect("writing to a string cannot fail");
     writeln!(
         out,
         "        let __rule_start = antlr4_runtime::IntStream::index(self.base.input());"
@@ -1632,42 +1601,6 @@ fn render_generated_left_recursive_rule_method(
     writeln!(
         out,
         "                    return Err(GeneratedRuleError::Fatal(__error));"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(out, "                }}").expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "                if allow_fallback && !Self::generated_only() {{"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "                    self.base.unroll_recursion_context();"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "                    self.generated_actions.truncate(__generated_action_marker);"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "                    self.base.restore_int_members(__generated_member_checkpoint);"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "                    self.base.restore_generated_diagnostics(__generated_diagnostic_marker);"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "                    antlr4_runtime::IntStream::seek(self.base.input(), __rule_start);"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "                    return Err(GeneratedRuleError::Recoverable(__error));"
     )
     .expect("writing to a string cannot fail");
     writeln!(out, "                }}").expect("writing to a string cannot fail");
@@ -2964,14 +2897,13 @@ enum GeneratedAction {{
 #[allow(dead_code)]
 #[derive(Debug)]
 enum GeneratedRuleError {{
-    Recoverable(antlr4_runtime::AntlrError),
     Fatal(antlr4_runtime::AntlrError),
 }}
 
 impl GeneratedRuleError {{
     fn into_error(self) -> antlr4_runtime::AntlrError {{
         match self {{
-            Self::Recoverable(error) | Self::Fatal(error) => error,
+            Self::Fatal(error) => error,
         }}
     }}
 }}
@@ -3046,12 +2978,6 @@ where
         let (__tree, __from_generated) = if let Some(result) = self.parse_generated_rule(rule_index, precedence, allow_generated_fallback) {{
             match result {{
                 Ok(tree) => (tree, true),
-                Err(GeneratedRuleError::Recoverable(_error)) if allow_generated_fallback && !__generated_only => {{
-                    self.generated_actions.truncate(__generated_action_marker);
-                    self.base.restore_int_members(__generated_member_checkpoint.clone());
-                    antlr4_runtime::IntStream::seek(self.base.input(), __rule_start);
-                    (self.parse_interpreted_rule_precedence(rule_index, precedence)?, false)
-                }}
                 Err(error) => {{
                     self.generated_actions.truncate(__generated_action_marker);
                     self.base.restore_int_members(__generated_member_checkpoint);
@@ -7128,15 +7054,13 @@ s : ;
     }
 
     #[test]
-    fn generated_only_mode_disables_interpreter_fallback() {
+    fn generated_only_mode_disables_missing_rule_fallback() {
         let rendered =
             render_parser("TParser", &minimal_parser_data(), None).expect("parser should render");
 
         assert!(rendered.contains("ANTLR4_RUST_GENERATED_ONLY"));
         assert!(rendered.contains("let __generated_only = Self::generated_only();"));
-        assert!(rendered.contains(
-            "Err(GeneratedRuleError::Recoverable(_error)) if allow_generated_fallback && !__generated_only"
-        ));
+        assert!(!rendered.contains("GeneratedRuleError::Recoverable"));
         assert!(rendered.contains("generated parser did not emit rule {}"));
     }
 
