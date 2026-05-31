@@ -123,6 +123,7 @@ pub struct DfaState {
     pub is_accept_state: bool,
     pub prediction: Option<usize>,
     pub requires_full_context: bool,
+    pub conflicting_alts: Vec<usize>,
 }
 
 impl DfaState {
@@ -134,6 +135,7 @@ impl DfaState {
             is_accept_state: false,
             prediction: None,
             requires_full_context: false,
+            conflicting_alts: Vec::new(),
         }
     }
 

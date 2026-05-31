@@ -71,7 +71,9 @@ type FxHashMap<K, V> = HashMap<K, V, FxBuildHasher>;
 #[allow(clippy::disallowed_types)]
 type FxHashSet<K> = HashSet<K, FxBuildHasher>;
 
-use crate::atn::parser::{ParserAtnPrediction, ParserAtnSimulator};
+use crate::atn::parser::{
+    ParserAtnPrediction, ParserAtnPredictionDiagnosticKind, ParserAtnSimulator,
+};
 use crate::atn::{Atn, AtnState, AtnStateKind, Transition};
 use crate::errors::AntlrError;
 use crate::int_stream::IntStream;
@@ -2280,6 +2282,85 @@ where
         ));
     }
 
+    /// Buffers ANTLR-style diagnostic-listener messages produced by generated
+    /// parser calls to the adaptive simulator.
+    pub fn record_generated_prediction_diagnostic(
+        &mut self,
+        atn: &Atn,
+        state_number: usize,
+        prediction: &ParserAtnPrediction,
+    ) {
+        let Some(diagnostic) = &prediction.diagnostic else {
+            return;
+        };
+        if !self.report_diagnostic_errors || diagnostic.conflicting_alts.len() < 2 {
+            return;
+        }
+        let Some(decision) = atn
+            .decision_to_state()
+            .iter()
+            .position(|candidate| *candidate == state_number)
+        else {
+            return;
+        };
+        let Some(rule_index) = atn.state(state_number).and_then(|state| state.rule_index) else {
+            return;
+        };
+        let rule_name = self
+            .rule_names()
+            .get(rule_index)
+            .map_or_else(|| "<unknown>".to_owned(), Clone::clone);
+        let attempt_input = display_input_text(
+            &self
+                .input
+                .text(diagnostic.start_index, diagnostic.sll_stop_index),
+        );
+        let result_input = display_input_text(
+            &self
+                .input
+                .text(diagnostic.start_index, diagnostic.ll_stop_index),
+        );
+        let alts = diagnostic
+            .conflicting_alts
+            .iter()
+            .map(usize::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+        let key = (
+            decision,
+            diagnostic.start_index,
+            format!(
+                "{:?}:{alts}:{attempt_input}:{result_input}",
+                diagnostic.kind
+            ),
+        );
+        if !self.reported_prediction_diagnostics.insert(key) {
+            return;
+        }
+        let attempt_token = self.token_at(diagnostic.sll_stop_index);
+        self.generated_parser_diagnostics.push(diagnostic_for_token(
+            attempt_token.as_ref(),
+            format!(
+                "reportAttemptingFullContext d={decision} ({rule_name}), input='{attempt_input}'"
+            ),
+        ));
+        let result_token = self.token_at(diagnostic.ll_stop_index);
+        let message = match diagnostic.kind {
+            ParserAtnPredictionDiagnosticKind::Ambiguity => {
+                format!(
+                    "reportAmbiguity d={decision} ({rule_name}): ambigAlts={{{alts}}}, input='{result_input}'"
+                )
+            }
+            ParserAtnPredictionDiagnosticKind::ContextSensitivity => {
+                format!(
+                    "reportContextSensitivity d={decision} ({rule_name}), input='{result_input}'"
+                )
+            }
+        };
+        self.generated_parser_diagnostics
+            .push(diagnostic_for_token(result_token.as_ref(), message));
+    }
+
     pub fn la(&mut self, offset: isize) -> i32 {
         self.input.la_token(offset)
     }
@@ -3088,6 +3169,7 @@ where
             alt: alt + 1,
             requires_full_context: false,
             has_semantic_context: false,
+            diagnostic: None,
         })
     }
 
@@ -7901,7 +7983,9 @@ mod tests {
     use super::*;
     use crate::atn::AtnType;
     use crate::atn::IntervalSet;
-    use crate::atn::parser::ParserAtnSimulator;
+    use crate::atn::parser::{
+        ParserAtnPredictionDiagnostic, ParserAtnPredictionDiagnosticKind, ParserAtnSimulator,
+    };
     use crate::atn::serialized::{AtnDeserializer, SerializedAtn};
     use crate::token::{CommonToken, HIDDEN_CHANNEL, Token};
     use crate::token_stream::CommonTokenStream;
@@ -8371,6 +8455,97 @@ mod tests {
                 column: 3,
                 message: "missing 'Y' at '<EOF>'".to_owned(),
             }]
+        );
+    }
+
+    #[test]
+    fn generated_prediction_diagnostics_use_adaptive_context() {
+        let atn = two_alt_decision_atn();
+        let data = RecognizerData::new(
+            "Mini.g4",
+            Vocabulary::new(
+                [None, Some("'x'"), Some("'y'")],
+                [None, Some("X"), Some("Y")],
+                [None::<&str>, None, None],
+            ),
+        )
+        .with_rule_names(["s"]);
+        let mut parser = BaseParser::new(
+            CommonTokenStream::new(Source {
+                tokens: vec![
+                    CommonToken::new(1)
+                        .with_text("x")
+                        .with_position(1, 0)
+                        .with_span(0, 0),
+                    CommonToken::new(2)
+                        .with_text("y")
+                        .with_position(1, 2)
+                        .with_span(1, 1),
+                    CommonToken::eof("parser-test", 2, 1, 3),
+                ],
+                index: 0,
+            }),
+            data,
+        );
+        parser.set_report_diagnostic_errors(true);
+
+        parser.record_generated_prediction_diagnostic(
+            &atn,
+            1,
+            &ParserAtnPrediction {
+                alt: 1,
+                requires_full_context: true,
+                has_semantic_context: false,
+                diagnostic: Some(ParserAtnPredictionDiagnostic {
+                    kind: ParserAtnPredictionDiagnosticKind::ContextSensitivity,
+                    start_index: 0,
+                    sll_stop_index: 1,
+                    ll_stop_index: 0,
+                    conflicting_alts: vec![1, 2],
+                }),
+            },
+        );
+        parser.record_generated_prediction_diagnostic(
+            &atn,
+            1,
+            &ParserAtnPrediction {
+                alt: 1,
+                requires_full_context: true,
+                has_semantic_context: false,
+                diagnostic: Some(ParserAtnPredictionDiagnostic {
+                    kind: ParserAtnPredictionDiagnosticKind::Ambiguity,
+                    start_index: 0,
+                    sll_stop_index: 1,
+                    ll_stop_index: 1,
+                    conflicting_alts: vec![1, 2],
+                }),
+            },
+        );
+
+        assert_eq!(
+            parser.generated_parser_diagnostics,
+            [
+                ParserDiagnostic {
+                    line: 1,
+                    column: 2,
+                    message: "reportAttemptingFullContext d=0 (s), input='xy'".to_owned(),
+                },
+                ParserDiagnostic {
+                    line: 1,
+                    column: 0,
+                    message: "reportContextSensitivity d=0 (s), input='x'".to_owned(),
+                },
+                ParserDiagnostic {
+                    line: 1,
+                    column: 2,
+                    message: "reportAttemptingFullContext d=0 (s), input='xy'".to_owned(),
+                },
+                ParserDiagnostic {
+                    line: 1,
+                    column: 2,
+                    message: "reportAmbiguity d=0 (s): ambigAlts={1, 2}, input='xy'".to_owned(),
+                },
+            ]
         );
     }
 

@@ -19,11 +19,27 @@ pub struct ParserAtnSimulator<'a> {
     decision_to_dfa: Vec<Dfa>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ParserAtnPrediction {
     pub alt: usize,
     pub requires_full_context: bool,
     pub has_semantic_context: bool,
+    pub diagnostic: Option<ParserAtnPredictionDiagnostic>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ParserAtnPredictionDiagnostic {
+    pub kind: ParserAtnPredictionDiagnosticKind,
+    pub start_index: usize,
+    pub sll_stop_index: usize,
+    pub ll_stop_index: usize,
+    pub conflicting_alts: Vec<usize>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ParserAtnPredictionDiagnosticKind {
+    Ambiguity,
+    ContextSensitivity,
 }
 
 #[derive(Clone, Copy)]
@@ -49,6 +65,19 @@ struct AdaptivePredictRequest<'a> {
 struct DfaEdge {
     decision: usize,
     source_state: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct DfaPredictionInfo {
+    prediction: ParserAtnPrediction,
+    conflicting_alts: Vec<usize>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct FullContextPrediction {
+    prediction: ParserAtnPrediction,
+    stop_index: usize,
+    ambiguity_alts: Option<Vec<usize>>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -353,22 +382,42 @@ impl<'a> ParserAtnSimulator<'a> {
         {
             return Ok(Some(prediction));
         }
-        let Some(prediction) = self.dfa_prediction_info(decision, state_number) else {
+        let Some(info) = self.dfa_prediction_info(decision, state_number) else {
             return Ok(None);
         };
+        let prediction = info.prediction;
         if prediction.requires_full_context
             && (force_full_context_retry || !prediction.has_semantic_context)
         {
+            let sll_stop_index = input.index();
             input.seek(start_index);
-            return self
-                .adaptive_predict_full_context(
-                    decision_state,
-                    input,
-                    precedence,
-                    outer_context,
-                    merge_cache,
+            let full_context = self.adaptive_predict_full_context(
+                decision_state,
+                input,
+                precedence,
+                outer_context,
+                merge_cache,
+            )?;
+            let (kind, conflicting_alts) = if let Some(ambiguity_alts) = full_context.ambiguity_alts
+            {
+                (ParserAtnPredictionDiagnosticKind::Ambiguity, ambiguity_alts)
+            } else {
+                (
+                    ParserAtnPredictionDiagnosticKind::ContextSensitivity,
+                    info.conflicting_alts,
                 )
-                .map(Some);
+            };
+            let mut prediction = full_context.prediction;
+            if conflicting_alts.len() > 1 {
+                prediction.diagnostic = Some(ParserAtnPredictionDiagnostic {
+                    kind,
+                    start_index,
+                    sll_stop_index,
+                    ll_stop_index: full_context.stop_index,
+                    conflicting_alts,
+                });
+            }
+            return Ok(Some(prediction));
         }
         Ok(Some(prediction))
     }
@@ -406,6 +455,7 @@ impl<'a> ParserAtnSimulator<'a> {
             alt,
             requires_full_context: false,
             has_semantic_context: configs_have_semantic_context_for_alt(configs, alt),
+            diagnostic: None,
         })
     }
 
@@ -481,7 +531,7 @@ impl<'a> ParserAtnSimulator<'a> {
         precedence: i32,
         outer_context: &Rc<PredictionContext>,
         merge_cache: &mut PredictionContextMergeCache,
-    ) -> Result<ParserAtnPrediction, ParserAtnSimulatorError> {
+    ) -> Result<FullContextPrediction, ParserAtnSimulatorError> {
         let decision_state = self
             .atn
             .state(decision_state)
@@ -495,10 +545,15 @@ impl<'a> ParserAtnSimulator<'a> {
         );
         loop {
             if let Some(alt) = configs.unique_alt() {
-                return Ok(ParserAtnPrediction {
-                    alt,
-                    requires_full_context: true,
-                    has_semantic_context: configs_have_semantic_context_for_alt(&configs, alt),
+                return Ok(FullContextPrediction {
+                    prediction: ParserAtnPrediction {
+                        alt,
+                        requires_full_context: true,
+                        has_semantic_context: configs_have_semantic_context_for_alt(&configs, alt),
+                        diagnostic: None,
+                    },
+                    stop_index: input.index(),
+                    ambiguity_alts: None,
                 });
             }
             let symbol = input.la(1);
@@ -511,31 +566,47 @@ impl<'a> ParserAtnSimulator<'a> {
             }
             configs = reach;
             if let Some(alt) = configs.unique_alt() {
-                return Ok(ParserAtnPrediction {
-                    alt,
-                    requires_full_context: true,
-                    has_semantic_context: configs_have_semantic_context_for_alt(&configs, alt),
+                return Ok(FullContextPrediction {
+                    prediction: ParserAtnPrediction {
+                        alt,
+                        requires_full_context: true,
+                        has_semantic_context: configs_have_semantic_context_for_alt(&configs, alt),
+                        diagnostic: None,
+                    },
+                    stop_index: input.index(),
+                    ambiguity_alts: None,
+                });
+            }
+            if symbol == TOKEN_EOF || self.configs_all_reached_rule_stop(&configs) {
+                let alts = configs.alts();
+                let alt = alts
+                    .iter()
+                    .next()
+                    .copied()
+                    .ok_or(ParserAtnSimulatorError::PredictionRequiresMoreLookahead)?;
+                return Ok(FullContextPrediction {
+                    prediction: ParserAtnPrediction {
+                        alt,
+                        requires_full_context: true,
+                        has_semantic_context: configs_have_semantic_context_for_alt(&configs, alt),
+                        diagnostic: None,
+                    },
+                    stop_index: input.index(),
+                    ambiguity_alts: (alts.len() > 1).then(|| alts.into_iter().collect()),
                 });
             }
             if !configs.has_semantic_context()
                 && let Some(alt) = resolves_to_just_one_viable_alt(configs.configs())
             {
-                return Ok(ParserAtnPrediction {
-                    alt,
-                    requires_full_context: true,
-                    has_semantic_context: configs_have_semantic_context_for_alt(&configs, alt),
-                });
-            }
-            if symbol == TOKEN_EOF || self.configs_all_reached_rule_stop(&configs) {
-                let alt = configs
-                    .alts()
-                    .into_iter()
-                    .next()
-                    .ok_or(ParserAtnSimulatorError::PredictionRequiresMoreLookahead)?;
-                return Ok(ParserAtnPrediction {
-                    alt,
-                    requires_full_context: true,
-                    has_semantic_context: configs_have_semantic_context_for_alt(&configs, alt),
+                return Ok(FullContextPrediction {
+                    prediction: ParserAtnPrediction {
+                        alt,
+                        requires_full_context: true,
+                        has_semantic_context: configs_have_semantic_context_for_alt(&configs, alt),
+                        diagnostic: None,
+                    },
+                    stop_index: input.index(),
+                    ambiguity_alts: None,
                 });
             }
             input.consume();
@@ -579,10 +650,19 @@ impl<'a> ParserAtnSimulator<'a> {
                 .or_else(|| reach.alts().into_iter().next())
         });
         let requires_full_context = prediction.is_none() && conflict_prediction.is_some();
+        let conflicting_alts = if requires_full_context {
+            let alts = reach.conflicting_alts();
+            if alts.is_empty() { reach.alts() } else { alts }
+                .into_iter()
+                .collect()
+        } else {
+            Vec::new()
+        };
         let mut dfa_state = DfaState::new(reach);
         if let Some(prediction) = conflict_prediction {
             dfa_state.mark_accept(prediction);
             dfa_state.requires_full_context = requires_full_context;
+            dfa_state.conflicting_alts = conflicting_alts;
         }
         let target_state = self.decision_to_dfa[edge.decision].add_state(dfa_state);
         if let Some(source) = self.decision_to_dfa[edge.decision].state_mut(edge.source_state) {
@@ -860,18 +940,33 @@ impl<'a> ParserAtnSimulator<'a> {
         &self,
         decision: usize,
         state_number: usize,
-    ) -> Option<ParserAtnPrediction> {
+    ) -> Option<DfaPredictionInfo> {
         self.decision_to_dfa
             .get(decision)
             .and_then(|dfa| dfa.state(state_number))
             .and_then(|state| {
-                state.prediction.map(|alt| ParserAtnPrediction {
-                    alt,
-                    requires_full_context: state.requires_full_context,
-                    has_semantic_context: configs_have_semantic_context_for_alt(
-                        &state.configs,
-                        alt,
-                    ),
+                state.prediction.map(|alt| {
+                    let conflicting_alts = if state.requires_full_context {
+                        if state.conflicting_alts.is_empty() {
+                            state.configs.alts().into_iter().collect()
+                        } else {
+                            state.conflicting_alts.clone()
+                        }
+                    } else {
+                        Vec::new()
+                    };
+                    DfaPredictionInfo {
+                        prediction: ParserAtnPrediction {
+                            alt,
+                            requires_full_context: state.requires_full_context,
+                            has_semantic_context: configs_have_semantic_context_for_alt(
+                                &state.configs,
+                                alt,
+                            ),
+                            diagnostic: None,
+                        },
+                        conflicting_alts,
+                    }
                 })
             })
     }
@@ -1012,6 +1107,13 @@ mod tests {
                 alt: 1,
                 requires_full_context: true,
                 has_semantic_context: false,
+                diagnostic: Some(ParserAtnPredictionDiagnostic {
+                    kind: ParserAtnPredictionDiagnosticKind::Ambiguity,
+                    start_index: 0,
+                    sll_stop_index: 0,
+                    ll_stop_index: 0,
+                    conflicting_alts: vec![1, 2],
+                }),
             }
         );
 
@@ -1101,13 +1203,20 @@ mod tests {
                 alt: 1,
                 requires_full_context: true,
                 has_semantic_context: false,
+                diagnostic: Some(ParserAtnPredictionDiagnostic {
+                    kind: ParserAtnPredictionDiagnosticKind::Ambiguity,
+                    start_index: 0,
+                    sll_stop_index: 0,
+                    ll_stop_index: 0,
+                    conflicting_alts: vec![1, 2],
+                }),
             }
         );
         assert_eq!(input.index(), 0);
     }
 
     #[test]
-    fn context_prediction_retries_full_context_for_semantic_dfa_conflict() {
+    fn context_prediction_reports_context_sensitivity_for_dfa_conflict() {
         let atn = two_token_decision_atn();
         let mut simulator = ParserAtnSimulator::new(&atn);
         let empty = PredictionContext::empty();
@@ -1129,6 +1238,7 @@ mod tests {
         let mut accept_state = DfaState::new(accept_configs);
         accept_state.mark_accept(1);
         accept_state.requires_full_context = true;
+        accept_state.conflicting_alts = vec![1, 2];
         let accept = simulator.decision_to_dfa[0].add_state(accept_state);
         simulator.decision_to_dfa[0]
             .state_mut(start)
@@ -1146,6 +1256,13 @@ mod tests {
                 alt: 2,
                 requires_full_context: true,
                 has_semantic_context: false,
+                diagnostic: Some(ParserAtnPredictionDiagnostic {
+                    kind: ParserAtnPredictionDiagnosticKind::ContextSensitivity,
+                    start_index: 0,
+                    sll_stop_index: 0,
+                    ll_stop_index: 1,
+                    conflicting_alts: vec![1, 2],
+                }),
             }
         );
         assert_eq!(input.index(), 0);

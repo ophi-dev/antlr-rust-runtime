@@ -1968,8 +1968,14 @@ fn render_generated_decision(
     }
     if allow_semantic_context {
         render_generated_semantic_prediction_filter(out, &pad, alts);
+        render_generated_decision_diagnostic_report(out, &pad, state, alts);
+    } else {
+        writeln!(
+            out,
+            "{pad}self.base.record_generated_prediction_diagnostic(atn(), {state}, &__prediction);"
+        )
+        .expect("writing to a string cannot fail");
     }
-    render_generated_decision_diagnostic_report(out, &pad, state, alts);
     writeln!(out, "{pad}match __prediction.alt {{").expect("writing to a string cannot fail");
     for (index, steps) in alts.iter().enumerate() {
         let alt = index + 1;
@@ -2372,6 +2378,11 @@ fn render_generated_star_loop(
         exit_alt,
         body,
     );
+    writeln!(
+        out,
+        "{pad}    self.base.record_generated_prediction_diagnostic(atn(), {state}, &__prediction);"
+    )
+    .expect("writing to a string cannot fail");
     writeln!(out, "{pad}    match __prediction.alt {{").expect("writing to a string cannot fail");
     writeln!(out, "{pad}        {enter_alt} => {{").expect("writing to a string cannot fail");
     render_generated_alt_number_assignment(
@@ -2462,7 +2473,7 @@ fn render_generated_left_recursive_loop(
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "{pad}            antlr4_runtime::ParserAtnPrediction {{ alt: {enter_alt}, requires_full_context: true, has_semantic_context: true }}"
+        "{pad}            antlr4_runtime::ParserAtnPrediction {{ alt: {enter_alt}, requires_full_context: true, has_semantic_context: true, diagnostic: None }}"
     )
     .expect("writing to a string cannot fail");
     writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
@@ -2473,7 +2484,7 @@ fn render_generated_left_recursive_loop(
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "{pad}            antlr4_runtime::ParserAtnPrediction {{ alt: {exit_alt}, requires_full_context: true, has_semantic_context: false }}"
+        "{pad}            antlr4_runtime::ParserAtnPrediction {{ alt: {exit_alt}, requires_full_context: true, has_semantic_context: false, diagnostic: None }}"
     )
     .expect("writing to a string cannot fail");
     writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
@@ -2490,6 +2501,11 @@ fn render_generated_left_recursive_loop(
         exit_alt,
         body,
     );
+    writeln!(
+        out,
+        "{pad}    self.base.record_generated_prediction_diagnostic(atn(), {state}, &__prediction);"
+    )
+    .expect("writing to a string cannot fail");
     writeln!(out, "{pad}    match __prediction.alt {{").expect("writing to a string cannot fail");
     writeln!(out, "{pad}        {enter_alt} => {{").expect("writing to a string cannot fail");
     writeln!(
@@ -7222,7 +7238,34 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
     }
 
     #[test]
-    fn generated_decision_reports_exact_ambiguity_diagnostics() {
+    fn generated_decision_records_adaptive_diagnostics() {
+        let alts = vec![vec![mt(1, 4)], vec![mt(2, 5)]];
+        let mut rendered = String::new();
+
+        render_generated_decision(
+            &mut rendered,
+            DecisionRender {
+                state: 16,
+                decision: 0,
+                track_alt_number: false,
+                allow_semantic_context: false,
+                force_context: false,
+                alts: &alts,
+            },
+            0,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            false,
+        );
+
+        assert!(
+            rendered.contains("record_generated_prediction_diagnostic(atn(), 16, &__prediction)")
+        );
+        assert!(!rendered.contains("__diagnostic_la"));
+    }
+
+    #[test]
+    fn generated_semantic_decision_reports_filtered_ambiguity_diagnostics() {
         let alts = vec![
             vec![mt(2, 4)],
             vec![mt(2, 5)],
