@@ -478,7 +478,7 @@ pub struct BaseParser<S> {
     prediction_diagnostics: Vec<ParserDiagnostic>,
     reported_prediction_diagnostics: BTreeSet<(usize, usize, String)>,
     generated_parser_diagnostics: Vec<ParserDiagnostic>,
-    generated_sync_expected: Option<BTreeSet<i32>>,
+    generated_sync_expected: Option<TokenBitSet>,
     int_members: BTreeMap<usize, i64>,
     rule_context_stack: Vec<RuleContextFrame>,
     pending_invoking_states: Vec<isize>,
@@ -498,6 +498,11 @@ pub struct BaseParser<S> {
     /// Keying on `state_number` and sharing the result through `Rc` removes
     /// repeated DFS plus per-call `BTreeSet` allocations.
     state_expected_cache: FxHashMap<usize, Rc<BTreeSet<i32>>>,
+    /// Same expected-symbol cache as a bitset for generated parser sync.
+    /// Successful parses only need `contains` and union; keeping that path out
+    /// of `BTreeSet` avoids tree allocation for every nullable loop/optional
+    /// check and defers deterministic formatting to diagnostics.
+    state_expected_token_cache: FxHashMap<usize, Rc<TokenBitSet>>,
     /// Per-state cache for whether a return state can finish its owning rule
     /// without consuming more input. Generated-parser sync uses this to walk
     /// parent prediction contexts for nullable exits without paying repeated
@@ -1039,6 +1044,35 @@ fn transition_expected_symbols(transition: &Transition, max_token_type: i32) -> 
     symbols
 }
 
+fn transition_expected_token_set(transition: &Transition, max_token_type: i32) -> TokenBitSet {
+    let mut symbols = TokenBitSet::default();
+    match transition {
+        Transition::Atom { label, .. } => {
+            symbols.insert(*label);
+        }
+        Transition::Range { start, stop, .. } => {
+            symbols.extend_range(*start, *stop);
+        }
+        Transition::Set { set, .. } => {
+            for (start, stop) in set.ranges() {
+                symbols.extend_range(*start, *stop);
+            }
+        }
+        Transition::NotSet { set, .. } => {
+            symbols.extend_iter((1..=max_token_type).filter(|symbol| !set.contains(*symbol)));
+        }
+        Transition::Wildcard { .. } => {
+            symbols.extend_range(1, max_token_type);
+        }
+        Transition::Epsilon { .. }
+        | Transition::Rule { .. }
+        | Transition::Predicate { .. }
+        | Transition::Action { .. }
+        | Transition::Precedence { .. } => {}
+    }
+    symbols
+}
+
 /// Returns the consuming-token expectations reachable from an ATN state through
 /// epsilon transitions. Recovery diagnostics need this closure so alternatives
 /// and loop exits report the same expectation set ANTLR users see.
@@ -1061,6 +1095,32 @@ fn state_expected_symbols(atn: &Atn, state_number: usize) -> BTreeSet<i32> {
                 }
             } else {
                 symbols.extend(transition_symbols);
+            }
+        }
+    }
+    symbols
+}
+
+fn state_expected_token_set(atn: &Atn, state_number: usize) -> TokenBitSet {
+    let mut symbols = TokenBitSet::default();
+    let mut stack = vec![state_number];
+    let mut visited = BTreeSet::new();
+    while let Some(current) = stack.pop() {
+        if !visited.insert(current) {
+            continue;
+        }
+        let Some(state) = atn.state(current) else {
+            continue;
+        };
+        for transition in &state.transitions {
+            let transition_symbols =
+                transition_expected_token_set(transition, atn.max_token_type());
+            if transition_symbols.is_empty() {
+                if transition.is_epsilon() {
+                    stack.push(transition.target());
+                }
+            } else {
+                symbols.extend_from(&transition_symbols);
             }
         }
     }
@@ -2186,6 +2246,7 @@ where
             invoked_predicates: Vec::new(),
             rule_first_set_cache: Vec::new(),
             state_expected_cache: FxHashMap::default(),
+            state_expected_token_cache: FxHashMap::default(),
             rule_stop_reach_cache: Vec::new(),
             recovery_symbols_intern: FxHashMap::default(),
             decision_lookahead_cache: FxHashMap::default(),
@@ -2562,10 +2623,10 @@ where
                 .with_position(current.line(), current.column());
             return Ok(vec![ParseTree::Error(ErrorNode::new(token))]);
         }
-        let mismatch_expected = self
-            .generated_sync_expected
-            .take()
-            .unwrap_or_else(|| expected_symbols.clone());
+        let mismatch_expected = self.generated_sync_expected.take().map_or_else(
+            || expected_symbols.clone(),
+            |symbols| symbols.to_btree_set(),
+        );
         let mismatch_expected_display = self.expected_symbols_display(&mismatch_expected);
         Err(AntlrError::ParserError {
             line: current.line(),
@@ -3069,24 +3130,24 @@ where
             has_expected_symbols |= !transition.symbols.is_empty();
             nullable |= transition.nullable;
         }
-        let context_expected = nullable.then(|| self.context_expected_symbols(atn));
+        let context_expected = nullable.then(|| self.context_expected_token_set(atn));
         if nullable {
             if context_expected
                 .as_ref()
-                .is_some_and(|expected| expected.contains(&symbol))
+                .is_some_and(|expected| expected.contains(symbol))
             {
                 return Ok(Vec::new());
             }
         }
-        if !has_expected_symbols && context_expected.as_ref().is_none_or(BTreeSet::is_empty) {
+        if !has_expected_symbols && context_expected.as_ref().is_none_or(TokenBitSet::is_empty) {
             return Ok(Vec::new());
         }
-        let mut expected = BTreeSet::new();
+        let mut expected = TokenBitSet::default();
         for transition in &entry.transitions {
-            transition.symbols.extend_btree_set(&mut expected);
+            expected.extend_from(&transition.symbols);
         }
         if let Some(context_expected) = context_expected {
-            expected.extend(context_expected);
+            expected.extend_from(&context_expected);
         }
         let can_delete_in_place =
             !(nullable && current_context_empty && self.rule_context_stack.len() > 1);
@@ -3104,14 +3165,15 @@ where
                     break;
                 }
                 let next_symbol = self.token_type_at(next);
-                if next_symbol != TOKEN_EOF && expected.contains(&next_symbol) {
+                if next_symbol != TOKEN_EOF && expected.contains(next_symbol) {
                     let current = self.input.lt(1).cloned();
+                    let expected_symbols = expected.to_btree_set();
                     let message = format!(
                         "extraneous input {} expecting {}",
                         current
                             .as_ref()
                             .map_or_else(|| "'<EOF>'".to_owned(), token_input_display),
-                        self.expected_symbols_display(&expected)
+                        self.expected_symbols_display(&expected_symbols)
                     );
                     self.generated_parser_diagnostics
                         .push(diagnostic_for_token(current.as_ref(), message));
@@ -3132,6 +3194,7 @@ where
             return Ok(Vec::new());
         }
         let current = self.input.lt(1).cloned();
+        let expected_symbols = expected.to_btree_set();
         Err(AntlrError::ParserError {
             line: current.as_ref().map(Token::line).unwrap_or_default(),
             column: current.as_ref().map(Token::column).unwrap_or_default(),
@@ -3140,7 +3203,7 @@ where
                 current
                     .as_ref()
                     .map_or_else(|| "'<EOF>'".to_owned(), token_input_display),
-                self.expected_symbols_display(&expected)
+                self.expected_symbols_display(&expected_symbols)
             ),
         })
     }
@@ -3180,6 +3243,13 @@ where
         expected
     }
 
+    fn context_expected_token_set(&mut self, atn: &Atn) -> TokenBitSet {
+        let context = self.prediction_context(atn);
+        let mut expected = TokenBitSet::default();
+        self.collect_context_expected_token_set(atn, &context, &mut expected);
+        expected
+    }
+
     fn collect_context_expected_symbols(
         &mut self,
         atn: &Atn,
@@ -3203,6 +3273,34 @@ where
                 && let Some(parent) = context.parent(index)
             {
                 self.collect_context_expected_symbols(atn, &parent, expected);
+            }
+        }
+    }
+
+    fn collect_context_expected_token_set(
+        &mut self,
+        atn: &Atn,
+        context: &Rc<PredictionContext>,
+        expected: &mut TokenBitSet,
+    ) {
+        if context.is_empty() {
+            expected.insert(TOKEN_EOF);
+            return;
+        }
+        for index in 0..context.len() {
+            let Some(return_state) = context.return_state(index) else {
+                continue;
+            };
+            if return_state == EMPTY_RETURN_STATE {
+                expected.insert(TOKEN_EOF);
+                continue;
+            }
+            let state_expected = self.cached_state_expected_token_set(atn, return_state);
+            expected.extend_from(&state_expected);
+            if self.cached_state_can_reach_rule_stop(atn, return_state)
+                && let Some(parent) = context.parent(index)
+            {
+                self.collect_context_expected_token_set(atn, &parent, expected);
             }
         }
     }
@@ -6155,6 +6253,20 @@ where
         self.state_expected_cache
             .insert(state_number, Rc::clone(&entry));
         entry
+    }
+
+    fn cached_state_expected_token_set(
+        &mut self,
+        atn: &Atn,
+        state_number: usize,
+    ) -> Rc<TokenBitSet> {
+        if let Some(cached) = self.state_expected_token_cache.get(&state_number) {
+            return Rc::clone(cached);
+        }
+        let symbols = Rc::new(state_expected_token_set(atn, state_number));
+        self.state_expected_token_cache
+            .insert(state_number, Rc::clone(&symbols));
+        symbols
     }
 
     fn cached_state_can_reach_rule_stop(&mut self, atn: &Atn, state_number: usize) -> bool {
