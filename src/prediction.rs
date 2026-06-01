@@ -85,9 +85,7 @@ pub enum PredictionContext {
 
 impl PredictionContext {
     pub fn empty() -> Rc<Self> {
-        Rc::new(Self::Empty {
-            cached_hash: prediction_context_empty_hash(),
-        })
+        EMPTY_PREDICTION_CONTEXT.with(Rc::clone)
     }
 
     pub fn singleton(parent: Rc<Self>, return_state: usize) -> Rc<Self> {
@@ -290,6 +288,12 @@ impl PartialEq for PredictionContext {
 
 impl Eq for PredictionContext {}
 
+thread_local! {
+    static EMPTY_PREDICTION_CONTEXT: Rc<PredictionContext> = Rc::new(PredictionContext::Empty {
+        cached_hash: prediction_context_empty_hash(),
+    });
+}
+
 impl Hash for PredictionContext {
     fn hash<H: Hasher>(&self, state: &mut H) {
         state.write_u64(self.cached_hash());
@@ -417,6 +421,110 @@ impl PredictionContextMergeCache {
             PredictionContextMergeKey::new(left, right),
             Rc::clone(merged),
         );
+    }
+}
+
+/// Shared canonical store for prediction-context graphs retained in DFA states.
+#[derive(Debug)]
+pub(crate) struct PredictionContextCache {
+    empty: Rc<PredictionContext>,
+    entries: FxHashMap<Rc<PredictionContext>, Rc<PredictionContext>>,
+}
+
+impl PredictionContextCache {
+    pub(crate) fn new() -> Self {
+        Self {
+            empty: PredictionContext::empty(),
+            entries: FxHashMap::default(),
+        }
+    }
+
+    pub(crate) fn get_cached_context(
+        &mut self,
+        context: &Rc<PredictionContext>,
+    ) -> Rc<PredictionContext> {
+        if context.is_empty() {
+            return Rc::clone(&self.empty);
+        }
+        if let Some(existing) = self.entries.get(context) {
+            return Rc::clone(existing);
+        }
+        let mut visited = FxHashMap::default();
+        self.get_cached_context_inner(context, &mut visited)
+    }
+
+    fn get_cached_context_inner(
+        &mut self,
+        context: &Rc<PredictionContext>,
+        visited: &mut FxHashMap<Rc<PredictionContext>, Rc<PredictionContext>>,
+    ) -> Rc<PredictionContext> {
+        if context.is_empty() {
+            return Rc::clone(&self.empty);
+        }
+        if let Some(existing) = visited.get(context) {
+            return Rc::clone(existing);
+        }
+        if let Some(existing) = self.entries.get(context) {
+            let existing = Rc::clone(existing);
+            visited.insert(Rc::clone(context), Rc::clone(&existing));
+            return existing;
+        }
+        let cached = match context.as_ref() {
+            PredictionContext::Empty { .. } => Rc::clone(&self.empty),
+            PredictionContext::Singleton {
+                parent,
+                return_state,
+                ..
+            } => {
+                let cached_parent = self.get_cached_context_inner(parent, visited);
+                if Rc::ptr_eq(parent, &cached_parent) {
+                    self.add(Rc::clone(context))
+                } else {
+                    self.add(PredictionContext::singleton(cached_parent, *return_state))
+                }
+            }
+            PredictionContext::Array {
+                parents,
+                return_states,
+                ..
+            } => {
+                let mut changed = false;
+                let mut cached_parents = Vec::with_capacity(parents.len());
+                for parent in parents {
+                    let cached_parent = self.get_cached_context_inner(parent, visited);
+                    changed |= !Rc::ptr_eq(parent, &cached_parent);
+                    cached_parents.push(cached_parent);
+                }
+                if changed {
+                    self.add(PredictionContext::array(
+                        cached_parents,
+                        return_states.clone(),
+                    ))
+                } else {
+                    self.add(Rc::clone(context))
+                }
+            }
+        };
+        visited.insert(Rc::clone(context), Rc::clone(&cached));
+        cached
+    }
+
+    fn add(&mut self, context: Rc<PredictionContext>) -> Rc<PredictionContext> {
+        if context.is_empty() {
+            return Rc::clone(&self.empty);
+        }
+        if let Some(existing) = self.entries.get(&context) {
+            return Rc::clone(existing);
+        }
+        self.entries
+            .insert(Rc::clone(&context), Rc::clone(&context));
+        context
+    }
+}
+
+impl Default for PredictionContextCache {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -595,10 +703,10 @@ impl AtnConfig {
     }
 }
 
-#[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Default)]
 pub struct AtnConfigSet {
     configs: Vec<AtnConfig>,
-    config_index: BTreeMap<AtnConfigKey, usize>,
+    config_index: FxHashMap<AtnConfigKey, usize>,
     full_context: bool,
     unique_alt: Option<usize>,
     conflicting_alts: BTreeSet<usize>,
@@ -612,10 +720,10 @@ impl AtnConfigSet {
         Self::default()
     }
 
-    pub const fn new_full_context(full_context: bool) -> Self {
+    pub fn new_full_context(full_context: bool) -> Self {
         Self {
             configs: Vec::new(),
-            config_index: BTreeMap::new(),
+            config_index: FxHashMap::default(),
             full_context,
             unique_alt: None,
             conflicting_alts: BTreeSet::new(),
@@ -687,6 +795,13 @@ impl AtnConfigSet {
         }
     }
 
+    pub(crate) fn optimize_contexts(&mut self, cache: &mut PredictionContextCache) {
+        assert!(!self.readonly, "cannot mutate readonly ATN config set");
+        for config in &mut self.configs {
+            config.context = cache.get_cached_context(&config.context);
+        }
+    }
+
     pub const fn is_readonly(&self) -> bool {
         self.readonly
     }
@@ -735,7 +850,37 @@ impl AtnConfigSet {
     }
 }
 
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+impl PartialEq for AtnConfigSet {
+    fn eq(&self, other: &Self) -> bool {
+        self.configs == other.configs
+            && self.full_context == other.full_context
+            && self.has_semantic_context == other.has_semantic_context
+            && self.dips_into_outer_context == other.dips_into_outer_context
+    }
+}
+
+impl Eq for AtnConfigSet {}
+
+impl Ord for AtnConfigSet {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.configs
+            .cmp(&other.configs)
+            .then_with(|| self.full_context.cmp(&other.full_context))
+            .then_with(|| self.has_semantic_context.cmp(&other.has_semantic_context))
+            .then_with(|| {
+                self.dips_into_outer_context
+                    .cmp(&other.dips_into_outer_context)
+            })
+    }
+}
+
+impl PartialOrd for AtnConfigSet {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 struct AtnConfigKey {
     state: usize,
     alt: usize,
@@ -907,5 +1052,36 @@ mod tests {
         let merged = PredictionContext::merge(left, right);
 
         assert_eq!(merged.len(), 2);
+    }
+
+    #[test]
+    fn prediction_context_cache_reuses_equal_context_graphs() {
+        let mut cache = PredictionContextCache::new();
+        let left_parent = PredictionContext::singleton(PredictionContext::empty(), 1);
+        let right_parent = PredictionContext::singleton(PredictionContext::empty(), 1);
+        let left = PredictionContext::singleton(left_parent, 42);
+        let right = PredictionContext::singleton(right_parent, 42);
+
+        let cached_left = cache.get_cached_context(&left);
+        let cached_right = cache.get_cached_context(&right);
+        let cached_left_parent = cached_left.parent(0).expect("singleton parent");
+        let cached_right_parent = cached_right.parent(0).expect("singleton parent");
+
+        assert!(Rc::ptr_eq(&cached_left, &cached_right));
+        assert!(Rc::ptr_eq(&cached_left_parent, &cached_right_parent));
+    }
+
+    #[test]
+    fn config_set_optimize_contexts_canonicalizes_contexts() {
+        let mut cache = PredictionContextCache::new();
+        let first = PredictionContext::singleton(PredictionContext::empty(), 7);
+        let second = PredictionContext::singleton(PredictionContext::empty(), 7);
+        let mut set = AtnConfigSet::new();
+        set.add(AtnConfig::new(1, 1, first));
+        set.add(AtnConfig::new(2, 2, second));
+
+        set.optimize_contexts(&mut cache);
+
+        assert!(Rc::ptr_eq(&set.configs[0].context, &set.configs[1].context));
     }
 }

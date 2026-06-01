@@ -2,9 +2,9 @@ use crate::atn::{Atn, AtnState, AtnStateKind, Transition};
 use crate::dfa::{Dfa, DfaState};
 use crate::int_stream::IntStream;
 use crate::prediction::{
-    AtnConfig, AtnConfigSet, EMPTY_RETURN_STATE, PredictionContext, PredictionContextMergeCache,
-    PredictionFxHasher, SemanticContext, has_sll_conflict_terminating_prediction,
-    resolves_to_just_one_viable_alt,
+    AtnConfig, AtnConfigSet, EMPTY_RETURN_STATE, PredictionContext, PredictionContextCache,
+    PredictionContextMergeCache, PredictionFxHasher, SemanticContext,
+    has_sll_conflict_terminating_prediction, resolves_to_just_one_viable_alt,
 };
 use crate::token::TOKEN_EOF;
 use std::cell::RefCell;
@@ -19,10 +19,13 @@ pub struct ParserAtnSimulator<'a> {
     atn: &'a Atn,
     decision_to_dfa: Vec<Dfa>,
     shared_cache_key: Option<usize>,
+    context_cache: Rc<RefCell<PredictionContextCache>>,
 }
 
 thread_local! {
     static SHARED_DECISION_DFAS: RefCell<HashMap<usize, Vec<Dfa>>> = RefCell::new(HashMap::new());
+    static SHARED_CONTEXT_CACHES: RefCell<HashMap<usize, Rc<RefCell<PredictionContextCache>>>> =
+        RefCell::new(HashMap::new());
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -207,6 +210,7 @@ impl<'a> ParserAtnSimulator<'a> {
             atn,
             decision_to_dfa: initial_decision_dfas(atn),
             shared_cache_key: None,
+            context_cache: Rc::new(RefCell::new(PredictionContextCache::new())),
         }
     }
 
@@ -223,10 +227,19 @@ impl<'a> ParserAtnSimulator<'a> {
         let decision_to_dfa = SHARED_DECISION_DFAS
             .with(|cache| cache.borrow().get(&key).cloned())
             .unwrap_or_else(|| initial_decision_dfas(atn));
+        let context_cache = SHARED_CONTEXT_CACHES.with(|cache| {
+            Rc::clone(
+                cache
+                    .borrow_mut()
+                    .entry(key)
+                    .or_insert_with(|| Rc::new(RefCell::new(PredictionContextCache::new()))),
+            )
+        });
         Self {
             atn,
             decision_to_dfa,
             shared_cache_key: Some(key),
+            context_cache,
         }
     }
 
@@ -543,7 +556,7 @@ impl<'a> ParserAtnSimulator<'a> {
             .state(decision_state)
             .ok_or(ParserAtnSimulatorError::MissingAtnState(decision_state))?;
         let configs = self.compute_start_state(decision_state, precedence, merge_cache);
-        let state_number = self.decision_to_dfa[decision].add_state(DfaState::new(configs));
+        let state_number = self.add_dfa_state(decision, DfaState::new(configs));
         if self.decision_to_dfa[decision].is_precedence_dfa() {
             let precedence_key = usize::try_from(precedence.max(0)).unwrap_or_default();
             self.decision_to_dfa[decision].set_precedence_start_state(precedence_key, state_number);
@@ -551,6 +564,21 @@ impl<'a> ParserAtnSimulator<'a> {
             self.decision_to_dfa[decision].set_start_state(state_number);
         }
         Ok(state_number)
+    }
+
+    fn add_dfa_state(&mut self, decision: usize, mut state: DfaState) -> usize {
+        if state.configs.is_readonly() {
+            return self.decision_to_dfa[decision].add_state(state);
+        }
+        if let Some(existing) =
+            self.decision_to_dfa[decision].state_number_for_configs(&state.configs)
+        {
+            return existing;
+        }
+        state
+            .configs
+            .optimize_contexts(&mut self.context_cache.borrow_mut());
+        self.decision_to_dfa[decision].insert_state(state)
     }
 
     fn compute_start_state(
@@ -688,7 +716,7 @@ impl<'a> ParserAtnSimulator<'a> {
             if let Some(prediction) = self.alt_that_finished_decision_entry_rule(configs) {
                 let mut dfa_state = DfaState::new(configs.clone());
                 dfa_state.mark_accept(prediction);
-                let target_state = self.decision_to_dfa[edge.decision].add_state(dfa_state);
+                let target_state = self.add_dfa_state(edge.decision, dfa_state);
                 if let Some(source) =
                     self.decision_to_dfa[edge.decision].state_mut(edge.source_state)
                 {
@@ -726,7 +754,7 @@ impl<'a> ParserAtnSimulator<'a> {
             dfa_state.requires_full_context = requires_full_context;
             dfa_state.conflicting_alts = conflicting_alts;
         }
-        let target_state = self.decision_to_dfa[edge.decision].add_state(dfa_state);
+        let target_state = self.add_dfa_state(edge.decision, dfa_state);
         if let Some(source) = self.decision_to_dfa[edge.decision].state_mut(edge.source_state) {
             source.add_edge(symbol, target_state);
         }

@@ -469,6 +469,13 @@ pub trait Parser: Recognizer {
 }
 
 #[derive(Debug)]
+struct CachedPredictionContext {
+    version: usize,
+    atn_key: usize,
+    context: Rc<PredictionContext>,
+}
+
+#[derive(Debug)]
 pub struct BaseParser<S> {
     input: CommonTokenStream<S>,
     data: RecognizerData,
@@ -481,6 +488,8 @@ pub struct BaseParser<S> {
     generated_sync_expected: Option<TokenBitSet>,
     int_members: BTreeMap<usize, i64>,
     rule_context_stack: Vec<RuleContextFrame>,
+    rule_context_version: usize,
+    prediction_context_cache: Option<CachedPredictionContext>,
     pending_invoking_states: Vec<isize>,
     precedence_stack: Vec<i32>,
     /// Predicate side effects are observable in a few target-template tests;
@@ -2241,6 +2250,8 @@ where
             generated_sync_expected: None,
             int_members: BTreeMap::new(),
             rule_context_stack: Vec::new(),
+            rule_context_version: 0,
+            prediction_context_cache: None,
             pending_invoking_states: Vec::new(),
             precedence_stack: vec![0],
             invoked_predicates: Vec::new(),
@@ -2730,6 +2741,7 @@ where
             rule_index,
             invoking_state,
         });
+        self.invalidate_prediction_context_cache();
         let start_index = self.current_visible_index();
         let mut context = ParserRuleContext::new(rule_index, invoking_state);
         if let Some(token) = self.token_at(start_index) {
@@ -2758,11 +2770,20 @@ where
     /// Exits the current generated parser rule.
     pub fn exit_rule(&mut self) {
         self.rule_context_stack.pop();
+        self.invalidate_prediction_context_cache();
     }
 
     /// Converts the active generated-parser rule stack into an ANTLR prediction
     /// context for full-context adaptive prediction.
-    pub fn prediction_context(&self, atn: &Atn) -> Rc<PredictionContext> {
+    pub fn prediction_context(&mut self, atn: &Atn) -> Rc<PredictionContext> {
+        let atn_ptr: *const Atn = atn;
+        let atn_key = atn_ptr as usize;
+        if let Some(cached) = &self.prediction_context_cache
+            && cached.version == self.rule_context_version
+            && cached.atn_key == atn_key
+        {
+            return Rc::clone(&cached.context);
+        }
         let mut context = PredictionContext::empty();
         for frame in self.rule_context_stack.iter().skip(1) {
             let Ok(state_number) = usize::try_from(frame.invoking_state) else {
@@ -2776,7 +2797,17 @@ where
             };
             context = PredictionContext::singleton(context, *follow_state);
         }
+        self.prediction_context_cache = Some(CachedPredictionContext {
+            version: self.rule_context_version,
+            atn_key,
+            context: Rc::clone(&context),
+        });
         context
+    }
+
+    fn invalidate_prediction_context_cache(&mut self) {
+        self.rule_context_version = self.rule_context_version.wrapping_add(1);
+        self.prediction_context_cache = None;
     }
 
     /// Adds a generated parser child only when parse-tree construction is
@@ -8522,6 +8553,34 @@ mod tests {
 
         assert!(expected.contains(&1));
         assert!(expected.contains(&TOKEN_EOF));
+    }
+
+    #[test]
+    fn prediction_context_reuses_cached_stack_until_rule_stack_changes() {
+        let atn = nested_nullable_context_atn();
+        let mut parser = mini_parser(vec![CommonToken::eof("parser-test", 1, 1, 1)]);
+        parser.rule_context_stack = vec![
+            RuleContextFrame {
+                rule_index: 0,
+                invoking_state: 0,
+            },
+            RuleContextFrame {
+                rule_index: 1,
+                invoking_state: 1,
+            },
+            RuleContextFrame {
+                rule_index: 2,
+                invoking_state: 2,
+            },
+        ];
+
+        let first = parser.prediction_context(&atn);
+        let second = parser.prediction_context(&atn);
+        assert!(Rc::ptr_eq(&first, &second));
+
+        parser.exit_rule();
+        let after_pop = parser.prediction_context(&atn);
+        assert!(!Rc::ptr_eq(&first, &after_pop));
     }
 
     #[test]

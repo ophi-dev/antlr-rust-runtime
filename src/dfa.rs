@@ -92,10 +92,14 @@ impl Dfa {
 
     /// Inserts a DFA state or returns the existing state number for an
     /// equivalent ATN configuration set.
-    pub fn add_state(&mut self, mut state: DfaState) -> usize {
-        if let Some(existing) = self.state_index.get(&state.configs) {
-            return *existing;
+    pub fn add_state(&mut self, state: DfaState) -> usize {
+        if let Some(existing) = self.state_number_for_configs(&state.configs) {
+            return existing;
         }
+        self.insert_state(state)
+    }
+
+    pub(crate) fn insert_state(&mut self, mut state: DfaState) -> usize {
         let state_number = self.states.len();
         state.state_number = state_number;
         state.ensure_edge_capacity(self.max_token_type);
@@ -104,6 +108,10 @@ impl Dfa {
         self.state_index.insert(state_key, state_number);
         self.states.push(state);
         state_number
+    }
+
+    pub(crate) fn state_number_for_configs(&self, configs: &AtnConfigSet) -> Option<usize> {
+        self.state_index.get(configs).copied()
     }
 
     pub fn state(&self, state_number: usize) -> Option<&DfaState> {
