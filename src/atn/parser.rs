@@ -7,7 +7,8 @@ use crate::prediction::{
     resolves_to_just_one_viable_alt,
 };
 use crate::token::TOKEN_EOF;
-use std::collections::HashSet;
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
 use std::hash::BuildHasherDefault;
 use std::rc::Rc;
 
@@ -17,6 +18,11 @@ type FxHashSet<T> = HashSet<T, BuildHasherDefault<PredictionFxHasher>>;
 pub struct ParserAtnSimulator<'a> {
     atn: &'a Atn,
     decision_to_dfa: Vec<Dfa>,
+    shared_cache_key: Option<usize>,
+}
+
+thread_local! {
+    static SHARED_DECISION_DFAS: RefCell<HashMap<usize, Vec<Dfa>>> = RefCell::new(HashMap::new());
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -144,27 +150,83 @@ impl IntStream for LookaheadIntStream {
     }
 }
 
+fn initial_decision_dfas(atn: &Atn) -> Vec<Dfa> {
+    atn.decision_to_state()
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(decision, state)| {
+            let mut dfa = Dfa::with_max_token_type(state, decision, atn.max_token_type());
+            if atn
+                .state(state)
+                .is_some_and(|state| state.precedence_rule_decision)
+            {
+                dfa.set_precedence_dfa(true);
+            }
+            dfa
+        })
+        .collect()
+}
+
+fn merge_shared_decision_dfas(shared: &mut Vec<Dfa>, local: &[Dfa]) {
+    if shared.len() != local.len() {
+        *shared = local.to_vec();
+        return;
+    }
+    for (shared_dfa, local_dfa) in shared.iter_mut().zip(local) {
+        // State numbers are stable for a DFA cloned from the shared cache and
+        // then extended locally. If this local DFA has at least as many states,
+        // it is a complete valid replacement for the shared one. If it is
+        // smaller, it may be a stale parser instance that predates another
+        // parser's cache update, so do not merge edges by numeric state id.
+        if local_dfa.states().len() >= shared_dfa.states().len() {
+            *shared_dfa = local_dfa.clone();
+        }
+    }
+}
+
+impl Drop for ParserAtnSimulator<'_> {
+    fn drop(&mut self) {
+        let Some(key) = self.shared_cache_key else {
+            return;
+        };
+        SHARED_DECISION_DFAS.with(|cache| {
+            let mut cache = cache.borrow_mut();
+            if let Some(shared) = cache.get_mut(&key) {
+                merge_shared_decision_dfas(shared, &self.decision_to_dfa);
+            } else {
+                cache.insert(key, self.decision_to_dfa.clone());
+            }
+        });
+    }
+}
+
 impl<'a> ParserAtnSimulator<'a> {
     pub fn new(atn: &'a Atn) -> Self {
-        let decision_to_dfa = atn
-            .decision_to_state()
-            .iter()
-            .copied()
-            .enumerate()
-            .map(|(decision, state)| {
-                let mut dfa = Dfa::with_max_token_type(state, decision, atn.max_token_type());
-                if atn
-                    .state(state)
-                    .is_some_and(|state| state.precedence_rule_decision)
-                {
-                    dfa.set_precedence_dfa(true);
-                }
-                dfa
-            })
-            .collect();
+        Self {
+            atn,
+            decision_to_dfa: initial_decision_dfas(atn),
+            shared_cache_key: None,
+        }
+    }
+
+    /// Creates a simulator that starts from, and publishes back into, a
+    /// thread-local DFA cache keyed by a generated parser's static ATN.
+    ///
+    /// Generated parsers usually create a fresh parser object per parse. Without
+    /// this cache every parse relearns the same adaptive DFA; with it, later
+    /// parser instances reuse the SLL cache learned by earlier instances while
+    /// still keeping mutable simulator state local to the parser during a parse.
+    pub fn new_shared(atn: &'static Atn) -> Self {
+        let ptr: *const Atn = atn;
+        let key = ptr as usize;
+        let decision_to_dfa = SHARED_DECISION_DFAS
+            .with(|cache| cache.borrow().get(&key).cloned())
+            .unwrap_or_else(|| initial_decision_dfas(atn));
         Self {
             atn,
             decision_to_dfa,
+            shared_cache_key: Some(key),
         }
     }
 
@@ -1076,6 +1138,19 @@ mod tests {
         let start = dfa.start_state().expect("start state");
         let after_first = dfa.state(start).and_then(|state| state.edge(1));
         assert!(after_first.is_some());
+    }
+
+    #[test]
+    fn shared_simulator_reuses_learned_dfa_states() {
+        let atn = Box::leak(Box::new(two_token_decision_atn()));
+        let learned_states = {
+            let mut simulator = ParserAtnSimulator::new_shared(atn);
+            assert_eq!(simulator.adaptive_predict(0, [1, 2]), Ok(1));
+            simulator.decision_dfas()[0].states().len()
+        };
+
+        let simulator = ParserAtnSimulator::new_shared(atn);
+        assert_eq!(simulator.decision_dfas()[0].states().len(), learned_states);
     }
 
     #[test]

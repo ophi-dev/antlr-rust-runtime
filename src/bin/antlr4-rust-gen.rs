@@ -2265,7 +2265,7 @@ fn render_generated_adaptive_prediction_with_indent(
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "{nested}let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new(atn()));"
+        "{nested}let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));"
     )
     .expect("writing to a string cannot fail");
     writeln!(
@@ -2298,7 +2298,7 @@ fn render_generated_sll_then_context_prediction_with_indent(
     writeln!(out, "{nested}let __prediction = {{").expect("writing to a string cannot fail");
     writeln!(
         out,
-        "{nested}    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new(atn()));"
+        "{nested}    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));"
     )
     .expect("writing to a string cannot fail");
     writeln!(
@@ -2455,7 +2455,7 @@ fn render_generated_left_recursive_loop(
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "{pad}        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new(atn()));"
+        "{pad}        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));"
     )
     .expect("writing to a string cannot fail");
     writeln!(
@@ -2945,7 +2945,7 @@ where
     #[allow(dead_code)]
     fn simulator(&mut self) -> &mut antlr4_runtime::ParserAtnSimulator<'static> {{
         self.simulator
-            .get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new(atn()))
+            .get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()))
     }}
 
     #[allow(dead_code)]
@@ -3040,7 +3040,7 @@ where
         if precedence == 0 && {adaptive_direct_allowed} && std::env::var_os("ANTLR4_RUST_ADAPTIVE_DIRECT").is_some() {{
             let simulator = self
                 .simulator
-                .get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new(atn()));
+                .get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
             self.base
                 .parse_atn_rule_adaptive_or_fallback(atn(), simulator, rule_index)
         }} else {{
