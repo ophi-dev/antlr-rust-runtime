@@ -554,6 +554,7 @@ struct GeneratedStepRenderContext<'a> {
     return_action_statements: &'a BTreeMap<usize, Vec<(String, i64)>>,
     track_alt_numbers: bool,
     direct_generated_rule_calls: &'a [bool],
+    atn_preferred_rule_calls: &'a [bool],
 }
 
 struct GeneratedParserCompileContext<'a> {
@@ -655,6 +656,149 @@ fn drop_rules_calling_disabled_rules(rules: &mut [Option<GeneratedParserRule>]) 
             return;
         };
         rules[rule_index] = None;
+    }
+}
+
+const ATN_PREFERRED_LEADING_CALL_CHAIN_MIN: usize = 8;
+
+fn generated_atn_preferred_rule_calls(
+    rules: &[Option<GeneratedParserRule>],
+    rule_names: &[String],
+) -> Vec<bool> {
+    let leading_rule_calls = rules
+        .iter()
+        .map(|rule| {
+            rule.as_ref()
+                .and_then(|rule| generated_steps_leading_mandatory_rule_call(&rule.steps))
+        })
+        .collect::<Vec<_>>();
+    let mut preferred = vec![false; rules.len()];
+
+    for start in 0..rules.len() {
+        if rules[start].is_none() {
+            continue;
+        }
+        let mut chain = Vec::new();
+        let mut seen = vec![false; rules.len()];
+        let mut current = start;
+
+        loop {
+            if current >= rules.len() || rules[current].is_none() || seen[current] {
+                break;
+            }
+            seen[current] = true;
+            chain.push(current);
+            let Some(next) = leading_rule_calls[current] else {
+                break;
+            };
+            current = next;
+        }
+
+        if chain.len() >= ATN_PREFERRED_LEADING_CALL_CHAIN_MIN
+            && generated_atn_preferred_chain_matches_rule_names(&chain, rule_names)
+        {
+            for rule_index in chain {
+                preferred[rule_index] = true;
+            }
+        }
+    }
+
+    preferred
+}
+
+fn generated_atn_preferred_chain_matches_rule_names(
+    chain: &[usize],
+    rule_names: &[String],
+) -> bool {
+    if rule_names.is_empty() {
+        return true;
+    }
+    // The structural chain alone also matches C#, where interpreted parsing is
+    // pathologically slower on the WPF fixture; keep this targeted to the
+    // Kotlin ladder until we have a real per-chain cost model.
+    chain.iter().any(|rule_index| {
+        rule_names
+            .get(*rule_index)
+            .is_some_and(|name| matches_kotlin_expression_ladder_name(name))
+    })
+}
+
+fn matches_kotlin_expression_ladder_name(name: &str) -> bool {
+    matches!(
+        name,
+        "disjunction"
+            | "conjunction"
+            | "equalityComparison"
+            | "comparison"
+            | "namedInfix"
+            | "elvisExpression"
+            | "infixFunctionCall"
+            | "rangeExpression"
+            | "additiveExpression"
+            | "multiplicativeExpression"
+            | "prefixUnaryExpression"
+            | "postfixUnaryExpression"
+    )
+}
+
+fn generated_steps_leading_mandatory_rule_call(steps: &[GeneratedParserStep]) -> Option<usize> {
+    for step in steps {
+        match step {
+            GeneratedParserStep::CallRule { rule_index, .. } => return Some(*rule_index),
+            GeneratedParserStep::Decision { alts, .. } if generated_alts_are_nullable(alts) => {}
+            GeneratedParserStep::Decision { alts, .. } => {
+                return generated_alts_common_leading_mandatory_rule_call(alts);
+            }
+            GeneratedParserStep::StarLoop { .. }
+            | GeneratedParserStep::LeftRecursiveLoop { .. }
+            | GeneratedParserStep::Precedence(_)
+            | GeneratedParserStep::Predicate { .. }
+            | GeneratedParserStep::Action { .. } => {}
+            GeneratedParserStep::MatchToken { .. }
+            | GeneratedParserStep::MatchSet { .. }
+            | GeneratedParserStep::MatchNotSet { .. }
+            | GeneratedParserStep::MatchWildcard => return None,
+        }
+    }
+    None
+}
+
+fn generated_alts_common_leading_mandatory_rule_call(
+    alts: &[Vec<GeneratedParserStep>],
+) -> Option<usize> {
+    let mut common = None;
+    for alt in alts {
+        let rule_index = generated_steps_leading_mandatory_rule_call(alt)?;
+        match common {
+            Some(common_rule_index) if common_rule_index != rule_index => return None,
+            Some(_) => {}
+            None => common = Some(rule_index),
+        }
+    }
+    common
+}
+
+fn generated_alts_are_nullable(alts: &[Vec<GeneratedParserStep>]) -> bool {
+    alts.iter().any(|alt| generated_steps_are_nullable(alt))
+}
+
+fn generated_steps_are_nullable(steps: &[GeneratedParserStep]) -> bool {
+    steps.iter().all(generated_step_is_nullable)
+}
+
+fn generated_step_is_nullable(step: &GeneratedParserStep) -> bool {
+    match step {
+        GeneratedParserStep::Precedence(_)
+        | GeneratedParserStep::Predicate { .. }
+        | GeneratedParserStep::Action { .. }
+        | GeneratedParserStep::StarLoop { .. }
+        | GeneratedParserStep::LeftRecursiveLoop { .. } => true,
+        GeneratedParserStep::Decision { alts, .. } => generated_alts_are_nullable(alts),
+        GeneratedParserStep::MatchToken { .. }
+        | GeneratedParserStep::MatchSet { .. }
+        | GeneratedParserStep::MatchNotSet { .. }
+        | GeneratedParserStep::MatchWildcard
+        | GeneratedParserStep::CallRule { .. } => false,
     }
 }
 
@@ -1614,9 +1758,31 @@ fn compile_generated_parser_transition(
     }
 }
 
+#[cfg(test)]
 fn render_generated_rule_dispatch(
     rules: &[Option<GeneratedParserRule>],
     direct_generated_rule_calls: &[bool],
+    inline_action_statements: &BTreeMap<usize, String>,
+    init_action_statements: &BTreeMap<usize, String>,
+    return_action_statements: &BTreeMap<usize, Vec<(String, i64)>>,
+    track_alt_numbers: bool,
+) -> String {
+    render_generated_rule_dispatch_with_rule_names(
+        rules,
+        direct_generated_rule_calls,
+        &[],
+        inline_action_statements,
+        init_action_statements,
+        return_action_statements,
+        track_alt_numbers,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_generated_rule_dispatch_with_rule_names(
+    rules: &[Option<GeneratedParserRule>],
+    direct_generated_rule_calls: &[bool],
+    rule_names: &[String],
     inline_action_statements: &BTreeMap<usize, String>,
     init_action_statements: &BTreeMap<usize, String>,
     return_action_statements: &BTreeMap<usize, Vec<(String, i64)>>,
@@ -1642,11 +1808,13 @@ fn render_generated_rule_dispatch(
     writeln!(out, "            _ => None,").expect("writing to a string cannot fail");
     writeln!(out, "        }}").expect("writing to a string cannot fail");
     writeln!(out, "    }}").expect("writing to a string cannot fail");
+    let atn_preferred_rule_calls = generated_atn_preferred_rule_calls(rules, rule_names);
     let step_render_context = GeneratedStepRenderContext {
         inline_action_statements,
         return_action_statements,
         track_alt_numbers,
         direct_generated_rule_calls,
+        atn_preferred_rule_calls: &atn_preferred_rule_calls,
     };
     for rule in rules.iter().flatten() {
         let index = rule.rule_index;
@@ -2082,7 +2250,7 @@ fn render_generated_step(
                 GeneratedRuleCallPrecedence::Literal(value) => value.to_string(),
                 GeneratedRuleCallPrecedence::InheritLocal => "__precedence".to_owned(),
             };
-            let child_call = if render_context
+            let generated_child_call = if render_context
                 .direct_generated_rule_calls
                 .get(*rule_index)
                 .copied()
@@ -2093,6 +2261,18 @@ fn render_generated_step(
                 )
             } else {
                 format!("self.parse_rule_precedence_from_generated({rule_index}, {precedence})")
+            };
+            let child_call = if render_context
+                .atn_preferred_rule_calls
+                .get(*rule_index)
+                .copied()
+                .unwrap_or_default()
+            {
+                format!(
+                    "if self.generated_only() {{ {generated_child_call} }} else {{ self.parse_interpreted_rule_precedence({rule_index}, {precedence}) }}"
+                )
+            } else {
+                generated_child_call
             };
             writeln!(out, "{pad}let __child = {child_call};")
                 .expect("writing to a string cannot fail");
@@ -3169,9 +3349,10 @@ fn render_parser_with_options(
         .enumerate()
         .map(|(index, rule)| rule.is_some() && after_actions.get(index).is_none_or(Vec::is_empty))
         .collect::<Vec<_>>();
-    let generated_rule_dispatch = render_generated_rule_dispatch(
+    let generated_rule_dispatch = render_generated_rule_dispatch_with_rule_names(
         &generated_rules,
         &direct_generated_rule_calls,
+        &data.rule_names,
         &inline_action_statements,
         &init_action_statements,
         &generated_return_action_statements(&return_actions),
@@ -3251,6 +3432,7 @@ where
     base: BaseParser<S>,
     simulator: Option<antlr4_runtime::ParserAtnSimulator<'static>>,
     generated_actions: Vec<GeneratedAction>,
+    generated_only: bool,
 }}
 
 #[allow(dead_code)]
@@ -3290,7 +3472,12 @@ where
             .with_channel_names(metadata.channel_names().iter().copied())
             .with_mode_names(metadata.mode_names().iter().copied());
 {base_initialization}
-        Self {{ base, simulator: None, generated_actions: Vec::new() }}
+        Self {{
+            base,
+            simulator: None,
+            generated_actions: Vec::new(),
+            generated_only: std::env::var_os("ANTLR4_RUST_GENERATED_ONLY").is_some(),
+        }}
     }}
 
     pub fn metadata() -> &'static GrammarMetadata {{
@@ -3304,8 +3491,8 @@ where
     }}
 
     #[allow(dead_code)]
-    fn generated_only() -> bool {{
-        std::env::var_os("ANTLR4_RUST_GENERATED_ONLY").is_some()
+    fn generated_only(&self) -> bool {{
+        self.generated_only
     }}
 
     #[allow(dead_code)]
@@ -3340,7 +3527,7 @@ where
         let __rule_start = antlr4_runtime::IntStream::index(self.base.input());
         let __generated_action_marker = self.generated_actions.len();
         let __generated_member_checkpoint = self.base.int_members_checkpoint();
-        let __generated_only = Self::generated_only();
+        let __generated_only = self.generated_only();
         let __after_start_index = if Self::has_after_actions(rule_index) {{
             Some(__rule_start)
         }} else {{
@@ -6752,6 +6939,23 @@ atn:
         }
     }
 
+    fn cr(rule_index: usize) -> GeneratedParserStep {
+        GeneratedParserStep::CallRule {
+            source_state: 100 + rule_index,
+            rule_index,
+            precedence: GeneratedRuleCallPrecedence::Literal(0),
+        }
+    }
+
+    fn test_rule(rule_index: usize, steps: Vec<GeneratedParserStep>) -> GeneratedParserRule {
+        GeneratedParserRule {
+            rule_index,
+            entry_state: rule_index * 2,
+            left_recursive: false,
+            steps,
+        }
+    }
+
     #[test]
     fn compiles_linear_parser_rule_body() {
         let atn = linear_rule_atn();
@@ -7033,6 +7237,131 @@ atn:
         assert!(rules[0].is_none());
         assert!(rules[1].is_none());
         assert!(rules[2].is_some());
+    }
+
+    #[test]
+    fn classifies_long_leading_call_chains_as_atn_preferred() {
+        let mut rules = (0..ATN_PREFERRED_LEADING_CALL_CHAIN_MIN)
+            .map(|rule_index| {
+                let steps = if rule_index + 1 == ATN_PREFERRED_LEADING_CALL_CHAIN_MIN {
+                    vec![mt(1, 0)]
+                } else if rule_index == 0 {
+                    vec![
+                        GeneratedParserStep::StarLoop {
+                            state: 1,
+                            decision: 0,
+                            enter_alt: 1,
+                            exit_alt: 2,
+                            track_alt_number: false,
+                            allow_semantic_context: false,
+                            force_context: false,
+                            fast_path: None,
+                            body: vec![mt(2, 0)],
+                        },
+                        cr(rule_index + 1),
+                    ]
+                } else {
+                    vec![cr(rule_index + 1)]
+                };
+                Some(test_rule(rule_index, steps))
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            generated_atn_preferred_rule_calls(&rules, &[]),
+            vec![true; ATN_PREFERRED_LEADING_CALL_CHAIN_MIN]
+        );
+
+        rules.truncate(ATN_PREFERRED_LEADING_CALL_CHAIN_MIN - 1);
+        assert_eq!(
+            generated_atn_preferred_rule_calls(&rules, &[]),
+            vec![false; ATN_PREFERRED_LEADING_CALL_CHAIN_MIN - 1]
+        );
+    }
+
+    #[test]
+    fn atn_preferred_rule_calls_require_kotlin_ladder_names_when_available() {
+        let rules = (0..ATN_PREFERRED_LEADING_CALL_CHAIN_MIN)
+            .map(|rule_index| {
+                let steps = if rule_index + 1 == ATN_PREFERRED_LEADING_CALL_CHAIN_MIN {
+                    vec![mt(1, 0)]
+                } else {
+                    vec![cr(rule_index + 1)]
+                };
+                Some(test_rule(rule_index, steps))
+            })
+            .collect::<Vec<_>>();
+        let csharp_names = [
+            "conditional_expression",
+            "null_coalescing_expression",
+            "conditional_or_expression",
+            "conditional_and_expression",
+            "inclusive_or_expression",
+            "exclusive_or_expression",
+            "and_expression",
+            "equality_expression",
+        ]
+        .map(str::to_owned);
+        let kotlin_names = [
+            "expression",
+            "disjunction",
+            "conjunction",
+            "equalityComparison",
+            "comparison",
+            "namedInfix",
+            "elvisExpression",
+            "infixFunctionCall",
+        ]
+        .map(str::to_owned);
+
+        assert_eq!(
+            generated_atn_preferred_rule_calls(&rules, &csharp_names),
+            vec![false; ATN_PREFERRED_LEADING_CALL_CHAIN_MIN]
+        );
+        assert_eq!(
+            generated_atn_preferred_rule_calls(&rules, &kotlin_names),
+            vec![true; ATN_PREFERRED_LEADING_CALL_CHAIN_MIN]
+        );
+    }
+
+    #[test]
+    fn renders_atn_preferred_generated_child_calls_as_interpreted_by_default() {
+        let rules = (0..ATN_PREFERRED_LEADING_CALL_CHAIN_MIN)
+            .map(|rule_index| {
+                let steps = if rule_index + 1 == ATN_PREFERRED_LEADING_CALL_CHAIN_MIN {
+                    vec![mt(1, 0)]
+                } else {
+                    vec![cr(rule_index + 1)]
+                };
+                Some(test_rule(rule_index, steps))
+            })
+            .collect::<Vec<_>>();
+        let direct_generated_rule_calls = vec![true; rules.len()];
+        let rule_names = [
+            "expression",
+            "disjunction",
+            "conjunction",
+            "equalityComparison",
+            "comparison",
+            "namedInfix",
+            "elvisExpression",
+            "infixFunctionCall",
+        ]
+        .map(str::to_owned);
+
+        let rendered = render_generated_rule_dispatch_with_rule_names(
+            &rules,
+            &direct_generated_rule_calls,
+            &rule_names,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            false,
+        );
+
+        assert!(rendered.contains(
+            "if self.generated_only() { self.parse_generated_rule_1_dispatch(0, false).map_err(GeneratedRuleError::into_error) } else { self.parse_interpreted_rule_precedence(1, 0) }"
+        ));
     }
 
     #[test]
@@ -7356,6 +7685,7 @@ atn:
                 return_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 direct_generated_rule_calls: &[],
+                atn_preferred_rule_calls: &[],
             },
         );
 
@@ -7480,7 +7810,7 @@ s : ;
             render_parser("TParser", &minimal_parser_data(), None).expect("parser should render");
 
         assert!(rendered.contains("ANTLR4_RUST_GENERATED_ONLY"));
-        assert!(rendered.contains("let __generated_only = Self::generated_only();"));
+        assert!(rendered.contains("let __generated_only = self.generated_only();"));
         assert!(!rendered.contains("GeneratedRuleError::Recoverable"));
         assert!(rendered.contains("generated parser did not emit rule {}"));
     }
@@ -7587,6 +7917,7 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
                 return_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 direct_generated_rule_calls: &[],
+                atn_preferred_rule_calls: &[],
             },
         );
 
@@ -7633,6 +7964,7 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
                 return_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 direct_generated_rule_calls: &[],
+                atn_preferred_rule_calls: &[],
             },
         );
 
@@ -7673,6 +8005,7 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
                 return_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 direct_generated_rule_calls: &[],
+                atn_preferred_rule_calls: &[],
             },
         );
 
@@ -7714,6 +8047,7 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
                 return_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 direct_generated_rule_calls: &[],
+                atn_preferred_rule_calls: &[],
             },
         );
 
@@ -7756,6 +8090,7 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
                 return_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 direct_generated_rule_calls: &[],
+                atn_preferred_rule_calls: &[],
             },
         );
 
@@ -7810,6 +8145,7 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
                 return_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 direct_generated_rule_calls: &[],
+                atn_preferred_rule_calls: &[],
             },
         );
 
