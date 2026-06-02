@@ -1,7 +1,7 @@
 # Parse Benchmark
 
 This benchmark compares parse throughput for generated ANTLR parsers and
-tree-sitter parsers on Kotlin and C# fixtures.
+tree-sitter parsers on Kotlin, C#, and Java fixtures.
 
 The harness is intentionally a standalone script instead of `cargo bench`.
 `cargo bench` is useful for in-process Rust-only measurements, but this check
@@ -17,10 +17,11 @@ The benchmark defaults to:
 - `ANTLR4_JAR=/tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar`
 - `GRAMMARS_V4=/tmp/antlr-cleanroom/grammars-v4`
 
-For C#, the sparse checkout must include `csharp/v7` in addition to Kotlin:
+The sparse checkout must include C# and the modern Java grammar in addition to
+Kotlin:
 
 ```bash
-git -C /tmp/antlr-cleanroom/grammars-v4 sparse-checkout set kotlin/kotlin csharp/v7
+git -C /tmp/antlr-cleanroom/grammars-v4 sparse-checkout set kotlin/kotlin csharp/v7 java/java
 ```
 
 Install the Python dependencies in the interpreter you will use to run the
@@ -85,3 +86,4 @@ stress patterns:
 
 - Kotlin: JetBrains Kotlin, kotlinx.coroutines, Ktor.
 - C#: dotnet/wpf, Mono.
+- Java: Mojang DataFixerUpper, Bazel, OpenRewrite, Trino.

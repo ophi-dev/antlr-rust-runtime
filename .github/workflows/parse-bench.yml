@@ -65,7 +65,7 @@ jobs:
           git -C /tmp/antlr-cleanroom/grammars-v4 init -q
           git -C /tmp/antlr-cleanroom/grammars-v4 remote add origin https://github.com/antlr/grammars-v4.git
           git -C /tmp/antlr-cleanroom/grammars-v4 sparse-checkout init --cone
-          git -C /tmp/antlr-cleanroom/grammars-v4 sparse-checkout set kotlin/kotlin csharp/v7
+          git -C /tmp/antlr-cleanroom/grammars-v4 sparse-checkout set kotlin/kotlin csharp/v7 java/java
           git -C /tmp/antlr-cleanroom/grammars-v4 fetch --depth 1 origin 284602b3f23ca54dc30778204ab7ae9e969145e9
           git -C /tmp/antlr-cleanroom/grammars-v4 checkout FETCH_HEAD
 

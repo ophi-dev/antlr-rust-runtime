@@ -673,6 +673,7 @@ fn generated_atn_preferred_rule_calls(
         })
         .collect::<Vec<_>>();
     let mut preferred = vec![false; rules.len()];
+    let kotlin_rule_set = is_kotlin_rule_set(rule_names);
 
     for start in 0..rules.len() {
         if rules[start].is_none() {
@@ -702,8 +703,24 @@ fn generated_atn_preferred_rule_calls(
             }
         }
     }
+    if kotlin_rule_set {
+        for (rule_index, name) in rule_names.iter().enumerate() {
+            if matches_kotlin_atn_preferred_rule_name(name) && rule_index < preferred.len() {
+                preferred[rule_index] = true;
+            }
+        }
+    }
 
     preferred
+}
+
+fn is_kotlin_rule_set(rule_names: &[String]) -> bool {
+    rule_names.iter().any(|name| name == "kotlinFile")
+        && rule_names.iter().any(|name| name == "blockLevelExpression")
+}
+
+fn matches_kotlin_atn_preferred_rule_name(name: &str) -> bool {
+    matches!(name, "kotlinFile" | "statements" | "statement")
 }
 
 fn generated_atn_preferred_chain_matches_rule_names(
@@ -1789,6 +1806,7 @@ fn render_generated_rule_dispatch_with_rule_names(
     track_alt_numbers: bool,
 ) -> String {
     let mut out = String::new();
+    let atn_preferred_rule_calls = generated_atn_preferred_rule_calls(rules, rule_names);
     writeln!(
         out,
         "    #[allow(dead_code)]\n    fn parse_generated_rule(&mut self, rule_index: usize, precedence: i32, allow_fallback: bool) -> Option<Result<antlr4_runtime::ParseTree, GeneratedRuleError>> {{"
@@ -1799,16 +1817,27 @@ fn render_generated_rule_dispatch_with_rule_names(
     writeln!(out, "        match rule_index {{").expect("writing to a string cannot fail");
     for rule in rules.iter().flatten() {
         let index = rule.rule_index;
-        writeln!(
-            out,
-            "            {index} => Some(self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback)),"
-        )
-        .expect("writing to a string cannot fail");
+        if atn_preferred_rule_calls
+            .get(index)
+            .copied()
+            .unwrap_or_default()
+        {
+            writeln!(
+                out,
+                "            {index} if self.generated_only() => Some(self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback)),"
+            )
+            .expect("writing to a string cannot fail");
+        } else {
+            writeln!(
+                out,
+                "            {index} => Some(self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback)),"
+            )
+            .expect("writing to a string cannot fail");
+        }
     }
     writeln!(out, "            _ => None,").expect("writing to a string cannot fail");
     writeln!(out, "        }}").expect("writing to a string cannot fail");
     writeln!(out, "    }}").expect("writing to a string cannot fail");
-    let atn_preferred_rule_calls = generated_atn_preferred_rule_calls(rules, rule_names);
     let step_render_context = GeneratedStepRenderContext {
         inline_action_statements,
         return_action_statements,
@@ -7325,6 +7354,39 @@ atn:
     }
 
     #[test]
+    fn atn_preferred_rule_calls_mark_only_kotlin_root_and_statement_rules_by_name() {
+        let rules = vec![
+            Some(test_rule(0, vec![mt(1, 0)])),
+            Some(test_rule(1, vec![mt(1, 0)])),
+            Some(test_rule(2, vec![mt(1, 0)])),
+            Some(test_rule(3, vec![mt(1, 0)])),
+        ];
+        let kotlin_names = [
+            "kotlinFile",
+            "blockLevelExpression",
+            "statements",
+            "statement",
+        ]
+        .map(str::to_owned);
+        let csharp_like_names = [
+            "compilation_unit",
+            "block_level_expression",
+            "statements",
+            "statement",
+        ]
+        .map(str::to_owned);
+
+        assert_eq!(
+            generated_atn_preferred_rule_calls(&rules, &kotlin_names),
+            vec![true, false, true, true]
+        );
+        assert_eq!(
+            generated_atn_preferred_rule_calls(&rules, &csharp_like_names),
+            vec![false; 4]
+        );
+    }
+
+    #[test]
     fn renders_atn_preferred_generated_child_calls_as_interpreted_by_default() {
         let rules = (0..ATN_PREFERRED_LEADING_CALL_CHAIN_MIN)
             .map(|rule_index| {
@@ -7361,6 +7423,44 @@ atn:
 
         assert!(rendered.contains(
             "if self.generated_only() { self.parse_generated_rule_1_dispatch(0, false).map_err(GeneratedRuleError::into_error) } else { self.parse_interpreted_rule_precedence(1, 0) }"
+        ));
+    }
+
+    #[test]
+    fn renders_atn_preferred_dispatch_only_for_generated_only_mode() {
+        let rules = vec![
+            Some(test_rule(0, vec![cr(2)])),
+            Some(test_rule(1, vec![mt(1, 0)])),
+            Some(test_rule(2, vec![mt(1, 0)])),
+            Some(test_rule(3, vec![mt(1, 0)])),
+        ];
+        let direct_generated_rule_calls = vec![true; rules.len()];
+        let rule_names = [
+            "kotlinFile",
+            "blockLevelExpression",
+            "statements",
+            "statement",
+        ]
+        .map(str::to_owned);
+
+        let rendered = render_generated_rule_dispatch_with_rule_names(
+            &rules,
+            &direct_generated_rule_calls,
+            &rule_names,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            false,
+        );
+
+        assert!(rendered.contains(
+            "0 if self.generated_only() => Some(self.parse_generated_rule_0_dispatch(precedence, allow_fallback))"
+        ));
+        assert!(!rendered.contains(
+            "0 => Some(self.parse_generated_rule_0_dispatch(precedence, allow_fallback))"
+        ));
+        assert!(rendered.contains(
+            "if self.generated_only() { self.parse_generated_rule_2_dispatch(0, false).map_err(GeneratedRuleError::into_error) } else { self.parse_interpreted_rule_precedence(2, 0) }"
         ));
     }
 

@@ -84,6 +84,21 @@ LANGUAGES: dict[str, LanguageSpec] = {
             Path("csharp/v7/Go/CSharpParserBase.go"),
         ),
     ),
+    "java": LanguageSpec(
+        name="java",
+        grammar_rel=Path("java/java"),
+        grammar_files=("JavaLexer.g4", "JavaParser.g4"),
+        lexer_name="JavaLexer",
+        parser_name="JavaParser",
+        rust_lexer_module="java_lexer",
+        rust_parser_module="java_parser",
+        rust_lexer_type="JavaLexer",
+        rust_parser_type="JavaParser",
+        rust_entry="compilation_unit",
+        python_entry="compilationUnit",
+        go_entry="CompilationUnit",
+        tree_sitter_name="java",
+    ),
 }
 
 RUNTIMES = ("rust-antlr", "python-antlr", "go-antlr", "tree-sitter")
@@ -220,6 +235,23 @@ def transform_go_lexer_actions(grammar: str) -> str:
         flags=re.DOTALL,
     )
     return grammar.replace("this.", "l.")
+
+
+def transform_java(grammar_dir: Path) -> None:
+    parser = grammar_dir / "JavaParser.g4"
+    text = parser.read_text()
+    text = text.replace("    superClass = JavaParserBase;\n", "")
+    text = re.sub(
+        r"annotationFieldValue:\s*\{ this\.IsNotIdentifierAssign\(\) \}\? annotationValue\s*\|\s*identifier '=' annotationValue\s*;",
+        "annotationFieldValue:\n    identifier '=' annotationValue\n    | annotationValue\n    ;",
+        text,
+        flags=re.MULTILINE,
+    )
+    text = text.replace(
+        "recordComponent (',' recordComponent)* { this.DoLastRecordComponent() }?",
+        "recordComponent (',' recordComponent)*",
+    )
+    parser.write_text(text)
 
 
 def generate_antlr(
@@ -756,6 +788,8 @@ def prepare_work(
         if "rust-antlr" in runtimes:
             base_grammar = work_dir / "grammars" / spec.name / "base"
             copy_grammar(spec, args.grammars_v4, base_grammar)
+            if spec.name == "java":
+                transform_java(base_grammar)
             interp_dir = work_dir / "generated" / spec.name / "interp"
             generate_antlr(args.antlr_jar, spec, base_grammar, interp_dir, None)
             generate_rust_modules(
@@ -771,6 +805,8 @@ def prepare_work(
             copy_grammar(spec, args.grammars_v4, py_grammar)
             if spec.name == "csharp":
                 transform_csharp_python(py_grammar)
+            if spec.name == "java":
+                transform_java(py_grammar)
             py_lang_gen = py_gen
             generate_antlr(args.antlr_jar, spec, py_grammar, py_lang_gen, "Python3")
             prepare_python_support(spec, args.grammars_v4, py_lang_gen)
@@ -780,6 +816,8 @@ def prepare_work(
             copy_grammar(spec, args.grammars_v4, go_grammar)
             if spec.name == "csharp":
                 transform_csharp_go(go_grammar)
+            if spec.name == "java":
+                transform_java(go_grammar)
             go_gen = work_dir / "generated" / spec.name / "go"
             package_name = go_package_name(spec)
             generate_antlr(args.antlr_jar, spec, go_grammar, go_gen, "Go", package_name)
@@ -996,7 +1034,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--work-dir", type=Path, default=ROOT / "target" / "parse-bench")
     parser.add_argument("--python", default=os.environ.get("PYTHON", sys.executable))
-    parser.add_argument("--languages", default="kotlin,csharp")
+    parser.add_argument("--languages", default="kotlin,csharp,java")
     parser.add_argument("--runtimes", default="rust-antlr,python-antlr,go-antlr,tree-sitter")
     parser.add_argument("--iters", type=int, default=10)
     parser.add_argument("--warmups", type=int, default=2)
