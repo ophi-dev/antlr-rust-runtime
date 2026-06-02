@@ -172,18 +172,28 @@ impl PredictionContext {
         root_is_wildcard: bool,
         mut cache: Option<&mut PredictionContextMergeCache>,
     ) -> Rc<Self> {
+        #[cfg(feature = "perf-counters")]
+        crate::perf::record_context_merge_call();
         if left == right {
+            #[cfg(feature = "perf-counters")]
+            crate::perf::record_context_merge_identical();
             return left;
         }
         if let Some(cache) = cache.as_deref_mut() {
             if let Some(merged) = cache.get(&left, &right) {
+                #[cfg(feature = "perf-counters")]
+                crate::perf::record_context_merge_cache_hit();
                 return merged;
             }
+            #[cfg(feature = "perf-counters")]
+            crate::perf::record_context_merge_cache_miss();
         }
         let merged = if root_is_wildcard && (left.is_empty() || right.is_empty()) {
             Self::empty()
         } else {
-            merge_contexts_uncached(Rc::clone(&left), Rc::clone(&right))
+            #[cfg(feature = "perf-counters")]
+            crate::perf::record_context_merge_uncached();
+            merge_contexts_uncached(&left, &right)
         };
         if let Some(cache) = cache {
             cache.insert(&left, &right, &merged);
@@ -193,58 +203,299 @@ impl PredictionContext {
 }
 
 fn merge_contexts_uncached(
-    left: Rc<PredictionContext>,
-    right: Rc<PredictionContext>,
+    left: &Rc<PredictionContext>,
+    right: &Rc<PredictionContext>,
 ) -> Rc<PredictionContext> {
     if left == right {
-        return left;
+        return Rc::clone(left);
     }
     match (left.as_ref(), right.as_ref()) {
         (PredictionContext::Empty { .. }, PredictionContext::Empty { .. }) => {
             PredictionContext::empty()
         }
-        _ => {
-            let mut entries = Vec::new();
-            collect_entries(&left, &mut entries);
-            collect_entries(&right, &mut entries);
-            drop((left, right));
-            entries.sort_by_key(|(parent, return_state)| (*return_state, parent.cached_hash()));
-            let mut deduplicated: Vec<(Rc<PredictionContext>, usize)> =
-                Vec::with_capacity(entries.len());
-            for (parent, return_state) in entries {
-                let parent_hash = parent.cached_hash();
-                let mut duplicate = false;
-                for (existing_parent, existing_return_state) in deduplicated.iter().rev() {
-                    if *existing_return_state != return_state
-                        || existing_parent.cached_hash() != parent_hash
-                    {
-                        break;
-                    }
-                    if existing_parent == &parent {
-                        duplicate = true;
-                        break;
-                    }
-                }
-                if !duplicate {
-                    deduplicated.push((parent, return_state));
-                }
-            }
-            let mut entries = deduplicated;
-            if entries.len() == 1 {
-                let (parent, return_state) = entries.remove(0);
-                return PredictionContext::singleton(parent, return_state);
-            }
-            let parents = entries
-                .iter()
-                .map(|(parent, _)| Rc::clone(parent))
-                .collect();
-            let return_states = entries
-                .iter()
-                .map(|(_, return_state)| *return_state)
-                .collect();
-            PredictionContext::array(parents, return_states)
+        (
+            PredictionContext::Singleton {
+                parent: left_parent,
+                return_state: left_return_state,
+                ..
+            },
+            PredictionContext::Singleton {
+                parent: right_parent,
+                return_state: right_return_state,
+                ..
+            },
+        ) => merge_two_context_entries(
+            Rc::clone(left_parent),
+            *left_return_state,
+            Rc::clone(right_parent),
+            *right_return_state,
+        ),
+        (PredictionContext::Empty { .. }, PredictionContext::Singleton { .. })
+        | (PredictionContext::Singleton { .. }, PredictionContext::Empty { .. }) => {
+            let (left_parent, left_return_state) = first_context_entry(left);
+            let (right_parent, right_return_state) = first_context_entry(right);
+            merge_two_context_entries(
+                left_parent,
+                left_return_state,
+                right_parent,
+                right_return_state,
+            )
+        }
+        (
+            PredictionContext::Array {
+                parents,
+                return_states,
+                ..
+            },
+            PredictionContext::Singleton { .. } | PredictionContext::Empty { .. },
+        ) => {
+            let (parent, return_state) = first_context_entry(right);
+            merge_array_with_entry(
+                Rc::clone(left),
+                parents,
+                return_states,
+                parent,
+                return_state,
+                false,
+            )
+        }
+        (
+            PredictionContext::Singleton { .. } | PredictionContext::Empty { .. },
+            PredictionContext::Array {
+                parents,
+                return_states,
+                ..
+            },
+        ) => {
+            let (parent, return_state) = first_context_entry(left);
+            merge_array_with_entry(
+                Rc::clone(right),
+                parents,
+                return_states,
+                parent,
+                return_state,
+                true,
+            )
+        }
+        (
+            PredictionContext::Array {
+                parents: left_parents,
+                return_states: left_return_states,
+                ..
+            },
+            PredictionContext::Array {
+                parents: right_parents,
+                return_states: right_return_states,
+                ..
+            },
+        ) => merge_arrays(
+            left_parents,
+            left_return_states,
+            right_parents,
+            right_return_states,
+        ),
+    }
+}
+
+fn first_context_entry(context: &Rc<PredictionContext>) -> (Rc<PredictionContext>, usize) {
+    match context.as_ref() {
+        PredictionContext::Empty { .. } => (Rc::clone(context), EMPTY_RETURN_STATE),
+        PredictionContext::Singleton {
+            parent,
+            return_state,
+            ..
+        } => (Rc::clone(parent), *return_state),
+        PredictionContext::Array { .. } => unreachable!("array contexts have multiple entries"),
+    }
+}
+
+fn merge_two_context_entries(
+    left_parent: Rc<PredictionContext>,
+    left_return_state: usize,
+    right_parent: Rc<PredictionContext>,
+    right_return_state: usize,
+) -> Rc<PredictionContext> {
+    if left_return_state == right_return_state && left_parent == right_parent {
+        return PredictionContext::singleton(left_parent, left_return_state);
+    }
+    let left_key = (left_return_state, left_parent.cached_hash());
+    let right_key = (right_return_state, right_parent.cached_hash());
+    let (first_parent, first_return_state, second_parent, second_return_state) =
+        if right_key < left_key {
+            (
+                right_parent,
+                right_return_state,
+                left_parent,
+                left_return_state,
+            )
+        } else {
+            (
+                left_parent,
+                left_return_state,
+                right_parent,
+                right_return_state,
+            )
+        };
+    PredictionContext::array(
+        vec![first_parent, second_parent],
+        vec![first_return_state, second_return_state],
+    )
+}
+
+fn merge_array_with_entry(
+    array_context: Rc<PredictionContext>,
+    array_parents: &[Rc<PredictionContext>],
+    array_return_states: &[usize],
+    entry_parent: Rc<PredictionContext>,
+    entry_return_state: usize,
+    entry_on_left: bool,
+) -> Rc<PredictionContext> {
+    let entry_key = context_entry_key(&entry_parent, entry_return_state);
+    let mut insert_index = array_parents.len();
+    for (index, (parent, return_state)) in array_parents
+        .iter()
+        .zip(array_return_states)
+        .enumerate()
+    {
+        let key = context_entry_key(parent, *return_state);
+        if key == entry_key && parent == &entry_parent {
+            return array_context;
+        }
+        let should_insert = if entry_on_left {
+            entry_key <= key
+        } else {
+            entry_key < key
+        };
+        if should_insert {
+            insert_index = index;
+            break;
         }
     }
+
+    let mut parents = Vec::with_capacity(array_parents.len() + 1);
+    let mut return_states = Vec::with_capacity(array_return_states.len() + 1);
+    parents.extend(array_parents[..insert_index].iter().cloned());
+    return_states.extend_from_slice(&array_return_states[..insert_index]);
+    parents.push(entry_parent);
+    return_states.push(entry_return_state);
+    parents.extend(array_parents[insert_index..].iter().cloned());
+    return_states.extend_from_slice(&array_return_states[insert_index..]);
+    PredictionContext::array(parents, return_states)
+}
+
+fn merge_arrays(
+    left_parents: &[Rc<PredictionContext>],
+    left_return_states: &[usize],
+    right_parents: &[Rc<PredictionContext>],
+    right_return_states: &[usize],
+) -> Rc<PredictionContext> {
+    let mut parents = Vec::with_capacity(left_parents.len() + right_parents.len());
+    let mut return_states = Vec::with_capacity(left_return_states.len() + right_return_states.len());
+    let mut left_index = 0;
+    let mut right_index = 0;
+
+    while left_index < left_parents.len() && right_index < right_parents.len() {
+        let left_key = context_entry_key(&left_parents[left_index], left_return_states[left_index]);
+        let right_key =
+            context_entry_key(&right_parents[right_index], right_return_states[right_index]);
+        match left_key.cmp(&right_key) {
+            Ordering::Less => {
+                push_context_entry(
+                    &mut parents,
+                    &mut return_states,
+                    Rc::clone(&left_parents[left_index]),
+                    left_return_states[left_index],
+                );
+                left_index += 1;
+            }
+            Ordering::Greater => {
+                push_context_entry(
+                    &mut parents,
+                    &mut return_states,
+                    Rc::clone(&right_parents[right_index]),
+                    right_return_states[right_index],
+                );
+                right_index += 1;
+            }
+            Ordering::Equal => {
+                let group_key = left_key;
+                while left_index < left_parents.len()
+                    && context_entry_key(&left_parents[left_index], left_return_states[left_index])
+                        == group_key
+                {
+                    push_context_entry(
+                        &mut parents,
+                        &mut return_states,
+                        Rc::clone(&left_parents[left_index]),
+                        left_return_states[left_index],
+                    );
+                    left_index += 1;
+                }
+                while right_index < right_parents.len()
+                    && context_entry_key(
+                        &right_parents[right_index],
+                        right_return_states[right_index],
+                    ) == group_key
+                {
+                    push_context_entry(
+                        &mut parents,
+                        &mut return_states,
+                        Rc::clone(&right_parents[right_index]),
+                        right_return_states[right_index],
+                    );
+                    right_index += 1;
+                }
+            }
+        }
+    }
+
+    for index in left_index..left_parents.len() {
+        push_context_entry(
+            &mut parents,
+            &mut return_states,
+            Rc::clone(&left_parents[index]),
+            left_return_states[index],
+        );
+    }
+    for index in right_index..right_parents.len() {
+        push_context_entry(
+            &mut parents,
+            &mut return_states,
+            Rc::clone(&right_parents[index]),
+            right_return_states[index],
+        );
+    }
+
+    if parents.len() == 1 {
+        return PredictionContext::singleton(
+            parents.pop().expect("single merged parent"),
+            return_states.pop().expect("single merged return state"),
+        );
+    }
+    PredictionContext::array(parents, return_states)
+}
+
+fn push_context_entry(
+    parents: &mut Vec<Rc<PredictionContext>>,
+    return_states: &mut Vec<usize>,
+    parent: Rc<PredictionContext>,
+    return_state: usize,
+) {
+    let key = context_entry_key(&parent, return_state);
+    for (existing_parent, existing_return_state) in parents.iter().zip(return_states.iter()).rev() {
+        if context_entry_key(existing_parent, *existing_return_state) != key {
+            break;
+        }
+        if existing_parent == &parent {
+            return;
+        }
+    }
+    parents.push(parent);
+    return_states.push(return_state);
+}
+
+fn context_entry_key(parent: &Rc<PredictionContext>, return_state: usize) -> (usize, u64) {
+    (return_state, parent.cached_hash())
 }
 
 impl PartialEq for PredictionContext {
@@ -405,10 +656,7 @@ impl PredictionContextMergeCache {
         right: &Rc<PredictionContext>,
     ) -> Option<Rc<PredictionContext>> {
         let key = PredictionContextMergeKey::new(left, right);
-        self.entries
-            .get(&key)
-            .or_else(|| self.entries.get(&key.reversed()))
-            .cloned()
+        self.entries.get(&key).cloned()
     }
 
     fn insert(
@@ -443,14 +691,25 @@ impl PredictionContextCache {
         &mut self,
         context: &Rc<PredictionContext>,
     ) -> Rc<PredictionContext> {
+        #[cfg(feature = "perf-counters")]
+        crate::perf::record_context_cache_call();
         if context.is_empty() {
+            #[cfg(feature = "perf-counters")]
+            crate::perf::record_context_cache_empty();
             return Rc::clone(&self.empty);
         }
         if let Some(existing) = self.entries.get(context) {
+            #[cfg(feature = "perf-counters")]
+            crate::perf::record_context_cache_hit();
             return Rc::clone(existing);
         }
+        #[cfg(feature = "perf-counters")]
+        crate::perf::record_context_cache_miss();
         let mut visited = FxHashMap::default();
-        self.get_cached_context_inner(context, &mut visited)
+        let cached = self.get_cached_context_inner(context, &mut visited);
+        #[cfg(feature = "perf-counters")]
+        crate::perf::record_context_cache_visited(visited.len());
+        cached
     }
 
     fn get_cached_context_inner(
@@ -465,6 +724,8 @@ impl PredictionContextCache {
             return Rc::clone(existing);
         }
         if let Some(existing) = self.entries.get(context) {
+            #[cfg(feature = "perf-counters")]
+            crate::perf::record_context_cache_hit();
             let existing = Rc::clone(existing);
             visited.insert(Rc::clone(context), Rc::clone(&existing));
             return existing;
@@ -514,8 +775,12 @@ impl PredictionContextCache {
             return Rc::clone(&self.empty);
         }
         if let Some(existing) = self.entries.get(&context) {
+            #[cfg(feature = "perf-counters")]
+            crate::perf::record_context_cache_hit();
             return Rc::clone(existing);
         }
+        #[cfg(feature = "perf-counters")]
+        crate::perf::record_context_cache_insert();
         self.entries
             .insert(Rc::clone(&context), Rc::clone(&context));
         context
@@ -538,22 +803,32 @@ struct PredictionContextMergeKey {
 
 impl PredictionContextMergeKey {
     fn new(left: &Rc<PredictionContext>, right: &Rc<PredictionContext>) -> Self {
+        let left_hash = prediction_context_hash(left);
+        let right_hash = prediction_context_hash(right);
+        if should_swap_merge_key(left, left_hash, right, right_hash) {
+            return Self {
+                left: Rc::clone(right),
+                right: Rc::clone(left),
+                left_hash: right_hash,
+                right_hash: left_hash,
+            };
+        }
         Self {
             left: Rc::clone(left),
             right: Rc::clone(right),
-            left_hash: prediction_context_hash(left),
-            right_hash: prediction_context_hash(right),
+            left_hash,
+            right_hash,
         }
     }
+}
 
-    fn reversed(&self) -> Self {
-        Self {
-            left: Rc::clone(&self.right),
-            right: Rc::clone(&self.left),
-            left_hash: self.right_hash,
-            right_hash: self.left_hash,
-        }
-    }
+fn should_swap_merge_key(
+    left: &Rc<PredictionContext>,
+    left_hash: u64,
+    right: &Rc<PredictionContext>,
+    right_hash: u64,
+) -> bool {
+    (right_hash, Rc::as_ptr(right) as usize) < (left_hash, Rc::as_ptr(left) as usize)
 }
 
 impl PartialEq for PredictionContextMergeKey {
@@ -576,31 +851,6 @@ impl Hash for PredictionContextMergeKey {
 
 fn prediction_context_hash(context: &Rc<PredictionContext>) -> u64 {
     context.cached_hash()
-}
-
-fn collect_entries(
-    context: &Rc<PredictionContext>,
-    entries: &mut Vec<(Rc<PredictionContext>, usize)>,
-) {
-    match context.as_ref() {
-        PredictionContext::Empty { .. } => {
-            entries.push((Rc::clone(context), EMPTY_RETURN_STATE));
-        }
-        PredictionContext::Singleton {
-            parent,
-            return_state,
-            ..
-        } => entries.push((Rc::clone(parent), *return_state)),
-        PredictionContext::Array {
-            parents,
-            return_states,
-            ..
-        } => {
-            for (parent, return_state) in parents.iter().zip(return_states) {
-                entries.push((Rc::clone(parent), *return_state));
-            }
-        }
-    }
 }
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -745,6 +995,8 @@ impl AtnConfigSet {
         cache: Option<&mut PredictionContextMergeCache>,
     ) -> bool {
         assert!(!self.readonly, "cannot mutate readonly ATN config set");
+        #[cfg(feature = "perf-counters")]
+        crate::perf::record_config_add_call();
         if !config.semantic_context.is_none() {
             self.has_semantic_context = true;
         }
@@ -753,6 +1005,8 @@ impl AtnConfigSet {
         }
         let key = AtnConfigKey::from(&config);
         if let Some(existing_index) = self.config_index.get(&key).copied() {
+            #[cfg(feature = "perf-counters")]
+            crate::perf::record_config_merge();
             let root_is_wildcard = !self.full_context;
             let existing = &mut self.configs[existing_index];
             existing.context = PredictionContext::merge_with_options(
@@ -770,6 +1024,8 @@ impl AtnConfigSet {
             let index = self.configs.len();
             self.config_index.insert(key, index);
             self.configs.push(config);
+            #[cfg(feature = "perf-counters")]
+            crate::perf::record_config_insert(self.configs.len());
             self.unique_alt = None;
             self.conflicting_alts.clear();
             true
@@ -1052,6 +1308,29 @@ mod tests {
         let merged = PredictionContext::merge(left, right);
 
         assert_eq!(merged.len(), 2);
+    }
+
+    #[test]
+    fn merge_arrays_linearly_preserves_order_and_deduplicates_entries() {
+        let empty = PredictionContext::empty();
+        let parent_one = PredictionContext::singleton(Rc::clone(&empty), 1);
+        let parent_two = PredictionContext::singleton(Rc::clone(&empty), 2);
+        let parent_three = PredictionContext::singleton(Rc::clone(&empty), 3);
+        let left = PredictionContext::array(
+            vec![Rc::clone(&parent_one), Rc::clone(&parent_three)],
+            vec![10, 30],
+        );
+        let right =
+            PredictionContext::array(vec![parent_two, Rc::clone(&parent_three)], vec![20, 30]);
+
+        let merged = PredictionContext::merge(left, right);
+
+        assert_eq!(merged.len(), 3);
+        assert_eq!(merged.return_state(0), Some(10));
+        assert_eq!(merged.parent(0), Some(parent_one));
+        assert_eq!(merged.return_state(1), Some(20));
+        assert_eq!(merged.return_state(2), Some(30));
+        assert_eq!(merged.parent(2), Some(parent_three));
     }
 
     #[test]

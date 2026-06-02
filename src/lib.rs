@@ -8,6 +8,8 @@ pub mod generated;
 pub mod int_stream;
 pub mod lexer;
 pub mod parser;
+#[cfg(feature = "perf-counters")]
+pub mod perf;
 pub mod prediction;
 pub mod recognizer;
 pub mod token;
@@ -26,6 +28,8 @@ pub use parser::{
     BaseParser, Parser, ParserAction, ParserMemberAction, ParserPredicate, ParserReturnAction,
     ParserRuleArg, ParserRuntimeOptions, PredictionMode,
 };
+#[cfg(feature = "perf-counters")]
+pub use perf::{dump as dump_prediction_perf_counters, reset as reset_prediction_perf_counters};
 pub use prediction::{
     AtnConfig, AtnConfigSet, PredictionContext, PredictionContextMergeCache, SemanticContext,
 };

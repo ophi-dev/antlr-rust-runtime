@@ -356,6 +356,10 @@ def write_rust_runner(work_dir: Path, specs: list[LanguageSpec]) -> Path:
                 'version = "0.0.0"',
                 'edition = "2024"',
                 "",
+                "[features]",
+                "default = []",
+                'perf-counters = ["antlr-rust-runtime/perf-counters"]',
+                "",
                 "[dependencies]",
                 f'antlr-rust-runtime = {{ path = "{ROOT}" }}',
                 "",
@@ -426,6 +430,8 @@ fn run_main() -> Result<(), String> {{
     for _ in 0..warmups {{
         parse_once(&language, &src)?;
     }}
+    #[cfg(feature = "perf-counters")]
+    antlr4_runtime::reset_prediction_perf_counters();
 
     let mut min_ns = u128::MAX;
     let mut total_ns = 0_u128;
@@ -438,6 +444,10 @@ fn run_main() -> Result<(), String> {{
     }}
     let avg_ns = total_ns / iters as u128;
     println!("min_ns={{min_ns}} avg_ns={{avg_ns}}");
+    #[cfg(feature = "perf-counters")]
+    if env::var_os("ANTLR_PERF_DUMP").is_some() {{
+        antlr4_runtime::dump_prediction_perf_counters();
+    }}
     Ok(())
 }}
 
@@ -828,7 +838,10 @@ def prepare_work(
 
     runners: dict[str, Path] = {}
     if "rust-antlr" in runtimes:
-        run(["cargo", "build", "--quiet", "--release", "--manifest-path", str(rust_runner / "Cargo.toml")])
+        rust_build_cmd = ["cargo", "build", "--quiet", "--release", "--manifest-path", str(rust_runner / "Cargo.toml")]
+        if os.environ.get("ANTLR_PERF_DUMP"):
+            rust_build_cmd.extend(["--features", "perf-counters"])
+        run(rust_build_cmd)
         runners["rust-antlr"] = rust_runner / "target" / "release" / "parse-bench-rust-runner"
     if "python-antlr" in runtimes:
         runners["python-antlr"] = write_python_antlr_runner(work_dir, specs, py_gen)

@@ -1,0 +1,323 @@
+//! Lightweight counters for prediction performance investigations.
+
+#![allow(clippy::missing_const_for_thread_local)]
+
+use std::cell::RefCell;
+use std::collections::BTreeMap;
+
+#[derive(Debug, Default)]
+struct Counters {
+    adaptive_calls: u64,
+    forced_full_context_calls: u64,
+    full_context_retries: u64,
+    sll_conflicts: u64,
+    reach_sll_calls: u64,
+    reach_full_context_calls: u64,
+    reach_input_configs: u64,
+    reach_output_configs: u64,
+    reach_max_input_configs: u64,
+    reach_max_output_configs: u64,
+    closure_calls: u64,
+    closure_visited_total: u64,
+    closure_visited_max: u64,
+    config_add_calls: u64,
+    config_inserts: u64,
+    config_merges: u64,
+    config_max_size: u64,
+    context_merge_calls: u64,
+    context_merge_identical: u64,
+    context_merge_cache_hits: u64,
+    context_merge_cache_misses: u64,
+    context_merge_uncached: u64,
+    context_cache_calls: u64,
+    context_cache_empty: u64,
+    context_cache_hits: u64,
+    context_cache_misses: u64,
+    context_cache_inserts: u64,
+    context_cache_visited_total: u64,
+    context_cache_visited_max: u64,
+    decisions: BTreeMap<usize, DecisionCounters>,
+}
+
+#[derive(Debug, Default)]
+struct DecisionCounters {
+    adaptive_calls: u64,
+    forced_full_context_calls: u64,
+    full_context_retries: u64,
+    sll_conflicts: u64,
+}
+
+thread_local! {
+    static COUNTERS: RefCell<Counters> = RefCell::new(Counters::default());
+}
+
+fn with_counters(update: impl FnOnce(&mut Counters)) {
+    COUNTERS.with(|counters| update(&mut counters.borrow_mut()));
+}
+
+fn add_len(total: &mut u64, max: &mut u64, len: usize) {
+    let len = u64::try_from(len).unwrap_or(u64::MAX);
+    *total = total.saturating_add(len);
+    *max = (*max).max(len);
+}
+
+pub(crate) fn record_adaptive_call(decision: usize, forced_full_context: bool) {
+    with_counters(|counters| {
+        counters.adaptive_calls = counters.adaptive_calls.saturating_add(1);
+        let decision_counters = counters.decisions.entry(decision).or_default();
+        decision_counters.adaptive_calls = decision_counters.adaptive_calls.saturating_add(1);
+        if forced_full_context {
+            counters.forced_full_context_calls =
+                counters.forced_full_context_calls.saturating_add(1);
+            decision_counters.forced_full_context_calls = decision_counters
+                .forced_full_context_calls
+                .saturating_add(1);
+        }
+    });
+}
+
+pub(crate) fn record_full_context_retry(decision: usize) {
+    with_counters(|counters| {
+        counters.full_context_retries = counters.full_context_retries.saturating_add(1);
+        let decision_counters = counters.decisions.entry(decision).or_default();
+        decision_counters.full_context_retries =
+            decision_counters.full_context_retries.saturating_add(1);
+    });
+}
+
+pub(crate) fn record_sll_conflict(decision: usize) {
+    with_counters(|counters| {
+        counters.sll_conflicts = counters.sll_conflicts.saturating_add(1);
+        let decision_counters = counters.decisions.entry(decision).or_default();
+        decision_counters.sll_conflicts = decision_counters.sll_conflicts.saturating_add(1);
+    });
+}
+
+pub(crate) fn record_reach_set(full_context: bool, input_configs: usize, output_configs: usize) {
+    with_counters(|counters| {
+        if full_context {
+            counters.reach_full_context_calls = counters.reach_full_context_calls.saturating_add(1);
+        } else {
+            counters.reach_sll_calls = counters.reach_sll_calls.saturating_add(1);
+        }
+        add_len(
+            &mut counters.reach_input_configs,
+            &mut counters.reach_max_input_configs,
+            input_configs,
+        );
+        add_len(
+            &mut counters.reach_output_configs,
+            &mut counters.reach_max_output_configs,
+            output_configs,
+        );
+    });
+}
+
+pub(crate) fn record_closure(visited_configs: usize) {
+    with_counters(|counters| {
+        counters.closure_calls = counters.closure_calls.saturating_add(1);
+        add_len(
+            &mut counters.closure_visited_total,
+            &mut counters.closure_visited_max,
+            visited_configs,
+        );
+    });
+}
+
+pub(crate) fn record_config_add_call() {
+    with_counters(|counters| {
+        counters.config_add_calls = counters.config_add_calls.saturating_add(1);
+    });
+}
+
+pub(crate) fn record_config_insert(size_after: usize) {
+    with_counters(|counters| {
+        counters.config_inserts = counters.config_inserts.saturating_add(1);
+        counters.config_max_size = counters
+            .config_max_size
+            .max(u64::try_from(size_after).unwrap_or(u64::MAX));
+    });
+}
+
+pub(crate) fn record_config_merge() {
+    with_counters(|counters| {
+        counters.config_merges = counters.config_merges.saturating_add(1);
+    });
+}
+
+pub(crate) fn record_context_merge_call() {
+    with_counters(|counters| {
+        counters.context_merge_calls = counters.context_merge_calls.saturating_add(1);
+    });
+}
+
+pub(crate) fn record_context_merge_identical() {
+    with_counters(|counters| {
+        counters.context_merge_identical = counters.context_merge_identical.saturating_add(1);
+    });
+}
+
+pub(crate) fn record_context_merge_cache_hit() {
+    with_counters(|counters| {
+        counters.context_merge_cache_hits = counters.context_merge_cache_hits.saturating_add(1);
+    });
+}
+
+pub(crate) fn record_context_merge_cache_miss() {
+    with_counters(|counters| {
+        counters.context_merge_cache_misses = counters.context_merge_cache_misses.saturating_add(1);
+    });
+}
+
+pub(crate) fn record_context_merge_uncached() {
+    with_counters(|counters| {
+        counters.context_merge_uncached = counters.context_merge_uncached.saturating_add(1);
+    });
+}
+
+pub(crate) fn record_context_cache_call() {
+    with_counters(|counters| {
+        counters.context_cache_calls = counters.context_cache_calls.saturating_add(1);
+    });
+}
+
+pub(crate) fn record_context_cache_empty() {
+    with_counters(|counters| {
+        counters.context_cache_empty = counters.context_cache_empty.saturating_add(1);
+    });
+}
+
+pub(crate) fn record_context_cache_hit() {
+    with_counters(|counters| {
+        counters.context_cache_hits = counters.context_cache_hits.saturating_add(1);
+    });
+}
+
+pub(crate) fn record_context_cache_miss() {
+    with_counters(|counters| {
+        counters.context_cache_misses = counters.context_cache_misses.saturating_add(1);
+    });
+}
+
+pub(crate) fn record_context_cache_insert() {
+    with_counters(|counters| {
+        counters.context_cache_inserts = counters.context_cache_inserts.saturating_add(1);
+    });
+}
+
+pub(crate) fn record_context_cache_visited(visited_contexts: usize) {
+    with_counters(|counters| {
+        add_len(
+            &mut counters.context_cache_visited_total,
+            &mut counters.context_cache_visited_max,
+            visited_contexts,
+        );
+    });
+}
+
+pub fn reset() {
+    COUNTERS.with(|counters| *counters.borrow_mut() = Counters::default());
+}
+
+pub fn dump() {
+    COUNTERS.with(|counters| {
+        let counters = counters.borrow();
+        dump_totals(&counters);
+        dump_decisions(&counters);
+    });
+}
+
+fn dump_totals(counters: &Counters) {
+    for (name, value) in totals(counters) {
+        print_counter(name, value);
+    }
+}
+
+fn dump_decisions(counters: &Counters) {
+    for (decision, counters) in &counters.decisions {
+        print_decision_counter(*decision, "adaptive_calls", counters.adaptive_calls);
+        print_decision_counter(
+            *decision,
+            "forced_full_context_calls",
+            counters.forced_full_context_calls,
+        );
+        print_decision_counter(
+            *decision,
+            "full_context_retries",
+            counters.full_context_retries,
+        );
+        print_decision_counter(*decision, "sll_conflicts", counters.sll_conflicts);
+    }
+}
+
+const fn totals(counters: &Counters) -> [(&'static str, u64); 29] {
+    [
+        ("prediction.adaptive_calls", counters.adaptive_calls),
+        (
+            "prediction.forced_full_context_calls",
+            counters.forced_full_context_calls,
+        ),
+        (
+            "prediction.full_context_retries",
+            counters.full_context_retries,
+        ),
+        ("prediction.sll_conflicts", counters.sll_conflicts),
+        ("reach.sll_calls", counters.reach_sll_calls),
+        (
+            "reach.full_context_calls",
+            counters.reach_full_context_calls,
+        ),
+        ("reach.input_configs", counters.reach_input_configs),
+        ("reach.output_configs", counters.reach_output_configs),
+        ("reach.max_input_configs", counters.reach_max_input_configs),
+        (
+            "reach.max_output_configs",
+            counters.reach_max_output_configs,
+        ),
+        ("closure.calls", counters.closure_calls),
+        ("closure.visited_total", counters.closure_visited_total),
+        ("closure.visited_max", counters.closure_visited_max),
+        ("config.add_calls", counters.config_add_calls),
+        ("config.inserts", counters.config_inserts),
+        ("config.merges", counters.config_merges),
+        ("config.max_size", counters.config_max_size),
+        ("context_merge.calls", counters.context_merge_calls),
+        ("context_merge.identical", counters.context_merge_identical),
+        (
+            "context_merge.cache_hits",
+            counters.context_merge_cache_hits,
+        ),
+        (
+            "context_merge.cache_misses",
+            counters.context_merge_cache_misses,
+        ),
+        ("context_merge.uncached", counters.context_merge_uncached),
+        ("context_cache.calls", counters.context_cache_calls),
+        ("context_cache.empty", counters.context_cache_empty),
+        ("context_cache.hits", counters.context_cache_hits),
+        ("context_cache.misses", counters.context_cache_misses),
+        ("context_cache.inserts", counters.context_cache_inserts),
+        (
+            "context_cache.visited_total",
+            counters.context_cache_visited_total,
+        ),
+        (
+            "context_cache.visited_max",
+            counters.context_cache_visited_max,
+        ),
+    ]
+}
+
+fn print_counter(name: &str, value: u64) {
+    #[allow(clippy::print_stderr)]
+    {
+        eprintln!("perf {name}={value}");
+    }
+}
+
+fn print_decision_counter(decision: usize, name: &str, value: u64) {
+    #[allow(clippy::print_stderr)]
+    {
+        eprintln!("perf decision.{decision}.{name}={value}");
+    }
+}

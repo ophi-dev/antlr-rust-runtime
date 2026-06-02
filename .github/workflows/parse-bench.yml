@@ -95,7 +95,8 @@ jobs:
             compare_args=(
               --baseline base-parse-bench.json \
               --current head-parse-bench.json \
-              --max-regression 1.15
+              --max-regression 1.15 \
+              --require-speedup kotlin:rust-antlr:go-antlr:3.0
             )
             if ! cmp -s \
               base/tools/parse-bench/fixtures/manifest.json \

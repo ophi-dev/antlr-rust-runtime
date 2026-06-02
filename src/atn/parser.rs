@@ -355,6 +355,8 @@ impl<'a> ParserAtnSimulator<'a> {
             outer_context,
             force_full_context_retry,
         } = request;
+        #[cfg(feature = "perf-counters")]
+        crate::perf::record_adaptive_call(decision, force_full_context_retry);
         let Some(&decision_state) = self.atn.decision_to_state().get(decision) else {
             return Err(ParserAtnSimulatorError::UnknownDecision(decision));
         };
@@ -464,6 +466,8 @@ impl<'a> ParserAtnSimulator<'a> {
         if prediction.requires_full_context
             && (force_full_context_retry || !prediction.has_semantic_context)
         {
+            #[cfg(feature = "perf-counters")]
+            crate::perf::record_full_context_retry(decision);
             let sll_stop_index = input.index();
             input.seek(start_index);
             let full_context = self.adaptive_predict_full_context(
@@ -609,7 +613,7 @@ impl<'a> ParserAtnSimulator<'a> {
         for (index, transition) in decision_state.transitions.iter().enumerate() {
             let alt = index + 1;
             let config = AtnConfig::new(transition.target(), alt, Rc::clone(initial_context));
-            self.closure(config, &mut configs, merge_cache, precedence, false);
+            self.closure(config, &mut configs, merge_cache, precedence, true, false);
         }
         configs
     }
@@ -740,6 +744,10 @@ impl<'a> ParserAtnSimulator<'a> {
                 .or_else(|| reach.alts().into_iter().next())
         });
         let requires_full_context = prediction.is_none() && conflict_prediction.is_some();
+        #[cfg(feature = "perf-counters")]
+        if requires_full_context {
+            crate::perf::record_sll_conflict(edge.decision);
+        }
         let conflicting_alts = if requires_full_context {
             let alts = reach.conflicting_alts();
             if alts.is_empty() { reach.alts() } else { alts }
@@ -769,7 +777,7 @@ impl<'a> ParserAtnSimulator<'a> {
         precedence: i32,
         merge_cache: &mut PredictionContextMergeCache,
     ) -> AtnConfigSet {
-        let mut reach = AtnConfigSet::new_full_context(full_context);
+        let mut intermediate = AtnConfigSet::new_full_context(full_context);
         let mut skipped_stop_states = Vec::new();
         for config in configs.configs() {
             let Some(state) = self.atn.state(config.state) else {
@@ -791,16 +799,31 @@ impl<'a> ParserAtnSimulator<'a> {
                         reaches_into_outer_context: config.reaches_into_outer_context,
                         precedence_filter_suppressed: config.precedence_filter_suppressed,
                     };
-                    self.closure(
-                        target,
-                        &mut reach,
-                        merge_cache,
-                        precedence,
-                        symbol == TOKEN_EOF,
-                    );
+                    intermediate.add_with_merge_cache(target, Some(merge_cache));
                 }
             }
         }
+        let mut reach = if skipped_stop_states.is_empty() && symbol != TOKEN_EOF {
+            if intermediate.len() == 1 || intermediate.unique_alt().is_some() {
+                intermediate
+            } else {
+                self.close_intermediate_reach_set(
+                    intermediate,
+                    full_context,
+                    precedence,
+                    symbol,
+                    merge_cache,
+                )
+            }
+        } else {
+            self.close_intermediate_reach_set(
+                intermediate,
+                full_context,
+                precedence,
+                symbol,
+                merge_cache,
+            )
+        };
         if symbol == TOKEN_EOF {
             reach = self.rule_stop_configs(reach, merge_cache);
         }
@@ -808,6 +831,30 @@ impl<'a> ParserAtnSimulator<'a> {
             for config in skipped_stop_states {
                 reach.add_with_merge_cache(config, Some(merge_cache));
             }
+        }
+        #[cfg(feature = "perf-counters")]
+        crate::perf::record_reach_set(full_context, configs.len(), reach.len());
+        reach
+    }
+
+    fn close_intermediate_reach_set(
+        &self,
+        intermediate: AtnConfigSet,
+        full_context: bool,
+        precedence: i32,
+        symbol: i32,
+        merge_cache: &mut PredictionContextMergeCache,
+    ) -> AtnConfigSet {
+        let mut reach = AtnConfigSet::new_full_context(full_context);
+        for config in intermediate.configs() {
+            self.closure(
+                config.clone(),
+                &mut reach,
+                merge_cache,
+                precedence,
+                false,
+                symbol == TOKEN_EOF,
+            );
         }
         reach
     }
@@ -873,6 +920,7 @@ impl<'a> ParserAtnSimulator<'a> {
         configs: &mut AtnConfigSet,
         merge_cache: &mut PredictionContextMergeCache,
         precedence: i32,
+        collect_predicates: bool,
         treat_eof_as_epsilon: bool,
     ) {
         let mut stack = vec![config];
@@ -902,9 +950,13 @@ impl<'a> ParserAtnSimulator<'a> {
                     continue;
                 }
                 if transition.is_epsilon() {
-                    if let Some(mut target) =
-                        self.epsilon_target_config(&config, transition, precedence)
-                    {
+                    if let Some(mut target) = self.epsilon_target_config(
+                        &config,
+                        transition,
+                        precedence,
+                        collect_predicates,
+                        configs.full_context(),
+                    ) {
                         if at_rule_stop {
                             target.reaches_into_outer_context =
                                 target.reaches_into_outer_context.saturating_add(1);
@@ -925,6 +977,8 @@ impl<'a> ParserAtnSimulator<'a> {
                 }
             }
         }
+        #[cfg(feature = "perf-counters")]
+        crate::perf::record_closure(visited.len());
     }
 
     fn closure_at_rule_stop(
@@ -978,23 +1032,16 @@ impl<'a> ParserAtnSimulator<'a> {
         config: &AtnConfig,
         transition: &Transition,
         precedence: i32,
+        collect_predicates: bool,
+        full_context: bool,
     ) -> Option<AtnConfig> {
-        if matches!(
-            transition,
-            Transition::Precedence {
-                precedence: transition_precedence,
-                ..
-            } if *transition_precedence < precedence
-        ) {
-            return None;
-        }
         let semantic_context = match transition {
             Transition::Predicate {
                 rule_index,
                 pred_index,
                 context_dependent,
                 ..
-            } => SemanticContext::and(
+            } if collect_predicates => SemanticContext::and(
                 config.semantic_context.clone(),
                 SemanticContext::Predicate {
                     rule_index: *rule_index,
@@ -1002,12 +1049,18 @@ impl<'a> ParserAtnSimulator<'a> {
                     context_dependent: *context_dependent,
                 },
             ),
-            Transition::Precedence { precedence, .. } => SemanticContext::and(
-                config.semantic_context.clone(),
-                SemanticContext::Precedence {
-                    precedence: *precedence,
-                },
-            ),
+            Transition::Precedence {
+                precedence: transition_precedence,
+                ..
+            } if collect_predicates && *transition_precedence < precedence => return None,
+            Transition::Precedence { precedence, .. } if collect_predicates && !full_context => {
+                SemanticContext::and(
+                    config.semantic_context.clone(),
+                    SemanticContext::Precedence {
+                        precedence: *precedence,
+                    },
+                )
+            }
             _ => config.semantic_context.clone(),
         };
         let context = match transition {
@@ -1411,6 +1464,7 @@ mod tests {
             &mut configs,
             &mut merge_cache,
             0,
+            true,
             false,
         );
 
@@ -1419,6 +1473,71 @@ mod tests {
         assert_eq!(config.state, 1);
         assert_eq!(config.alt, 2);
         assert_eq!(config.reaches_into_outer_context, 1);
+    }
+
+    #[test]
+    fn precedence_contexts_are_collected_only_for_start_closure() {
+        let mut atn = Atn::new(AtnType::Parser, 1);
+        add_state(&mut atn, 0, AtnStateKind::Basic);
+        add_state(&mut atn, 1, AtnStateKind::Basic);
+        let simulator = ParserAtnSimulator::new(&atn);
+        let transition = Transition::Precedence {
+            target: 1,
+            precedence: 2,
+        };
+        let config = AtnConfig::new(0, 1, PredictionContext::empty());
+
+        let sll_start = simulator
+            .epsilon_target_config(&config, &transition, 1, true, false)
+            .expect("sll start transition");
+        assert!(matches!(
+            sll_start.semantic_context,
+            SemanticContext::Precedence { precedence: 2 }
+        ));
+
+        let full_context_start = simulator
+            .epsilon_target_config(&config, &transition, 1, true, true)
+            .expect("full-context start transition");
+        assert!(full_context_start.semantic_context.is_none());
+
+        let reach = simulator
+            .epsilon_target_config(&config, &transition, 3, false, false)
+            .expect("reach transition");
+        assert!(reach.semantic_context.is_none());
+
+        assert!(
+            simulator
+                .epsilon_target_config(&config, &transition, 3, true, false)
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn reach_set_skips_closure_for_unique_intermediate_alt() {
+        let mut atn = Atn::new(AtnType::Parser, 1);
+        add_state(&mut atn, 0, AtnStateKind::Basic);
+        add_state(&mut atn, 1, AtnStateKind::Basic);
+        add_state(&mut atn, 2, AtnStateKind::Basic);
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Atom {
+                target: 1,
+                label: 7,
+            });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Epsilon { target: 2 });
+
+        let simulator = ParserAtnSimulator::new(&atn);
+        let empty = PredictionContext::empty();
+        let mut configs = AtnConfigSet::new_full_context(false);
+        configs.add(AtnConfig::new(0, 1, empty));
+        let mut merge_cache = PredictionContextMergeCache::new();
+
+        let reach = simulator.compute_reach_set(&configs, 7, false, 0, &mut merge_cache);
+
+        assert_eq!(reach.len(), 1);
+        assert_eq!(reach.configs()[0].state, 1);
     }
 
     #[test]
