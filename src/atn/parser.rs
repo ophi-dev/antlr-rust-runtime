@@ -60,6 +60,7 @@ struct PredictionCheck<'a> {
     precedence: i32,
     outer_context: &'a Rc<PredictionContext>,
     force_full_context_retry: bool,
+    sll_probe_only: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -68,6 +69,14 @@ struct AdaptivePredictRequest<'a> {
     precedence: usize,
     outer_context: &'a Rc<PredictionContext>,
     force_full_context_retry: bool,
+    /// When set, the SLL walk stops at the first full-context-requiring conflict
+    /// and returns the SLL prediction (carrying `requires_full_context = true`)
+    /// WITHOUT running the expensive full-context LL loop. The generated
+    /// two-stage prediction uses only that boolean to decide whether to re-run
+    /// with the real outer context, so the empty-context LL pass this skips is
+    /// discarded work. Mirrors Go's execATN, which returns "needs LL" from the
+    /// SLL stage rather than computing LL twice.
+    sll_probe_only: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -310,6 +319,42 @@ impl<'a> ParserAtnSimulator<'a> {
                 precedence,
                 outer_context: &empty,
                 force_full_context_retry: false,
+                sll_probe_only: false,
+            },
+            input,
+            &mut merge_cache,
+        );
+        input.seek(index);
+        input.release(marker);
+        result
+    }
+
+    /// SLL-probe variant of [`Self::adaptive_predict_stream_info_with_precedence`].
+    ///
+    /// Identical to the precedence entry except that, when the SLL walk reaches
+    /// a conflict state requiring full context, it returns the SLL prediction
+    /// (carrying `requires_full_context = true`) WITHOUT running the
+    /// full-context LL loop. The generated two-stage prediction calls this for
+    /// stage 1 and only consults `requires_full_context` to decide whether to
+    /// re-run with the real outer context, so the empty-context LL pass this
+    /// skips would be discarded anyway. Avoids the double LL pass per escalation.
+    pub fn adaptive_predict_stream_info_sll_probe<T: IntStream>(
+        &mut self,
+        decision: usize,
+        precedence: usize,
+        input: &mut T,
+    ) -> Result<ParserAtnPrediction, ParserAtnSimulatorError> {
+        let empty = PredictionContext::empty();
+        let marker = input.mark();
+        let index = input.index();
+        let mut merge_cache = PredictionContextMergeCache::new();
+        let result = self.adaptive_predict_stream_inner(
+            AdaptivePredictRequest {
+                decision,
+                precedence,
+                outer_context: &empty,
+                force_full_context_retry: false,
+                sll_probe_only: true,
             },
             input,
             &mut merge_cache,
@@ -335,6 +380,7 @@ impl<'a> ParserAtnSimulator<'a> {
                 precedence,
                 outer_context,
                 force_full_context_retry: true,
+                sll_probe_only: false,
             },
             input,
             &mut merge_cache,
@@ -375,6 +421,7 @@ impl<'a> ParserAtnSimulator<'a> {
             precedence,
             outer_context,
             force_full_context_retry,
+            sll_probe_only,
         } = request;
         #[cfg(feature = "perf-counters")]
         crate::perf::record_adaptive_call(decision, force_full_context_retry);
@@ -395,6 +442,7 @@ impl<'a> ParserAtnSimulator<'a> {
                 precedence,
                 outer_context,
                 force_full_context_retry,
+                sll_probe_only,
             },
             merge_cache,
         )? {
@@ -447,6 +495,7 @@ impl<'a> ParserAtnSimulator<'a> {
                     precedence,
                     outer_context,
                     force_full_context_retry,
+                    sll_probe_only,
                 },
                 merge_cache,
             )? {
@@ -473,6 +522,7 @@ impl<'a> ParserAtnSimulator<'a> {
             precedence,
             outer_context,
             force_full_context_retry,
+            sll_probe_only,
         } = check;
         if outer_context.is_empty()
             && let Some(prediction) =
@@ -484,6 +534,15 @@ impl<'a> ParserAtnSimulator<'a> {
             return Ok(None);
         };
         let prediction = info.prediction;
+        // SLL-probe stage: the caller only needs to know that this conflict
+        // requires full context; it will re-run with the real outer context.
+        // Returning the SLL prediction here (with requires_full_context set)
+        // avoids running the full-context LL loop with the empty probe context,
+        // whose result the generated two-stage code discards. Mirrors Go's
+        // execATN, which signals "needs LL" instead of computing LL twice.
+        if sll_probe_only && prediction.requires_full_context {
+            return Ok(Some(prediction));
+        }
         if prediction.requires_full_context
             && (force_full_context_retry || !prediction.has_semantic_context)
         {

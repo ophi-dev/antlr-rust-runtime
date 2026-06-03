@@ -2977,9 +2977,12 @@ fn render_generated_sll_then_context_prediction_with_indent(
         "{nested}    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));"
     )
     .expect("writing to a string cannot fail");
+    // Stage 1 uses the SLL probe: on a full-context-requiring conflict it returns
+    // requires_full_context WITHOUT running the LL loop (the result is discarded
+    // here anyway — only the boolean gates the stage-2 re-run with real context).
     writeln!(
         out,
-        "{nested}    __simulator.adaptive_predict_stream_info_with_precedence({decision}, 0, self.base.input())"
+        "{nested}    __simulator.adaptive_predict_stream_info_sll_probe({decision}, 0, self.base.input())"
     )
     .expect("writing to a string cannot fail");
     writeln!(out, "{nested}        .map_err(|__error| match __error {{")
@@ -7199,7 +7202,9 @@ atn:
         assert!(rendered.contains("parse_generated_rule_0"));
         assert!(rendered.contains("sync_decision(atn(), 1, __ctx.children().is_empty())"));
         assert!(rendered.contains("ll1_decision_prediction(atn(), 1)"));
-        assert!(rendered.contains("adaptive_predict_stream_info_with_precedence(0, 0"));
+        // Stage 1 is the SLL probe (no LL loop on the empty-context conflict);
+        // stage 2 re-runs with the real context only when full context is needed.
+        assert!(rendered.contains("adaptive_predict_stream_info_sll_probe(0, 0"));
         assert!(rendered.contains("adaptive_predict_stream_info_with_context(0, 0"));
 
         let rendered_with_alt_numbers = render_generated_rule_dispatch(
@@ -7249,7 +7254,7 @@ atn:
         assert!(rendered.contains("2 => {"));
         assert!(rendered.contains("break;"));
         assert!(rendered.contains("ll1_decision_prediction(atn(), 1)"));
-        assert!(rendered.contains("adaptive_predict_stream_info_with_precedence(0, 0"));
+        assert!(rendered.contains("adaptive_predict_stream_info_sll_probe(0, 0"));
         assert!(rendered.contains("adaptive_predict_stream_info_with_context(0, 0"));
     }
 
