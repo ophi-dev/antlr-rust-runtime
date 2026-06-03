@@ -110,6 +110,27 @@ impl From<&AtnConfig> for ClosureConfigKey {
     }
 }
 
+/// Reusable scratch buffers for `closure`. ANTLR's reference runtimes allocate a
+/// fresh work stack and "closure busy" visited set per `closure` call (millions
+/// of allocations on large parses); reusing one buffer across the per-config
+/// calls of a single reach/start-state computation removes that churn. Each
+/// `closure` call clears the buffers first, so the visited scope stays per-call
+/// — behaviour-identical to allocating fresh sets.
+#[derive(Default)]
+struct ClosureScratch {
+    stack: Vec<AtnConfig>,
+    visited: FxHashSet<ClosureConfigKey>,
+}
+
+/// Per-closure-tree invariants, grouped so `closure` stays within Clippy's
+/// argument-count budget while threading the reusable [`ClosureScratch`].
+#[derive(Clone, Copy)]
+struct ClosureParams {
+    precedence: i32,
+    collect_predicates: bool,
+    treat_eof_as_epsilon: bool,
+}
+
 #[derive(Debug)]
 struct LookaheadIntStream {
     symbols: Vec<i32>,
@@ -610,10 +631,16 @@ impl<'a> ParserAtnSimulator<'a> {
         merge_cache: &mut PredictionContextMergeCache,
     ) -> AtnConfigSet {
         let mut configs = AtnConfigSet::new_full_context(full_context);
+        let mut scratch = ClosureScratch::default();
+        let params = ClosureParams {
+            precedence,
+            collect_predicates: true,
+            treat_eof_as_epsilon: false,
+        };
         for (index, transition) in decision_state.transitions.iter().enumerate() {
             let alt = index + 1;
             let config = AtnConfig::new(transition.target(), alt, Rc::clone(initial_context));
-            self.closure(config, &mut configs, merge_cache, precedence, true, false);
+            self.closure(config, &mut configs, merge_cache, &mut scratch, params);
         }
         configs
     }
@@ -808,7 +835,7 @@ impl<'a> ParserAtnSimulator<'a> {
                 intermediate
             } else {
                 self.close_intermediate_reach_set(
-                    intermediate,
+                    &intermediate,
                     full_context,
                     precedence,
                     symbol,
@@ -817,7 +844,7 @@ impl<'a> ParserAtnSimulator<'a> {
             }
         } else {
             self.close_intermediate_reach_set(
-                intermediate,
+                &intermediate,
                 full_context,
                 precedence,
                 symbol,
@@ -839,22 +866,21 @@ impl<'a> ParserAtnSimulator<'a> {
 
     fn close_intermediate_reach_set(
         &self,
-        intermediate: AtnConfigSet,
+        intermediate: &AtnConfigSet,
         full_context: bool,
         precedence: i32,
         symbol: i32,
         merge_cache: &mut PredictionContextMergeCache,
     ) -> AtnConfigSet {
         let mut reach = AtnConfigSet::new_full_context(full_context);
+        let mut scratch = ClosureScratch::default();
+        let params = ClosureParams {
+            precedence,
+            collect_predicates: false,
+            treat_eof_as_epsilon: symbol == TOKEN_EOF,
+        };
         for config in intermediate.configs() {
-            self.closure(
-                config.clone(),
-                &mut reach,
-                merge_cache,
-                precedence,
-                false,
-                symbol == TOKEN_EOF,
-            );
+            self.closure(config.clone(), &mut reach, merge_cache, &mut scratch, params);
         }
         reach
     }
@@ -919,14 +945,19 @@ impl<'a> ParserAtnSimulator<'a> {
         config: AtnConfig,
         configs: &mut AtnConfigSet,
         merge_cache: &mut PredictionContextMergeCache,
-        precedence: i32,
-        collect_predicates: bool,
-        treat_eof_as_epsilon: bool,
+        scratch: &mut ClosureScratch,
+        params: ClosureParams,
     ) {
-        let mut stack = vec![config];
-        let mut visited = FxHashSet::<ClosureConfigKey>::default();
-        while let Some(config) = stack.pop() {
-            if !visited.insert(ClosureConfigKey::from(&config)) {
+        let ClosureParams {
+            precedence,
+            collect_predicates,
+            treat_eof_as_epsilon,
+        } = params;
+        scratch.stack.clear();
+        scratch.visited.clear();
+        scratch.stack.push(config);
+        while let Some(config) = scratch.stack.pop() {
+            if !scratch.visited.insert(ClosureConfigKey::from(&config)) {
                 continue;
             }
             let Some(state) = self.atn.state(config.state) else {
@@ -934,7 +965,12 @@ impl<'a> ParserAtnSimulator<'a> {
             };
             let at_rule_stop = state.is_rule_stop();
             if at_rule_stop
-                && self.closure_at_rule_stop(config.clone(), configs, merge_cache, &mut stack)
+                && self.closure_at_rule_stop(
+                    config.clone(),
+                    configs,
+                    merge_cache,
+                    &mut scratch.stack,
+                )
             {
                 continue;
             }
@@ -961,12 +997,12 @@ impl<'a> ParserAtnSimulator<'a> {
                             target.reaches_into_outer_context =
                                 target.reaches_into_outer_context.saturating_add(1);
                         }
-                        stack.push(target);
+                        scratch.stack.push(target);
                     }
                 } else if treat_eof_as_epsilon
                     && transition.matches(TOKEN_EOF, 1, self.atn.max_token_type())
                 {
-                    stack.push(AtnConfig {
+                    scratch.stack.push(AtnConfig {
                         state: transition.target(),
                         alt: config.alt,
                         context: Rc::clone(&config.context),
@@ -978,7 +1014,7 @@ impl<'a> ParserAtnSimulator<'a> {
             }
         }
         #[cfg(feature = "perf-counters")]
-        crate::perf::record_closure(visited.len());
+        crate::perf::record_closure(scratch.visited.len());
     }
 
     fn closure_at_rule_stop(
@@ -1459,13 +1495,17 @@ mod tests {
         let simulator = ParserAtnSimulator::new(&atn);
         let mut configs = AtnConfigSet::new_full_context(false);
         let mut merge_cache = PredictionContextMergeCache::new();
+        let mut scratch = ClosureScratch::default();
         simulator.closure(
             AtnConfig::new(0, 2, PredictionContext::empty()),
             &mut configs,
             &mut merge_cache,
-            0,
-            true,
-            false,
+            &mut scratch,
+            ClosureParams {
+                precedence: 0,
+                collect_predicates: true,
+                treat_eof_as_epsilon: false,
+            },
         );
 
         assert_eq!(configs.len(), 1);
