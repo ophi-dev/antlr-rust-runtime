@@ -83,6 +83,41 @@
       "source": "https://github.com/trinodb/trino/blob/ee76b9bac977a0158bd8b6a4f4b2f52cd0eaba9b/core/trino-main/src/main/java/io/trino/sql/gen/columnar/FilterEvaluator.java",
       "license": "Apache-2.0",
       "description": "Trino columnar filter evaluator with a sealed interface, record result type, pattern switch expressions with when guards, yield blocks, lambdas, nested generics, and static factory flow."
+    },
+    {
+      "language": "trino",
+      "path": "trino/trino-tpcds-q64.sql",
+      "source": "https://github.com/trinodb/trino/blob/82c47e2be109cb17bc48f04d00176f72f0253ffa/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpcds/q64.sql",
+      "license": "Apache-2.0",
+      "description": "Trino TPC-DS query 64 with multiple CTEs, wide select lists, broad joined relations, HAVING, BETWEEN predicates, and long ORDER BY clauses; benchmark placeholders are normalized to identifiers."
+    },
+    {
+      "language": "trino",
+      "path": "trino/trino-tpcds-q47.sql",
+      "source": "https://github.com/trinodb/trino/blob/82c47e2be109cb17bc48f04d00176f72f0253ffa/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpcds/q47.sql",
+      "license": "Apache-2.0",
+      "description": "Trino TPC-DS query 47 with chained CTEs, window functions, partitioned ORDER BY, self-joins over CTE aliases, CASE expressions, DECIMAL literals, and LIMIT; benchmark placeholders are normalized to identifiers."
+    },
+    {
+      "language": "trino",
+      "path": "trino/trino-tpcds-q74.sql",
+      "source": "https://github.com/trinodb/trino/blob/82c47e2be109cb17bc48f04d00176f72f0253ffa/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpcds/q74.sql",
+      "license": "Apache-2.0",
+      "description": "Trino TPC-DS query 74 with a CTE containing UNION ALL branches, repeated CTE self-joins, arithmetic expressions, nested CASE comparisons, ORDER BY, and LIMIT; benchmark placeholders are normalized to identifiers."
+    },
+    {
+      "language": "trino",
+      "path": "trino/trino-tpch-q21.sql",
+      "source": "https://github.com/trinodb/trino/blob/82c47e2be109cb17bc48f04d00176f72f0253ffa/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpch/q21.sql",
+      "license": "Apache-2.0",
+      "description": "Trino TPC-H query 21 with correlated EXISTS and NOT EXISTS subqueries, multi-table FROM lists, grouped aggregation, qualified aliases, ORDER BY, and LIMIT; benchmark placeholders are normalized to identifiers."
+    },
+    {
+      "language": "trino",
+      "path": "trino/trino-tpcds-grammar-suite.sql",
+      "source": "https://github.com/trinodb/trino/tree/82c47e2be109cb17bc48f04d00176f72f0253ffa/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpcds",
+      "license": "Apache-2.0",
+      "description": "Curated Trino TPC-DS grammar-stress suite combining the 40 benchmark queries with the highest feature score for CTEs, windows, UNION, EXISTS, CASE, grouping, HAVING, ORDER BY, intervals, BETWEEN, IN, and CAST; benchmark placeholders are normalized to identifiers."
     }
   ]
 }

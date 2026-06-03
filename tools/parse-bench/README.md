@@ -1,7 +1,8 @@
 # Parse Benchmark
 
 This benchmark compares parse throughput for generated ANTLR parsers and
-tree-sitter parsers on Kotlin, C#, and Java fixtures.
+tree-sitter parsers on Kotlin, C#, and Java fixtures, with an explicit Trino
+SQL fixture set for SQL-dialect Rust vs Go checks.
 
 The harness is intentionally a standalone script instead of `cargo bench`.
 `cargo bench` is useful for in-process Rust-only measurements, but this check
@@ -17,11 +18,11 @@ The benchmark defaults to:
 - `ANTLR4_JAR=/tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar`
 - `GRAMMARS_V4=/tmp/antlr-cleanroom/grammars-v4`
 
-The sparse checkout must include C# and the modern Java grammar in addition to
-Kotlin:
+The sparse checkout must include C#, the modern Java grammar, and Trino SQL in
+addition to Kotlin:
 
 ```bash
-git -C /tmp/antlr-cleanroom/grammars-v4 sparse-checkout set kotlin/kotlin csharp/v7 java/java
+git -C /tmp/antlr-cleanroom/grammars-v4 sparse-checkout set kotlin/kotlin csharp/v7 java/java sql/trino
 ```
 
 Install the Python dependencies in the interpreter you will use to run the
@@ -37,6 +38,15 @@ Quick local smoke:
 
 ```bash
 python3 tools/parse-bench/run.py --quick
+```
+
+SQL-only Rust vs Go smoke:
+
+```bash
+python3 tools/parse-bench/run.py \
+  --languages trino \
+  --runtimes rust-antlr,go-antlr \
+  --quick
 ```
 
 Longer local run with reports:
@@ -87,3 +97,6 @@ stress patterns:
 - Kotlin: JetBrains Kotlin, kotlinx.coroutines, Ktor.
 - C#: dotnet/wpf, Mono.
 - Java: Mojang DataFixerUpper, Bazel, OpenRewrite, Trino.
+- Trino SQL: Trino benchmark TPC-DS/TPC-H queries with benchmark placeholders
+  normalized to identifiers, including a curated TPC-DS grammar-stress suite
+  selected by CTE/window/UNION/EXISTS/CASE/grouping feature density.

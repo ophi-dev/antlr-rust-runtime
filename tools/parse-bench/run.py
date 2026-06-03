@@ -99,6 +99,21 @@ LANGUAGES: dict[str, LanguageSpec] = {
         go_entry="CompilationUnit",
         tree_sitter_name="java",
     ),
+    "trino": LanguageSpec(
+        name="trino",
+        grammar_rel=Path("sql/trino"),
+        grammar_files=("TrinoLexer.g4", "TrinoParser.g4"),
+        lexer_name="TrinoLexer",
+        parser_name="TrinoParser",
+        rust_lexer_module="trino_lexer",
+        rust_parser_module="trino_parser",
+        rust_lexer_type="TrinoLexer",
+        rust_parser_type="TrinoParser",
+        rust_entry="parse",
+        python_entry="parse",
+        go_entry="Parse",
+        tree_sitter_name="sql",
+    ),
 }
 
 RUNTIMES = ("rust-antlr", "python-antlr", "go-antlr", "tree-sitter")

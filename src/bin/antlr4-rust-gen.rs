@@ -3,6 +3,7 @@ use std::env;
 use std::fmt::Write as _;
 use std::fs;
 use std::io;
+use std::ops::AddAssign;
 use std::path::{Path, PathBuf};
 
 use antlr4_runtime::atn::serialized::{AtnDeserializer, SerializedAtn};
@@ -660,10 +661,25 @@ fn drop_rules_calling_disabled_rules(rules: &mut [Option<GeneratedParserRule>]) 
 }
 
 const ATN_PREFERRED_LEADING_CALL_CHAIN_MIN: usize = 8;
+const ATN_PREFERRED_CHAIN_MIN_DECISION_DENSITY_NUMERATOR: usize = 2;
+const ATN_PREFERRED_WRAPPER_MIN_DECISION_COST: usize = 2;
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct GeneratedRuleShape {
+    decision_cost: usize,
+    action_or_predicate_count: usize,
+}
+
+impl AddAssign for GeneratedRuleShape {
+    fn add_assign(&mut self, rhs: Self) {
+        self.decision_cost += rhs.decision_cost;
+        self.action_or_predicate_count += rhs.action_or_predicate_count;
+    }
+}
 
 fn generated_atn_preferred_rule_calls(
     rules: &[Option<GeneratedParserRule>],
-    rule_names: &[String],
+    _rule_names: &[String],
 ) -> Vec<bool> {
     let leading_rule_calls = rules
         .iter()
@@ -672,8 +688,14 @@ fn generated_atn_preferred_rule_calls(
                 .and_then(|rule| generated_steps_leading_mandatory_rule_call(&rule.steps))
         })
         .collect::<Vec<_>>();
+    let shapes = rules
+        .iter()
+        .map(|rule| {
+            rule.as_ref()
+                .map_or_else(GeneratedRuleShape::default, generated_rule_shape)
+        })
+        .collect::<Vec<_>>();
     let mut preferred = vec![false; rules.len()];
-    let kotlin_rule_set = is_kotlin_rule_set(rule_names);
 
     for start in 0..rules.len() {
         if rules[start].is_none() {
@@ -696,66 +718,164 @@ fn generated_atn_preferred_rule_calls(
         }
 
         if chain.len() >= ATN_PREFERRED_LEADING_CALL_CHAIN_MIN
-            && generated_atn_preferred_chain_matches_rule_names(&chain, rule_names)
+            && generated_atn_preferred_chain_is_expensive(&chain, &shapes)
         {
             for rule_index in chain {
                 preferred[rule_index] = true;
             }
         }
     }
-    if kotlin_rule_set {
-        for (rule_index, name) in rule_names.iter().enumerate() {
-            if matches_kotlin_atn_preferred_rule_name(name) && rule_index < preferred.len() {
-                preferred[rule_index] = true;
-            }
-        }
-    }
+    propagate_atn_preferred_wrappers(rules, &shapes, &mut preferred);
 
     preferred
 }
 
-fn is_kotlin_rule_set(rule_names: &[String]) -> bool {
-    rule_names.iter().any(|name| name == "kotlinFile")
-        && rule_names.iter().any(|name| name == "blockLevelExpression")
-}
-
-fn matches_kotlin_atn_preferred_rule_name(name: &str) -> bool {
-    matches!(name, "kotlinFile" | "statements" | "statement")
-}
-
-fn generated_atn_preferred_chain_matches_rule_names(
+fn generated_atn_preferred_chain_is_expensive(
     chain: &[usize],
-    rule_names: &[String],
+    shapes: &[GeneratedRuleShape],
 ) -> bool {
-    if rule_names.is_empty() {
-        return true;
-    }
-    // The structural chain alone also matches C#, where interpreted parsing is
-    // pathologically slower on the WPF fixture; keep this targeted to the
-    // Kotlin ladder until we have a real per-chain cost model.
-    chain.iter().any(|rule_index| {
-        rule_names
-            .get(*rule_index)
-            .is_some_and(|name| matches_kotlin_expression_ladder_name(name))
-    })
+    let decision_cost = chain
+        .iter()
+        .filter_map(|rule_index| shapes.get(*rule_index))
+        .map(|shape| shape.decision_cost)
+        .sum::<usize>();
+    decision_cost >= chain.len() * ATN_PREFERRED_CHAIN_MIN_DECISION_DENSITY_NUMERATOR
 }
 
-fn matches_kotlin_expression_ladder_name(name: &str) -> bool {
-    matches!(
-        name,
-        "disjunction"
-            | "conjunction"
-            | "equalityComparison"
-            | "comparison"
-            | "namedInfix"
-            | "elvisExpression"
-            | "infixFunctionCall"
-            | "rangeExpression"
-            | "additiveExpression"
-            | "multiplicativeExpression"
-            | "prefixUnaryExpression"
-            | "postfixUnaryExpression"
-    )
+fn propagate_atn_preferred_wrappers(
+    rules: &[Option<GeneratedParserRule>],
+    shapes: &[GeneratedRuleShape],
+    preferred: &mut [bool],
+) {
+    loop {
+        let mut changed = false;
+        for (rule_index, rule) in rules.iter().enumerate() {
+            if preferred.get(rule_index).copied().unwrap_or_default() {
+                continue;
+            }
+            let Some(rule) = rule else {
+                continue;
+            };
+            if !generated_rule_is_atn_preferred_wrapper(rule, shapes, preferred) {
+                continue;
+            }
+            preferred[rule_index] = true;
+            changed = true;
+        }
+        if !changed {
+            return;
+        }
+    }
+}
+
+fn generated_rule_is_atn_preferred_wrapper(
+    rule: &GeneratedParserRule,
+    shapes: &[GeneratedRuleShape],
+    preferred: &[bool],
+) -> bool {
+    if rule.left_recursive {
+        return false;
+    }
+    let shape = shapes.get(rule.rule_index).copied().unwrap_or_default();
+    shape.action_or_predicate_count == 0
+        && shape.decision_cost >= ATN_PREFERRED_WRAPPER_MIN_DECISION_COST
+        && generated_steps_call_atn_preferred_rule(&rule.steps, preferred)
+}
+
+fn generated_rule_shape(rule: &GeneratedParserRule) -> GeneratedRuleShape {
+    generated_steps_shape(&rule.steps)
+}
+
+fn generated_steps_shape(steps: &[GeneratedParserStep]) -> GeneratedRuleShape {
+    let mut shape = GeneratedRuleShape::default();
+    for step in steps {
+        shape += generated_step_shape(step);
+    }
+    shape
+}
+
+fn generated_step_shape(step: &GeneratedParserStep) -> GeneratedRuleShape {
+    match step {
+        GeneratedParserStep::Decision {
+            allow_semantic_context,
+            force_context,
+            fast_path,
+            alts,
+            ..
+        } => {
+            let mut shape = GeneratedRuleShape {
+                decision_cost: usize::from(
+                    fast_path.is_none() || *allow_semantic_context || *force_context,
+                ),
+                action_or_predicate_count: 0,
+            };
+            for alt in alts {
+                shape += generated_steps_shape(alt);
+            }
+            shape
+        }
+        GeneratedParserStep::StarLoop {
+            allow_semantic_context,
+            force_context,
+            fast_path,
+            body,
+            ..
+        } => {
+            let mut shape = GeneratedRuleShape {
+                decision_cost: usize::from(
+                    fast_path.is_none() || *allow_semantic_context || *force_context,
+                ),
+                action_or_predicate_count: 0,
+            };
+            shape += generated_steps_shape(body);
+            shape
+        }
+        GeneratedParserStep::LeftRecursiveLoop { body, .. } => {
+            let mut shape = GeneratedRuleShape {
+                decision_cost: 1,
+                action_or_predicate_count: 0,
+            };
+            shape += generated_steps_shape(body);
+            shape
+        }
+        GeneratedParserStep::Predicate { .. } | GeneratedParserStep::Action { .. } => {
+            GeneratedRuleShape {
+                decision_cost: 0,
+                action_or_predicate_count: 1,
+            }
+        }
+        GeneratedParserStep::MatchToken { .. }
+        | GeneratedParserStep::MatchSet { .. }
+        | GeneratedParserStep::MatchNotSet { .. }
+        | GeneratedParserStep::MatchWildcard
+        | GeneratedParserStep::Precedence(_)
+        | GeneratedParserStep::CallRule { .. } => GeneratedRuleShape::default(),
+    }
+}
+
+fn generated_steps_call_atn_preferred_rule(
+    steps: &[GeneratedParserStep],
+    preferred: &[bool],
+) -> bool {
+    steps.iter().any(|step| match step {
+        GeneratedParserStep::CallRule { rule_index, .. } => {
+            preferred.get(*rule_index).copied().unwrap_or_default()
+        }
+        GeneratedParserStep::Decision { alts, .. } => alts
+            .iter()
+            .any(|alt| generated_steps_call_atn_preferred_rule(alt, preferred)),
+        GeneratedParserStep::StarLoop { body, .. }
+        | GeneratedParserStep::LeftRecursiveLoop { body, .. } => {
+            generated_steps_call_atn_preferred_rule(body, preferred)
+        }
+        GeneratedParserStep::MatchToken { .. }
+        | GeneratedParserStep::MatchSet { .. }
+        | GeneratedParserStep::MatchNotSet { .. }
+        | GeneratedParserStep::MatchWildcard
+        | GeneratedParserStep::Precedence(_)
+        | GeneratedParserStep::Predicate { .. }
+        | GeneratedParserStep::Action { .. } => false,
+    })
 }
 
 fn generated_steps_leading_mandatory_rule_call(steps: &[GeneratedParserStep]) -> Option<usize> {
@@ -6976,6 +7096,33 @@ atn:
         }
     }
 
+    fn adaptive_loop(decision: usize) -> GeneratedParserStep {
+        GeneratedParserStep::StarLoop {
+            state: 1_000 + decision,
+            decision,
+            enter_alt: 1,
+            exit_alt: 2,
+            track_alt_number: false,
+            allow_semantic_context: false,
+            force_context: false,
+            fast_path: None,
+            body: vec![mt(2, 0)],
+        }
+    }
+
+    fn expensive_ladder_rule(rule_index: usize, next: Option<usize>) -> GeneratedParserRule {
+        let mut steps = Vec::new();
+        if let Some(next) = next {
+            steps.push(cr(next));
+        }
+        steps.push(adaptive_loop(rule_index * 2));
+        steps.push(adaptive_loop(rule_index * 2 + 1));
+        if next.is_none() {
+            steps.push(mt(1, 0));
+        }
+        test_rule(rule_index, steps)
+    }
+
     fn test_rule(rule_index: usize, steps: Vec<GeneratedParserStep>) -> GeneratedParserRule {
         GeneratedParserRule {
             rule_index,
@@ -7269,30 +7416,15 @@ atn:
     }
 
     #[test]
-    fn classifies_long_leading_call_chains_as_atn_preferred() {
+    fn classifies_expensive_long_leading_call_chains_as_atn_preferred() {
         let mut rules = (0..ATN_PREFERRED_LEADING_CALL_CHAIN_MIN)
             .map(|rule_index| {
-                let steps = if rule_index + 1 == ATN_PREFERRED_LEADING_CALL_CHAIN_MIN {
-                    vec![mt(1, 0)]
-                } else if rule_index == 0 {
-                    vec![
-                        GeneratedParserStep::StarLoop {
-                            state: 1,
-                            decision: 0,
-                            enter_alt: 1,
-                            exit_alt: 2,
-                            track_alt_number: false,
-                            allow_semantic_context: false,
-                            force_context: false,
-                            fast_path: None,
-                            body: vec![mt(2, 0)],
-                        },
-                        cr(rule_index + 1),
-                    ]
+                let next = if rule_index + 1 == ATN_PREFERRED_LEADING_CALL_CHAIN_MIN {
+                    None
                 } else {
-                    vec![cr(rule_index + 1)]
+                    Some(rule_index + 1)
                 };
-                Some(test_rule(rule_index, steps))
+                Some(expensive_ladder_rule(rule_index, next))
             })
             .collect::<Vec<_>>();
 
@@ -7309,107 +7441,79 @@ atn:
     }
 
     #[test]
-    fn atn_preferred_rule_calls_require_kotlin_ladder_names_when_available() {
-        let rules = (0..ATN_PREFERRED_LEADING_CALL_CHAIN_MIN)
+    fn atn_preferred_rule_calls_reject_simple_operator_ladders() {
+        let simple_rules = (0..ATN_PREFERRED_LEADING_CALL_CHAIN_MIN)
             .map(|rule_index| {
                 let steps = if rule_index + 1 == ATN_PREFERRED_LEADING_CALL_CHAIN_MIN {
-                    vec![mt(1, 0)]
+                    vec![adaptive_loop(rule_index), mt(1, 0)]
                 } else {
-                    vec![cr(rule_index + 1)]
+                    vec![cr(rule_index + 1), adaptive_loop(rule_index)]
                 };
                 Some(test_rule(rule_index, steps))
             })
             .collect::<Vec<_>>();
-        let csharp_names = [
-            "conditional_expression",
-            "null_coalescing_expression",
-            "conditional_or_expression",
-            "conditional_and_expression",
-            "inclusive_or_expression",
-            "exclusive_or_expression",
-            "and_expression",
-            "equality_expression",
-        ]
-        .map(str::to_owned);
-        let kotlin_names = [
-            "expression",
-            "disjunction",
-            "conjunction",
-            "equalityComparison",
-            "comparison",
-            "namedInfix",
-            "elvisExpression",
-            "infixFunctionCall",
-        ]
-        .map(str::to_owned);
 
         assert_eq!(
-            generated_atn_preferred_rule_calls(&rules, &csharp_names),
+            generated_atn_preferred_rule_calls(&simple_rules, &[]),
             vec![false; ATN_PREFERRED_LEADING_CALL_CHAIN_MIN]
         );
+
+        let expensive_rules = (0..ATN_PREFERRED_LEADING_CALL_CHAIN_MIN)
+            .map(|rule_index| {
+                let next = if rule_index + 1 == ATN_PREFERRED_LEADING_CALL_CHAIN_MIN {
+                    None
+                } else {
+                    Some(rule_index + 1)
+                };
+                Some(expensive_ladder_rule(rule_index, next))
+            })
+            .collect::<Vec<_>>();
         assert_eq!(
-            generated_atn_preferred_rule_calls(&rules, &kotlin_names),
+            generated_atn_preferred_rule_calls(&expensive_rules, &[]),
             vec![true; ATN_PREFERRED_LEADING_CALL_CHAIN_MIN]
         );
     }
 
     #[test]
-    fn atn_preferred_rule_calls_mark_only_kotlin_root_and_statement_rules_by_name() {
-        let rules = vec![
-            Some(test_rule(0, vec![mt(1, 0)])),
-            Some(test_rule(1, vec![mt(1, 0)])),
-            Some(test_rule(2, vec![mt(1, 0)])),
-            Some(test_rule(3, vec![mt(1, 0)])),
-        ];
-        let kotlin_names = [
-            "kotlinFile",
-            "blockLevelExpression",
-            "statements",
-            "statement",
-        ]
-        .map(str::to_owned);
-        let csharp_like_names = [
-            "compilation_unit",
-            "block_level_expression",
-            "statements",
-            "statement",
-        ]
-        .map(str::to_owned);
+    fn atn_preferred_rule_calls_propagate_through_expensive_wrappers() {
+        let mut rules = Vec::new();
+        rules.push(Some(test_rule(
+            0,
+            vec![mt(9, 0), adaptive_loop(100), adaptive_loop(101), cr(1)],
+        )));
+        rules.push(Some(test_rule(
+            1,
+            vec![mt(8, 0), adaptive_loop(102), adaptive_loop(103), cr(2)],
+        )));
+        for rule_index in 2..(2 + ATN_PREFERRED_LEADING_CALL_CHAIN_MIN) {
+            let next = if rule_index + 1 == 2 + ATN_PREFERRED_LEADING_CALL_CHAIN_MIN {
+                None
+            } else {
+                Some(rule_index + 1)
+            };
+            rules.push(Some(expensive_ladder_rule(rule_index, next)));
+        }
+        rules.push(Some(test_rule(10, vec![cr(2)])));
 
-        assert_eq!(
-            generated_atn_preferred_rule_calls(&rules, &kotlin_names),
-            vec![true, false, true, true]
-        );
-        assert_eq!(
-            generated_atn_preferred_rule_calls(&rules, &csharp_like_names),
-            vec![false; 4]
-        );
+        let mut expected = vec![true; 2 + ATN_PREFERRED_LEADING_CALL_CHAIN_MIN];
+        expected.push(false);
+        assert_eq!(generated_atn_preferred_rule_calls(&rules, &[]), expected);
     }
 
     #[test]
     fn renders_atn_preferred_generated_child_calls_as_interpreted_by_default() {
         let rules = (0..ATN_PREFERRED_LEADING_CALL_CHAIN_MIN)
             .map(|rule_index| {
-                let steps = if rule_index + 1 == ATN_PREFERRED_LEADING_CALL_CHAIN_MIN {
-                    vec![mt(1, 0)]
+                let next = if rule_index + 1 == ATN_PREFERRED_LEADING_CALL_CHAIN_MIN {
+                    None
                 } else {
-                    vec![cr(rule_index + 1)]
+                    Some(rule_index + 1)
                 };
-                Some(test_rule(rule_index, steps))
+                Some(expensive_ladder_rule(rule_index, next))
             })
             .collect::<Vec<_>>();
         let direct_generated_rule_calls = vec![true; rules.len()];
-        let rule_names = [
-            "expression",
-            "disjunction",
-            "conjunction",
-            "equalityComparison",
-            "comparison",
-            "namedInfix",
-            "elvisExpression",
-            "infixFunctionCall",
-        ]
-        .map(str::to_owned);
+        let rule_names = Vec::new();
 
         let rendered = render_generated_rule_dispatch_with_rule_names(
             &rules,
@@ -7428,20 +7532,22 @@ atn:
 
     #[test]
     fn renders_atn_preferred_dispatch_only_for_generated_only_mode() {
-        let rules = vec![
-            Some(test_rule(0, vec![cr(2)])),
-            Some(test_rule(1, vec![mt(1, 0)])),
-            Some(test_rule(2, vec![mt(1, 0)])),
-            Some(test_rule(3, vec![mt(1, 0)])),
-        ];
+        let mut rules = Vec::new();
+        rules.push(Some(test_rule(
+            0,
+            vec![mt(9, 0), adaptive_loop(100), adaptive_loop(101), cr(2)],
+        )));
+        rules.push(Some(test_rule(1, vec![mt(1, 0)])));
+        for rule_index in 2..(2 + ATN_PREFERRED_LEADING_CALL_CHAIN_MIN) {
+            let next = if rule_index + 1 == 2 + ATN_PREFERRED_LEADING_CALL_CHAIN_MIN {
+                None
+            } else {
+                Some(rule_index + 1)
+            };
+            rules.push(Some(expensive_ladder_rule(rule_index, next)));
+        }
         let direct_generated_rule_calls = vec![true; rules.len()];
-        let rule_names = [
-            "kotlinFile",
-            "blockLevelExpression",
-            "statements",
-            "statement",
-        ]
-        .map(str::to_owned);
+        let rule_names = Vec::new();
 
         let rendered = render_generated_rule_dispatch_with_rule_names(
             &rules,
