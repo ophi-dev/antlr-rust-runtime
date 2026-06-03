@@ -188,9 +188,13 @@ impl PredictionContext {
             #[cfg(feature = "perf-counters")]
             crate::perf::record_context_merge_cache_miss();
         }
-        #[cfg(feature = "perf-counters")]
-        crate::perf::record_context_merge_uncached();
-        let merged = merge_contexts_uncached(&left, &right, root_is_wildcard, cache.as_deref_mut());
+        let merged = if root_is_wildcard && (left.is_empty() || right.is_empty()) {
+            Self::empty()
+        } else {
+            #[cfg(feature = "perf-counters")]
+            crate::perf::record_context_merge_uncached();
+            merge_contexts_uncached(&left, &right)
+        };
         if let Some(cache) = cache {
             cache.insert(&left, &right, &merged);
         }
@@ -198,49 +202,65 @@ impl PredictionContext {
     }
 }
 
-/// Dispatches a context merge to the singleton/array helpers, faithfully
-/// mirroring ANTLR's `mergeSingletons`/`mergeArrays` (Go `prediction_context.go`,
-/// Java `PredictionContext.java`). The merge cache and `root_is_wildcard` are
-/// threaded so recursive parent merges canonicalize identically to the
-/// reference: two stack entries that share a return state are collapsed into a
-/// single entry whose parent is the recursive merge of their parents, rather
-/// than kept as duplicate entries.
 fn merge_contexts_uncached(
     left: &Rc<PredictionContext>,
     right: &Rc<PredictionContext>,
-    root_is_wildcard: bool,
-    mut cache: Option<&mut PredictionContextMergeCache>,
 ) -> Rc<PredictionContext> {
     if left == right {
         return Rc::clone(left);
     }
     match (left.as_ref(), right.as_ref()) {
-        // Two single-entry contexts (Empty counts as the `$` entry).
+        (PredictionContext::Empty { .. }, PredictionContext::Empty { .. }) => {
+            PredictionContext::empty()
+        }
         (
-            PredictionContext::Empty { .. } | PredictionContext::Singleton { .. },
-            PredictionContext::Empty { .. } | PredictionContext::Singleton { .. },
-        ) => merge_singletons(left, right, root_is_wildcard, cache.as_deref_mut()),
+            PredictionContext::Singleton {
+                parent: left_parent,
+                return_state: left_return_state,
+                ..
+            },
+            PredictionContext::Singleton {
+                parent: right_parent,
+                return_state: right_return_state,
+                ..
+            },
+        ) => merge_two_context_entries(
+            Rc::clone(left_parent),
+            *left_return_state,
+            Rc::clone(right_parent),
+            *right_return_state,
+        ),
+        (PredictionContext::Empty { .. }, PredictionContext::Singleton { .. })
+        | (PredictionContext::Singleton { .. }, PredictionContext::Empty { .. }) => {
+            let (left_parent, left_return_state) = first_context_entry(left);
+            let (right_parent, right_return_state) = first_context_entry(right);
+            merge_two_context_entries(
+                left_parent,
+                left_return_state,
+                right_parent,
+                right_return_state,
+            )
+        }
         (
             PredictionContext::Array {
                 parents,
                 return_states,
                 ..
             },
-            PredictionContext::Empty { .. } | PredictionContext::Singleton { .. },
+            PredictionContext::Singleton { .. } | PredictionContext::Empty { .. },
         ) => {
             let (parent, return_state) = first_context_entry(right);
-            let right_array = single_entry_as_array(parent, return_state);
-            merge_arrays(
+            merge_array_with_entry(
+                Rc::clone(left),
                 parents,
                 return_states,
-                &right_array.0,
-                &right_array.1,
-                root_is_wildcard,
-                cache.as_deref_mut(),
+                parent,
+                return_state,
+                false,
             )
         }
         (
-            PredictionContext::Empty { .. } | PredictionContext::Singleton { .. },
+            PredictionContext::Singleton { .. } | PredictionContext::Empty { .. },
             PredictionContext::Array {
                 parents,
                 return_states,
@@ -248,14 +268,13 @@ fn merge_contexts_uncached(
             },
         ) => {
             let (parent, return_state) = first_context_entry(left);
-            let left_array = single_entry_as_array(parent, return_state);
-            merge_arrays(
-                &left_array.0,
-                &left_array.1,
+            merge_array_with_entry(
+                Rc::clone(right),
                 parents,
                 return_states,
-                root_is_wildcard,
-                cache.as_deref_mut(),
+                parent,
+                return_state,
+                true,
             )
         }
         (
@@ -274,15 +293,13 @@ fn merge_contexts_uncached(
             left_return_states,
             right_parents,
             right_return_states,
-            root_is_wildcard,
-            cache,
         ),
     }
 }
 
 fn first_context_entry(context: &Rc<PredictionContext>) -> (Rc<PredictionContext>, usize) {
     match context.as_ref() {
-        PredictionContext::Empty { .. } => (PredictionContext::empty(), EMPTY_RETURN_STATE),
+        PredictionContext::Empty { .. } => (Rc::clone(context), EMPTY_RETURN_STATE),
         PredictionContext::Singleton {
             parent,
             return_state,
@@ -292,141 +309,85 @@ fn first_context_entry(context: &Rc<PredictionContext>) -> (Rc<PredictionContext
     }
 }
 
-/// Represents a single-entry context (Empty or Singleton) as a 1-element array
-/// so the array merge can handle the singleton/array mixed cases uniformly,
-/// mirroring how ANTLR routes those through `mergeArrays`. The `$` (empty) entry
-/// is encoded as an `EMPTY_RETURN_STATE` slot whose parent is the empty context.
-fn single_entry_as_array(
-    parent: Rc<PredictionContext>,
-    return_state: usize,
-) -> (Vec<Rc<PredictionContext>>, Vec<usize>) {
-    (vec![parent], vec![return_state])
+fn merge_two_context_entries(
+    left_parent: Rc<PredictionContext>,
+    left_return_state: usize,
+    right_parent: Rc<PredictionContext>,
+    right_return_state: usize,
+) -> Rc<PredictionContext> {
+    if left_return_state == right_return_state && left_parent == right_parent {
+        return PredictionContext::singleton(left_parent, left_return_state);
+    }
+    let left_key = (left_return_state, left_parent.cached_hash());
+    let right_key = (right_return_state, right_parent.cached_hash());
+    let (first_parent, first_return_state, second_parent, second_return_state) =
+        if right_key < left_key {
+            (
+                right_parent,
+                right_return_state,
+                left_parent,
+                left_return_state,
+            )
+        } else {
+            (
+                left_parent,
+                left_return_state,
+                right_parent,
+                right_return_state,
+            )
+        };
+    PredictionContext::array(
+        vec![first_parent, second_parent],
+        vec![first_return_state, second_return_state],
+    )
 }
 
-/// Faithful port of ANTLR's `mergeSingletons`: merges two single-entry contexts,
-/// recursively merging parents when the return states match (`ax + ay = a'[x,y]`
-/// collapses to one entry with a merged parent).
-fn merge_singletons(
-    a: &Rc<PredictionContext>,
-    b: &Rc<PredictionContext>,
-    root_is_wildcard: bool,
-    cache: Option<&mut PredictionContextMergeCache>,
+fn merge_array_with_entry(
+    array_context: Rc<PredictionContext>,
+    array_parents: &[Rc<PredictionContext>],
+    array_return_states: &[usize],
+    entry_parent: Rc<PredictionContext>,
+    entry_return_state: usize,
+    entry_on_left: bool,
 ) -> Rc<PredictionContext> {
-    if let Some(root) = merge_root(a, b, root_is_wildcard) {
-        return root;
-    }
-    let (a_parent, a_return_state) = first_context_entry(a);
-    let (b_parent, b_return_state) = first_context_entry(b);
-
-    if a_return_state == b_return_state {
-        let parent =
-            PredictionContext::merge_with_options(a_parent.clone(), b_parent.clone(), root_is_wildcard, cache);
-        // ax + bx = ax, if the merged parent reduced to an existing parent.
-        if parent == a_parent {
-            return Rc::clone(a);
+    let entry_key = context_entry_key(&entry_parent, entry_return_state);
+    let mut insert_index = array_parents.len();
+    for (index, (parent, return_state)) in array_parents
+        .iter()
+        .zip(array_return_states)
+        .enumerate()
+    {
+        let key = context_entry_key(parent, *return_state);
+        if key == entry_key && parent == &entry_parent {
+            return array_context;
         }
-        if parent == b_parent {
-            return Rc::clone(b);
+        let should_insert = if entry_on_left {
+            entry_key <= key
+        } else {
+            entry_key < key
+        };
+        if should_insert {
+            insert_index = index;
+            break;
         }
-        // ax + ay = a'[x,y]: a new singleton over the merged parent.
-        return PredictionContext::singleton(parent, a_return_state);
     }
 
-    // Return states differ. If the parents are identical we can share them.
-    let single_parent = if a_parent == b_parent {
-        Some(a_parent.clone())
-    } else {
-        None
-    };
-    if let Some(single_parent) = single_parent {
-        let (parents, return_states) =
-            sort_two_entries(single_parent.clone(), a_return_state, single_parent, b_return_state);
-        return PredictionContext::array(parents, return_states);
-    }
-    // Parents differ and cannot merge: pack into a two-entry array.
-    let (parents, return_states) =
-        sort_two_entries(a_parent, a_return_state, b_parent, b_return_state);
+    let mut parents = Vec::with_capacity(array_parents.len() + 1);
+    let mut return_states = Vec::with_capacity(array_return_states.len() + 1);
+    parents.extend(array_parents[..insert_index].iter().cloned());
+    return_states.extend_from_slice(&array_return_states[..insert_index]);
+    parents.push(entry_parent);
+    return_states.push(entry_return_state);
+    parents.extend(array_parents[insert_index..].iter().cloned());
+    return_states.extend_from_slice(&array_return_states[insert_index..]);
     PredictionContext::array(parents, return_states)
 }
 
-/// Handles the `$`-root cases of a singleton merge (ANTLR `mergeRoot`).
-/// Returns `Some` when one side is the empty (`$`) context; `None` otherwise.
-fn merge_root(
-    a: &Rc<PredictionContext>,
-    b: &Rc<PredictionContext>,
-    root_is_wildcard: bool,
-) -> Option<Rc<PredictionContext>> {
-    let a_empty = a.is_empty();
-    let b_empty = b.is_empty();
-    if !a_empty && !b_empty {
-        return None;
-    }
-    if root_is_wildcard {
-        // In SLL mode the empty root is a wildcard that absorbs the other side.
-        if a_empty {
-            return Some(PredictionContext::empty());
-        }
-        if b_empty {
-            return Some(PredictionContext::empty());
-        }
-        return None;
-    }
-    // Full LL mode: `$` is an ordinary entry that joins the array.
-    if a_empty && b_empty {
-        return Some(PredictionContext::empty());
-    }
-    if a_empty {
-        let (parent, return_state) = first_context_entry(b);
-        let (parents, return_states) = sort_two_entries(
-            parent,
-            return_state,
-            PredictionContext::empty(),
-            EMPTY_RETURN_STATE,
-        );
-        return Some(PredictionContext::array(parents, return_states));
-    }
-    // b_empty
-    let (parent, return_state) = first_context_entry(a);
-    let (parents, return_states) = sort_two_entries(
-        parent,
-        return_state,
-        PredictionContext::empty(),
-        EMPTY_RETURN_STATE,
-    );
-    Some(PredictionContext::array(parents, return_states))
-}
-
-/// Builds the `(parents, return_states)` for a two-entry array sorted by
-/// return state (ANTLR keeps array entries sorted by payload/return state).
-fn sort_two_entries(
-    first_parent: Rc<PredictionContext>,
-    first_return_state: usize,
-    second_parent: Rc<PredictionContext>,
-    second_return_state: usize,
-) -> (Vec<Rc<PredictionContext>>, Vec<usize>) {
-    if first_return_state <= second_return_state {
-        (
-            vec![first_parent, second_parent],
-            vec![first_return_state, second_return_state],
-        )
-    } else {
-        (
-            vec![second_parent, first_parent],
-            vec![second_return_state, first_return_state],
-        )
-    }
-}
-
-/// Faithful port of ANTLR's `mergeArrays`: merges two return-state-sorted arrays,
-/// recursively merging the parents of entries that share a return state and
-/// collapsing them into a single entry, then sharing structurally-equal parents.
 fn merge_arrays(
     left_parents: &[Rc<PredictionContext>],
     left_return_states: &[usize],
     right_parents: &[Rc<PredictionContext>],
     right_return_states: &[usize],
-    root_is_wildcard: bool,
-    mut cache: Option<&mut PredictionContextMergeCache>,
 ) -> Rc<PredictionContext> {
     let mut parents = Vec::with_capacity(left_parents.len() + right_parents.len());
     let mut return_states = Vec::with_capacity(left_return_states.len() + right_return_states.len());
@@ -434,48 +395,75 @@ fn merge_arrays(
     let mut right_index = 0;
 
     while left_index < left_parents.len() && right_index < right_parents.len() {
-        let left_return_state = left_return_states[left_index];
-        let right_return_state = right_return_states[right_index];
-        match left_return_state.cmp(&right_return_state) {
-            Ordering::Equal => {
-                // Same payload (stack top): yield a single entry whose parent is
-                // the recursive merge of the two parents.
-                let left_parent = &left_parents[left_index];
-                let right_parent = &right_parents[right_index];
-                let merged_parent = if left_parent == right_parent {
-                    Rc::clone(left_parent)
-                } else {
-                    PredictionContext::merge_with_options(
-                        Rc::clone(left_parent),
-                        Rc::clone(right_parent),
-                        root_is_wildcard,
-                        cache.as_deref_mut(),
-                    )
-                };
-                parents.push(merged_parent);
-                return_states.push(left_return_state);
-                left_index += 1;
-                right_index += 1;
-            }
+        let left_key = context_entry_key(&left_parents[left_index], left_return_states[left_index]);
+        let right_key =
+            context_entry_key(&right_parents[right_index], right_return_states[right_index]);
+        match left_key.cmp(&right_key) {
             Ordering::Less => {
-                parents.push(Rc::clone(&left_parents[left_index]));
-                return_states.push(left_return_state);
+                push_context_entry(
+                    &mut parents,
+                    &mut return_states,
+                    Rc::clone(&left_parents[left_index]),
+                    left_return_states[left_index],
+                );
                 left_index += 1;
             }
             Ordering::Greater => {
-                parents.push(Rc::clone(&right_parents[right_index]));
-                return_states.push(right_return_state);
+                push_context_entry(
+                    &mut parents,
+                    &mut return_states,
+                    Rc::clone(&right_parents[right_index]),
+                    right_return_states[right_index],
+                );
                 right_index += 1;
+            }
+            Ordering::Equal => {
+                let group_key = left_key;
+                while left_index < left_parents.len()
+                    && context_entry_key(&left_parents[left_index], left_return_states[left_index])
+                        == group_key
+                {
+                    push_context_entry(
+                        &mut parents,
+                        &mut return_states,
+                        Rc::clone(&left_parents[left_index]),
+                        left_return_states[left_index],
+                    );
+                    left_index += 1;
+                }
+                while right_index < right_parents.len()
+                    && context_entry_key(
+                        &right_parents[right_index],
+                        right_return_states[right_index],
+                    ) == group_key
+                {
+                    push_context_entry(
+                        &mut parents,
+                        &mut return_states,
+                        Rc::clone(&right_parents[right_index]),
+                        right_return_states[right_index],
+                    );
+                    right_index += 1;
+                }
             }
         }
     }
+
     for index in left_index..left_parents.len() {
-        parents.push(Rc::clone(&left_parents[index]));
-        return_states.push(left_return_states[index]);
+        push_context_entry(
+            &mut parents,
+            &mut return_states,
+            Rc::clone(&left_parents[index]),
+            left_return_states[index],
+        );
     }
     for index in right_index..right_parents.len() {
-        parents.push(Rc::clone(&right_parents[index]));
-        return_states.push(right_return_states[index]);
+        push_context_entry(
+            &mut parents,
+            &mut return_states,
+            Rc::clone(&right_parents[index]),
+            right_return_states[index],
+        );
     }
 
     if parents.len() == 1 {
@@ -484,23 +472,30 @@ fn merge_arrays(
             return_states.pop().expect("single merged return state"),
         );
     }
-    combine_common_parents(&mut parents);
     PredictionContext::array(parents, return_states)
 }
 
-/// Shares structurally-equal-but-distinct `Rc` parents in a merged array so
-/// downstream equality/hash checks short-circuit on pointer identity (ANTLR
-/// `combineCommonParents`). Behaviour-preserving: it only replaces a parent with
-/// an equal one already present in the same array.
-fn combine_common_parents(parents: &mut [Rc<PredictionContext>]) {
-    let mut unique: Vec<Rc<PredictionContext>> = Vec::new();
-    for parent in parents.iter_mut() {
-        if let Some(existing) = unique.iter().find(|candidate| *candidate == parent) {
-            *parent = Rc::clone(existing);
-        } else {
-            unique.push(Rc::clone(parent));
+fn push_context_entry(
+    parents: &mut Vec<Rc<PredictionContext>>,
+    return_states: &mut Vec<usize>,
+    parent: Rc<PredictionContext>,
+    return_state: usize,
+) {
+    let key = context_entry_key(&parent, return_state);
+    for (existing_parent, existing_return_state) in parents.iter().zip(return_states.iter()).rev() {
+        if context_entry_key(existing_parent, *existing_return_state) != key {
+            break;
+        }
+        if existing_parent == &parent {
+            return;
         }
     }
+    parents.push(parent);
+    return_states.push(return_state);
+}
+
+fn context_entry_key(parent: &Rc<PredictionContext>, return_state: usize) -> (usize, u64) {
+    (return_state, parent.cached_hash())
 }
 
 impl PartialEq for PredictionContext {
