@@ -96,7 +96,7 @@ stress patterns:
 
 - Kotlin: JetBrains Kotlin, kotlinx.coroutines, Ktor.
 - C#: dotnet/wpf, Mono.
-- Java: Mojang DataFixerUpper, Bazel, OpenRewrite, Trino.
+- Java: Mojang DataFixerUpper, Bazel, Google Closure Compiler, Trino.
 - Trino SQL: Trino benchmark TPC-DS/TPC-H queries with benchmark placeholders
   normalized to identifiers, including a curated TPC-DS grammar-stress suite
   selected by CTE/window/UNION/EXISTS/CASE/grouping feature density.

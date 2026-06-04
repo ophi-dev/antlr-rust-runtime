@@ -552,6 +552,9 @@ struct LeftRecursiveLoopRender<'a> {
 #[derive(Clone, Copy)]
 struct GeneratedStepRenderContext<'a> {
     inline_action_statements: &'a BTreeMap<usize, String>,
+    /// Member-setting `@init` statements, keyed by rule index, that must run on
+    /// rule entry (before the body) so same-rule predicates observe them.
+    init_entry_action_statements: &'a BTreeMap<usize, String>,
     return_action_statements: &'a BTreeMap<usize, Vec<(String, i64)>>,
     track_alt_numbers: bool,
     direct_generated_rule_calls: &'a [bool],
@@ -1910,6 +1913,7 @@ fn render_generated_rule_dispatch(
         &[],
         inline_action_statements,
         init_action_statements,
+        &BTreeMap::new(),
         return_action_statements,
         track_alt_numbers,
     )
@@ -1922,6 +1926,7 @@ fn render_generated_rule_dispatch_with_rule_names(
     rule_names: &[String],
     inline_action_statements: &BTreeMap<usize, String>,
     init_action_statements: &BTreeMap<usize, String>,
+    init_entry_action_statements: &BTreeMap<usize, String>,
     return_action_statements: &BTreeMap<usize, Vec<(String, i64)>>,
     track_alt_numbers: bool,
 ) -> String {
@@ -1960,6 +1965,7 @@ fn render_generated_rule_dispatch_with_rule_names(
     writeln!(out, "    }}").expect("writing to a string cannot fail");
     let step_render_context = GeneratedStepRenderContext {
         inline_action_statements,
+        init_entry_action_statements,
         return_action_statements,
         track_alt_numbers,
         direct_generated_rule_calls,
@@ -2041,6 +2047,14 @@ fn render_generated_rule_method(
         "        let mut __ctx = self.base.enter_rule({entry_state}isize, {index});"
     )
     .expect("writing to a string cannot fail");
+    // Member-setting `@init` runs on rule entry (before the body) so same-rule
+    // predicates and actions observe the state it sets.
+    render_generated_init_action_entry(
+        out,
+        index,
+        step_render_context.init_entry_action_statements,
+        2,
+    );
     writeln!(out, "        let mut __consumed_eof = false;")
         .expect("writing to a string cannot fail");
     writeln!(
@@ -2162,6 +2176,14 @@ fn render_generated_left_recursive_rule_method(
         "        let mut __ctx = self.base.enter_recursion_rule({entry_state}isize, {index}, __precedence);"
     )
     .expect("writing to a string cannot fail");
+    // Member-setting `@init` runs on rule entry (before the body) so same-rule
+    // predicates and actions observe the state it sets.
+    render_generated_init_action_entry(
+        out,
+        index,
+        step_render_context.init_entry_action_statements,
+        2,
+    );
     writeln!(out, "        let mut __consumed_eof = false;")
         .expect("writing to a string cannot fail");
     writeln!(
@@ -2234,6 +2256,31 @@ fn render_generated_left_recursive_rule_method(
     writeln!(out, "            }}").expect("writing to a string cannot fail");
     writeln!(out, "        }}").expect("writing to a string cannot fail");
     writeln!(out, "    }}").expect("writing to a string cannot fail");
+}
+
+/// Emits a member-setting `@init` action so it runs on rule ENTRY, before the
+/// body. ANTLR runs `@init` on entry and generated body predicates/actions read
+/// live member state (`parser_semantic_predicate_matches_with_context_and_local`
+/// clones `int_members`), so a member write must take effect here rather than
+/// only on the exit-time replay. `init_entry_action_statements` is pre-filtered
+/// to member-only actions (see `init_entry_action_statements`), so side-effecting
+/// `@init` actions (printing/diagnostics) are NOT duplicated here — they stay on
+/// the buffered replay path whose ordering matches ANTLR. The `int_members`
+/// checkpoint taken before the body rolls these writes back if the rule fails.
+fn render_generated_init_action_entry(
+    out: &mut String,
+    rule_index: usize,
+    init_entry_action_statements: &BTreeMap<usize, String>,
+    indent: usize,
+) {
+    let Some(statement) = init_entry_action_statements.get(&rule_index) else {
+        return;
+    };
+    if statement.is_empty() {
+        return;
+    }
+    let pad = "    ".repeat(indent);
+    writeln!(out, "{pad}{statement}").expect("writing to a string cannot fail");
 }
 
 fn render_generated_init_action(
@@ -3453,6 +3500,7 @@ fn render_parser_with_options(
     let return_actions = parser_return_actions(&actions);
     let inline_action_statements = inline_parser_action_statements(&actions, &int_members)?;
     let init_action_statements = init_parser_action_statements(&init_actions, &int_members)?;
+    let init_entry_action_statements = init_entry_action_statements(&init_actions, &int_members)?;
     let inline_action_states = inline_action_statements
         .keys()
         .copied()
@@ -3507,6 +3555,7 @@ fn render_parser_with_options(
         &data.rule_names,
         &inline_action_statements,
         &init_action_statements,
+        &init_entry_action_statements,
         &generated_return_action_statements(&return_actions),
         track_alt_numbers,
     );
@@ -5604,6 +5653,41 @@ fn init_parser_action_statements(
     Ok(statements)
 }
 
+/// Whether an `@init` template only mutates parser members (`SetMember` /
+/// `AddMember`, possibly nested in a `Sequence`). Only such actions are run
+/// eagerly on rule entry: their effect is idempotent under the
+/// checkpoint/restore + replay cycle (the value is recomputed from the restored
+/// baseline) and same-rule predicates/actions must observe it. Side-effecting
+/// actions (printing, diagnostics) stay on the buffered exit-replay path so
+/// their ordering matches ANTLR; running them eagerly would duplicate output.
+fn init_action_mutates_members_only(action: &ActionTemplate) -> bool {
+    match action {
+        ActionTemplate::SetMember { .. } | ActionTemplate::AddMember { .. } => true,
+        ActionTemplate::Sequence(actions) => {
+            !actions.is_empty() && actions.iter().all(init_action_mutates_members_only)
+        }
+        _ => false,
+    }
+}
+
+/// Statements for `@init` actions that should run on rule ENTRY — restricted to
+/// member writes the rule body may read. Side-effecting `@init` actions are
+/// excluded here and remain on the buffered exit-replay path
+/// (`init_parser_action_statements`).
+fn init_entry_action_statements(
+    init_actions: &[Option<ActionTemplate>],
+    members: &[IntMemberTemplate],
+) -> io::Result<BTreeMap<usize, String>> {
+    let mut statements = BTreeMap::new();
+    for (rule_index, action) in init_actions.iter().enumerate() {
+        let Some(action) = action.as_ref().filter(|a| init_action_mutates_members_only(a)) else {
+            continue;
+        };
+        statements.insert(rule_index, render_action_statement(action, members)?);
+    }
+    Ok(statements)
+}
+
 fn collect_return_actions(
     source_state: usize,
     action: &ActionTemplate,
@@ -7528,8 +7612,8 @@ atn:
             &BTreeMap::new(),
             &BTreeMap::new(),
             &BTreeMap::new(),
-            false,
-        );
+            &BTreeMap::new(),
+            false);
 
         assert!(rendered.contains(
             "if self.generated_only() { self.parse_generated_rule_1_dispatch(0, false).map_err(GeneratedRuleError::into_error) } else { self.parse_interpreted_rule_precedence(1, 0) }"
@@ -7562,8 +7646,8 @@ atn:
             &BTreeMap::new(),
             &BTreeMap::new(),
             &BTreeMap::new(),
-            false,
-        );
+            &BTreeMap::new(),
+            false);
 
         assert!(rendered.contains(
             "0 if self.generated_only() => Some(self.parse_generated_rule_0_dispatch(precedence, allow_fallback))"
@@ -7894,6 +7978,7 @@ atn:
             0,
             GeneratedStepRenderContext {
                 inline_action_statements: &BTreeMap::new(),
+                init_entry_action_statements: &BTreeMap::new(),
                 return_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 direct_generated_rule_calls: &[],
@@ -8065,6 +8150,48 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
         assert!(rendered.contains("parse_generated_rule_0"));
         assert!(rendered.contains("ParserAction::new_rule_init(0, __rule_start, Some(0))"));
         assert!(rendered.contains("self.base.expected_tokens_at_state(atn(), state)"));
+        // The print-style @init above is NOT run eagerly at entry — only buffered
+        // for exit replay — so its statement appears once, after the rule body.
+        let expected = "self.base.expected_tokens_at_state(atn(), state)";
+        let body_start = rendered
+            .find("let __result = (|| -> Result<(), antlr4_runtime::AntlrError>")
+            .expect("rule body present");
+        assert!(
+            rendered.find(expected).expect("expected stmt") > body_start,
+            "side-effecting @init must not be hoisted to rule entry"
+        );
+    }
+
+    #[test]
+    fn runs_init_member_action_before_rule_body() {
+        // Regression for #12: a member-setting `@init` must run on rule ENTRY,
+        // before the body, so same-rule predicates/actions observe it. (Members
+        // are declared after the rule so the action is captured by the existing
+        // rule-name scan.)
+        let rendered = render_parser(
+            "TParser",
+            &minimal_parser_data(),
+            Some(
+                r#"parser grammar T;
+s @init {<SetMember("i","1")>} : ;
+@parser::members {<InitIntMember("i","0")>}
+"#,
+            ),
+        )
+        .expect("parser should render");
+
+        let set_member = rendered
+            .find("self.base.set_int_member(0, 1);")
+            .expect("member @init should emit a live entry write");
+        let body_start = rendered
+            .find("let __result = (|| -> Result<(), antlr4_runtime::AntlrError>")
+            .expect("generated rule body should be present");
+        assert!(
+            set_member < body_start,
+            "member @init write must run before the rule body, not only at exit replay"
+        );
+        // The buffered exit-time replay action is still emitted for listeners.
+        assert!(rendered.contains("ParserAction::new_rule_init(0, __rule_start, Some(0))"));
     }
 
     #[test]
@@ -8126,6 +8253,7 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
             0,
             GeneratedStepRenderContext {
                 inline_action_statements: &BTreeMap::new(),
+                init_entry_action_statements: &BTreeMap::new(),
                 return_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 direct_generated_rule_calls: &[],
@@ -8173,6 +8301,7 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
             0,
             GeneratedStepRenderContext {
                 inline_action_statements: &BTreeMap::new(),
+                init_entry_action_statements: &BTreeMap::new(),
                 return_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 direct_generated_rule_calls: &[],
@@ -8214,6 +8343,7 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
             0,
             GeneratedStepRenderContext {
                 inline_action_statements: &BTreeMap::new(),
+                init_entry_action_statements: &BTreeMap::new(),
                 return_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 direct_generated_rule_calls: &[],
@@ -8256,6 +8386,7 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
             0,
             GeneratedStepRenderContext {
                 inline_action_statements: &BTreeMap::new(),
+                init_entry_action_statements: &BTreeMap::new(),
                 return_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 direct_generated_rule_calls: &[],
@@ -8299,6 +8430,7 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
             0,
             GeneratedStepRenderContext {
                 inline_action_statements: &BTreeMap::new(),
+                init_entry_action_statements: &BTreeMap::new(),
                 return_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 direct_generated_rule_calls: &[],
@@ -8354,6 +8486,7 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
             0,
             GeneratedStepRenderContext {
                 inline_action_statements: &BTreeMap::new(),
+                init_entry_action_statements: &BTreeMap::new(),
                 return_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 direct_generated_rule_calls: &[],
@@ -8965,3 +9098,4 @@ continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#,
         }
     }
 }
+
