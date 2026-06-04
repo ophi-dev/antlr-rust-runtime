@@ -143,6 +143,11 @@ impl CommonToken {
 
     #[must_use]
     pub fn with_source_text(mut self, input: Rc<str>, start_byte: u32, stop_byte: u32) -> Self {
+        debug_assert!(
+            start_byte <= stop_byte && stop_byte as usize <= input.len(),
+            "invalid token source-text bounds: start={start_byte}, stop={stop_byte}, len={}",
+            input.len()
+        );
         self.text = Some(TokenText::Source {
             input,
             start_byte,

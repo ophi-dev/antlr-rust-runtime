@@ -60,6 +60,17 @@ def check_speedup_requirements(
             fast = results.get((language, fixture, fast_runtime))
             slow = results.get((language, fixture, slow_runtime))
             if fast is None or slow is None:
+                # A speedup requirement applies to every fixture in the language;
+                # missing either runtime is a failure, not a silent skip.
+                missing = [
+                    runtime
+                    for runtime, value in ((fast_runtime, fast), (slow_runtime, slow))
+                    if value is None
+                ]
+                failures.append(
+                    f"{language}/{fixture}: missing runtime result(s) for "
+                    f"speedup requirement: {', '.join(missing)}"
+                )
                 continue
             compared += 1
             fast_avg = float(fast["avg_ns"])
