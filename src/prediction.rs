@@ -151,7 +151,10 @@ impl PredictionContext {
         match self {
             Self::Empty { .. } => true,
             Self::Singleton { return_state, .. } => *return_state == EMPTY_RETURN_STATE,
-            Self::Array { return_states, .. } => return_states.contains(&EMPTY_RETURN_STATE),
+            // Array return states are kept sorted ascending and
+            // `EMPTY_RETURN_STATE` is `usize::MAX`, so the empty path can only be
+            // the final entry — an O(1) check instead of a linear scan.
+            Self::Array { return_states, .. } => return_states.last() == Some(&EMPTY_RETURN_STATE),
         }
     }
 
@@ -715,19 +718,23 @@ impl PredictionContextCache {
     fn get_cached_context_inner(
         &mut self,
         context: &Rc<PredictionContext>,
-        visited: &mut FxHashMap<Rc<PredictionContext>, Rc<PredictionContext>>,
+        visited: &mut FxHashMap<usize, Rc<PredictionContext>>,
     ) -> Rc<PredictionContext> {
         if context.is_empty() {
             return Rc::clone(&self.empty);
         }
-        if let Some(existing) = visited.get(context) {
+        // Key the per-traversal memo by pointer identity. We only need to detect
+        // the exact same node revisited within this canonicalization pass, so a
+        // pointer compare avoids recursive structural `PredictionContext::eq`.
+        let context_ptr = Rc::as_ptr(context) as usize;
+        if let Some(existing) = visited.get(&context_ptr) {
             return Rc::clone(existing);
         }
         if let Some(existing) = self.entries.get(context) {
             #[cfg(feature = "perf-counters")]
             crate::perf::record_context_cache_hit();
             let existing = Rc::clone(existing);
-            visited.insert(Rc::clone(context), Rc::clone(&existing));
+            visited.insert(context_ptr, Rc::clone(&existing));
             return existing;
         }
         let cached = match context.as_ref() {
@@ -766,7 +773,7 @@ impl PredictionContextCache {
                 }
             }
         };
-        visited.insert(Rc::clone(context), Rc::clone(&cached));
+        visited.insert(context_ptr, Rc::clone(&cached));
         cached
     }
 
@@ -1166,7 +1173,11 @@ pub fn unique_alt(configs: &[AtnConfig]) -> Option<usize> {
 }
 
 pub fn conflicting_alt_subsets(configs: &[AtnConfig]) -> Vec<BTreeSet<usize>> {
-    let mut by_state_context = BTreeMap::<(usize, Rc<PredictionContext>), BTreeSet<usize>>::new();
+    // The subset order is irrelevant to every caller, so hash by the cheap
+    // cached context hash instead of paying `BTreeMap`'s recursive
+    // `PredictionContext::cmp` on every key comparison.
+    let mut by_state_context =
+        FxHashMap::<(usize, Rc<PredictionContext>), BTreeSet<usize>>::default();
     for config in configs {
         by_state_context
             .entry((config.state, Rc::clone(&config.context)))
