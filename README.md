@@ -191,6 +191,50 @@ cargo run --bin antlr4-runtime-testsuite -- \
   --case LexerExec/KeywordID
 ```
 
+## Performance
+
+`tools/parse-bench/` benchmarks parse throughput of the generated Rust parsers
+against the upstream Go runtime (`github.com/antlr4-go/antlr/v4`) — and
+optionally the reference Python runtime and tree-sitter — on real-world Kotlin,
+C#, Java, and Trino SQL fixtures. See
+[`tools/parse-bench/README.md`](tools/parse-bench/README.md) for setup (the
+ANTLR jar, the `grammars-v4` sparse checkout, and the Python dependencies).
+
+Run the Rust-vs-Go comparison across all fixture languages:
+
+```bash
+python3 tools/parse-bench/run.py \
+  --languages kotlin,csharp,java,trino \
+  --runtimes rust-antlr,go-antlr \
+  --quick \
+  --json target/parse-bench/results.json \
+  --markdown target/parse-bench/results.md
+```
+
+The report prints `min`/`avg` parse time and a ratio against `rust-antlr` for
+every fixture. Drop `--quick` (or add `--iters`/`--warmups`) for longer, lower
+variance runs; add `--runtimes rust-antlr,go-antlr,python-antlr,tree-sitter` to
+include the other runtimes.
+
+### Current results
+
+Relative parse speed of this runtime versus the Go runtime, summarized as the
+geometric mean of the per-fixture `go ÷ rust` parse-time ratios in each language
+group (**> 1.0** means Rust is faster than Go; **< 1.0** means slower):
+
+| Language | Fixtures | Rust vs Go (parse time) |
+|----------|---------:|-------------------------|
+| Kotlin   | 4        | ~10× faster             |
+| Java     | 4        | ~0.9× (roughly on par)  |
+| C#       | 4        | ~0.45× (Go ~2.2× faster)|
+| Trino SQL| 5        | ~0.4× (Go ~2.6× faster) |
+
+Rust is dramatically faster on Kotlin (expression-ladder memoization in the
+generated walker) and near parity on Java; C# and Trino remain ahead for Go and
+are the focus of ongoing prediction/closure optimization. Numbers are quick-mode
+(`--quick`, best-of-min) on an Apple M3 Pro and are indicative — re-run the
+benchmark on your own hardware for authoritative figures.
+
 ## Useful Information
 
 - ANTLR: <https://www.antlr.org/>
