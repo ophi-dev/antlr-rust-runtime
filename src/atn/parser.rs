@@ -207,6 +207,11 @@ fn merge_shared_decision_dfas(shared: &mut Vec<Dfa>, local: &[Dfa]) {
         return;
     }
     for (shared_dfa, local_dfa) in shared.iter_mut().zip(local) {
+        // Skip DFAs this parser never extended — cloning them back would be pure
+        // churn on an already-warm cache (the common steady-state case).
+        if !local_dfa.is_dirty() {
+            continue;
+        }
         // State numbers are stable for a DFA cloned from the shared cache and
         // then extended locally. If this local DFA has at least as many states,
         // it is a complete valid replacement for the shared one. If it is
@@ -214,6 +219,7 @@ fn merge_shared_decision_dfas(shared: &mut Vec<Dfa>, local: &[Dfa]) {
         // parser's cache update, so do not merge edges by numeric state id.
         if local_dfa.states().len() >= shared_dfa.states().len() {
             *shared_dfa = local_dfa.clone();
+            shared_dfa.clear_dirty();
         }
     }
 }
@@ -254,9 +260,14 @@ impl<'a> ParserAtnSimulator<'a> {
     pub fn new_shared(atn: &'static Atn) -> Self {
         let ptr: *const Atn = atn;
         let key = ptr as usize;
-        let decision_to_dfa = SHARED_DECISION_DFAS
+        let mut decision_to_dfa = SHARED_DECISION_DFAS
             .with(|cache| cache.borrow().get(&key).cloned())
             .unwrap_or_else(|| initial_decision_dfas(atn));
+        // Start from a clean baseline: only states/edges this parser actually
+        // learns will mark a DFA dirty, so the drop-time merge can skip the rest.
+        for dfa in &mut decision_to_dfa {
+            dfa.clear_dirty();
+        }
         let context_cache = SHARED_CONTEXT_CACHES.with(|cache| {
             Rc::clone(
                 cache
@@ -429,6 +440,11 @@ impl<'a> ParserAtnSimulator<'a> {
             return Err(ParserAtnSimulatorError::UnknownDecision(decision));
         };
         let start_index = input.index();
+        // Precedence originates from the parser's precedence stack (rule nesting
+        // depth), so it is always small in practice. A value above `i32::MAX`
+        // would be clamped here; the clamp only ever affects pathological inputs
+        // and at worst over-filters precedence transitions, never miscomputing a
+        // real parse.
         let precedence = i32::try_from(precedence).unwrap_or(i32::MAX);
         let mut state_number =
             self.ensure_start_state(decision, decision_state, precedence, merge_cache)?;

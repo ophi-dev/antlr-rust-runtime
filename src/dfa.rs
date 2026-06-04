@@ -11,6 +11,10 @@ pub struct Dfa {
     start_state: Option<usize>,
     precedence_start_states: Vec<Option<usize>>,
     precedence_mode: bool,
+    /// Set whenever a state, edge, or start state is learned. Lets the shared
+    /// decision-DFA cache skip cloning DFAs that a parse never extended, avoiding
+    /// per-parse churn when the cache is already warm. Not part of DFA identity.
+    dirty: bool,
 }
 
 impl Dfa {
@@ -32,6 +36,7 @@ impl Dfa {
             start_state: None,
             precedence_start_states: Vec::new(),
             precedence_mode: false,
+            dirty: false,
         }
     }
 
@@ -57,6 +62,19 @@ impl Dfa {
 
     pub const fn set_start_state(&mut self, state_number: usize) {
         self.start_state = Some(state_number);
+        self.dirty = true;
+    }
+
+    /// Whether this DFA learned any new state/edge/start since it was created or
+    /// last cleared. The shared-cache merge uses this to skip untouched DFAs.
+    pub const fn is_dirty(&self) -> bool {
+        self.dirty
+    }
+
+    /// Clears the dirty flag, marking the current contents as the clean baseline
+    /// (called after publishing to / cloning from the shared cache).
+    pub const fn clear_dirty(&mut self) {
+        self.dirty = false;
     }
 
     pub const fn is_precedence_dfa(&self) -> bool {
@@ -72,6 +90,7 @@ impl Dfa {
         self.start_state = None;
         self.precedence_start_states.clear();
         self.precedence_mode = precedence_dfa;
+        self.dirty = true;
         if precedence_dfa {
             self.start_state = Some(self.add_state(DfaState::new(AtnConfigSet::new())));
         }
@@ -88,6 +107,7 @@ impl Dfa {
             self.precedence_start_states.resize(precedence + 1, None);
         }
         self.precedence_start_states[precedence] = Some(state_number);
+        self.dirty = true;
     }
 
     /// Inserts a DFA state or returns the existing state number for an
@@ -107,6 +127,7 @@ impl Dfa {
         state.configs.set_readonly(true);
         self.state_index.insert(state_key, state_number);
         self.states.push(state);
+        self.dirty = true;
         state_number
     }
 
@@ -119,6 +140,9 @@ impl Dfa {
     }
 
     pub fn state_mut(&mut self, state_number: usize) -> Option<&mut DfaState> {
+        // Handing out a mutable state (used to add learned edges) conservatively
+        // marks the DFA dirty so the shared-cache merge re-publishes it.
+        self.dirty = true;
         self.states.get_mut(state_number)
     }
 }
