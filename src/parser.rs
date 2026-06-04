@@ -6566,6 +6566,21 @@ where
         }
     }
 
+    /// Stop-token index for a rule's `@after` action, matching the boundary that
+    /// `finish_rule` records on the rule context.
+    ///
+    /// A rule that matched EOF leaves the cursor parked on the EOF token
+    /// (`CommonTokenStream::consume` does not advance past EOF), so the stop is
+    /// the current index rather than the previous visible token. Without this,
+    /// `$stop`/`$text` in an `@after` action on a rule like `r: a* EOF;` would
+    /// report the token before EOF (or `None` for empty input), diverging from
+    /// the rule context that `finish_rule` builds.
+    #[must_use]
+    pub fn after_action_stop_index(&mut self, current_index: usize) -> Option<usize> {
+        let consumed_eof = self.token_type_at(current_index) == TOKEN_EOF;
+        self.rule_stop_token_index(current_index, consumed_eof)
+    }
+
     /// Returns the rule stop token for a selected parse path.
     ///
     /// EOF transitions do not advance the token-stream cursor, so an EOF match
