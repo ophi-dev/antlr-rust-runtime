@@ -2055,6 +2055,11 @@ fn render_generated_rule_method(
         step_render_context.init_entry_action_statements,
         2,
     );
+    // Queue the `@init` action event before the body steps so the buffered replay
+    // (`run_generated_action`) runs it ahead of body actions, matching ANTLR's
+    // "init before body" order. It sits after `__generated_action_marker`, so a
+    // fatal-sync abort that truncates back to the marker discards it too.
+    render_generated_init_action(out, index, entry_state, init_action_statements, 2);
     writeln!(out, "        let mut __consumed_eof = false;")
         .expect("writing to a string cannot fail");
     writeln!(
@@ -2077,7 +2082,6 @@ fn render_generated_rule_method(
         "                let __tree = self.base.finish_rule(__ctx, __consumed_eof);"
     )
     .expect("writing to a string cannot fail");
-    render_generated_init_action(out, index, entry_state, init_action_statements, 4);
     writeln!(out, "                Ok(__tree)").expect("writing to a string cannot fail");
     writeln!(out, "            }}").expect("writing to a string cannot fail");
     writeln!(out, "            Err(__error) => {{").expect("writing to a string cannot fail");
@@ -2119,7 +2123,6 @@ fn render_generated_rule_method(
         "                let __tree = self.base.finish_rule(__ctx, __consumed_eof);"
     )
     .expect("writing to a string cannot fail");
-    render_generated_init_action(out, index, entry_state, init_action_statements, 4);
     writeln!(out, "                Ok(__tree)").expect("writing to a string cannot fail");
     writeln!(out, "            }}").expect("writing to a string cannot fail");
     writeln!(out, "        }}").expect("writing to a string cannot fail");
@@ -2184,6 +2187,11 @@ fn render_generated_left_recursive_rule_method(
         step_render_context.init_entry_action_statements,
         2,
     );
+    // Queue the `@init` action event before the body steps so the buffered replay
+    // (`run_generated_action`) runs it ahead of body actions, matching ANTLR's
+    // "init before body" order. It sits after `__generated_action_marker`, so a
+    // fatal-sync abort that truncates back to the marker discards it too.
+    render_generated_init_action(out, index, entry_state, init_action_statements, 2);
     writeln!(out, "        let mut __consumed_eof = false;")
         .expect("writing to a string cannot fail");
     writeln!(
@@ -2206,7 +2214,6 @@ fn render_generated_left_recursive_rule_method(
         "                let __tree = self.base.finish_recursion_rule(__ctx, __consumed_eof);"
     )
     .expect("writing to a string cannot fail");
-    render_generated_init_action(out, index, entry_state, init_action_statements, 4);
     writeln!(out, "                Ok(__tree)").expect("writing to a string cannot fail");
     writeln!(out, "            }}").expect("writing to a string cannot fail");
     writeln!(out, "            Err(__error) => {{").expect("writing to a string cannot fail");
@@ -2251,7 +2258,6 @@ fn render_generated_left_recursive_rule_method(
         "                let __tree = self.base.finish_recursion_rule(__ctx, __consumed_eof);"
     )
     .expect("writing to a string cannot fail");
-    render_generated_init_action(out, index, entry_state, init_action_statements, 4);
     writeln!(out, "                Ok(__tree)").expect("writing to a string cannot fail");
     writeln!(out, "            }}").expect("writing to a string cannot fail");
     writeln!(out, "        }}").expect("writing to a string cannot fail");
@@ -8138,8 +8144,10 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
         assert!(rendered.contains("parse_generated_rule_0"));
         assert!(rendered.contains("ParserAction::new_rule_init(0, __rule_start, Some(0))"));
         assert!(rendered.contains("self.base.expected_tokens_at_state(atn(), state)"));
-        // The print-style @init above is NOT run eagerly at entry — only buffered
-        // for exit replay — so its statement appears once, after the rule body.
+        // The print-style @init above is NOT run eagerly at entry: only its action
+        // event is buffered (for ordered replay). The side-effecting statement
+        // itself lives in `run_action`, rendered after the rule body, so it never
+        // appears inline inside the body.
         let expected = "self.base.expected_tokens_at_state(atn(), state)";
         let body_start = rendered
             .find("let __result = (|| -> Result<(), antlr4_runtime::AntlrError>")
@@ -8178,8 +8186,17 @@ s @init {<SetMember("i","1")>} : ;
             set_member < body_start,
             "member @init write must run before the rule body, not only at exit replay"
         );
-        // The buffered exit-time replay action is still emitted for listeners.
-        assert!(rendered.contains("ParserAction::new_rule_init(0, __rule_start, Some(0))"));
+        // The buffered `@init` action event is still emitted for replay/listeners,
+        // and it must be queued BEFORE the body steps so the buffered replay runs
+        // it ahead of body actions (matching ANTLR's init-before-body order).
+        let init_push = rendered
+            .find("ParserAction::new_rule_init(0, __rule_start, Some(0))")
+            .expect("buffered @init action event should be emitted");
+        assert!(
+            init_push < body_start,
+            "@init action must be queued before the rule body, not appended at exit \
+             (otherwise the buffered replay runs body actions before @init)"
+        );
     }
 
     #[test]
