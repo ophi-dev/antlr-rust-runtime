@@ -518,6 +518,29 @@ impl<'a> ParserAtnSimulator<'a> {
                 return Ok(prediction);
             }
             if symbol == TOKEN_EOF {
+                // We ran out of input while still inside the decision and the
+                // current state is not a clean accept. ANTLR's execATN takes one
+                // more step on EOF, reaches an empty reach set, and falls back to
+                // getSynValidOrSemInvalidAltThatFinishedDecisionEntryRule: any alt
+                // whose configs already reached the decision's rule-stop (i.e. an
+                // exit alt of a `(...)*`/`(...)+`/precedence loop) is a valid
+                // prediction, not a syntax error. Mirror that fallback here so we
+                // exit the loop cleanly instead of reporting a spurious
+                // "no viable alternative at input '<EOF>'".
+                if let Some(configs) = self
+                    .decision_to_dfa
+                    .get(decision)
+                    .and_then(|dfa| dfa.state(state_number))
+                    .map(|state| state.configs.clone())
+                    && let Some(alt) = self.alt_that_finished_decision_entry_rule(&configs)
+                {
+                    return Ok(ParserAtnPrediction {
+                        alt,
+                        requires_full_context: false,
+                        has_semantic_context: configs_have_semantic_context_for_alt(&configs, alt),
+                        diagnostic: None,
+                    });
+                }
                 return Err(ParserAtnSimulatorError::PredictionRequiresMoreLookahead);
             }
             input.consume();
