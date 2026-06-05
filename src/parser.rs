@@ -2231,6 +2231,44 @@ where
     steps: usize,
 }
 
+/// Outcome of a generated token / set / not-set match that may recover.
+///
+/// Generated parsers append `children` to the current rule context. `consumed_eof`
+/// reports whether the match actually consumed a real EOF terminal — it is true
+/// only on a successful match (or single-token deletion that lands on EOF), and
+/// always false on single-token insertion, which synthesizes a missing token and
+/// consumes nothing. Generated code feeds this into `finish_rule`'s
+/// `consumed_eof`, so the rule stop token is recorded as EOF only when EOF was
+/// truly matched, matching ANTLR's `matchedEOF` semantics.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GeneratedMatch {
+    children: Vec<ParseTree>,
+    consumed_eof: bool,
+}
+
+impl GeneratedMatch {
+    /// Parse-tree children produced by the match (the matched terminal, an
+    /// error node plus deleted-then-matched terminal, or a single missing-token
+    /// error node).
+    #[must_use]
+    pub fn children(&self) -> &[ParseTree] {
+        &self.children
+    }
+
+    /// Consumes the result, returning the children for appending to the rule
+    /// context.
+    #[must_use]
+    pub fn into_children(self) -> Vec<ParseTree> {
+        self.children
+    }
+
+    /// Whether a real EOF terminal was consumed by this match.
+    #[must_use]
+    pub const fn consumed_eof(&self) -> bool {
+        self.consumed_eof
+    }
+}
+
 impl<S> BaseParser<S>
 where
     S: TokenSource,
@@ -2504,7 +2542,7 @@ where
         token_type: i32,
         follow_state: usize,
         atn: &Atn,
-    ) -> Result<Vec<ParseTree>, AntlrError> {
+    ) -> Result<GeneratedMatch, AntlrError> {
         let current = self
             .input
             .lt(1)
@@ -2516,8 +2554,12 @@ where
             })?;
         if current.token_type() == token_type {
             self.generated_sync_expected = None;
+            let consumed_eof = current.token_type() == TOKEN_EOF;
             self.consume();
-            return Ok(vec![ParseTree::Terminal(TerminalNode::new(current))]);
+            return Ok(GeneratedMatch {
+                children: vec![ParseTree::Terminal(TerminalNode::new(current))],
+                consumed_eof,
+            });
         }
         let mut expected_symbols = BTreeSet::new();
         expected_symbols.insert(token_type);
@@ -2531,7 +2573,7 @@ where
         intervals: &[(i32, i32)],
         follow_state: usize,
         atn: &Atn,
-    ) -> Result<Vec<ParseTree>, AntlrError> {
+    ) -> Result<GeneratedMatch, AntlrError> {
         let current = self
             .input
             .lt(1)
@@ -2543,8 +2585,12 @@ where
             })?;
         if interval_set_contains(intervals, current.token_type()) {
             self.generated_sync_expected = None;
+            let consumed_eof = current.token_type() == TOKEN_EOF;
             self.consume();
-            return Ok(vec![ParseTree::Terminal(TerminalNode::new(current))]);
+            return Ok(GeneratedMatch {
+                children: vec![ParseTree::Terminal(TerminalNode::new(current))],
+                consumed_eof,
+            });
         }
         let expected_symbols = interval_symbols(intervals);
         self.recover_generated_match(current, &expected_symbols, follow_state, atn, |symbol| {
@@ -2559,7 +2605,7 @@ where
         max_vocabulary: i32,
         follow_state: usize,
         atn: &Atn,
-    ) -> Result<Vec<ParseTree>, AntlrError> {
+    ) -> Result<GeneratedMatch, AntlrError> {
         let current = self
             .input
             .lt(1)
@@ -2573,8 +2619,12 @@ where
             && !interval_set_contains(intervals, current.token_type())
         {
             self.generated_sync_expected = None;
+            let consumed_eof = current.token_type() == TOKEN_EOF;
             self.consume();
-            return Ok(vec![ParseTree::Terminal(TerminalNode::new(current))]);
+            return Ok(GeneratedMatch {
+                children: vec![ParseTree::Terminal(TerminalNode::new(current))],
+                consumed_eof,
+            });
         }
         let expected_symbols =
             interval_complement_symbols(intervals, min_vocabulary, max_vocabulary);
@@ -2591,7 +2641,7 @@ where
         follow_state: usize,
         atn: &Atn,
         matches: impl Fn(i32) -> bool,
-    ) -> Result<Vec<ParseTree>, AntlrError> {
+    ) -> Result<GeneratedMatch, AntlrError> {
         let expected_display = self.expected_symbols_display(expected_symbols);
         if current.token_type() != TOKEN_EOF
             && let Some(next) = self.input.lt(2).cloned()
@@ -2604,12 +2654,18 @@ where
             self.generated_parser_diagnostics
                 .push(diagnostic_for_token(Some(&current), message));
             self.generated_sync_expected = None;
+            // Single-token deletion: skip `current`, then accept `next`. The
+            // accepted token can be EOF only if it is a real EOF terminal.
+            let consumed_eof = next.token_type() == TOKEN_EOF;
             self.consume();
             self.consume();
-            return Ok(vec![
-                ParseTree::Error(ErrorNode::new(current)),
-                ParseTree::Terminal(TerminalNode::new(next)),
-            ]);
+            return Ok(GeneratedMatch {
+                children: vec![
+                    ParseTree::Error(ErrorNode::new(current)),
+                    ParseTree::Terminal(TerminalNode::new(next)),
+                ],
+                consumed_eof,
+            });
         }
         let follow_symbols = self.generated_recovery_follow_symbols(atn, follow_state);
         if follow_symbols.contains(&current.token_type())
@@ -2632,7 +2688,14 @@ where
                 .with_text(format!("<missing {missing_display}>"))
                 .with_span(usize::MAX, usize::MAX)
                 .with_position(current.line(), current.column());
-            return Ok(vec![ParseTree::Error(ErrorNode::new(token))]);
+            // Single-token insertion synthesizes a missing token and consumes
+            // nothing, so no EOF terminal is consumed even when the lookahead is
+            // EOF. Reporting consumed_eof=false here is what keeps `finish_rule`
+            // from recording EOF as the rule stop on this recovery path.
+            return Ok(GeneratedMatch {
+                children: vec![ParseTree::Error(ErrorNode::new(token))],
+                consumed_eof: false,
+            });
         }
         let mismatch_expected = self.generated_sync_expected.take().map_or_else(
             || expected_symbols.clone(),
@@ -8631,8 +8694,11 @@ mod tests {
             .match_token_recovering(2, 5, &atn)
             .expect("generated match should insert missing token");
 
-        assert_eq!(node.len(), 1);
-        assert_eq!(node[0].text(), "<missing 'Y'>");
+        assert_eq!(node.children().len(), 1);
+        assert_eq!(node.children()[0].text(), "<missing 'Y'>");
+        // Single-token insertion synthesizes a missing token and consumes nothing,
+        // so no EOF terminal is consumed even though lookahead is EOF.
+        assert!(!node.consumed_eof());
         assert_eq!(parser.la(1), TOKEN_EOF);
         assert_eq!(
             parser.generated_parser_diagnostics,
@@ -8748,7 +8814,10 @@ mod tests {
             .match_not_set_recovering(&[(1, 1)], 1, 1, 1, &atn)
             .expect("empty complement should recover at EOF");
 
-        assert_eq!(node.len(), 1);
+        assert_eq!(node.children().len(), 1);
+        // Recovery synthesizes a missing token without consuming EOF, so the
+        // enclosing rule must not record EOF as its stop token.
+        assert!(!node.consumed_eof());
         assert_eq!(parser.la(1), TOKEN_EOF);
         assert_eq!(
             parser.generated_parser_diagnostics,

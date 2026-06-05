@@ -2330,16 +2330,14 @@ fn render_generated_step(
         } => {
             writeln!(
                 out,
-                "{pad}let __children = self.base.match_token_recovering({token_type}, {follow_state}, atn())?;"
+                "{pad}let __match = self.base.match_token_recovering({token_type}, {follow_state}, atn())?;"
             )
             .expect("writing to a string cannot fail");
-            if *token_type == antlr4_runtime::token::TOKEN_EOF {
-                writeln!(out, "{pad}__consumed_eof = true;")
-                    .expect("writing to a string cannot fail");
-            }
+            writeln!(out, "{pad}__consumed_eof |= __match.consumed_eof();")
+                .expect("writing to a string cannot fail");
             writeln!(
                 out,
-                "{pad}for __child in __children {{ self.base.add_parse_child(&mut __ctx, __child); }}"
+                "{pad}for __child in __match.into_children() {{ self.base.add_parse_child(&mut __ctx, __child); }}"
             )
             .expect("writing to a string cannot fail");
         }
@@ -2350,19 +2348,14 @@ fn render_generated_step(
             let intervals = render_i32_ranges(intervals);
             writeln!(
                 out,
-                "{pad}let __matched_eof = self.base.la(1) == antlr4_runtime::token::TOKEN_EOF;"
+                "{pad}let __match = self.base.match_set_recovering(&{intervals}, {follow_state}, atn())?;"
             )
             .expect("writing to a string cannot fail");
-            writeln!(
-                out,
-                "{pad}let __children = self.base.match_set_recovering(&{intervals}, {follow_state}, atn())?;"
-            )
-            .expect("writing to a string cannot fail");
-            writeln!(out, "{pad}if __matched_eof {{ __consumed_eof = true; }}")
+            writeln!(out, "{pad}__consumed_eof |= __match.consumed_eof();")
                 .expect("writing to a string cannot fail");
             writeln!(
                 out,
-                "{pad}for __child in __children {{ self.base.add_parse_child(&mut __ctx, __child); }}"
+                "{pad}for __child in __match.into_children() {{ self.base.add_parse_child(&mut __ctx, __child); }}"
             )
             .expect("writing to a string cannot fail");
         }
@@ -2373,19 +2366,14 @@ fn render_generated_step(
             let intervals = render_i32_ranges(intervals);
             writeln!(
                 out,
-                "{pad}let __matched_eof = self.base.la(1) == antlr4_runtime::token::TOKEN_EOF;"
+                "{pad}let __match = self.base.match_not_set_recovering(&{intervals}, 1, atn().max_token_type(), {follow_state}, atn())?;"
             )
             .expect("writing to a string cannot fail");
-            writeln!(
-                out,
-                "{pad}let __children = self.base.match_not_set_recovering(&{intervals}, 1, atn().max_token_type(), {follow_state}, atn())?;"
-            )
-            .expect("writing to a string cannot fail");
-            writeln!(out, "{pad}if __matched_eof {{ __consumed_eof = true; }}")
+            writeln!(out, "{pad}__consumed_eof |= __match.consumed_eof();")
                 .expect("writing to a string cannot fail");
             writeln!(
                 out,
-                "{pad}for __child in __children {{ self.base.add_parse_child(&mut __ctx, __child); }}"
+                "{pad}for __child in __match.into_children() {{ self.base.add_parse_child(&mut __ctx, __child); }}"
             )
             .expect("writing to a string cannot fail");
         }
