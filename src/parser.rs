@@ -2668,10 +2668,23 @@ where
             });
         }
         let follow_symbols = self.generated_recovery_follow_symbols(atn, follow_state);
+        // ANTLR's `singleTokenInsertion` inserts a missing token when the state
+        // *after* the current element can consume the current symbol. At EOF that
+        // only holds when the follow state EXPLICITLY expects EOF (e.g. an `EOF`
+        // terminal follows in the rule, as in `r: . EOF;` or `r: ID EOF;`), not
+        // when EOF merely leaks in from the empty enclosing context (as in
+        // `start: ID+;` on empty input — antlr#6 `InvalidEmptyInput`, which must
+        // stay a `mismatched input` error). `follow_symbols` mixes both sources,
+        // so consult the follow state's OWN expected set for the explicit case.
+        let follow_explicitly_expects_eof = current.token_type() == TOKEN_EOF
+            && self
+                .cached_state_expected_symbols(atn, follow_state)
+                .contains(&TOKEN_EOF);
         if follow_symbols.contains(&current.token_type())
             && (current.token_type() != TOKEN_EOF
                 || self.rule_context_stack.len() > 1
-                || expected_symbols.is_empty())
+                || expected_symbols.is_empty()
+                || follow_explicitly_expects_eof)
         {
             let message = format!(
                 "missing {expected_display} at {}",
@@ -8475,6 +8488,27 @@ mod tests {
         atn
     }
 
+    /// ATN for `start : . EOF ;`: a wildcard whose follow state explicitly matches
+    /// EOF. State 0 (`RuleStart`) -wildcard-> 2 -EOF-> 1 (`RuleStop`).
+    fn wildcard_then_eof_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 1);
+        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
+        atn.add_state(AtnState::new(1, AtnStateKind::RuleStop).with_rule_index(0));
+        atn.add_state(AtnState::new(2, AtnStateKind::Basic).with_rule_index(0));
+        atn.set_rule_to_start_state(vec![0]);
+        atn.set_rule_to_stop_state(vec![1]);
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Wildcard { target: 2 });
+        atn.state_mut(2)
+            .expect("state 2")
+            .add_transition(Transition::Atom {
+                target: 1,
+                label: TOKEN_EOF,
+            });
+        atn
+    }
+
     #[test]
     fn parser_matches_token_and_reports_mismatch() {
         let source = Source {
@@ -8825,6 +8859,49 @@ mod tests {
                 line: 1,
                 column: 1,
                 message: "missing {} at '<EOF>'".to_owned(),
+            }]
+        );
+    }
+
+    #[test]
+    fn wildcard_recovers_via_insertion_when_follow_expects_eof_at_eof() {
+        // `start : . EOF ;` on empty input. The wildcard is modeled as an
+        // empty-complement not-set; at EOF the follow state (the explicit EOF
+        // match) expects EOF, so even in the start rule recovery must perform
+        // single-token insertion (`<missing ...>`) rather than aborting — matching
+        // ANTLR's `(start <missing ...> <EOF>)` / "missing ... at '<EOF>'".
+        let atn = wildcard_then_eof_atn();
+        let data = RecognizerData::new(
+            "Mini.g4",
+            Vocabulary::new([None, Some("'x'")], [None, Some("X")], [None::<&str>, None]),
+        );
+        let mut parser = BaseParser::new(
+            CommonTokenStream::new(Source {
+                tokens: vec![CommonToken::eof("parser-test", 1, 1, 1)],
+                index: 0,
+            }),
+            data,
+        );
+        parser.rule_context_stack = vec![RuleContextFrame {
+            rule_index: 0,
+            invoking_state: 0,
+        }];
+
+        let node = parser
+            .match_not_set_recovering(&[], 1, atn.max_token_type(), 2, &atn)
+            .expect("wildcard at EOF should recover by insertion when follow expects EOF");
+
+        // A single `<missing ...>` error node is inserted; EOF is not consumed.
+        assert_eq!(node.children().len(), 1);
+        assert!(!node.consumed_eof());
+        assert!(node.children()[0].text().starts_with("<missing"));
+        assert_eq!(parser.la(1), TOKEN_EOF);
+        assert_eq!(
+            parser.generated_parser_diagnostics,
+            [ParserDiagnostic {
+                line: 1,
+                column: 1,
+                message: "missing 'x' at '<EOF>'".to_owned(),
             }]
         );
     }

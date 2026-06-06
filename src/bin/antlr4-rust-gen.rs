@@ -454,7 +454,9 @@ enum GeneratedParserStep {
         intervals: Vec<(i32, i32)>,
         follow_state: usize,
     },
-    MatchWildcard,
+    MatchWildcard {
+        follow_state: usize,
+    },
     Precedence(i32),
     Predicate {
         rule_index: usize,
@@ -850,7 +852,7 @@ fn generated_step_shape(step: &GeneratedParserStep) -> GeneratedRuleShape {
         GeneratedParserStep::MatchToken { .. }
         | GeneratedParserStep::MatchSet { .. }
         | GeneratedParserStep::MatchNotSet { .. }
-        | GeneratedParserStep::MatchWildcard
+        | GeneratedParserStep::MatchWildcard { .. }
         | GeneratedParserStep::Precedence(_)
         | GeneratedParserStep::CallRule { .. } => GeneratedRuleShape::default(),
     }
@@ -874,7 +876,7 @@ fn generated_steps_call_atn_preferred_rule(
         GeneratedParserStep::MatchToken { .. }
         | GeneratedParserStep::MatchSet { .. }
         | GeneratedParserStep::MatchNotSet { .. }
-        | GeneratedParserStep::MatchWildcard
+        | GeneratedParserStep::MatchWildcard { .. }
         | GeneratedParserStep::Precedence(_)
         | GeneratedParserStep::Predicate { .. }
         | GeneratedParserStep::Action { .. } => false,
@@ -897,7 +899,7 @@ fn generated_steps_leading_mandatory_rule_call(steps: &[GeneratedParserStep]) ->
             GeneratedParserStep::MatchToken { .. }
             | GeneratedParserStep::MatchSet { .. }
             | GeneratedParserStep::MatchNotSet { .. }
-            | GeneratedParserStep::MatchWildcard => return None,
+            | GeneratedParserStep::MatchWildcard { .. } => return None,
         }
     }
     None
@@ -937,7 +939,7 @@ fn generated_step_is_nullable(step: &GeneratedParserStep) -> bool {
         GeneratedParserStep::MatchToken { .. }
         | GeneratedParserStep::MatchSet { .. }
         | GeneratedParserStep::MatchNotSet { .. }
-        | GeneratedParserStep::MatchWildcard
+        | GeneratedParserStep::MatchWildcard { .. }
         | GeneratedParserStep::CallRule { .. } => false,
     }
 }
@@ -984,7 +986,7 @@ fn generated_steps_call_disabled_rule(steps: &[GeneratedParserStep], enabled: &[
         GeneratedParserStep::MatchToken { .. }
         | GeneratedParserStep::MatchSet { .. }
         | GeneratedParserStep::MatchNotSet { .. }
-        | GeneratedParserStep::MatchWildcard
+        | GeneratedParserStep::MatchWildcard { .. }
         | GeneratedParserStep::Precedence(_)
         | GeneratedParserStep::Predicate { .. }
         | GeneratedParserStep::Action { .. } => false,
@@ -1090,7 +1092,7 @@ fn generated_steps_first_set(
                 first.nullable = false;
                 return first;
             }
-            GeneratedParserStep::MatchWildcard => {
+            GeneratedParserStep::MatchWildcard { .. } => {
                 first.symbols.extend(1..=atn.max_token_type());
                 first.nullable = false;
                 return first;
@@ -1698,7 +1700,7 @@ fn steps_may_consume(steps: &[GeneratedParserStep]) -> bool {
         GeneratedParserStep::MatchToken { .. }
         | GeneratedParserStep::MatchSet { .. }
         | GeneratedParserStep::MatchNotSet { .. }
-        | GeneratedParserStep::MatchWildcard
+        | GeneratedParserStep::MatchWildcard { .. }
         | GeneratedParserStep::CallRule { .. } => true,
         GeneratedParserStep::Action { .. }
         | GeneratedParserStep::Precedence(_)
@@ -1740,7 +1742,7 @@ fn allow_semantic_context_in_decisions(steps: &mut [GeneratedParserStep]) {
             GeneratedParserStep::MatchToken { .. }
             | GeneratedParserStep::MatchSet { .. }
             | GeneratedParserStep::MatchNotSet { .. }
-            | GeneratedParserStep::MatchWildcard
+            | GeneratedParserStep::MatchWildcard { .. }
             | GeneratedParserStep::Precedence(_)
             | GeneratedParserStep::Predicate { .. }
             | GeneratedParserStep::Action { .. }
@@ -1760,7 +1762,7 @@ fn steps_contain_predicate(steps: &[GeneratedParserStep]) -> bool {
         GeneratedParserStep::MatchToken { .. }
         | GeneratedParserStep::MatchSet { .. }
         | GeneratedParserStep::MatchNotSet { .. }
-        | GeneratedParserStep::MatchWildcard
+        | GeneratedParserStep::MatchWildcard { .. }
         | GeneratedParserStep::Precedence(_)
         | GeneratedParserStep::Action { .. }
         | GeneratedParserStep::CallRule { .. } => false,
@@ -1828,9 +1830,12 @@ fn compile_generated_parser_transition(
             }),
             *target,
         )),
-        Transition::Wildcard { target } => {
-            Some((Some(GeneratedParserStep::MatchWildcard), *target))
-        }
+        Transition::Wildcard { target } => Some((
+            Some(GeneratedParserStep::MatchWildcard {
+                follow_state: *target,
+            }),
+            *target,
+        )),
         Transition::Rule {
             rule_index,
             follow_state,
@@ -2383,11 +2388,24 @@ fn render_generated_step(
             )
             .expect("writing to a string cannot fail");
         }
-        GeneratedParserStep::MatchWildcard => {
-            writeln!(out, "{pad}let __child = self.base.match_wildcard()?;")
+        GeneratedParserStep::MatchWildcard { follow_state } => {
+            // A wildcard matches any single token. Model it as a not-set with an
+            // empty exclusion set (every token in 1..=max), reusing the recovering
+            // match so a wildcard at EOF performs ANTLR's single-token insertion
+            // (`<missing ...>` error node) and lets the rule continue, instead of
+            // aborting the remaining steps.
+            writeln!(
+                out,
+                "{pad}let __match = self.base.match_not_set_recovering(&[], 1, atn().max_token_type(), {follow_state}, atn())?;"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(out, "{pad}__consumed_eof |= __match.consumed_eof();")
                 .expect("writing to a string cannot fail");
-            writeln!(out, "{pad}self.base.add_parse_child(&mut __ctx, __child);")
-                .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}for __child in __match.into_children() {{ self.base.add_parse_child(&mut __ctx, __child); }}"
+            )
+            .expect("writing to a string cannot fail");
         }
         GeneratedParserStep::Precedence(precedence) => {
             writeln!(out, "{pad}if !self.base.precpred({precedence}) {{")
@@ -2874,7 +2892,7 @@ fn leading_predicates(steps: &[GeneratedParserStep]) -> Vec<(usize, usize)> {
             GeneratedParserStep::MatchToken { .. }
             | GeneratedParserStep::MatchSet { .. }
             | GeneratedParserStep::MatchNotSet { .. }
-            | GeneratedParserStep::MatchWildcard
+            | GeneratedParserStep::MatchWildcard { .. }
             | GeneratedParserStep::CallRule { .. }
             | GeneratedParserStep::Decision { .. }
             | GeneratedParserStep::StarLoop { .. }
@@ -2902,7 +2920,7 @@ fn leading_lookahead_condition(steps: &[GeneratedParserStep], la_symbol: &str) -
                     "{la_symbol} != antlr4_runtime::TOKEN_EOF && !({excluded})"
                 ));
             }
-            GeneratedParserStep::MatchWildcard => {
+            GeneratedParserStep::MatchWildcard { .. } => {
                 return Some(format!("{la_symbol} != antlr4_runtime::TOKEN_EOF"));
             }
             GeneratedParserStep::CallRule { .. }
@@ -3306,7 +3324,7 @@ fn loop_entry_condition(body: &[GeneratedParserStep]) -> Option<String> {
         | GeneratedParserStep::MatchToken { .. }
         | GeneratedParserStep::MatchSet { .. }
         | GeneratedParserStep::MatchNotSet { .. }
-        | GeneratedParserStep::MatchWildcard
+        | GeneratedParserStep::MatchWildcard { .. }
         | GeneratedParserStep::CallRule { .. }
         | GeneratedParserStep::StarLoop { .. }
         | GeneratedParserStep::LeftRecursiveLoop { .. } => None,
@@ -8237,6 +8255,37 @@ s @init {<SetMember("i","1")>} : ;
         assert!(rendered.contains("parser_action_at_current(6, 0"));
         assert!(rendered.contains("self.generated_actions.push(GeneratedAction::Parser(action));"));
         assert!(rendered.contains("println!(\"alt 2\");"));
+    }
+
+    #[test]
+    fn renders_wildcard_match_through_recovering_path() {
+        // A wildcard (`.`) must go through the recovering match (modeled as an
+        // empty-complement not-set over the full vocabulary) so a wildcard at EOF
+        // performs ANTLR's single-token insertion instead of aborting the rule.
+        let rule = GeneratedParserRule {
+            rule_index: 0,
+            entry_state: 0,
+            left_recursive: false,
+            steps: vec![GeneratedParserStep::MatchWildcard { follow_state: 7 }],
+        };
+
+        let rendered = render_generated_rule_dispatch(
+            &[Some(rule)],
+            &[],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            false,
+        );
+
+        // Recovering not-set over 1..=max with an empty exclusion = "any token",
+        // threading the wildcard's follow state for EOF-insertion follow checks.
+        assert!(rendered.contains(
+            "match_not_set_recovering(&[], 1, atn().max_token_type(), 7, atn())"
+        ));
+        assert!(rendered.contains("__consumed_eof |= __match.consumed_eof();"));
+        // The old non-recovering call must be gone.
+        assert!(!rendered.contains("self.base.match_wildcard()"));
     }
 
     #[test]
