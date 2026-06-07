@@ -2962,7 +2962,7 @@ fn render_generated_alt_number_assignment(out: &mut String, pad: &str, alt: usiz
 fn render_generated_sync_decision(out: &mut String, pad: &str, state: usize) {
     writeln!(
         out,
-        "{pad}match self.base.sync_decision(atn(), {state}, __ctx.children().is_empty()) {{"
+        "{pad}match self.base.sync_decision(atn(), {state}, !__ctx.has_matched_child()) {{"
     )
     .expect("writing to a string cannot fail");
     writeln!(out, "{pad}    Ok(__sync_children) => {{").expect("writing to a string cannot fail");
@@ -7297,7 +7297,7 @@ atn:
             false,
         );
         assert!(rendered.contains("parse_generated_rule_0"));
-        assert!(rendered.contains("sync_decision(atn(), 1, __ctx.children().is_empty())"));
+        assert!(rendered.contains("sync_decision(atn(), 1, !__ctx.has_matched_child())"));
         assert!(rendered.contains("ll1_decision_prediction(atn(), 1)"));
         // Stage 1 is the SLL probe (no LL loop on the empty-context conflict);
         // stage 2 re-runs with the real context only when full context is needed.
@@ -7346,7 +7346,7 @@ atn:
             false,
         );
         assert!(rendered.contains("loop {"));
-        assert!(rendered.contains("sync_decision(atn(), 1, __ctx.children().is_empty())"));
+        assert!(rendered.contains("sync_decision(atn(), 1, !__ctx.has_matched_child())"));
         assert!(rendered.contains("1 => {"));
         assert!(rendered.contains("2 => {"));
         assert!(rendered.contains("break;"));

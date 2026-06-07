@@ -2887,10 +2887,14 @@ where
     }
 
     /// Adds a generated parser child only when parse-tree construction is
-    /// enabled.
+    /// enabled. The match is recorded on the context either way (via `add_child`,
+    /// or `note_matched_child` when trees are off) so generated recovery can tell
+    /// whether the rule has matched anything yet without depending on `children`.
     pub fn add_parse_child(&self, context: &mut ParserRuleContext, child: ParseTree) {
         if self.build_parse_trees {
             context.add_child(child);
+        } else {
+            context.note_matched_child();
         }
     }
 
@@ -9076,6 +9080,32 @@ mod tests {
         ]);
         assert_eq!(parser.match_wildcard().expect("wildcard").text(), "x");
         assert!(parser.match_wildcard().is_err());
+    }
+
+    #[test]
+    fn add_parse_child_records_match_even_without_tree_building() {
+        // `sync_decision`'s "is the current context empty" flag must reflect real
+        // matches, not parse-tree children: when `build_parse_trees(false)`,
+        // `children` stays empty but `has_matched_child` must still flip so nested
+        // recovery does not wrongly suppress single-token deletion.
+        let mut parser = mini_parser(vec![CommonToken::eof("parser-test", 1, 1, 1)]);
+        let token = CommonToken::new(1).with_text("x");
+
+        parser.set_build_parse_trees(false);
+        let mut ctx = ParserRuleContext::new(0, 0);
+        assert!(!ctx.has_matched_child());
+        parser.add_parse_child(&mut ctx, ParseTree::Terminal(TerminalNode::new(token.clone())));
+        // Tree building is off, so no child is stored...
+        assert!(ctx.children().is_empty());
+        // ...but the match is recorded, so the context is no longer "empty".
+        assert!(ctx.has_matched_child());
+
+        // With tree building on, the child is stored and the match is recorded.
+        parser.set_build_parse_trees(true);
+        let mut ctx = ParserRuleContext::new(0, 0);
+        parser.add_parse_child(&mut ctx, ParseTree::Terminal(TerminalNode::new(token)));
+        assert_eq!(ctx.children().len(), 1);
+        assert!(ctx.has_matched_child());
     }
 
     #[test]

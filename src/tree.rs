@@ -179,7 +179,16 @@ pub struct ParserRuleContext {
     stop: Option<CommonToken>,
     int_returns: Option<Box<IntReturns>>,
     children: Vec<ParseTree>,
-    exception: Option<AntlrError>,
+    /// Whether any child has been offered to this context, independent of whether
+    /// the tree was actually built. `children` stays empty when
+    /// `Parser::set_build_parse_trees(false)`, so generated recovery uses this
+    /// flag (not `children.is_empty()`) to tell whether the rule has matched
+    /// anything yet.
+    matched_child: bool,
+    // Boxed: an `AntlrError` is large and only set on the rare error path, so
+    // keeping it behind a pointer keeps `ParserRuleContext` (and thus the
+    // `ParseTree::Rule` variant) compact.
+    exception: Option<Box<AntlrError>>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -195,6 +204,7 @@ impl ParserRuleContext {
             stop: None,
             int_returns: None,
             children: Vec::new(),
+            matched_child: false,
             exception: None,
         }
     }
@@ -212,6 +222,7 @@ impl ParserRuleContext {
             stop: None,
             int_returns: None,
             children: Vec::with_capacity(capacity),
+            matched_child: false,
             exception: None,
         }
     }
@@ -263,12 +274,12 @@ impl ParserRuleContext {
             .and_then(|values| values.0.get(name).copied())
     }
 
-    pub const fn exception(&self) -> Option<&AntlrError> {
-        self.exception.as_ref()
+    pub fn exception(&self) -> Option<&AntlrError> {
+        self.exception.as_deref()
     }
 
     pub fn set_exception(&mut self, error: AntlrError) {
-        self.exception = Some(error);
+        self.exception = Some(Box::new(error));
     }
 
     pub fn children(&self) -> &[ParseTree] {
@@ -276,7 +287,21 @@ impl ParserRuleContext {
     }
 
     pub fn add_child(&mut self, child: ParseTree) {
+        self.matched_child = true;
         self.children.push(child);
+    }
+
+    /// Records that a child was matched without storing it (used when parse-tree
+    /// construction is disabled). Keeps `has_matched_child` accurate even though
+    /// `children` stays empty.
+    pub const fn note_matched_child(&mut self) {
+        self.matched_child = true;
+    }
+
+    /// Whether this context has matched at least one child (token, rule, or error
+    /// node) so far, regardless of whether parse-tree construction is enabled.
+    pub const fn has_matched_child(&self) -> bool {
+        self.matched_child
     }
 
     pub fn text(&self) -> String {
