@@ -2482,6 +2482,18 @@ fn render_generated_step(
             } else {
                 generated_child_call
             };
+            // Snapshot the buffer length and member state before the child so we
+            // can tell, after it returns, whether it ran on the interpreter path.
+            writeln!(
+                out,
+                "{pad}let __child_action_marker = self.generated_actions.len();"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}let __child_member_checkpoint = self.base.int_members_checkpoint();"
+            )
+            .expect("writing to a string cannot fail");
             writeln!(out, "{pad}let __child = {child_call};")
                 .expect("writing to a string cannot fail");
             writeln!(
@@ -2490,6 +2502,31 @@ fn render_generated_step(
             )
             .expect("writing to a string cannot fail");
             writeln!(out, "{pad}let __child = __child?;").expect("writing to a string cannot fail");
+            // An interpreted child mutates integer members immediately instead of
+            // buffering actions. If the child pushed nothing to the buffer but
+            // changed members, capture a snapshot so the top-level replay (which
+            // restores members to the rule-entry checkpoint) re-applies them in
+            // position. Generated children buffer their own actions, so they grow
+            // the buffer and need no snapshot here.
+            writeln!(
+                out,
+                "{pad}if self.generated_actions.len() == __child_action_marker {{"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}    let __child_members = self.base.int_members_checkpoint();"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(out, "{pad}    if __child_members != __child_member_checkpoint {{")
+                .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}        self.generated_actions.push(GeneratedAction::MemberSnapshot(__child_members));"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
+            writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
             writeln!(out, "{pad}self.base.add_parse_child(&mut __ctx, __child);")
                 .expect("writing to a string cannot fail");
         }
@@ -3658,6 +3695,12 @@ enum GeneratedAction {{
         start_index: usize,
         stop_index: Option<usize>,
     }},
+    /// Integer-member snapshot captured after a child rule ran on the interpreter
+    /// path. Interpreted children mutate members immediately instead of buffering
+    /// actions, so the top-level generated rollback (`restore_int_members`) would
+    /// otherwise wipe those updates before replay. Replaying this snapshot in
+    /// position re-applies them.
+    MemberSnapshot(std::collections::BTreeMap<usize, i64>),
 }}
 
 #[allow(dead_code)]
@@ -3714,6 +3757,9 @@ where
             GeneratedAction::Parser(action) => self.run_action(action, tree),
             GeneratedAction::After {{ rule_index, tree, start_index, stop_index }} => {{
                 self.run_after_actions(rule_index, &tree, start_index, stop_index);
+            }}
+            GeneratedAction::MemberSnapshot(members) => {{
+                self.base.restore_int_members(members);
             }}
         }}
     }}
@@ -8215,6 +8261,52 @@ s @init {<SetMember("i","1")>} : ;
             "@init action must be queued before the rule body, not appended at exit \
              (otherwise the buffered replay runs body actions before @init)"
         );
+    }
+
+    #[test]
+    fn call_rule_step_captures_member_snapshot_for_interpreted_child() {
+        // A generated rule that calls a child must snapshot integer members after
+        // the child when the child ran interpreted (it mutates members immediately
+        // instead of buffering actions); otherwise the top-level replay restores
+        // members to the rule-entry checkpoint and silently drops the child's
+        // updates. Render a `CallRule` step directly (the codegen test harness
+        // can't synthesize a multi-rule ATN from grammar text).
+        let mut rendered = String::new();
+        render_generated_step(
+            &mut rendered,
+            &GeneratedParserStep::CallRule {
+                source_state: 3,
+                rule_index: 1,
+                precedence: GeneratedRuleCallPrecedence::Literal(0),
+            },
+            2,
+            GeneratedStepRenderContext {
+                inline_action_statements: &BTreeMap::new(),
+                init_entry_action_statements: &BTreeMap::new(),
+                return_action_statements: &BTreeMap::new(),
+                track_alt_numbers: false,
+                direct_generated_rule_calls: &[],
+                atn_preferred_rule_calls: &[],
+            },
+        );
+
+        // The child call is bracketed by a buffer-length marker + member checkpoint,
+        // and a MemberSnapshot is pushed only when the child buffered nothing but
+        // changed members (i.e. it ran interpreted).
+        assert!(rendered.contains("let __child_action_marker = self.generated_actions.len();"));
+        assert!(
+            rendered.contains("let __child_member_checkpoint = self.base.int_members_checkpoint();")
+        );
+        assert!(rendered.contains("if self.generated_actions.len() == __child_action_marker {"));
+        assert!(rendered.contains("if __child_members != __child_member_checkpoint {"));
+        assert!(rendered.contains(
+            "self.generated_actions.push(GeneratedAction::MemberSnapshot(__child_members));"
+        ));
+        // Marker capture must precede the child call, which must precede the snapshot.
+        let marker = rendered.find("__child_action_marker = ").expect("marker");
+        let call = rendered.find("let __child =").expect("child call");
+        let snapshot = rendered.find("GeneratedAction::MemberSnapshot").expect("snapshot");
+        assert!(marker < call && call < snapshot);
     }
 
     #[test]
