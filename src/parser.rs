@@ -6693,6 +6693,32 @@ where
         self.after_action_stop_index(current_index)
     }
 
+    /// Start-token index for a rule's `@after` action, taken from the start token
+    /// the rule context already recorded.
+    ///
+    /// `enter_rule` sets the rule context start to the first visible token (it
+    /// skips leading hidden-channel tokens), so reading it back keeps `$start` /
+    /// `$text` in an `@after` action aligned with the rule context — even when the
+    /// rule begins after a hidden prefix (e.g. leading whitespace) that the raw
+    /// pre-rule cursor still points at. Falls back to `fallback_index` only when
+    /// the tree carries no rule start.
+    #[must_use]
+    pub fn after_action_start_index_for_tree(
+        &self,
+        tree: &ParseTree,
+        fallback_index: usize,
+    ) -> usize {
+        if let ParseTree::Rule(rule) = tree {
+            if let Some(start) = rule.context().start() {
+                let token_index = start.token_index();
+                if token_index >= 0 {
+                    return token_index.unsigned_abs();
+                }
+            }
+        }
+        fallback_index
+    }
+
     /// Returns the rule stop token for a selected parse path.
     ///
     /// EOF transitions do not advance the token-stream cursor, so an EOF match
@@ -9282,6 +9308,30 @@ mod tests {
             parser.after_action_stop_index_for_tree(&tree, current_index),
             Some(0)
         );
+    }
+
+    #[test]
+    fn after_action_start_uses_rule_context_start_not_cursor() {
+        // A rule that begins after leading hidden-channel tokens: the rule context
+        // start (set by `enter_rule`) is the first visible token, not the raw cursor
+        // that may still point at the hidden prefix. The @after start must follow
+        // the context start so `$start`/`$text` excludes the hidden prefix.
+        let parser = mini_parser(vec![CommonToken::eof("parser-test", 1, 1, 1)]);
+        let mut id = CommonToken::new(1).with_text("x");
+        // The first visible token sits at stream index 2 (after two hidden tokens).
+        id.set_token_index(2);
+
+        let mut ctx = ParserRuleContext::new(0, 0);
+        ctx.set_start(id);
+        let tree = ParseTree::Rule(RuleNode::new(ctx));
+
+        // The raw fallback (pre-rule cursor) would be 0 (the hidden prefix)...
+        // ...but the tree-aware helper follows the rule context start (index 2).
+        assert_eq!(parser.after_action_start_index_for_tree(&tree, 0), 2);
+
+        // With no rule start recorded, it falls back to the provided index.
+        let empty = ParseTree::Rule(RuleNode::new(ParserRuleContext::new(0, 0)));
+        assert_eq!(parser.after_action_start_index_for_tree(&empty, 7), 7);
     }
 
     #[test]

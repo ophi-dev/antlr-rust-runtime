@@ -2029,11 +2029,6 @@ fn render_generated_rule_method(
     writeln!(out, "        let _ = allow_fallback;").expect("writing to a string cannot fail");
     writeln!(
         out,
-        "        let __rule_start = antlr4_runtime::IntStream::index(self.base.input());"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
         "        let __generated_action_marker = self.generated_actions.len();"
     )
     .expect("writing to a string cannot fail");
@@ -2050,6 +2045,15 @@ fn render_generated_rule_method(
     writeln!(
         out,
         "        let mut __ctx = self.base.enter_rule({entry_state}isize, {index});"
+    )
+    .expect("writing to a string cannot fail");
+    // Capture the rule start AFTER `enter_rule`, which advances the cursor past any
+    // leading hidden-channel tokens to the first visible token. Capturing before
+    // would make `$start`/`$text` in generated actions include a leading hidden
+    // prefix (e.g. whitespace), diverging from ANTLR and the rule context start.
+    writeln!(
+        out,
+        "        let __rule_start = antlr4_runtime::IntStream::index(self.base.input());"
     )
     .expect("writing to a string cannot fail");
     // Member-setting `@init` runs on rule entry (before the body) so same-rule
@@ -2161,11 +2165,6 @@ fn render_generated_left_recursive_rule_method(
     writeln!(out, "        let _ = allow_fallback;").expect("writing to a string cannot fail");
     writeln!(
         out,
-        "        let __rule_start = antlr4_runtime::IntStream::index(self.base.input());"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
         "        let __generated_action_marker = self.generated_actions.len();"
     )
     .expect("writing to a string cannot fail");
@@ -2182,6 +2181,15 @@ fn render_generated_left_recursive_rule_method(
     writeln!(
         out,
         "        let mut __ctx = self.base.enter_recursion_rule({entry_state}isize, {index}, __precedence);"
+    )
+    .expect("writing to a string cannot fail");
+    // Capture the rule start AFTER `enter_recursion_rule`, which (via `enter_rule`)
+    // advances the cursor past any leading hidden-channel tokens to the first
+    // visible token. Capturing before would make `$start`/`$text` in generated
+    // actions include a leading hidden prefix, diverging from ANTLR.
+    writeln!(
+        out,
+        "        let __rule_start = antlr4_runtime::IntStream::index(self.base.input());"
     )
     .expect("writing to a string cannot fail");
     // Member-setting `@init` runs on rule entry (before the body) so same-rule
@@ -3787,11 +3795,7 @@ where
         let __generated_action_marker = self.generated_actions.len();
         let __generated_member_checkpoint = self.base.int_members_checkpoint();
         let __generated_only = self.generated_only();
-        let __after_start_index = if Self::has_after_actions(rule_index) {{
-            Some(__rule_start)
-        }} else {{
-            None
-        }};
+        let __has_after_actions = Self::has_after_actions(rule_index);
         let (__tree, __from_generated) = if let Some(result) = self.parse_generated_rule(rule_index, precedence, allow_generated_fallback) {{
             match result {{
                 Ok(tree) => (tree, true),
@@ -3807,7 +3811,12 @@ where
         }} else {{
             (self.parse_interpreted_rule_precedence(rule_index, precedence)?, false)
         }};
-        if let Some(start_index) = __after_start_index {{
+        if __has_after_actions {{
+            // Use the rule context's start token (the first visible token, set by
+            // `enter_rule`) rather than the pre-rule cursor, which may sit on a
+            // leading hidden-channel token. Keeps `$start`/`$text` aligned with the
+            // rule context and with ANTLR.
+            let start_index = self.base.after_action_start_index_for_tree(&__tree, __rule_start);
             let __after_index = antlr4_runtime::IntStream::index(self.base.input());
             let stop_index = self.base.after_action_stop_index_for_tree(&__tree, __after_index);
             if __from_generated {{
@@ -8117,7 +8126,12 @@ atn:
         .expect("parser should render");
 
         assert!(rendered.contains("matches!(rule_index, 0)"));
-        assert!(rendered.contains("let __after_start_index"));
+        assert!(rendered.contains("let __has_after_actions = Self::has_after_actions(rule_index);"));
+        // The @after start comes from the rule context (first visible token), not
+        // the raw pre-rule cursor, so a leading hidden prefix is excluded.
+        assert!(rendered.contains(
+            "let start_index = self.base.after_action_start_index_for_tree(&__tree, __rule_start);"
+        ));
         assert!(
             rendered
                 .contains("self.run_after_actions(rule_index, &__tree, start_index, stop_index);")
