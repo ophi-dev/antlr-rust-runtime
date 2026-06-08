@@ -2466,17 +2466,21 @@ fn render_generated_step(
                 GeneratedRuleCallPrecedence::Literal(value) => value.to_string(),
                 GeneratedRuleCallPrecedence::InheritLocal => "__precedence".to_owned(),
             };
-            let generated_child_call = if render_context
+            // `direct_generated_rule_calls[N]` is false exactly when generated rule
+            // N carries an `@after` action; such children must go through
+            // `parse_rule_precedence_from_generated` (the dispatch wrapper) so their
+            // `@after` is run/queued.
+            let child_has_after = !render_context
                 .direct_generated_rule_calls
                 .get(*rule_index)
                 .copied()
-                .unwrap_or_default()
-            {
+                .unwrap_or_default();
+            let generated_child_call = if child_has_after {
+                format!("self.parse_rule_precedence_from_generated({rule_index}, {precedence})")
+            } else {
                 format!(
                     "self.parse_generated_rule_{rule_index}_dispatch({precedence}, false).map_err(GeneratedRuleError::into_error)"
                 )
-            } else {
-                format!("self.parse_rule_precedence_from_generated({rule_index}, {precedence})")
             };
             let child_call = if render_context
                 .atn_preferred_rule_calls
@@ -2484,9 +2488,22 @@ fn render_generated_step(
                 .copied()
                 .unwrap_or_default()
             {
-                format!(
-                    "if self.generated_only() {{ {generated_child_call} }} else {{ self.parse_interpreted_rule_precedence({rule_index}, {precedence}) }}"
-                )
+                if child_has_after {
+                    // `@after`-bearing ATN-preferred child: the interpreted path
+                    // (`parse_interpreted_rule_precedence`) does not dispatch `@after`,
+                    // so route through `parse_rule_precedence_from_generated`. For an
+                    // ATN-preferred rule its `parse_generated_rule` dispatch arm is
+                    // guarded by `generated_only()`, so in normal mode that probe
+                    // returns `None` and the wrapper still parses the child on the
+                    // interpreted path (preserving the ATN-preferred optimization)
+                    // while running its `@after`. Both `if generated_only()` arms
+                    // collapse to this same call, so emit it directly.
+                    generated_child_call
+                } else {
+                    format!(
+                        "if self.generated_only() {{ {generated_child_call} }} else {{ self.parse_interpreted_rule_precedence({rule_index}, {precedence}) }}"
+                    )
+                }
             } else {
                 generated_child_call
             };
@@ -8060,6 +8077,58 @@ atn:
         );
         assert!(rendered.contains("failed_predicate_option_error(2, __message)"));
         assert!(rendered.contains("failed_predicate_error(\"semantic predicate\")"));
+    }
+
+    fn render_call_rule_step(
+        direct_generated_rule_calls: &[bool],
+        atn_preferred_rule_calls: &[bool],
+    ) -> String {
+        let mut rendered = String::new();
+        render_generated_step(
+            &mut rendered,
+            &GeneratedParserStep::CallRule {
+                source_state: 4,
+                rule_index: 1,
+                precedence: GeneratedRuleCallPrecedence::Literal(0),
+            },
+            2,
+            GeneratedStepRenderContext {
+                inline_action_statements: &BTreeMap::new(),
+                init_entry_action_statements: &BTreeMap::new(),
+                return_action_statements: &BTreeMap::new(),
+                track_alt_numbers: false,
+                direct_generated_rule_calls,
+                atn_preferred_rule_calls,
+            },
+        );
+        rendered
+    }
+
+    #[test]
+    fn atn_preferred_child_with_after_action_routes_through_dispatch_wrapper() {
+        // An ATN-preferred child that carries an `@after` action
+        // (direct_generated_rule_calls[1] == false) must NOT be called via the bare
+        // `parse_interpreted_rule_precedence`, which never dispatches `@after`. It
+        // must go through `parse_rule_precedence_from_generated`, which preserves the
+        // interpreted routing (the rule's generated dispatch arm is guarded by
+        // `generated_only()`) while running the child's `@after`.
+        let rendered = render_call_rule_step(&[true, false], &[true, true]);
+
+        assert!(rendered.contains("self.parse_rule_precedence_from_generated(1, 0)"));
+        assert!(!rendered.contains("self.parse_interpreted_rule_precedence(1, 0)"));
+    }
+
+    #[test]
+    fn atn_preferred_child_without_after_keeps_lean_interpreted_call() {
+        // An ATN-preferred child WITHOUT `@after` (direct_generated_rule_calls[1] ==
+        // true) keeps the lean direct interpreted call, avoiding the dispatch
+        // wrapper's probe/checkpoint overhead on the hot path.
+        let rendered = render_call_rule_step(&[true, true], &[true, true]);
+
+        assert!(rendered.contains(
+            "if self.generated_only() { self.parse_generated_rule_1_dispatch(0, false)"
+        ));
+        assert!(rendered.contains("else { self.parse_interpreted_rule_precedence(1, 0) }"));
     }
 
     #[test]
