@@ -3809,7 +3809,7 @@ where
         }};
         if let Some(start_index) = __after_start_index {{
             let __after_index = antlr4_runtime::IntStream::index(self.base.input());
-            let stop_index = self.base.after_action_stop_index(__after_index);
+            let stop_index = self.base.after_action_stop_index_for_tree(&__tree, __after_index);
             if __from_generated {{
                 self.generated_actions.push(GeneratedAction::After {{
                     rule_index,

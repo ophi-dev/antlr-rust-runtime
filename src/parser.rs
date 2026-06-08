@@ -6655,10 +6655,42 @@ where
     /// `$stop`/`$text` in an `@after` action on a rule like `r: a* EOF;` would
     /// report the token before EOF (or `None` for empty input), diverging from
     /// the rule context that `finish_rule` builds.
+    ///
+    /// NOTE: this infers `consumed_eof` from the cursor, which is wrong when a
+    /// rule ends right before EOF without matching it (the cursor is parked on
+    /// EOF, but the rule did not consume it). Prefer
+    /// [`Self::after_action_stop_index_for_tree`], which reuses the stop token the
+    /// rule context already recorded with the real flag. Kept for callers without
+    /// the rule tree in hand.
     #[must_use]
     pub fn after_action_stop_index(&mut self, current_index: usize) -> Option<usize> {
         let consumed_eof = self.token_type_at(current_index) == TOKEN_EOF;
         self.rule_stop_token_index(current_index, consumed_eof)
+    }
+
+    /// Stop-token index for a rule's `@after` action, taken from the stop token
+    /// the rule context already recorded.
+    ///
+    /// `finish_rule` computes the rule stop with the real `consumed_eof` flag, so
+    /// reading it back keeps `$stop`/`$text` in an `@after` action aligned with
+    /// the rule context — even when the rule ends immediately before EOF without
+    /// matching it (cursor parked on EOF, but `consumed_eof` is false). Falls back
+    /// to the cursor-based inference only when the tree carries no rule stop.
+    #[must_use]
+    pub fn after_action_stop_index_for_tree(
+        &mut self,
+        tree: &ParseTree,
+        current_index: usize,
+    ) -> Option<usize> {
+        if let ParseTree::Rule(rule) = tree {
+            if let Some(stop) = rule.context().stop() {
+                let token_index = stop.token_index();
+                if token_index >= 0 {
+                    return Some(token_index.unsigned_abs());
+                }
+            }
+        }
+        self.after_action_stop_index(current_index)
     }
 
     /// Returns the rule stop token for a selected parse path.
@@ -9218,6 +9250,37 @@ mod tests {
         assert_eq!(
             parser.text_interval(actions[0].start_index(), actions[0].stop_index()),
             ""
+        );
+    }
+
+    #[test]
+    fn after_action_stop_uses_rule_context_stop_not_cursor() {
+        // A rule that ends right before EOF without matching it (e.g. `a: ID;`
+        // called from `start: a EOF;`): after matching ID the cursor parks on EOF,
+        // but the rule did not consume it. The @after stop must follow the rule
+        // context's recorded stop (ID at index 0), not the cursor's EOF (index 1).
+        let mut id = CommonToken::new(1).with_text("x");
+        id.set_token_index(0);
+        let mut eof = CommonToken::eof("parser-test", 1, 1, 1);
+        eof.set_token_index(1);
+        let mut parser = mini_parser(vec![id.clone(), eof]);
+        // Advance the cursor onto EOF, as it would be after `a` matched ID.
+        parser.consume();
+        assert_eq!(parser.la(1), TOKEN_EOF);
+
+        // Rule `a` matched only ID, so its context stop is the ID token (index 0),
+        // exactly what finish_rule(consumed_eof = false) records.
+        let mut ctx = ParserRuleContext::new(0, 0);
+        ctx.set_stop(id);
+        let tree = ParseTree::Rule(RuleNode::new(ctx));
+
+        let current_index = parser.input.index();
+        // Cursor-only inference would wrongly pick EOF (the parked cursor)...
+        assert_eq!(parser.after_action_stop_index(current_index), Some(1));
+        // ...but the tree-aware helper follows the rule context stop (ID).
+        assert_eq!(
+            parser.after_action_stop_index_for_tree(&tree, current_index),
+            Some(0)
         );
     }
 
