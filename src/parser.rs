@@ -3224,6 +3224,7 @@ where
         let Some(state) = atn.state(state_number) else {
             return Ok(Vec::new());
         };
+        let state_kind = state.kind;
         let Some(rule_index) = state.rule_index else {
             return Ok(Vec::new());
         };
@@ -3262,6 +3263,23 @@ where
         }
         let can_delete_in_place =
             !(nullable && current_context_empty && self.rule_context_stack.len() > 1);
+        // ANTLR's `DefaultErrorStrategy.sync` recovers differently by decision kind:
+        // a loop sync (STAR_LOOP_ENTRY / STAR_LOOP_BACK / PLUS_LOOP_BACK and the
+        // *-block starts) does `consumeUntil` the follow set — multi-token deletion,
+        // one error per skipped token across loop iterations; a plain optional/block
+        // entry (BLOCK_START) does `singleTokenDeletion` — it deletes the one
+        // unexpected token only when LA(2) is expected, otherwise reports a mismatch
+        // and leaves recovery to the rule. Treating an optional block as a loop
+        // would over-consume (e.g. `start: (A)? B EOF;` on `C C B` would delete both
+        // `C`s and accept the input, which ANTLR rejects with `mismatched input`).
+        let loop_sync = matches!(
+            state_kind,
+            AtnStateKind::StarLoopEntry
+                | AtnStateKind::StarLoopBack
+                | AtnStateKind::PlusLoopBack
+                | AtnStateKind::StarBlockStart
+                | AtnStateKind::PlusBlockStart
+        );
         if symbol != TOKEN_EOF && can_delete_in_place {
             let mut cursor = self.input.index();
             let mut skipped = Vec::new();
@@ -3277,17 +3295,17 @@ where
                 }
                 let next_symbol = self.token_type_at(next);
                 if next_symbol != TOKEN_EOF && expected.contains(next_symbol) {
-                    let current = self.input.lt(1).cloned();
+                    let current_token = self.input.lt(1).cloned();
                     let expected_symbols = expected.to_btree_set();
                     let message = format!(
                         "extraneous input {} expecting {}",
-                        current
+                        current_token
                             .as_ref()
                             .map_or_else(|| "'<EOF>'".to_owned(), token_input_display),
                         self.expected_symbols_display(&expected_symbols)
                     );
                     self.generated_parser_diagnostics
-                        .push(diagnostic_for_token(current.as_ref(), message));
+                        .push(diagnostic_for_token(current_token.as_ref(), message));
                     let mut children = Vec::with_capacity(skipped.len());
                     for index in skipped {
                         if let Some(token) = self.token_at(index) {
@@ -3296,6 +3314,12 @@ where
                         }
                     }
                     return Ok(children);
+                }
+                // A non-loop block entry deletes at most one token (single-token
+                // deletion): if LA(2) is not expected, stop scanning so the mismatch
+                // is reported at the first token instead of skipping ahead.
+                if !loop_sync {
+                    break;
                 }
                 cursor = next;
             }
@@ -8421,6 +8445,101 @@ mod tests {
             .expect("state 4")
             .add_transition(Transition::Epsilon { target: 5 });
         atn
+    }
+
+    /// ATN for `start : (A)? B EOF ;` (A=1, B=2, C=3, max token type 3).
+    /// State 1 is the nullable optional-block decision; its sync set is {A, B}.
+    fn optional_then_b_eof_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 3);
+        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
+        atn.add_state(AtnState::new(1, AtnStateKind::BlockStart).with_rule_index(0));
+        atn.add_state(AtnState::new(2, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(3, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(4, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(5, AtnStateKind::RuleStop).with_rule_index(0));
+        atn.set_rule_to_start_state(vec![0]);
+        atn.set_rule_to_stop_state(vec![5]);
+        atn.add_decision_state(1);
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Epsilon { target: 1 });
+        // Optional block: match A then fall through, or skip straight to state 3.
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Atom {
+                target: 3,
+                label: 1,
+            });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Epsilon { target: 3 });
+        // Match B, then EOF.
+        atn.state_mut(3)
+            .expect("state 3")
+            .add_transition(Transition::Atom {
+                target: 4,
+                label: 2,
+            });
+        atn.state_mut(4)
+            .expect("state 4")
+            .add_transition(Transition::Atom {
+                target: 5,
+                label: TOKEN_EOF,
+            });
+        atn
+    }
+
+    #[test]
+    fn sync_decision_deletes_only_a_single_token() {
+        // ANTLR sync recovery deletes exactly one token, only when LA(2) is
+        // expected. `(A)? B EOF` at the optional-block decision:
+        //  - `C B`   -> single-token deletion: one error node for the extra `C`.
+        //  - `C C B` -> LA(2) is `C` (not expected), so NO deletion; sync returns
+        //               without consuming and records the expected set for the
+        //               subsequent mismatch (the parser must not over-consume both
+        //               `C`s and accept the input).
+        let atn = optional_then_b_eof_atn();
+
+        let mut single = mini_parser(vec![
+            CommonToken::new(3).with_text("c"),
+            CommonToken::new(2).with_text("b"),
+            CommonToken::eof("parser-test", 1, 2, 2),
+        ]);
+        single.rule_context_stack = vec![RuleContextFrame {
+            rule_index: 0,
+            invoking_state: 0,
+        }];
+        let children = single
+            .sync_decision(&atn, 1, true)
+            .expect("single extraneous token recovers");
+        assert_eq!(children.len(), 1);
+        assert!(matches!(children[0], ParseTree::Error(_)));
+        // Exactly one token consumed (the cursor now sits on `b`).
+        assert_eq!(single.la(1), 2);
+
+        let mut double = mini_parser(vec![
+            CommonToken::new(3).with_text("c"),
+            CommonToken::new(3).with_text("c"),
+            CommonToken::new(2).with_text("b"),
+            CommonToken::eof("parser-test", 1, 3, 3),
+        ]);
+        double.rule_context_stack = vec![RuleContextFrame {
+            rule_index: 0,
+            invoking_state: 0,
+        }];
+        let result = double.sync_decision(&atn, 1, true);
+        // No single-token deletion fires (LA(2) is `c`, not expected): sync must NOT
+        // consume either `c`. It reports the mismatch at the first `c` (so the parser
+        // does not over-consume both and accept the input). Nothing is consumed, so
+        // the cursor still sits on the first `c` for rule-level recovery.
+        let error = result.expect_err("two extraneous tokens must not be deleted by sync");
+        match error {
+            AntlrError::ParserError { message, .. } => {
+                assert!(message.starts_with("mismatched input"), "got: {message}");
+            }
+            other => panic!("expected a mismatched-input ParserError, got {other:?}"),
+        }
+        assert_eq!(double.la(1), 3);
     }
 
     fn predicate_after_token_atn() -> Atn {
