@@ -2475,8 +2475,10 @@ fn render_generated_step(
                 .get(*rule_index)
                 .copied()
                 .unwrap_or_default();
+            let from_generated_call =
+                format!("self.parse_rule_precedence_from_generated({rule_index}, {precedence})");
             let generated_child_call = if child_has_after {
-                format!("self.parse_rule_precedence_from_generated({rule_index}, {precedence})")
+                from_generated_call.clone()
             } else {
                 format!(
                     "self.parse_generated_rule_{rule_index}_dispatch({precedence}, false).map_err(GeneratedRuleError::into_error)"
@@ -2488,22 +2490,16 @@ fn render_generated_step(
                 .copied()
                 .unwrap_or_default()
             {
-                if child_has_after {
-                    // `@after`-bearing ATN-preferred child: the interpreted path
-                    // (`parse_interpreted_rule_precedence`) does not dispatch `@after`,
-                    // so route through `parse_rule_precedence_from_generated`. For an
-                    // ATN-preferred rule its `parse_generated_rule` dispatch arm is
-                    // guarded by `generated_only()`, so in normal mode that probe
-                    // returns `None` and the wrapper still parses the child on the
-                    // interpreted path (preserving the ATN-preferred optimization)
-                    // while running its `@after`. Both `if generated_only()` arms
-                    // collapse to this same call, so emit it directly.
-                    generated_child_call
-                } else {
-                    format!(
-                        "if self.generated_only() {{ {generated_child_call} }} else {{ self.parse_interpreted_rule_precedence({rule_index}, {precedence}) }}"
-                    )
-                }
+                // ATN-preferred child: route through `parse_rule_precedence_from_generated`.
+                // The rule's `parse_generated_rule` dispatch arm is guarded by
+                // `generated_only()`, so in normal mode the generated probe returns
+                // `None` and the wrapper parses the child on the INTERPRETED path
+                // (preserving the ATN-preferred optimization) — but, because it is
+                // called with allow_generated_fallback=false, the wrapper BUFFERS the
+                // child's body actions and `@after` in position (matching ANTLR's
+                // action ordering) instead of running them immediately. Applies
+                // whether or not the child has `@after`.
+                from_generated_call
             } else {
                 generated_child_call
             };
@@ -3466,6 +3462,7 @@ fn render_parser_parse_rule_fallback(
     has_action_dispatch: bool,
     has_predicate_dispatch: bool,
     has_return_actions: bool,
+    buffer_actions: bool,
 ) -> io::Result<String> {
     let mut out = String::new();
     if has_predicate_dispatch || has_return_actions {
@@ -3506,11 +3503,24 @@ fn render_parser_parse_rule_fallback(
     }
 
     if has_action_dispatch {
-        writeln!(
-            out,
-            "for action in actions {{ self.run_action(action, &tree); }}"
-        )
-        .expect("writing to a string cannot fail");
+        if buffer_actions {
+            // Nested inside a generated parent: buffer the child's action events in
+            // position instead of running them now, so the parent's earlier buffered
+            // actions still replay before the child's at the top-level replay (action
+            // ordering matches ANTLR). The actions carry their own source_state, which
+            // `run_action`'s global dispatch resolves correctly at replay.
+            writeln!(
+                out,
+                "for action in actions {{ self.generated_actions.push(GeneratedAction::Parser(action)); }}"
+            )
+            .expect("writing to a string cannot fail");
+        } else {
+            writeln!(
+                out,
+                "for action in actions {{ self.run_action(action, &tree); }}"
+            )
+            .expect("writing to a string cannot fail");
+        }
     } else {
         writeln!(out, "let _ = actions;").expect("writing to a string cannot fail");
     }
@@ -3650,6 +3660,21 @@ fn render_parser_with_options(
         has_action_dispatch,
         has_predicate_dispatch,
         has_return_actions,
+        false,
+    )?;
+    let parse_rule_fallback_buffered = render_parser_parse_rule_fallback(
+        &init_action_rules,
+        track_alt_numbers,
+        &predicates,
+        data,
+        &int_members,
+        &rule_args,
+        &member_actions,
+        &return_actions,
+        has_action_dispatch,
+        has_predicate_dispatch,
+        has_return_actions,
+        true,
     )?;
     let after_action_dispatch = render_parser_after_action_dispatch(&after_actions);
     let parser_predicate_constant =
@@ -3825,8 +3850,14 @@ where
             }}
         }} else if __generated_only {{
             return Err(antlr4_runtime::AntlrError::Unsupported(format!("generated parser did not emit rule {{}}", rule_index)));
-        }} else {{
+        }} else if allow_generated_fallback {{
+            // Top-level / public entry: run the interpreted child's actions now.
             (self.parse_interpreted_rule_precedence(rule_index, precedence)?, false)
+        }} else {{
+            // Nested inside a generated parent (allow_generated_fallback = false):
+            // buffer the interpreted child's actions in position so they replay in
+            // source order relative to the parent's already-buffered actions.
+            (self.parse_interpreted_rule_buffered(rule_index, precedence)?, false)
         }};
         if __has_after_actions {{
             // Use the rule context's start token (the first visible token, set by
@@ -3836,7 +3867,11 @@ where
             let start_index = self.base.after_action_start_index_for_tree(&__tree, __rule_start);
             let __after_index = antlr4_runtime::IntStream::index(self.base.input());
             let stop_index = self.base.after_action_stop_index_for_tree(&__tree, __after_index);
-            if __from_generated {{
+            // Buffer the `@after` event whenever we are in a buffered context — both
+            // when the child parsed generated (__from_generated) AND when it parsed
+            // interpreted but is nested in a generated parent (!allow_generated_fallback).
+            // Only the true top-level (allow_generated_fallback && interpreted) runs it now.
+            if __from_generated || !allow_generated_fallback {{
                 self.generated_actions.push(GeneratedAction::After {{
                     rule_index,
                     tree: __tree.clone(),
@@ -3861,6 +3896,17 @@ where
     #[allow(dead_code)]
     fn parse_interpreted_rule(&mut self, rule_index: usize) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{
         self.parse_interpreted_rule_precedence(rule_index, 0)
+    }}
+
+    // Interpreted parse used when a GENERATED parent calls this child on the
+    // interpreted path: instead of running the child's action events immediately,
+    // it buffers them onto `self.generated_actions` so they replay in source order
+    // relative to the parent's already-buffered actions (matching ANTLR). Used in
+    // the nested context (`parse_rule_precedence_inner` with
+    // allow_generated_fallback = false); the top-level call still runs actions now.
+    #[allow(dead_code)]
+    fn parse_interpreted_rule_buffered(&mut self, rule_index: usize, precedence: i32) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{
+{parse_rule_fallback_buffered}
     }}
 
     #[allow(dead_code)]
@@ -7699,9 +7745,12 @@ atn:
             &BTreeMap::new(),
             false);
 
-        assert!(rendered.contains(
-            "if self.generated_only() { self.parse_generated_rule_1_dispatch(0, false).map_err(GeneratedRuleError::into_error) } else { self.parse_interpreted_rule_precedence(1, 0) }"
-        ));
+        // ATN-preferred children route through `parse_rule_precedence_from_generated`:
+        // the rule's generated dispatch arm is `generated_only()`-guarded, so in normal
+        // mode the wrapper parses the child interpreted (optimization preserved) while
+        // buffering its actions in position (correct ordering).
+        assert!(rendered.contains("self.parse_rule_precedence_from_generated(1, 0)"));
+        assert!(!rendered.contains("self.parse_interpreted_rule_precedence(1, 0)"));
     }
 
     #[test]
@@ -7739,9 +7788,9 @@ atn:
         assert!(!rendered.contains(
             "0 => Some(self.parse_generated_rule_0_dispatch(precedence, allow_fallback))"
         ));
-        assert!(rendered.contains(
-            "if self.generated_only() { self.parse_generated_rule_2_dispatch(0, false).map_err(GeneratedRuleError::into_error) } else { self.parse_interpreted_rule_precedence(2, 0) }"
-        ));
+        // The ATN-preferred child call routes through the buffering wrapper.
+        assert!(rendered.contains("self.parse_rule_precedence_from_generated(2, 0)"));
+        assert!(!rendered.contains("self.parse_interpreted_rule_precedence(2, 0)"));
     }
 
     #[test]
@@ -8107,11 +8156,10 @@ atn:
     #[test]
     fn atn_preferred_child_with_after_action_routes_through_dispatch_wrapper() {
         // An ATN-preferred child that carries an `@after` action
-        // (direct_generated_rule_calls[1] == false) must NOT be called via the bare
-        // `parse_interpreted_rule_precedence`, which never dispatches `@after`. It
-        // must go through `parse_rule_precedence_from_generated`, which preserves the
-        // interpreted routing (the rule's generated dispatch arm is guarded by
-        // `generated_only()`) while running the child's `@after`.
+        // (direct_generated_rule_calls[1] == false) must go through
+        // `parse_rule_precedence_from_generated`, which preserves interpreted routing
+        // (the rule's generated dispatch arm is guarded by `generated_only()`) while
+        // BUFFERING the child's body actions and `@after` in position.
         let rendered = render_call_rule_step(&[true, false], &[true, true]);
 
         assert!(rendered.contains("self.parse_rule_precedence_from_generated(1, 0)"));
@@ -8119,16 +8167,18 @@ atn:
     }
 
     #[test]
-    fn atn_preferred_child_without_after_keeps_lean_interpreted_call() {
+    fn atn_preferred_child_without_after_also_routes_through_dispatch_wrapper() {
         // An ATN-preferred child WITHOUT `@after` (direct_generated_rule_calls[1] ==
-        // true) keeps the lean direct interpreted call, avoiding the dispatch
-        // wrapper's probe/checkpoint overhead on the hot path.
+        // true) must ALSO route through `parse_rule_precedence_from_generated`, not the
+        // bare `parse_interpreted_rule_precedence`: the bare interpreted call runs the
+        // child's body actions immediately, which reorders them before the generated
+        // parent's buffered actions. The wrapper buffers them in position instead while
+        // still parsing the child interpreted (the dispatch arm is `generated_only()`
+        // guarded).
         let rendered = render_call_rule_step(&[true, true], &[true, true]);
 
-        assert!(rendered.contains(
-            "if self.generated_only() { self.parse_generated_rule_1_dispatch(0, false)"
-        ));
-        assert!(rendered.contains("else { self.parse_interpreted_rule_precedence(1, 0) }"));
+        assert!(rendered.contains("self.parse_rule_precedence_from_generated(1, 0)"));
+        assert!(!rendered.contains("self.parse_interpreted_rule_precedence(1, 0)"));
     }
 
     #[test]
@@ -8175,6 +8225,7 @@ atn:
             true,
             false,
             false,
+            false,
         )
         .expect("fallback should render");
 
@@ -8182,6 +8233,35 @@ atn:
             "parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence"
         ));
         assert!(fallback.contains("for action in actions { self.run_action(action, &tree); }"));
+        assert!(fallback.contains("Ok(tree)"));
+    }
+
+    #[test]
+    fn parse_rule_fallback_buffers_parser_actions_when_nested() {
+        // The buffered fallback (used when a generated parent calls a child on the
+        // interpreted path) must push the child's action events onto
+        // `generated_actions` in position instead of running them immediately, so
+        // they replay in source order relative to the parent's buffered actions.
+        let fallback = render_parser_parse_rule_fallback(
+            &[],
+            false,
+            &[],
+            &minimal_parser_data(),
+            &[],
+            &[],
+            &[],
+            &[],
+            true,
+            false,
+            false,
+            true,
+        )
+        .expect("buffered fallback should render");
+
+        assert!(fallback.contains(
+            "for action in actions { self.generated_actions.push(GeneratedAction::Parser(action)); }"
+        ));
+        assert!(!fallback.contains("self.run_action(action, &tree);"));
         assert!(fallback.contains("Ok(tree)"));
     }
 
