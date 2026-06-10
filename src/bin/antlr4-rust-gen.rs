@@ -2317,9 +2317,11 @@ fn render_generated_init_action(
     }
     let pad = "    ".repeat(indent);
     let _ = statement;
+    // An `@init` action belongs to this rule; it replays against the rule's own
+    // tree, so it is tagged `tree: None` (no child re-tagging applies).
     writeln!(
         out,
-        "{pad}self.generated_actions.push(GeneratedAction::Parser(antlr4_runtime::ParserAction::new_rule_init({rule_index}, __rule_start, Some({entry_state}))));"
+        "{pad}self.generated_actions.push(GeneratedAction::Parser {{ action: antlr4_runtime::ParserAction::new_rule_init({rule_index}, __rule_start, Some({entry_state})), tree: None }});"
     )
     .expect("writing to a string cannot fail");
 }
@@ -2523,6 +2525,33 @@ fn render_generated_step(
             )
             .expect("writing to a string cannot fail");
             writeln!(out, "{pad}let __child = __child?;").expect("writing to a string cannot fail");
+            // Tag the child's buffered `$ctx`-rooted actions with the child's tree
+            // so they render the child subtree (not the parent's) on the top-level
+            // replay. Only untagged (`None`) actions at a ctx-rooted source-state are
+            // tagged: the `is_none()` guard preserves a grandchild's deeper tag, and
+            // tree-search actions (e.g. `RuleInvocationStack`) are excluded so they
+            // keep resolving from the outer tree. The deep `__child.clone()` runs
+            // only when such an action exists, so the common case pays nothing.
+            writeln!(
+                out,
+                "{pad}for __buffered in &mut self.generated_actions[__child_action_marker..] {{"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}    if let GeneratedAction::Parser {{ action, tree }} = __buffered {{"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}        if tree.is_none() && CTX_ROOTED_ACTION_STATES.contains(&action.source_state()) {{"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(out, "{pad}            *tree = Some(__child.clone());")
+                .expect("writing to a string cannot fail");
+            writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
+            writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
+            writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
             // An interpreted child mutates integer members immediately instead of
             // buffering actions. If the child pushed nothing to the buffer but
             // changed members, capture a snapshot so the top-level replay (which
@@ -2571,9 +2600,12 @@ fn render_generated_step(
                 render_context.return_action_statements,
                 indent,
             );
+            // A rule's own action is tagged `tree: None` (replays against this
+            // rule's tree at the top-level replay). A nested child's `$ctx`-rooted
+            // action is re-tagged with the child tree at the CallRule site.
             writeln!(
                 out,
-                "{pad}self.generated_actions.push(GeneratedAction::Parser(action));"
+                "{pad}self.generated_actions.push(GeneratedAction::Parser {{ action, tree: None }});"
             )
             .expect("writing to a string cannot fail");
         }
@@ -3508,10 +3540,12 @@ fn render_parser_parse_rule_fallback(
             // position instead of running them now, so the parent's earlier buffered
             // actions still replay before the child's at the top-level replay (action
             // ordering matches ANTLR). The actions carry their own source_state, which
-            // `run_action`'s global dispatch resolves correctly at replay.
+            // `run_action`'s global dispatch resolves correctly at replay. A
+            // `$ctx`-rooted action is tagged with this interpreted child's tree so it
+            // renders the child subtree rather than the outer tree on replay.
             writeln!(
                 out,
-                "for action in actions {{ self.generated_actions.push(GeneratedAction::Parser(action)); }}"
+                "for action in actions {{ let __tree = if CTX_ROOTED_ACTION_STATES.contains(&action.source_state()) {{ Some(tree.clone()) }} else {{ None }}; self.generated_actions.push(GeneratedAction::Parser {{ action, tree: __tree }}); }}"
             )
             .expect("writing to a string cannot fail");
         } else {
@@ -3684,6 +3718,20 @@ fn render_parser_with_options(
         && !has_predicate_dispatch
         && !has_return_actions;
     let action_method = render_parser_action_method(&actions, &init_actions, &int_members)?;
+    // ATN action source-states whose action is `$ctx`-rooted (renders the current
+    // rule's own tree). A nested child's buffered action at one of these states is
+    // re-tagged with the child tree at the call site so it renders the child
+    // subtree, not the parent's, on replay. Source-states are globally unique, so a
+    // flat sorted set suffices.
+    let ctx_rooted_action_states = actions
+        .iter()
+        .filter(|(_, action)| action_is_ctx_rooted(action))
+        .map(|(state, _)| *state)
+        .collect::<BTreeSet<usize>>();
+    let ctx_rooted_action_states_constant = format!(
+        "#[allow(dead_code)]\nconst CTX_ROOTED_ACTION_STATES: &[usize] = &{};\n",
+        render_usize_array(&ctx_rooted_action_states.iter().copied().collect::<Vec<_>>())
+    );
     let base_initialization = render_parser_base_initialization(&int_members);
     let mut rule_methods = String::new();
     for (index, rule) in data.rule_names.iter().enumerate() {
@@ -3711,6 +3759,7 @@ use std::sync::OnceLock;
 {rule_constants}
 {metadata}
 {parser_predicate_constant}
+{ctx_rooted_action_states_constant}
 
 static ATN_CELL: OnceLock<Atn> = OnceLock::new();
 
@@ -3738,7 +3787,16 @@ where
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
 enum GeneratedAction {{
-    Parser(antlr4_runtime::ParserAction),
+    Parser {{
+        action: antlr4_runtime::ParserAction,
+        /// The rule tree a `$ctx`-rooted action (`<ToStringTree("$ctx")>`) ran in.
+        /// `None` means "use the replay tree" — correct for a rule's own actions
+        /// and for tree-search actions (`RuleInvocationStack`, `$rule.text`,
+        /// `first_rule`-based templates) which resolve from the outer tree. A
+        /// nested child's `$ctx`-rooted action is tagged with the child tree so it
+        /// renders the child subtree, not the parent's, on buffered replay.
+        tree: Option<antlr4_runtime::ParseTree>,
+    }},
     After {{
         rule_index: usize,
         tree: antlr4_runtime::ParseTree,
@@ -3804,7 +3862,9 @@ where
     #[allow(dead_code)]
     fn run_generated_action(&mut self, action: GeneratedAction, tree: &antlr4_runtime::ParseTree) {{
         match action {{
-            GeneratedAction::Parser(action) => self.run_action(action, tree),
+            GeneratedAction::Parser {{ action, tree: action_tree }} => {{
+                self.run_action(action, action_tree.as_ref().unwrap_or(tree));
+            }}
             GeneratedAction::After {{ rule_index, tree, start_index, stop_index }} => {{
                 self.run_after_actions(rule_index, &tree, start_index, stop_index);
             }}
@@ -5796,6 +5856,28 @@ fn init_action_mutates_members_only(action: &ActionTemplate) -> bool {
         ActionTemplate::Sequence(actions) => {
             !actions.is_empty() && actions.iter().all(init_action_mutates_members_only)
         }
+        _ => false,
+    }
+}
+
+/// Whether an action is `$ctx`-rooted, i.e. renders the *current rule's* parse
+/// tree (`<ToStringTree("$ctx")>` -> `StringTree { target: Current }`).
+///
+/// Such an action must observe the tree of the rule it ran in. When buffered from
+/// a nested child and replayed at the top level it would otherwise render the
+/// outer (parent) tree, so its `GeneratedAction::Parser` event is tagged with the
+/// child tree at the call site. Tree-SEARCH actions (`RuleInvocationStack`,
+/// `first_rule`-based `StringTree::Rule`/`Label`, `$rule.text`, rule-return) are
+/// NOT ctx-rooted: they walk from the outer tree root and must keep the replay
+/// tree (e.g. `RuleInvocationStack` in a child legitimately reports the ancestor
+/// chain `[child, parent]`, which needs the outer tree).
+fn action_is_ctx_rooted(action: &ActionTemplate) -> bool {
+    match action {
+        ActionTemplate::StringTree {
+            target: StringTreeTarget::Current,
+            ..
+        } => true,
+        ActionTemplate::Sequence(actions) => actions.iter().any(action_is_ctx_rooted),
         _ => false,
     }
 }
@@ -8258,9 +8340,10 @@ atn:
         )
         .expect("buffered fallback should render");
 
-        assert!(fallback.contains(
-            "for action in actions { self.generated_actions.push(GeneratedAction::Parser(action)); }"
-        ));
+        // Each buffered action is pushed as `GeneratedAction::Parser { action, tree }`,
+        // tagging `$ctx`-rooted actions with this child's tree (the rest `None`).
+        assert!(fallback.contains("self.generated_actions.push(GeneratedAction::Parser { action, tree: __tree });"));
+        assert!(fallback.contains("CTX_ROOTED_ACTION_STATES.contains(&action.source_state())"));
         assert!(!fallback.contains("self.run_action(action, &tree);"));
         assert!(fallback.contains("Ok(tree)"));
     }
@@ -8473,6 +8556,69 @@ s @init {<SetMember("i","1")>} : ;
     }
 
     #[test]
+    fn only_ctx_rooted_actions_are_classified_for_child_tree_retag() {
+        // `$ctx`-rooted actions (StringTree Current, incl. nested in a Sequence)
+        // must be classified so a nested child's buffered action is re-tagged with
+        // the child tree. Tree-SEARCH actions (RuleInvocationStack, first_rule-based
+        // StringTree::Rule/Label, $rule.text, rule-return) must NOT be classified —
+        // they resolve from the outer/replay tree (e.g. RuleInvocationStack in a
+        // child reports the ancestor chain, which needs the parent tree).
+        assert!(action_is_ctx_rooted(&ActionTemplate::StringTree {
+            target: StringTreeTarget::Current,
+            newline: true,
+        }));
+        assert!(action_is_ctx_rooted(&ActionTemplate::Sequence(vec![
+            ActionTemplate::Text { newline: false },
+            ActionTemplate::StringTree {
+                target: StringTreeTarget::Current,
+                newline: false,
+            },
+        ])));
+        assert!(!action_is_ctx_rooted(&ActionTemplate::RuleInvocationStack {
+            newline: true
+        }));
+        assert!(!action_is_ctx_rooted(&ActionTemplate::StringTree {
+            target: StringTreeTarget::Rule(1),
+            newline: true,
+        }));
+        assert!(!action_is_ctx_rooted(&ActionTemplate::StringTree {
+            target: StringTreeTarget::Label("r".to_owned()),
+            newline: true,
+        }));
+        assert!(!action_is_ctx_rooted(&ActionTemplate::Text { newline: true }));
+    }
+
+    #[test]
+    fn buffered_parser_action_replays_with_tagged_tree() {
+        // Module-level: `run_generated_action` must replay a `Parser` action against
+        // its own tagged tree when present (a child's $ctx action), falling back to
+        // the replay tree only when untagged (a rule's own / tree-search actions).
+        // The ctx-rooted allowlist const is always emitted.
+        let rendered = render_parser("TParser", &minimal_parser_data(), None)
+            .expect("parser should render");
+        assert!(rendered.contains(
+            "GeneratedAction::Parser { action, tree: action_tree } => {"
+        ));
+        assert!(rendered.contains("self.run_action(action, action_tree.as_ref().unwrap_or(tree));"));
+        assert!(rendered.contains("const CTX_ROOTED_ACTION_STATES: &[usize] = &["));
+    }
+
+    #[test]
+    fn call_rule_site_retags_child_ctx_actions_with_child_tree() {
+        // The CallRule step emits the re-tag loop that tags the child's untagged
+        // `$ctx`-rooted buffered actions with the child tree (innermost-wins via the
+        // `is_none()` guard).
+        let rendered = render_call_rule_step(&[], &[]);
+        assert!(rendered.contains(
+            "for __buffered in &mut self.generated_actions[__child_action_marker..]"
+        ));
+        assert!(rendered.contains(
+            "if tree.is_none() && CTX_ROOTED_ACTION_STATES.contains(&action.source_state())"
+        ));
+        assert!(rendered.contains("*tree = Some(__child.clone());"));
+    }
+
+    #[test]
     fn renders_generated_actions_as_buffered_events() {
         let rule = GeneratedParserRule {
             rule_index: 0,
@@ -8508,7 +8654,7 @@ s @init {<SetMember("i","1")>} : ;
 
         assert!(rendered.contains("parser_action_at_current(4, 0"));
         assert!(rendered.contains("parser_action_at_current(6, 0"));
-        assert!(rendered.contains("self.generated_actions.push(GeneratedAction::Parser(action));"));
+        assert!(rendered.contains("self.generated_actions.push(GeneratedAction::Parser { action, tree: None });"));
         assert!(rendered.contains("println!(\"alt 2\");"));
     }
 
@@ -8836,7 +8982,7 @@ s @init {<SetMember("i","1")>} : ;
         );
 
         assert!(rendered.contains("__ctx.set_int_return(\"y\", 1000);"));
-        assert!(rendered.contains("self.generated_actions.push(GeneratedAction::Parser(action));"));
+        assert!(rendered.contains("self.generated_actions.push(GeneratedAction::Parser { action, tree: None });"));
     }
 
     #[test]
