@@ -2094,33 +2094,54 @@ fn render_generated_rule_method(
     writeln!(out, "                Ok(__tree)").expect("writing to a string cannot fail");
     writeln!(out, "            }}").expect("writing to a string cannot fail");
     writeln!(out, "            Err(__error) => {{").expect("writing to a string cannot fail");
+    // A rule's own `sync_decision` failure (`__sync_error`) is fatal ONLY at the
+    // top-level public entry (`allow_fallback`). When this rule is a nested child
+    // (`!allow_fallback`), ANTLR recovers the mismatch INSIDE the child and returns
+    // a partial subtree to the parent — it never propagates the sync failure up. So
+    // for a nested child, recover locally like any other body error (a `Fatal`
+    // escaping here would make the parent recover on ITS context, dropping the
+    // child subtree). Only the true top-level keeps the `Fatal` abort (preserving
+    // antlr#6 `InvalidEmptyInput`-style start-rule errors).
     writeln!(
         out,
         "                if let Some(__error) = __sync_error {{"
     )
     .expect("writing to a string cannot fail");
-    writeln!(out, "                    self.base.exit_rule();")
+    writeln!(out, "                    if allow_fallback {{").expect("writing to a string cannot fail");
+    writeln!(out, "                        self.base.exit_rule();")
         .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "                    self.generated_actions.truncate(__generated_action_marker);"
+        "                        self.generated_actions.truncate(__generated_action_marker);"
     )
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "                    self.base.restore_int_members(__generated_member_checkpoint);"
+        "                        self.base.restore_int_members(__generated_member_checkpoint);"
     )
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "                    self.base.restore_generated_diagnostics(__generated_diagnostic_marker);"
+        "                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);"
     )
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "                    return Err(GeneratedRuleError::Fatal(__error));"
+        "                        return Err(GeneratedRuleError::Fatal(__error));"
     )
     .expect("writing to a string cannot fail");
+    writeln!(out, "                    }}").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                    self.base.recover_generated_rule(&mut __ctx, atn(), __error);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                    let __tree = self.base.finish_rule(__ctx, __consumed_eof);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "                    return Ok(__tree);").expect("writing to a string cannot fail");
     writeln!(out, "                }}").expect("writing to a string cannot fail");
     writeln!(
         out,
@@ -2230,36 +2251,54 @@ fn render_generated_left_recursive_rule_method(
     writeln!(out, "                Ok(__tree)").expect("writing to a string cannot fail");
     writeln!(out, "            }}").expect("writing to a string cannot fail");
     writeln!(out, "            Err(__error) => {{").expect("writing to a string cannot fail");
+    // Same as the non-left-recursive case: a nested child (`!allow_fallback`)
+    // recovers its own sync failure internally and returns a partial subtree; only
+    // the top-level entry propagates `Fatal`. Use `finish_recursion_rule` (which
+    // unrolls the recursion context) in the recover branch — do NOT also call
+    // `unroll_recursion_context` (that would double-unroll).
     writeln!(
         out,
         "                if let Some(__error) = __sync_error {{"
     )
     .expect("writing to a string cannot fail");
+    writeln!(out, "                    if allow_fallback {{").expect("writing to a string cannot fail");
     writeln!(
         out,
-        "                    self.base.unroll_recursion_context();"
+        "                        self.base.unroll_recursion_context();"
     )
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "                    self.generated_actions.truncate(__generated_action_marker);"
+        "                        self.generated_actions.truncate(__generated_action_marker);"
     )
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "                    self.base.restore_int_members(__generated_member_checkpoint);"
+        "                        self.base.restore_int_members(__generated_member_checkpoint);"
     )
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "                    self.base.restore_generated_diagnostics(__generated_diagnostic_marker);"
+        "                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);"
     )
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "                    return Err(GeneratedRuleError::Fatal(__error));"
+        "                        return Err(GeneratedRuleError::Fatal(__error));"
     )
     .expect("writing to a string cannot fail");
+    writeln!(out, "                    }}").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                    self.base.recover_generated_rule(&mut __ctx, atn(), __error);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                    let __tree = self.base.finish_recursion_rule(__ctx, __consumed_eof);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "                    return Ok(__tree);").expect("writing to a string cannot fail");
     writeln!(out, "                }}").expect("writing to a string cannot fail");
     writeln!(
         out,
@@ -8466,6 +8505,36 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
             rendered.find(expected).expect("expected stmt") > body_start,
             "side-effecting @init must not be hoisted to rule entry"
         );
+    }
+
+    #[test]
+    fn generated_rule_recovers_own_sync_failure_unless_top_level() {
+        // A rule's own sync failure (`__sync_error`) is fatal only at the top-level
+        // public entry (`allow_fallback`); a nested child recovers it locally and
+        // returns a partial subtree (so a parent never recovers the child's failure
+        // on the parent context, losing the child subtree). Assert the generated
+        // catch arm gates the `Fatal` return on `allow_fallback` and otherwise runs
+        // `recover_generated_rule` + `finish_rule` + `Ok`.
+        let rendered = render_parser("TParser", &minimal_parser_data(), None)
+            .expect("parser should render");
+        let sync_arm = rendered
+            .find("if let Some(__error) = __sync_error {")
+            .expect("sync-error catch arm present");
+        let rest = &rendered[sync_arm..];
+        // Inside the sync arm, the Fatal return is guarded by `if allow_fallback`.
+        let guard = rest
+            .find("if allow_fallback {")
+            .expect("fatal return gated on allow_fallback");
+        let fatal = rest
+            .find("return Err(GeneratedRuleError::Fatal(__error));")
+            .expect("fatal return present");
+        assert!(guard < fatal, "Fatal return must be inside the allow_fallback guard");
+        // And the nested-child path recovers locally and returns Ok.
+        let recover = rest
+            .find("self.base.recover_generated_rule(&mut __ctx, atn(), __error);")
+            .expect("local recovery present in sync arm");
+        assert!(recover > guard, "recover path follows the guarded fatal return");
+        assert!(rest[recover..].contains("return Ok(__tree);"));
     }
 
     #[test]
