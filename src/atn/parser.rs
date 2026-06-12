@@ -127,7 +127,13 @@ impl From<&AtnConfig> for ClosureConfigKey {
 /// — behaviour-identical to allocating fresh sets.
 #[derive(Default)]
 struct ClosureScratch {
-    stack: Vec<AtnConfig>,
+    /// Work stack of `(config, collect_predicates)`. The per-config
+    /// `collect_predicates` flag mirrors ANTLR's
+    /// `continueCollecting = collectPredicates && !ActionTransition`: once an
+    /// action edge is crossed, predicates on the far side are NOT collected into
+    /// the config's semantic context, so they are deferred to parse time rather
+    /// than evaluated during prediction (the "action hides predicates" rule).
+    stack: Vec<(AtnConfig, bool)>,
     visited: FxHashSet<ClosureConfigKey>,
 }
 
@@ -1053,8 +1059,8 @@ impl<'a> ParserAtnSimulator<'a> {
         } = params;
         scratch.stack.clear();
         scratch.visited.clear();
-        scratch.stack.push(config);
-        while let Some(config) = scratch.stack.pop() {
+        scratch.stack.push((config, collect_predicates));
+        while let Some((config, collect_predicates)) = scratch.stack.pop() {
             if !scratch.visited.insert(ClosureConfigKey::from(&config)) {
                 continue;
             }
@@ -1065,6 +1071,7 @@ impl<'a> ParserAtnSimulator<'a> {
             if at_rule_stop
                 && self.closure_at_rule_stop(
                     config.clone(),
+                    collect_predicates,
                     configs,
                     merge_cache,
                     &mut scratch.stack,
@@ -1095,19 +1102,27 @@ impl<'a> ParserAtnSimulator<'a> {
                             target.reaches_into_outer_context =
                                 target.reaches_into_outer_context.saturating_add(1);
                         }
-                        scratch.stack.push(target);
+                        // ANTLR: stop collecting predicates once an action edge is
+                        // crossed, so a predicate after an action is deferred to
+                        // parse time rather than evaluated during prediction.
+                        let target_collect_predicates = collect_predicates
+                            && !matches!(transition, Transition::Action { .. });
+                        scratch.stack.push((target, target_collect_predicates));
                     }
                 } else if treat_eof_as_epsilon
                     && transition.matches(TOKEN_EOF, 1, self.atn.max_token_type())
                 {
-                    scratch.stack.push(AtnConfig {
-                        state: transition.target(),
-                        alt: config.alt,
-                        context: Rc::clone(&config.context),
-                        semantic_context: config.semantic_context.clone(),
-                        reaches_into_outer_context: config.reaches_into_outer_context,
-                        precedence_filter_suppressed: config.precedence_filter_suppressed,
-                    });
+                    scratch.stack.push((
+                        AtnConfig {
+                            state: transition.target(),
+                            alt: config.alt,
+                            context: Rc::clone(&config.context),
+                            semantic_context: config.semantic_context.clone(),
+                            reaches_into_outer_context: config.reaches_into_outer_context,
+                            precedence_filter_suppressed: config.precedence_filter_suppressed,
+                        },
+                        collect_predicates,
+                    ));
                 }
             }
         }
@@ -1118,9 +1133,10 @@ impl<'a> ParserAtnSimulator<'a> {
     fn closure_at_rule_stop(
         &self,
         config: AtnConfig,
+        collect_predicates: bool,
         configs: &mut AtnConfigSet,
         merge_cache: &mut PredictionContextMergeCache,
-        stack: &mut Vec<AtnConfig>,
+        stack: &mut Vec<(AtnConfig, bool)>,
     ) -> bool {
         if config.context.is_empty() {
             if configs.full_context() {
@@ -1156,7 +1172,7 @@ impl<'a> ParserAtnSimulator<'a> {
                 reaches_into_outer_context: config.reaches_into_outer_context,
                 precedence_filter_suppressed: config.precedence_filter_suppressed,
             };
-            stack.push(next);
+            stack.push((next, collect_predicates));
         }
         handled_all_paths
     }
@@ -1648,6 +1664,93 @@ mod tests {
                 .epsilon_target_config(&config, &transition, 3, true, false)
                 .is_none()
         );
+    }
+
+    #[test]
+    fn closure_stops_collecting_predicates_after_action_edge() {
+        // ANTLR's `closure_` sets
+        // `continueCollecting = collectPredicates && !ActionTransition`, so a
+        // predicate reached *after* an action edge is NOT folded into the
+        // config's semantic context — it is deferred to parse time (the
+        // "action hides predicates" rule). Build `0 -Action-> 1 -Pred-> 2` and
+        // assert the closure config carries NO semantic context.
+        let mut atn = Atn::new(AtnType::Parser, 1);
+        add_state(&mut atn, 0, AtnStateKind::Basic);
+        add_state(&mut atn, 1, AtnStateKind::Basic);
+        add_state(&mut atn, 2, AtnStateKind::Basic);
+        add_state(&mut atn, 3, AtnStateKind::Basic);
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Action {
+                target: 1,
+                rule_index: 0,
+                action_index: Some(0),
+                context_dependent: false,
+            });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Predicate {
+                target: 2,
+                rule_index: 0,
+                pred_index: 0,
+                context_dependent: false,
+            });
+        atn.state_mut(2)
+            .expect("state 2")
+            .add_transition(Transition::Atom {
+                target: 3,
+                label: 1,
+            });
+
+        let simulator = ParserAtnSimulator::new(&atn);
+        let mut configs = AtnConfigSet::new();
+        let mut merge_cache = PredictionContextMergeCache::new();
+        let mut scratch = ClosureScratch::default();
+        simulator.closure(
+            AtnConfig::new(0, 1, PredictionContext::empty()),
+            &mut configs,
+            &mut merge_cache,
+            &mut scratch,
+            ClosureParams {
+                precedence: 0,
+                collect_predicates: true,
+                treat_eof_as_epsilon: false,
+            },
+        );
+
+        // The config that stops at state 2 (post-predicate, awaiting the atom)
+        // must NOT carry the predicate — the action edge turned collection off.
+        let at_two = configs
+            .configs()
+            .iter()
+            .find(|config| config.state == 2)
+            .expect("config at state 2");
+        assert!(
+            at_two.semantic_context.is_none(),
+            "predicate after an action edge must not be collected during prediction"
+        );
+
+        // Control: the SAME predicate reached WITHOUT an intervening action edge
+        // IS collected (so the assertion above is about the action edge, not a
+        // blanket failure to collect predicates).
+        let direct = simulator
+            .epsilon_target_config(
+                &AtnConfig::new(1, 1, PredictionContext::empty()),
+                &Transition::Predicate {
+                    target: 2,
+                    rule_index: 0,
+                    pred_index: 0,
+                    context_dependent: false,
+                },
+                0,
+                true,
+                false,
+            )
+            .expect("predicate transition");
+        assert!(matches!(
+            direct.semantic_context,
+            SemanticContext::Predicate { pred_index: 0, .. }
+        ));
     }
 
     #[test]
