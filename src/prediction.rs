@@ -321,10 +321,10 @@ fn merge_two_context_entries(
     if left_return_state == right_return_state && left_parent == right_parent {
         return PredictionContext::singleton(left_parent, left_return_state);
     }
-    let left_key = (left_return_state, left_parent.cached_hash());
-    let right_key = (right_return_state, right_parent.cached_hash());
     let (first_parent, first_return_state, second_parent, second_return_state) =
-        if right_key < left_key {
+        if compare_entries(&right_parent, right_return_state, &left_parent, left_return_state)
+            == Ordering::Less
+        {
             (
                 right_parent,
                 right_return_state,
@@ -353,21 +353,20 @@ fn merge_array_with_entry(
     entry_return_state: usize,
     entry_on_left: bool,
 ) -> Rc<PredictionContext> {
-    let entry_key = context_entry_key(&entry_parent, entry_return_state);
     let mut insert_index = array_parents.len();
     for (index, (parent, return_state)) in array_parents
         .iter()
         .zip(array_return_states)
         .enumerate()
     {
-        let key = context_entry_key(parent, *return_state);
-        if key == entry_key && parent == &entry_parent {
+        let ordering = compare_entries(&entry_parent, entry_return_state, parent, *return_state);
+        if ordering == Ordering::Equal && parent == &entry_parent {
             return array_context;
         }
         let should_insert = if entry_on_left {
-            entry_key <= key
+            ordering != Ordering::Greater
         } else {
-            entry_key < key
+            ordering == Ordering::Less
         };
         if should_insert {
             insert_index = index;
@@ -398,75 +397,41 @@ fn merge_arrays(
     let mut right_index = 0;
 
     while left_index < left_parents.len() && right_index < right_parents.len() {
-        let left_key = context_entry_key(&left_parents[left_index], left_return_states[left_index]);
-        let right_key =
-            context_entry_key(&right_parents[right_index], right_return_states[right_index]);
-        match left_key.cmp(&right_key) {
+        match compare_entries(
+            &left_parents[left_index],
+            left_return_states[left_index],
+            &right_parents[right_index],
+            right_return_states[right_index],
+        ) {
             Ordering::Less => {
-                push_context_entry(
-                    &mut parents,
-                    &mut return_states,
-                    Rc::clone(&left_parents[left_index]),
-                    left_return_states[left_index],
-                );
+                parents.push(Rc::clone(&left_parents[left_index]));
+                return_states.push(left_return_states[left_index]);
                 left_index += 1;
             }
             Ordering::Greater => {
-                push_context_entry(
-                    &mut parents,
-                    &mut return_states,
-                    Rc::clone(&right_parents[right_index]),
-                    right_return_states[right_index],
-                );
+                parents.push(Rc::clone(&right_parents[right_index]));
+                return_states.push(right_return_states[right_index]);
                 right_index += 1;
             }
+            // `compare_entries` is a strict total order whose final tie-break is a
+            // structural `parent.cmp`, so `Equal` means the two entries are
+            // structurally identical — keep one and drop the duplicate.
             Ordering::Equal => {
-                let group_key = left_key;
-                while left_index < left_parents.len()
-                    && context_entry_key(&left_parents[left_index], left_return_states[left_index])
-                        == group_key
-                {
-                    push_context_entry(
-                        &mut parents,
-                        &mut return_states,
-                        Rc::clone(&left_parents[left_index]),
-                        left_return_states[left_index],
-                    );
-                    left_index += 1;
-                }
-                while right_index < right_parents.len()
-                    && context_entry_key(
-                        &right_parents[right_index],
-                        right_return_states[right_index],
-                    ) == group_key
-                {
-                    push_context_entry(
-                        &mut parents,
-                        &mut return_states,
-                        Rc::clone(&right_parents[right_index]),
-                        right_return_states[right_index],
-                    );
-                    right_index += 1;
-                }
+                parents.push(Rc::clone(&left_parents[left_index]));
+                return_states.push(left_return_states[left_index]);
+                left_index += 1;
+                right_index += 1;
             }
         }
     }
 
     for index in left_index..left_parents.len() {
-        push_context_entry(
-            &mut parents,
-            &mut return_states,
-            Rc::clone(&left_parents[index]),
-            left_return_states[index],
-        );
+        parents.push(Rc::clone(&left_parents[index]));
+        return_states.push(left_return_states[index]);
     }
     for index in right_index..right_parents.len() {
-        push_context_entry(
-            &mut parents,
-            &mut return_states,
-            Rc::clone(&right_parents[index]),
-            right_return_states[index],
-        );
+        parents.push(Rc::clone(&right_parents[index]));
+        return_states.push(right_return_states[index]);
     }
 
     if parents.len() == 1 {
@@ -478,27 +443,35 @@ fn merge_arrays(
     PredictionContext::array(parents, return_states)
 }
 
-fn push_context_entry(
-    parents: &mut Vec<Rc<PredictionContext>>,
-    return_states: &mut Vec<usize>,
-    parent: Rc<PredictionContext>,
-    return_state: usize,
-) {
-    let key = context_entry_key(&parent, return_state);
-    for (existing_parent, existing_return_state) in parents.iter().zip(return_states.iter()).rev() {
-        if context_entry_key(existing_parent, *existing_return_state) != key {
-            break;
-        }
-        if existing_parent == &parent {
-            return;
-        }
-    }
-    parents.push(parent);
-    return_states.push(return_state);
-}
-
-fn context_entry_key(parent: &Rc<PredictionContext>, return_state: usize) -> (usize, u64) {
-    (return_state, parent.cached_hash())
+/// Strict total order over array context entries, used as the merge-sort key by
+/// all three merge helpers (`merge_two_context_entries`, `merge_array_with_entry`,
+/// `merge_arrays`). Orders by `return_state`, then `cached_hash`, then a
+/// structural `parent.cmp(parent)` tie-break.
+///
+/// The structural tie-break is what makes Array canonicalization collision-proof:
+/// two structurally-distinct parents that share a `return_state` *and* a colliding
+/// `cached_hash` (astronomically rare, but possible with a 64-bit hash) would
+/// otherwise compare equal and be appended in operand order, so `merge(a, b)` and
+/// `merge(b, a)` could produce arrays that are structurally unequal (Array `eq` is
+/// element-by-element) — breaking the "equal logical context ⇒ equal
+/// representation" invariant the merge/context caches rely on. Falling through to
+/// `parent.cmp` gives such entries a deterministic, order-independent position.
+/// On the common path (no hash collision) this is identical to comparing the old
+/// `(return_state, cached_hash)` key, so it is perf-neutral.
+///
+/// All three helpers must use this so every Array is built in this order; the
+/// 2-pointer sorted-merge in `merge_arrays` is only correct on inputs sorted by
+/// the same total order.
+fn compare_entries(
+    left_parent: &Rc<PredictionContext>,
+    left_return_state: usize,
+    right_parent: &Rc<PredictionContext>,
+    right_return_state: usize,
+) -> Ordering {
+    left_return_state
+        .cmp(&right_return_state)
+        .then_with(|| left_parent.cached_hash().cmp(&right_parent.cached_hash()))
+        .then_with(|| left_parent.cmp(right_parent))
 }
 
 impl PartialEq for PredictionContext {
@@ -1350,6 +1323,69 @@ mod tests {
         assert_eq!(merged.return_state(1), Some(20));
         assert_eq!(merged.return_state(2), Some(30));
         assert_eq!(merged.parent(2), Some(parent_three));
+    }
+
+    /// Builds a `Singleton` with a caller-chosen `cached_hash` so a test can force
+    /// two structurally-distinct contexts to collide on their hash — the only way
+    /// to reach the canonicalization hazard `compare_entries` guards against (a real
+    /// 64-bit `cached_hash` collision is astronomically rare to produce organically).
+    fn singleton_with_forced_hash(
+        parent: Rc<PredictionContext>,
+        return_state: usize,
+        cached_hash: u64,
+    ) -> Rc<PredictionContext> {
+        Rc::new(PredictionContext::Singleton {
+            parent,
+            return_state,
+            cached_hash,
+        })
+    }
+
+    #[test]
+    fn merge_is_order_independent_under_hash_collision() {
+        // Two structurally-different parents (return states 100 vs 200) forced to
+        // share one `cached_hash`, both reached via the same outer return state 7.
+        let empty = PredictionContext::empty();
+        let parent_a = singleton_with_forced_hash(Rc::clone(&empty), 100, 0xDEAD_BEEF);
+        let parent_b = singleton_with_forced_hash(Rc::clone(&empty), 200, 0xDEAD_BEEF);
+        assert_ne!(parent_a, parent_b, "parents must be structurally distinct");
+        assert_eq!(
+            parent_a.cached_hash(),
+            parent_b.cached_hash(),
+            "test must force the hash collision"
+        );
+
+        // singleton+singleton path (merge_two_context_entries): same return_state,
+        // colliding-hash parents, merged in both orders.
+        let left = PredictionContext::singleton(Rc::clone(&parent_a), 7);
+        let right = PredictionContext::singleton(Rc::clone(&parent_b), 7);
+        let merged_lr = PredictionContext::merge(Rc::clone(&left), Rc::clone(&right));
+        let merged_rl = PredictionContext::merge(right, left);
+        assert_eq!(
+            merged_lr, merged_rl,
+            "merge_two_context_entries must canonicalize regardless of operand order"
+        );
+
+        // array+array path (merge_arrays): each operand carries one colliding-hash
+        // entry at return_state 7 plus a shared non-colliding entry at 30, so the
+        // merge walks the rs=7 group from both sides. The result must not depend on
+        // operand order. (A shared trailing entry keeps both operands distinct so
+        // `merge` does not short-circuit on `left == right`.)
+        let shared = PredictionContext::singleton(Rc::clone(&empty), 30);
+        let left_array = PredictionContext::array(
+            vec![Rc::clone(&parent_a), Rc::clone(&shared)],
+            vec![7, 30],
+        );
+        let right_array =
+            PredictionContext::array(vec![Rc::clone(&parent_b), shared], vec![7, 30]);
+        let merged_arrays_lr =
+            PredictionContext::merge(Rc::clone(&left_array), Rc::clone(&right_array));
+        let merged_arrays_rl = PredictionContext::merge(right_array, left_array);
+        assert_eq!(
+            merged_arrays_lr, merged_arrays_rl,
+            "merge_arrays must canonicalize colliding-hash entries to one order"
+        );
+        assert_eq!(merged_arrays_lr.len(), 3, "two rs=7 entries + one rs=30");
     }
 
     #[test]
