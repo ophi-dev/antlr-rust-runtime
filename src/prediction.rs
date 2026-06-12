@@ -1026,6 +1026,14 @@ impl AtnConfigSet {
                 .reaches_into_outer_context
                 .max(config.reaches_into_outer_context);
             existing.precedence_filter_suppressed |= config.precedence_filter_suppressed;
+            // Merging rewrites `existing.context`, which can change the
+            // (state, context) groupings `conflicting_alts()` derives. Drop the
+            // lazily-populated cache so a later call recomputes — mirroring the
+            // insert branch's `self.conflicting_alts.clear()`. (All current callers
+            // read `conflicting_alts()` only after the set is fully built, so this
+            // is a no-op today; it keeps the two branches consistent and prevents a
+            // stale read if a future caller interleaves reads with merges.)
+            self.conflicting_alts.clear();
             false
         } else {
             let index = self.configs.len();
