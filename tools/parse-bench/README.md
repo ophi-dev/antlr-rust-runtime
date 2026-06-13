@@ -1,7 +1,8 @@
 # Parse Benchmark
 
 This benchmark compares parse throughput for generated ANTLR parsers and
-tree-sitter parsers on Kotlin and C# fixtures.
+tree-sitter parsers on Kotlin, C#, and Java fixtures, with an explicit Trino
+SQL fixture set for SQL-dialect Rust vs Go checks.
 
 The harness is intentionally a standalone script instead of `cargo bench`.
 `cargo bench` is useful for in-process Rust-only measurements, but this check
@@ -17,10 +18,11 @@ The benchmark defaults to:
 - `ANTLR4_JAR=/tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar`
 - `GRAMMARS_V4=/tmp/antlr-cleanroom/grammars-v4`
 
-For C#, the sparse checkout must include `csharp/v7` in addition to Kotlin:
+The sparse checkout must include C#, the modern Java grammar, and Trino SQL in
+addition to Kotlin:
 
 ```bash
-git -C /tmp/antlr-cleanroom/grammars-v4 sparse-checkout set kotlin/kotlin csharp/v7
+git -C /tmp/antlr-cleanroom/grammars-v4 sparse-checkout set kotlin/kotlin csharp/v7 java/java sql/trino
 ```
 
 Install the Python dependencies in the interpreter you will use to run the
@@ -38,12 +40,22 @@ Quick local smoke:
 python3 tools/parse-bench/run.py --quick
 ```
 
+SQL-only Rust vs Go smoke:
+
+```bash
+python3 tools/parse-bench/run.py \
+  --languages trino \
+  --runtimes rust-antlr,go-antlr \
+  --quick
+```
+
 Longer local run with reports:
 
 ```bash
 python3 tools/parse-bench/run.py \
   --iters 20 \
   --warmups 3 \
+  --rust-generated-only \
   --json target/parse-bench/results.json \
   --markdown target/parse-bench/results.md
 ```
@@ -57,6 +69,9 @@ The script regenerates parsers into `target/parse-bench`, builds:
 
 The output table reports `min` and `avg` parse time per fixture and a relative
 ratio against `rust-antlr` for the same fixture.
+Use `--rust-generated-only` for Adaptive LL delivery evidence so the Rust
+generator fails if any parser rule lacks a generated body and the Rust runner
+fails if a generated parser path falls back to the interpreter.
 
 ## PR Watchdog
 
@@ -81,3 +96,7 @@ stress patterns:
 
 - Kotlin: JetBrains Kotlin, kotlinx.coroutines, Ktor.
 - C#: dotnet/wpf, Mono.
+- Java: Mojang DataFixerUpper, Bazel, Google Closure Compiler, Trino.
+- Trino SQL: Trino benchmark TPC-DS/TPC-H queries with benchmark placeholders
+  normalized to identifiers, including a curated TPC-DS grammar-stress suite
+  selected by CTE/window/UNION/EXISTS/CASE/grouping feature density.

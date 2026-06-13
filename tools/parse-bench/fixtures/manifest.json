@@ -55,6 +55,69 @@
       "source": "https://github.com/mono/mono/blob/0f53e9e151d92944cacab3e24ac359410c606df6/mcs/mcs/statement.cs",
       "license": "MIT",
       "description": "Mono compiler statement binder and emitter code with deep statement forms, nested classes, switch paths, and exception-flow constructs."
+    },
+    {
+      "language": "java",
+      "path": "java/mojang-data-result.java",
+      "source": "https://github.com/Mojang/DataFixerUpper/blob/5fc0978694e996cfe68a742b67a0d506c17de3f0/src/main/java/com/mojang/serialization/DataResult.java",
+      "license": "MIT",
+      "description": "DataFixerUpper algebraic result type with a sealed generic interface, nested records, higher-kinded-style generics, lambdas, method references, and default interface methods."
+    },
+    {
+      "language": "java",
+      "path": "java/bazel-sky-value-retriever.java",
+      "source": "https://github.com/bazelbuild/bazel/blob/b12fbe12714f6145d7832f3cdbf1531042244734/src/main/java/com/google/devtools/build/lib/skyframe/serialization/SkyValueRetriever.java",
+      "license": "Apache-2.0",
+      "description": "Bazel Skyframe retrieval state machine with sealed interfaces, nested records, async generic futures, nested switch statements, annotations, and staged control flow."
+    },
+    {
+      "language": "java",
+      "path": "java/google-closure-property.java",
+      "source": "https://github.com/google/closure-compiler/blob/dbfda37ef8dbd3e50cabef2edfc99e2c5a1f2e3f/src/com/google/javascript/rhino/jstype/Property.java",
+      "license": "Apache-2.0",
+      "description": "Closure Compiler JavaScript property model with sealed interfaces, nested records, nullable/type-use annotations, switch expressions, pattern alternatives, and overloaded constructors."
+    },
+    {
+      "language": "java",
+      "path": "java/trino-filter-evaluator.java",
+      "source": "https://github.com/trinodb/trino/blob/ee76b9bac977a0158bd8b6a4f4b2f52cd0eaba9b/core/trino-main/src/main/java/io/trino/sql/gen/columnar/FilterEvaluator.java",
+      "license": "Apache-2.0",
+      "description": "Trino columnar filter evaluator with a sealed interface, record result type, pattern switch expressions with when guards, yield blocks, lambdas, nested generics, and static factory flow."
+    },
+    {
+      "language": "trino",
+      "path": "trino/trino-tpcds-q64.sql",
+      "source": "https://github.com/trinodb/trino/blob/82c47e2be109cb17bc48f04d00176f72f0253ffa/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpcds/q64.sql",
+      "license": "Apache-2.0",
+      "description": "Trino TPC-DS query 64 with multiple CTEs, wide select lists, broad joined relations, HAVING, BETWEEN predicates, and long ORDER BY clauses; benchmark placeholders are normalized to identifiers."
+    },
+    {
+      "language": "trino",
+      "path": "trino/trino-tpcds-q47.sql",
+      "source": "https://github.com/trinodb/trino/blob/82c47e2be109cb17bc48f04d00176f72f0253ffa/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpcds/q47.sql",
+      "license": "Apache-2.0",
+      "description": "Trino TPC-DS query 47 with chained CTEs, window functions, partitioned ORDER BY, self-joins over CTE aliases, CASE expressions, DECIMAL literals, and LIMIT; benchmark placeholders are normalized to identifiers."
+    },
+    {
+      "language": "trino",
+      "path": "trino/trino-tpcds-q74.sql",
+      "source": "https://github.com/trinodb/trino/blob/82c47e2be109cb17bc48f04d00176f72f0253ffa/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpcds/q74.sql",
+      "license": "Apache-2.0",
+      "description": "Trino TPC-DS query 74 with a CTE containing UNION ALL branches, repeated CTE self-joins, arithmetic expressions, nested CASE comparisons, ORDER BY, and LIMIT; benchmark placeholders are normalized to identifiers."
+    },
+    {
+      "language": "trino",
+      "path": "trino/trino-tpch-q21.sql",
+      "source": "https://github.com/trinodb/trino/blob/82c47e2be109cb17bc48f04d00176f72f0253ffa/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpch/q21.sql",
+      "license": "Apache-2.0",
+      "description": "Trino TPC-H query 21 with correlated EXISTS and NOT EXISTS subqueries, multi-table FROM lists, grouped aggregation, qualified aliases, ORDER BY, and LIMIT; benchmark placeholders are normalized to identifiers."
+    },
+    {
+      "language": "trino",
+      "path": "trino/trino-tpcds-grammar-suite.sql",
+      "source": "https://github.com/trinodb/trino/tree/82c47e2be109cb17bc48f04d00176f72f0253ffa/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpcds",
+      "license": "Apache-2.0",
+      "description": "Curated Trino TPC-DS grammar-stress suite combining the 40 benchmark queries with the highest feature score for CTEs, windows, UNION, EXISTS, CASE, grouping, HAVING, ORDER BY, intervals, BETWEEN, IN, and CAST; benchmark placeholders are normalized to identifiers."
     }
   ]
 }

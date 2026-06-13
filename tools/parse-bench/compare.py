@@ -28,6 +28,74 @@ def load_results(path: Path) -> dict[tuple[str, str, str], dict]:
     return indexed
 
 
+def parse_speedup_requirement(value: str) -> tuple[str, str, str, float]:
+    parts = value.split(":")
+    if len(parts) != 4:
+        raise argparse.ArgumentTypeError(
+            "expected LANGUAGE:FAST_RUNTIME:SLOW_RUNTIME:MIN_RATIO"
+        )
+    language, fast_runtime, slow_runtime, ratio_text = parts
+    try:
+        min_ratio = float(ratio_text)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            f"invalid MIN_RATIO {ratio_text!r}: {error}"
+        ) from error
+    if min_ratio <= 0:
+        raise argparse.ArgumentTypeError("MIN_RATIO must be greater than zero")
+    return language, fast_runtime, slow_runtime, min_ratio
+
+
+def check_speedup_requirements(
+    results: dict[tuple[str, str, str], dict],
+    requirements: list[tuple[str, str, str, float]],
+) -> list[str]:
+    failures: list[str] = []
+    fixtures_by_language = sorted({(language, fixture) for language, fixture, _ in results})
+    for language, fast_runtime, slow_runtime, min_ratio in requirements:
+        compared = 0
+        for fixture_language, fixture in fixtures_by_language:
+            if fixture_language != language:
+                continue
+            fast = results.get((language, fixture, fast_runtime))
+            slow = results.get((language, fixture, slow_runtime))
+            if fast is None or slow is None:
+                # A speedup requirement applies to every fixture in the language;
+                # missing either runtime is a failure, not a silent skip.
+                missing = [
+                    runtime
+                    for runtime, value in ((fast_runtime, fast), (slow_runtime, slow))
+                    if value is None
+                ]
+                failures.append(
+                    f"{language}/{fixture}: missing runtime result(s) for "
+                    f"speedup requirement: {', '.join(missing)}"
+                )
+                continue
+            compared += 1
+            fast_avg = float(fast["avg_ns"])
+            slow_avg = float(slow["avg_ns"])
+            if fast_avg <= 0:
+                failures.append(
+                    f"{language}/{fixture} {fast_runtime}: invalid avg_ns {fast_avg}"
+                )
+                continue
+            ratio = slow_avg / fast_avg
+            if ratio < min_ratio:
+                failures.append(
+                    f"{language}/{fixture}: {fast_runtime} speedup over "
+                    f"{slow_runtime} is {ratio:.2f}x, below {min_ratio:.2f}x "
+                    f"({fast_avg / 1_000_000:.3f}ms vs "
+                    f"{slow_avg / 1_000_000:.3f}ms)"
+                )
+        if compared == 0:
+            failures.append(
+                f"{language}: no comparable {fast_runtime}/{slow_runtime} "
+                "results for speedup requirement"
+            )
+    return failures
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--baseline", required=True, type=Path)
@@ -44,13 +112,25 @@ def main() -> int:
         action="store_true",
         help="Exit successfully when there are no matching baseline/current results.",
     )
+    parser.add_argument(
+        "--require-speedup",
+        action="append",
+        default=[],
+        type=parse_speedup_requirement,
+        metavar="LANGUAGE:FAST_RUNTIME:SLOW_RUNTIME:MIN_RATIO",
+        help=(
+            "Require FAST_RUNTIME to be at least MIN_RATIO faster than "
+            "SLOW_RUNTIME for every fixture in LANGUAGE; repeat for multiple "
+            "requirements."
+        ),
+    )
     args = parser.parse_args()
 
     baseline = load_results(args.baseline)
     current = load_results(args.current)
     runtimes = set(args.runtime or ["rust-antlr"])
 
-    failures: list[str] = []
+    regression_failures: list[str] = []
     for key, head in sorted(current.items()):
         language, fixture, runtime = key
         if runtime not in runtimes or key not in baseline:
@@ -61,11 +141,12 @@ def main() -> int:
             continue
         ratio = head_avg / base_avg
         if ratio > args.max_regression:
-            failures.append(
+            regression_failures.append(
                 f"{language}/{fixture} {runtime}: "
                 f"{head_avg / 1_000_000:.3f}ms vs "
                 f"{base_avg / 1_000_000:.3f}ms ({ratio:.2f}x)"
             )
+    speedup_failures = check_speedup_requirements(current, args.require_speedup)
 
     compared = sum(
         1
@@ -79,17 +160,22 @@ def main() -> int:
         )
         if args.allow_empty:
             print(f"{message}; skipping regression comparison")
-            return 0
-        print(message, file=sys.stderr)
-        return 1
+        else:
+            print(message, file=sys.stderr)
+            return 1
 
-    if failures:
+    if regression_failures:
         print(
             f"parse benchmark regression exceeds {args.max_regression:.2f}x:",
             file=sys.stderr,
         )
-        for failure in failures:
+        for failure in regression_failures:
             print(f"  {failure}", file=sys.stderr)
+    if speedup_failures:
+        print("parse benchmark speedup requirement failed:", file=sys.stderr)
+        for failure in speedup_failures:
+            print(f"  {failure}", file=sys.stderr)
+    if regression_failures or speedup_failures:
         return 1
 
     print(

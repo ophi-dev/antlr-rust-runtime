@@ -1,4 +1,5 @@
 use crate::int_stream::{EOF, IntStream, UNKNOWN_SOURCE_NAME};
+use std::rc::Rc;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TextInterval {
@@ -22,13 +23,65 @@ impl TextInterval {
 
 pub trait CharStream: IntStream {
     fn text(&self, interval: TextInterval) -> String;
+
+    fn text_source_interval(&self, _interval: TextInterval) -> Option<(Rc<str>, usize, usize)> {
+        None
+    }
 }
 
 #[derive(Clone, Debug)]
 pub struct InputStream {
-    data: Vec<char>,
+    source: Rc<str>,
+    data: InputData,
     cursor: usize,
     source_name: String,
+}
+
+#[derive(Clone, Debug)]
+enum InputData {
+    Ascii,
+    Unicode {
+        chars: Vec<char>,
+        byte_offsets: Vec<usize>,
+    },
+}
+
+impl InputData {
+    fn new(input: &str) -> Self {
+        if input.is_ascii() {
+            Self::Ascii
+        } else {
+            Self::Unicode {
+                chars: input.chars().collect(),
+                byte_offsets: input.char_indices().map(|(index, _)| index).collect(),
+            }
+        }
+    }
+
+    const fn len(&self, source: &str) -> usize {
+        match self {
+            Self::Ascii => source.len(),
+            Self::Unicode { chars, .. } => chars.len(),
+        }
+    }
+
+    fn get(&self, source: &str, index: usize) -> Option<char> {
+        match self {
+            Self::Ascii => source.as_bytes().get(index).map(|byte| char::from(*byte)),
+            Self::Unicode { chars, .. } => chars.get(index).copied(),
+        }
+    }
+
+    fn byte_bounds(&self, source: &str, start: usize, stop: usize) -> Option<(usize, usize)> {
+        match self {
+            Self::Ascii => Some((start, stop + 1)),
+            Self::Unicode { byte_offsets, .. } => {
+                let start_byte = *byte_offsets.get(start)?;
+                let stop_byte = byte_offsets.get(stop + 1).copied().unwrap_or(source.len());
+                Some((start_byte, stop_byte))
+            }
+        }
+    }
 }
 
 impl InputStream {
@@ -41,16 +94,18 @@ impl InputStream {
     /// Creates a character stream with an explicit source name for tokens and
     /// diagnostics.
     pub fn with_source_name(input: impl AsRef<str>, source_name: impl Into<String>) -> Self {
+        let input = input.as_ref();
         Self {
-            data: input.as_ref().chars().collect(),
+            source: Rc::from(input),
+            data: InputData::new(input),
             cursor: 0,
             source_name: source_name.into(),
         }
     }
 
     /// Returns true when the cursor has reached or passed the end of input.
-    pub const fn is_eof(&self) -> bool {
-        self.cursor >= self.data.len()
+    pub fn is_eof(&self) -> bool {
+        self.cursor >= self.data.len(&self.source)
     }
 }
 
@@ -76,7 +131,7 @@ impl IntStream for InputStream {
         };
 
         absolute
-            .and_then(|index| self.data.get(index).copied())
+            .and_then(|index| self.data.get(&self.source, index))
             .map_or(EOF, |ch| ch as i32)
     }
 
@@ -85,11 +140,11 @@ impl IntStream for InputStream {
     }
 
     fn seek(&mut self, index: usize) {
-        self.cursor = index.min(self.data.len());
+        self.cursor = index.min(self.data.len(&self.source));
     }
 
     fn size(&self) -> usize {
-        self.data.len()
+        self.data.len(&self.source)
     }
 
     fn source_name(&self) -> &str {
@@ -100,17 +155,26 @@ impl IntStream for InputStream {
 impl CharStream for InputStream {
     /// Returns text for an inclusive interval of Unicode scalar indices.
     fn text(&self, interval: TextInterval) -> String {
-        if interval.is_empty() || self.data.is_empty() {
-            return String::new();
+        if let Some((source, start, stop)) = self.text_source_interval(interval) {
+            return source[start..stop].to_owned();
+        }
+        String::new()
+    }
+
+    fn text_source_interval(&self, interval: TextInterval) -> Option<(Rc<str>, usize, usize)> {
+        let len = self.data.len(&self.source);
+        if interval.is_empty() || len == 0 {
+            return None;
         }
 
-        let start = interval.start.min(self.data.len());
-        let stop = interval.stop.min(self.data.len().saturating_sub(1));
+        let start = interval.start.min(len);
+        let stop = interval.stop.min(len.saturating_sub(1));
         if start > stop {
-            return String::new();
+            return None;
         }
 
-        self.data[start..=stop].iter().collect()
+        let (start_byte, stop_byte) = self.data.byte_bounds(&self.source, start, stop)?;
+        Some((Rc::clone(&self.source), start_byte, stop_byte))
     }
 }
 

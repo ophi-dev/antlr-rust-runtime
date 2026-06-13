@@ -3,10 +3,11 @@ use std::env;
 use std::fmt::Write as _;
 use std::fs;
 use std::io;
+use std::ops::AddAssign;
 use std::path::{Path, PathBuf};
 
 use antlr4_runtime::atn::serialized::{AtnDeserializer, SerializedAtn};
-use antlr4_runtime::atn::{LexerAction, Transition};
+use antlr4_runtime::atn::{Atn, AtnStateKind, LexerAction, Transition};
 
 #[path = "../bin_support/rust_names.rs"]
 mod rust_names;
@@ -55,7 +56,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .parser_name
             .clone()
             .unwrap_or_else(|| grammar_name_from_path(&parser));
-        let module = render_parser(&grammar_name, &data, grammar_source.as_deref())?;
+        let module = render_parser_with_options(
+            &grammar_name,
+            &data,
+            grammar_source.as_deref(),
+            ParserRenderOptions {
+                require_generated_parser: args.require_generated_parser,
+            },
+        )?;
         fs::write(
             args.out_dir
                 .join(format!("{}.rs", module_name(&grammar_name))),
@@ -74,6 +82,7 @@ struct Args {
     parser_name: Option<String>,
     grammar: Option<PathBuf>,
     out_dir: PathBuf,
+    require_generated_parser: bool,
 }
 
 impl Args {
@@ -91,6 +100,7 @@ impl Args {
         let mut parser_name = None;
         let mut grammar = None;
         let mut out_dir = None;
+        let mut require_generated_parser = false;
 
         let mut iter = env::args().skip(1);
         while let Some(arg) = iter.next() {
@@ -101,6 +111,7 @@ impl Args {
                 "--parser-name" => parser_name = Some(next_arg(&mut iter, "--parser-name")?),
                 "--grammar" => grammar = Some(PathBuf::from(next_arg(&mut iter, "--grammar")?)),
                 "--out-dir" => out_dir = Some(PathBuf::from(next_arg(&mut iter, "--out-dir")?)),
+                "--require-generated-parser" => require_generated_parser = true,
                 "--help" | "-h" => return Err(usage()),
                 other => return Err(format!("unknown argument {other}\n\n{}", usage())),
             }
@@ -120,6 +131,7 @@ impl Args {
             parser_name,
             grammar,
             out_dir: out_dir.unwrap_or_else(|| PathBuf::from(".")),
+            require_generated_parser,
         })
     }
 }
@@ -130,7 +142,7 @@ fn next_arg(iter: &mut impl Iterator<Item = String>, flag: &str) -> Result<Strin
 }
 
 fn usage() -> String {
-    "usage: antlr4-rust-gen [--lexer Lexer.interp] [--parser Parser.interp] [--grammar Grammar.g4] [--out-dir DIR]"
+    "usage: antlr4-rust-gen [--lexer Lexer.interp] [--parser Parser.interp] [--grammar Grammar.g4] [--out-dir DIR] [--require-generated-parser]"
         .to_owned()
 }
 
@@ -420,15 +432,3227 @@ where
     ))
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct GeneratedParserRule {
+    rule_index: usize,
+    entry_state: usize,
+    left_recursive: bool,
+    steps: Vec<GeneratedParserStep>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum GeneratedParserStep {
+    MatchToken {
+        token_type: i32,
+        follow_state: usize,
+    },
+    MatchSet {
+        intervals: Vec<(i32, i32)>,
+        follow_state: usize,
+    },
+    MatchNotSet {
+        intervals: Vec<(i32, i32)>,
+        follow_state: usize,
+    },
+    MatchWildcard {
+        follow_state: usize,
+    },
+    Precedence(i32),
+    Predicate {
+        rule_index: usize,
+        pred_index: usize,
+    },
+    Action {
+        source_state: usize,
+        rule_index: usize,
+    },
+    CallRule {
+        source_state: usize,
+        rule_index: usize,
+        precedence: GeneratedRuleCallPrecedence,
+    },
+    Decision {
+        state: usize,
+        decision: usize,
+        track_alt_number: bool,
+        allow_semantic_context: bool,
+        force_context: bool,
+        fast_path: Option<GeneratedDecisionFastPath>,
+        alts: Vec<Vec<Self>>,
+    },
+    StarLoop {
+        state: usize,
+        decision: usize,
+        enter_alt: usize,
+        exit_alt: usize,
+        track_alt_number: bool,
+        allow_semantic_context: bool,
+        force_context: bool,
+        /// `true` for a `+` (one-or-more) loop, `false` for a `*` (zero-or-more)
+        /// loop. A `+` loop's mandatory first element is iteration 1, so its first
+        /// loop-back sync recovers like ANTLR's `STAR_LOOP_BACK`/`PLUS_LOOP_BACK`
+        /// (multi-token `consumeUntil`); a `*` loop's first sync is at the entry,
+        /// which recovers like `STAR_LOOP_ENTRY` (single-token deletion).
+        plus_loop: bool,
+        fast_path: Option<GeneratedDecisionFastPath>,
+        body: Vec<Self>,
+    },
+    LeftRecursiveLoop {
+        state: usize,
+        decision: usize,
+        enter_alt: usize,
+        exit_alt: usize,
+        rule_index: usize,
+        entry_state: usize,
+        body: Vec<Self>,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum GeneratedRuleCallPrecedence {
+    Literal(i32),
+    InheritLocal,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct GeneratedDecisionFastPath {
+    arms: Vec<GeneratedDecisionFastArm>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct GeneratedDecisionFastArm {
+    alt: usize,
+    intervals: Vec<(i32, i32)>,
+}
+
+#[derive(Clone, Copy)]
+struct DecisionRender<'a> {
+    state: usize,
+    decision: usize,
+    track_alt_number: bool,
+    allow_semantic_context: bool,
+    force_context: bool,
+    fast_path: Option<&'a GeneratedDecisionFastPath>,
+    alts: &'a [Vec<GeneratedParserStep>],
+}
+
+#[derive(Clone, Copy)]
+struct StarLoopRender<'a> {
+    state: usize,
+    decision: usize,
+    alts: (usize, usize),
+    track_alt_number: bool,
+    allow_semantic_context: bool,
+    force_context: bool,
+    plus_loop: bool,
+    fast_path: Option<&'a GeneratedDecisionFastPath>,
+    body: &'a [GeneratedParserStep],
+}
+
+#[derive(Clone, Copy)]
+struct LeftRecursiveLoopRender<'a> {
+    state: usize,
+    decision: usize,
+    alts: (usize, usize),
+    rule: (usize, usize),
+    body: &'a [GeneratedParserStep],
+}
+
+#[derive(Clone, Copy)]
+struct GeneratedStepRenderContext<'a> {
+    inline_action_statements: &'a BTreeMap<usize, String>,
+    /// Member-setting `@init` statements, keyed by rule index, that must run on
+    /// rule entry (before the body) so same-rule predicates observe them.
+    init_entry_action_statements: &'a BTreeMap<usize, String>,
+    return_action_statements: &'a BTreeMap<usize, Vec<(String, i64)>>,
+    track_alt_numbers: bool,
+    direct_generated_rule_calls: &'a [bool],
+    atn_preferred_rule_calls: &'a [bool],
+}
+
+struct GeneratedParserCompileContext<'a> {
+    atn: &'a Atn,
+    decision_by_state: &'a [Option<usize>],
+    rule_args: &'a [(usize, usize, RuleArgTemplate)],
+    inline_action_states: &'a BTreeSet<usize>,
+    action_states: &'a BTreeSet<usize>,
+    generated_action_states: &'a BTreeSet<usize>,
+    predicate_coordinates: &'a BTreeSet<(usize, usize)>,
+    generated_predicate_coordinates: &'a BTreeSet<(usize, usize)>,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct ParserRenderOptions {
+    require_generated_parser: bool,
+}
+
+#[derive(Clone, Copy)]
+struct ActionStateSets<'a> {
+    all: &'a BTreeSet<usize>,
+    generated: &'a BTreeSet<usize>,
+    inline: &'a BTreeSet<usize>,
+}
+
+#[derive(Clone, Copy)]
+struct PredicateCoordinateSets<'a> {
+    all: &'a BTreeSet<(usize, usize)>,
+    generated: &'a BTreeSet<(usize, usize)>,
+}
+
+const fn generated_action_state_sets<'a>(
+    context: &GeneratedParserCompileContext<'a>,
+) -> ActionStateSets<'a> {
+    ActionStateSets {
+        all: context.action_states,
+        generated: context.generated_action_states,
+        inline: context.inline_action_states,
+    }
+}
+
+const fn generated_predicate_coordinate_sets<'a>(
+    context: &GeneratedParserCompileContext<'a>,
+) -> PredicateCoordinateSets<'a> {
+    PredicateCoordinateSets {
+        all: context.predicate_coordinates,
+        generated: context.generated_predicate_coordinates,
+    }
+}
+
+/// Compiles the parser ATN subset that is safe to emit as recursive-descent
+/// Rust today. Unsupported states deliberately return `None` so the generated
+/// method can keep using the interpreter fallback until more ATN shapes are
+/// covered.
+fn parser_generated_rules(
+    data: &InterpData,
+    enabled_rules: &[bool],
+    rule_args: &[(usize, usize, RuleArgTemplate)],
+    action_states: ActionStateSets<'_>,
+    predicate_coordinates: PredicateCoordinateSets<'_>,
+    require_generated_callees: bool,
+) -> io::Result<Vec<Option<GeneratedParserRule>>> {
+    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
+        .deserialize()
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    let decision_by_state = decision_by_state(&atn);
+    let context = GeneratedParserCompileContext {
+        atn: &atn,
+        decision_by_state: &decision_by_state,
+        rule_args,
+        inline_action_states: action_states.inline,
+        action_states: action_states.all,
+        generated_action_states: action_states.generated,
+        predicate_coordinates: predicate_coordinates.all,
+        generated_predicate_coordinates: predicate_coordinates.generated,
+    };
+    let mut rules = (0..data.rule_names.len())
+        .map(|rule_index| {
+            if enabled_rules.get(rule_index).copied().unwrap_or_default() {
+                compile_generated_parser_rule(&context, rule_index)
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+    if require_generated_callees {
+        drop_rules_calling_disabled_rules(&mut rules);
+    }
+    Ok(rules)
+}
+
+fn drop_rules_calling_disabled_rules(rules: &mut [Option<GeneratedParserRule>]) {
+    loop {
+        let enabled = rules.iter().map(Option::is_some).collect::<Vec<_>>();
+        let drop_index = rules.iter().filter_map(Option::as_ref).find_map(|rule| {
+            generated_steps_call_disabled_rule(&rule.steps, &enabled).then_some(rule.rule_index)
+        });
+        let Some(rule_index) = drop_index else {
+            return;
+        };
+        rules[rule_index] = None;
+    }
+}
+
+const ATN_PREFERRED_LEADING_CALL_CHAIN_MIN: usize = 8;
+const ATN_PREFERRED_CHAIN_MIN_DECISION_DENSITY_NUMERATOR: usize = 2;
+const ATN_PREFERRED_WRAPPER_MIN_DECISION_COST: usize = 2;
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct GeneratedRuleShape {
+    decision_cost: usize,
+    action_or_predicate_count: usize,
+}
+
+impl AddAssign for GeneratedRuleShape {
+    fn add_assign(&mut self, rhs: Self) {
+        self.decision_cost += rhs.decision_cost;
+        self.action_or_predicate_count += rhs.action_or_predicate_count;
+    }
+}
+
+fn generated_atn_preferred_rule_calls(
+    rules: &[Option<GeneratedParserRule>],
+    _rule_names: &[String],
+) -> Vec<bool> {
+    let leading_rule_calls = rules
+        .iter()
+        .map(|rule| {
+            rule.as_ref()
+                .and_then(|rule| generated_steps_leading_mandatory_rule_call(&rule.steps))
+        })
+        .collect::<Vec<_>>();
+    let shapes = rules
+        .iter()
+        .map(|rule| {
+            rule.as_ref()
+                .map_or_else(GeneratedRuleShape::default, generated_rule_shape)
+        })
+        .collect::<Vec<_>>();
+    let mut preferred = vec![false; rules.len()];
+
+    for start in 0..rules.len() {
+        if rules[start].is_none() {
+            continue;
+        }
+        let mut chain = Vec::new();
+        let mut seen = vec![false; rules.len()];
+        let mut current = start;
+
+        loop {
+            if current >= rules.len() || rules[current].is_none() || seen[current] {
+                break;
+            }
+            seen[current] = true;
+            chain.push(current);
+            let Some(next) = leading_rule_calls[current] else {
+                break;
+            };
+            current = next;
+        }
+
+        if chain.len() >= ATN_PREFERRED_LEADING_CALL_CHAIN_MIN
+            && generated_atn_preferred_chain_is_expensive(&chain, &shapes)
+        {
+            for rule_index in chain {
+                preferred[rule_index] = true;
+            }
+        }
+    }
+    propagate_atn_preferred_wrappers(rules, &shapes, &mut preferred);
+
+    preferred
+}
+
+fn generated_atn_preferred_chain_is_expensive(
+    chain: &[usize],
+    shapes: &[GeneratedRuleShape],
+) -> bool {
+    let decision_cost = chain
+        .iter()
+        .filter_map(|rule_index| shapes.get(*rule_index))
+        .map(|shape| shape.decision_cost)
+        .sum::<usize>();
+    decision_cost >= chain.len() * ATN_PREFERRED_CHAIN_MIN_DECISION_DENSITY_NUMERATOR
+}
+
+fn propagate_atn_preferred_wrappers(
+    rules: &[Option<GeneratedParserRule>],
+    shapes: &[GeneratedRuleShape],
+    preferred: &mut [bool],
+) {
+    loop {
+        let mut changed = false;
+        for (rule_index, rule) in rules.iter().enumerate() {
+            if preferred.get(rule_index).copied().unwrap_or_default() {
+                continue;
+            }
+            let Some(rule) = rule else {
+                continue;
+            };
+            if !generated_rule_is_atn_preferred_wrapper(rule, shapes, preferred) {
+                continue;
+            }
+            preferred[rule_index] = true;
+            changed = true;
+        }
+        if !changed {
+            return;
+        }
+    }
+}
+
+fn generated_rule_is_atn_preferred_wrapper(
+    rule: &GeneratedParserRule,
+    shapes: &[GeneratedRuleShape],
+    preferred: &[bool],
+) -> bool {
+    if rule.left_recursive {
+        return false;
+    }
+    let shape = shapes.get(rule.rule_index).copied().unwrap_or_default();
+    shape.action_or_predicate_count == 0
+        && shape.decision_cost >= ATN_PREFERRED_WRAPPER_MIN_DECISION_COST
+        && generated_steps_call_atn_preferred_rule(&rule.steps, preferred)
+}
+
+fn generated_rule_shape(rule: &GeneratedParserRule) -> GeneratedRuleShape {
+    generated_steps_shape(&rule.steps)
+}
+
+fn generated_steps_shape(steps: &[GeneratedParserStep]) -> GeneratedRuleShape {
+    let mut shape = GeneratedRuleShape::default();
+    for step in steps {
+        shape += generated_step_shape(step);
+    }
+    shape
+}
+
+fn generated_step_shape(step: &GeneratedParserStep) -> GeneratedRuleShape {
+    match step {
+        GeneratedParserStep::Decision {
+            allow_semantic_context,
+            force_context,
+            fast_path,
+            alts,
+            ..
+        } => {
+            let mut shape = GeneratedRuleShape {
+                decision_cost: usize::from(
+                    fast_path.is_none() || *allow_semantic_context || *force_context,
+                ),
+                action_or_predicate_count: 0,
+            };
+            for alt in alts {
+                shape += generated_steps_shape(alt);
+            }
+            shape
+        }
+        GeneratedParserStep::StarLoop {
+            allow_semantic_context,
+            force_context,
+            fast_path,
+            body,
+            ..
+        } => {
+            let mut shape = GeneratedRuleShape {
+                decision_cost: usize::from(
+                    fast_path.is_none() || *allow_semantic_context || *force_context,
+                ),
+                action_or_predicate_count: 0,
+            };
+            shape += generated_steps_shape(body);
+            shape
+        }
+        GeneratedParserStep::LeftRecursiveLoop { body, .. } => {
+            let mut shape = GeneratedRuleShape {
+                decision_cost: 1,
+                action_or_predicate_count: 0,
+            };
+            shape += generated_steps_shape(body);
+            shape
+        }
+        GeneratedParserStep::Predicate { .. } | GeneratedParserStep::Action { .. } => {
+            GeneratedRuleShape {
+                decision_cost: 0,
+                action_or_predicate_count: 1,
+            }
+        }
+        GeneratedParserStep::MatchToken { .. }
+        | GeneratedParserStep::MatchSet { .. }
+        | GeneratedParserStep::MatchNotSet { .. }
+        | GeneratedParserStep::MatchWildcard { .. }
+        | GeneratedParserStep::Precedence(_)
+        | GeneratedParserStep::CallRule { .. } => GeneratedRuleShape::default(),
+    }
+}
+
+fn generated_steps_call_atn_preferred_rule(
+    steps: &[GeneratedParserStep],
+    preferred: &[bool],
+) -> bool {
+    steps.iter().any(|step| match step {
+        GeneratedParserStep::CallRule { rule_index, .. } => {
+            preferred.get(*rule_index).copied().unwrap_or_default()
+        }
+        GeneratedParserStep::Decision { alts, .. } => alts
+            .iter()
+            .any(|alt| generated_steps_call_atn_preferred_rule(alt, preferred)),
+        GeneratedParserStep::StarLoop { body, .. }
+        | GeneratedParserStep::LeftRecursiveLoop { body, .. } => {
+            generated_steps_call_atn_preferred_rule(body, preferred)
+        }
+        GeneratedParserStep::MatchToken { .. }
+        | GeneratedParserStep::MatchSet { .. }
+        | GeneratedParserStep::MatchNotSet { .. }
+        | GeneratedParserStep::MatchWildcard { .. }
+        | GeneratedParserStep::Precedence(_)
+        | GeneratedParserStep::Predicate { .. }
+        | GeneratedParserStep::Action { .. } => false,
+    })
+}
+
+fn generated_steps_leading_mandatory_rule_call(steps: &[GeneratedParserStep]) -> Option<usize> {
+    for step in steps {
+        match step {
+            GeneratedParserStep::CallRule { rule_index, .. } => return Some(*rule_index),
+            GeneratedParserStep::Decision { alts, .. } if generated_alts_are_nullable(alts) => {}
+            GeneratedParserStep::Decision { alts, .. } => {
+                return generated_alts_common_leading_mandatory_rule_call(alts);
+            }
+            GeneratedParserStep::StarLoop { .. }
+            | GeneratedParserStep::LeftRecursiveLoop { .. }
+            | GeneratedParserStep::Precedence(_)
+            | GeneratedParserStep::Predicate { .. }
+            | GeneratedParserStep::Action { .. } => {}
+            GeneratedParserStep::MatchToken { .. }
+            | GeneratedParserStep::MatchSet { .. }
+            | GeneratedParserStep::MatchNotSet { .. }
+            | GeneratedParserStep::MatchWildcard { .. } => return None,
+        }
+    }
+    None
+}
+
+fn generated_alts_common_leading_mandatory_rule_call(
+    alts: &[Vec<GeneratedParserStep>],
+) -> Option<usize> {
+    let mut common = None;
+    for alt in alts {
+        let rule_index = generated_steps_leading_mandatory_rule_call(alt)?;
+        match common {
+            Some(common_rule_index) if common_rule_index != rule_index => return None,
+            Some(_) => {}
+            None => common = Some(rule_index),
+        }
+    }
+    common
+}
+
+fn generated_alts_are_nullable(alts: &[Vec<GeneratedParserStep>]) -> bool {
+    alts.iter().any(|alt| generated_steps_are_nullable(alt))
+}
+
+fn generated_steps_are_nullable(steps: &[GeneratedParserStep]) -> bool {
+    steps.iter().all(generated_step_is_nullable)
+}
+
+fn generated_step_is_nullable(step: &GeneratedParserStep) -> bool {
+    match step {
+        GeneratedParserStep::Precedence(_)
+        | GeneratedParserStep::Predicate { .. }
+        | GeneratedParserStep::Action { .. }
+        | GeneratedParserStep::StarLoop { .. }
+        | GeneratedParserStep::LeftRecursiveLoop { .. } => true,
+        GeneratedParserStep::Decision { alts, .. } => generated_alts_are_nullable(alts),
+        GeneratedParserStep::MatchToken { .. }
+        | GeneratedParserStep::MatchSet { .. }
+        | GeneratedParserStep::MatchNotSet { .. }
+        | GeneratedParserStep::MatchWildcard { .. }
+        | GeneratedParserStep::CallRule { .. } => false,
+    }
+}
+
+fn require_all_parser_rules_generated(
+    rules: &[Option<GeneratedParserRule>],
+    data: &InterpData,
+) -> io::Result<()> {
+    let missing = rules
+        .iter()
+        .enumerate()
+        .filter(|(_, rule)| rule.is_none())
+        .map(|(index, _)| {
+            data.rule_names
+                .get(index)
+                .map_or_else(|| index.to_string(), Clone::clone)
+        })
+        .collect::<Vec<_>>();
+    if missing.is_empty() {
+        return Ok(());
+    }
+    Err(io::Error::new(
+        io::ErrorKind::InvalidData,
+        format!(
+            "generated parser did not emit {} rule(s): {}",
+            missing.len(),
+            missing.join(", ")
+        ),
+    ))
+}
+
+fn generated_steps_call_disabled_rule(steps: &[GeneratedParserStep], enabled: &[bool]) -> bool {
+    steps.iter().any(|step| match step {
+        GeneratedParserStep::CallRule { rule_index, .. } => {
+            !enabled.get(*rule_index).copied().unwrap_or_default()
+        }
+        GeneratedParserStep::Decision { alts, .. } => alts
+            .iter()
+            .any(|alt| generated_steps_call_disabled_rule(alt, enabled)),
+        GeneratedParserStep::StarLoop { body, .. }
+        | GeneratedParserStep::LeftRecursiveLoop { body, .. } => {
+            generated_steps_call_disabled_rule(body, enabled)
+        }
+        GeneratedParserStep::MatchToken { .. }
+        | GeneratedParserStep::MatchSet { .. }
+        | GeneratedParserStep::MatchNotSet { .. }
+        | GeneratedParserStep::MatchWildcard { .. }
+        | GeneratedParserStep::Precedence(_)
+        | GeneratedParserStep::Predicate { .. }
+        | GeneratedParserStep::Action { .. } => false,
+    })
+}
+
+fn decision_by_state(atn: &Atn) -> Vec<Option<usize>> {
+    let mut decision_by_state = vec![None; atn.states().len()];
+    for (decision, &state_number) in atn.decision_to_state().iter().enumerate() {
+        if let Some(slot) = decision_by_state.get_mut(state_number) {
+            *slot = Some(decision);
+        }
+    }
+    decision_by_state
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct GeneratedLookSet {
+    symbols: BTreeSet<i32>,
+    nullable: bool,
+}
+
+#[derive(Default)]
+struct GeneratedFirstSetCtx {
+    cache: BTreeMap<(usize, usize), GeneratedLookSet>,
+    in_progress: BTreeSet<(usize, usize)>,
+    hit_cycle: bool,
+}
+
+fn generated_decision_fast_path<'a>(
+    context: &GeneratedParserCompileContext<'_>,
+    state: &antlr4_runtime::atn::AtnState,
+    alts: impl IntoIterator<Item = (usize, &'a [GeneratedParserStep])>,
+) -> Option<GeneratedDecisionFastPath> {
+    if state.precedence_rule_decision || state.non_greedy {
+        return None;
+    }
+    let mut first_ctx = GeneratedFirstSetCtx::default();
+    let mut symbol_alts = BTreeMap::<i32, Option<usize>>::new();
+    for (alt, steps) in alts {
+        let look = generated_steps_first_set(context.atn, steps, &mut first_ctx);
+        if look.nullable {
+            return None;
+        }
+        for symbol in look.symbols {
+            match symbol_alts.get(&symbol).copied().flatten() {
+                None if symbol_alts.contains_key(&symbol) => {}
+                None => {
+                    symbol_alts.insert(symbol, Some(alt));
+                }
+                Some(existing) if existing == alt => {}
+                Some(_) => {
+                    symbol_alts.insert(symbol, None);
+                }
+            }
+        }
+    }
+
+    let mut symbols_by_alt = BTreeMap::<usize, BTreeSet<i32>>::new();
+    for (symbol, alt) in symbol_alts {
+        if let Some(alt) = alt {
+            symbols_by_alt.entry(alt).or_default().insert(symbol);
+        }
+    }
+    let arms = symbols_by_alt
+        .into_iter()
+        .map(|(alt, symbols)| GeneratedDecisionFastArm {
+            alt,
+            intervals: symbols_to_ranges(symbols),
+        })
+        .filter(|arm| !arm.intervals.is_empty())
+        .collect::<Vec<_>>();
+    (!arms.is_empty()).then_some(GeneratedDecisionFastPath { arms })
+}
+
+fn generated_steps_first_set(
+    atn: &Atn,
+    steps: &[GeneratedParserStep],
+    ctx: &mut GeneratedFirstSetCtx,
+) -> GeneratedLookSet {
+    let mut first = GeneratedLookSet::default();
+    for step in steps {
+        match step {
+            GeneratedParserStep::MatchToken { token_type, .. } => {
+                first.symbols.insert(*token_type);
+                first.nullable = false;
+                return first;
+            }
+            GeneratedParserStep::MatchSet { intervals, .. } => {
+                for (start, stop) in intervals {
+                    first.symbols.extend(*start..=*stop);
+                }
+                first.nullable = false;
+                return first;
+            }
+            GeneratedParserStep::MatchNotSet { intervals, .. } => {
+                first.symbols.extend(1..=atn.max_token_type());
+                for (start, stop) in intervals {
+                    for symbol in *start..=*stop {
+                        first.symbols.remove(&symbol);
+                    }
+                }
+                first.nullable = false;
+                return first;
+            }
+            GeneratedParserStep::MatchWildcard { .. } => {
+                first.symbols.extend(1..=atn.max_token_type());
+                first.nullable = false;
+                return first;
+            }
+            GeneratedParserStep::CallRule { rule_index, .. } => {
+                let Some(start) = atn.rule_to_start_state().get(*rule_index).copied() else {
+                    return GeneratedLookSet::default();
+                };
+                let Some(stop) = atn.rule_to_stop_state().get(*rule_index).copied() else {
+                    return GeneratedLookSet::default();
+                };
+                let child = generated_rule_first_set(atn, start, stop, ctx);
+                first.symbols.extend(child.symbols);
+                if !child.nullable {
+                    first.nullable = false;
+                    return first;
+                }
+            }
+            GeneratedParserStep::Decision { alts, .. } => {
+                let nested = generated_alt_steps_first_set(atn, alts, ctx);
+                first.symbols.extend(nested.symbols);
+                if !nested.nullable {
+                    first.nullable = false;
+                    return first;
+                }
+            }
+            GeneratedParserStep::StarLoop { body, .. }
+            | GeneratedParserStep::LeftRecursiveLoop { body, .. } => {
+                let nested = generated_steps_first_set(atn, body, ctx);
+                first.symbols.extend(nested.symbols);
+            }
+            GeneratedParserStep::Precedence(_)
+            | GeneratedParserStep::Predicate { .. }
+            | GeneratedParserStep::Action { .. } => {}
+        }
+    }
+    first.nullable = true;
+    first
+}
+
+fn generated_alt_steps_first_set(
+    atn: &Atn,
+    alts: &[Vec<GeneratedParserStep>],
+    ctx: &mut GeneratedFirstSetCtx,
+) -> GeneratedLookSet {
+    let mut first = GeneratedLookSet::default();
+    for alt in alts {
+        let alt_first = generated_steps_first_set(atn, alt, ctx);
+        first.symbols.extend(alt_first.symbols);
+        first.nullable |= alt_first.nullable;
+    }
+    first
+}
+
+fn generated_rule_first_set(
+    atn: &Atn,
+    state_number: usize,
+    rule_stop_state: usize,
+    ctx: &mut GeneratedFirstSetCtx,
+) -> GeneratedLookSet {
+    let key = (state_number, rule_stop_state);
+    if let Some(cached) = ctx.cache.get(&key) {
+        return cached.clone();
+    }
+    if !ctx.in_progress.insert(key) {
+        return GeneratedLookSet::default();
+    }
+    let saved_hit_cycle = ctx.hit_cycle;
+    ctx.hit_cycle = false;
+    let mut first = GeneratedLookSet::default();
+    generated_rule_first_set_inner(
+        atn,
+        state_number,
+        rule_stop_state,
+        ctx,
+        &mut BTreeSet::new(),
+        &mut first,
+    );
+    ctx.in_progress.remove(&key);
+    if !ctx.hit_cycle {
+        ctx.cache.insert(key, first.clone());
+    }
+    ctx.hit_cycle = saved_hit_cycle || ctx.hit_cycle;
+    first
+}
+
+fn generated_rule_first_set_inner(
+    atn: &Atn,
+    state_number: usize,
+    rule_stop_state: usize,
+    ctx: &mut GeneratedFirstSetCtx,
+    visited: &mut BTreeSet<usize>,
+    first: &mut GeneratedLookSet,
+) {
+    if !visited.insert(state_number) {
+        return;
+    }
+    if state_number == rule_stop_state {
+        first.nullable = true;
+        return;
+    }
+    let Some(state) = atn.state(state_number) else {
+        return;
+    };
+    for transition in &state.transitions {
+        let symbols = generated_transition_symbols(transition, atn.max_token_type());
+        if !symbols.is_empty() {
+            first.symbols.extend(symbols);
+            continue;
+        }
+        match transition {
+            Transition::Epsilon { target }
+            | Transition::Action { target, .. }
+            | Transition::Predicate { target, .. }
+            | Transition::Precedence { target, .. } => {
+                generated_rule_first_set_inner(atn, *target, rule_stop_state, ctx, visited, first);
+            }
+            Transition::Rule {
+                target,
+                rule_index,
+                follow_state,
+                ..
+            } => {
+                let Some(child_stop) = atn.rule_to_stop_state().get(*rule_index).copied() else {
+                    continue;
+                };
+                let child_key = (*target, child_stop);
+                if ctx.in_progress.contains(&child_key) && !ctx.cache.contains_key(&child_key) {
+                    ctx.hit_cycle = true;
+                }
+                let child = generated_rule_first_set(atn, *target, child_stop, ctx);
+                first.symbols.extend(child.symbols);
+                if child.nullable {
+                    generated_rule_first_set_inner(
+                        atn,
+                        *follow_state,
+                        rule_stop_state,
+                        ctx,
+                        visited,
+                        first,
+                    );
+                }
+            }
+            Transition::Atom { .. }
+            | Transition::Range { .. }
+            | Transition::Set { .. }
+            | Transition::NotSet { .. }
+            | Transition::Wildcard { .. } => {}
+        }
+    }
+}
+
+fn generated_transition_symbols(transition: &Transition, max_token_type: i32) -> BTreeSet<i32> {
+    let mut symbols = BTreeSet::new();
+    match transition {
+        Transition::Atom { label, .. } => {
+            symbols.insert(*label);
+        }
+        Transition::Range { start, stop, .. } => {
+            symbols.extend(*start..=*stop);
+        }
+        Transition::Set { set, .. } => {
+            for (start, stop) in set.ranges() {
+                symbols.extend(*start..=*stop);
+            }
+        }
+        Transition::NotSet { set, .. } => {
+            symbols.extend((1..=max_token_type).filter(|symbol| !set.contains(*symbol)));
+        }
+        Transition::Wildcard { .. } => {
+            symbols.extend(1..=max_token_type);
+        }
+        Transition::Epsilon { .. }
+        | Transition::Rule { .. }
+        | Transition::Predicate { .. }
+        | Transition::Action { .. }
+        | Transition::Precedence { .. } => {}
+    }
+    symbols
+}
+
+fn symbols_to_ranges(symbols: BTreeSet<i32>) -> Vec<(i32, i32)> {
+    let mut ranges = Vec::new();
+    for symbol in symbols {
+        match ranges.last_mut() {
+            Some((_, stop)) if *stop + 1 == symbol => *stop = symbol,
+            _ => ranges.push((symbol, symbol)),
+        }
+    }
+    ranges
+}
+
+const fn state_tracks_alt_number(state: &antlr4_runtime::atn::AtnState) -> bool {
+    matches!(
+        state.kind,
+        AtnStateKind::Basic
+            | AtnStateKind::BlockStart
+            | AtnStateKind::PlusBlockStart
+            | AtnStateKind::StarBlockStart
+            | AtnStateKind::StarLoopEntry
+    ) && !state.precedence_rule_decision
+        && state.transitions.len() > 1
+}
+
+fn compile_generated_parser_rule(
+    context: &GeneratedParserCompileContext<'_>,
+    rule_index: usize,
+) -> Option<GeneratedParserRule> {
+    let entry_state = context.atn.rule_to_start_state().get(rule_index).copied()?;
+    let stop_state = context.atn.rule_to_stop_state().get(rule_index).copied()?;
+    let start = context.atn.state(entry_state)?;
+    if start.left_recursive_rule {
+        return compile_generated_left_recursive_parser_rule(
+            context,
+            rule_index,
+            entry_state,
+            stop_state,
+        );
+    }
+    let mut visited = BTreeSet::new();
+    let steps = compile_generated_parser_path(context, entry_state, stop_state, &mut visited)?;
+    Some(GeneratedParserRule {
+        rule_index,
+        entry_state,
+        left_recursive: false,
+        steps,
+    })
+}
+
+fn compile_generated_left_recursive_parser_rule(
+    context: &GeneratedParserCompileContext<'_>,
+    rule_index: usize,
+    entry_state: usize,
+    stop_state: usize,
+) -> Option<GeneratedParserRule> {
+    let loop_entry = find_left_recursive_loop_entry(context, rule_index)?;
+    let mut visited = BTreeSet::new();
+    let mut steps = compile_generated_parser_path(context, entry_state, loop_entry, &mut visited)?;
+    let loop_state = context.atn.state(loop_entry)?;
+    let decision = context
+        .decision_by_state
+        .get(loop_entry)
+        .copied()
+        .flatten()?;
+    let (loop_step, exit_target) = compile_generated_left_recursive_loop(
+        context,
+        rule_index,
+        entry_state,
+        loop_state,
+        decision,
+    )?;
+    steps.push(loop_step);
+    steps.extend(compile_generated_parser_path(
+        context,
+        exit_target,
+        stop_state,
+        &mut BTreeSet::new(),
+    )?);
+    Some(GeneratedParserRule {
+        rule_index,
+        entry_state,
+        left_recursive: true,
+        steps,
+    })
+}
+
+fn find_left_recursive_loop_entry(
+    context: &GeneratedParserCompileContext<'_>,
+    rule_index: usize,
+) -> Option<usize> {
+    context.atn.states().iter().find_map(|state| {
+        (state.rule_index == Some(rule_index)
+            && state.kind == AtnStateKind::StarLoopEntry
+            && state.precedence_rule_decision)
+            .then_some(state.state_number)
+    })
+}
+
+fn compile_generated_left_recursive_loop(
+    context: &GeneratedParserCompileContext<'_>,
+    rule_index: usize,
+    entry_state: usize,
+    state: &antlr4_runtime::atn::AtnState,
+    decision: usize,
+) -> Option<(GeneratedParserStep, usize)> {
+    let mut enter = None;
+    let mut exit = None;
+    for (index, transition) in state.transitions.iter().enumerate() {
+        let alt = index + 1;
+        let target = transition.target();
+        let target_state = context.atn.state(target)?;
+        if target_state.kind == AtnStateKind::LoopEnd {
+            exit = Some((alt, transition, target, target_state.loop_back_state?));
+        } else {
+            enter = Some((alt, transition));
+        }
+    }
+
+    let (enter_alt, enter_transition) = enter?;
+    let (exit_alt, exit_transition, exit_target, loop_back_state) = exit?;
+    let (enter_step, enter_target) = compile_generated_parser_transition(
+        state.state_number,
+        context.rule_args,
+        enter_transition,
+        generated_action_state_sets(context),
+        generated_predicate_coordinate_sets(context),
+    )?;
+    let mut body = enter_step.into_iter().collect::<Vec<_>>();
+    body.extend(compile_generated_parser_path(
+        context,
+        enter_target,
+        loop_back_state,
+        &mut BTreeSet::new(),
+    )?);
+    allow_semantic_context_in_decisions(&mut body);
+    if !steps_may_consume(&body) {
+        return None;
+    }
+
+    let (exit_step, _) = compile_generated_parser_transition(
+        state.state_number,
+        context.rule_args,
+        exit_transition,
+        generated_action_state_sets(context),
+        generated_predicate_coordinate_sets(context),
+    )?;
+    if exit_step.is_some() {
+        return None;
+    }
+
+    Some((
+        GeneratedParserStep::LeftRecursiveLoop {
+            state: state.state_number,
+            decision,
+            enter_alt,
+            exit_alt,
+            rule_index,
+            entry_state,
+            body,
+        },
+        exit_target,
+    ))
+}
+
+fn compile_generated_parser_path(
+    context: &GeneratedParserCompileContext<'_>,
+    state_number: usize,
+    stop_state: usize,
+    visited: &mut BTreeSet<usize>,
+) -> Option<Vec<GeneratedParserStep>> {
+    if state_number == stop_state {
+        return Some(Vec::new());
+    }
+    if !visited.insert(state_number) {
+        return None;
+    }
+
+    let state = context.atn.state(state_number)?;
+    let steps = if let Some(decision) = context
+        .decision_by_state
+        .get(state_number)
+        .copied()
+        .flatten()
+    {
+        compile_generated_parser_decision_state(context, state, decision, stop_state, visited)?
+    } else {
+        let transition = state.transitions.first()?;
+        if state.transitions.len() != 1 {
+            return None;
+        }
+        let (step, target) = compile_generated_parser_transition(
+            state_number,
+            context.rule_args,
+            transition,
+            generated_action_state_sets(context),
+            generated_predicate_coordinate_sets(context),
+        )?;
+        let mut steps = step.into_iter().collect::<Vec<_>>();
+        steps.extend(compile_generated_parser_path(
+            context, target, stop_state, visited,
+        )?);
+        steps
+    };
+    visited.remove(&state_number);
+    Some(steps)
+}
+
+fn compile_generated_parser_decision_state(
+    context: &GeneratedParserCompileContext<'_>,
+    state: &antlr4_runtime::atn::AtnState,
+    decision: usize,
+    stop_state: usize,
+    visited: &mut BTreeSet<usize>,
+) -> Option<Vec<GeneratedParserStep>> {
+    match state.kind {
+        AtnStateKind::BlockStart | AtnStateKind::PlusBlockStart | AtnStateKind::StarBlockStart => {
+            compile_generated_parser_block_decision(context, state, decision, stop_state, visited)
+        }
+        AtnStateKind::StarLoopEntry => {
+            compile_generated_parser_star_loop(context, state, decision, stop_state, visited)
+        }
+        AtnStateKind::PlusLoopBack => {
+            compile_generated_parser_plus_loop(context, state, decision, stop_state, visited)
+        }
+        _ => None,
+    }
+}
+
+fn compile_generated_parser_block_decision(
+    context: &GeneratedParserCompileContext<'_>,
+    state: &antlr4_runtime::atn::AtnState,
+    decision: usize,
+    stop_state: usize,
+    visited: &mut BTreeSet<usize>,
+) -> Option<Vec<GeneratedParserStep>> {
+    let end_state = state.end_state?;
+    let mut alts = Vec::with_capacity(state.transitions.len());
+    for transition in &state.transitions {
+        let (step, target) = compile_generated_parser_transition(
+            state.state_number,
+            context.rule_args,
+            transition,
+            generated_action_state_sets(context),
+            generated_predicate_coordinate_sets(context),
+        )?;
+        let mut alt_visited = visited.clone();
+        let mut alt_steps = step.into_iter().collect::<Vec<_>>();
+        alt_steps.extend(compile_generated_parser_path(
+            context,
+            target,
+            end_state,
+            &mut alt_visited,
+        )?);
+        alts.push(alt_steps);
+    }
+
+    let mut steps = vec![GeneratedParserStep::Decision {
+        state: state.state_number,
+        decision,
+        track_alt_number: state_tracks_alt_number(state),
+        allow_semantic_context: alts.iter().any(|alt| steps_contain_predicate(alt)),
+        force_context: state.non_greedy,
+        fast_path: generated_decision_fast_path(
+            context,
+            state,
+            alts.iter()
+                .enumerate()
+                .map(|(index, alt)| (index + 1, alt.as_slice())),
+        ),
+        alts,
+    }];
+    steps.extend(compile_generated_parser_path(
+        context, end_state, stop_state, visited,
+    )?);
+    Some(steps)
+}
+
+fn compile_generated_parser_star_loop(
+    context: &GeneratedParserCompileContext<'_>,
+    state: &antlr4_runtime::atn::AtnState,
+    decision: usize,
+    stop_state: usize,
+    visited: &mut BTreeSet<usize>,
+) -> Option<Vec<GeneratedParserStep>> {
+    let mut enter = None;
+    let mut exit = None;
+    for (index, transition) in state.transitions.iter().enumerate() {
+        let alt = index + 1;
+        let target = transition.target();
+        let target_state = context.atn.state(target)?;
+        let target_kind = target_state.kind;
+        if target_kind == AtnStateKind::LoopEnd {
+            exit = Some((alt, transition, target_state.loop_back_state?));
+        } else {
+            enter = Some((alt, transition));
+        }
+    }
+
+    let (enter_alt, enter_transition) = enter?;
+    let (exit_alt, exit_transition, loop_back_state) = exit?;
+    let (enter_step, enter_target) = compile_generated_parser_transition(
+        state.state_number,
+        context.rule_args,
+        enter_transition,
+        generated_action_state_sets(context),
+        generated_predicate_coordinate_sets(context),
+    )?;
+    let mut body_visited = BTreeSet::new();
+    let mut body = enter_step.into_iter().collect::<Vec<_>>();
+    body.extend(compile_generated_parser_path(
+        context,
+        enter_target,
+        loop_back_state,
+        &mut body_visited,
+    )?);
+    if !steps_may_consume(&body) {
+        return None;
+    }
+
+    let (exit_step, exit_target) = compile_generated_parser_transition(
+        state.state_number,
+        context.rule_args,
+        exit_transition,
+        generated_action_state_sets(context),
+        generated_predicate_coordinate_sets(context),
+    )?;
+    if exit_step.is_some() {
+        return None;
+    }
+
+    let mut steps = vec![GeneratedParserStep::StarLoop {
+        state: state.state_number,
+        decision,
+        enter_alt,
+        exit_alt,
+        track_alt_number: state_tracks_alt_number(state),
+        allow_semantic_context: steps_contain_predicate(&body),
+        force_context: state.non_greedy,
+        plus_loop: false,
+        fast_path: None,
+        body,
+    }];
+    steps.extend(compile_generated_parser_path(
+        context,
+        exit_target,
+        stop_state,
+        visited,
+    )?);
+    Some(steps)
+}
+
+fn compile_generated_parser_plus_loop(
+    context: &GeneratedParserCompileContext<'_>,
+    state: &antlr4_runtime::atn::AtnState,
+    decision: usize,
+    stop_state: usize,
+    visited: &mut BTreeSet<usize>,
+) -> Option<Vec<GeneratedParserStep>> {
+    let mut enter = None;
+    let mut exit = None;
+    for (index, transition) in state.transitions.iter().enumerate() {
+        let alt = index + 1;
+        let target = transition.target();
+        let target_state = context.atn.state(target)?;
+        if target_state.kind == AtnStateKind::LoopEnd {
+            exit = Some((alt, transition));
+        } else {
+            enter = Some((alt, transition));
+        }
+    }
+
+    let (enter_alt, enter_transition) = enter?;
+    let (enter_step, enter_target) = compile_generated_parser_transition(
+        state.state_number,
+        context.rule_args,
+        enter_transition,
+        generated_action_state_sets(context),
+        generated_predicate_coordinate_sets(context),
+    )?;
+    let mut body_visited = BTreeSet::new();
+    let mut body = enter_step.into_iter().collect::<Vec<_>>();
+    body.extend(compile_generated_parser_path(
+        context,
+        enter_target,
+        state.state_number,
+        &mut body_visited,
+    )?);
+    if !steps_may_consume(&body) {
+        return None;
+    }
+
+    let (exit_alt, exit_transition) = exit?;
+    let (exit_step, exit_target) = compile_generated_parser_transition(
+        state.state_number,
+        context.rule_args,
+        exit_transition,
+        generated_action_state_sets(context),
+        generated_predicate_coordinate_sets(context),
+    )?;
+    if exit_step.is_some() {
+        return None;
+    }
+
+    let mut steps = vec![GeneratedParserStep::StarLoop {
+        state: state.state_number,
+        decision,
+        enter_alt,
+        exit_alt,
+        track_alt_number: state_tracks_alt_number(state),
+        allow_semantic_context: steps_contain_predicate(&body),
+        force_context: state.non_greedy,
+        plus_loop: true,
+        fast_path: None,
+        body,
+    }];
+    steps.extend(compile_generated_parser_path(
+        context,
+        exit_target,
+        stop_state,
+        visited,
+    )?);
+    Some(steps)
+}
+
+fn steps_may_consume(steps: &[GeneratedParserStep]) -> bool {
+    steps.iter().any(|step| match step {
+        GeneratedParserStep::MatchToken { .. }
+        | GeneratedParserStep::MatchSet { .. }
+        | GeneratedParserStep::MatchNotSet { .. }
+        | GeneratedParserStep::MatchWildcard { .. }
+        | GeneratedParserStep::CallRule { .. } => true,
+        GeneratedParserStep::Action { .. }
+        | GeneratedParserStep::Precedence(_)
+        | GeneratedParserStep::Predicate { .. } => false,
+        GeneratedParserStep::Decision { alts, .. } => alts.iter().any(|alt| steps_may_consume(alt)),
+        GeneratedParserStep::StarLoop { body, .. }
+        | GeneratedParserStep::LeftRecursiveLoop { body, .. } => steps_may_consume(body),
+    })
+}
+
+fn allow_semantic_context_in_decisions(steps: &mut [GeneratedParserStep]) {
+    for step in steps {
+        match step {
+            GeneratedParserStep::Decision {
+                allow_semantic_context,
+                fast_path,
+                alts,
+                ..
+            } => {
+                *allow_semantic_context = true;
+                *fast_path = None;
+                for alt in alts {
+                    allow_semantic_context_in_decisions(alt);
+                }
+            }
+            GeneratedParserStep::StarLoop {
+                allow_semantic_context,
+                fast_path,
+                body,
+                ..
+            } => {
+                *allow_semantic_context = true;
+                *fast_path = None;
+                allow_semantic_context_in_decisions(body);
+            }
+            GeneratedParserStep::LeftRecursiveLoop { body, .. } => {
+                allow_semantic_context_in_decisions(body);
+            }
+            GeneratedParserStep::MatchToken { .. }
+            | GeneratedParserStep::MatchSet { .. }
+            | GeneratedParserStep::MatchNotSet { .. }
+            | GeneratedParserStep::MatchWildcard { .. }
+            | GeneratedParserStep::Precedence(_)
+            | GeneratedParserStep::Predicate { .. }
+            | GeneratedParserStep::Action { .. }
+            | GeneratedParserStep::CallRule { .. } => {}
+        }
+    }
+}
+
+fn steps_contain_predicate(steps: &[GeneratedParserStep]) -> bool {
+    steps.iter().any(|step| match step {
+        GeneratedParserStep::Predicate { .. } => true,
+        GeneratedParserStep::Decision { alts, .. } => {
+            alts.iter().any(|alt| steps_contain_predicate(alt))
+        }
+        GeneratedParserStep::StarLoop { body, .. }
+        | GeneratedParserStep::LeftRecursiveLoop { body, .. } => steps_contain_predicate(body),
+        GeneratedParserStep::MatchToken { .. }
+        | GeneratedParserStep::MatchSet { .. }
+        | GeneratedParserStep::MatchNotSet { .. }
+        | GeneratedParserStep::MatchWildcard { .. }
+        | GeneratedParserStep::Precedence(_)
+        | GeneratedParserStep::Action { .. }
+        | GeneratedParserStep::CallRule { .. } => false,
+    })
+}
+
+fn generated_rule_call_precedence(
+    rule_args: &[(usize, usize, RuleArgTemplate)],
+    source_state: usize,
+    rule_index: usize,
+    transition_precedence: i32,
+) -> Option<GeneratedRuleCallPrecedence> {
+    let Some((_, _, arg)) = rule_args
+        .iter()
+        .find(|(arg_source, arg_rule, _)| *arg_source == source_state && *arg_rule == rule_index)
+    else {
+        return Some(GeneratedRuleCallPrecedence::Literal(transition_precedence));
+    };
+    match arg {
+        RuleArgTemplate::Literal(value) => i32::try_from(*value)
+            .ok()
+            .map(GeneratedRuleCallPrecedence::Literal),
+        RuleArgTemplate::InheritLocal => Some(GeneratedRuleCallPrecedence::InheritLocal),
+    }
+}
+
+fn compile_generated_parser_transition(
+    source_state: usize,
+    rule_args: &[(usize, usize, RuleArgTemplate)],
+    transition: &Transition,
+    action_states: ActionStateSets<'_>,
+    predicate_coordinates: PredicateCoordinateSets<'_>,
+) -> Option<(Option<GeneratedParserStep>, usize)> {
+    match transition {
+        Transition::Epsilon { target } => Some((None, *target)),
+        Transition::Atom { target, label } => Some((
+            Some(GeneratedParserStep::MatchToken {
+                token_type: *label,
+                follow_state: *target,
+            }),
+            *target,
+        )),
+        Transition::Range {
+            target,
+            start,
+            stop,
+        } => Some((
+            Some(GeneratedParserStep::MatchSet {
+                intervals: vec![(*start, *stop)],
+                follow_state: *target,
+            }),
+            *target,
+        )),
+        Transition::Set { target, set } => Some((
+            Some(GeneratedParserStep::MatchSet {
+                intervals: set.ranges().to_vec(),
+                follow_state: *target,
+            }),
+            *target,
+        )),
+        Transition::NotSet { target, set } => Some((
+            Some(GeneratedParserStep::MatchNotSet {
+                intervals: set.ranges().to_vec(),
+                follow_state: *target,
+            }),
+            *target,
+        )),
+        Transition::Wildcard { target } => Some((
+            Some(GeneratedParserStep::MatchWildcard {
+                follow_state: *target,
+            }),
+            *target,
+        )),
+        Transition::Rule {
+            rule_index,
+            follow_state,
+            precedence,
+            ..
+        } => Some((
+            Some(GeneratedParserStep::CallRule {
+                source_state,
+                rule_index: *rule_index,
+                precedence: generated_rule_call_precedence(
+                    rule_args,
+                    source_state,
+                    *rule_index,
+                    *precedence,
+                )?,
+            }),
+            *follow_state,
+        )),
+        Transition::Action {
+            target, rule_index, ..
+        } if action_states.generated.contains(&source_state) => Some((
+            Some(GeneratedParserStep::Action {
+                source_state,
+                rule_index: *rule_index,
+            }),
+            *target,
+        )),
+        Transition::Action {
+            target,
+            action_index: None,
+            ..
+        } if !action_states.all.contains(&source_state) => Some((None, *target)),
+        Transition::Predicate {
+            target,
+            rule_index,
+            pred_index,
+            ..
+        } if predicate_coordinates
+            .generated
+            .contains(&(*rule_index, *pred_index)) =>
+        {
+            Some((
+                Some(GeneratedParserStep::Predicate {
+                    rule_index: *rule_index,
+                    pred_index: *pred_index,
+                }),
+                *target,
+            ))
+        }
+        Transition::Predicate {
+            rule_index,
+            pred_index,
+            ..
+        } if predicate_coordinates
+            .all
+            .contains(&(*rule_index, *pred_index)) =>
+        {
+            None
+        }
+        Transition::Predicate { target, .. } => Some((None, *target)),
+        Transition::Precedence { target, precedence } => {
+            Some((Some(GeneratedParserStep::Precedence(*precedence)), *target))
+        }
+        Transition::Action { .. } => None,
+    }
+}
+
+#[cfg(test)]
+fn render_generated_rule_dispatch(
+    rules: &[Option<GeneratedParserRule>],
+    direct_generated_rule_calls: &[bool],
+    inline_action_statements: &BTreeMap<usize, String>,
+    init_action_statements: &BTreeMap<usize, String>,
+    return_action_statements: &BTreeMap<usize, Vec<(String, i64)>>,
+    track_alt_numbers: bool,
+) -> String {
+    render_generated_rule_dispatch_with_rule_names(
+        rules,
+        direct_generated_rule_calls,
+        &[],
+        inline_action_statements,
+        init_action_statements,
+        &BTreeMap::new(),
+        return_action_statements,
+        track_alt_numbers,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_generated_rule_dispatch_with_rule_names(
+    rules: &[Option<GeneratedParserRule>],
+    direct_generated_rule_calls: &[bool],
+    rule_names: &[String],
+    inline_action_statements: &BTreeMap<usize, String>,
+    init_action_statements: &BTreeMap<usize, String>,
+    init_entry_action_statements: &BTreeMap<usize, String>,
+    return_action_statements: &BTreeMap<usize, Vec<(String, i64)>>,
+    track_alt_numbers: bool,
+) -> String {
+    let mut out = String::new();
+    let atn_preferred_rule_calls = generated_atn_preferred_rule_calls(rules, rule_names);
+    writeln!(
+        out,
+        "    #[allow(dead_code)]\n    fn parse_generated_rule(&mut self, rule_index: usize, precedence: i32, allow_fallback: bool) -> Option<Result<antlr4_runtime::ParseTree, GeneratedRuleError>> {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "        let _ = precedence;").expect("writing to a string cannot fail");
+    writeln!(out, "        let _ = allow_fallback;").expect("writing to a string cannot fail");
+    writeln!(out, "        match rule_index {{").expect("writing to a string cannot fail");
+    for rule in rules.iter().flatten() {
+        let index = rule.rule_index;
+        if atn_preferred_rule_calls
+            .get(index)
+            .copied()
+            .unwrap_or_default()
+        {
+            writeln!(
+                out,
+                "            {index} if self.generated_only() => Some(self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback)),"
+            )
+            .expect("writing to a string cannot fail");
+        } else {
+            writeln!(
+                out,
+                "            {index} => Some(self.parse_generated_rule_{index}_dispatch(precedence, allow_fallback)),"
+            )
+            .expect("writing to a string cannot fail");
+        }
+    }
+    writeln!(out, "            _ => None,").expect("writing to a string cannot fail");
+    writeln!(out, "        }}").expect("writing to a string cannot fail");
+    writeln!(out, "    }}").expect("writing to a string cannot fail");
+    let step_render_context = GeneratedStepRenderContext {
+        inline_action_statements,
+        init_entry_action_statements,
+        return_action_statements,
+        track_alt_numbers,
+        direct_generated_rule_calls,
+        atn_preferred_rule_calls: &atn_preferred_rule_calls,
+    };
+    for rule in rules.iter().flatten() {
+        let index = rule.rule_index;
+        writeln!(
+            out,
+            "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}_dispatch(&mut self, precedence: i32, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {{"
+        )
+        .expect("writing to a string cannot fail");
+        if rule.left_recursive {
+            writeln!(
+                out,
+                "        self.parse_generated_rule_{index}_precedence(precedence, allow_fallback)"
+            )
+            .expect("writing to a string cannot fail");
+        } else {
+            writeln!(out, "        let _ = precedence;").expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "        self.parse_generated_rule_{index}(precedence, allow_fallback)"
+            )
+            .expect("writing to a string cannot fail");
+        }
+        writeln!(out, "    }}").expect("writing to a string cannot fail");
+        render_generated_rule_method(&mut out, rule, init_action_statements, step_render_context);
+    }
+    out
+}
+
+fn render_generated_rule_method(
+    out: &mut String,
+    rule: &GeneratedParserRule,
+    init_action_statements: &BTreeMap<usize, String>,
+    step_render_context: GeneratedStepRenderContext<'_>,
+) {
+    if rule.left_recursive {
+        render_generated_left_recursive_rule_method(
+            out,
+            rule,
+            init_action_statements,
+            step_render_context,
+        );
+        return;
+    }
+    let index = rule.rule_index;
+    let entry_state = rule.entry_state;
+    writeln!(
+        out,
+        "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}(&mut self, __precedence: i32, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "        let _ = __precedence;").expect("writing to a string cannot fail");
+    writeln!(out, "        let _ = allow_fallback;").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "        let __generated_action_marker = self.generated_actions.len();"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "        let __generated_member_checkpoint = self.base.int_members_checkpoint();"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "        let __generated_diagnostic_marker = self.base.generated_diagnostics_checkpoint();"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "        let mut __ctx = self.base.enter_rule({entry_state}isize, {index});"
+    )
+    .expect("writing to a string cannot fail");
+    // Capture the rule start AFTER `enter_rule`, which advances the cursor past any
+    // leading hidden-channel tokens to the first visible token. Capturing before
+    // would make `$start`/`$text` in generated actions include a leading hidden
+    // prefix (e.g. whitespace), diverging from ANTLR and the rule context start.
+    writeln!(
+        out,
+        "        let __rule_start = antlr4_runtime::IntStream::index(self.base.input());"
+    )
+    .expect("writing to a string cannot fail");
+    // Member-setting `@init` runs on rule entry (before the body) so same-rule
+    // predicates and actions observe the state it sets.
+    render_generated_init_action_entry(
+        out,
+        index,
+        step_render_context.init_entry_action_statements,
+        2,
+    );
+    // Queue the `@init` action event before the body steps so the buffered replay
+    // (`run_generated_action`) runs it ahead of body actions, matching ANTLR's
+    // "init before body" order. It sits after `__generated_action_marker`, so a
+    // fatal-sync abort that truncates back to the marker discards it too.
+    render_generated_init_action(out, index, entry_state, init_action_statements, 2);
+    writeln!(out, "        let mut __consumed_eof = false;")
+        .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "        let mut __sync_error: Option<antlr4_runtime::AntlrError> = None;"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "        let __result = (|| -> Result<(), antlr4_runtime::AntlrError> {{"
+    )
+    .expect("writing to a string cannot fail");
+    render_generated_steps(out, &rule.steps, 3, step_render_context);
+    writeln!(out, "            Ok(())").expect("writing to a string cannot fail");
+    writeln!(out, "        }})();").expect("writing to a string cannot fail");
+    writeln!(out, "        match __result {{").expect("writing to a string cannot fail");
+    writeln!(out, "            Ok(()) => {{").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                let __tree = self.base.finish_rule(__ctx, __consumed_eof);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "                Ok(__tree)").expect("writing to a string cannot fail");
+    writeln!(out, "            }}").expect("writing to a string cannot fail");
+    writeln!(out, "            Err(__error) => {{").expect("writing to a string cannot fail");
+    // A rule's own `sync_decision` failure (`__sync_error`) is fatal ONLY at the
+    // top-level public entry (`allow_fallback`). When this rule is a nested child
+    // (`!allow_fallback`), ANTLR recovers the mismatch INSIDE the child and returns
+    // a partial subtree to the parent — it never propagates the sync failure up. So
+    // for a nested child, recover locally like any other body error (a `Fatal`
+    // escaping here would make the parent recover on ITS context, dropping the
+    // child subtree). Only the true top-level keeps the `Fatal` abort (preserving
+    // antlr#6 `InvalidEmptyInput`-style start-rule errors).
+    writeln!(
+        out,
+        "                if let Some(__error) = __sync_error {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "                    if allow_fallback {{").expect("writing to a string cannot fail");
+    writeln!(out, "                        self.base.exit_rule();")
+        .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                        self.generated_actions.truncate(__generated_action_marker);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                        self.base.restore_int_members(__generated_member_checkpoint);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                        return Err(GeneratedRuleError::Fatal(__error));"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "                    }}").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                    self.base.recover_generated_rule(&mut __ctx, atn(), __error);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                    let __tree = self.base.finish_rule(__ctx, __consumed_eof);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "                    return Ok(__tree);").expect("writing to a string cannot fail");
+    writeln!(out, "                }}").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                self.base.recover_generated_rule(&mut __ctx, atn(), __error);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                let __tree = self.base.finish_rule(__ctx, __consumed_eof);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "                Ok(__tree)").expect("writing to a string cannot fail");
+    writeln!(out, "            }}").expect("writing to a string cannot fail");
+    writeln!(out, "        }}").expect("writing to a string cannot fail");
+    writeln!(out, "    }}").expect("writing to a string cannot fail");
+}
+
+fn render_generated_left_recursive_rule_method(
+    out: &mut String,
+    rule: &GeneratedParserRule,
+    init_action_statements: &BTreeMap<usize, String>,
+    step_render_context: GeneratedStepRenderContext<'_>,
+) {
+    let index = rule.rule_index;
+    let entry_state = rule.entry_state;
+    writeln!(
+        out,
+        "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}(&mut self, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "        self.parse_generated_rule_{index}_precedence(0, allow_fallback)"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "    }}").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "\n    #[allow(dead_code)]\n    fn parse_generated_rule_{index}_precedence(&mut self, __precedence: i32, allow_fallback: bool) -> Result<antlr4_runtime::ParseTree, GeneratedRuleError> {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "        let _ = allow_fallback;").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "        let __generated_action_marker = self.generated_actions.len();"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "        let __generated_member_checkpoint = self.base.int_members_checkpoint();"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "        let __generated_diagnostic_marker = self.base.generated_diagnostics_checkpoint();"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "        let mut __ctx = self.base.enter_recursion_rule({entry_state}isize, {index}, __precedence);"
+    )
+    .expect("writing to a string cannot fail");
+    // Capture the rule start AFTER `enter_recursion_rule`, which (via `enter_rule`)
+    // advances the cursor past any leading hidden-channel tokens to the first
+    // visible token. Capturing before would make `$start`/`$text` in generated
+    // actions include a leading hidden prefix, diverging from ANTLR.
+    writeln!(
+        out,
+        "        let __rule_start = antlr4_runtime::IntStream::index(self.base.input());"
+    )
+    .expect("writing to a string cannot fail");
+    // Member-setting `@init` runs on rule entry (before the body) so same-rule
+    // predicates and actions observe the state it sets.
+    render_generated_init_action_entry(
+        out,
+        index,
+        step_render_context.init_entry_action_statements,
+        2,
+    );
+    // Queue the `@init` action event before the body steps so the buffered replay
+    // (`run_generated_action`) runs it ahead of body actions, matching ANTLR's
+    // "init before body" order. It sits after `__generated_action_marker`, so a
+    // fatal-sync abort that truncates back to the marker discards it too.
+    render_generated_init_action(out, index, entry_state, init_action_statements, 2);
+    writeln!(out, "        let mut __consumed_eof = false;")
+        .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "        let mut __sync_error: Option<antlr4_runtime::AntlrError> = None;"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "        let __result = (|| -> Result<(), antlr4_runtime::AntlrError> {{"
+    )
+    .expect("writing to a string cannot fail");
+    render_generated_steps(out, &rule.steps, 3, step_render_context);
+    writeln!(out, "            Ok(())").expect("writing to a string cannot fail");
+    writeln!(out, "        }})();").expect("writing to a string cannot fail");
+    writeln!(out, "        match __result {{").expect("writing to a string cannot fail");
+    writeln!(out, "            Ok(()) => {{").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                let __tree = self.base.finish_recursion_rule(__ctx, __consumed_eof);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "                Ok(__tree)").expect("writing to a string cannot fail");
+    writeln!(out, "            }}").expect("writing to a string cannot fail");
+    writeln!(out, "            Err(__error) => {{").expect("writing to a string cannot fail");
+    // Same as the non-left-recursive case: a nested child (`!allow_fallback`)
+    // recovers its own sync failure internally and returns a partial subtree; only
+    // the top-level entry propagates `Fatal`. Use `finish_recursion_rule` (which
+    // unrolls the recursion context) in the recover branch — do NOT also call
+    // `unroll_recursion_context` (that would double-unroll).
+    writeln!(
+        out,
+        "                if let Some(__error) = __sync_error {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "                    if allow_fallback {{").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                        self.base.unroll_recursion_context();"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                        self.generated_actions.truncate(__generated_action_marker);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                        self.base.restore_int_members(__generated_member_checkpoint);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                        return Err(GeneratedRuleError::Fatal(__error));"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "                    }}").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                    self.base.recover_generated_rule(&mut __ctx, atn(), __error);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                    let __tree = self.base.finish_recursion_rule(__ctx, __consumed_eof);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "                    return Ok(__tree);").expect("writing to a string cannot fail");
+    writeln!(out, "                }}").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                self.base.recover_generated_rule(&mut __ctx, atn(), __error);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                let __tree = self.base.finish_recursion_rule(__ctx, __consumed_eof);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "                Ok(__tree)").expect("writing to a string cannot fail");
+    writeln!(out, "            }}").expect("writing to a string cannot fail");
+    writeln!(out, "        }}").expect("writing to a string cannot fail");
+    writeln!(out, "    }}").expect("writing to a string cannot fail");
+}
+
+/// Emits a member-setting `@init` action so it runs on rule ENTRY, before the
+/// body. ANTLR runs `@init` on entry and generated body predicates/actions read
+/// live member state (`parser_semantic_predicate_matches_with_context_and_local`
+/// clones `int_members`), so a member write must take effect here rather than
+/// only on the exit-time replay. `init_entry_action_statements` is pre-filtered
+/// to member-only actions (see `init_entry_action_statements`), so side-effecting
+/// `@init` actions (printing/diagnostics) are NOT duplicated here — they stay on
+/// the buffered replay path whose ordering matches ANTLR. The `int_members`
+/// checkpoint taken before the body rolls these writes back if the rule fails.
+fn render_generated_init_action_entry(
+    out: &mut String,
+    rule_index: usize,
+    init_entry_action_statements: &BTreeMap<usize, String>,
+    indent: usize,
+) {
+    let Some(statement) = init_entry_action_statements.get(&rule_index) else {
+        return;
+    };
+    if statement.is_empty() {
+        return;
+    }
+    let pad = "    ".repeat(indent);
+    writeln!(out, "{pad}{statement}").expect("writing to a string cannot fail");
+}
+
+fn render_generated_init_action(
+    out: &mut String,
+    rule_index: usize,
+    entry_state: usize,
+    init_action_statements: &BTreeMap<usize, String>,
+    indent: usize,
+) {
+    let Some(statement) = init_action_statements.get(&rule_index) else {
+        return;
+    };
+    if statement.is_empty() {
+        return;
+    }
+    let pad = "    ".repeat(indent);
+    let _ = statement;
+    // An `@init` action belongs to this rule; it replays against the rule's own
+    // tree, so it is tagged `tree: None` (no child re-tagging applies).
+    writeln!(
+        out,
+        "{pad}self.generated_actions.push(GeneratedAction::Parser {{ action: antlr4_runtime::ParserAction::new_rule_init({rule_index}, __rule_start, Some({entry_state})), tree: None }});"
+    )
+    .expect("writing to a string cannot fail");
+}
+
+fn render_generated_steps(
+    out: &mut String,
+    steps: &[GeneratedParserStep],
+    indent: usize,
+    render_context: GeneratedStepRenderContext<'_>,
+) {
+    for step in steps {
+        render_generated_step(out, step, indent, render_context);
+    }
+}
+
+fn render_generated_step(
+    out: &mut String,
+    step: &GeneratedParserStep,
+    indent: usize,
+    render_context: GeneratedStepRenderContext<'_>,
+) {
+    let pad = "    ".repeat(indent);
+    match step {
+        GeneratedParserStep::MatchToken {
+            token_type,
+            follow_state,
+        } => {
+            writeln!(
+                out,
+                "{pad}let __match = self.base.match_token_recovering({token_type}, {follow_state}, atn())?;"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(out, "{pad}__consumed_eof |= __match.consumed_eof();")
+                .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}for __child in __match.into_children() {{ self.base.add_parse_child(&mut __ctx, __child); }}"
+            )
+            .expect("writing to a string cannot fail");
+        }
+        GeneratedParserStep::MatchSet {
+            intervals,
+            follow_state,
+        } => {
+            let intervals = render_i32_ranges(intervals);
+            writeln!(
+                out,
+                "{pad}let __match = self.base.match_set_recovering(&{intervals}, {follow_state}, atn())?;"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(out, "{pad}__consumed_eof |= __match.consumed_eof();")
+                .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}for __child in __match.into_children() {{ self.base.add_parse_child(&mut __ctx, __child); }}"
+            )
+            .expect("writing to a string cannot fail");
+        }
+        GeneratedParserStep::MatchNotSet {
+            intervals,
+            follow_state,
+        } => {
+            let intervals = render_i32_ranges(intervals);
+            writeln!(
+                out,
+                "{pad}let __match = self.base.match_not_set_recovering(&{intervals}, 1, atn().max_token_type(), {follow_state}, atn())?;"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(out, "{pad}__consumed_eof |= __match.consumed_eof();")
+                .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}for __child in __match.into_children() {{ self.base.add_parse_child(&mut __ctx, __child); }}"
+            )
+            .expect("writing to a string cannot fail");
+        }
+        GeneratedParserStep::MatchWildcard { follow_state } => {
+            // A wildcard matches any single token. Model it as a not-set with an
+            // empty exclusion set (every token in 1..=max), reusing the recovering
+            // match so a wildcard at EOF performs ANTLR's single-token insertion
+            // (`<missing ...>` error node) and lets the rule continue, instead of
+            // aborting the remaining steps.
+            writeln!(
+                out,
+                "{pad}let __match = self.base.match_not_set_recovering(&[], 1, atn().max_token_type(), {follow_state}, atn())?;"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(out, "{pad}__consumed_eof |= __match.consumed_eof();")
+                .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}for __child in __match.into_children() {{ self.base.add_parse_child(&mut __ctx, __child); }}"
+            )
+            .expect("writing to a string cannot fail");
+        }
+        GeneratedParserStep::Precedence(precedence) => {
+            writeln!(out, "{pad}if !self.base.precpred({precedence}) {{")
+                .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}    return Err(self.base.failed_predicate_error(\"precpred(_ctx, {precedence})\"));"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
+        }
+        GeneratedParserStep::Predicate {
+            rule_index,
+            pred_index,
+        } => {
+            writeln!(
+                out,
+                "{pad}if !self.base.parser_semantic_predicate_matches_with_context_and_local(PARSER_PREDICATES, {rule_index}, {pred_index}, &__ctx, __precedence) {{"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}    if let Some(__message) = self.base.parser_semantic_predicate_failure_message({rule_index}, {pred_index}, PARSER_PREDICATES) {{"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}        return Err(self.base.failed_predicate_option_error({rule_index}, __message));"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}    return Err(self.base.failed_predicate_error(\"semantic predicate\"));"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
+        }
+        GeneratedParserStep::CallRule {
+            source_state,
+            rule_index,
+            precedence,
+        } => {
+            writeln!(
+                out,
+                "{pad}let __invoking_marker = self.base.push_invoking_state({source_state}isize);"
+            )
+            .expect("writing to a string cannot fail");
+            let precedence = match precedence {
+                GeneratedRuleCallPrecedence::Literal(value) => value.to_string(),
+                GeneratedRuleCallPrecedence::InheritLocal => "__precedence".to_owned(),
+            };
+            // `direct_generated_rule_calls[N]` is false exactly when generated rule
+            // N carries an `@after` action; such children must go through
+            // `parse_rule_precedence_from_generated` (the dispatch wrapper) so their
+            // `@after` is run/queued.
+            let child_has_after = !render_context
+                .direct_generated_rule_calls
+                .get(*rule_index)
+                .copied()
+                .unwrap_or_default();
+            let from_generated_call =
+                format!("self.parse_rule_precedence_from_generated({rule_index}, {precedence})");
+            let generated_child_call = if child_has_after {
+                from_generated_call.clone()
+            } else {
+                format!(
+                    "self.parse_generated_rule_{rule_index}_dispatch({precedence}, false).map_err(GeneratedRuleError::into_error)"
+                )
+            };
+            let child_call = if render_context
+                .atn_preferred_rule_calls
+                .get(*rule_index)
+                .copied()
+                .unwrap_or_default()
+            {
+                // ATN-preferred child: route through `parse_rule_precedence_from_generated`.
+                // The rule's `parse_generated_rule` dispatch arm is guarded by
+                // `generated_only()`, so in normal mode the generated probe returns
+                // `None` and the wrapper parses the child on the INTERPRETED path
+                // (preserving the ATN-preferred optimization) — but, because it is
+                // called with allow_generated_fallback=false, the wrapper BUFFERS the
+                // child's body actions and `@after` in position (matching ANTLR's
+                // action ordering) instead of running them immediately. Applies
+                // whether or not the child has `@after`.
+                from_generated_call
+            } else {
+                generated_child_call
+            };
+            // Snapshot the buffer length and member state before the child so we
+            // can tell, after it returns, whether it ran on the interpreter path.
+            writeln!(
+                out,
+                "{pad}let __child_action_marker = self.generated_actions.len();"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}let __child_member_checkpoint = self.base.int_members_checkpoint();"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(out, "{pad}let __child = {child_call};")
+                .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}self.base.discard_invoking_state(__invoking_marker);"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(out, "{pad}let __child = __child?;").expect("writing to a string cannot fail");
+            // Tag the child's buffered `$ctx`-rooted actions with the child's tree
+            // so they render the child subtree (not the parent's) on the top-level
+            // replay. Only untagged (`None`) actions at a ctx-rooted source-state are
+            // tagged: the `is_none()` guard preserves a grandchild's deeper tag, and
+            // tree-search actions (e.g. `RuleInvocationStack`) are excluded so they
+            // keep resolving from the outer tree. The deep `__child.clone()` runs
+            // only when such an action exists, so the common case pays nothing.
+            writeln!(
+                out,
+                "{pad}for __buffered in &mut self.generated_actions[__child_action_marker..] {{"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}    if let GeneratedAction::Parser {{ action, tree }} = __buffered {{"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}        if tree.is_none() && CTX_ROOTED_ACTION_STATES.contains(&action.source_state()) {{"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(out, "{pad}            *tree = Some(__child.clone());")
+                .expect("writing to a string cannot fail");
+            writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
+            writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
+            writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
+            // An interpreted child mutates integer members immediately instead of
+            // buffering actions. If the child pushed nothing to the buffer but
+            // changed members, capture a snapshot so the top-level replay (which
+            // restores members to the rule-entry checkpoint) re-applies them in
+            // position. Generated children buffer their own actions, so they grow
+            // the buffer and need no snapshot here.
+            writeln!(
+                out,
+                "{pad}if self.generated_actions.len() == __child_action_marker {{"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}    let __child_members = self.base.int_members_checkpoint();"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(out, "{pad}    if __child_members != __child_member_checkpoint {{")
+                .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}        self.generated_actions.push(GeneratedAction::MemberSnapshot(__child_members));"
+            )
+            .expect("writing to a string cannot fail");
+            writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
+            writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
+            writeln!(out, "{pad}self.base.add_parse_child(&mut __ctx, __child);")
+                .expect("writing to a string cannot fail");
+        }
+        GeneratedParserStep::Action {
+            source_state,
+            rule_index,
+        } => {
+            writeln!(
+                out,
+                "{pad}let action = self.base.parser_action_at_current({source_state}, {rule_index}, __rule_start, __consumed_eof);"
+            )
+            .expect("writing to a string cannot fail");
+            if let Some(statement) = render_context.inline_action_statements.get(source_state) {
+                if !statement.is_empty() {
+                    writeln!(out, "{pad}{statement}").expect("writing to a string cannot fail");
+                }
+            }
+            render_generated_return_actions(
+                out,
+                *source_state,
+                render_context.return_action_statements,
+                indent,
+            );
+            // A rule's own action is tagged `tree: None` (replays against this
+            // rule's tree at the top-level replay). A nested child's `$ctx`-rooted
+            // action is re-tagged with the child tree at the CallRule site.
+            writeln!(
+                out,
+                "{pad}self.generated_actions.push(GeneratedAction::Parser {{ action, tree: None }});"
+            )
+            .expect("writing to a string cannot fail");
+        }
+        GeneratedParserStep::Decision {
+            state,
+            decision,
+            track_alt_number,
+            allow_semantic_context,
+            force_context,
+            fast_path,
+            alts,
+        } => {
+            render_generated_decision(
+                out,
+                DecisionRender {
+                    state: *state,
+                    decision: *decision,
+                    track_alt_number: *track_alt_number,
+                    allow_semantic_context: *allow_semantic_context,
+                    force_context: *force_context,
+                    fast_path: fast_path.as_ref(),
+                    alts,
+                },
+                indent,
+                render_context,
+            );
+        }
+        GeneratedParserStep::StarLoop {
+            state,
+            decision,
+            enter_alt,
+            exit_alt,
+            track_alt_number,
+            allow_semantic_context,
+            force_context,
+            plus_loop,
+            fast_path,
+            body,
+        } => {
+            render_generated_star_loop(
+                out,
+                StarLoopRender {
+                    state: *state,
+                    decision: *decision,
+                    alts: (*enter_alt, *exit_alt),
+                    track_alt_number: *track_alt_number,
+                    allow_semantic_context: *allow_semantic_context,
+                    force_context: *force_context,
+                    plus_loop: *plus_loop,
+                    fast_path: fast_path.as_ref(),
+                    body,
+                },
+                indent,
+                render_context,
+            );
+        }
+        GeneratedParserStep::LeftRecursiveLoop {
+            state,
+            decision,
+            enter_alt,
+            exit_alt,
+            rule_index,
+            entry_state,
+            body,
+            ..
+        } => {
+            render_generated_left_recursive_loop(
+                out,
+                LeftRecursiveLoopRender {
+                    state: *state,
+                    decision: *decision,
+                    alts: (*enter_alt, *exit_alt),
+                    rule: (*rule_index, *entry_state),
+                    body,
+                },
+                indent,
+                render_context,
+            );
+        }
+    }
+}
+
+fn render_generated_return_actions(
+    out: &mut String,
+    source_state: usize,
+    return_action_statements: &BTreeMap<usize, Vec<(String, i64)>>,
+    indent: usize,
+) {
+    let Some(actions) = return_action_statements.get(&source_state) else {
+        return;
+    };
+    let pad = "    ".repeat(indent);
+    for (name, value) in actions {
+        writeln!(
+            out,
+            "{pad}__ctx.set_int_return(\"{}\", {value});",
+            rust_string(name)
+        )
+        .expect("writing to a string cannot fail");
+    }
+}
+
+fn render_generated_decision(
+    out: &mut String,
+    decision_info: DecisionRender<'_>,
+    indent: usize,
+    render_context: GeneratedStepRenderContext<'_>,
+) {
+    let DecisionRender {
+        state,
+        decision,
+        track_alt_number,
+        allow_semantic_context,
+        force_context,
+        fast_path,
+        alts,
+    } = decision_info;
+    let pad = "    ".repeat(indent);
+    if let Some(fast_path) = fast_path.filter(|_| !allow_semantic_context && !force_context) {
+        writeln!(
+            out,
+            "{pad}let mut __decision_start = antlr4_runtime::IntStream::index(self.base.input());"
+        )
+        .expect("writing to a string cannot fail");
+        writeln!(out, "{pad}let __prediction = match self.base.la(1) {{")
+            .expect("writing to a string cannot fail");
+        render_generated_fast_prediction_arms(out, &pad, fast_path);
+        writeln!(out, "{pad}    _ => {{").expect("writing to a string cannot fail");
+        // A non-loop block/optional decision is never a loop-back: ANTLR syncs it
+        // like BLOCK_START (single-token deletion), so pass `false`.
+        render_generated_sync_decision(out, &format!("{pad}        "), state, "false");
+        writeln!(
+            out,
+            "{pad}        __decision_start = antlr4_runtime::IntStream::index(self.base.input());"
+        )
+        .expect("writing to a string cannot fail");
+        render_generated_ll1_then_adaptive_prediction(
+            out,
+            &format!("{pad}        "),
+            state,
+            decision,
+            false,
+        );
+        writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
+        writeln!(out, "{pad}}};").expect("writing to a string cannot fail");
+    } else {
+        if !allow_semantic_context {
+            render_generated_sync_decision(out, &pad, state, "false");
+        }
+        writeln!(
+            out,
+            "{pad}let __decision_start = antlr4_runtime::IntStream::index(self.base.input());"
+        )
+        .expect("writing to a string cannot fail");
+        if allow_semantic_context || force_context {
+            render_generated_adaptive_prediction(out, &pad, decision);
+        } else {
+            render_generated_ll1_then_adaptive_prediction(out, &pad, state, decision, true);
+        }
+    }
+    if allow_semantic_context {
+        render_generated_semantic_prediction_filter(out, &pad, alts);
+        render_generated_decision_diagnostic_report(out, &pad, state, alts);
+    } else {
+        writeln!(
+            out,
+            "{pad}self.base.record_generated_prediction_diagnostic(atn(), {state}, &__prediction);"
+        )
+        .expect("writing to a string cannot fail");
+    }
+    writeln!(out, "{pad}match __prediction.alt {{").expect("writing to a string cannot fail");
+    for (index, steps) in alts.iter().enumerate() {
+        let alt = index + 1;
+        writeln!(out, "{pad}    {alt} => {{").expect("writing to a string cannot fail");
+        render_generated_alt_number_assignment(
+            out,
+            &format!("{pad}        "),
+            alt,
+            render_context.track_alt_numbers && track_alt_number,
+        );
+        render_generated_steps(out, steps, indent + 2, render_context);
+        writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
+    }
+    writeln!(
+        out,
+        "{pad}    _ => return Err(self.base.no_viable_alternative_error(__decision_start)),"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
+}
+
+fn render_generated_fast_prediction_arms(
+    out: &mut String,
+    pad: &str,
+    fast_path: &GeneratedDecisionFastPath,
+) {
+    for arm in &fast_path.arms {
+        let patterns = render_i32_match_patterns(&arm.intervals);
+        let alt = arm.alt;
+        writeln!(
+            out,
+            "{pad}    {patterns} => antlr4_runtime::ParserAtnPrediction {{ alt: {alt}, requires_full_context: false, has_semantic_context: false, diagnostic: None }},"
+        )
+        .expect("writing to a string cannot fail");
+    }
+}
+
+fn render_generated_ll1_then_adaptive_prediction(
+    out: &mut String,
+    pad: &str,
+    state: usize,
+    decision: usize,
+    assign: bool,
+) {
+    let prefix = if assign { "let __prediction = " } else { "" };
+    let suffix = if assign { ";" } else { "" };
+    writeln!(
+        out,
+        "{pad}{prefix}if let Some(__prediction) = self.base.ll1_decision_prediction(atn(), {state}) {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    __prediction").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}}} else {{").expect("writing to a string cannot fail");
+    render_generated_sll_then_context_prediction_with_indent(out, pad, decision, 1);
+    writeln!(out, "{pad}}}{suffix}").expect("writing to a string cannot fail");
+}
+
+fn render_generated_decision_diagnostic_report(
+    out: &mut String,
+    pad: &str,
+    state: usize,
+    alts: &[Vec<GeneratedParserStep>],
+) {
+    let alt_conditions = alts
+        .iter()
+        .map(|steps| semantic_alt_candidate_condition_with_la(steps, "__diagnostic_la"))
+        .collect::<Vec<_>>();
+    if alt_conditions
+        .iter()
+        .any(|condition| condition == "true" || condition == "false")
+    {
+        return;
+    }
+    writeln!(out, "{pad}if self.base.report_diagnostic_errors() {{")
+        .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    let __diagnostic_la = self.base.la(1);")
+        .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    let mut __diagnostic_alts = Vec::new();")
+        .expect("writing to a string cannot fail");
+    for (index, condition) in alt_conditions.iter().enumerate() {
+        let alt = index + 1;
+        writeln!(out, "{pad}    if {condition} {{").expect("writing to a string cannot fail");
+        writeln!(out, "{pad}        __diagnostic_alts.push({alt});")
+            .expect("writing to a string cannot fail");
+        writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
+    }
+    writeln!(
+        out,
+        "{pad}    self.base.record_generated_ambiguity_diagnostic(atn(), {state}, __decision_start, __decision_start, &__diagnostic_alts);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
+}
+
+fn render_generated_semantic_prediction_filter(
+    out: &mut String,
+    pad: &str,
+    alts: &[Vec<GeneratedParserStep>],
+) {
+    let alt_has_predicates = alts
+        .iter()
+        .map(|steps| !leading_predicates(steps).is_empty())
+        .collect::<Vec<_>>();
+    if !alt_has_predicates
+        .iter()
+        .any(|has_predicate| *has_predicate)
+    {
+        return;
+    }
+    let alt_conditions = alts
+        .iter()
+        .map(|steps| semantic_alt_candidate_condition(steps))
+        .collect::<Vec<_>>();
+    writeln!(
+        out,
+        "{pad}let __prediction = if __prediction.has_semantic_context {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    let __semantic_la = self.base.la(1);")
+        .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}    let __semantic_alt = match __prediction.alt {{"
+    )
+    .expect("writing to a string cannot fail");
+    for (index, condition) in alt_conditions.iter().enumerate() {
+        if !alt_has_predicates[index] {
+            continue;
+        }
+        let alt = index + 1;
+        writeln!(out, "{pad}        {alt} if {condition} => Some({alt}),")
+            .expect("writing to a string cannot fail");
+        writeln!(out, "{pad}        {alt} => {{").expect("writing to a string cannot fail");
+        render_semantic_alt_search(out, pad, &alt_conditions);
+        writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
+    }
+    writeln!(out, "{pad}        _ => Some(__prediction.alt),")
+        .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    }};").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    match __semantic_alt {{").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}        Some(__alt) => antlr4_runtime::ParserAtnPrediction {{ alt: __alt, ..__prediction }},"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}        None => {{").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}            let __error = self.base.no_viable_alternative_error(__decision_start);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}            return Err(__error);")
+        .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}}} else {{").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    __prediction").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}}};").expect("writing to a string cannot fail");
+}
+
+fn render_semantic_alt_search(out: &mut String, pad: &str, alt_conditions: &[String]) {
+    for (index, condition) in alt_conditions.iter().enumerate() {
+        let alt = index + 1;
+        writeln!(out, "{pad}            if {condition} {{")
+            .expect("writing to a string cannot fail");
+        writeln!(out, "{pad}                Some({alt})").expect("writing to a string cannot fail");
+        writeln!(out, "{pad}            }} else").expect("writing to a string cannot fail");
+    }
+    writeln!(out, "{pad}            {{ None }}").expect("writing to a string cannot fail");
+}
+
+fn semantic_alt_candidate_condition(steps: &[GeneratedParserStep]) -> String {
+    semantic_alt_candidate_condition_with_la(steps, "__semantic_la")
+}
+
+fn semantic_alt_candidate_condition_with_la(
+    steps: &[GeneratedParserStep],
+    la_symbol: &str,
+) -> String {
+    let predicates = leading_predicates(steps);
+    let mut conditions = predicates
+        .into_iter()
+        .map(|(rule_index, pred_index)| {
+            format!(
+                "self.base.parser_semantic_predicate_matches_with_context_and_local(PARSER_PREDICATES, {rule_index}, {pred_index}, &__ctx, __precedence)"
+            )
+        })
+        .collect::<Vec<_>>();
+    if let Some(lookahead) = leading_lookahead_condition(steps, la_symbol) {
+        conditions.push(lookahead);
+    }
+    if conditions.is_empty() {
+        "true".to_owned()
+    } else {
+        conditions.join(" && ")
+    }
+}
+
+fn leading_predicates(steps: &[GeneratedParserStep]) -> Vec<(usize, usize)> {
+    let mut predicates = Vec::new();
+    for step in steps {
+        match step {
+            GeneratedParserStep::Predicate {
+                rule_index,
+                pred_index,
+            } => predicates.push((*rule_index, *pred_index)),
+            GeneratedParserStep::Action { .. } | GeneratedParserStep::Precedence(_) => {}
+            GeneratedParserStep::MatchToken { .. }
+            | GeneratedParserStep::MatchSet { .. }
+            | GeneratedParserStep::MatchNotSet { .. }
+            | GeneratedParserStep::MatchWildcard { .. }
+            | GeneratedParserStep::CallRule { .. }
+            | GeneratedParserStep::Decision { .. }
+            | GeneratedParserStep::StarLoop { .. }
+            | GeneratedParserStep::LeftRecursiveLoop { .. } => break,
+        }
+    }
+    predicates
+}
+
+fn leading_lookahead_condition(steps: &[GeneratedParserStep], la_symbol: &str) -> Option<String> {
+    for step in steps {
+        match step {
+            GeneratedParserStep::Predicate { .. }
+            | GeneratedParserStep::Action { .. }
+            | GeneratedParserStep::Precedence(_) => {}
+            GeneratedParserStep::MatchToken { token_type, .. } => {
+                return Some(format!("{la_symbol} == {token_type}"));
+            }
+            GeneratedParserStep::MatchSet { intervals, .. } => {
+                return Some(intervals_condition(la_symbol, intervals));
+            }
+            GeneratedParserStep::MatchNotSet { intervals, .. } => {
+                let excluded = intervals_condition(la_symbol, intervals);
+                return Some(format!(
+                    "{la_symbol} != antlr4_runtime::TOKEN_EOF && !({excluded})"
+                ));
+            }
+            GeneratedParserStep::MatchWildcard { .. } => {
+                return Some(format!("{la_symbol} != antlr4_runtime::TOKEN_EOF"));
+            }
+            GeneratedParserStep::CallRule { .. }
+            | GeneratedParserStep::Decision { .. }
+            | GeneratedParserStep::StarLoop { .. }
+            | GeneratedParserStep::LeftRecursiveLoop { .. } => return None,
+        }
+    }
+    None
+}
+
+fn intervals_condition(symbol: &str, intervals: &[(i32, i32)]) -> String {
+    if intervals.is_empty() {
+        return "false".to_owned();
+    }
+    intervals
+        .iter()
+        .map(|(start, stop)| {
+            if start == stop {
+                format!("{symbol} == {start}")
+            } else {
+                format!("({start}..={stop}).contains(&{symbol})")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" || ")
+}
+
+fn render_generated_alt_number_assignment(out: &mut String, pad: &str, alt: usize, enabled: bool) {
+    if !enabled {
+        return;
+    }
+    writeln!(out, "{pad}if __ctx.alt_number() == 0 {{").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    __ctx.set_alt_number({alt});")
+        .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
+}
+
+fn render_generated_sync_decision(out: &mut String, pad: &str, state: usize, loop_back_expr: &str) {
+    writeln!(
+        out,
+        "{pad}match self.base.sync_decision(atn(), {state}, !__ctx.has_matched_child(), {loop_back_expr}) {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    Ok(__sync_children) => {{").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}        for __child in __sync_children {{ self.base.add_parse_child(&mut __ctx, __child); }}"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    Err(__error) => {{").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}        __sync_error = Some(__error.clone());")
+        .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}        return Err(__error);").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
+}
+
+fn render_generated_adaptive_prediction(out: &mut String, pad: &str, decision: usize) {
+    writeln!(out, "{pad}let __prediction = {{").expect("writing to a string cannot fail");
+    render_generated_adaptive_prediction_with_indent(out, pad, decision, 1);
+    writeln!(out, "{pad}}};").expect("writing to a string cannot fail");
+}
+
+fn render_generated_adaptive_prediction_with_indent(
+    out: &mut String,
+    pad: &str,
+    decision: usize,
+    extra_indent: usize,
+) {
+    let nested = format!("{pad}{}", "    ".repeat(extra_indent));
+    writeln!(
+        out,
+        "{nested}let __prediction_context = self.base.prediction_context(atn());"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{nested}let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{nested}__simulator.adaptive_predict_stream_info_with_context({decision}, 0, self.base.input(), &__prediction_context)"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{nested}    .map_err(|__error| match __error {{")
+        .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{nested}        antlr4_runtime::ParserAtnSimulatorError::NoViableAlt {{ index, .. }} => self.base.no_viable_alternative_error_at(__decision_start, index),"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{nested}        _ => self.base.no_viable_alternative_error(__decision_start),"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{nested}    }})?").expect("writing to a string cannot fail");
+}
+
+fn render_generated_sll_then_context_prediction_with_indent(
+    out: &mut String,
+    pad: &str,
+    decision: usize,
+    extra_indent: usize,
+) {
+    let nested = format!("{pad}{}", "    ".repeat(extra_indent));
+    writeln!(out, "{nested}let __prediction = {{").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{nested}    let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));"
+    )
+    .expect("writing to a string cannot fail");
+    // Stage 1 uses the SLL probe: on a full-context-requiring conflict it returns
+    // requires_full_context WITHOUT running the LL loop (the result is discarded
+    // here anyway — only the boolean gates the stage-2 re-run with real context).
+    writeln!(
+        out,
+        "{nested}    __simulator.adaptive_predict_stream_info_sll_probe({decision}, 0, self.base.input())"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{nested}        .map_err(|__error| match __error {{")
+        .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{nested}            antlr4_runtime::ParserAtnSimulatorError::NoViableAlt {{ index, .. }} => self.base.no_viable_alternative_error_at(__decision_start, index),"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{nested}            _ => self.base.no_viable_alternative_error(__decision_start),"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{nested}        }})?").expect("writing to a string cannot fail");
+    writeln!(out, "{nested}}};").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{nested}if __prediction.requires_full_context && self.base.prediction_mode() != antlr4_runtime::PredictionMode::Sll {{"
+    )
+    .expect("writing to a string cannot fail");
+    render_generated_adaptive_prediction_with_indent(out, pad, decision, extra_indent + 1);
+    writeln!(out, "{nested}}} else {{").expect("writing to a string cannot fail");
+    writeln!(out, "{nested}    __prediction").expect("writing to a string cannot fail");
+    writeln!(out, "{nested}}}").expect("writing to a string cannot fail");
+}
+
+fn render_generated_star_loop(
+    out: &mut String,
+    loop_info: StarLoopRender<'_>,
+    indent: usize,
+    render_context: GeneratedStepRenderContext<'_>,
+) {
+    let StarLoopRender {
+        state,
+        decision,
+        alts,
+        track_alt_number,
+        allow_semantic_context,
+        force_context,
+        plus_loop,
+        fast_path,
+        body,
+    } = loop_info;
+    let (enter_alt, exit_alt) = alts;
+    let pad = "    ".repeat(indent);
+    // Per-loop "iteration started" flag, threaded into `sync_decision` so it
+    // recovers like ANTLR: a `*` loop's first sync is at the loop ENTRY
+    // (single-token deletion), every later sync is a loop-BACK (multi-token
+    // `consumeUntil`). A `+` loop's mandatory first element is iteration 1, so it
+    // is already on the loop-back side at its first sync (init `true`).
+    let loop_iter = format!("__loop_iter_{state}");
+    writeln!(out, "{pad}let mut {loop_iter} = {plus_loop};")
+        .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}loop {{").expect("writing to a string cannot fail");
+    let inner_pad = format!("{pad}    ");
+    if let Some(fast_path) = fast_path.filter(|_| !allow_semantic_context && !force_context) {
+        writeln!(
+            out,
+            "{pad}    let mut __decision_start = antlr4_runtime::IntStream::index(self.base.input());"
+        )
+        .expect("writing to a string cannot fail");
+        writeln!(out, "{pad}    let __prediction = match self.base.la(1) {{")
+            .expect("writing to a string cannot fail");
+        render_generated_fast_prediction_arms(out, &inner_pad, fast_path);
+        writeln!(out, "{pad}        _ => {{").expect("writing to a string cannot fail");
+        render_generated_sync_decision(out, &format!("{pad}            "), state, &loop_iter);
+        writeln!(
+            out,
+            "{pad}            __decision_start = antlr4_runtime::IntStream::index(self.base.input());"
+        )
+        .expect("writing to a string cannot fail");
+        render_generated_ll1_then_adaptive_prediction(
+            out,
+            &format!("{pad}            "),
+            state,
+            decision,
+            false,
+        );
+        writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
+        writeln!(out, "{pad}    }};").expect("writing to a string cannot fail");
+    } else {
+        render_generated_sync_decision(out, &inner_pad, state, &loop_iter);
+        writeln!(
+            out,
+            "{pad}    let __decision_start = antlr4_runtime::IntStream::index(self.base.input());"
+        )
+        .expect("writing to a string cannot fail");
+        if allow_semantic_context || force_context {
+            render_generated_adaptive_prediction(out, &inner_pad, decision);
+        } else {
+            render_generated_ll1_then_adaptive_prediction(out, &inner_pad, state, decision, true);
+        }
+    }
+    render_generated_loop_semantic_prediction_filter(
+        out,
+        &format!("{pad}    "),
+        enter_alt,
+        exit_alt,
+        body,
+    );
+    writeln!(
+        out,
+        "{pad}    self.base.record_generated_prediction_diagnostic(atn(), {state}, &__prediction);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    match __prediction.alt {{").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}        {enter_alt} => {{").expect("writing to a string cannot fail");
+    // Once an iteration is taken, every subsequent sync is a loop-back.
+    writeln!(out, "{pad}            {loop_iter} = true;").expect("writing to a string cannot fail");
+    render_generated_alt_number_assignment(
+        out,
+        &format!("{pad}            "),
+        enter_alt,
+        render_context.track_alt_numbers && track_alt_number,
+    );
+    render_generated_steps(out, body, indent + 3, render_context);
+    writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}        {exit_alt} => {{").expect("writing to a string cannot fail");
+    render_generated_alt_number_assignment(
+        out,
+        &format!("{pad}            "),
+        exit_alt,
+        render_context.track_alt_numbers && track_alt_number,
+    );
+    writeln!(out, "{pad}            break;").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}        _ => return Err(self.base.no_viable_alternative_error(__decision_start)),"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
+}
+
+fn render_generated_left_recursive_loop(
+    out: &mut String,
+    loop_info: LeftRecursiveLoopRender<'_>,
+    indent: usize,
+    render_context: GeneratedStepRenderContext<'_>,
+) {
+    let LeftRecursiveLoopRender {
+        state,
+        decision,
+        alts,
+        rule,
+        body,
+    } = loop_info;
+    let (rule_index, entry_state) = rule;
+    let (enter_alt, exit_alt) = alts;
+    let pad = "    ".repeat(indent);
+    writeln!(out, "{pad}loop {{").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}    let __decision_start = antlr4_runtime::IntStream::index(self.base.input());"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}    let __prediction_precedence = if __precedence <= 0 {{ 0 }} else {{ __precedence as usize }};"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    let __prediction = match {{").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}        let __prediction_context = self.base.prediction_context(atn());"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}        __simulator.adaptive_predict_stream_info_with_context({decision}, __prediction_precedence, self.base.input(), &__prediction_context)"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    }} {{").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}        Ok(__prediction) => __prediction,")
+        .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}        Err(antlr4_runtime::ParserAtnSimulatorError::NoViableAlt {{ .. }}) if self.base.left_recursive_loop_enter_matches(atn(), {state}, __precedence) => {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}            antlr4_runtime::ParserAtnPrediction {{ alt: {enter_alt}, requires_full_context: true, has_semantic_context: true, diagnostic: None }}"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}        Err(antlr4_runtime::ParserAtnSimulatorError::NoViableAlt {{ .. }}) => {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}            antlr4_runtime::ParserAtnPrediction {{ alt: {exit_alt}, requires_full_context: true, has_semantic_context: false, diagnostic: None }}"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}        Err(_) => return Err(self.base.no_viable_alternative_error(__decision_start)),"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    }};").expect("writing to a string cannot fail");
+    render_generated_loop_semantic_prediction_filter(
+        out,
+        &format!("{pad}    "),
+        enter_alt,
+        exit_alt,
+        body,
+    );
+    writeln!(
+        out,
+        "{pad}    self.base.record_generated_prediction_diagnostic(atn(), {state}, &__prediction);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    match __prediction.alt {{").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}        {enter_alt} => {{").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}            self.base.push_new_recursion_context_with_previous({entry_state}isize, {rule_index}, &mut __ctx);"
+    )
+    .expect("writing to a string cannot fail");
+    render_generated_steps(out, body, indent + 3, render_context);
+    writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}        {exit_alt} => break,").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}        _ => return Err(self.base.no_viable_alternative_error(__decision_start)),"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
+}
+
+fn render_generated_loop_semantic_prediction_filter(
+    out: &mut String,
+    pad: &str,
+    enter_alt: usize,
+    exit_alt: usize,
+    body: &[GeneratedParserStep],
+) {
+    let Some(condition) = loop_entry_condition(body) else {
+        return;
+    };
+    writeln!(
+        out,
+        "{pad}let __prediction = if __prediction.alt == {enter_alt} {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    let __semantic_la = self.base.la(1);")
+        .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    if {condition} {{").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}        __prediction").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    }} else {{").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}        antlr4_runtime::ParserAtnPrediction {{ alt: {exit_alt}, ..__prediction }}"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}}} else {{").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}    __prediction").expect("writing to a string cannot fail");
+    writeln!(out, "{pad}}};").expect("writing to a string cannot fail");
+}
+
+fn loop_entry_condition(body: &[GeneratedParserStep]) -> Option<String> {
+    let step = body.first()?;
+    match step {
+        GeneratedParserStep::Predicate { .. } | GeneratedParserStep::Precedence(_) => {
+            Some(semantic_alt_candidate_condition(body))
+        }
+        GeneratedParserStep::Decision { alts, .. } => {
+            if !alts.iter().any(|alt| steps_contain_predicate(alt)) {
+                return None;
+            }
+            Some(
+                alts.iter()
+                    .map(|alt| format!("({})", semantic_alt_candidate_condition(alt)))
+                    .collect::<Vec<_>>()
+                    .join(" || "),
+            )
+        }
+        GeneratedParserStep::Action { .. }
+        | GeneratedParserStep::MatchToken { .. }
+        | GeneratedParserStep::MatchSet { .. }
+        | GeneratedParserStep::MatchNotSet { .. }
+        | GeneratedParserStep::MatchWildcard { .. }
+        | GeneratedParserStep::CallRule { .. }
+        | GeneratedParserStep::StarLoop { .. }
+        | GeneratedParserStep::LeftRecursiveLoop { .. } => None,
+    }
+}
+
+/// Renders dispatch for rule-level `@after` actions. Keeping this behind
+/// `parse_rule_precedence` lets generated nested rule calls preserve the same
+/// action behavior as public rule entrypoints.
+fn render_parser_after_action_dispatch(after_actions: &[Vec<ActionTemplate>]) -> String {
+    let active_rules = after_actions
+        .iter()
+        .enumerate()
+        .filter_map(|(index, actions)| (!actions.is_empty()).then_some(index))
+        .collect::<Vec<_>>();
+    let matches_expr = if active_rules.is_empty() {
+        "false".to_owned()
+    } else {
+        format!(
+            "matches!(rule_index, {})",
+            active_rules
+                .iter()
+                .map(usize::to_string)
+                .collect::<Vec<_>>()
+                .join(" | ")
+        )
+    };
+
+    let mut out = String::new();
+    writeln!(
+        out,
+        "    #[allow(dead_code)]\n    fn has_after_actions(rule_index: usize) -> bool {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "        let _ = rule_index;").expect("writing to a string cannot fail");
+    writeln!(out, "        {matches_expr}").expect("writing to a string cannot fail");
+    writeln!(out, "    }}").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "\n    #[allow(dead_code)]\n    fn run_after_actions(&mut self, rule_index: usize, tree: &antlr4_runtime::ParseTree, start_index: usize, stop_index: Option<usize>) {{"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "        let _ = (tree, start_index, stop_index);")
+        .expect("writing to a string cannot fail");
+    writeln!(out, "        match rule_index {{").expect("writing to a string cannot fail");
+    for (index, actions) in after_actions.iter().enumerate() {
+        if actions.is_empty() {
+            continue;
+        }
+        writeln!(out, "            {index} => {{").expect("writing to a string cannot fail");
+        for template in actions {
+            writeln!(
+                out,
+                "                {}",
+                render_parser_after_action_statement(template, index)
+            )
+            .expect("writing to a string cannot fail");
+        }
+        writeln!(out, "            }}").expect("writing to a string cannot fail");
+    }
+    writeln!(out, "            _ => {{}}").expect("writing to a string cannot fail");
+    writeln!(out, "        }}").expect("writing to a string cannot fail");
+    writeln!(out, "    }}").expect("writing to a string cannot fail");
+    out
+}
+
+#[allow(clippy::fn_params_excessive_bools, clippy::too_many_arguments)]
+fn render_parser_parse_rule_fallback(
+    init_action_rules: &[usize],
+    track_alt_numbers: bool,
+    predicates: &[((usize, usize), PredicateTemplate)],
+    data: &InterpData,
+    int_members: &[IntMemberTemplate],
+    rule_args: &[(usize, usize, RuleArgTemplate)],
+    member_actions: &[(usize, usize, i64)],
+    return_actions: &[(usize, String, i64)],
+    has_action_dispatch: bool,
+    has_predicate_dispatch: bool,
+    has_return_actions: bool,
+    buffer_actions: bool,
+) -> io::Result<String> {
+    let mut out = String::new();
+    if has_predicate_dispatch || has_return_actions {
+        writeln!(
+            out,
+            "let (tree, actions) = self.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence, antlr4_runtime::ParserRuntimeOptions {{ init_action_rules: &{}, track_alt_numbers: {track_alt_numbers}, predicates: &{}, rule_args: &{}, member_actions: &{}, return_actions: &{} }})?;",
+            render_usize_array(init_action_rules),
+            render_parser_predicate_array(predicates, data, int_members)?,
+            render_parser_rule_arg_array(rule_args),
+            render_parser_member_action_array(member_actions),
+            render_parser_return_action_array(return_actions, data)?
+        )
+        .expect("writing to a string cannot fail");
+    } else if track_alt_numbers {
+        writeln!(
+            out,
+            "let (tree, actions) = self.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence, antlr4_runtime::ParserRuntimeOptions {{ init_action_rules: &{}, track_alt_numbers: true, ..antlr4_runtime::ParserRuntimeOptions::default() }})?;",
+            render_usize_array(init_action_rules)
+        )
+        .expect("writing to a string cannot fail");
+    } else if !init_action_rules.is_empty() {
+        writeln!(
+            out,
+            "let (tree, actions) = self.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence, antlr4_runtime::ParserRuntimeOptions {{ init_action_rules: &{}, ..antlr4_runtime::ParserRuntimeOptions::default() }})?;",
+            render_usize_array(init_action_rules)
+        )
+        .expect("writing to a string cannot fail");
+    } else if has_action_dispatch {
+        writeln!(
+            out,
+            "let (tree, actions) = self.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence, antlr4_runtime::ParserRuntimeOptions::default())?;"
+        )
+        .expect("writing to a string cannot fail");
+    } else {
+        return Ok(
+            "self.base.parse_atn_rule_with_precedence(atn(), rule_index, precedence)".to_owned(),
+        );
+    }
+
+    if has_action_dispatch {
+        if buffer_actions {
+            // Nested inside a generated parent: buffer the child's action events in
+            // position instead of running them now, so the parent's earlier buffered
+            // actions still replay before the child's at the top-level replay (action
+            // ordering matches ANTLR). The actions carry their own source_state, which
+            // `run_action`'s global dispatch resolves correctly at replay. A
+            // `$ctx`-rooted action is tagged with this interpreted child's tree so it
+            // renders the child subtree rather than the outer tree on replay.
+            writeln!(
+                out,
+                "for action in actions {{ let __tree = if CTX_ROOTED_ACTION_STATES.contains(&action.source_state()) {{ Some(tree.clone()) }} else {{ None }}; self.generated_actions.push(GeneratedAction::Parser {{ action, tree: __tree }}); }}"
+            )
+            .expect("writing to a string cannot fail");
+        } else {
+            writeln!(
+                out,
+                "for action in actions {{ self.run_action(action, &tree); }}"
+            )
+            .expect("writing to a string cannot fail");
+        }
+    } else {
+        writeln!(out, "let _ = actions;").expect("writing to a string cannot fail");
+    }
+    writeln!(out, "Ok(tree)").expect("writing to a string cannot fail");
+    Ok(out
+        .lines()
+        .map(|line| format!("        {line}"))
+        .collect::<Vec<_>>()
+        .join("\n"))
+}
+
 /// Renders a Rust parser module with one public method per grammar rule.
 ///
-/// Parser methods currently route through the runtime parser interpreter entry
-/// point. As the parser ATN simulator matures, the generated surface can remain
-/// stable while the interpreter becomes semantically complete.
+/// Parser methods use generated recursive-descent bodies for the ATN subset
+/// covered by `parser_generated_rules` and keep the interpreter fallback for
+/// unsupported constructs while the generated surface is expanded.
+#[cfg(test)]
 fn render_parser(
     grammar_name: &str,
     data: &InterpData,
     grammar_source: Option<&str>,
+) -> io::Result<String> {
+    render_parser_with_options(
+        grammar_name,
+        data,
+        grammar_source,
+        ParserRenderOptions::default(),
+    )
+}
+
+fn render_parser_with_options(
+    grammar_name: &str,
+    data: &InterpData,
+    grammar_source: Option<&str>,
+    options: ParserRenderOptions,
 ) -> io::Result<String> {
     let type_name = rust_type_name(grammar_name);
     let metadata = render_metadata(grammar_name, data);
@@ -455,116 +3679,133 @@ fn render_parser(
     let int_members = grammar_source.map_or_else(Vec::new, parser_int_members);
     let member_actions = parser_member_actions(&actions, &int_members)?;
     let return_actions = parser_return_actions(&actions);
+    let inline_action_statements = inline_parser_action_statements(&actions, &int_members)?;
+    let init_action_statements = init_parser_action_statements(&init_actions, &int_members)?;
+    let init_entry_action_statements = init_entry_action_statements(&init_actions, &int_members)?;
+    let inline_action_states = inline_action_statements
+        .keys()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let action_states = actions
+        .iter()
+        .map(|(source_state, _)| *source_state)
+        .collect::<BTreeSet<_>>();
+    let generated_action_states = action_states.clone();
+    let predicate_coordinates = grammar_source
+        .map_or_else(|| Ok(Vec::new()), |_| lexer_predicate_transitions(data))?
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    let generated_predicate_coordinates = predicates
+        .iter()
+        .filter_map(|(coordinate, predicate)| {
+            can_generate_parser_predicate(predicate).then_some(*coordinate)
+        })
+        .collect::<BTreeSet<_>>();
     let has_init_actions = init_actions.iter().any(Option::is_some);
     let has_action_dispatch = !actions.is_empty() || has_init_actions;
     let has_predicate_dispatch = !predicates.is_empty();
     let has_return_actions = !return_actions.is_empty();
     let track_alt_numbers = grammar_source.is_some_and(uses_alt_number_contexts);
+    let generated_rule_enabled = vec![true; data.rule_names.len()];
+    let generated_rules = parser_generated_rules(
+        data,
+        &generated_rule_enabled,
+        &rule_args,
+        ActionStateSets {
+            all: &action_states,
+            generated: &generated_action_states,
+            inline: &inline_action_states,
+        },
+        PredicateCoordinateSets {
+            all: &predicate_coordinates,
+            generated: &generated_predicate_coordinates,
+        },
+        has_action_dispatch || has_predicate_dispatch || has_return_actions,
+    )?;
+    if options.require_generated_parser {
+        require_all_parser_rules_generated(&generated_rules, data)?;
+    }
+    let direct_generated_rule_calls = generated_rules
+        .iter()
+        .enumerate()
+        .map(|(index, rule)| rule.is_some() && after_actions.get(index).is_none_or(Vec::is_empty))
+        .collect::<Vec<_>>();
+    let generated_rule_dispatch = render_generated_rule_dispatch_with_rule_names(
+        &generated_rules,
+        &direct_generated_rule_calls,
+        &data.rule_names,
+        &inline_action_statements,
+        &init_action_statements,
+        &init_entry_action_statements,
+        &generated_return_action_statements(&return_actions),
+        track_alt_numbers,
+    );
     let init_action_rules = init_actions
         .iter()
         .enumerate()
         .filter_map(|(index, action)| action.as_ref().map(|_| index))
         .collect::<Vec<_>>();
+    let parse_rule_fallback = render_parser_parse_rule_fallback(
+        &init_action_rules,
+        track_alt_numbers,
+        &predicates,
+        data,
+        &int_members,
+        &rule_args,
+        &member_actions,
+        &return_actions,
+        has_action_dispatch,
+        has_predicate_dispatch,
+        has_return_actions,
+        false,
+    )?;
+    let parse_rule_fallback_buffered = render_parser_parse_rule_fallback(
+        &init_action_rules,
+        track_alt_numbers,
+        &predicates,
+        data,
+        &int_members,
+        &rule_args,
+        &member_actions,
+        &return_actions,
+        has_action_dispatch,
+        has_predicate_dispatch,
+        has_return_actions,
+        true,
+    )?;
+    let after_action_dispatch = render_parser_after_action_dispatch(&after_actions);
+    let parser_predicate_constant =
+        render_parser_predicate_constant(&predicates, data, &int_members)?;
+    let adaptive_direct_allowed = !has_action_dispatch
+        && !track_alt_numbers
+        && !has_predicate_dispatch
+        && !has_return_actions;
     let action_method = render_parser_action_method(&actions, &init_actions, &int_members)?;
+    // ATN action source-states whose action is `$ctx`-rooted (renders the current
+    // rule's own tree). A nested child's buffered action at one of these states is
+    // re-tagged with the child tree at the call site so it renders the child
+    // subtree, not the parent's, on replay. Source-states are globally unique, so a
+    // flat sorted set suffices.
+    let ctx_rooted_action_states = actions
+        .iter()
+        .filter(|(_, action)| action_is_ctx_rooted(action))
+        .map(|(state, _)| *state)
+        .collect::<BTreeSet<usize>>();
+    let ctx_rooted_action_states_constant = format!(
+        "#[allow(dead_code)]\nconst CTX_ROOTED_ACTION_STATES: &[usize] = &{};\n",
+        render_usize_array(&ctx_rooted_action_states.iter().copied().collect::<Vec<_>>())
+    );
     let base_initialization = render_parser_base_initialization(&int_members);
     let mut rule_methods = String::new();
     for (index, rule) in data.rule_names.iter().enumerate() {
-        let after_action = after_actions.get(index).map_or(&[][..], Vec::as_slice);
-        let uses_after_interval = after_action.iter().any(ActionTemplate::uses_rule_interval);
-        let needs_slow_path = has_action_dispatch
-            || track_alt_numbers
-            || has_predicate_dispatch
-            || has_return_actions
-            || after_action.iter().any(ActionTemplate::needs_nested_tree);
         writeln!(
             rule_methods,
             "    pub fn {}(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{",
             rust_function_name(rule)
         )
         .expect("writing to a string cannot fail");
-        if uses_after_interval {
-            writeln!(
-                rule_methods,
-                "        let start_index = antlr4_runtime::IntStream::index(self.base.input());"
-            )
+        writeln!(rule_methods, "        self.parse_rule({index})")
             .expect("writing to a string cannot fail");
-        }
-        if !needs_slow_path && after_action.is_empty() {
-            writeln!(
-                rule_methods,
-                "        self.base.parse_atn_rule(atn(), {index})"
-            )
-            .expect("writing to a string cannot fail");
-        } else {
-            if needs_slow_path {
-                if has_predicate_dispatch || has_return_actions {
-                    writeln!(
-                        rule_methods,
-                        "        let (tree, actions) = self.base.parse_atn_rule_with_runtime_options(atn(), {index}, antlr4_runtime::ParserRuntimeOptions {{ init_action_rules: &{}, track_alt_numbers: {track_alt_numbers}, predicates: &{}, rule_args: &{}, member_actions: &{}, return_actions: &{} }})?;",
-                        render_usize_array(&init_action_rules),
-                        render_parser_predicate_array(&predicates, data, &int_members)?,
-                        render_parser_rule_arg_array(&rule_args),
-                        render_parser_member_action_array(&member_actions),
-                        render_parser_return_action_array(&return_actions, data)?
-                    )
-                    .expect("writing to a string cannot fail");
-                } else if track_alt_numbers {
-                    writeln!(
-                        rule_methods,
-                        "        let (tree, actions) = self.base.parse_atn_rule_with_action_options(atn(), {index}, &{}, true)?;",
-                        render_usize_array(&init_action_rules)
-                    )
-                    .expect("writing to a string cannot fail");
-                } else if has_init_actions {
-                    writeln!(
-                        rule_methods,
-                        "        let (tree, actions) = self.base.parse_atn_rule_with_action_inits(atn(), {index}, &{})?;",
-                        render_usize_array(&init_action_rules)
-                    )
-                    .expect("writing to a string cannot fail");
-                } else {
-                    writeln!(
-                        rule_methods,
-                        "        let (tree, actions) = self.base.parse_atn_rule_with_actions(atn(), {index})?;"
-                    )
-                    .expect("writing to a string cannot fail");
-                }
-                if has_action_dispatch {
-                    writeln!(
-                        rule_methods,
-                        "        for action in actions {{ self.run_action(action, &tree); }}"
-                    )
-                    .expect("writing to a string cannot fail");
-                } else {
-                    writeln!(rule_methods, "        let _ = actions;")
-                        .expect("writing to a string cannot fail");
-                }
-            } else {
-                writeln!(
-                    rule_methods,
-                    "        let tree = self.base.parse_atn_rule(atn(), {index})?;"
-                )
-                .expect("writing to a string cannot fail");
-            }
-            if !after_action.is_empty() {
-                if uses_after_interval {
-                    writeln!(
-                        rule_methods,
-                        "        let stop_index = antlr4_runtime::IntStream::index(self.base.input()).checked_sub(1);"
-                    )
-                    .expect("writing to a string cannot fail");
-                }
-                for template in after_action {
-                    writeln!(
-                        rule_methods,
-                        "        {}",
-                        render_parser_after_action_statement(template, index)
-                    )
-                    .expect("writing to a string cannot fail");
-                }
-            }
-            writeln!(rule_methods, "        Ok(tree)").expect("writing to a string cannot fail");
-        }
         writeln!(rule_methods, "    }}").expect("writing to a string cannot fail");
     }
 
@@ -580,6 +3821,8 @@ use std::sync::OnceLock;
 {token_constants}
 {rule_constants}
 {metadata}
+{parser_predicate_constant}
+{ctx_rooted_action_states_constant}
 
 static ATN_CELL: OnceLock<Atn> = OnceLock::new();
 
@@ -599,6 +3842,50 @@ where
     S: TokenSource,
 {{
     base: BaseParser<S>,
+    simulator: Option<antlr4_runtime::ParserAtnSimulator<'static>>,
+    generated_actions: Vec<GeneratedAction>,
+    generated_only: bool,
+}}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug)]
+enum GeneratedAction {{
+    Parser {{
+        action: antlr4_runtime::ParserAction,
+        /// The rule tree a `$ctx`-rooted action (`<ToStringTree("$ctx")>`) ran in.
+        /// `None` means "use the replay tree" — correct for a rule's own actions
+        /// and for tree-search actions (`RuleInvocationStack`, `$rule.text`,
+        /// `first_rule`-based templates) which resolve from the outer tree. A
+        /// nested child's `$ctx`-rooted action is tagged with the child tree so it
+        /// renders the child subtree, not the parent's, on buffered replay.
+        tree: Option<antlr4_runtime::ParseTree>,
+    }},
+    After {{
+        rule_index: usize,
+        tree: antlr4_runtime::ParseTree,
+        start_index: usize,
+        stop_index: Option<usize>,
+    }},
+    /// Integer-member snapshot captured after a child rule ran on the interpreter
+    /// path. Interpreted children mutate members immediately instead of buffering
+    /// actions, so the top-level generated rollback (`restore_int_members`) would
+    /// otherwise wipe those updates before replay. Replaying this snapshot in
+    /// position re-applies them.
+    MemberSnapshot(std::collections::BTreeMap<usize, i64>),
+}}
+
+#[allow(dead_code)]
+#[derive(Debug)]
+enum GeneratedRuleError {{
+    Fatal(antlr4_runtime::AntlrError),
+}}
+
+impl GeneratedRuleError {{
+    fn into_error(self) -> antlr4_runtime::AntlrError {{
+        match self {{
+            Self::Fatal(error) => error,
+        }}
+    }}
 }}
 
 impl<S> {type_name}<S>
@@ -612,12 +3899,153 @@ where
             .with_channel_names(metadata.channel_names().iter().copied())
             .with_mode_names(metadata.mode_names().iter().copied());
 {base_initialization}
-        Self {{ base }}
+        Self {{
+            base,
+            simulator: None,
+            generated_actions: Vec::new(),
+            generated_only: std::env::var_os("ANTLR4_RUST_GENERATED_ONLY").is_some(),
+        }}
     }}
 
     pub fn metadata() -> &'static GrammarMetadata {{
         &METADATA
     }}
+
+    #[allow(dead_code)]
+    fn simulator(&mut self) -> &mut antlr4_runtime::ParserAtnSimulator<'static> {{
+        self.simulator
+            .get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()))
+    }}
+
+    #[allow(dead_code)]
+    fn generated_only(&self) -> bool {{
+        self.generated_only
+    }}
+
+    #[allow(dead_code)]
+    fn run_generated_action(&mut self, action: GeneratedAction, tree: &antlr4_runtime::ParseTree) {{
+        match action {{
+            GeneratedAction::Parser {{ action, tree: action_tree }} => {{
+                self.run_action(action, action_tree.as_ref().unwrap_or(tree));
+            }}
+            GeneratedAction::After {{ rule_index, tree, start_index, stop_index }} => {{
+                self.run_after_actions(rule_index, &tree, start_index, stop_index);
+            }}
+            GeneratedAction::MemberSnapshot(members) => {{
+                self.base.restore_int_members(members);
+            }}
+        }}
+    }}
+
+{after_action_dispatch}
+
+    #[allow(dead_code)]
+    fn parse_rule(&mut self, rule_index: usize) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{
+        self.parse_rule_precedence(rule_index, 0)
+    }}
+
+    #[allow(dead_code)]
+    fn parse_rule_precedence(&mut self, rule_index: usize, precedence: i32) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{
+        self.parse_rule_precedence_inner(rule_index, precedence, true)
+    }}
+
+    #[allow(dead_code)]
+    fn parse_rule_precedence_from_generated(&mut self, rule_index: usize, precedence: i32) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{
+        self.parse_rule_precedence_inner(rule_index, precedence, false)
+    }}
+
+    #[allow(dead_code)]
+    fn parse_rule_precedence_inner(&mut self, rule_index: usize, precedence: i32, allow_generated_fallback: bool) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{
+        let __rule_start = antlr4_runtime::IntStream::index(self.base.input());
+        let __generated_action_marker = self.generated_actions.len();
+        let __generated_member_checkpoint = self.base.int_members_checkpoint();
+        let __generated_only = self.generated_only();
+        let __has_after_actions = Self::has_after_actions(rule_index);
+        let (__tree, __from_generated) = if let Some(result) = self.parse_generated_rule(rule_index, precedence, allow_generated_fallback) {{
+            match result {{
+                Ok(tree) => (tree, true),
+                Err(error) => {{
+                    self.generated_actions.truncate(__generated_action_marker);
+                    self.base.restore_int_members(__generated_member_checkpoint);
+                    antlr4_runtime::IntStream::seek(self.base.input(), __rule_start);
+                    return Err(error.into_error());
+                }}
+            }}
+        }} else if __generated_only {{
+            return Err(antlr4_runtime::AntlrError::Unsupported(format!("generated parser did not emit rule {{}}", rule_index)));
+        }} else if allow_generated_fallback {{
+            // Top-level / public entry: run the interpreted child's actions now.
+            (self.parse_interpreted_rule_precedence(rule_index, precedence)?, false)
+        }} else {{
+            // Nested inside a generated parent (allow_generated_fallback = false):
+            // buffer the interpreted child's actions in position so they replay in
+            // source order relative to the parent's already-buffered actions.
+            (self.parse_interpreted_rule_buffered(rule_index, precedence)?, false)
+        }};
+        if __has_after_actions {{
+            // Use the rule context's start token (the first visible token, set by
+            // `enter_rule`) rather than the pre-rule cursor, which may sit on a
+            // leading hidden-channel token. Keeps `$start`/`$text` aligned with the
+            // rule context and with ANTLR.
+            let start_index = self.base.after_action_start_index_for_tree(&__tree, __rule_start);
+            let __after_index = antlr4_runtime::IntStream::index(self.base.input());
+            let stop_index = self.base.after_action_stop_index_for_tree(&__tree, __after_index);
+            // Buffer the `@after` event whenever we are in a buffered context — both
+            // when the child parsed generated (__from_generated) AND when it parsed
+            // interpreted but is nested in a generated parent (!allow_generated_fallback).
+            // Only the true top-level (allow_generated_fallback && interpreted) runs it now.
+            if __from_generated || !allow_generated_fallback {{
+                self.generated_actions.push(GeneratedAction::After {{
+                    rule_index,
+                    tree: __tree.clone(),
+                    start_index,
+                    stop_index,
+                }});
+            }} else {{
+                self.run_after_actions(rule_index, &__tree, start_index, stop_index);
+            }}
+        }}
+        if __from_generated && allow_generated_fallback {{
+            self.base.report_generated_parser_diagnostics();
+            let __generated_actions = self.generated_actions.split_off(__generated_action_marker);
+            self.base.restore_int_members(__generated_member_checkpoint);
+            for __action in __generated_actions {{
+                self.run_generated_action(__action, &__tree);
+            }}
+        }}
+        Ok(__tree)
+    }}
+
+    #[allow(dead_code)]
+    fn parse_interpreted_rule(&mut self, rule_index: usize) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{
+        self.parse_interpreted_rule_precedence(rule_index, 0)
+    }}
+
+    // Interpreted parse used when a GENERATED parent calls this child on the
+    // interpreted path: instead of running the child's action events immediately,
+    // it buffers them onto `self.generated_actions` so they replay in source order
+    // relative to the parent's already-buffered actions (matching ANTLR). Used in
+    // the nested context (`parse_rule_precedence_inner` with
+    // allow_generated_fallback = false); the top-level call still runs actions now.
+    #[allow(dead_code)]
+    fn parse_interpreted_rule_buffered(&mut self, rule_index: usize, precedence: i32) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{
+{parse_rule_fallback_buffered}
+    }}
+
+    #[allow(dead_code)]
+    fn parse_interpreted_rule_precedence(&mut self, rule_index: usize, precedence: i32) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{
+        if precedence == 0 && {adaptive_direct_allowed} && std::env::var_os("ANTLR4_RUST_ADAPTIVE_DIRECT").is_some() {{
+            let simulator = self
+                .simulator
+                .get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));
+            self.base
+                .parse_atn_rule_adaptive_or_fallback(atn(), simulator, rule_index)
+        }} else {{
+{parse_rule_fallback}
+        }}
+    }}
+
+{generated_rule_dispatch}
 
 {rule_methods}
 
@@ -722,6 +4150,10 @@ enum ActionTemplate {
         value: String,
         newline: bool,
     },
+    SetMember {
+        member: String,
+        value: i64,
+    },
     AddMember {
         member: String,
         value: i64,
@@ -733,33 +4165,16 @@ enum ActionTemplate {
     Sequence(Vec<Self>),
 }
 
+#[cfg(test)]
 impl ActionTemplate {
-    /// Reports whether an `@after` action needs the rule's input interval
-    /// captured before and after parsing.
-    fn uses_rule_interval(&self) -> bool {
+    /// Reports whether a parser action can be emitted directly at its ATN
+    /// action-transition site without needing the completed parse tree or
+    /// interpreter-only state.
+    fn can_run_inline(&self) -> bool {
         matches!(
             self,
-            Self::Text { .. }
-                | Self::TextWithPrefix { .. }
-                | Self::RuleTextWithPrefix { .. }
-                | Self::TokenText { .. }
-                | Self::TokenTextWithPrefix { .. }
-                | Self::TokenDisplay { .. }
-        ) || matches!(self, Self::Sequence(actions) if actions.iter().any(Self::uses_rule_interval))
-    }
-
-    /// Reports whether rendering the action requires a nested parse tree
-    /// instead of the faster flat rule tree.
-    fn needs_nested_tree(&self) -> bool {
-        matches!(
-            self,
-            Self::StringTree { .. }
-                | Self::RuleTextWithPrefix { .. }
-                | Self::RuleInvocationStack { .. }
-                | Self::ListenerWalk { .. }
-                | Self::RuleValue { .. }
-                | Self::RuleReturnValue { .. }
-        ) || matches!(self, Self::Sequence(actions) if actions.iter().any(Self::needs_nested_tree))
+            Self::Noop | Self::SetMember { .. } | Self::AddMember { .. }
+        ) || matches!(self, Self::Sequence(actions) if actions.iter().all(Self::can_run_inline))
     }
 }
 
@@ -797,6 +4212,11 @@ enum PredicateTemplate {
         value: i64,
         equals: bool,
     },
+    MemberEquals {
+        member: String,
+        value: i64,
+        equals: bool,
+    },
     LookaheadTextEquals {
         offset: isize,
         text: String,
@@ -809,6 +4229,29 @@ enum PredicateTemplate {
         offset: isize,
         token_name: String,
     },
+    TokenPairAdjacent,
+    ContextChildRuleTextNotEquals {
+        rule_name: String,
+        text: String,
+    },
+}
+
+const fn can_generate_parser_predicate(predicate: &PredicateTemplate) -> bool {
+    matches!(
+        predicate,
+        PredicateTemplate::True
+            | PredicateTemplate::False
+            | PredicateTemplate::FalseWithMessage { .. }
+            | PredicateTemplate::Invoke { .. }
+            | PredicateTemplate::LocalIntEquals { .. }
+            | PredicateTemplate::LocalIntLessOrEqual { .. }
+            | PredicateTemplate::MemberModuloEquals { .. }
+            | PredicateTemplate::MemberEquals { .. }
+            | PredicateTemplate::LookaheadTextEquals { .. }
+            | PredicateTemplate::LookaheadNotEquals { .. }
+            | PredicateTemplate::TokenPairAdjacent
+            | PredicateTemplate::ContextChildRuleTextNotEquals { .. }
+    )
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1538,6 +4981,7 @@ fn parse_action_template(body: &str) -> Option<ActionTemplate> {
             .or_else(|| parse_token_text(body))
             .or_else(|| parse_token_display(body))
             .or_else(|| parse_add_member(body))
+            .or_else(|| parse_set_member(body))
             .or_else(|| parse_member_value(body))
             .or_else(|| parse_noop_action(body))
             .or_else(|| parse_write_literal(body)),
@@ -1567,6 +5011,20 @@ fn parse_add_member(body: &str) -> Option<ActionTemplate> {
         return None;
     };
     Some(ActionTemplate::AddMember {
+        member: parse_template_string(member)?,
+        value: parse_template_string(value)?.parse::<i64>().ok()?,
+    })
+}
+
+fn parse_set_member(body: &str) -> Option<ActionTemplate> {
+    let arguments = body
+        .strip_prefix("SetMember(")
+        .and_then(|value| value.strip_suffix(')'))
+        .map(split_template_arguments)?;
+    let [member, value] = arguments.as_slice() else {
+        return None;
+    };
+    Some(ActionTemplate::SetMember {
         member: parse_template_string(member)?,
         value: parse_template_string(value)?.parse::<i64>().ok()?,
     })
@@ -1610,17 +5068,43 @@ fn parse_predicate_template(body: &str) -> Option<PredicateTemplate> {
     match body {
         "True()" => Some(PredicateTemplate::True),
         "False()" => Some(PredicateTemplate::False),
-        _ => parse_text_equals_predicate(body)
+        r#"ParserPropertyCall({$parser}, "Property()")"# => Some(PredicateTemplate::True),
+        _ => parse_raw_boolean_predicate(body)
+            .or_else(|| parse_text_equals_predicate(body))
             .or_else(|| parse_token_start_column_equals_predicate(body))
             .or_else(|| parse_column_compare_predicate(body))
             .or_else(|| parse_invoke_predicate(body))
             .or_else(|| parse_val_equals_predicate(body))
             .or_else(|| parse_raw_local_int_less_or_equal_predicate(body))
             .or_else(|| parse_mod_member_predicate(body))
+            .or_else(|| parse_member_predicate(body))
             .or_else(|| parse_boolean_member_not_predicate(body))
+            .or_else(|| parse_csharp_parser_predicate(body))
             .or_else(|| parse_lt_equals_predicate(body))
             .or_else(|| parse_la_not_equals_predicate(body)),
     }
+}
+
+fn parse_raw_boolean_predicate(body: &str) -> Option<PredicateTemplate> {
+    match body {
+        "true" => return Some(PredicateTemplate::True),
+        "false" => return Some(PredicateTemplate::False),
+        _ => {}
+    }
+    let (equals, left, right) = if let Some((left, right)) = body.split_once("==") {
+        (true, left, right)
+    } else {
+        let (left, right) = body.split_once("!=")?;
+        (false, left, right)
+    };
+    let left = left.trim().parse::<i64>().ok()?;
+    let right = right.trim().parse::<i64>().ok()?;
+    let value = if equals { left == right } else { left != right };
+    Some(if value {
+        PredicateTemplate::True
+    } else {
+        PredicateTemplate::False
+    })
 }
 
 /// Returns the call body for an action made of exactly one target template.
@@ -1669,6 +5153,30 @@ fn parse_mod_member_predicate(body: &str) -> Option<PredicateTemplate> {
     })
 }
 
+fn parse_member_predicate(body: &str) -> Option<PredicateTemplate> {
+    let (equals, arguments) = if let Some(arguments) = body
+        .strip_prefix("MemberEquals(")
+        .and_then(|value| value.strip_suffix(')'))
+    {
+        (true, arguments)
+    } else {
+        (
+            false,
+            body.strip_prefix("MemberNotEquals(")
+                .and_then(|value| value.strip_suffix(')'))?,
+        )
+    };
+    let arguments = split_template_arguments(arguments);
+    let [member, value] = arguments.as_slice() else {
+        return None;
+    };
+    Some(PredicateTemplate::MemberEquals {
+        member: parse_template_string(member)?,
+        value: parse_template_string(value)?.parse::<i64>().ok()?,
+        equals,
+    })
+}
+
 /// Parses simple local integer argument predicates such as
 /// `ValEquals("$i","2")`.
 fn parse_val_equals_predicate(body: &str) -> Option<PredicateTemplate> {
@@ -1712,6 +5220,21 @@ fn parse_invoke_predicate(body: &str) -> Option<PredicateTemplate> {
         "True()" => Some(PredicateTemplate::Invoke { value: true }),
         "False()" => Some(PredicateTemplate::Invoke { value: false }),
         r#"ValEquals("$i","99")"# => Some(PredicateTemplate::Invoke { value: true }),
+        _ => None,
+    }
+}
+
+fn parse_csharp_parser_predicate(body: &str) -> Option<PredicateTemplate> {
+    match body.trim() {
+        "this.IsRightArrow()" | "this.IsRightShift()" | "this.IsRightShiftAssignment()" => {
+            Some(PredicateTemplate::TokenPairAdjacent)
+        }
+        "this.IsLocalVariableDeclaration()" => {
+            Some(PredicateTemplate::ContextChildRuleTextNotEquals {
+                rule_name: "local_variable_type".to_owned(),
+                text: "var".to_owned(),
+            })
+        }
         _ => None,
     }
 }
@@ -1887,8 +5410,7 @@ fn parse_noop_action(body: &str) -> Option<ActionTemplate> {
         || body.starts_with("InitIntVar(")
         || body.starts_with("IntArg(")
         || body.starts_with("Production(")
-        || body.starts_with("Result(")
-        || body.starts_with("SetMember("))
+        || body.starts_with("Result("))
         && body.ends_with(')')
     {
         return Some(ActionTemplate::Noop);
@@ -2313,6 +5835,134 @@ fn parser_return_actions(actions: &[(usize, ActionTemplate)]) -> Vec<(usize, Str
     return_actions
 }
 
+/// Renders parser actions that are safe to execute from generated rule bodies.
+fn inline_parser_action_statements(
+    actions: &[(usize, ActionTemplate)],
+    members: &[IntMemberTemplate],
+) -> io::Result<BTreeMap<usize, String>> {
+    let mut statements = BTreeMap::new();
+    for (source_state, action) in actions {
+        let statement = render_inline_parser_action_statement(action, members)?;
+        if !statement.is_empty() {
+            statements.insert(*source_state, statement);
+        }
+    }
+    Ok(statements)
+}
+
+fn render_inline_parser_action_statement(
+    action: &ActionTemplate,
+    members: &[IntMemberTemplate],
+) -> io::Result<String> {
+    match action {
+        ActionTemplate::SetMember { member, value } => {
+            let member = member_id(members, member)?;
+            Ok(format!("self.base.set_int_member({member}, {value});"))
+        }
+        ActionTemplate::AddMember { member, value } => {
+            let member = member_id(members, member)?;
+            Ok(format!("self.base.add_int_member({member}, {value});"))
+        }
+        ActionTemplate::Sequence(actions) => {
+            let mut rendered = Vec::new();
+            for action in actions {
+                let statement = render_inline_parser_action_statement(action, members)?;
+                if !statement.is_empty() {
+                    rendered.push(statement);
+                }
+            }
+            Ok(rendered.join(" "))
+        }
+        ActionTemplate::Noop
+        | ActionTemplate::Text { .. }
+        | ActionTemplate::TextWithPrefix { .. }
+        | ActionTemplate::RuleTextWithPrefix { .. }
+        | ActionTemplate::StringTree { .. }
+        | ActionTemplate::RuleInvocationStack { .. }
+        | ActionTemplate::ListenerWalk { .. }
+        | ActionTemplate::RuleValue { .. }
+        | ActionTemplate::RuleReturnValue { .. }
+        | ActionTemplate::SetIntReturn { .. }
+        | ActionTemplate::TokenText { .. }
+        | ActionTemplate::TokenTextWithPrefix { .. }
+        | ActionTemplate::TokenDisplay { .. }
+        | ActionTemplate::ExpectedTokenNames { .. }
+        | ActionTemplate::Literal { .. }
+        | ActionTemplate::MemberValue { .. } => Ok(String::new()),
+    }
+}
+
+fn init_parser_action_statements(
+    init_actions: &[Option<ActionTemplate>],
+    members: &[IntMemberTemplate],
+) -> io::Result<BTreeMap<usize, String>> {
+    let mut statements = BTreeMap::new();
+    for (rule_index, action) in init_actions.iter().enumerate() {
+        let Some(action) = action else {
+            continue;
+        };
+        statements.insert(rule_index, render_action_statement(action, members)?);
+    }
+    Ok(statements)
+}
+
+/// Whether an `@init` template only mutates parser members (`SetMember` /
+/// `AddMember`, possibly nested in a `Sequence`). Only such actions are run
+/// eagerly on rule entry: their effect is idempotent under the
+/// checkpoint/restore + replay cycle (the value is recomputed from the restored
+/// baseline) and same-rule predicates/actions must observe it. Side-effecting
+/// actions (printing, diagnostics) stay on the buffered exit-replay path so
+/// their ordering matches ANTLR; running them eagerly would duplicate output.
+fn init_action_mutates_members_only(action: &ActionTemplate) -> bool {
+    match action {
+        ActionTemplate::SetMember { .. } | ActionTemplate::AddMember { .. } => true,
+        ActionTemplate::Sequence(actions) => {
+            !actions.is_empty() && actions.iter().all(init_action_mutates_members_only)
+        }
+        _ => false,
+    }
+}
+
+/// Whether an action is `$ctx`-rooted, i.e. renders the *current rule's* parse
+/// tree (`<ToStringTree("$ctx")>` -> `StringTree { target: Current }`).
+///
+/// Such an action must observe the tree of the rule it ran in. When buffered from
+/// a nested child and replayed at the top level it would otherwise render the
+/// outer (parent) tree, so its `GeneratedAction::Parser` event is tagged with the
+/// child tree at the call site. Tree-SEARCH actions (`RuleInvocationStack`,
+/// `first_rule`-based `StringTree::Rule`/`Label`, `$rule.text`, rule-return) are
+/// NOT ctx-rooted: they walk from the outer tree root and must keep the replay
+/// tree (e.g. `RuleInvocationStack` in a child legitimately reports the ancestor
+/// chain `[child, parent]`, which needs the outer tree).
+fn action_is_ctx_rooted(action: &ActionTemplate) -> bool {
+    match action {
+        ActionTemplate::StringTree {
+            target: StringTreeTarget::Current,
+            ..
+        } => true,
+        ActionTemplate::Sequence(actions) => actions.iter().any(action_is_ctx_rooted),
+        _ => false,
+    }
+}
+
+/// Statements for `@init` actions that should run on rule ENTRY — restricted to
+/// member writes the rule body may read. Side-effecting `@init` actions are
+/// excluded here and remain on the buffered exit-replay path
+/// (`init_parser_action_statements`).
+fn init_entry_action_statements(
+    init_actions: &[Option<ActionTemplate>],
+    members: &[IntMemberTemplate],
+) -> io::Result<BTreeMap<usize, String>> {
+    let mut statements = BTreeMap::new();
+    for (rule_index, action) in init_actions.iter().enumerate() {
+        let Some(action) = action.as_ref().filter(|a| init_action_mutates_members_only(a)) else {
+            continue;
+        };
+        statements.insert(rule_index, render_action_statement(action, members)?);
+    }
+    Ok(statements)
+}
+
 fn collect_return_actions(
     source_state: usize,
     action: &ActionTemplate,
@@ -2341,9 +5991,23 @@ fn collect_return_actions(
         | ActionTemplate::TokenDisplay { .. }
         | ActionTemplate::ExpectedTokenNames { .. }
         | ActionTemplate::Literal { .. }
+        | ActionTemplate::SetMember { .. }
         | ActionTemplate::AddMember { .. }
         | ActionTemplate::MemberValue { .. } => {}
     }
+}
+
+fn generated_return_action_statements(
+    actions: &[(usize, String, i64)],
+) -> BTreeMap<usize, Vec<(String, i64)>> {
+    let mut statements = BTreeMap::<usize, Vec<(String, i64)>>::new();
+    for (source_state, name, value) in actions {
+        statements
+            .entry(*source_state)
+            .or_default()
+            .push((name.clone(), *value));
+    }
+    statements
 }
 
 fn collect_member_actions(
@@ -2377,6 +6041,7 @@ fn collect_member_actions(
         | ActionTemplate::TokenDisplay { .. }
         | ActionTemplate::ExpectedTokenNames { .. }
         | ActionTemplate::Literal { .. }
+        | ActionTemplate::SetMember { .. }
         | ActionTemplate::MemberValue { .. } => {}
     }
     Ok(())
@@ -2495,6 +6160,7 @@ fn render_lexer_action_statement(template: &ActionTemplate) -> String {
         ActionTemplate::RuleValue { .. } => String::new(),
         ActionTemplate::RuleReturnValue { .. } => String::new(),
         ActionTemplate::SetIntReturn { .. } => String::new(),
+        ActionTemplate::SetMember { .. } => String::new(),
         ActionTemplate::AddMember { .. } => String::new(),
         ActionTemplate::MemberValue { .. } => String::new(),
         ActionTemplate::Sequence(actions) => actions
@@ -2552,8 +6218,11 @@ fn render_lexer_predicate_expression(template: &PredicateTemplate) -> String {
         | PredicateTemplate::LocalIntEquals { .. }
         | PredicateTemplate::LocalIntLessOrEqual { .. }
         | PredicateTemplate::MemberModuloEquals { .. }
+        | PredicateTemplate::MemberEquals { .. }
         | PredicateTemplate::LookaheadTextEquals { .. }
-        | PredicateTemplate::LookaheadNotEquals { .. } => {
+        | PredicateTemplate::LookaheadNotEquals { .. }
+        | PredicateTemplate::TokenPairAdjacent
+        | PredicateTemplate::ContextChildRuleTextNotEquals { .. } => {
             unreachable!("lookahead parser predicates are not lexer predicates")
         }
     }
@@ -2568,7 +6237,10 @@ fn render_parser_action_method(
 ) -> io::Result<String> {
     let has_init_actions = init_actions.iter().any(Option::is_some);
     if actions.is_empty() && !has_init_actions {
-        return Ok(String::new());
+        return Ok(
+            "    fn run_action(&mut self, _action: antlr4_runtime::ParserAction, _tree: &antlr4_runtime::ParseTree) {}\n"
+                .to_owned(),
+        );
     }
     let mut init_arms = String::new();
     for (rule_index, template) in init_actions.iter().enumerate() {
@@ -2711,6 +6383,10 @@ fn render_action_statement(
             let write = if *newline { "println!" } else { "print!" };
             Ok(format!("{write}(\"{}\");", rust_string(value)))
         }
+        ActionTemplate::SetMember { member, value } => {
+            let member = member_id(members, member)?;
+            Ok(format!("self.base.set_int_member({member}, {value});"))
+        }
         ActionTemplate::AddMember { member, value } => {
             let member = member_id(members, member)?;
             Ok(format!("self.base.add_int_member({member}, {value});"))
@@ -2827,6 +6503,7 @@ fn render_parser_after_action_statement(template: &ActionTemplate, rule_index: u
             format!("{write}(\"{}\");", rust_string(value))
         }
         ActionTemplate::SetIntReturn { .. }
+        | ActionTemplate::SetMember { .. }
         | ActionTemplate::AddMember { .. }
         | ActionTemplate::MemberValue { .. } => String::new(),
         ActionTemplate::Sequence(actions) => actions
@@ -3405,6 +7082,31 @@ fn render_i32_slice(values: &[i32]) -> String {
     format!("[{items}]")
 }
 
+/// Renders an inline `[(i32, i32); N]` expression for generated token-set
+/// matches.
+fn render_i32_ranges(values: &[(i32, i32)]) -> String {
+    let items = values
+        .iter()
+        .map(|(start, stop)| format!("({start}, {stop})"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("[{items}]")
+}
+
+fn render_i32_match_patterns(values: &[(i32, i32)]) -> String {
+    values
+        .iter()
+        .map(|(start, stop)| {
+            if start == stop {
+                start.to_string()
+            } else {
+                format!("{start}..={stop}")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" | ")
+}
+
 /// Renders an inline `[usize; N]` expression for generated parser helpers.
 fn render_usize_array(values: &[usize]) -> String {
     let items = values
@@ -3413,6 +7115,18 @@ fn render_usize_array(values: &[usize]) -> String {
         .collect::<Vec<_>>()
         .join(", ");
     format!("[{items}]")
+}
+
+/// Renders parser predicate metadata shared by generated predicate checks.
+fn render_parser_predicate_constant(
+    predicates: &[((usize, usize), PredicateTemplate)],
+    data: &InterpData,
+    members: &[IntMemberTemplate],
+) -> io::Result<String> {
+    let predicates = render_parser_predicate_array(predicates, data, members)?;
+    Ok(format!(
+        "#[allow(dead_code)]\nconst PARSER_PREDICATES: &[(usize, usize, antlr4_runtime::ParserPredicate)] = &{predicates};\n"
+    ))
 }
 
 /// Renders parser predicate metadata as an inline slice consumed by the runtime
@@ -3453,6 +7167,16 @@ fn render_parser_predicate_array(
                     "antlr4_runtime::ParserPredicate::MemberModuloEquals {{ member: {member}, modulus: {modulus}, value: {value}, equals: {equals} }}"
                 )
             }
+            PredicateTemplate::MemberEquals {
+                member,
+                value,
+                equals,
+            } => {
+                let member = member_id(members, member)?;
+                format!(
+                    "antlr4_runtime::ParserPredicate::MemberEquals {{ member: {member}, value: {value}, equals: {equals} }}"
+                )
+            }
             PredicateTemplate::TextEquals(_) => {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -3482,6 +7206,25 @@ fn render_parser_predicate_array(
                 })?;
                 format!(
                     "antlr4_runtime::ParserPredicate::LookaheadNotEquals {{ offset: {offset}, token_type: {token_type} }}"
+                )
+            }
+            PredicateTemplate::TokenPairAdjacent => {
+                "antlr4_runtime::ParserPredicate::TokenPairAdjacent".to_owned()
+            }
+            PredicateTemplate::ContextChildRuleTextNotEquals { rule_name, text } => {
+                let rule_index = data
+                    .rule_names
+                    .iter()
+                    .position(|name| name == rule_name)
+                    .ok_or_else(|| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            format!("unknown predicate rule {rule_name}"),
+                        )
+                    })?;
+                format!(
+                    "antlr4_runtime::ParserPredicate::ContextChildRuleTextNotEquals {{ rule_index: {rule_index}, text: \"{}\" }}",
+                    rust_string(text)
                 )
             }
         };
@@ -3621,6 +7364,7 @@ fn grammar_name_from_path(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use antlr4_runtime::atn::{AtnState, AtnType, IntervalSet};
 
     #[test]
     fn parses_interp_sections() {
@@ -3661,6 +7405,1778 @@ atn:
         assert_eq!(rust_function_name("try"), "r#try");
         assert_eq!(rust_function_name("Self"), "r#self");
         assert!(is_rust_keyword("Self"));
+    }
+
+    fn compile_test_parser_rule(
+        atn: &Atn,
+        rule_index: usize,
+        inline_action_states: &BTreeSet<usize>,
+    ) -> Option<GeneratedParserRule> {
+        let decision_by_state = decision_by_state(atn);
+        let action_states = BTreeSet::new();
+        let generated_action_states = BTreeSet::new();
+        let predicate_coordinates = BTreeSet::new();
+        let generated_predicate_coordinates = BTreeSet::new();
+        let context = GeneratedParserCompileContext {
+            atn,
+            decision_by_state: &decision_by_state,
+            rule_args: &[],
+            inline_action_states,
+            action_states: &action_states,
+            generated_action_states: &generated_action_states,
+            predicate_coordinates: &predicate_coordinates,
+            generated_predicate_coordinates: &generated_predicate_coordinates,
+        };
+        compile_generated_parser_rule(&context, rule_index)
+    }
+
+    fn mt(token_type: i32, follow_state: usize) -> GeneratedParserStep {
+        GeneratedParserStep::MatchToken {
+            token_type,
+            follow_state,
+        }
+    }
+
+    fn ms(intervals: Vec<(i32, i32)>, follow_state: usize) -> GeneratedParserStep {
+        GeneratedParserStep::MatchSet {
+            intervals,
+            follow_state,
+        }
+    }
+
+    fn mns(intervals: Vec<(i32, i32)>, follow_state: usize) -> GeneratedParserStep {
+        GeneratedParserStep::MatchNotSet {
+            intervals,
+            follow_state,
+        }
+    }
+
+    fn cr(rule_index: usize) -> GeneratedParserStep {
+        GeneratedParserStep::CallRule {
+            source_state: 100 + rule_index,
+            rule_index,
+            precedence: GeneratedRuleCallPrecedence::Literal(0),
+        }
+    }
+
+    fn adaptive_loop(decision: usize) -> GeneratedParserStep {
+        GeneratedParserStep::StarLoop {
+            state: 1_000 + decision,
+            decision,
+            enter_alt: 1,
+            exit_alt: 2,
+            track_alt_number: false,
+            allow_semantic_context: false,
+            force_context: false,
+            plus_loop: false,
+            fast_path: None,
+            body: vec![mt(2, 0)],
+        }
+    }
+
+    fn expensive_ladder_rule(rule_index: usize, next: Option<usize>) -> GeneratedParserRule {
+        let mut steps = Vec::new();
+        if let Some(next) = next {
+            steps.push(cr(next));
+        }
+        steps.push(adaptive_loop(rule_index * 2));
+        steps.push(adaptive_loop(rule_index * 2 + 1));
+        if next.is_none() {
+            steps.push(mt(1, 0));
+        }
+        test_rule(rule_index, steps)
+    }
+
+    fn test_rule(rule_index: usize, steps: Vec<GeneratedParserStep>) -> GeneratedParserRule {
+        GeneratedParserRule {
+            rule_index,
+            entry_state: rule_index * 2,
+            left_recursive: false,
+            steps,
+        }
+    }
+
+    #[test]
+    fn compiles_linear_parser_rule_body() {
+        let atn = linear_rule_atn();
+        let body = compile_test_parser_rule(&atn, 0, &BTreeSet::new())
+            .expect("linear rule should compile");
+
+        assert_eq!(body.rule_index, 0);
+        assert_eq!(body.entry_state, 0);
+        assert_eq!(
+            body.steps,
+            [mt(1, 2), mt(antlr4_runtime::token::TOKEN_EOF, 3)]
+        );
+
+        let rendered = render_generated_rule_dispatch(
+            &[Some(body)],
+            &[],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            false,
+        );
+        assert!(rendered.contains("match_token_recovering(1, 2, atn())"));
+        assert!(rendered.contains("generated_diagnostics_checkpoint()"));
+        assert!(rendered.contains("restore_generated_diagnostics(__generated_diagnostic_marker)"));
+    }
+
+    #[test]
+    fn compiles_block_decision_with_adaptive_prediction() {
+        let atn = block_decision_atn();
+        let body = compile_test_parser_rule(&atn, 0, &BTreeSet::new())
+            .expect("block decision rule should compile");
+
+        assert_eq!(
+            body.steps,
+            [GeneratedParserStep::Decision {
+                state: 1,
+                decision: 0,
+                track_alt_number: true,
+                allow_semantic_context: false,
+                force_context: false,
+                fast_path: Some(GeneratedDecisionFastPath {
+                    arms: vec![
+                        GeneratedDecisionFastArm {
+                            alt: 1,
+                            intervals: vec![(1, 1)],
+                        },
+                        GeneratedDecisionFastArm {
+                            alt: 2,
+                            intervals: vec![(2, 2)],
+                        },
+                    ],
+                }),
+                alts: vec![vec![mt(1, 4)], vec![mt(2, 4)]],
+            }]
+        );
+
+        let rendered = render_generated_rule_dispatch(
+            &[Some(body.clone())],
+            &[],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            false,
+        );
+        assert!(rendered.contains("parse_generated_rule_0"));
+        assert!(rendered.contains(
+            "sync_decision(atn(), 1, !__ctx.has_matched_child(), false)"
+        ));
+        assert!(rendered.contains("ll1_decision_prediction(atn(), 1)"));
+        // Stage 1 is the SLL probe (no LL loop on the empty-context conflict);
+        // stage 2 re-runs with the real context only when full context is needed.
+        assert!(rendered.contains("adaptive_predict_stream_info_sll_probe(0, 0"));
+        assert!(rendered.contains("adaptive_predict_stream_info_with_context(0, 0"));
+
+        let rendered_with_alt_numbers = render_generated_rule_dispatch(
+            &[Some(body)],
+            &[],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            true,
+        );
+        assert!(rendered_with_alt_numbers.contains("__ctx.set_alt_number(1);"));
+        assert!(rendered_with_alt_numbers.contains("__ctx.set_alt_number(2);"));
+    }
+
+    #[test]
+    fn compiles_star_loop_with_adaptive_prediction() {
+        let atn = star_loop_atn();
+        let body = compile_test_parser_rule(&atn, 0, &BTreeSet::new())
+            .expect("star loop rule should compile");
+
+        assert_eq!(
+            body.steps,
+            [GeneratedParserStep::StarLoop {
+                state: 1,
+                decision: 0,
+                enter_alt: 1,
+                exit_alt: 2,
+                track_alt_number: true,
+                allow_semantic_context: false,
+                force_context: false,
+                plus_loop: false,
+                fast_path: None,
+                body: vec![mt(1, 4)],
+            }]
+        );
+
+        let rendered = render_generated_rule_dispatch(
+            &[Some(body)],
+            &[],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            false,
+        );
+        assert!(rendered.contains("loop {"));
+        // A `*` loop starts NOT iterated: its first sync is at the loop entry
+        // (single-token deletion), so the iteration flag inits to `false`.
+        assert!(rendered.contains("let mut __loop_iter_1 = false;"));
+        assert!(rendered.contains(
+            "sync_decision(atn(), 1, !__ctx.has_matched_child(), __loop_iter_1)"
+        ));
+        assert!(rendered.contains("__loop_iter_1 = true;"));
+        assert!(rendered.contains("1 => {"));
+        assert!(rendered.contains("2 => {"));
+        assert!(rendered.contains("break;"));
+        assert!(rendered.contains("ll1_decision_prediction(atn(), 1)"));
+        assert!(rendered.contains("adaptive_predict_stream_info_sll_probe(0, 0"));
+        assert!(rendered.contains("adaptive_predict_stream_info_with_context(0, 0"));
+    }
+
+    #[test]
+    fn compiles_plus_loop_back_with_adaptive_prediction() {
+        let atn = plus_loop_atn();
+        let body = compile_test_parser_rule(&atn, 0, &BTreeSet::new())
+            .expect("plus loop rule should compile");
+
+        assert_eq!(
+            body.steps,
+            [
+                mt(1, 3),
+                GeneratedParserStep::StarLoop {
+                    state: 4,
+                    decision: 0,
+                    enter_alt: 1,
+                    exit_alt: 2,
+                    track_alt_number: false,
+                    allow_semantic_context: false,
+                    force_context: false,
+                    plus_loop: true,
+                    fast_path: None,
+                    body: vec![mt(1, 3)],
+                }
+            ]
+        );
+
+        let rendered = render_generated_rule_dispatch(
+            &[Some(body)],
+            &[],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            false,
+        );
+        // A `+` loop's mandatory first element is iteration 1, so the iteration
+        // flag inits to `true`: its first loop-back sync recovers with multi-token
+        // `consumeUntil`, matching ANTLR's PLUS_LOOP_BACK.
+        assert!(rendered.contains("let mut __loop_iter_4 = true;"));
+        assert!(rendered.contains(
+            "sync_decision(atn(), 4, !__ctx.has_matched_child(), __loop_iter_4)"
+        ));
+    }
+
+    #[test]
+    fn compiles_plus_block_body_decision_with_adaptive_prediction() {
+        let atn = plus_block_decision_atn();
+        let body = compile_test_parser_rule(&atn, 0, &BTreeSet::new())
+            .expect("plus block decision rule should compile");
+
+        let body_decision = GeneratedParserStep::Decision {
+            state: 1,
+            decision: 0,
+            track_alt_number: true,
+            allow_semantic_context: false,
+            force_context: false,
+            fast_path: Some(GeneratedDecisionFastPath {
+                arms: vec![
+                    GeneratedDecisionFastArm {
+                        alt: 1,
+                        intervals: vec![(1, 1)],
+                    },
+                    GeneratedDecisionFastArm {
+                        alt: 2,
+                        intervals: vec![(2, 2)],
+                    },
+                ],
+            }),
+            alts: vec![vec![mt(1, 4)], vec![mt(2, 4)]],
+        };
+        assert_eq!(
+            body.steps,
+            [
+                body_decision.clone(),
+                GeneratedParserStep::StarLoop {
+                    state: 5,
+                    decision: 1,
+                    enter_alt: 1,
+                    exit_alt: 2,
+                    track_alt_number: false,
+                    allow_semantic_context: false,
+                    force_context: false,
+                    plus_loop: true,
+                    fast_path: None,
+                    body: vec![body_decision],
+                }
+            ]
+        );
+    }
+
+    #[test]
+    fn compiles_left_recursive_parser_rule() {
+        let atn = left_recursive_rule_atn();
+        let body = compile_test_parser_rule(&atn, 0, &BTreeSet::new())
+            .expect("left-recursive rule should compile");
+
+        assert!(body.left_recursive);
+        assert_eq!(body.rule_index, 0);
+        assert_eq!(body.entry_state, 0);
+        assert_eq!(
+            body.steps,
+            [
+                mt(1, 2),
+                GeneratedParserStep::LeftRecursiveLoop {
+                    state: 2,
+                    decision: 0,
+                    enter_alt: 1,
+                    exit_alt: 2,
+                    rule_index: 0,
+                    entry_state: 0,
+                    body: vec![GeneratedParserStep::Decision {
+                        state: 3,
+                        decision: 1,
+                        track_alt_number: false,
+                        allow_semantic_context: true,
+                        force_context: false,
+                        fast_path: None,
+                        alts: vec![vec![
+                            GeneratedParserStep::Precedence(2),
+                            mt(2, 10),
+                            GeneratedParserStep::CallRule {
+                                source_state: 10,
+                                rule_index: 0,
+                                precedence: GeneratedRuleCallPrecedence::Literal(3),
+                            },
+                        ]],
+                    }],
+                }
+            ]
+        );
+
+        let rendered = render_generated_rule_dispatch(
+            &[Some(body)],
+            &[],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            false,
+        );
+        assert!(rendered.contains("parse_generated_rule_0_precedence(precedence, allow_fallback)"));
+        assert!(
+            rendered.contains("push_new_recursion_context_with_previous(0isize, 0, &mut __ctx)")
+        );
+        assert!(rendered.contains("parse_rule_precedence_from_generated(0, 3)"));
+        assert!(rendered.contains("precpred(_ctx, 2)"));
+        assert!(
+            rendered
+                .contains("adaptive_predict_stream_info_with_context(0, __prediction_precedence")
+        );
+        assert!(rendered.contains("left_recursive_loop_enter_matches(atn(), 2, __precedence)"));
+        assert!(rendered.contains("ParserAtnSimulatorError::NoViableAlt { .. }"));
+    }
+
+    #[test]
+    fn drops_generated_rules_that_call_disabled_rules() {
+        let mut rules = vec![
+            Some(GeneratedParserRule {
+                rule_index: 0,
+                entry_state: 0,
+                left_recursive: false,
+                steps: vec![GeneratedParserStep::CallRule {
+                    source_state: 4,
+                    rule_index: 1,
+                    precedence: GeneratedRuleCallPrecedence::Literal(0),
+                }],
+            }),
+            None,
+            Some(GeneratedParserRule {
+                rule_index: 2,
+                entry_state: 10,
+                left_recursive: false,
+                steps: vec![mt(1, 0)],
+            }),
+        ];
+
+        drop_rules_calling_disabled_rules(&mut rules);
+
+        assert!(rules[0].is_none());
+        assert!(rules[1].is_none());
+        assert!(rules[2].is_some());
+    }
+
+    #[test]
+    fn classifies_expensive_long_leading_call_chains_as_atn_preferred() {
+        let mut rules = (0..ATN_PREFERRED_LEADING_CALL_CHAIN_MIN)
+            .map(|rule_index| {
+                let next = if rule_index + 1 == ATN_PREFERRED_LEADING_CALL_CHAIN_MIN {
+                    None
+                } else {
+                    Some(rule_index + 1)
+                };
+                Some(expensive_ladder_rule(rule_index, next))
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            generated_atn_preferred_rule_calls(&rules, &[]),
+            vec![true; ATN_PREFERRED_LEADING_CALL_CHAIN_MIN]
+        );
+
+        rules.truncate(ATN_PREFERRED_LEADING_CALL_CHAIN_MIN - 1);
+        assert_eq!(
+            generated_atn_preferred_rule_calls(&rules, &[]),
+            vec![false; ATN_PREFERRED_LEADING_CALL_CHAIN_MIN - 1]
+        );
+    }
+
+    #[test]
+    fn atn_preferred_rule_calls_reject_simple_operator_ladders() {
+        let simple_rules = (0..ATN_PREFERRED_LEADING_CALL_CHAIN_MIN)
+            .map(|rule_index| {
+                let steps = if rule_index + 1 == ATN_PREFERRED_LEADING_CALL_CHAIN_MIN {
+                    vec![adaptive_loop(rule_index), mt(1, 0)]
+                } else {
+                    vec![cr(rule_index + 1), adaptive_loop(rule_index)]
+                };
+                Some(test_rule(rule_index, steps))
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            generated_atn_preferred_rule_calls(&simple_rules, &[]),
+            vec![false; ATN_PREFERRED_LEADING_CALL_CHAIN_MIN]
+        );
+
+        let expensive_rules = (0..ATN_PREFERRED_LEADING_CALL_CHAIN_MIN)
+            .map(|rule_index| {
+                let next = if rule_index + 1 == ATN_PREFERRED_LEADING_CALL_CHAIN_MIN {
+                    None
+                } else {
+                    Some(rule_index + 1)
+                };
+                Some(expensive_ladder_rule(rule_index, next))
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            generated_atn_preferred_rule_calls(&expensive_rules, &[]),
+            vec![true; ATN_PREFERRED_LEADING_CALL_CHAIN_MIN]
+        );
+    }
+
+    #[test]
+    fn atn_preferred_rule_calls_propagate_through_expensive_wrappers() {
+        let mut rules = Vec::new();
+        rules.push(Some(test_rule(
+            0,
+            vec![mt(9, 0), adaptive_loop(100), adaptive_loop(101), cr(1)],
+        )));
+        rules.push(Some(test_rule(
+            1,
+            vec![mt(8, 0), adaptive_loop(102), adaptive_loop(103), cr(2)],
+        )));
+        for rule_index in 2..(2 + ATN_PREFERRED_LEADING_CALL_CHAIN_MIN) {
+            let next = if rule_index + 1 == 2 + ATN_PREFERRED_LEADING_CALL_CHAIN_MIN {
+                None
+            } else {
+                Some(rule_index + 1)
+            };
+            rules.push(Some(expensive_ladder_rule(rule_index, next)));
+        }
+        rules.push(Some(test_rule(10, vec![cr(2)])));
+
+        let mut expected = vec![true; 2 + ATN_PREFERRED_LEADING_CALL_CHAIN_MIN];
+        expected.push(false);
+        assert_eq!(generated_atn_preferred_rule_calls(&rules, &[]), expected);
+    }
+
+    #[test]
+    fn renders_atn_preferred_generated_child_calls_as_interpreted_by_default() {
+        let rules = (0..ATN_PREFERRED_LEADING_CALL_CHAIN_MIN)
+            .map(|rule_index| {
+                let next = if rule_index + 1 == ATN_PREFERRED_LEADING_CALL_CHAIN_MIN {
+                    None
+                } else {
+                    Some(rule_index + 1)
+                };
+                Some(expensive_ladder_rule(rule_index, next))
+            })
+            .collect::<Vec<_>>();
+        let direct_generated_rule_calls = vec![true; rules.len()];
+        let rule_names = Vec::new();
+
+        let rendered = render_generated_rule_dispatch_with_rule_names(
+            &rules,
+            &direct_generated_rule_calls,
+            &rule_names,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            false);
+
+        // ATN-preferred children route through `parse_rule_precedence_from_generated`:
+        // the rule's generated dispatch arm is `generated_only()`-guarded, so in normal
+        // mode the wrapper parses the child interpreted (optimization preserved) while
+        // buffering its actions in position (correct ordering).
+        assert!(rendered.contains("self.parse_rule_precedence_from_generated(1, 0)"));
+        assert!(!rendered.contains("self.parse_interpreted_rule_precedence(1, 0)"));
+    }
+
+    #[test]
+    fn renders_atn_preferred_dispatch_only_for_generated_only_mode() {
+        let mut rules = Vec::new();
+        rules.push(Some(test_rule(
+            0,
+            vec![mt(9, 0), adaptive_loop(100), adaptive_loop(101), cr(2)],
+        )));
+        rules.push(Some(test_rule(1, vec![mt(1, 0)])));
+        for rule_index in 2..(2 + ATN_PREFERRED_LEADING_CALL_CHAIN_MIN) {
+            let next = if rule_index + 1 == 2 + ATN_PREFERRED_LEADING_CALL_CHAIN_MIN {
+                None
+            } else {
+                Some(rule_index + 1)
+            };
+            rules.push(Some(expensive_ladder_rule(rule_index, next)));
+        }
+        let direct_generated_rule_calls = vec![true; rules.len()];
+        let rule_names = Vec::new();
+
+        let rendered = render_generated_rule_dispatch_with_rule_names(
+            &rules,
+            &direct_generated_rule_calls,
+            &rule_names,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            false);
+
+        assert!(rendered.contains(
+            "0 if self.generated_only() => Some(self.parse_generated_rule_0_dispatch(precedence, allow_fallback))"
+        ));
+        assert!(!rendered.contains(
+            "0 => Some(self.parse_generated_rule_0_dispatch(precedence, allow_fallback))"
+        ));
+        // The ATN-preferred child call routes through the buffering wrapper.
+        assert!(rendered.contains("self.parse_rule_precedence_from_generated(2, 0)"));
+        assert!(!rendered.contains("self.parse_interpreted_rule_precedence(2, 0)"));
+    }
+
+    #[test]
+    fn compiles_token_set_transitions() {
+        let range = Transition::Range {
+            target: 7,
+            start: 2,
+            stop: 4,
+        };
+        assert_eq!(
+            compile_generated_parser_transition(
+                3,
+                &[],
+                &range,
+                ActionStateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                    inline: &BTreeSet::new(),
+                },
+                PredicateCoordinateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                }
+            ),
+            Some((Some(ms(vec![(2, 4)], 7)), 7))
+        );
+
+        let mut set = IntervalSet::new();
+        set.add(1);
+        set.add_range(5, 6);
+        let set_transition = Transition::Set { target: 8, set };
+        assert_eq!(
+            compile_generated_parser_transition(
+                3,
+                &[],
+                &set_transition,
+                ActionStateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                    inline: &BTreeSet::new(),
+                },
+                PredicateCoordinateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                }
+            ),
+            Some((Some(ms(vec![(1, 1), (5, 6)], 8)), 8))
+        );
+
+        let mut not_set = IntervalSet::new();
+        not_set.add(1);
+        let not_set_transition = Transition::NotSet {
+            target: 9,
+            set: not_set,
+        };
+        assert_eq!(
+            compile_generated_parser_transition(
+                3,
+                &[],
+                &not_set_transition,
+                ActionStateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                    inline: &BTreeSet::new(),
+                },
+                PredicateCoordinateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                }
+            ),
+            Some((Some(mns(vec![(1, 1)], 9)), 9))
+        );
+    }
+
+    #[test]
+    fn compiles_generated_action_transitions_only_for_allowed_states() {
+        let action = Transition::Action {
+            target: 8,
+            rule_index: 2,
+            action_index: Some(0),
+            context_dependent: false,
+        };
+        assert_eq!(
+            compile_generated_parser_transition(
+                4,
+                &[],
+                &action,
+                ActionStateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                    inline: &BTreeSet::new(),
+                },
+                PredicateCoordinateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                }
+            ),
+            None
+        );
+
+        let mut generated_actions = BTreeSet::new();
+        generated_actions.insert(4);
+        assert_eq!(
+            compile_generated_parser_transition(
+                4,
+                &[],
+                &action,
+                ActionStateSets {
+                    all: &BTreeSet::new(),
+                    generated: &generated_actions,
+                    inline: &BTreeSet::new(),
+                },
+                PredicateCoordinateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                }
+            ),
+            Some((
+                Some(GeneratedParserStep::Action {
+                    source_state: 4,
+                    rule_index: 2,
+                }),
+                8
+            ))
+        );
+    }
+
+    #[test]
+    fn compiles_rule_call_precedence_from_rule_args() {
+        let rule = Transition::Rule {
+            target: 1,
+            rule_index: 2,
+            follow_state: 8,
+            precedence: 0,
+        };
+
+        assert_eq!(
+            compile_generated_parser_transition(
+                4,
+                &[(4, 2, RuleArgTemplate::Literal(6))],
+                &rule,
+                ActionStateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                    inline: &BTreeSet::new(),
+                },
+                PredicateCoordinateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                }
+            ),
+            Some((
+                Some(GeneratedParserStep::CallRule {
+                    source_state: 4,
+                    rule_index: 2,
+                    precedence: GeneratedRuleCallPrecedence::Literal(6),
+                }),
+                8
+            ))
+        );
+
+        assert_eq!(
+            compile_generated_parser_transition(
+                4,
+                &[(4, 2, RuleArgTemplate::InheritLocal)],
+                &rule,
+                ActionStateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                    inline: &BTreeSet::new(),
+                },
+                PredicateCoordinateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                }
+            ),
+            Some((
+                Some(GeneratedParserStep::CallRule {
+                    source_state: 4,
+                    rule_index: 2,
+                    precedence: GeneratedRuleCallPrecedence::InheritLocal,
+                }),
+                8
+            ))
+        );
+    }
+
+    #[test]
+    fn compiles_synthetic_noop_action_transitions_as_epsilon() {
+        let action = Transition::Action {
+            target: 8,
+            rule_index: 2,
+            action_index: None,
+            context_dependent: false,
+        };
+        assert_eq!(
+            compile_generated_parser_transition(
+                4,
+                &[],
+                &action,
+                ActionStateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                    inline: &BTreeSet::new(),
+                },
+                PredicateCoordinateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                }
+            ),
+            Some((None, 8))
+        );
+    }
+
+    #[test]
+    fn rejects_known_non_inline_noop_action_transitions() {
+        let action = Transition::Action {
+            target: 8,
+            rule_index: 2,
+            action_index: None,
+            context_dependent: false,
+        };
+        let mut action_states = BTreeSet::new();
+        action_states.insert(4);
+        assert_eq!(
+            compile_generated_parser_transition(
+                4,
+                &[],
+                &action,
+                ActionStateSets {
+                    all: &action_states,
+                    generated: &BTreeSet::new(),
+                    inline: &BTreeSet::new(),
+                },
+                PredicateCoordinateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                }
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn compiles_parser_predicates_as_viable_when_no_metadata_is_active() {
+        let predicate = Transition::Predicate {
+            target: 8,
+            rule_index: 2,
+            pred_index: 1,
+            context_dependent: false,
+        };
+
+        assert_eq!(
+            compile_generated_parser_transition(
+                4,
+                &[],
+                &predicate,
+                ActionStateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                    inline: &BTreeSet::new(),
+                },
+                PredicateCoordinateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                }
+            ),
+            Some((None, 8))
+        );
+    }
+
+    #[test]
+    fn compiles_generated_parser_predicate_transitions() {
+        let predicate = Transition::Predicate {
+            target: 8,
+            rule_index: 2,
+            pred_index: 1,
+            context_dependent: false,
+        };
+        let mut predicates = BTreeSet::new();
+        predicates.insert((2, 1));
+        let generated_predicates = predicates.clone();
+
+        assert_eq!(
+            compile_generated_parser_transition(
+                4,
+                &[],
+                &predicate,
+                ActionStateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                    inline: &BTreeSet::new(),
+                },
+                PredicateCoordinateSets {
+                    all: &predicates,
+                    generated: &generated_predicates,
+                }
+            ),
+            Some((
+                Some(GeneratedParserStep::Predicate {
+                    rule_index: 2,
+                    pred_index: 1,
+                }),
+                8
+            ))
+        );
+    }
+
+    #[test]
+    fn renders_fail_option_parser_predicate_error() {
+        let mut rendered = String::new();
+        render_generated_step(
+            &mut rendered,
+            &GeneratedParserStep::Predicate {
+                rule_index: 2,
+                pred_index: 1,
+            },
+            0,
+            GeneratedStepRenderContext {
+                inline_action_statements: &BTreeMap::new(),
+                init_entry_action_statements: &BTreeMap::new(),
+                return_action_statements: &BTreeMap::new(),
+                track_alt_numbers: false,
+                direct_generated_rule_calls: &[],
+                atn_preferred_rule_calls: &[],
+            },
+        );
+
+        assert!(
+            rendered.contains(
+                "parser_semantic_predicate_matches_with_context_and_local(PARSER_PREDICATES, 2, 1, &__ctx, __precedence)"
+            )
+        );
+        assert!(rendered.contains("failed_predicate_option_error(2, __message)"));
+        assert!(rendered.contains("failed_predicate_error(\"semantic predicate\")"));
+    }
+
+    fn render_call_rule_step(
+        direct_generated_rule_calls: &[bool],
+        atn_preferred_rule_calls: &[bool],
+    ) -> String {
+        let mut rendered = String::new();
+        render_generated_step(
+            &mut rendered,
+            &GeneratedParserStep::CallRule {
+                source_state: 4,
+                rule_index: 1,
+                precedence: GeneratedRuleCallPrecedence::Literal(0),
+            },
+            2,
+            GeneratedStepRenderContext {
+                inline_action_statements: &BTreeMap::new(),
+                init_entry_action_statements: &BTreeMap::new(),
+                return_action_statements: &BTreeMap::new(),
+                track_alt_numbers: false,
+                direct_generated_rule_calls,
+                atn_preferred_rule_calls,
+            },
+        );
+        rendered
+    }
+
+    #[test]
+    fn atn_preferred_child_with_after_action_routes_through_dispatch_wrapper() {
+        // An ATN-preferred child that carries an `@after` action
+        // (direct_generated_rule_calls[1] == false) must go through
+        // `parse_rule_precedence_from_generated`, which preserves interpreted routing
+        // (the rule's generated dispatch arm is guarded by `generated_only()`) while
+        // BUFFERING the child's body actions and `@after` in position.
+        let rendered = render_call_rule_step(&[true, false], &[true, true]);
+
+        assert!(rendered.contains("self.parse_rule_precedence_from_generated(1, 0)"));
+        assert!(!rendered.contains("self.parse_interpreted_rule_precedence(1, 0)"));
+    }
+
+    #[test]
+    fn atn_preferred_child_without_after_also_routes_through_dispatch_wrapper() {
+        // An ATN-preferred child WITHOUT `@after` (direct_generated_rule_calls[1] ==
+        // true) must ALSO route through `parse_rule_precedence_from_generated`, not the
+        // bare `parse_interpreted_rule_precedence`: the bare interpreted call runs the
+        // child's body actions immediately, which reorders them before the generated
+        // parent's buffered actions. The wrapper buffers them in position instead while
+        // still parsing the child interpreted (the dispatch arm is `generated_only()`
+        // guarded).
+        let rendered = render_call_rule_step(&[true, true], &[true, true]);
+
+        assert!(rendered.contains("self.parse_rule_precedence_from_generated(1, 0)"));
+        assert!(!rendered.contains("self.parse_interpreted_rule_precedence(1, 0)"));
+    }
+
+    #[test]
+    fn rejects_known_parser_predicates_without_generated_metadata() {
+        let predicate = Transition::Predicate {
+            target: 8,
+            rule_index: 2,
+            pred_index: 1,
+            context_dependent: false,
+        };
+        let mut predicates = BTreeSet::new();
+        predicates.insert((2, 1));
+
+        assert_eq!(
+            compile_generated_parser_transition(
+                4,
+                &[],
+                &predicate,
+                ActionStateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                    inline: &BTreeSet::new(),
+                },
+                PredicateCoordinateSets {
+                    all: &predicates,
+                    generated: &BTreeSet::new(),
+                }
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn parse_rule_fallback_runs_parser_actions() {
+        let fallback = render_parser_parse_rule_fallback(
+            &[],
+            false,
+            &[],
+            &minimal_parser_data(),
+            &[],
+            &[],
+            &[],
+            &[],
+            true,
+            false,
+            false,
+            false,
+        )
+        .expect("fallback should render");
+
+        assert!(fallback.contains(
+            "parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence"
+        ));
+        assert!(fallback.contains("for action in actions { self.run_action(action, &tree); }"));
+        assert!(fallback.contains("Ok(tree)"));
+    }
+
+    #[test]
+    fn parse_rule_fallback_buffers_parser_actions_when_nested() {
+        // The buffered fallback (used when a generated parent calls a child on the
+        // interpreted path) must push the child's action events onto
+        // `generated_actions` in position instead of running them immediately, so
+        // they replay in source order relative to the parent's buffered actions.
+        let fallback = render_parser_parse_rule_fallback(
+            &[],
+            false,
+            &[],
+            &minimal_parser_data(),
+            &[],
+            &[],
+            &[],
+            &[],
+            true,
+            false,
+            false,
+            true,
+        )
+        .expect("buffered fallback should render");
+
+        // Each buffered action is pushed as `GeneratedAction::Parser { action, tree }`,
+        // tagging `$ctx`-rooted actions with this child's tree (the rest `None`).
+        assert!(fallback.contains("self.generated_actions.push(GeneratedAction::Parser { action, tree: __tree });"));
+        assert!(fallback.contains("CTX_ROOTED_ACTION_STATES.contains(&action.source_state())"));
+        assert!(!fallback.contains("self.run_action(action, &tree);"));
+        assert!(fallback.contains("Ok(tree)"));
+    }
+
+    #[test]
+    fn renders_after_actions_inside_parse_rule_dispatch() {
+        let rendered = render_parser(
+            "TParser",
+            &minimal_parser_data(),
+            Some(r#"parser grammar T; s @after {<InputText():writeln()>} : ;"#),
+        )
+        .expect("parser should render");
+
+        assert!(rendered.contains("matches!(rule_index, 0)"));
+        assert!(rendered.contains("let __has_after_actions = Self::has_after_actions(rule_index);"));
+        // The @after start comes from the rule context (first visible token), not
+        // the raw pre-rule cursor, so a leading hidden prefix is excluded.
+        assert!(rendered.contains(
+            "let start_index = self.base.after_action_start_index_for_tree(&__tree, __rule_start);"
+        ));
+        assert!(
+            rendered
+                .contains("self.run_after_actions(rule_index, &__tree, start_index, stop_index);")
+        );
+        assert!(rendered.contains(
+            "let text = self.base.text_interval(start_index, stop_index); println!(\"{}\", text);"
+        ));
+        assert!(rendered.contains("parse_generated_rule_0"));
+        assert!(!rendered.contains("let tree = self.parse_rule(0)?;"));
+    }
+
+    #[test]
+    fn context_superclass_does_not_disable_generated_rules() {
+        let rendered = render_parser(
+            "TParser",
+            &minimal_parser_data(),
+            Some(
+                r#"parser grammar T;
+options { contextSuperClass=MyRuleNode; }
+<TreeNodeWithAltNumField(X="T")>
+s : ;
+"#,
+            ),
+        )
+        .expect("parser should render");
+
+        assert!(rendered.contains("parse_generated_rule_0"));
+        assert!(rendered.contains("track_alt_numbers: true"));
+    }
+
+    #[test]
+    fn generated_parser_handles_diagnostic_reporting() {
+        let rendered =
+            render_parser("TParser", &minimal_parser_data(), None).expect("parser should render");
+
+        assert!(!rendered.contains("if !self.base.report_diagnostic_errors() || __generated_only"));
+        assert!(
+            rendered.contains("self.parse_interpreted_rule_precedence(rule_index, precedence)?")
+        );
+    }
+
+    #[test]
+    fn generated_only_mode_disables_missing_rule_fallback() {
+        let rendered =
+            render_parser("TParser", &minimal_parser_data(), None).expect("parser should render");
+
+        assert!(rendered.contains("ANTLR4_RUST_GENERATED_ONLY"));
+        assert!(rendered.contains("let __generated_only = self.generated_only();"));
+        assert!(!rendered.contains("GeneratedRuleError::Recoverable"));
+        assert!(rendered.contains("generated parser did not emit rule {}"));
+    }
+
+    #[test]
+    fn require_generated_parser_reports_missing_rules() {
+        let error = require_all_parser_rules_generated(&[None], &minimal_parser_data())
+            .expect_err("missing generated rule should fail strict mode");
+
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert_eq!(
+            error.to_string(),
+            "generated parser did not emit 1 rule(s): s"
+        );
+    }
+
+    #[test]
+    fn generated_parser_reports_lexer_errors_on_outer_success() {
+        let rendered =
+            render_parser("TParser", &minimal_parser_data(), None).expect("parser should render");
+
+        assert!(rendered.contains("if __from_generated && allow_generated_fallback {"));
+        assert!(rendered.contains("self.base.report_generated_parser_diagnostics();"));
+        assert!(!rendered.contains("self.base.report_token_source_errors();"));
+    }
+
+    #[test]
+    fn renders_generated_rule_init_actions_on_success() {
+        let rendered = render_parser(
+            "TParser",
+            &minimal_parser_data(),
+            Some(
+                r#"parser grammar T;
+s @init {<GetExpectedTokenNames():writeln()>} : ;
+"#,
+            ),
+        )
+        .expect("parser should render");
+
+        assert!(rendered.contains("parse_generated_rule_0"));
+        assert!(rendered.contains("ParserAction::new_rule_init(0, __rule_start, Some(0))"));
+        assert!(rendered.contains("self.base.expected_tokens_at_state(atn(), state)"));
+        // The print-style @init above is NOT run eagerly at entry: only its action
+        // event is buffered (for ordered replay). The side-effecting statement
+        // itself lives in `run_action`, rendered after the rule body, so it never
+        // appears inline inside the body.
+        let expected = "self.base.expected_tokens_at_state(atn(), state)";
+        let body_start = rendered
+            .find("let __result = (|| -> Result<(), antlr4_runtime::AntlrError>")
+            .expect("rule body present");
+        assert!(
+            rendered.find(expected).expect("expected stmt") > body_start,
+            "side-effecting @init must not be hoisted to rule entry"
+        );
+    }
+
+    #[test]
+    fn generated_rule_recovers_own_sync_failure_unless_top_level() {
+        // A rule's own sync failure (`__sync_error`) is fatal only at the top-level
+        // public entry (`allow_fallback`); a nested child recovers it locally and
+        // returns a partial subtree (so a parent never recovers the child's failure
+        // on the parent context, losing the child subtree). Assert the generated
+        // catch arm gates the `Fatal` return on `allow_fallback` and otherwise runs
+        // `recover_generated_rule` + `finish_rule` + `Ok`.
+        let rendered = render_parser("TParser", &minimal_parser_data(), None)
+            .expect("parser should render");
+        let sync_arm = rendered
+            .find("if let Some(__error) = __sync_error {")
+            .expect("sync-error catch arm present");
+        let rest = &rendered[sync_arm..];
+        // Inside the sync arm, the Fatal return is guarded by `if allow_fallback`.
+        let guard = rest
+            .find("if allow_fallback {")
+            .expect("fatal return gated on allow_fallback");
+        let fatal = rest
+            .find("return Err(GeneratedRuleError::Fatal(__error));")
+            .expect("fatal return present");
+        assert!(guard < fatal, "Fatal return must be inside the allow_fallback guard");
+        // And the nested-child path recovers locally and returns Ok.
+        let recover = rest
+            .find("self.base.recover_generated_rule(&mut __ctx, atn(), __error);")
+            .expect("local recovery present in sync arm");
+        assert!(recover > guard, "recover path follows the guarded fatal return");
+        assert!(rest[recover..].contains("return Ok(__tree);"));
+    }
+
+    #[test]
+    fn runs_init_member_action_before_rule_body() {
+        // Regression for #12: a member-setting `@init` must run on rule ENTRY,
+        // before the body, so same-rule predicates/actions observe it. (Members
+        // are declared after the rule so the action is captured by the existing
+        // rule-name scan.)
+        let rendered = render_parser(
+            "TParser",
+            &minimal_parser_data(),
+            Some(
+                r#"parser grammar T;
+s @init {<SetMember("i","1")>} : ;
+@parser::members {<InitIntMember("i","0")>}
+"#,
+            ),
+        )
+        .expect("parser should render");
+
+        let set_member = rendered
+            .find("self.base.set_int_member(0, 1);")
+            .expect("member @init should emit a live entry write");
+        let body_start = rendered
+            .find("let __result = (|| -> Result<(), antlr4_runtime::AntlrError>")
+            .expect("generated rule body should be present");
+        assert!(
+            set_member < body_start,
+            "member @init write must run before the rule body, not only at exit replay"
+        );
+        // The buffered `@init` action event is still emitted for replay/listeners,
+        // and it must be queued BEFORE the body steps so the buffered replay runs
+        // it ahead of body actions (matching ANTLR's init-before-body order).
+        let init_push = rendered
+            .find("ParserAction::new_rule_init(0, __rule_start, Some(0))")
+            .expect("buffered @init action event should be emitted");
+        assert!(
+            init_push < body_start,
+            "@init action must be queued before the rule body, not appended at exit \
+             (otherwise the buffered replay runs body actions before @init)"
+        );
+    }
+
+    #[test]
+    fn call_rule_step_captures_member_snapshot_for_interpreted_child() {
+        // A generated rule that calls a child must snapshot integer members after
+        // the child when the child ran interpreted (it mutates members immediately
+        // instead of buffering actions); otherwise the top-level replay restores
+        // members to the rule-entry checkpoint and silently drops the child's
+        // updates. Render a `CallRule` step directly (the codegen test harness
+        // can't synthesize a multi-rule ATN from grammar text).
+        let mut rendered = String::new();
+        render_generated_step(
+            &mut rendered,
+            &GeneratedParserStep::CallRule {
+                source_state: 3,
+                rule_index: 1,
+                precedence: GeneratedRuleCallPrecedence::Literal(0),
+            },
+            2,
+            GeneratedStepRenderContext {
+                inline_action_statements: &BTreeMap::new(),
+                init_entry_action_statements: &BTreeMap::new(),
+                return_action_statements: &BTreeMap::new(),
+                track_alt_numbers: false,
+                direct_generated_rule_calls: &[],
+                atn_preferred_rule_calls: &[],
+            },
+        );
+
+        // The child call is bracketed by a buffer-length marker + member checkpoint,
+        // and a MemberSnapshot is pushed only when the child buffered nothing but
+        // changed members (i.e. it ran interpreted).
+        assert!(rendered.contains("let __child_action_marker = self.generated_actions.len();"));
+        assert!(
+            rendered.contains("let __child_member_checkpoint = self.base.int_members_checkpoint();")
+        );
+        assert!(rendered.contains("if self.generated_actions.len() == __child_action_marker {"));
+        assert!(rendered.contains("if __child_members != __child_member_checkpoint {"));
+        assert!(rendered.contains(
+            "self.generated_actions.push(GeneratedAction::MemberSnapshot(__child_members));"
+        ));
+        // Marker capture must precede the child call, which must precede the snapshot.
+        let marker = rendered.find("__child_action_marker = ").expect("marker");
+        let call = rendered.find("let __child =").expect("child call");
+        let snapshot = rendered.find("GeneratedAction::MemberSnapshot").expect("snapshot");
+        assert!(marker < call && call < snapshot);
+    }
+
+    #[test]
+    fn only_ctx_rooted_actions_are_classified_for_child_tree_retag() {
+        // `$ctx`-rooted actions (StringTree Current, incl. nested in a Sequence)
+        // must be classified so a nested child's buffered action is re-tagged with
+        // the child tree. Tree-SEARCH actions (RuleInvocationStack, first_rule-based
+        // StringTree::Rule/Label, $rule.text, rule-return) must NOT be classified —
+        // they resolve from the outer/replay tree (e.g. RuleInvocationStack in a
+        // child reports the ancestor chain, which needs the parent tree).
+        assert!(action_is_ctx_rooted(&ActionTemplate::StringTree {
+            target: StringTreeTarget::Current,
+            newline: true,
+        }));
+        assert!(action_is_ctx_rooted(&ActionTemplate::Sequence(vec![
+            ActionTemplate::Text { newline: false },
+            ActionTemplate::StringTree {
+                target: StringTreeTarget::Current,
+                newline: false,
+            },
+        ])));
+        assert!(!action_is_ctx_rooted(&ActionTemplate::RuleInvocationStack {
+            newline: true
+        }));
+        assert!(!action_is_ctx_rooted(&ActionTemplate::StringTree {
+            target: StringTreeTarget::Rule(1),
+            newline: true,
+        }));
+        assert!(!action_is_ctx_rooted(&ActionTemplate::StringTree {
+            target: StringTreeTarget::Label("r".to_owned()),
+            newline: true,
+        }));
+        assert!(!action_is_ctx_rooted(&ActionTemplate::Text { newline: true }));
+    }
+
+    #[test]
+    fn buffered_parser_action_replays_with_tagged_tree() {
+        // Module-level: `run_generated_action` must replay a `Parser` action against
+        // its own tagged tree when present (a child's $ctx action), falling back to
+        // the replay tree only when untagged (a rule's own / tree-search actions).
+        // The ctx-rooted allowlist const is always emitted.
+        let rendered = render_parser("TParser", &minimal_parser_data(), None)
+            .expect("parser should render");
+        assert!(rendered.contains(
+            "GeneratedAction::Parser { action, tree: action_tree } => {"
+        ));
+        assert!(rendered.contains("self.run_action(action, action_tree.as_ref().unwrap_or(tree));"));
+        assert!(rendered.contains("const CTX_ROOTED_ACTION_STATES: &[usize] = &["));
+    }
+
+    #[test]
+    fn call_rule_site_retags_child_ctx_actions_with_child_tree() {
+        // The CallRule step emits the re-tag loop that tags the child's untagged
+        // `$ctx`-rooted buffered actions with the child tree (innermost-wins via the
+        // `is_none()` guard).
+        let rendered = render_call_rule_step(&[], &[]);
+        assert!(rendered.contains(
+            "for __buffered in &mut self.generated_actions[__child_action_marker..]"
+        ));
+        assert!(rendered.contains(
+            "if tree.is_none() && CTX_ROOTED_ACTION_STATES.contains(&action.source_state())"
+        ));
+        assert!(rendered.contains("*tree = Some(__child.clone());"));
+    }
+
+    #[test]
+    fn renders_generated_actions_as_buffered_events() {
+        let rule = GeneratedParserRule {
+            rule_index: 0,
+            entry_state: 0,
+            left_recursive: false,
+            steps: vec![
+                GeneratedParserStep::Action {
+                    source_state: 4,
+                    rule_index: 0,
+                },
+                GeneratedParserStep::Action {
+                    source_state: 6,
+                    rule_index: 0,
+                },
+            ],
+        };
+        let mut statements = BTreeMap::new();
+        statements.insert(
+            4,
+            "let text = self.base.text_interval(action.start_index(), action.stop_index()); print!(\"{}\", text);"
+                .to_owned(),
+        );
+        statements.insert(6, "println!(\"alt 2\");".to_owned());
+
+        let rendered = render_generated_rule_dispatch(
+            &[Some(rule)],
+            &[],
+            &statements,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            false,
+        );
+
+        assert!(rendered.contains("parser_action_at_current(4, 0"));
+        assert!(rendered.contains("parser_action_at_current(6, 0"));
+        assert!(rendered.contains("self.generated_actions.push(GeneratedAction::Parser { action, tree: None });"));
+        assert!(rendered.contains("println!(\"alt 2\");"));
+    }
+
+    #[test]
+    fn renders_wildcard_match_through_recovering_path() {
+        // A wildcard (`.`) must go through the recovering match (modeled as an
+        // empty-complement not-set over the full vocabulary) so a wildcard at EOF
+        // performs ANTLR's single-token insertion instead of aborting the rule.
+        let rule = GeneratedParserRule {
+            rule_index: 0,
+            entry_state: 0,
+            left_recursive: false,
+            steps: vec![GeneratedParserStep::MatchWildcard { follow_state: 7 }],
+        };
+
+        let rendered = render_generated_rule_dispatch(
+            &[Some(rule)],
+            &[],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            false,
+        );
+
+        // Recovering not-set over 1..=max with an empty exclusion = "any token",
+        // threading the wildcard's follow state for EOF-insertion follow checks.
+        assert!(rendered.contains(
+            "match_not_set_recovering(&[], 1, atn().max_token_type(), 7, atn())"
+        ));
+        assert!(rendered.contains("__consumed_eof |= __match.consumed_eof();"));
+        // The old non-recovering call must be gone.
+        assert!(!rendered.contains("self.base.match_wildcard()"));
+    }
+
+    #[test]
+    fn generated_decision_does_not_reject_semantic_context_metadata() {
+        let alts = vec![vec![mt(1, 0)], vec![]];
+        let mut rendered = String::new();
+
+        render_generated_decision(
+            &mut rendered,
+            DecisionRender {
+                state: 1,
+                decision: 0,
+                track_alt_number: false,
+                allow_semantic_context: false,
+                force_context: false,
+                fast_path: None,
+                alts: &alts,
+            },
+            0,
+            GeneratedStepRenderContext {
+                inline_action_statements: &BTreeMap::new(),
+                init_entry_action_statements: &BTreeMap::new(),
+                return_action_statements: &BTreeMap::new(),
+                track_alt_numbers: false,
+                direct_generated_rule_calls: &[],
+                atn_preferred_rule_calls: &[],
+            },
+        );
+
+        assert!(rendered.contains("ll1_decision_prediction(atn(), 1)"));
+        assert!(rendered.contains("prediction_mode() != antlr4_runtime::PredictionMode::Sll"));
+        assert!(!rendered.contains("has_semantic_context"));
+    }
+
+    #[test]
+    fn generated_decision_filters_semantic_predicate_alts() {
+        let alts = vec![
+            vec![
+                GeneratedParserStep::Predicate {
+                    rule_index: 1,
+                    pred_index: 0,
+                },
+                mt(1, 2),
+            ],
+            vec![
+                GeneratedParserStep::Predicate {
+                    rule_index: 1,
+                    pred_index: 1,
+                },
+                mt(1, 3),
+            ],
+            vec![mt(2, 4)],
+        ];
+        let mut rendered = String::new();
+
+        render_generated_decision(
+            &mut rendered,
+            DecisionRender {
+                state: 1,
+                decision: 0,
+                track_alt_number: false,
+                allow_semantic_context: true,
+                force_context: false,
+                fast_path: None,
+                alts: &alts,
+            },
+            0,
+            GeneratedStepRenderContext {
+                inline_action_statements: &BTreeMap::new(),
+                init_entry_action_statements: &BTreeMap::new(),
+                return_action_statements: &BTreeMap::new(),
+                track_alt_numbers: false,
+                direct_generated_rule_calls: &[],
+                atn_preferred_rule_calls: &[],
+            },
+        );
+
+        assert!(rendered.contains("if __prediction.has_semantic_context"));
+        assert!(rendered.contains(
+            "parser_semantic_predicate_matches_with_context_and_local(PARSER_PREDICATES, 1, 0, &__ctx, __precedence)"
+        ));
+        assert!(rendered.contains(
+            "parser_semantic_predicate_matches_with_context_and_local(PARSER_PREDICATES, 1, 1, &__ctx, __precedence)"
+        ));
+        assert!(rendered.contains("__semantic_la == 1"));
+        assert!(
+            rendered.contains("antlr4_runtime::ParserAtnPrediction { alt: __alt, ..__prediction }")
+        );
+        assert!(rendered.contains("no_viable_alternative_error(__decision_start)"));
+        assert!(!rendered.contains("__sync_error = Some(__error.clone())"));
+    }
+
+    #[test]
+    fn generated_decision_records_adaptive_diagnostics() {
+        let alts = vec![vec![mt(1, 4)], vec![mt(2, 5)]];
+        let mut rendered = String::new();
+
+        render_generated_decision(
+            &mut rendered,
+            DecisionRender {
+                state: 16,
+                decision: 0,
+                track_alt_number: false,
+                allow_semantic_context: false,
+                force_context: false,
+                fast_path: None,
+                alts: &alts,
+            },
+            0,
+            GeneratedStepRenderContext {
+                inline_action_statements: &BTreeMap::new(),
+                init_entry_action_statements: &BTreeMap::new(),
+                return_action_statements: &BTreeMap::new(),
+                track_alt_numbers: false,
+                direct_generated_rule_calls: &[],
+                atn_preferred_rule_calls: &[],
+            },
+        );
+
+        assert!(
+            rendered.contains("record_generated_prediction_diagnostic(atn(), 16, &__prediction)")
+        );
+        assert!(!rendered.contains("__diagnostic_la"));
+    }
+
+    #[test]
+    fn generated_semantic_decision_reports_filtered_ambiguity_diagnostics() {
+        let alts = vec![
+            vec![mt(2, 4)],
+            vec![mt(2, 5)],
+            vec![
+                GeneratedParserStep::Predicate {
+                    rule_index: 1,
+                    pred_index: 0,
+                },
+                mt(2, 6),
+            ],
+        ];
+        let mut rendered = String::new();
+
+        render_generated_decision(
+            &mut rendered,
+            DecisionRender {
+                state: 16,
+                decision: 0,
+                track_alt_number: false,
+                allow_semantic_context: true,
+                force_context: false,
+                fast_path: None,
+                alts: &alts,
+            },
+            0,
+            GeneratedStepRenderContext {
+                inline_action_statements: &BTreeMap::new(),
+                init_entry_action_statements: &BTreeMap::new(),
+                return_action_statements: &BTreeMap::new(),
+                track_alt_numbers: false,
+                direct_generated_rule_calls: &[],
+                atn_preferred_rule_calls: &[],
+            },
+        );
+
+        assert!(rendered.contains("if self.base.report_diagnostic_errors()"));
+        assert!(rendered.contains("let __diagnostic_la = self.base.la(1);"));
+        assert!(rendered.contains("if __diagnostic_la == 2"));
+        assert!(rendered.contains("__diagnostic_alts.push(1);"));
+        assert!(rendered.contains("__diagnostic_alts.push(2);"));
+        assert!(rendered.contains(
+            "record_generated_ambiguity_diagnostic(atn(), 16, __decision_start, __decision_start, &__diagnostic_alts)"
+        ));
+    }
+
+    #[test]
+    fn generated_loop_filters_failed_leading_predicate_to_exit_alt() {
+        let body = vec![
+            GeneratedParserStep::Predicate {
+                rule_index: 1,
+                pred_index: 0,
+            },
+            mt(3, 4),
+        ];
+        let mut rendered = String::new();
+
+        render_generated_star_loop(
+            &mut rendered,
+            StarLoopRender {
+                state: 1,
+                decision: 0,
+                alts: (1, 2),
+                track_alt_number: false,
+                allow_semantic_context: true,
+                force_context: false,
+                plus_loop: false,
+                fast_path: None,
+                body: &body,
+            },
+            0,
+            GeneratedStepRenderContext {
+                inline_action_statements: &BTreeMap::new(),
+                init_entry_action_statements: &BTreeMap::new(),
+                return_action_statements: &BTreeMap::new(),
+                track_alt_numbers: false,
+                direct_generated_rule_calls: &[],
+                atn_preferred_rule_calls: &[],
+            },
+        );
+
+        assert!(rendered.contains("if __prediction.alt == 1"));
+        assert!(rendered.contains(
+            "parser_semantic_predicate_matches_with_context_and_local(PARSER_PREDICATES, 1, 0, &__ctx, __precedence)"
+        ));
+        assert!(rendered.contains("__semantic_la == 3"));
+        assert!(
+            rendered.contains("antlr4_runtime::ParserAtnPrediction { alt: 2, ..__prediction }")
+        );
+    }
+
+    #[test]
+    fn generated_loop_filters_first_nested_predicated_decision() {
+        let body = vec![GeneratedParserStep::Decision {
+            state: 1,
+            decision: 0,
+            track_alt_number: false,
+            allow_semantic_context: true,
+            force_context: false,
+            fast_path: None,
+            alts: vec![
+                vec![mt(1, 4)],
+                vec![mt(3, 4)],
+                vec![
+                    GeneratedParserStep::Predicate {
+                        rule_index: 2,
+                        pred_index: 0,
+                    },
+                    mt(2, 4),
+                ],
+            ],
+        }];
+        let mut rendered = String::new();
+
+        render_generated_star_loop(
+            &mut rendered,
+            StarLoopRender {
+                state: 1,
+                decision: 1,
+                alts: (1, 2),
+                track_alt_number: false,
+                allow_semantic_context: true,
+                force_context: false,
+                plus_loop: false,
+                fast_path: None,
+                body: &body,
+            },
+            0,
+            GeneratedStepRenderContext {
+                inline_action_statements: &BTreeMap::new(),
+                init_entry_action_statements: &BTreeMap::new(),
+                return_action_statements: &BTreeMap::new(),
+                track_alt_numbers: false,
+                direct_generated_rule_calls: &[],
+                atn_preferred_rule_calls: &[],
+            },
+        );
+
+        assert!(rendered.contains("(__semantic_la == 1) || (__semantic_la == 3)"));
+        assert!(rendered.contains(
+            "(self.base.parser_semantic_predicate_matches_with_context_and_local(PARSER_PREDICATES, 2, 0, &__ctx, __precedence) && __semantic_la == 2)"
+        ));
+        assert!(
+            rendered.contains("antlr4_runtime::ParserAtnPrediction { alt: 2, ..__prediction }")
+        );
+    }
+
+    #[test]
+    fn renders_generated_return_actions_on_context() {
+        let rule = GeneratedParserRule {
+            rule_index: 1,
+            entry_state: 2,
+            left_recursive: false,
+            steps: vec![GeneratedParserStep::Action {
+                source_state: 9,
+                rule_index: 1,
+            }],
+        };
+        let mut return_actions = BTreeMap::new();
+        return_actions.insert(9, vec![("y".to_owned(), 1000)]);
+
+        let rendered = render_generated_rule_dispatch(
+            &[None, Some(rule)],
+            &[],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &return_actions,
+            false,
+        );
+
+        assert!(rendered.contains("__ctx.set_int_return(\"y\", 1000);"));
+        assert!(rendered.contains("self.generated_actions.push(GeneratedAction::Parser { action, tree: None });"));
+    }
+
+    #[test]
+    fn classifies_inline_safe_parser_actions() {
+        assert!(
+            ActionTemplate::Sequence(vec![
+                ActionTemplate::Noop,
+                ActionTemplate::AddMember {
+                    member: "i".to_owned(),
+                    value: 1,
+                },
+            ])
+            .can_run_inline()
+        );
+        assert!(!ActionTemplate::Text { newline: true }.can_run_inline());
+        assert!(
+            !ActionTemplate::MemberValue {
+                member: "i".to_owned(),
+                newline: true,
+            }
+            .can_run_inline()
+        );
+        assert!(
+            !ActionTemplate::StringTree {
+                target: StringTreeTarget::Current,
+                newline: true,
+            }
+            .can_run_inline()
+        );
+        assert!(
+            !ActionTemplate::Sequence(vec![
+                ActionTemplate::Noop,
+                ActionTemplate::ExpectedTokenNames { newline: true },
+            ])
+            .can_run_inline()
+        );
+    }
+
+    #[test]
+    fn extracts_inline_member_mutations_from_mixed_parser_actions() {
+        let members = vec![IntMemberTemplate {
+            name: "i".to_owned(),
+            initial_value: 0,
+        }];
+        let statement = render_inline_parser_action_statement(
+            &ActionTemplate::Sequence(vec![
+                ActionTemplate::AddMember {
+                    member: "i".to_owned(),
+                    value: 1,
+                },
+                ActionTemplate::MemberValue {
+                    member: "i".to_owned(),
+                    newline: true,
+                },
+            ]),
+            &members,
+        )
+        .expect("statement");
+
+        assert_eq!(statement, "self.base.add_int_member(0, 1);");
+
+        let statement = render_inline_parser_action_statement(
+            &ActionTemplate::SetMember {
+                member: "i".to_owned(),
+                value: 3,
+            },
+            &members,
+        )
+        .expect("statement");
+
+        assert_eq!(statement, "self.base.set_int_member(0, 3);");
     }
 
     #[test]
@@ -3801,7 +9317,7 @@ continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#,
     fn parses_member_scaffolding_templates() {
         assert!(matches!(
             parse_action_template(r#"SetMember("i","1")"#),
-            Some(ActionTemplate::Noop)
+            Some(ActionTemplate::SetMember { member, value }) if member == "i" && value == 1
         ));
         assert_eq!(
             parse_invoke_predicate(r#"True():Invoke_pred()"#),
@@ -3810,6 +9326,22 @@ continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#,
         assert_eq!(
             parse_invoke_predicate(r#"False():Invoke_pred()"#),
             Some(PredicateTemplate::Invoke { value: false })
+        );
+        assert_eq!(
+            parse_predicate_template(r#"ParserPropertyCall({$parser}, "Property()")"#),
+            Some(PredicateTemplate::True)
+        );
+        assert_eq!(
+            parse_predicate_template("true"),
+            Some(PredicateTemplate::True)
+        );
+        assert_eq!(
+            parse_predicate_template("0==0"),
+            Some(PredicateTemplate::True)
+        );
+        assert_eq!(
+            parse_predicate_template("0 != 0"),
+            Some(PredicateTemplate::False)
         );
         assert_eq!(
             parse_val_equals_predicate(r#"ValEquals("$i","2")"#),
@@ -3823,5 +9355,325 @@ continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#,
             parse_boolean_member_not_predicate(r#"GetMember("enumKeyword"):Not()"#),
             Some(PredicateTemplate::False)
         );
+        assert_eq!(
+            parse_member_predicate(r#"MemberEquals("i","1")"#),
+            Some(PredicateTemplate::MemberEquals {
+                member: "i".to_owned(),
+                value: 1,
+                equals: true,
+            })
+        );
+        assert_eq!(
+            parse_predicate_template("this.IsRightArrow()"),
+            Some(PredicateTemplate::TokenPairAdjacent)
+        );
+        assert_eq!(
+            parse_predicate_template("this.IsLocalVariableDeclaration()"),
+            Some(PredicateTemplate::ContextChildRuleTextNotEquals {
+                rule_name: "local_variable_type".to_owned(),
+                text: "var".to_owned(),
+            })
+        );
+    }
+
+    fn linear_rule_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 2);
+        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
+        atn.add_state(AtnState::new(1, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(2, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(3, AtnStateKind::RuleStop).with_rule_index(0));
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Epsilon { target: 1 });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Atom {
+                target: 2,
+                label: 1,
+            });
+        atn.state_mut(2)
+            .expect("state 2")
+            .add_transition(Transition::Atom {
+                target: 3,
+                label: antlr4_runtime::token::TOKEN_EOF,
+            });
+        atn.set_rule_to_start_state(vec![0]);
+        atn.set_rule_to_stop_state(vec![3]);
+        atn
+    }
+
+    fn block_decision_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 2);
+        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
+        let mut decision = AtnState::new(1, AtnStateKind::BlockStart).with_rule_index(0);
+        decision.end_state = Some(4);
+        atn.add_state(decision);
+        atn.add_state(AtnState::new(2, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(3, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(4, AtnStateKind::BlockEnd).with_rule_index(0));
+        atn.add_state(AtnState::new(5, AtnStateKind::RuleStop).with_rule_index(0));
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Epsilon { target: 1 });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Epsilon { target: 2 });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Epsilon { target: 3 });
+        atn.state_mut(2)
+            .expect("state 2")
+            .add_transition(Transition::Atom {
+                target: 4,
+                label: 1,
+            });
+        atn.state_mut(3)
+            .expect("state 3")
+            .add_transition(Transition::Atom {
+                target: 4,
+                label: 2,
+            });
+        atn.state_mut(4)
+            .expect("state 4")
+            .add_transition(Transition::Epsilon { target: 5 });
+        atn.add_decision_state(1);
+        atn.set_rule_to_start_state(vec![0]);
+        atn.set_rule_to_stop_state(vec![5]);
+        atn
+    }
+
+    fn star_loop_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 2);
+        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
+        atn.add_state(AtnState::new(1, AtnStateKind::StarLoopEntry).with_rule_index(0));
+        atn.add_state(AtnState::new(2, AtnStateKind::Basic).with_rule_index(0));
+        let mut loop_end = AtnState::new(3, AtnStateKind::LoopEnd).with_rule_index(0);
+        loop_end.loop_back_state = Some(4);
+        atn.add_state(loop_end);
+        atn.add_state(AtnState::new(4, AtnStateKind::StarLoopBack).with_rule_index(0));
+        atn.add_state(AtnState::new(5, AtnStateKind::RuleStop).with_rule_index(0));
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Epsilon { target: 1 });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Epsilon { target: 2 });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Epsilon { target: 3 });
+        atn.state_mut(2)
+            .expect("state 2")
+            .add_transition(Transition::Atom {
+                target: 4,
+                label: 1,
+            });
+        atn.state_mut(4)
+            .expect("state 4")
+            .add_transition(Transition::Epsilon { target: 1 });
+        atn.state_mut(3)
+            .expect("state 3")
+            .add_transition(Transition::Epsilon { target: 5 });
+        atn.add_decision_state(1);
+        atn.set_rule_to_start_state(vec![0]);
+        atn.set_rule_to_stop_state(vec![5]);
+        atn
+    }
+
+    fn plus_loop_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 2);
+        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
+        let mut plus_start = AtnState::new(1, AtnStateKind::PlusBlockStart).with_rule_index(0);
+        plus_start.end_state = Some(3);
+        atn.add_state(plus_start);
+        atn.add_state(AtnState::new(2, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(3, AtnStateKind::BlockEnd).with_rule_index(0));
+        atn.add_state(AtnState::new(4, AtnStateKind::PlusLoopBack).with_rule_index(0));
+        let mut loop_end = AtnState::new(5, AtnStateKind::LoopEnd).with_rule_index(0);
+        loop_end.loop_back_state = Some(4);
+        atn.add_state(loop_end);
+        atn.add_state(AtnState::new(6, AtnStateKind::RuleStop).with_rule_index(0));
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Epsilon { target: 1 });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Epsilon { target: 2 });
+        atn.state_mut(2)
+            .expect("state 2")
+            .add_transition(Transition::Atom {
+                target: 3,
+                label: 1,
+            });
+        atn.state_mut(3)
+            .expect("state 3")
+            .add_transition(Transition::Epsilon { target: 4 });
+        atn.state_mut(4)
+            .expect("state 4")
+            .add_transition(Transition::Epsilon { target: 1 });
+        atn.state_mut(4)
+            .expect("state 4")
+            .add_transition(Transition::Epsilon { target: 5 });
+        atn.state_mut(5)
+            .expect("state 5")
+            .add_transition(Transition::Epsilon { target: 6 });
+        atn.add_decision_state(4);
+        atn.set_rule_to_start_state(vec![0]);
+        atn.set_rule_to_stop_state(vec![6]);
+        atn
+    }
+
+    fn plus_block_decision_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 2);
+        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
+        let mut plus_start = AtnState::new(1, AtnStateKind::PlusBlockStart).with_rule_index(0);
+        plus_start.end_state = Some(4);
+        atn.add_state(plus_start);
+        atn.add_state(AtnState::new(2, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(3, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(4, AtnStateKind::BlockEnd).with_rule_index(0));
+        atn.add_state(AtnState::new(5, AtnStateKind::PlusLoopBack).with_rule_index(0));
+        let mut loop_end = AtnState::new(6, AtnStateKind::LoopEnd).with_rule_index(0);
+        loop_end.loop_back_state = Some(5);
+        atn.add_state(loop_end);
+        atn.add_state(AtnState::new(7, AtnStateKind::RuleStop).with_rule_index(0));
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Epsilon { target: 1 });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Epsilon { target: 2 });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Epsilon { target: 3 });
+        atn.state_mut(2)
+            .expect("state 2")
+            .add_transition(Transition::Atom {
+                target: 4,
+                label: 1,
+            });
+        atn.state_mut(3)
+            .expect("state 3")
+            .add_transition(Transition::Atom {
+                target: 4,
+                label: 2,
+            });
+        atn.state_mut(4)
+            .expect("state 4")
+            .add_transition(Transition::Epsilon { target: 5 });
+        atn.state_mut(5)
+            .expect("state 5")
+            .add_transition(Transition::Epsilon { target: 1 });
+        atn.state_mut(5)
+            .expect("state 5")
+            .add_transition(Transition::Epsilon { target: 6 });
+        atn.state_mut(6)
+            .expect("state 6")
+            .add_transition(Transition::Epsilon { target: 7 });
+        atn.add_decision_state(1);
+        atn.add_decision_state(5);
+        atn.set_rule_to_start_state(vec![0]);
+        atn.set_rule_to_stop_state(vec![7]);
+        atn
+    }
+
+    fn left_recursive_rule_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 2);
+        let mut start = AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0);
+        start.left_recursive_rule = true;
+        atn.add_state(start);
+        atn.add_state(AtnState::new(1, AtnStateKind::Basic).with_rule_index(0));
+        let mut loop_entry = AtnState::new(2, AtnStateKind::StarLoopEntry).with_rule_index(0);
+        loop_entry.precedence_rule_decision = true;
+        atn.add_state(loop_entry);
+        let mut block_start = AtnState::new(3, AtnStateKind::StarBlockStart).with_rule_index(0);
+        block_start.end_state = Some(6);
+        atn.add_state(block_start);
+        atn.add_state(AtnState::new(4, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(5, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(6, AtnStateKind::BlockEnd).with_rule_index(0));
+        let mut loop_end = AtnState::new(7, AtnStateKind::LoopEnd).with_rule_index(0);
+        loop_end.loop_back_state = Some(8);
+        atn.add_state(loop_end);
+        atn.add_state(AtnState::new(8, AtnStateKind::StarLoopBack).with_rule_index(0));
+        atn.add_state(AtnState::new(9, AtnStateKind::RuleStop).with_rule_index(0));
+        atn.add_state(AtnState::new(10, AtnStateKind::Basic).with_rule_index(0));
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Epsilon { target: 1 });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Atom {
+                target: 2,
+                label: 1,
+            });
+        atn.state_mut(2)
+            .expect("state 2")
+            .add_transition(Transition::Epsilon { target: 3 });
+        atn.state_mut(2)
+            .expect("state 2")
+            .add_transition(Transition::Epsilon { target: 7 });
+        atn.state_mut(3)
+            .expect("state 3")
+            .add_transition(Transition::Epsilon { target: 4 });
+        atn.state_mut(4)
+            .expect("state 4")
+            .add_transition(Transition::Precedence {
+                target: 5,
+                precedence: 2,
+            });
+        atn.state_mut(5)
+            .expect("state 5")
+            .add_transition(Transition::Atom {
+                target: 10,
+                label: 2,
+            });
+        atn.state_mut(10)
+            .expect("state 10")
+            .add_transition(Transition::Rule {
+                target: 0,
+                rule_index: 0,
+                follow_state: 6,
+                precedence: 3,
+            });
+        atn.state_mut(6)
+            .expect("state 6")
+            .add_transition(Transition::Epsilon { target: 8 });
+        atn.state_mut(8)
+            .expect("state 8")
+            .add_transition(Transition::Epsilon { target: 2 });
+        atn.state_mut(7)
+            .expect("state 7")
+            .add_transition(Transition::Epsilon { target: 9 });
+        atn.add_decision_state(2);
+        atn.add_decision_state(3);
+        atn.set_rule_to_start_state(vec![0]);
+        atn.set_rule_to_stop_state(vec![9]);
+        atn
+    }
+
+    fn minimal_parser_data() -> InterpData {
+        InterpData {
+            literal_names: vec![None, Some("'a'".to_owned())],
+            symbolic_names: vec![None, Some("A".to_owned())],
+            rule_names: vec!["s".to_owned()],
+            channel_names: vec!["DEFAULT_TOKEN_CHANNEL".to_owned()],
+            mode_names: vec!["DEFAULT_MODE".to_owned()],
+            atn: vec![
+                4, 1, 1, // version, parser grammar, max token type
+                2, // states
+                2, 0, // rule start
+                7, 0, // rule stop
+                0, // non-greedy states
+                0, // precedence states
+                1, // rules
+                0, // rule 0 start
+                0, // modes
+                0, // sets
+                1, // transitions
+                0, 1, 1, 0, 0, 0, // epsilon
+                0, // decisions
+            ],
+        }
     }
 }
+

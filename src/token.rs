@@ -59,8 +59,38 @@ pub struct CommonToken {
     token_index: isize,
     line: usize,
     column: usize,
-    text: Option<String>,
-    source_name: String,
+    text: Option<TokenText>,
+    source_name: Rc<str>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum TokenText {
+    Explicit(Rc<str>),
+    Source {
+        input: Rc<str>,
+        start_byte: u32,
+        stop_byte: u32,
+    },
+}
+
+impl TokenText {
+    fn as_str(&self) -> &str {
+        match self {
+            Self::Explicit(text) => text.as_ref(),
+            Self::Source {
+                input,
+                start_byte,
+                stop_byte,
+            } => &input[*start_byte as usize..*stop_byte as usize],
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TokenSourceText {
+    pub input: Rc<str>,
+    pub start_byte: u32,
+    pub stop_byte: u32,
 }
 
 #[derive(Debug)]
@@ -72,11 +102,12 @@ pub struct TokenSpec<'a> {
     pub line: usize,
     pub column: usize,
     pub text: Option<String>,
+    pub source_text: Option<TokenSourceText>,
     pub source_name: &'a str,
 }
 
 impl CommonToken {
-    pub const fn new(token_type: i32) -> Self {
+    pub fn new(token_type: i32) -> Self {
         Self {
             token_type,
             channel: DEFAULT_CHANNEL,
@@ -86,11 +117,11 @@ impl CommonToken {
             line: 1,
             column: 0,
             text: None,
-            source_name: String::new(),
+            source_name: Rc::from(""),
         }
     }
 
-    pub fn eof(source_name: impl Into<String>, index: usize, line: usize, column: usize) -> Self {
+    pub fn eof(source_name: impl Into<Rc<str>>, index: usize, line: usize, column: usize) -> Self {
         Self {
             token_type: TOKEN_EOF,
             channel: DEFAULT_CHANNEL,
@@ -99,14 +130,29 @@ impl CommonToken {
             token_index: -1,
             line,
             column,
-            text: Some("<EOF>".to_owned()),
+            text: Some(TokenText::Explicit(Rc::from("<EOF>"))),
             source_name: source_name.into(),
         }
     }
 
     #[must_use]
-    pub fn with_text(mut self, text: impl Into<String>) -> Self {
-        self.text = Some(text.into());
+    pub fn with_text(mut self, text: impl Into<Rc<str>>) -> Self {
+        self.text = Some(TokenText::Explicit(text.into()));
+        self
+    }
+
+    #[must_use]
+    pub fn with_source_text(mut self, input: Rc<str>, start_byte: u32, stop_byte: u32) -> Self {
+        debug_assert!(
+            start_byte <= stop_byte && stop_byte as usize <= input.len(),
+            "invalid token source-text bounds: start={start_byte}, stop={stop_byte}, len={}",
+            input.len()
+        );
+        self.text = Some(TokenText::Source {
+            input,
+            start_byte,
+            stop_byte,
+        });
         self
     }
 
@@ -131,7 +177,7 @@ impl CommonToken {
     }
 
     #[must_use]
-    pub fn with_source_name(mut self, source_name: impl Into<String>) -> Self {
+    pub fn with_source_name(mut self, source_name: impl Into<Rc<str>>) -> Self {
         self.source_name = source_name.into();
         self
     }
@@ -171,11 +217,11 @@ impl Token for CommonToken {
     }
 
     fn text(&self) -> Option<&str> {
-        self.text.as_deref()
+        self.text.as_ref().map(TokenText::as_str)
     }
 
     fn source_name(&self) -> &str {
-        &self.source_name
+        self.source_name.as_ref()
     }
 }
 
@@ -247,6 +293,12 @@ impl TokenFactory for CommonTokenFactory {
             .with_source_name(spec.source_name);
         if let Some(text) = spec.text {
             token = token.with_text(text);
+        } else if let Some(source_text) = spec.source_text {
+            token = token.with_source_text(
+                source_text.input,
+                source_text.start_byte,
+                source_text.stop_byte,
+            );
         }
         token
     }

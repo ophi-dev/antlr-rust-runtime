@@ -6,6 +6,7 @@
 //! these compact Rust structures for simulation.
 
 pub mod lexer;
+pub mod parser;
 pub mod serialized;
 
 /// Distinguishes lexer ATNs from parser ATNs in serialized grammar metadata.
@@ -365,10 +366,7 @@ impl IntervalSet {
         // membership lookup from O(n) to O(log n), which matters because
         // parser/lexer hot paths call this once per `Set`/`NotSet`/`Wildcard`
         // transition probe.
-        match self
-            .ranges
-            .binary_search_by(|(start, _)| start.cmp(&value))
-        {
+        match self.ranges.binary_search_by(|(start, _)| start.cmp(&value)) {
             Ok(_) => true,
             Err(pos) => pos > 0 && self.ranges[pos - 1].1 >= value,
         }

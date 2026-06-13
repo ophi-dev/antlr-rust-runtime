@@ -79,7 +79,13 @@ mkdir -p "$DUMPER_GEN"
 cargo run --quiet --release --manifest-path "$REPO_ROOT/Cargo.toml" \
     --bin antlr4-rust-gen -- \
     --lexer  "$WORK_DIR/interp/KotlinLexer.interp" \
+    --grammar "$WORK_DIR/grammar/KotlinLexer.g4" \
+    --out-dir "$WORK_DIR/rust-gen"
+cargo run --quiet --release --manifest-path "$REPO_ROOT/Cargo.toml" \
+    --bin antlr4-rust-gen -- \
     --parser "$WORK_DIR/interp/KotlinParser.interp" \
+    --grammar "$WORK_DIR/grammar/KotlinParser.g4" \
+    --require-generated-parser \
     --out-dir "$WORK_DIR/rust-gen"
 cp "$WORK_DIR/rust-gen/kotlin_lexer.rs" "$WORK_DIR/rust-gen/kotlin_parser.rs" "$DUMPER_GEN/"
 cargo build --quiet --release --manifest-path "$DUMPER_DIR/Cargo.toml"

@@ -3,9 +3,9 @@
 // iterated externally, so the project's `disallowed_types` lint (which
 // guards against non-deterministic iteration order leaking out) does not
 // apply to these uses.
+use std::cell::RefCell;
 #[allow(clippy::disallowed_types)]
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::cell::RefCell;
 use std::hash::{BuildHasherDefault, Hash, Hasher};
 use std::rc::Rc;
 
@@ -71,9 +71,13 @@ type FxHashMap<K, V> = HashMap<K, V, FxBuildHasher>;
 #[allow(clippy::disallowed_types)]
 type FxHashSet<K> = HashSet<K, FxBuildHasher>;
 
+use crate::atn::parser::{
+    ParserAtnPrediction, ParserAtnPredictionDiagnosticKind, ParserAtnSimulator,
+};
 use crate::atn::{Atn, AtnState, AtnStateKind, Transition};
 use crate::errors::AntlrError;
 use crate::int_stream::IntStream;
+use crate::prediction::{EMPTY_RETURN_STATE, PredictionContext};
 use crate::recognizer::{Recognizer, RecognizerData};
 use crate::token::{CommonToken, TOKEN_EOF, Token, TokenSource, TokenSourceError};
 use crate::token_stream::CommonTokenStream;
@@ -83,7 +87,47 @@ use crate::vocabulary::Vocabulary;
 /// Upper bound for the recursive metadata recognizer before it treats a path as
 /// non-viable. Long expression-regression descriptors legitimately walk tens
 /// of thousands of ATN edges.
-const RECOGNITION_DEPTH_LIMIT: usize = 100_000;
+const RECOGNITION_DEPTH_LIMIT: usize = 32_768;
+/// Whole-rule direct adaptive execution is allowed to give up and fall back to
+/// the existing recognizer. Keep the guard at the same order of magnitude as
+/// speculative recognition so malformed cyclic ATNs cannot spin forever.
+const ADAPTIVE_DIRECT_STEP_LIMIT: usize = RECOGNITION_DEPTH_LIMIT;
+/// Probe window for deciding whether clean-pass one-outcome memo entries are
+/// reusable enough to keep caching. Large C# parses mostly produce one-shot
+/// entries; small ambiguous Kotlin loops repeatedly hit the same keys.
+const CLEAN_SINGLE_OUTCOME_MEMO_PROBE_LIMIT: usize = 4096;
+const CLEAN_SINGLE_OUTCOME_MEMO_REPEAT_LIMIT: usize = 8;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SingleOutcomeMemoMode {
+    Probe,
+    Promote,
+    Sparse,
+}
+
+fn interval_set_contains(intervals: &[(i32, i32)], symbol: i32) -> bool {
+    intervals
+        .iter()
+        .any(|(start, stop)| (*start..=*stop).contains(&symbol))
+}
+
+fn interval_symbols(intervals: &[(i32, i32)]) -> BTreeSet<i32> {
+    let mut symbols = BTreeSet::new();
+    for (start, stop) in intervals {
+        symbols.extend(*start..=*stop);
+    }
+    symbols
+}
+
+fn interval_complement_symbols(
+    intervals: &[(i32, i32)],
+    min_vocabulary: i32,
+    max_vocabulary: i32,
+) -> BTreeSet<i32> {
+    (min_vocabulary..=max_vocabulary)
+        .filter(|symbol| !interval_set_contains(intervals, *symbol))
+        .collect()
+}
 
 #[cfg(feature = "perf-counters")]
 mod perf_counters {
@@ -124,7 +168,10 @@ mod perf_counters {
             ("outcomes_cloned", OUTCOMES_CLONED.with(Cell::get)),
             ("epsilon_transitions", EPSILON_TRANSITIONS.with(Cell::get)),
             ("rule_transitions", RULE_TRANSITIONS.with(Cell::get)),
-            ("atom_range_transitions", ATOM_RANGE_TRANSITIONS.with(Cell::get)),
+            (
+                "atom_range_transitions",
+                ATOM_RANGE_TRANSITIONS.with(Cell::get),
+            ),
             ("single_trans_body", SINGLE_TRANS_BODY.with(Cell::get)),
             ("multi_trans_body", MULTI_TRANS_BODY.with(Cell::get)),
             ("single_trans_rule", SINGLE_TRANS_RULE.with(Cell::get)),
@@ -172,7 +219,6 @@ pub use perf_counters::{dump as dump_perf_counters, reset as reset_perf_counters
 /// Sixty-four tokens is a small rule-sized window: it keeps startup lazy while
 /// switching long inputs to the cheaper filled-stream path before large fanout.
 const FAST_RECOGNIZER_DEFERRED_FILL_AT: usize = 64;
-
 /// Parser semantic action reached while recognizing one ATN path.
 ///
 /// Generated parsers use `source_state` to dispatch back to the grammar action
@@ -283,6 +329,17 @@ pub enum ParserPredicate {
         offset: isize,
         token_type: i32,
     },
+    /// Checks that the last two consumed visible tokens were adjacent in the
+    /// token stream. Used by C# parser predicates for split operator tokens.
+    TokenPairAdjacent,
+    /// Checks a generated parser context child by rule index and text.
+    ///
+    /// If the child is absent the predicate succeeds, matching target helpers
+    /// that treat incomplete or non-matching contexts as non-restrictive.
+    ContextChildRuleTextNotEquals {
+        rule_index: usize,
+        text: &'static str,
+    },
     /// Compares the current rule invocation's integer argument with a literal
     /// value from a supported `ValEquals("$i", "...")` target template.
     LocalIntEquals {
@@ -300,6 +357,12 @@ pub enum ParserPredicate {
         value: i64,
         equals: bool,
     },
+    /// Compares a generated parser integer member with a literal value.
+    MemberEquals {
+        member: usize,
+        value: i64,
+        equals: bool,
+    },
 }
 
 /// Prediction strategy requested by generated parser harnesses.
@@ -311,6 +374,8 @@ pub enum PredictionMode {
     /// Preserve SLL's first-viable alternative bias at a decision, even when a
     /// later full-context alternative could avoid recovery.
     Sll,
+    /// Full LL prediction with exact ambiguity detection for diagnostic runs.
+    LlExactAmbigDetection,
 }
 
 /// Integer argument metadata for a generated parser rule invocation.
@@ -404,6 +469,13 @@ pub trait Parser: Recognizer {
 }
 
 #[derive(Debug)]
+struct CachedPredictionContext {
+    version: usize,
+    atn_key: usize,
+    context: Rc<PredictionContext>,
+}
+
+#[derive(Debug)]
 pub struct BaseParser<S> {
     input: CommonTokenStream<S>,
     data: RecognizerData,
@@ -412,22 +484,39 @@ pub struct BaseParser<S> {
     prediction_mode: PredictionMode,
     prediction_diagnostics: Vec<ParserDiagnostic>,
     reported_prediction_diagnostics: BTreeSet<(usize, usize, String)>,
+    generated_parser_diagnostics: Vec<ParserDiagnostic>,
+    generated_sync_expected: Option<TokenBitSet>,
     int_members: BTreeMap<usize, i64>,
+    rule_context_stack: Vec<RuleContextFrame>,
+    rule_context_version: usize,
+    prediction_context_cache: Option<CachedPredictionContext>,
+    pending_invoking_states: Vec<isize>,
+    precedence_stack: Vec<i32>,
     /// Predicate side effects are observable in a few target-template tests;
     /// speculative recognition may revisit the same coordinate, so replay it
     /// once per parser instance.
     invoked_predicates: Vec<(usize, usize)>,
-    /// FIRST-set cache shared across all speculative rule-call lookups in a
-    /// single parser instance. The fast recognizer consults FIRST sets on
-    /// every rule transition; without caching the same DFS would repeat for
-    /// every speculative path that visits the same rule.
-    first_set_cache: FirstSetCache,
+    /// Per-parse rule FIRST-set cache keyed by rule start state. This keeps
+    /// hot rule-transition checks to a vector lookup after the first visit
+    /// while the thread-local shared ATN cache still owns the cross-parse
+    /// computed value.
+    rule_first_set_cache: Vec<Option<Rc<FirstSet>>>,
     /// Per-state expected-symbol cache. `state_expected_symbols` walks every
     /// epsilon-reachable consuming transition and shows up as a hot loop in
     /// `next_recovery_context` and recovery diagnostics on long inputs.
     /// Keying on `state_number` and sharing the result through `Rc` removes
     /// repeated DFS plus per-call `BTreeSet` allocations.
     state_expected_cache: FxHashMap<usize, Rc<BTreeSet<i32>>>,
+    /// Same expected-symbol cache as a bitset for generated parser sync.
+    /// Successful parses only need `contains` and union; keeping that path out
+    /// of `BTreeSet` avoids tree allocation for every nullable loop/optional
+    /// check and defers deterministic formatting to diagnostics.
+    state_expected_token_cache: FxHashMap<usize, Rc<TokenBitSet>>,
+    /// Per-state cache for whether a return state can finish its owning rule
+    /// without consuming more input. Generated-parser sync uses this to walk
+    /// parent prediction contexts for nullable exits without paying repeated
+    /// epsilon-closure searches on every loop or optional decision.
+    rule_stop_reach_cache: Vec<Option<bool>>,
     /// Per-parser interner for `recovery_symbols` sets. Speculative recursion
     /// threads the same epsilon-recovery context through hundreds of follow
     /// states; sharing `Rc<BTreeSet<i32>>` instances lets clones reduce to a
@@ -445,6 +534,16 @@ pub struct BaseParser<S> {
     /// turns the question into a hashmap probe instead of re-scanning
     /// the decision's per-transition FIRST sets every visit.
     ll1_decision_cache: FxHashMap<(usize, i32), Option<usize>>,
+    /// Per-parse cache for whether an ATN state can reach itself without
+    /// consuming input. Only those states need the recursive recognizer's
+    /// `(state, token-index)` cycle guard.
+    empty_cycle_cache: Vec<Option<bool>>,
+    /// Probe state for deciding whether clean-pass one-outcome memo entries
+    /// are worth storing for the current parse.
+    single_outcome_memo_mode: SingleOutcomeMemoMode,
+    single_outcome_probe_seen: FxHashSet<FastRecognizeKey>,
+    single_outcome_probe_samples: usize,
+    single_outcome_probe_repeats: usize,
     /// Empty recovery-symbols singleton used as the default at rule entry and
     /// after token consumption.
     empty_recovery_symbols: Rc<BTreeSet<i32>>,
@@ -465,6 +564,12 @@ pub struct BaseParser<S> {
     /// selected rule spans after recognition, avoiding many speculative `Rc`
     /// nodes that are thrown away with losing paths.
     fast_token_nodes_enabled: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct RuleContextFrame {
+    rule_index: usize,
+    invoking_state: isize,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -511,7 +616,7 @@ enum RecognizedNode {
 struct FastRecognizeOutcome {
     index: usize,
     consumed_eof: bool,
-    diagnostics: Vec<ParserDiagnostic>,
+    diagnostics: FastDiagnostics,
     /// Speculative parse-tree fragment built up as the recognizer climbs.
     /// The list is held as a persistent cons-list of `Rc`-wrapped nodes so
     /// prepending while chaining recognition outcomes is `O(1)` and cloning
@@ -521,6 +626,61 @@ struct FastRecognizeOutcome {
     /// thousands of nodes per speculative path; without the persistent-list
     /// shape recognition becomes super-linear in path length.
     nodes: NodeList,
+}
+
+#[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
+#[allow(clippy::box_collection)]
+struct FastDiagnostics(Option<Box<Vec<ParserDiagnostic>>>);
+
+impl FastDiagnostics {
+    const fn new() -> Self {
+        Self(None)
+    }
+
+    #[cfg(test)]
+    fn from_vec(diagnostics: Vec<ParserDiagnostic>) -> Self {
+        if diagnostics.is_empty() {
+            Self::new()
+        } else {
+            Self(Some(Box::new(diagnostics)))
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.0
+            .as_ref()
+            .is_none_or(|diagnostics| diagnostics.is_empty())
+    }
+
+    fn as_slice(&self) -> &[ParserDiagnostic] {
+        self.0.as_deref().map_or(&[], Vec::as_slice)
+    }
+
+    fn insert(&mut self, index: usize, diagnostic: ParserDiagnostic) {
+        self.0
+            .get_or_insert_with(Box::default)
+            .insert(index, diagnostic);
+    }
+
+    fn append(&mut self, other: &mut Self) {
+        if other.is_empty() {
+            return;
+        }
+        self.0
+            .get_or_insert_with(Box::default)
+            .append(other.0.get_or_insert_with(Box::default));
+        if other.is_empty() {
+            other.0 = None;
+        }
+    }
+}
+
+impl std::ops::Deref for FastDiagnostics {
+    type Target = [ParserDiagnostic];
+
+    fn deref(&self) -> &Self::Target {
+        self.as_slice()
+    }
 }
 
 /// Persistent cons-list of fast-recognizer nodes. The list keeps nodes in the
@@ -594,13 +754,13 @@ impl NodeList {
         NodeListIter { cursor: self }
     }
 
+    fn len(&self) -> usize {
+        self.iter().count()
+    }
+
     fn has_left_recursive_boundary(&self) -> bool {
-        self.iter().any(|node| {
-            matches!(
-                node.as_ref(),
-                FastRecognizedNode::LeftRecursiveBoundary { .. }
-            )
-        })
+        self.iter()
+            .any(|node| fast_node_has_left_recursive_boundary(node.as_ref()))
     }
 
     fn has_explicit_token_node(&self) -> bool {
@@ -893,6 +1053,35 @@ fn transition_expected_symbols(transition: &Transition, max_token_type: i32) -> 
     symbols
 }
 
+fn transition_expected_token_set(transition: &Transition, max_token_type: i32) -> TokenBitSet {
+    let mut symbols = TokenBitSet::default();
+    match transition {
+        Transition::Atom { label, .. } => {
+            symbols.insert(*label);
+        }
+        Transition::Range { start, stop, .. } => {
+            symbols.extend_range(*start, *stop);
+        }
+        Transition::Set { set, .. } => {
+            for (start, stop) in set.ranges() {
+                symbols.extend_range(*start, *stop);
+            }
+        }
+        Transition::NotSet { set, .. } => {
+            symbols.extend_iter((1..=max_token_type).filter(|symbol| !set.contains(*symbol)));
+        }
+        Transition::Wildcard { .. } => {
+            symbols.extend_range(1, max_token_type);
+        }
+        Transition::Epsilon { .. }
+        | Transition::Rule { .. }
+        | Transition::Predicate { .. }
+        | Transition::Action { .. }
+        | Transition::Precedence { .. } => {}
+    }
+    symbols
+}
+
 /// Returns the consuming-token expectations reachable from an ATN state through
 /// epsilon transitions. Recovery diagnostics need this closure so alternatives
 /// and loop exits report the same expectation set ANTLR users see.
@@ -919,6 +1108,66 @@ fn state_expected_symbols(atn: &Atn, state_number: usize) -> BTreeSet<i32> {
         }
     }
     symbols
+}
+
+fn state_expected_token_set(atn: &Atn, state_number: usize) -> TokenBitSet {
+    let mut symbols = TokenBitSet::default();
+    let mut stack = vec![state_number];
+    let mut visited = BTreeSet::new();
+    while let Some(current) = stack.pop() {
+        if !visited.insert(current) {
+            continue;
+        }
+        let Some(state) = atn.state(current) else {
+            continue;
+        };
+        for transition in &state.transitions {
+            let transition_symbols =
+                transition_expected_token_set(transition, atn.max_token_type());
+            if transition_symbols.is_empty() {
+                if transition.is_epsilon() {
+                    stack.push(transition.target());
+                }
+            } else {
+                symbols.extend_from(&transition_symbols);
+            }
+        }
+    }
+    symbols
+}
+
+fn state_can_reach_rule_stop(atn: &Atn, state_number: usize) -> bool {
+    let Some(rule_index) = atn.state(state_number).and_then(|state| state.rule_index) else {
+        return false;
+    };
+    let Some(&stop_state) = atn.rule_to_stop_state().get(rule_index) else {
+        return false;
+    };
+    epsilon_reaches_state(atn, state_number, stop_state)
+}
+
+fn epsilon_reaches_state(atn: &Atn, start: usize, target: usize) -> bool {
+    let mut stack = vec![start];
+    let mut visited = BTreeSet::new();
+    while let Some(current) = stack.pop() {
+        if current == target {
+            return true;
+        }
+        if !visited.insert(current) {
+            continue;
+        }
+        let Some(state) = atn.state(current) else {
+            continue;
+        };
+        stack.extend(
+            state
+                .transitions
+                .iter()
+                .filter(|transition| transition.is_epsilon())
+                .map(Transition::target),
+        );
+    }
+    false
 }
 
 /// FIRST set for a rule entry plus whether the rule is nullable.
@@ -989,10 +1238,7 @@ impl SharedAtnCacheKey {
     }
 }
 
-fn with_shared_first_set_cache<R>(
-    atn: &Atn,
-    f: impl FnOnce(&mut FirstSetCache) -> R,
-) -> R {
+fn with_shared_first_set_cache<R>(atn: &Atn, f: impl FnOnce(&mut FirstSetCache) -> R) -> R {
     SHARED_ATN_CACHES.with(|cell| {
         let key = SharedAtnCacheKey::for_atn(atn);
         let mut map = cell.borrow_mut();
@@ -1001,10 +1247,7 @@ fn with_shared_first_set_cache<R>(
     })
 }
 
-fn with_shared_atn_caches<R>(
-    atn: &Atn,
-    f: impl FnOnce(&mut SharedAtnCache) -> R,
-) -> R {
+fn with_shared_atn_caches<R>(atn: &Atn, f: impl FnOnce(&mut SharedAtnCache) -> R) -> R {
     SHARED_ATN_CACHES.with(|cell| {
         let key = SharedAtnCacheKey::for_atn(atn);
         let mut map = cell.borrow_mut();
@@ -1212,22 +1455,56 @@ fn transition_first_set(
 /// strict disjointness *and* no nullable transitions in the decision.
 fn ll1_unique_alt(entry: &DecisionLookahead, symbol: i32) -> Option<usize> {
     let mut chosen: Option<usize> = None;
-    for (i, t) in entry.transitions.iter().enumerate() {
-        // Nullable transitions can match without consuming `symbol`, so
-        // they're always potentially viable. Bail and fall back to the
-        // standard filter loop.
-        if t.nullable {
+    for (index, transition) in entry.transitions.iter().enumerate() {
+        if transition.nullable {
             return None;
         }
-        if t.symbols.contains(symbol) {
+        if transition.symbols.contains(symbol) {
             if chosen.is_some() {
-                // Two transitions both contain this symbol — not LL(1).
                 return None;
             }
-            chosen = Some(i);
+            chosen = Some(index);
         }
     }
     chosen
+}
+
+/// Returns the unique greedy alt index (0-based) selected by the current
+/// lookahead.
+///
+/// The shortcut is intentionally conservative around nullable exits. If the
+/// current symbol can start a consuming alternative and an empty alternative is
+/// also present, one-token lookahead is not enough to know whether the symbol
+/// belongs to the current construct or to its caller's follow set. `None`
+/// signals the caller to fall back to adaptive prediction.
+fn ll1_greedy_alt(entry: &DecisionLookahead, symbol: i32, non_greedy: bool) -> Option<usize> {
+    let mut matching_non_nullable_alt = None;
+    let mut nullable_alt = None;
+    for (index, transition) in entry.transitions.iter().enumerate() {
+        if transition.nullable {
+            if nullable_alt.is_some() {
+                return None;
+            }
+            nullable_alt = Some(index);
+        }
+        if transition.symbols.contains(symbol) {
+            if transition.nullable {
+                continue;
+            }
+            if matching_non_nullable_alt.is_some() {
+                return None;
+            }
+            matching_non_nullable_alt = Some(index);
+        }
+    }
+    if matching_non_nullable_alt.is_some() && nullable_alt.is_some() {
+        return None;
+    }
+    if non_greedy {
+        nullable_alt.or(matching_non_nullable_alt)
+    } else {
+        matching_non_nullable_alt.or(nullable_alt)
+    }
 }
 
 fn should_skip_via_lookahead(
@@ -1424,6 +1701,104 @@ fn state_sync_symbols_inner(
             symbols.extend(transition_symbols);
         }
     }
+}
+
+fn state_can_reach_symbol_with_precedence(
+    atn: &Atn,
+    state_number: usize,
+    symbol: i32,
+    precedence: i32,
+    visited: &mut BTreeSet<usize>,
+) -> bool {
+    if !visited.insert(state_number) {
+        return false;
+    }
+    let Some(state) = atn.state(state_number) else {
+        return false;
+    };
+    state.transitions.iter().any(|transition| {
+        if transition.matches(symbol, 1, atn.max_token_type()) {
+            return true;
+        }
+        if !transition.is_epsilon() {
+            return false;
+        }
+        if matches!(
+            transition,
+            Transition::Precedence {
+                precedence: transition_precedence,
+                ..
+            } if *transition_precedence < precedence
+        ) {
+            return false;
+        }
+        state_can_reach_symbol_with_precedence(
+            atn,
+            transition.target(),
+            symbol,
+            precedence,
+            visited,
+        )
+    })
+}
+
+fn context_can_match_symbol_before_state(
+    atn: &Atn,
+    context: &PredictionContext,
+    stop_state_number: usize,
+    symbol: i32,
+) -> bool {
+    (0..context.len()).any(|index| {
+        context.return_state(index).is_some_and(|return_state| {
+            let parent = context
+                .parent(index)
+                .unwrap_or_else(PredictionContext::empty);
+            state_or_parent_can_match_symbol_before_state(
+                atn,
+                return_state,
+                &parent,
+                stop_state_number,
+                symbol,
+                &mut BTreeSet::new(),
+            )
+        })
+    })
+}
+
+fn state_or_parent_can_match_symbol_before_state(
+    atn: &Atn,
+    state_number: usize,
+    parent: &Rc<PredictionContext>,
+    stop_state_number: usize,
+    symbol: i32,
+    visited: &mut BTreeSet<usize>,
+) -> bool {
+    if state_number == EMPTY_RETURN_STATE {
+        return false;
+    }
+    if state_number == stop_state_number {
+        return context_can_match_symbol_before_state(atn, parent, stop_state_number, symbol);
+    }
+    if !visited.insert(state_number) {
+        return false;
+    }
+    let Some(state) = atn.state(state_number) else {
+        return false;
+    };
+    state.transitions.iter().any(|transition| {
+        if transition.matches(symbol, 1, atn.max_token_type()) {
+            return true;
+        }
+        transition.is_epsilon()
+            && state_or_parent_can_match_symbol_before_state(
+                atn,
+                transition.target(),
+                parent,
+                stop_state_number,
+                symbol,
+                visited,
+            )
+    })
 }
 
 /// Carries recovery expectations and their restart state through epsilon-only
@@ -1745,6 +2120,16 @@ struct FastCurrentTokenDeletionRequest<'a, 'b> {
     expected: &'b mut ExpectedTokens,
 }
 
+#[derive(Clone, Copy)]
+struct FastChildRuleFailureRecoveryRequest<'a> {
+    atn: &'a Atn,
+    rule_index: usize,
+    start_index: usize,
+    follow_state: usize,
+    stop_state: usize,
+    expected: &'a ExpectedTokens,
+}
+
 struct RecoveryRequest<'a, 'b> {
     atn: &'a Atn,
     transition: &'a Transition,
@@ -1796,6 +2181,7 @@ struct PredicateEval<'a> {
     rule_index: usize,
     pred_index: usize,
     predicates: &'a [(usize, usize, ParserPredicate)],
+    context: Option<&'a ParserRuleContext>,
     local_int_arg: Option<(usize, i64)>,
     member_values: &'a BTreeMap<usize, i64>,
 }
@@ -1808,6 +2194,79 @@ struct PredicateFailureRecovery<'a> {
     member_values: BTreeMap<usize, i64>,
     return_values: BTreeMap<String, i64>,
     rule_alt_number: usize,
+}
+
+#[derive(Debug)]
+enum DirectAdaptiveParseControl {
+    Fallback(DirectAdaptiveFallback),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DirectAdaptiveFallback {
+    Action,
+    InvalidAlt,
+    LeftRecursiveBoundary,
+    MissingAtn,
+    NoTransition,
+    Predicate,
+    Prediction,
+    Precedence,
+    RuleStop,
+    SemanticContext,
+    StepLimit,
+    TokenMismatch,
+    UnknownDecision,
+}
+
+type DirectAdaptiveParseResult<T> = Result<T, DirectAdaptiveParseControl>;
+
+struct DirectAdaptiveParser<'atn, 'sim, S>
+where
+    S: TokenSource,
+{
+    parser: &'sim mut BaseParser<S>,
+    atn: &'atn Atn,
+    simulator: &'sim mut ParserAtnSimulator<'atn>,
+    decision_by_state: Vec<Option<usize>>,
+    steps: usize,
+}
+
+/// Outcome of a generated token / set / not-set match that may recover.
+///
+/// Generated parsers append `children` to the current rule context. `consumed_eof`
+/// reports whether the match actually consumed a real EOF terminal — it is true
+/// only on a successful match (or single-token deletion that lands on EOF), and
+/// always false on single-token insertion, which synthesizes a missing token and
+/// consumes nothing. Generated code feeds this into `finish_rule`'s
+/// `consumed_eof`, so the rule stop token is recorded as EOF only when EOF was
+/// truly matched, matching ANTLR's `matchedEOF` semantics.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GeneratedMatch {
+    children: Vec<ParseTree>,
+    consumed_eof: bool,
+}
+
+impl GeneratedMatch {
+    /// Parse-tree children produced by the match (the matched terminal, an
+    /// error node plus deleted-then-matched terminal, or a single missing-token
+    /// error node).
+    #[must_use]
+    pub fn children(&self) -> &[ParseTree] {
+        &self.children
+    }
+
+    /// Consumes the result, returning the children for appending to the rule
+    /// context.
+    #[must_use]
+    pub fn into_children(self) -> Vec<ParseTree> {
+        self.children
+    }
+
+    /// Whether a real EOF terminal was consumed by this match.
+    #[must_use]
+    pub const fn consumed_eof(&self) -> bool {
+        self.consumed_eof
+    }
 }
 
 impl<S> BaseParser<S>
@@ -1825,13 +2284,27 @@ where
             prediction_mode: PredictionMode::Ll,
             prediction_diagnostics: Vec::new(),
             reported_prediction_diagnostics: BTreeSet::new(),
+            generated_parser_diagnostics: Vec::new(),
+            generated_sync_expected: None,
             int_members: BTreeMap::new(),
+            rule_context_stack: Vec::new(),
+            rule_context_version: 0,
+            prediction_context_cache: None,
+            pending_invoking_states: Vec::new(),
+            precedence_stack: vec![0],
             invoked_predicates: Vec::new(),
-            first_set_cache: FxHashMap::default(),
+            rule_first_set_cache: Vec::new(),
             state_expected_cache: FxHashMap::default(),
+            state_expected_token_cache: FxHashMap::default(),
+            rule_stop_reach_cache: Vec::new(),
             recovery_symbols_intern: FxHashMap::default(),
             decision_lookahead_cache: FxHashMap::default(),
             ll1_decision_cache: FxHashMap::default(),
+            empty_cycle_cache: Vec::new(),
+            single_outcome_memo_mode: SingleOutcomeMemoMode::Probe,
+            single_outcome_probe_seen: FxHashSet::default(),
+            single_outcome_probe_samples: 0,
+            single_outcome_probe_repeats: 0,
             empty_recovery_symbols: Rc::new(BTreeSet::new()),
             fast_first_set_prefilter: true,
             fast_recovery_enabled: true,
@@ -1841,6 +2314,161 @@ where
 
     pub const fn input(&mut self) -> &mut CommonTokenStream<S> {
         &mut self.input
+    }
+
+    /// Emits diagnostics buffered by the token stream while generated parser
+    /// code was fetching lexer tokens directly.
+    pub fn report_token_source_errors(&mut self) {
+        report_token_source_errors(&self.input.drain_source_errors());
+    }
+
+    /// Captures the current generated-parser diagnostic buffer length before a
+    /// speculative generated rule path.
+    pub const fn generated_diagnostics_checkpoint(&self) -> usize {
+        self.generated_parser_diagnostics.len()
+    }
+
+    /// Restores generated-parser diagnostics after a speculative rule path failed.
+    pub fn restore_generated_diagnostics(&mut self, marker: usize) {
+        self.generated_parser_diagnostics.truncate(marker);
+        self.generated_sync_expected = None;
+    }
+
+    /// Emits diagnostics recorded by committed generated parser recovery.
+    pub fn report_generated_parser_diagnostics(&mut self) {
+        let parser_diagnostics = std::mem::take(&mut self.generated_parser_diagnostics);
+        let token_errors = self.input.drain_source_errors();
+        report_generated_diagnostics(&parser_diagnostics, &token_errors);
+    }
+
+    /// Buffers ANTLR-style ambiguity diagnostics discovered by generated
+    /// decision code.
+    pub fn record_generated_ambiguity_diagnostic(
+        &mut self,
+        atn: &Atn,
+        state_number: usize,
+        start_index: usize,
+        stop_index: usize,
+        alts: &[usize],
+    ) {
+        if !self.report_diagnostic_errors || alts.len() < 2 {
+            return;
+        }
+        let Some(decision) = atn
+            .decision_to_state()
+            .iter()
+            .position(|candidate| *candidate == state_number)
+        else {
+            return;
+        };
+        let Some(rule_index) = atn.state(state_number).and_then(|state| state.rule_index) else {
+            return;
+        };
+        let rule_name = self
+            .rule_names()
+            .get(rule_index)
+            .map_or_else(|| "<unknown>".to_owned(), Clone::clone);
+        let input = display_input_text(&self.input.text(start_index, stop_index));
+        let alts = alts
+            .iter()
+            .map(usize::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+        let key = (decision, start_index, format!("{alts}:{input}"));
+        if !self.reported_prediction_diagnostics.insert(key) {
+            return;
+        }
+        let start_token = self.token_at(start_index);
+        let stop_token = self.token_at(stop_index);
+        self.generated_parser_diagnostics.push(diagnostic_for_token(
+            start_token.as_ref(),
+            format!("reportAttemptingFullContext d={decision} ({rule_name}), input='{input}'"),
+        ));
+        self.generated_parser_diagnostics.push(diagnostic_for_token(
+            stop_token.as_ref(),
+            format!(
+                "reportAmbiguity d={decision} ({rule_name}): ambigAlts={{{alts}}}, input='{input}'"
+            ),
+        ));
+    }
+
+    /// Buffers ANTLR-style diagnostic-listener messages produced by generated
+    /// parser calls to the adaptive simulator.
+    pub fn record_generated_prediction_diagnostic(
+        &mut self,
+        atn: &Atn,
+        state_number: usize,
+        prediction: &ParserAtnPrediction,
+    ) {
+        let Some(diagnostic) = &prediction.diagnostic else {
+            return;
+        };
+        if !self.report_diagnostic_errors || diagnostic.conflicting_alts.len() < 2 {
+            return;
+        }
+        let Some(decision) = atn
+            .decision_to_state()
+            .iter()
+            .position(|candidate| *candidate == state_number)
+        else {
+            return;
+        };
+        let Some(rule_index) = atn.state(state_number).and_then(|state| state.rule_index) else {
+            return;
+        };
+        let rule_name = self
+            .rule_names()
+            .get(rule_index)
+            .map_or_else(|| "<unknown>".to_owned(), Clone::clone);
+        let attempt_input = display_input_text(
+            &self
+                .input
+                .text(diagnostic.start_index, diagnostic.sll_stop_index),
+        );
+        let result_input = display_input_text(
+            &self
+                .input
+                .text(diagnostic.start_index, diagnostic.ll_stop_index),
+        );
+        let alts = diagnostic
+            .conflicting_alts
+            .iter()
+            .map(usize::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+        let key = (
+            decision,
+            diagnostic.start_index,
+            format!(
+                "{:?}:{alts}:{attempt_input}:{result_input}",
+                diagnostic.kind
+            ),
+        );
+        if !self.reported_prediction_diagnostics.insert(key) {
+            return;
+        }
+        let attempt_token = self.token_at(diagnostic.sll_stop_index);
+        self.generated_parser_diagnostics.push(diagnostic_for_token(
+            attempt_token.as_ref(),
+            format!(
+                "reportAttemptingFullContext d={decision} ({rule_name}), input='{attempt_input}'"
+            ),
+        ));
+        let result_token = self.token_at(diagnostic.ll_stop_index);
+        let message = match diagnostic.kind {
+            ParserAtnPredictionDiagnosticKind::Ambiguity => {
+                format!(
+                    "reportAmbiguity d={decision} ({rule_name}): ambigAlts={{{alts}}}, input='{result_input}'"
+                )
+            }
+            ParserAtnPredictionDiagnosticKind::ContextSensitivity => {
+                format!(
+                    "reportContextSensitivity d={decision} ({rule_name}), input='{result_input}'"
+                )
+            }
+        };
+        self.generated_parser_diagnostics
+            .push(diagnostic_for_token(result_token.as_ref(), message));
     }
 
     pub fn la(&mut self, offset: isize) -> i32 {
@@ -1859,6 +2487,17 @@ where
     /// Reads a generated integer member value.
     pub fn int_member(&self, member: usize) -> Option<i64> {
         self.int_members.get(&member).copied()
+    }
+
+    /// Captures generated integer members before speculative generated parser
+    /// execution.
+    pub fn int_members_checkpoint(&self) -> BTreeMap<usize, i64> {
+        self.int_members.clone()
+    }
+
+    /// Restores generated integer members after generated parser fallback.
+    pub fn restore_int_members(&mut self, members: BTreeMap<usize, i64>) {
+        self.int_members = members;
     }
 
     /// Adds `delta` to a generated integer member and returns the new value.
@@ -1895,12 +2534,1037 @@ where
         }
     }
 
+    /// Matches a token from generated recursive-descent code, including ANTLR's
+    /// single-token insertion recovery when the active rule context can legally
+    /// continue at the current input symbol.
+    pub fn match_token_recovering(
+        &mut self,
+        token_type: i32,
+        follow_state: usize,
+        atn: &Atn,
+    ) -> Result<GeneratedMatch, AntlrError> {
+        let current = self
+            .input
+            .lt(1)
+            .cloned()
+            .ok_or_else(|| AntlrError::ParserError {
+                line: 0,
+                column: 0,
+                message: "missing current token".to_owned(),
+            })?;
+        if current.token_type() == token_type {
+            self.generated_sync_expected = None;
+            let consumed_eof = current.token_type() == TOKEN_EOF;
+            self.consume();
+            return Ok(GeneratedMatch {
+                children: vec![ParseTree::Terminal(TerminalNode::new(current))],
+                consumed_eof,
+            });
+        }
+        let mut expected_symbols = BTreeSet::new();
+        expected_symbols.insert(token_type);
+        self.recover_generated_match(current, &expected_symbols, follow_state, atn, |symbol| {
+            symbol == token_type
+        })
+    }
+
+    pub fn match_set_recovering(
+        &mut self,
+        intervals: &[(i32, i32)],
+        follow_state: usize,
+        atn: &Atn,
+    ) -> Result<GeneratedMatch, AntlrError> {
+        let current = self
+            .input
+            .lt(1)
+            .cloned()
+            .ok_or_else(|| AntlrError::ParserError {
+                line: 0,
+                column: 0,
+                message: "missing current token".to_owned(),
+            })?;
+        if interval_set_contains(intervals, current.token_type()) {
+            self.generated_sync_expected = None;
+            let consumed_eof = current.token_type() == TOKEN_EOF;
+            self.consume();
+            return Ok(GeneratedMatch {
+                children: vec![ParseTree::Terminal(TerminalNode::new(current))],
+                consumed_eof,
+            });
+        }
+        let expected_symbols = interval_symbols(intervals);
+        self.recover_generated_match(current, &expected_symbols, follow_state, atn, |symbol| {
+            interval_set_contains(intervals, symbol)
+        })
+    }
+
+    pub fn match_not_set_recovering(
+        &mut self,
+        intervals: &[(i32, i32)],
+        min_vocabulary: i32,
+        max_vocabulary: i32,
+        follow_state: usize,
+        atn: &Atn,
+    ) -> Result<GeneratedMatch, AntlrError> {
+        let current = self
+            .input
+            .lt(1)
+            .cloned()
+            .ok_or_else(|| AntlrError::ParserError {
+                line: 0,
+                column: 0,
+                message: "missing current token".to_owned(),
+            })?;
+        if (min_vocabulary..=max_vocabulary).contains(&current.token_type())
+            && !interval_set_contains(intervals, current.token_type())
+        {
+            self.generated_sync_expected = None;
+            let consumed_eof = current.token_type() == TOKEN_EOF;
+            self.consume();
+            return Ok(GeneratedMatch {
+                children: vec![ParseTree::Terminal(TerminalNode::new(current))],
+                consumed_eof,
+            });
+        }
+        let expected_symbols =
+            interval_complement_symbols(intervals, min_vocabulary, max_vocabulary);
+        self.recover_generated_match(current, &expected_symbols, follow_state, atn, |symbol| {
+            (min_vocabulary..=max_vocabulary).contains(&symbol)
+                && !interval_set_contains(intervals, symbol)
+        })
+    }
+
+    fn recover_generated_match(
+        &mut self,
+        current: CommonToken,
+        expected_symbols: &BTreeSet<i32>,
+        follow_state: usize,
+        atn: &Atn,
+        matches: impl Fn(i32) -> bool,
+    ) -> Result<GeneratedMatch, AntlrError> {
+        let expected_display = self.expected_symbols_display(expected_symbols);
+        if current.token_type() != TOKEN_EOF
+            && let Some(next) = self.input.lt(2).cloned()
+            && matches(next.token_type())
+        {
+            let message = format!(
+                "extraneous input {} expecting {expected_display}",
+                token_input_display(&current)
+            );
+            self.generated_parser_diagnostics
+                .push(diagnostic_for_token(Some(&current), message));
+            self.generated_sync_expected = None;
+            // Single-token deletion: skip `current`, then accept `next`. The
+            // accepted token can be EOF only if it is a real EOF terminal.
+            let consumed_eof = next.token_type() == TOKEN_EOF;
+            self.consume();
+            self.consume();
+            return Ok(GeneratedMatch {
+                children: vec![
+                    ParseTree::Error(ErrorNode::new(current)),
+                    ParseTree::Terminal(TerminalNode::new(next)),
+                ],
+                consumed_eof,
+            });
+        }
+        let follow_symbols = self.generated_recovery_follow_symbols(atn, follow_state);
+        // ANTLR's `singleTokenInsertion` inserts a missing token when the state
+        // *after* the current element can consume the current symbol. At EOF that
+        // only holds when the follow state EXPLICITLY expects EOF (e.g. an `EOF`
+        // terminal follows in the rule, as in `r: . EOF;` or `r: ID EOF;`), not
+        // when EOF merely leaks in from the empty enclosing context (as in
+        // `start: ID+;` on empty input — antlr#6 `InvalidEmptyInput`, which must
+        // stay a `mismatched input` error). `follow_symbols` mixes both sources,
+        // so consult the follow state's OWN expected set for the explicit case.
+        let follow_explicitly_expects_eof = current.token_type() == TOKEN_EOF
+            && self
+                .cached_state_expected_symbols(atn, follow_state)
+                .contains(&TOKEN_EOF);
+        if follow_symbols.contains(&current.token_type())
+            && (current.token_type() != TOKEN_EOF
+                || self.rule_context_stack.len() > 1
+                || expected_symbols.is_empty()
+                || follow_explicitly_expects_eof)
+        {
+            let message = format!(
+                "missing {expected_display} at {}",
+                token_input_display(&current)
+            );
+            self.generated_parser_diagnostics
+                .push(diagnostic_for_token(Some(&current), message));
+            self.generated_sync_expected = None;
+            let token_type = expected_symbols.iter().next().copied().unwrap_or(TOKEN_EOF);
+            let mut missing_symbol = BTreeSet::new();
+            missing_symbol.insert(token_type);
+            let missing_display = self.expected_symbols_display(&missing_symbol);
+            let token = CommonToken::new(token_type)
+                .with_text(format!("<missing {missing_display}>"))
+                .with_span(usize::MAX, usize::MAX)
+                .with_position(current.line(), current.column());
+            // Single-token insertion synthesizes a missing token and consumes
+            // nothing, so no EOF terminal is consumed even when the lookahead is
+            // EOF. Reporting consumed_eof=false here is what keeps `finish_rule`
+            // from recording EOF as the rule stop on this recovery path.
+            return Ok(GeneratedMatch {
+                children: vec![ParseTree::Error(ErrorNode::new(token))],
+                consumed_eof: false,
+            });
+        }
+        let mismatch_expected = self.generated_sync_expected.take().map_or_else(
+            || expected_symbols.clone(),
+            |symbols| symbols.to_btree_set(),
+        );
+        let mismatch_expected_display = self.expected_symbols_display(&mismatch_expected);
+        Err(AntlrError::ParserError {
+            line: current.line(),
+            column: current.column(),
+            message: format!(
+                "mismatched input {} expecting {mismatch_expected_display}",
+                token_input_display(&current)
+            ),
+        })
+    }
+
+    fn generated_recovery_follow_symbols(
+        &mut self,
+        atn: &Atn,
+        follow_state: usize,
+    ) -> BTreeSet<i32> {
+        let mut follow = self
+            .cached_state_expected_symbols(atn, follow_state)
+            .as_ref()
+            .clone();
+        if self.cached_state_can_reach_rule_stop(atn, follow_state) {
+            follow.extend(self.context_expected_symbols(atn));
+        }
+        follow
+    }
+
     pub fn match_eof(&mut self) -> Result<ParseTree, AntlrError> {
         self.match_token(TOKEN_EOF)
     }
 
+    pub fn match_set(&mut self, intervals: &[(i32, i32)]) -> Result<ParseTree, AntlrError> {
+        self.match_interval_condition(intervals, |symbol| interval_set_contains(intervals, symbol))
+    }
+
+    pub fn match_not_set(
+        &mut self,
+        intervals: &[(i32, i32)],
+        min_vocabulary: i32,
+        max_vocabulary: i32,
+    ) -> Result<ParseTree, AntlrError> {
+        self.match_interval_condition(intervals, |symbol| {
+            (min_vocabulary..=max_vocabulary).contains(&symbol)
+                && !interval_set_contains(intervals, symbol)
+        })
+    }
+
+    fn match_interval_condition(
+        &mut self,
+        intervals: &[(i32, i32)],
+        matches: impl FnOnce(i32) -> bool,
+    ) -> Result<ParseTree, AntlrError> {
+        let current = self
+            .input
+            .lt(1)
+            .cloned()
+            .ok_or_else(|| AntlrError::ParserError {
+                line: 0,
+                column: 0,
+                message: "missing current token".to_owned(),
+            })?;
+        if matches(current.token_type()) {
+            self.consume();
+            Ok(ParseTree::Terminal(TerminalNode::new(current)))
+        } else {
+            Err(AntlrError::MismatchedInput {
+                expected: self.interval_display(intervals),
+                found: self.vocabulary().display_name(current.token_type()),
+            })
+        }
+    }
+
+    fn interval_display(&self, intervals: &[(i32, i32)]) -> String {
+        let values = intervals
+            .iter()
+            .map(|(start, stop)| {
+                if start == stop {
+                    self.vocabulary().display_name(*start)
+                } else {
+                    format!(
+                        "{}..{}",
+                        self.vocabulary().display_name(*start),
+                        self.vocabulary().display_name(*stop)
+                    )
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("{{{values}}}")
+    }
+
     pub const fn rule_node(&self, context: ParserRuleContext) -> ParseTree {
         ParseTree::Rule(RuleNode::new(context))
+    }
+
+    /// Enters a generated parser rule and returns the context object the
+    /// generated method should populate.
+    pub fn enter_rule(&mut self, state: isize, rule_index: usize) -> ParserRuleContext {
+        self.set_state(state);
+        let invoking_state = self.pending_invoking_states.pop().unwrap_or(state);
+        self.rule_context_stack.push(RuleContextFrame {
+            rule_index,
+            invoking_state,
+        });
+        self.invalidate_prediction_context_cache();
+        let start_index = self.current_visible_index();
+        let mut context = ParserRuleContext::new(rule_index, invoking_state);
+        if let Some(token) = self.token_at(start_index) {
+            context.set_start(token);
+        }
+        context
+    }
+
+    /// Records the ATN source state for the next generated rule invocation.
+    ///
+    /// ANTLR's full-context prediction reconstructs caller follow states from
+    /// each active rule context's invoking state. Generated Rust rule methods are
+    /// plain functions, so the caller supplies that ATN state just before making a
+    /// rule call; `enter_rule` consumes it when the callee starts.
+    pub fn push_invoking_state(&mut self, invoking_state: isize) -> usize {
+        let marker = self.pending_invoking_states.len();
+        self.pending_invoking_states.push(invoking_state);
+        marker
+    }
+
+    /// Discards an invoking-state marker if the callee did not consume it.
+    pub fn discard_invoking_state(&mut self, marker: usize) {
+        self.pending_invoking_states.truncate(marker);
+    }
+
+    /// Exits the current generated parser rule.
+    pub fn exit_rule(&mut self) {
+        self.rule_context_stack.pop();
+        self.invalidate_prediction_context_cache();
+    }
+
+    /// Converts the active generated-parser rule stack into an ANTLR prediction
+    /// context for full-context adaptive prediction.
+    pub fn prediction_context(&mut self, atn: &Atn) -> Rc<PredictionContext> {
+        let atn_ptr: *const Atn = atn;
+        let atn_key = atn_ptr as usize;
+        if let Some(cached) = &self.prediction_context_cache
+            && cached.version == self.rule_context_version
+            && cached.atn_key == atn_key
+        {
+            return Rc::clone(&cached.context);
+        }
+        let mut context = PredictionContext::empty();
+        for frame in self.rule_context_stack.iter().skip(1) {
+            let Ok(state_number) = usize::try_from(frame.invoking_state) else {
+                continue;
+            };
+            let Some(Transition::Rule { follow_state, .. }) = atn
+                .state(state_number)
+                .and_then(|state| state.transitions.first())
+            else {
+                continue;
+            };
+            context = PredictionContext::singleton(context, *follow_state);
+        }
+        self.prediction_context_cache = Some(CachedPredictionContext {
+            version: self.rule_context_version,
+            atn_key,
+            context: Rc::clone(&context),
+        });
+        context
+    }
+
+    fn invalidate_prediction_context_cache(&mut self) {
+        self.rule_context_version = self.rule_context_version.wrapping_add(1);
+        self.prediction_context_cache = None;
+    }
+
+    /// Adds a generated parser child only when parse-tree construction is
+    /// enabled. The match is recorded on the context either way (via `add_child`,
+    /// or `note_matched_child` when trees are off) so generated recovery can tell
+    /// whether the rule has matched anything yet without depending on `children`.
+    pub fn add_parse_child(&self, context: &mut ParserRuleContext, child: ParseTree) {
+        if self.build_parse_trees {
+            context.add_child(child);
+        } else {
+            context.note_matched_child();
+        }
+    }
+
+    /// Finishes a generated parser rule and returns its parse-tree node.
+    pub fn finish_rule(&mut self, mut context: ParserRuleContext, consumed_eof: bool) -> ParseTree {
+        let stop_index = self.rule_stop_token_index(self.input.index(), consumed_eof);
+        if let Some(token) = stop_index.and_then(|index| self.token_at(index)) {
+            context.set_stop(token);
+        }
+        self.exit_rule();
+        self.rule_node(context)
+    }
+
+    /// Recovers a generated rule catch block after a committed mismatch.
+    ///
+    /// ANTLR's generated parsers catch recognition errors inside each rule,
+    /// report the original error, then consume unexpected tokens until the
+    /// caller's recovery set can resume. Tokens consumed during recovery become
+    /// error nodes in the current rule context.
+    pub fn recover_generated_rule(
+        &mut self,
+        context: &mut ParserRuleContext,
+        atn: &Atn,
+        error: AntlrError,
+    ) {
+        let diagnostic = self.generated_rule_error_diagnostic(error);
+        self.push_generated_parser_diagnostic(diagnostic);
+        self.generated_sync_expected = None;
+        let recovery_symbols = self.context_expected_symbols(atn);
+        loop {
+            let symbol = self.la(1);
+            if symbol == TOKEN_EOF || recovery_symbols.contains(&symbol) {
+                break;
+            }
+            let Some(token) = self.input.lt(1).cloned() else {
+                break;
+            };
+            self.consume();
+            self.add_parse_child(context, ParseTree::Error(ErrorNode::new(token)));
+        }
+    }
+
+    fn push_generated_parser_diagnostic(&mut self, diagnostic: ParserDiagnostic) {
+        if self
+            .generated_parser_diagnostics
+            .iter()
+            .any(|existing| existing == &diagnostic)
+        {
+            return;
+        }
+        self.generated_parser_diagnostics.push(diagnostic);
+    }
+
+    fn generated_rule_error_diagnostic(&mut self, error: AntlrError) -> ParserDiagnostic {
+        match error {
+            AntlrError::ParserError {
+                line,
+                column,
+                message,
+            } => ParserDiagnostic {
+                line,
+                column,
+                message,
+            },
+            AntlrError::MismatchedInput { expected, found } => diagnostic_for_token(
+                self.input.lt(1),
+                format!("mismatched input {found} expecting {expected}"),
+            ),
+            AntlrError::NoViableAlternative { input } => diagnostic_for_token(
+                self.input.lt(1),
+                format!("no viable alternative at input {input}"),
+            ),
+            AntlrError::LexerError {
+                line,
+                column,
+                message,
+            } => ParserDiagnostic {
+                line,
+                column,
+                message,
+            },
+            AntlrError::Unsupported(message) => diagnostic_for_token(self.input.lt(1), message),
+        }
+    }
+
+    /// Finishes a generated left-recursive parser rule and returns its parse-tree node.
+    pub fn finish_recursion_rule(
+        &mut self,
+        mut context: ParserRuleContext,
+        consumed_eof: bool,
+    ) -> ParseTree {
+        let stop_index = self.rule_stop_token_index(self.input.index(), consumed_eof);
+        if let Some(token) = stop_index.and_then(|index| self.token_at(index)) {
+            context.set_stop(token);
+        }
+        self.unroll_recursion_context();
+        self.rule_node(context)
+    }
+
+    /// Enters a generated left-recursive rule at `precedence`.
+    pub fn enter_recursion_rule(
+        &mut self,
+        state: isize,
+        rule_index: usize,
+        precedence: i32,
+    ) -> ParserRuleContext {
+        self.precedence_stack.push(precedence);
+        self.enter_rule(state, rule_index)
+    }
+
+    /// Replaces the current context while expanding a left-recursive rule.
+    pub fn push_new_recursion_context(
+        &mut self,
+        state: isize,
+        rule_index: usize,
+    ) -> ParserRuleContext {
+        self.set_state(state);
+        ParserRuleContext::new(rule_index, state)
+    }
+
+    /// Wraps the previous left-recursive context before parsing the next
+    /// recursive operator alternative.
+    pub fn push_new_recursion_context_with_previous(
+        &mut self,
+        state: isize,
+        rule_index: usize,
+        current: &mut ParserRuleContext,
+    ) {
+        self.set_state(state);
+        if let Some(stop) = self
+            .rule_stop_token_index(self.input.index(), false)
+            .and_then(|index| self.token_at(index))
+        {
+            current.set_stop(stop);
+        }
+        let invoking_state = current.invoking_state();
+        let start = current.start().cloned();
+        let mut replacement = ParserRuleContext::new(rule_index, invoking_state);
+        if let Some(start) = start {
+            replacement.set_start(start);
+        }
+        let previous = std::mem::replace(current, replacement);
+        if self.build_parse_trees {
+            current.add_child(self.rule_node(previous));
+        }
+    }
+
+    /// Leaves a generated left-recursive rule.
+    pub fn unroll_recursion_context(&mut self) {
+        if self.precedence_stack.len() > 1 {
+            self.precedence_stack.pop();
+        }
+        self.exit_rule();
+    }
+
+    /// Checks whether a generated left-recursive loop has an operator
+    /// alternative that can start at the current token under the active
+    /// precedence. The operator block still performs adaptive prediction; this
+    /// guard only decides whether the loop should enter or exit.
+    pub fn left_recursive_loop_enter_matches(
+        &mut self,
+        atn: &Atn,
+        state_number: usize,
+        precedence: i32,
+    ) -> bool {
+        let symbol = self.la(1);
+        if symbol == TOKEN_EOF {
+            return false;
+        }
+        let Some(state) = atn.state(state_number) else {
+            return false;
+        };
+        let context = self.prediction_context(atn);
+        if context_can_match_symbol_before_state(atn, &context, state_number, symbol) {
+            return false;
+        }
+        state.transitions.iter().any(|transition| {
+            let target = transition.target();
+            if atn
+                .state(target)
+                .is_some_and(|state| state.kind == AtnStateKind::LoopEnd)
+            {
+                return false;
+            }
+            state_can_reach_symbol_with_precedence(
+                atn,
+                target,
+                symbol,
+                precedence,
+                &mut BTreeSet::new(),
+            )
+        })
+    }
+
+    /// Implements generated `precpred(_ctx, k)` checks.
+    pub fn precpred(&self, precedence: i32) -> bool {
+        precedence >= self.precedence_stack.last().copied().unwrap_or_default()
+    }
+
+    /// Evaluates a generated parser semantic predicate at the current input
+    /// position.
+    pub fn parser_semantic_predicate_matches(
+        &mut self,
+        predicates: &[(usize, usize, ParserPredicate)],
+        rule_index: usize,
+        pred_index: usize,
+    ) -> bool {
+        self.parser_semantic_predicate_matches_inner(predicates, rule_index, pred_index, None)
+    }
+
+    /// Evaluates a generated parser semantic predicate with the current integer
+    /// rule argument exposed as `$_p`/`$i` metadata where applicable.
+    pub fn parser_semantic_predicate_matches_with_local(
+        &mut self,
+        predicates: &[(usize, usize, ParserPredicate)],
+        rule_index: usize,
+        pred_index: usize,
+        local_int_arg: i32,
+    ) -> bool {
+        self.parser_semantic_predicate_matches_inner(
+            predicates,
+            rule_index,
+            pred_index,
+            Some((rule_index, i64::from(local_int_arg))),
+        )
+    }
+
+    fn parser_semantic_predicate_matches_inner(
+        &mut self,
+        predicates: &[(usize, usize, ParserPredicate)],
+        rule_index: usize,
+        pred_index: usize,
+        local_int_arg: Option<(usize, i64)>,
+    ) -> bool {
+        let index = self.input.index();
+        let member_values = self.int_members.clone();
+        self.parser_predicate_matches(PredicateEval {
+            index,
+            rule_index,
+            pred_index,
+            predicates,
+            context: None,
+            local_int_arg,
+            member_values: &member_values,
+        })
+    }
+
+    /// Evaluates a generated parser semantic predicate with access to the
+    /// current generated rule context.
+    pub fn parser_semantic_predicate_matches_with_context_and_local(
+        &mut self,
+        predicates: &[(usize, usize, ParserPredicate)],
+        rule_index: usize,
+        pred_index: usize,
+        context: &ParserRuleContext,
+        local_int_arg: i32,
+    ) -> bool {
+        let index = self.input.index();
+        let member_values = self.int_members.clone();
+        self.parser_predicate_matches(PredicateEval {
+            index,
+            rule_index,
+            pred_index,
+            predicates,
+            context: Some(context),
+            local_int_arg: Some((rule_index, i64::from(local_int_arg))),
+            member_values: &member_values,
+        })
+    }
+
+    /// Returns a generated fail-option message for a parser semantic
+    /// predicate coordinate.
+    pub fn parser_semantic_predicate_failure_message(
+        &self,
+        rule_index: usize,
+        pred_index: usize,
+        predicates: &[(usize, usize, ParserPredicate)],
+    ) -> Option<&'static str> {
+        self.parser_predicate_failure_message(rule_index, pred_index, predicates)
+    }
+
+    /// Matches any non-EOF token.
+    pub fn match_wildcard(&mut self) -> Result<ParseTree, AntlrError> {
+        let current = self
+            .input
+            .lt(1)
+            .cloned()
+            .ok_or_else(|| AntlrError::ParserError {
+                line: 0,
+                column: 0,
+                message: "missing current token".to_owned(),
+            })?;
+        if current.token_type() == TOKEN_EOF {
+            return Err(AntlrError::MismatchedInput {
+                expected: "wildcard".to_owned(),
+                found: self.vocabulary().display_name(TOKEN_EOF),
+            });
+        }
+        self.consume();
+        Ok(ParseTree::Terminal(TerminalNode::new(current)))
+    }
+
+    /// Generated parser synchronization hook. The current interpreter owns
+    /// recovery; direct generated methods can call this as a no-op until the
+    /// generated recovery strategy is expanded.
+    #[allow(clippy::unnecessary_wraps)]
+    pub fn sync(&mut self, state: isize) -> Result<(), AntlrError> {
+        self.set_state(state);
+        Ok(())
+    }
+
+    /// Synchronizes a generated parser decision against the ATN lookahead set.
+    ///
+    /// ANTLR generated parsers call the error strategy before optional and loop
+    /// decisions. When the current token cannot start any alternative, follow a
+    /// nullable exit, or be deleted before a later synchronization token, the
+    /// generated Rust method reports that decision-level mismatch instead of
+    /// descending into a child rule that cannot start at the current token.
+    pub fn sync_decision(
+        &mut self,
+        atn: &Atn,
+        state_number: usize,
+        current_context_empty: bool,
+        loop_back: bool,
+    ) -> Result<Vec<ParseTree>, AntlrError> {
+        self.set_state(isize::try_from(state_number).unwrap_or(isize::MAX));
+        self.generated_sync_expected = None;
+        let Some(state) = atn.state(state_number) else {
+            return Ok(Vec::new());
+        };
+        let Some(rule_index) = state.rule_index else {
+            return Ok(Vec::new());
+        };
+        let Some(rule_stop) = atn.rule_to_stop_state().get(rule_index).copied() else {
+            return Ok(Vec::new());
+        };
+        let entry = self.cached_decision_lookahead(atn, state, rule_stop);
+        let symbol = self.la(1);
+        let mut has_expected_symbols = false;
+        let mut nullable = false;
+        // Whether EOF is an EXPLICIT expected token of this decision (a real `EOF`
+        // reference in the grammar, e.g. `A* EOF`), as opposed to merely the
+        // implicit rule-follow that a nullable exit inherits (e.g. a start rule's
+        // end). Only an explicit EOF makes a token-before-EOF genuinely extraneous
+        // and worth deleting; an implicit-follow EOF means the loop should simply
+        // exit and leave the token for the (absent) caller — matching ANTLR, which
+        // exits the loop via prediction rather than consuming up to a synthetic EOF.
+        let mut explicit_eof_expected = false;
+        for transition in &entry.transitions {
+            if transition.symbols.contains(symbol) {
+                return Ok(Vec::new());
+            }
+            has_expected_symbols |= !transition.symbols.is_empty();
+            nullable |= transition.nullable;
+            explicit_eof_expected |= transition.symbols.contains(TOKEN_EOF);
+        }
+        let context_expected = nullable.then(|| self.context_expected_token_set(atn));
+        if nullable {
+            if context_expected
+                .as_ref()
+                .is_some_and(|expected| expected.contains(symbol))
+            {
+                return Ok(Vec::new());
+            }
+        }
+        if !has_expected_symbols && context_expected.as_ref().is_none_or(TokenBitSet::is_empty) {
+            return Ok(Vec::new());
+        }
+        let mut expected = TokenBitSet::default();
+        for transition in &entry.transitions {
+            expected.extend_from(&transition.symbols);
+        }
+        if let Some(context_expected) = context_expected {
+            expected.extend_from(&context_expected);
+        }
+        let can_delete_in_place =
+            !(nullable && current_context_empty && self.rule_context_stack.len() > 1);
+        // ANTLR's `DefaultErrorStrategy.sync` recovers differently by decision kind:
+        // a loop-BACK sync (STAR_LOOP_BACK / PLUS_LOOP_BACK — reached only after at
+        // least one iteration) does `consumeUntil` the follow set — multi-token
+        // deletion, one error per skipped token across iterations; a loop ENTRY
+        // (STAR_LOOP_ENTRY) and a plain optional/block entry (BLOCK_START /
+        // *-block / +-block starts) do `singleTokenDeletion` — delete the one
+        // unexpected token only when LA(2) is expected, otherwise report a mismatch
+        // and leave recovery to the rule.
+        //
+        // The generated loop always presents the loop-ENTRY state to this method on
+        // every pass, so `state.kind` cannot distinguish entry from back; the caller
+        // passes `loop_back` (false on a `*` loop's first sync / on a block, true once
+        // an iteration has been taken, and true on a `+` loop's first sync since its
+        // mandatory first element is iteration 1). Treating a loop entry as a
+        // loop-back would over-consume (e.g. `s: A* EOF;` on `c c` would delete both
+        // `c`s, which ANTLR rejects with `mismatched input`).
+        let loop_sync = loop_back;
+        if symbol != TOKEN_EOF && can_delete_in_place {
+            let mut cursor = self.input.index();
+            let mut skipped = Vec::new();
+            loop {
+                let current = self.token_type_at(cursor);
+                if current == TOKEN_EOF {
+                    break;
+                }
+                skipped.push(cursor);
+                let next = self.consume_index(cursor, current);
+                if next == cursor {
+                    break;
+                }
+                let next_symbol = self.token_type_at(next);
+                // Stop (and delete the skipped tokens as error nodes) when the next
+                // token is a real expected continuation. EOF counts only when it is
+                // an EXPLICIT grammar token (`A* EOF`): then the deleted tokens are
+                // genuinely extraneous and the generated EOF match consumes the real
+                // EOF afterwards. An implicit-follow EOF (a nullable exit's inherited
+                // rule-follow) does NOT count — the loop must exit and leave the
+                // token, as ANTLR does, instead of deleting up to a synthetic EOF.
+                let next_is_expected_stop = if next_symbol == TOKEN_EOF {
+                    explicit_eof_expected
+                } else {
+                    expected.contains(next_symbol)
+                };
+                if next_is_expected_stop {
+                    let current_token = self.input.lt(1).cloned();
+                    let expected_symbols = expected.to_btree_set();
+                    let message = format!(
+                        "extraneous input {} expecting {}",
+                        current_token
+                            .as_ref()
+                            .map_or_else(|| "'<EOF>'".to_owned(), token_input_display),
+                        self.expected_symbols_display(&expected_symbols)
+                    );
+                    self.generated_parser_diagnostics
+                        .push(diagnostic_for_token(current_token.as_ref(), message));
+                    let mut children = Vec::with_capacity(skipped.len());
+                    for index in skipped {
+                        if let Some(token) = self.token_at(index) {
+                            self.consume();
+                            children.push(ParseTree::Error(ErrorNode::new(token)));
+                        }
+                    }
+                    return Ok(children);
+                }
+                // A non-loop block entry deletes at most one token (single-token
+                // deletion): if LA(2) is not expected, stop scanning so the mismatch
+                // is reported at the first token instead of skipping ahead.
+                if !loop_sync {
+                    break;
+                }
+                cursor = next;
+            }
+        }
+        if nullable {
+            self.generated_sync_expected = Some(expected);
+            return Ok(Vec::new());
+        }
+        let current = self.input.lt(1).cloned();
+        let expected_symbols = expected.to_btree_set();
+        Err(AntlrError::ParserError {
+            line: current.as_ref().map(Token::line).unwrap_or_default(),
+            column: current.as_ref().map(Token::column).unwrap_or_default(),
+            message: format!(
+                "mismatched input {} expecting {}",
+                current
+                    .as_ref()
+                    .map_or_else(|| "'<EOF>'".to_owned(), token_input_display),
+                self.expected_symbols_display(&expected_symbols)
+            ),
+        })
+    }
+
+    /// Returns a generated-parser prediction when one token of lookahead
+    /// uniquely selects an alternative for `state_number`.
+    ///
+    /// This mirrors the interpreter's LL(1) commit point and lets generated
+    /// recursive-descent methods avoid invoking the adaptive simulator for
+    /// simple optional/block/loop decisions.
+    pub fn ll1_decision_prediction(
+        &mut self,
+        atn: &Atn,
+        state_number: usize,
+    ) -> Option<ParserAtnPrediction> {
+        let state = atn.state(state_number)?;
+        if state.precedence_rule_decision {
+            return None;
+        }
+        let rule_stop = state
+            .rule_index
+            .and_then(|rule_index| atn.rule_to_stop_state().get(rule_index).copied())?;
+        let symbol = self.la(1);
+        let entry = self.cached_decision_lookahead(atn, state, rule_stop);
+        ll1_greedy_alt(&entry, symbol, state.non_greedy).map(|alt| ParserAtnPrediction {
+            alt: alt + 1,
+            requires_full_context: false,
+            has_semantic_context: false,
+            diagnostic: None,
+        })
+    }
+
+    fn context_expected_symbols(&mut self, atn: &Atn) -> BTreeSet<i32> {
+        let context = self.prediction_context(atn);
+        let mut expected = BTreeSet::new();
+        self.collect_context_expected_symbols(atn, &context, &mut expected);
+        expected
+    }
+
+    fn context_expected_token_set(&mut self, atn: &Atn) -> TokenBitSet {
+        let context = self.prediction_context(atn);
+        let mut expected = TokenBitSet::default();
+        self.collect_context_expected_token_set(atn, &context, &mut expected);
+        expected
+    }
+
+    fn collect_context_expected_symbols(
+        &mut self,
+        atn: &Atn,
+        context: &Rc<PredictionContext>,
+        expected: &mut BTreeSet<i32>,
+    ) {
+        if context.is_empty() {
+            expected.insert(TOKEN_EOF);
+            return;
+        }
+        for index in 0..context.len() {
+            let Some(return_state) = context.return_state(index) else {
+                continue;
+            };
+            if return_state == EMPTY_RETURN_STATE {
+                expected.insert(TOKEN_EOF);
+                continue;
+            }
+            expected.extend(self.cached_state_expected_symbols(atn, return_state).iter());
+            if self.cached_state_can_reach_rule_stop(atn, return_state)
+                && let Some(parent) = context.parent(index)
+            {
+                self.collect_context_expected_symbols(atn, &parent, expected);
+            }
+        }
+    }
+
+    fn collect_context_expected_token_set(
+        &mut self,
+        atn: &Atn,
+        context: &Rc<PredictionContext>,
+        expected: &mut TokenBitSet,
+    ) {
+        if context.is_empty() {
+            expected.insert(TOKEN_EOF);
+            return;
+        }
+        for index in 0..context.len() {
+            let Some(return_state) = context.return_state(index) else {
+                continue;
+            };
+            if return_state == EMPTY_RETURN_STATE {
+                expected.insert(TOKEN_EOF);
+                continue;
+            }
+            let state_expected = self.cached_state_expected_token_set(atn, return_state);
+            expected.extend_from(&state_expected);
+            if self.cached_state_can_reach_rule_stop(atn, return_state)
+                && let Some(parent) = context.parent(index)
+            {
+                self.collect_context_expected_token_set(atn, &parent, expected);
+            }
+        }
+    }
+
+    /// Builds a generated no-viable-alternative parser error.
+    pub fn no_viable_alternative_error(&mut self, start_index: usize) -> AntlrError {
+        let error_index = self.input.index();
+        self.no_viable_alternative_error_at(start_index, error_index)
+    }
+
+    /// Builds a generated no-viable-alternative parser error at the simulator's
+    /// failing lookahead index. `adaptive_predict` restores the input cursor
+    /// before returning, so generated parsers have to pass the recorded index
+    /// explicitly to preserve ANTLR's LL(k) diagnostic span.
+    pub fn no_viable_alternative_error_at(
+        &mut self,
+        start_index: usize,
+        error_index: usize,
+    ) -> AntlrError {
+        let diagnostic = self.no_viable_alternative(start_index, error_index);
+        AntlrError::ParserError {
+            line: diagnostic.line,
+            column: diagnostic.column,
+            message: diagnostic.message,
+        }
+    }
+
+    /// Builds a generated failed-predicate parser error.
+    pub fn failed_predicate_error(&mut self, message: impl Into<String>) -> AntlrError {
+        let current = self.input.lt(1).cloned();
+        AntlrError::ParserError {
+            line: current.as_ref().map(Token::line).unwrap_or_default(),
+            column: current.as_ref().map(Token::column).unwrap_or_default(),
+            message: format!("rule failed predicate: {}", message.into()),
+        }
+    }
+
+    /// Builds a generated parser error for a semantic predicate with ANTLR's
+    /// `<fail='...'>` option.
+    pub fn failed_predicate_option_error(
+        &mut self,
+        rule_index: usize,
+        message: impl Into<String>,
+    ) -> AntlrError {
+        let current = self.input.lt(1).cloned();
+        let rule_name = self
+            .rule_names()
+            .get(rule_index)
+            .map_or_else(|| rule_index.to_string(), Clone::clone);
+        AntlrError::ParserError {
+            line: current.as_ref().map(Token::line).unwrap_or_default(),
+            column: current.as_ref().map(Token::column).unwrap_or_default(),
+            message: format!("rule {rule_name} {}", message.into()),
+        }
+    }
+
+    /// Builds a generated parser-action event at the current input position.
+    pub fn parser_action_at_current(
+        &mut self,
+        source_state: usize,
+        rule_index: usize,
+        start_index: usize,
+        consumed_eof: bool,
+    ) -> ParserAction {
+        let stop_index = self.rule_stop_token_index(self.input.index(), consumed_eof);
+        ParserAction::new(source_state, rule_index, start_index, stop_index)
+    }
+
+    /// Attempts to execute a whole generated rule by committing simulator
+    /// decisions directly. Unsupported constructs or decisions that need
+    /// full-context / predicate evaluation restore the input cursor and fall
+    /// back to [`Self::parse_atn_rule`].
+    pub fn parse_atn_rule_adaptive_or_fallback<'atn>(
+        &mut self,
+        atn: &'atn Atn,
+        simulator: &mut ParserAtnSimulator<'atn>,
+        rule_index: usize,
+    ) -> Result<ParseTree, AntlrError> {
+        let start_index = self.current_visible_index();
+        self.clear_prediction_diagnostics();
+        self.reset_per_parse_caches();
+        let mut decision_by_state = vec![None; atn.states().len()];
+        for (decision, &state_number) in atn.decision_to_state().iter().enumerate() {
+            if let Some(slot) = decision_by_state.get_mut(state_number) {
+                *slot = Some(decision);
+            }
+        }
+
+        let result = DirectAdaptiveParser {
+            parser: self,
+            atn,
+            simulator,
+            decision_by_state,
+            steps: 0,
+        }
+        .parse_rule(rule_index, -1, 0);
+
+        match result {
+            Ok(tree) => {
+                report_token_source_errors(&self.input.drain_source_errors());
+                Ok(tree)
+            }
+            Err(DirectAdaptiveParseControl::Fallback(reason)) => {
+                let _ = reason;
+                self.input.seek(start_index);
+                self.parse_atn_rule(atn, rule_index)
+            }
+        }
     }
 
     /// Parses a generated rule by interpreting the parser ATN from the rule's
@@ -1916,6 +3580,17 @@ where
         &mut self,
         atn: &Atn,
         rule_index: usize,
+    ) -> Result<ParseTree, AntlrError> {
+        self.parse_atn_rule_with_precedence(atn, rule_index, 0)
+    }
+
+    /// Parses a generated rule by interpreting the parser ATN with an initial
+    /// left-recursive precedence threshold.
+    pub fn parse_atn_rule_with_precedence(
+        &mut self,
+        atn: &Atn,
+        rule_index: usize,
+        precedence: i32,
     ) -> Result<ParseTree, AntlrError> {
         let start_state = atn
             .rule_to_start_state()
@@ -1938,9 +3613,14 @@ where
         self.reset_per_parse_caches();
         self.fast_recovery_enabled = false;
         self.fast_token_nodes_enabled = false;
-        let first_pass = self.fast_recognize_top(atn, start_state, stop_state, start_index);
+        let first_pass =
+            self.fast_recognize_top(atn, start_state, stop_state, start_index, precedence);
         self.fast_token_nodes_enabled = true;
         self.fast_recovery_enabled = true;
+        let needs_tree_retry = matches!(
+            &first_pass,
+            Ok((outcome, _)) if self.build_parse_trees && outcome.nodes.has_left_recursive_boundary()
+        );
         let needs_retry = match &first_pass {
             // The FIRST-set prefilter trims speculative rule calls that can't
             // match the current lookahead — useful for perf on grammars with
@@ -1951,15 +3631,26 @@ where
             // either produced no outcome at all or produced a recovered
             // outcome (diagnostics non-empty), since the second pass might
             // surface a child-level recovery with cleaner diagnostics or
-            // closer parity to ANTLR's tree shape.
+            // closer parity to ANTLR's tree shape. Left-recursive tree
+            // boundaries also need the token-node pass; otherwise the fold has
+            // no concrete left operand to wrap into ANTLR's recursive context.
             Err(_) => true,
-            Ok((outcome, _)) => !outcome.diagnostics.is_empty(),
+            Ok((outcome, _)) => !outcome.diagnostics.is_empty() || needs_tree_retry,
         };
         let (outcome, _expected) = if needs_retry {
             self.fast_first_set_prefilter = false;
-            let retry = self.fast_recognize_top(atn, start_state, stop_state, start_index);
+            let retry =
+                self.fast_recognize_top(atn, start_state, stop_state, start_index, precedence);
             self.fast_first_set_prefilter = true;
-            select_better_top_outcome(first_pass, retry).map_err(|expected| {
+            let selected = if needs_tree_retry {
+                match retry {
+                    ok @ Ok(_) => ok,
+                    Err(_) => first_pass,
+                }
+            } else {
+                select_better_top_outcome(first_pass, retry)
+            };
+            selected.map_err(|expected| {
                 let error = self.recognition_error(rule_index, start_index, &expected);
                 report_token_source_errors(&self.input.drain_source_errors());
                 error
@@ -1971,7 +3662,15 @@ where
         report_parser_diagnostics(&self.prediction_diagnostics);
         report_parser_diagnostics(&outcome.diagnostics);
         report_token_source_errors(&self.input.drain_source_errors());
-        let mut context = ParserRuleContext::new(rule_index, self.state());
+        let mut context = ParserRuleContext::with_child_capacity(
+            rule_index,
+            self.state(),
+            if self.build_parse_trees {
+                outcome.nodes.len()
+            } else {
+                0
+            },
+        );
         if let Some(token) = self.token_at(start_index) {
             context.set_start(token);
         }
@@ -2029,6 +3728,7 @@ where
         start_state: usize,
         stop_state: usize,
         start_index: usize,
+        precedence: i32,
     ) -> Result<(FastRecognizeOutcome, ExpectedTokens), ExpectedTokens> {
         // `input.size()` is intentionally only the currently buffered token
         // count here. Do not restore an up-front fill just to size this map:
@@ -2051,7 +3751,7 @@ where
                 index: start_index,
                 rule_start_index: start_index,
                 decision_start_index: None,
-                precedence: 0,
+                precedence,
                 depth: 0,
                 recovery_symbols: empty_recovery,
                 recovery_state: None,
@@ -2109,7 +3809,7 @@ where
             } => {
                 let current = self.token_at(*at_index);
                 let token = CommonToken::new(*token_type)
-                    .with_text(text)
+                    .with_text(text.as_str())
                     .with_span(usize::MAX, usize::MAX)
                     .with_position(
                         current.as_ref().map(Token::line).unwrap_or_default(),
@@ -2124,7 +3824,11 @@ where
                 stop_index,
                 children,
             } => {
-                let mut context = ParserRuleContext::new(*rule_index, *invoking_state);
+                let mut context = ParserRuleContext::with_child_capacity(
+                    *rule_index,
+                    *invoking_state,
+                    children.len(),
+                );
                 if let Some(token) = self.token_at(*start_index) {
                     context.set_start(token);
                 }
@@ -2163,7 +3867,11 @@ where
                 stop_index,
                 children,
             } => {
-                let mut context = ParserRuleContext::new(*rule_index, *invoking_state);
+                let mut context = ParserRuleContext::with_child_capacity(
+                    *rule_index,
+                    *invoking_state,
+                    children.len(),
+                );
                 if let Some(token) = self.token_at(*start_index) {
                     context.set_start(token);
                 }
@@ -2349,6 +4057,18 @@ where
         rule_index: usize,
         options: ParserRuntimeOptions<'_>,
     ) -> Result<(ParseTree, Vec<ParserAction>), AntlrError> {
+        self.parse_atn_rule_with_runtime_options_and_precedence(atn, rule_index, 0, options)
+    }
+
+    /// Parses a generated rule with action replay, parser predicate support,
+    /// and an initial left-recursive precedence threshold.
+    pub fn parse_atn_rule_with_runtime_options_and_precedence(
+        &mut self,
+        atn: &Atn,
+        rule_index: usize,
+        precedence: i32,
+        options: ParserRuntimeOptions<'_>,
+    ) -> Result<(ParseTree, Vec<ParserAction>), AntlrError> {
         let ParserRuntimeOptions {
             init_action_rules,
             track_alt_numbers,
@@ -2377,6 +4097,10 @@ where
         self.clear_prediction_diagnostics();
         self.reset_per_parse_caches();
         let init_action_rules = init_action_rules.iter().copied().collect::<BTreeSet<_>>();
+        let invoking_state = self.pending_invoking_states.pop();
+        let local_int_arg = invoking_state
+            .and_then(|state| usize::try_from(state).ok())
+            .and_then(|state| rule_local_int_arg(rule_args, state, rule_index, None));
         let mut visiting = BTreeSet::new();
         let mut memo = BTreeMap::new();
         let mut expected = ExpectedTokens::default();
@@ -2395,13 +4119,13 @@ where
                 rule_args,
                 member_actions,
                 return_actions,
-                local_int_arg: None,
+                local_int_arg,
                 member_values,
                 return_values,
                 rule_alt_number: 0,
                 track_alt_numbers,
                 consumed_eof: false,
-                precedence: 0,
+                precedence,
                 depth: 0,
                 recovery_symbols: BTreeSet::new(),
                 recovery_state: None,
@@ -2426,7 +4150,8 @@ where
                 ParserAction::new_rule_init(rule_index, start_index, Some(start_state)),
             );
         }
-        let mut context = ParserRuleContext::new(rule_index, self.state());
+        let mut context =
+            ParserRuleContext::new(rule_index, invoking_state.unwrap_or_else(|| self.state()));
         if track_alt_numbers {
             context.set_alt_number(outcome.alt_number);
         }
@@ -2913,6 +4638,71 @@ where
             .collect()
     }
 
+    /// Converts a failed child rule into a recovered fast-recognizer outcome so
+    /// the parent can keep its child rule context and continue at a sync token.
+    fn fast_child_rule_failure_recovery(
+        &mut self,
+        rule_index: usize,
+        start_index: usize,
+        sync_symbols: &BTreeSet<i32>,
+        expected: &ExpectedTokens,
+    ) -> Option<FastRecognizeOutcome> {
+        let (error_index, message) = self.expected_error_message(rule_index, start_index, expected);
+        let token = self.token_at(error_index);
+        let mut next_index = error_index;
+        loop {
+            let symbol = self.token_type_at(next_index);
+            if sync_symbols.contains(&symbol) {
+                if next_index == error_index {
+                    return None;
+                }
+                break;
+            }
+            if symbol == TOKEN_EOF {
+                break;
+            }
+            let after = self.consume_index(next_index, symbol);
+            if after == next_index {
+                break;
+            }
+            next_index = after;
+        }
+        let mut diagnostics = FastDiagnostics::new();
+        diagnostics.insert(0, diagnostic_for_token(token.as_ref(), message));
+        let mut nodes = NodeList::new();
+        if self.fast_token_nodes_enabled {
+            nodes.prepend(Rc::new(FastRecognizedNode::ErrorToken {
+                index: error_index,
+            }));
+        }
+        Some(FastRecognizeOutcome {
+            index: next_index,
+            consumed_eof: false,
+            diagnostics,
+            nodes,
+        })
+    }
+
+    /// Adapts the optional child-rule recovery result to the fast-recognizer
+    /// outcome list used by rule-call transitions.
+    fn fast_child_rule_failure_recovery_outcomes(
+        &mut self,
+        request: FastChildRuleFailureRecoveryRequest<'_>,
+    ) -> Vec<FastRecognizeOutcome> {
+        let FastChildRuleFailureRecoveryRequest {
+            atn,
+            rule_index,
+            start_index,
+            follow_state,
+            stop_state,
+            expected,
+        } = request;
+        let sync_symbols = state_sync_symbols(atn, follow_state, stop_state);
+        self.fast_child_rule_failure_recovery(rule_index, start_index, &sync_symbols, expected)
+            .into_iter()
+            .collect()
+    }
+
     /// Attempts to reach `stop_state` from `state_number` without committing
     /// token consumption to the parser's public stream position.
     #[allow(clippy::too_many_lines)]
@@ -2944,8 +4734,9 @@ where
         // collapses many recursive calls (and their memo lookups, vec
         // allocations, and visit-set churn) into a single function frame.
         // The loop exits as soon as we hit the original state's logic
-        // (multi-alt, decision, rule call, atom/range/set, precedence) so
-        // existing fanout, recovery, and memoization still apply unchanged.
+        // (multi-alt, decision, rule call, unmatched atom/range/set, gated
+        // precedence) so existing fanout, recovery, and memoization still
+        // apply unchanged.
         //
         // The inline case also handles single-atom-match states on the
         // happy-pass path: when the lone consuming transition matches the
@@ -2964,13 +4755,15 @@ where
                 let mut nodes = NodeList::new();
                 if self.fast_token_nodes_enabled {
                     for token_index in inline_consumed_tokens.iter().rev() {
-                        nodes.prepend(Rc::new(FastRecognizedNode::Token { index: *token_index }));
+                        nodes.prepend(Rc::new(FastRecognizedNode::Token {
+                            index: *token_index,
+                        }));
                     }
                 }
                 return vec![FastRecognizeOutcome {
                     index,
                     consumed_eof: inline_consumed_eof,
-                    diagnostics: Vec::new(),
+                    diagnostics: FastDiagnostics::new(),
                     nodes,
                 }];
             }
@@ -2983,7 +4776,21 @@ where
             {
                 match &state.transitions[0] {
                     Transition::Epsilon { target }
+                    | Transition::Predicate { target, .. }
+                    | Transition::Action { target, .. }
                         if left_recursive_boundary(atn, state, *target).is_none() =>
+                    {
+                        #[cfg(feature = "perf-counters")]
+                        perf_counters::inc(&perf_counters::EPSILON_TRANSITIONS, 1);
+                        state_number = *target;
+                        depth += 1;
+                        continue;
+                    }
+                    Transition::Precedence {
+                        target,
+                        precedence: transition_precedence,
+                    } if *transition_precedence >= precedence
+                        && left_recursive_boundary(atn, state, *target).is_none() =>
                     {
                         #[cfg(feature = "perf-counters")]
                         perf_counters::inc(&perf_counters::EPSILON_TRANSITIONS, 1);
@@ -3033,6 +4840,11 @@ where
         // body (decision state, rule call, etc.), the outcomes returned
         // below will need those token nodes prepended.
         let inline_pending = !inline_consumed_tokens.is_empty() || inline_consumed_eof;
+        let Some(state) = atn.state(state_number) else {
+            return Vec::new();
+        };
+        let transition_count = state.transitions.len();
+        let memo_lookup_enabled = self.fast_recovery_enabled || transition_count > 1;
         // In pass 1 (`fast_recovery_enabled == false`) the recovery-related
         // fields and the rule/decision boundary indices are pure plumbing —
         // they only affect the recovery branch and the no-viable diagnostic
@@ -3065,40 +4877,42 @@ where
                 recovery_state: None,
             }
         };
-        if let Some(outcomes) = memo.get(&key) {
-            #[cfg(feature = "perf-counters")]
-            {
-                perf_counters::inc(&perf_counters::RFS_MEMO_HITS, 1);
-                perf_counters::inc(&perf_counters::OUTCOMES_CLONED, outcomes.len() as u64);
-            }
-            // Materialize a fresh `Vec` from the cached slice; the caller
-            // mutates per-outcome state (eof flags, prepended nodes) so we
-            // can't hand them the shared backing.
-            if !inline_consumed_tokens.is_empty() || inline_consumed_eof {
-                let inline_eof = inline_consumed_eof;
-                let inline_tokens = &inline_consumed_tokens;
-                return outcomes
-                    .iter()
-                    .cloned()
-                    .map(|mut outcome| {
-                        if inline_eof {
-                            outcome.consumed_eof = true;
-                        }
-                        if self.fast_token_nodes_enabled {
-                            for token_index in inline_tokens.iter().rev() {
-                                outcome.nodes.prepend(Rc::new(FastRecognizedNode::Token {
-                                    index: *token_index,
-                                }));
+        if memo_lookup_enabled {
+            if let Some(outcomes) = memo.get(&key) {
+                #[cfg(feature = "perf-counters")]
+                {
+                    perf_counters::inc(&perf_counters::RFS_MEMO_HITS, 1);
+                    perf_counters::inc(&perf_counters::OUTCOMES_CLONED, outcomes.len() as u64);
+                }
+                // Materialize a fresh `Vec` from the cached slice; the caller
+                // mutates per-outcome state (eof flags, prepended nodes) so we
+                // can't hand them the shared backing.
+                if !inline_consumed_tokens.is_empty() || inline_consumed_eof {
+                    let inline_eof = inline_consumed_eof;
+                    let inline_tokens = &inline_consumed_tokens;
+                    return outcomes
+                        .iter()
+                        .cloned()
+                        .map(|mut outcome| {
+                            if inline_eof {
+                                outcome.consumed_eof = true;
                             }
-                        }
-                        outcome
-                    })
-                    .collect();
+                            if self.fast_token_nodes_enabled {
+                                for token_index in inline_tokens.iter().rev() {
+                                    outcome.nodes.prepend(Rc::new(FastRecognizedNode::Token {
+                                        index: *token_index,
+                                    }));
+                                }
+                            }
+                            outcome
+                        })
+                        .collect();
+                }
+                return outcomes.to_vec();
             }
-            return outcomes.to_vec();
+            #[cfg(feature = "perf-counters")]
+            perf_counters::inc(&perf_counters::RFS_MEMO_MISSES, 1);
         }
-        #[cfg(feature = "perf-counters")]
-        perf_counters::inc(&perf_counters::RFS_MEMO_MISSES, 1);
 
         // Cycle detection: only insert into the visiting set for states
         // that *could* re-enter without consuming — multi-alternative
@@ -3107,10 +4921,8 @@ where
         // Multi-alt states might contain epsilon-only edges that loop back
         // to the same `(state, index)` (e.g. left-recursive precedence
         // loops); we still need the guard there.
-        let Some(state) = atn.state(state_number) else {
-            return Vec::new();
-        };
-        let needs_cycle_guard = state.transitions.len() > 1;
+        let needs_cycle_guard =
+            transition_count > 1 && self.state_can_reenter_without_consuming(atn, state_number);
         #[cfg(feature = "perf-counters")]
         if needs_cycle_guard {
             perf_counters::inc(&perf_counters::MULTI_TRANS_BODY, 1);
@@ -3212,8 +5024,7 @@ where
         // because they're atom/rule/predicate) push at most one entry, so
         // reserving one slot avoids a reallocation while keeping the
         // unused-slot waste at one element.
-        let mut outcomes: Vec<FastRecognizeOutcome> =
-            Vec::with_capacity(transition_count.min(2));
+        let mut outcomes: Vec<FastRecognizeOutcome> = Vec::with_capacity(transition_count.min(2));
         for (transition_index, transition) in state.transitions.iter().enumerate() {
             if let Some(alt) = ll1_only_alt {
                 // LL(1) determinism: skip every alt except the chosen one.
@@ -3340,9 +5151,7 @@ where
                         // the cache when the FIRST-set walk hit a cycle, so
                         // we cannot assume the entry is in the cache after
                         // computing it.
-                        let first = with_shared_first_set_cache(atn, |cache| {
-                            rule_first_set(atn, *target, child_stop, cache)
-                        });
+                        let first = self.cached_rule_first_set(atn, *target, child_stop);
                         if should_skip_rule_via_first_set(
                             &first,
                             symbol,
@@ -3355,7 +5164,7 @@ where
                     }
                     let expected_before_child =
                         self.fast_recovery_enabled.then(|| expected.clone());
-                    let children = self.recognize_state_fast(
+                    let mut children = self.recognize_state_fast(
                         atn,
                         FastRecognizeRequest {
                             state_number: *target,
@@ -3372,6 +5181,18 @@ where
                         memo,
                         expected,
                     );
+                    if children.is_empty() && self.fast_recovery_enabled {
+                        children = self.fast_child_rule_failure_recovery_outcomes(
+                            FastChildRuleFailureRecoveryRequest {
+                                atn,
+                                rule_index: *rule_index,
+                                start_index: index,
+                                follow_state: *follow_state,
+                                stop_state,
+                                expected,
+                            },
+                        );
+                    }
                     if let Some(expected_before_child) = expected_before_child {
                         if children
                             .iter()
@@ -3569,7 +5390,11 @@ where
         if needs_cycle_guard {
             visiting.remove(&visit_id);
         }
-        if self.prediction_mode == PredictionMode::Ll && self.fast_recovery_enabled {
+        if matches!(
+            self.prediction_mode,
+            PredictionMode::Ll | PredictionMode::LlExactAmbigDetection
+        ) && self.fast_recovery_enabled
+        {
             // Without recovery enabled every outcome already has empty
             // diagnostics, so the discard pass is a no-op — skipping it
             // saves an iter+retain on each of the ~1M visits.
@@ -3589,7 +5414,11 @@ where
         // memoization unconditionally because the recovery branch may
         // record diagnostics that the cache must surface to repeated
         // failed visits.
-        let should_memoize = self.fast_recovery_enabled || transition_count > 1;
+        let should_memoize = self.fast_recovery_enabled
+            || (transition_count > 1
+                && (outcomes.is_empty()
+                    || outcomes.len() > 1
+                    || (outcomes.len() == 1 && self.should_memoize_single_outcome(&key))));
         // Apply inline pending state to each outcome before returning.
         // Tokens consumed inline by the loop-collapse don't appear in the
         // recursive recognizer's output, so we need to prepend them here.
@@ -3599,14 +5428,14 @@ where
             }
             if !inline_consumed_tokens.is_empty() {
                 for token_index in inline_consumed_tokens.iter().rev() {
-                    outcome
-                        .nodes
-                        .prepend(Rc::new(FastRecognizedNode::Token { index: *token_index }));
+                    outcome.nodes.prepend(Rc::new(FastRecognizedNode::Token {
+                        index: *token_index,
+                    }));
                 }
             }
             outcome
         };
-        if should_memoize && (self.fast_recovery_enabled || !outcomes.is_empty()) {
+        if should_memoize {
             #[cfg(feature = "perf-counters")]
             {
                 perf_counters::inc(&perf_counters::MEMO_INSERTED, 1);
@@ -3964,6 +5793,7 @@ where
 
     /// Attempts to reach `stop_state` and carries semantic actions for the
     /// selected parser path.
+    #[allow(clippy::too_many_lines)]
     fn recognize_state(
         &mut self,
         atn: &Atn,
@@ -4086,6 +5916,7 @@ where
                         rule_index: *rule_index,
                         pred_index: *pred_index,
                         predicates,
+                        context: None,
                         local_int_arg,
                         member_values: &member_values,
                     };
@@ -4445,7 +6276,10 @@ where
 
         visiting.remove(&visit_key);
         self.record_prediction_diagnostics(atn, state, index, &outcomes);
-        if self.prediction_mode == PredictionMode::Ll {
+        if matches!(
+            self.prediction_mode,
+            PredictionMode::Ll | PredictionMode::LlExactAmbigDetection
+        ) {
             discard_recovered_outcomes_if_clean_path_exists(&mut outcomes);
         }
         dedupe_outcomes(&mut outcomes);
@@ -4577,6 +6411,33 @@ where
         entry
     }
 
+    fn cached_state_expected_token_set(
+        &mut self,
+        atn: &Atn,
+        state_number: usize,
+    ) -> Rc<TokenBitSet> {
+        if let Some(cached) = self.state_expected_token_cache.get(&state_number) {
+            return Rc::clone(cached);
+        }
+        let symbols = Rc::new(state_expected_token_set(atn, state_number));
+        self.state_expected_token_cache
+            .insert(state_number, Rc::clone(&symbols));
+        symbols
+    }
+
+    fn cached_state_can_reach_rule_stop(&mut self, atn: &Atn, state_number: usize) -> bool {
+        if self.rule_stop_reach_cache.len() <= state_number {
+            self.rule_stop_reach_cache
+                .resize_with(atn.states().len().max(state_number + 1), || None);
+        }
+        if let Some(reaches) = self.rule_stop_reach_cache[state_number] {
+            return reaches;
+        }
+        let reaches = state_can_reach_rule_stop(atn, state_number);
+        self.rule_stop_reach_cache[state_number] = Some(reaches);
+        reaches
+    }
+
     /// Returns the parser's empty `recovery_symbols` singleton so callers can
     /// share an `Rc` instead of allocating new `BTreeSet`s for the common case.
     fn empty_recovery_symbols(&self) -> Rc<BTreeSet<i32>> {
@@ -4641,13 +6502,142 @@ where
                 ));
             }
             let entry = Rc::new(entry);
-            cache.decision_lookahead
+            cache
+                .decision_lookahead
                 .insert(state.state_number, Rc::clone(&entry));
             entry
         });
         self.decision_lookahead_cache
             .insert(state.state_number, Rc::clone(&entry));
         entry
+    }
+
+    fn cached_rule_first_set(
+        &mut self,
+        atn: &Atn,
+        target: usize,
+        child_stop: usize,
+    ) -> Rc<FirstSet> {
+        if self.rule_first_set_cache.len() <= target {
+            self.rule_first_set_cache
+                .resize_with(atn.states().len().max(target + 1), || None);
+        }
+        if let Some(cached) = self
+            .rule_first_set_cache
+            .get(target)
+            .and_then(Option::as_ref)
+        {
+            return Rc::clone(cached);
+        }
+        let first = with_shared_first_set_cache(atn, |cache| {
+            rule_first_set(atn, target, child_stop, cache)
+        });
+        self.rule_first_set_cache[target] = Some(Rc::clone(&first));
+        first
+    }
+
+    fn state_can_reenter_without_consuming(&mut self, atn: &Atn, state_number: usize) -> bool {
+        if self.empty_cycle_cache.len() <= state_number {
+            self.empty_cycle_cache
+                .resize_with(atn.states().len().max(state_number + 1), || None);
+        }
+        if let Some(cached) = self.empty_cycle_cache[state_number] {
+            return cached;
+        }
+        let mut visited = FxHashSet::with_capacity_and_hasher(64, FxBuildHasher::default());
+        let result = self.empty_path_reaches_state(atn, state_number, state_number, &mut visited);
+        self.empty_cycle_cache[state_number] = Some(result);
+        result
+    }
+
+    fn empty_path_reaches_state(
+        &mut self,
+        atn: &Atn,
+        state_number: usize,
+        target_state: usize,
+        visited: &mut FxHashSet<usize>,
+    ) -> bool {
+        if !visited.insert(state_number) {
+            return false;
+        }
+        let Some(state) = atn.state(state_number) else {
+            return false;
+        };
+        for transition in &state.transitions {
+            match transition {
+                Transition::Atom { .. }
+                | Transition::Range { .. }
+                | Transition::Set { .. }
+                | Transition::NotSet { .. }
+                | Transition::Wildcard { .. } => {}
+                Transition::Rule {
+                    target,
+                    rule_index,
+                    follow_state,
+                    ..
+                } => {
+                    if *target == target_state
+                        || self.empty_path_reaches_state(atn, *target, target_state, visited)
+                    {
+                        return true;
+                    }
+                    let Some(child_stop) = atn.rule_to_stop_state().get(*rule_index).copied()
+                    else {
+                        continue;
+                    };
+                    if self
+                        .cached_rule_first_set(atn, *target, child_stop)
+                        .nullable
+                        && (*follow_state == target_state
+                            || self.empty_path_reaches_state(
+                                atn,
+                                *follow_state,
+                                target_state,
+                                visited,
+                            ))
+                    {
+                        return true;
+                    }
+                }
+                Transition::Epsilon { target }
+                | Transition::Predicate { target, .. }
+                | Transition::Action { target, .. }
+                | Transition::Precedence { target, .. } => {
+                    if *target == target_state
+                        || self.empty_path_reaches_state(atn, *target, target_state, visited)
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    /// Decides whether a clean one-outcome entry is worth storing in the full
+    /// outcome memo table for this parse.
+    fn should_memoize_single_outcome(&mut self, key: &FastRecognizeKey) -> bool {
+        match self.single_outcome_memo_mode {
+            SingleOutcomeMemoMode::Promote => true,
+            SingleOutcomeMemoMode::Sparse => false,
+            SingleOutcomeMemoMode::Probe => {
+                self.single_outcome_probe_samples += 1;
+                if !self.single_outcome_probe_seen.insert(key.clone()) {
+                    self.single_outcome_probe_repeats += 1;
+                }
+                if self.single_outcome_probe_repeats >= CLEAN_SINGLE_OUTCOME_MEMO_REPEAT_LIMIT {
+                    self.single_outcome_memo_mode = SingleOutcomeMemoMode::Promote;
+                    self.single_outcome_probe_seen.clear();
+                    return true;
+                }
+                if self.single_outcome_probe_samples >= CLEAN_SINGLE_OUTCOME_MEMO_PROBE_LIMIT {
+                    self.single_outcome_memo_mode = SingleOutcomeMemoMode::Sparse;
+                    self.single_outcome_probe_seen.clear();
+                    return false;
+                }
+                true
+            }
+        }
     }
 
     /// Clones the visible token at an absolute token-stream index.
@@ -4699,6 +6689,79 @@ where
         } else {
             self.previous_token_index(index)
         }
+    }
+
+    /// Stop-token index for a rule's `@after` action, matching the boundary that
+    /// `finish_rule` records on the rule context.
+    ///
+    /// A rule that matched EOF leaves the cursor parked on the EOF token
+    /// (`CommonTokenStream::consume` does not advance past EOF), so the stop is
+    /// the current index rather than the previous visible token. Without this,
+    /// `$stop`/`$text` in an `@after` action on a rule like `r: a* EOF;` would
+    /// report the token before EOF (or `None` for empty input), diverging from
+    /// the rule context that `finish_rule` builds.
+    ///
+    /// NOTE: this infers `consumed_eof` from the cursor, which is wrong when a
+    /// rule ends right before EOF without matching it (the cursor is parked on
+    /// EOF, but the rule did not consume it). Prefer
+    /// [`Self::after_action_stop_index_for_tree`], which reuses the stop token the
+    /// rule context already recorded with the real flag. Kept for callers without
+    /// the rule tree in hand.
+    #[must_use]
+    pub fn after_action_stop_index(&mut self, current_index: usize) -> Option<usize> {
+        let consumed_eof = self.token_type_at(current_index) == TOKEN_EOF;
+        self.rule_stop_token_index(current_index, consumed_eof)
+    }
+
+    /// Stop-token index for a rule's `@after` action, taken from the stop token
+    /// the rule context already recorded.
+    ///
+    /// `finish_rule` computes the rule stop with the real `consumed_eof` flag, so
+    /// reading it back keeps `$stop`/`$text` in an `@after` action aligned with
+    /// the rule context — even when the rule ends immediately before EOF without
+    /// matching it (cursor parked on EOF, but `consumed_eof` is false). Falls back
+    /// to the cursor-based inference only when the tree carries no rule stop.
+    #[must_use]
+    pub fn after_action_stop_index_for_tree(
+        &mut self,
+        tree: &ParseTree,
+        current_index: usize,
+    ) -> Option<usize> {
+        if let ParseTree::Rule(rule) = tree {
+            if let Some(stop) = rule.context().stop() {
+                let token_index = stop.token_index();
+                if token_index >= 0 {
+                    return Some(token_index.unsigned_abs());
+                }
+            }
+        }
+        self.after_action_stop_index(current_index)
+    }
+
+    /// Start-token index for a rule's `@after` action, taken from the start token
+    /// the rule context already recorded.
+    ///
+    /// `enter_rule` sets the rule context start to the first visible token (it
+    /// skips leading hidden-channel tokens), so reading it back keeps `$start` /
+    /// `$text` in an `@after` action aligned with the rule context — even when the
+    /// rule begins after a hidden prefix (e.g. leading whitespace) that the raw
+    /// pre-rule cursor still points at. Falls back to `fallback_index` only when
+    /// the tree carries no rule start.
+    #[must_use]
+    pub fn after_action_start_index_for_tree(
+        &self,
+        tree: &ParseTree,
+        fallback_index: usize,
+    ) -> usize {
+        if let ParseTree::Rule(rule) = tree {
+            if let Some(start) = rule.context().start() {
+                let token_index = start.token_index();
+                if token_index >= 0 {
+                    return token_index.unsigned_abs();
+                }
+            }
+        }
+        fallback_index
     }
 
     /// Returns the rule stop token for a selected parse path.
@@ -4775,6 +6838,7 @@ where
             rule_index,
             pred_index,
             predicates,
+            context,
             local_int_arg,
             member_values,
         } = eval;
@@ -4805,6 +6869,25 @@ where
             ParserPredicate::LookaheadNotEquals { offset, token_type } => {
                 self.la(*offset) != *token_type
             }
+            ParserPredicate::TokenPairAdjacent => {
+                let Some(first) = self.input.lt(-2).map(Token::token_index) else {
+                    return false;
+                };
+                let Some(second) = self.input.lt(-1).map(Token::token_index) else {
+                    return false;
+                };
+                first + 1 == second
+            }
+            ParserPredicate::ContextChildRuleTextNotEquals { rule_index, text } => context
+                .and_then(|context| {
+                    context.children().iter().find_map(|child| match child {
+                        ParseTree::Rule(rule) if rule.context().rule_index() == *rule_index => {
+                            Some(child.text())
+                        }
+                        ParseTree::Rule(_) | ParseTree::Terminal(_) | ParseTree::Error(_) => None,
+                    })
+                })
+                .is_none_or(|actual| actual != *text),
             ParserPredicate::LocalIntEquals { value } => {
                 local_int_arg.is_none_or(|(_, actual)| actual == *value)
             }
@@ -4821,6 +6904,14 @@ where
                     return false;
                 }
                 let actual = member_values.get(member).copied().unwrap_or_default() % *modulus;
+                (actual == *value) == *equals
+            }
+            ParserPredicate::MemberEquals {
+                member,
+                value,
+                equals,
+            } => {
+                let actual = member_values.get(member).copied().unwrap_or_default();
                 (actual == *value) == *equals
             }
         }
@@ -4967,16 +7058,23 @@ where
     /// the perf wins (caches still amortize within one parse) without making
     /// long-lived parsers leak memory or surface stale ATN data:
     ///
-    /// * `first_set_cache` and `decision_lookahead_cache` are pure functions
-    ///   of the ATN's state graph.
-    /// * `state_expected_cache` and `recovery_symbols_intern` together form
+    /// * `rule_first_set_cache` and `decision_lookahead_cache` are pure
+    ///   functions of the ATN's state graph.
+    /// * `state_expected_cache`, `rule_stop_reach_cache`, and
+    ///   `recovery_symbols_intern` together form
     ///   the identity invariant that lets `FastRecognizeKey` hash
     ///   `recovery_symbols` by pointer; they have to be cleared in lockstep
     ///   so a stale interned `Rc` cannot outlive its map entry.
     fn reset_per_parse_caches(&mut self) {
-        self.first_set_cache.clear();
+        self.rule_first_set_cache.clear();
         self.decision_lookahead_cache.clear();
         self.ll1_decision_cache.clear();
+        self.empty_cycle_cache.clear();
+        self.rule_stop_reach_cache.clear();
+        self.single_outcome_memo_mode = SingleOutcomeMemoMode::Probe;
+        self.single_outcome_probe_seen.clear();
+        self.single_outcome_probe_samples = 0;
+        self.single_outcome_probe_repeats = 0;
         self.recovery_symbols_intern.clear();
         self.state_expected_cache.clear();
     }
@@ -5103,7 +7201,7 @@ where
             } => {
                 let current = self.token_at(*at_index);
                 let token = CommonToken::new(*token_type)
-                    .with_text(text)
+                    .with_text(text.as_str())
                     .with_span(usize::MAX, usize::MAX)
                     .with_position(
                         current.as_ref().map(Token::line).unwrap_or_default(),
@@ -5142,6 +7240,266 @@ where
                 format!("unfolded left-recursive boundary for rule {rule_index}"),
             )),
         }
+    }
+}
+
+impl<S> DirectAdaptiveParser<'_, '_, S>
+where
+    S: TokenSource,
+{
+    fn parse_rule(
+        &mut self,
+        rule_index: usize,
+        invoking_state: isize,
+        precedence: i32,
+    ) -> DirectAdaptiveParseResult<ParseTree> {
+        let start_state = *self.atn.rule_to_start_state().get(rule_index).ok_or(
+            DirectAdaptiveParseControl::Fallback(DirectAdaptiveFallback::MissingAtn),
+        )?;
+        let stop_state = *self
+            .atn
+            .rule_to_stop_state()
+            .get(rule_index)
+            .filter(|state| **state != usize::MAX)
+            .ok_or(DirectAdaptiveParseControl::Fallback(
+                DirectAdaptiveFallback::MissingAtn,
+            ))?;
+        let start_index = self.parser.current_visible_index();
+        let mut children = Vec::new();
+        let mut state_number = start_state;
+        let mut consumed_eof = false;
+        while state_number != stop_state {
+            self.step()?;
+            let (transition, boundary) = self.next_transition(state_number, precedence)?;
+            if boundary.is_some() {
+                return Err(DirectAdaptiveParseControl::Fallback(
+                    DirectAdaptiveFallback::LeftRecursiveBoundary,
+                ));
+            }
+            match transition {
+                Transition::Epsilon { target } => {
+                    state_number = target;
+                }
+                Transition::Precedence {
+                    target,
+                    precedence: transition_precedence,
+                } => {
+                    if transition_precedence < precedence {
+                        return Err(DirectAdaptiveParseControl::Fallback(
+                            DirectAdaptiveFallback::Precedence,
+                        ));
+                    }
+                    state_number = target;
+                }
+                Transition::Rule {
+                    rule_index,
+                    follow_state,
+                    precedence: rule_precedence,
+                    ..
+                } => {
+                    let child = self.parse_rule(
+                        rule_index,
+                        invoking_state_number(state_number),
+                        rule_precedence,
+                    )?;
+                    if self.parser.build_parse_trees {
+                        children.push(child);
+                    }
+                    state_number = follow_state;
+                }
+                Transition::Atom { .. }
+                | Transition::Range { .. }
+                | Transition::Set { .. }
+                | Transition::NotSet { .. }
+                | Transition::Wildcard { .. } => {
+                    let (matched_eof, child) = self.consume_transition(&transition)?;
+                    consumed_eof |= matched_eof;
+                    if let Some(child) = child {
+                        children.push(child);
+                    }
+                    state_number = transition.target();
+                }
+                Transition::Predicate { .. } => {
+                    return Err(DirectAdaptiveParseControl::Fallback(
+                        DirectAdaptiveFallback::Predicate,
+                    ));
+                }
+                Transition::Action { .. } => {
+                    return Err(DirectAdaptiveParseControl::Fallback(
+                        DirectAdaptiveFallback::Action,
+                    ));
+                }
+            }
+        }
+
+        let mut context = ParserRuleContext::with_child_capacity(
+            rule_index,
+            invoking_state,
+            if self.parser.build_parse_trees {
+                children.len()
+            } else {
+                0
+            },
+        );
+        if let Some(token) = self.parser.token_at(start_index) {
+            context.set_start(token);
+        }
+        let stop_index = self
+            .parser
+            .rule_stop_token_index(self.parser.input.index(), consumed_eof);
+        if let Some(token) = stop_index.and_then(|index| self.parser.token_at(index)) {
+            context.set_stop(token);
+        }
+        if self.parser.build_parse_trees {
+            for child in children {
+                context.add_child(child);
+            }
+        }
+        Ok(self.parser.rule_node(context))
+    }
+
+    const fn step(&mut self) -> DirectAdaptiveParseResult<()> {
+        self.steps += 1;
+        if self.steps > ADAPTIVE_DIRECT_STEP_LIMIT {
+            return Err(DirectAdaptiveParseControl::Fallback(
+                DirectAdaptiveFallback::StepLimit,
+            ));
+        }
+        Ok(())
+    }
+
+    fn next_transition(
+        &mut self,
+        state_number: usize,
+        precedence: i32,
+    ) -> DirectAdaptiveParseResult<(Transition, Option<usize>)> {
+        let state = self
+            .atn
+            .state(state_number)
+            .ok_or(DirectAdaptiveParseControl::Fallback(
+                DirectAdaptiveFallback::MissingAtn,
+            ))?;
+        if state.is_rule_stop() {
+            return Err(DirectAdaptiveParseControl::Fallback(
+                DirectAdaptiveFallback::RuleStop,
+            ));
+        }
+        let transition_index =
+            self.transition_index(state_number, state.transitions.len(), precedence)?;
+        let transition = state.transitions.get(transition_index).cloned().ok_or(
+            DirectAdaptiveParseControl::Fallback(DirectAdaptiveFallback::NoTransition),
+        )?;
+        let boundary = match &transition {
+            Transition::Epsilon { target } | Transition::Precedence { target, .. } => {
+                left_recursive_boundary(self.atn, state, *target)
+            }
+            _ => None,
+        };
+        Ok((transition, boundary))
+    }
+
+    fn transition_index(
+        &mut self,
+        state_number: usize,
+        transition_count: usize,
+        precedence: i32,
+    ) -> DirectAdaptiveParseResult<usize> {
+        match transition_count {
+            0 => Err(DirectAdaptiveParseControl::Fallback(
+                DirectAdaptiveFallback::NoTransition,
+            )),
+            1 => Ok(0),
+            _ => {
+                if let Some(alt) = self.ll1_transition_index(state_number, transition_count)? {
+                    return Ok(alt);
+                }
+                let decision = self
+                    .decision_by_state
+                    .get(state_number)
+                    .and_then(|decision| *decision)
+                    .ok_or(DirectAdaptiveParseControl::Fallback(
+                        DirectAdaptiveFallback::UnknownDecision,
+                    ))?;
+                let prediction = self
+                    .simulator
+                    .adaptive_predict_stream_info_with_precedence(
+                        decision,
+                        direct_precedence(precedence),
+                        &mut self.parser.input,
+                    )
+                    .map_err(|_| {
+                        DirectAdaptiveParseControl::Fallback(DirectAdaptiveFallback::Prediction)
+                    })?;
+                if prediction.has_semantic_context {
+                    return Err(DirectAdaptiveParseControl::Fallback(
+                        DirectAdaptiveFallback::SemanticContext,
+                    ));
+                }
+                prediction
+                    .alt
+                    .checked_sub(1)
+                    .filter(|index| *index < transition_count)
+                    .ok_or(DirectAdaptiveParseControl::Fallback(
+                        DirectAdaptiveFallback::InvalidAlt,
+                    ))
+            }
+        }
+    }
+
+    fn ll1_transition_index(
+        &mut self,
+        state_number: usize,
+        transition_count: usize,
+    ) -> DirectAdaptiveParseResult<Option<usize>> {
+        let state = self
+            .atn
+            .state(state_number)
+            .ok_or(DirectAdaptiveParseControl::Fallback(
+                DirectAdaptiveFallback::MissingAtn,
+            ))?;
+        if state.precedence_rule_decision {
+            return Ok(None);
+        }
+        let Some(rule_stop) = state
+            .rule_index
+            .and_then(|rule_index| self.atn.rule_to_stop_state().get(rule_index).copied())
+        else {
+            return Ok(None);
+        };
+        let symbol = self.parser.input.la_token(1);
+        let entry = self
+            .parser
+            .cached_decision_lookahead(self.atn, state, rule_stop);
+        Ok(ll1_greedy_alt(&entry, symbol, state.non_greedy).filter(|alt| *alt < transition_count))
+    }
+
+    fn consume_transition(
+        &mut self,
+        transition: &Transition,
+    ) -> DirectAdaptiveParseResult<(bool, Option<ParseTree>)> {
+        let symbol = self.parser.input.la_token(1);
+        if !transition.matches(symbol, 1, self.atn.max_token_type()) {
+            return Err(DirectAdaptiveParseControl::Fallback(
+                DirectAdaptiveFallback::TokenMismatch,
+            ));
+        }
+        let token =
+            self.parser
+                .input
+                .lt(1)
+                .cloned()
+                .ok_or(DirectAdaptiveParseControl::Fallback(
+                    DirectAdaptiveFallback::TokenMismatch,
+                ))?;
+        let matched_eof = symbol == TOKEN_EOF;
+        if !matched_eof {
+            self.parser.consume();
+        }
+        let child = self
+            .parser
+            .build_parse_trees
+            .then(|| ParseTree::Terminal(TerminalNode::new(token)));
+        Ok((matched_eof, child))
     }
 }
 
@@ -5255,6 +7613,16 @@ fn fold_fast_left_recursive_boundaries(
     folded
 }
 
+fn fast_node_has_left_recursive_boundary(node: &FastRecognizedNode) -> bool {
+    match node {
+        FastRecognizedNode::LeftRecursiveBoundary { .. } => true,
+        FastRecognizedNode::Rule { children, .. } => children.has_left_recursive_boundary(),
+        FastRecognizedNode::Token { .. }
+        | FastRecognizedNode::ErrorToken { .. }
+        | FastRecognizedNode::MissingToken { .. } => false,
+    }
+}
+
 fn fast_recognized_nodes_start_index(nodes: &[Rc<FastRecognizedNode>]) -> Option<usize> {
     nodes
         .iter()
@@ -5328,6 +7696,10 @@ fn invoking_state_number(state_number: usize) -> isize {
     isize::try_from(state_number).unwrap_or(isize::MAX)
 }
 
+fn direct_precedence(precedence: i32) -> usize {
+    usize::try_from(precedence.max(0)).unwrap_or_default()
+}
+
 const fn recognized_node_stop_index(node: &RecognizedNode) -> Option<usize> {
     match node {
         RecognizedNode::Token { index } | RecognizedNode::ErrorToken { index } => Some(*index),
@@ -5370,6 +7742,64 @@ fn report_parser_diagnostics(diagnostics: &[ParserDiagnostic]) {
             "line {}:{} {}",
             diagnostic.line, diagnostic.column, diagnostic.message
         );
+    }
+}
+
+/// Emits generated parser diagnostics and lexer diagnostics in the same
+/// source-position order as ANTLR's lazy token stream reports them.
+#[allow(clippy::print_stderr)]
+fn report_generated_diagnostics(
+    parser_diagnostics: &[ParserDiagnostic],
+    token_errors: &[TokenSourceError],
+) {
+    #[derive(Clone, Copy)]
+    enum DiagnosticSource {
+        Token(usize),
+        Parser(usize),
+    }
+
+    let mut ordered = Vec::with_capacity(parser_diagnostics.len() + token_errors.len());
+    ordered.extend(token_errors.iter().enumerate().map(|(index, error)| {
+        (
+            error.line,
+            error.column,
+            0_usize,
+            index,
+            DiagnosticSource::Token(index),
+        )
+    }));
+    ordered.extend(
+        parser_diagnostics
+            .iter()
+            .enumerate()
+            .map(|(index, diagnostic)| {
+                (
+                    diagnostic.line,
+                    diagnostic.column,
+                    1_usize,
+                    index,
+                    DiagnosticSource::Parser(index),
+                )
+            }),
+    );
+    ordered.sort_by_key(|(line, column, source_order, index, _)| {
+        (*line, *column, *source_order, *index)
+    });
+
+    for (_, _, _, _, source) in ordered {
+        match source {
+            DiagnosticSource::Token(index) => {
+                let error = &token_errors[index];
+                eprintln!("line {}:{} {}", error.line, error.column, error.message);
+            }
+            DiagnosticSource::Parser(index) => {
+                let diagnostic = &parser_diagnostics[index];
+                eprintln!(
+                    "line {}:{} {}",
+                    diagnostic.line, diagnostic.column, diagnostic.message
+                );
+            }
+        }
     }
 }
 
@@ -5450,7 +7880,7 @@ fn select_best_fast_outcome(
         let outcome_position = (outcome.index, outcome.consumed_eof);
         let best_position = (best.index, best.consumed_eof);
         let better = match prediction_mode {
-            PredictionMode::Ll => outcome_is_better(
+            PredictionMode::Ll | PredictionMode::LlExactAmbigDetection => outcome_is_better(
                 outcome_position,
                 &outcome.diagnostics,
                 best_position,
@@ -5477,7 +7907,7 @@ fn select_best_outcome(
         let outcome_position = (outcome.index, outcome.consumed_eof);
         let best_position = (best.index, best.consumed_eof);
         let better = match prediction_mode {
-            PredictionMode::Ll => {
+            PredictionMode::Ll | PredictionMode::LlExactAmbigDetection => {
                 outcome_is_better(
                     outcome_position,
                     &outcome.diagnostics,
@@ -5892,6 +8322,11 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::atn::AtnType;
+    use crate::atn::IntervalSet;
+    use crate::atn::parser::{
+        ParserAtnPredictionDiagnostic, ParserAtnPredictionDiagnosticKind, ParserAtnSimulator,
+    };
     use crate::atn::serialized::{AtnDeserializer, SerializedAtn};
     use crate::token::{CommonToken, HIDDEN_CHANNEL, Token};
     use crate::token_stream::CommonTokenStream;
@@ -5995,6 +8430,378 @@ mod tests {
         .expect("artificial parser ATN should deserialize")
     }
 
+    fn two_alt_decision_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 2);
+        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
+        atn.add_state(AtnState::new(1, AtnStateKind::BlockStart).with_rule_index(0));
+        atn.add_state(AtnState::new(2, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(3, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(4, AtnStateKind::BlockEnd).with_rule_index(0));
+        atn.add_state(AtnState::new(5, AtnStateKind::RuleStop).with_rule_index(0));
+        atn.set_rule_to_start_state(vec![0]);
+        atn.set_rule_to_stop_state(vec![5]);
+        atn.add_decision_state(1);
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Epsilon { target: 1 });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Atom {
+                target: 2,
+                label: 1,
+            });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Atom {
+                target: 3,
+                label: 2,
+            });
+        atn.state_mut(2)
+            .expect("state 2")
+            .add_transition(Transition::Epsilon { target: 4 });
+        atn.state_mut(3)
+            .expect("state 3")
+            .add_transition(Transition::Epsilon { target: 4 });
+        atn.state_mut(4)
+            .expect("state 4")
+            .add_transition(Transition::Epsilon { target: 5 });
+        atn
+    }
+
+    /// ATN for `start : (A)? B EOF ;` (A=1, B=2, C=3, max token type 3).
+    /// State 1 is the nullable optional-block decision; its sync set is {A, B}.
+    fn optional_then_b_eof_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 3);
+        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
+        atn.add_state(AtnState::new(1, AtnStateKind::BlockStart).with_rule_index(0));
+        atn.add_state(AtnState::new(2, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(3, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(4, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(5, AtnStateKind::RuleStop).with_rule_index(0));
+        atn.set_rule_to_start_state(vec![0]);
+        atn.set_rule_to_stop_state(vec![5]);
+        atn.add_decision_state(1);
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Epsilon { target: 1 });
+        // Optional block: match A then fall through, or skip straight to state 3.
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Atom {
+                target: 3,
+                label: 1,
+            });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Epsilon { target: 3 });
+        // Match B, then EOF.
+        atn.state_mut(3)
+            .expect("state 3")
+            .add_transition(Transition::Atom {
+                target: 4,
+                label: 2,
+            });
+        atn.state_mut(4)
+            .expect("state 4")
+            .add_transition(Transition::Atom {
+                target: 5,
+                label: TOKEN_EOF,
+            });
+        atn
+    }
+
+    #[test]
+    fn sync_decision_deletes_only_a_single_token() {
+        // ANTLR sync recovery deletes exactly one token, only when LA(2) is
+        // expected. `(A)? B EOF` at the optional-block decision:
+        //  - `C B`   -> single-token deletion: one error node for the extra `C`.
+        //  - `C C B` -> LA(2) is `C` (not expected), so NO deletion; sync returns
+        //               without consuming and records the expected set for the
+        //               subsequent mismatch (the parser must not over-consume both
+        //               `C`s and accept the input).
+        let atn = optional_then_b_eof_atn();
+
+        let mut single = mini_parser(vec![
+            CommonToken::new(3).with_text("c"),
+            CommonToken::new(2).with_text("b"),
+            CommonToken::eof("parser-test", 1, 2, 2),
+        ]);
+        single.rule_context_stack = vec![RuleContextFrame {
+            rule_index: 0,
+            invoking_state: 0,
+        }];
+        let children = single
+            .sync_decision(&atn, 1, true, false)
+            .expect("single extraneous token recovers");
+        assert_eq!(children.len(), 1);
+        assert!(matches!(children[0], ParseTree::Error(_)));
+        // Exactly one token consumed (the cursor now sits on `b`).
+        assert_eq!(single.la(1), 2);
+
+        let mut double = mini_parser(vec![
+            CommonToken::new(3).with_text("c"),
+            CommonToken::new(3).with_text("c"),
+            CommonToken::new(2).with_text("b"),
+            CommonToken::eof("parser-test", 1, 3, 3),
+        ]);
+        double.rule_context_stack = vec![RuleContextFrame {
+            rule_index: 0,
+            invoking_state: 0,
+        }];
+        let result = double.sync_decision(&atn, 1, true, false);
+        // No single-token deletion fires (LA(2) is `c`, not expected): sync must NOT
+        // consume either `c`. It reports the mismatch at the first `c` (so the parser
+        // does not over-consume both and accept the input). Nothing is consumed, so
+        // the cursor still sits on the first `c` for rule-level recovery.
+        let error = result.expect_err("two extraneous tokens must not be deleted by sync");
+        match error {
+            AntlrError::ParserError { message, .. } => {
+                assert!(message.starts_with("mismatched input"), "got: {message}");
+            }
+            other => panic!("expected a mismatched-input ParserError, got {other:?}"),
+        }
+        assert_eq!(double.la(1), 3);
+    }
+
+    /// The real serialized ATN that `antlr4-rust-gen` emits for
+    /// `grammar T; s : A* EOF; A:'a'; C:'c';` — a `*` loop whose follow set after
+    /// the loop is `EOF`. The loop decision is state 5.
+    fn star_loop_then_eof_atn() -> Atn {
+        AtnDeserializer::new(&SerializedAtn::from_i32(&[
+            4, 1, 3, 11, 2, 0, 7, 0, 1, 0, 5, 0, 4, 8, 0, 10, 0, 12, 0, 7, 9, 0, 1, 0, 1, 0, 1, 0,
+            0, 0, 1, 0, 0, 0, 10, 0, 5, 1, 0, 0, 0, 2, 4, 5, 1, 0, 0, 3, 2, 1, 0, 0, 0, 4, 7, 1, 0,
+            0, 0, 5, 3, 1, 0, 0, 0, 5, 6, 1, 0, 0, 0, 6, 8, 1, 0, 0, 0, 7, 5, 1, 0, 0, 0, 8, 9, 5,
+            0, 0, 1, 9, 1, 1, 0, 0, 0, 1, 5,
+        ]))
+        .deserialize()
+        .expect("star-loop-then-EOF ATN should deserialize")
+    }
+
+    #[test]
+    fn sync_decision_deletes_token_before_eof_at_loop_back() {
+        // `s : A* EOF` on `c`: the loop decision (state 5) can recover onto EOF.
+        // At the loop ENTRY (loop_back = false) a single unexpected token before
+        // EOF is deleted as an error node (then the generated EOF match consumes
+        // the real EOF) — matching ANTLR's `(s c <EOF>)` + "extraneous input".
+        // EOF must be a valid scan-stop for this to fire.
+        let atn = star_loop_then_eof_atn();
+        let mut parser = mini_parser(vec![
+            CommonToken::new(2).with_text("c"),
+            CommonToken::eof("parser-test", 1, 1, 1),
+        ]);
+        parser.rule_context_stack = vec![RuleContextFrame {
+            rule_index: 0,
+            invoking_state: 0,
+        }];
+        let children = parser
+            .sync_decision(&atn, 5, true, false)
+            .expect("single token before EOF recovers");
+        assert_eq!(children.len(), 1);
+        assert!(matches!(children[0], ParseTree::Error(_)));
+        assert_eq!(parser.la(1), TOKEN_EOF, "EOF is left for the rule's EOF match");
+    }
+
+    #[test]
+    fn sync_decision_does_not_delete_two_tokens_before_eof_at_loop_entry() {
+        // `s : A* EOF` on `c c`: at the loop ENTRY (loop_back = false) ANTLR does
+        // single-token deletion, which fails because LA(2) = `c` is not expected —
+        // so it reports `mismatched input` and consumes nothing (ANTLR: `(s c c)`
+        // with no EOF). The scan must NOT multi-token-consume both `c`s here.
+        let atn = star_loop_then_eof_atn();
+        let mut parser = mini_parser(vec![
+            CommonToken::new(2).with_text("c"),
+            CommonToken::new(2).with_text("c"),
+            CommonToken::eof("parser-test", 1, 2, 2),
+        ]);
+        parser.rule_context_stack = vec![RuleContextFrame {
+            rule_index: 0,
+            invoking_state: 0,
+        }];
+        let error = parser
+            .sync_decision(&atn, 5, true, false)
+            .expect_err("two tokens at the loop entry must not be deleted");
+        match error {
+            AntlrError::ParserError { message, .. } => {
+                assert!(message.starts_with("mismatched input"), "got: {message}");
+            }
+            other => panic!("expected mismatched-input ParserError, got {other:?}"),
+        }
+        assert_eq!(parser.la(1), 2, "nothing consumed; cursor still on first `c`");
+    }
+
+    #[test]
+    fn sync_decision_consumes_until_eof_at_loop_back() {
+        // Same `s : A* EOF` decision, but at a loop-BACK (loop_back = true, i.e.
+        // after ≥1 `A` matched). ANTLR uses multi-token `consumeUntil(recoverSet)`
+        // there, so two unexpected tokens before EOF are BOTH deleted and the rule
+        // recovers (matching `(s a c c <EOF>)` for input `a c c`). Here we feed the
+        // post-`a` state directly: `c c <EOF>` with loop_back = true.
+        let atn = star_loop_then_eof_atn();
+        let mut parser = mini_parser(vec![
+            CommonToken::new(2).with_text("c"),
+            CommonToken::new(2).with_text("c"),
+            CommonToken::eof("parser-test", 1, 2, 2),
+        ]);
+        parser.rule_context_stack = vec![RuleContextFrame {
+            rule_index: 0,
+            invoking_state: 0,
+        }];
+        let children = parser
+            .sync_decision(&atn, 5, false, true)
+            .expect("loop-back multi-token deletion recovers onto EOF");
+        assert_eq!(children.len(), 2, "both `c`s deleted as error nodes");
+        assert!(children.iter().all(|c| matches!(c, ParseTree::Error(_))));
+        assert_eq!(parser.la(1), TOKEN_EOF, "EOF left for the rule's EOF match");
+    }
+
+    fn predicate_after_token_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 2);
+        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
+        atn.add_state(AtnState::new(1, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(2, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(3, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(4, AtnStateKind::RuleStop).with_rule_index(0));
+        atn.set_rule_to_start_state(vec![0]);
+        atn.set_rule_to_stop_state(vec![4]);
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Atom {
+                target: 1,
+                label: 1,
+            });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Predicate {
+                target: 2,
+                rule_index: 0,
+                pred_index: 0,
+                context_dependent: false,
+            });
+        atn.state_mut(2)
+            .expect("state 2")
+            .add_transition(Transition::Atom {
+                target: 3,
+                label: 2,
+            });
+        atn.state_mut(3)
+            .expect("state 3")
+            .add_transition(Transition::Epsilon { target: 4 });
+        atn
+    }
+
+    fn nested_nullable_context_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 1);
+        for state_number in 0..=20 {
+            let kind = match state_number {
+                0 | 10 | 16 => AtnStateKind::RuleStart,
+                9 | 15 | 20 => AtnStateKind::RuleStop,
+                _ => AtnStateKind::Basic,
+            };
+            let rule_index = match state_number {
+                0..=9 => 0,
+                10..=15 => 1,
+                _ => 2,
+            };
+            atn.add_state(AtnState::new(state_number, kind).with_rule_index(rule_index));
+        }
+        atn.set_rule_to_start_state(vec![0, 10, 16]);
+        atn.set_rule_to_stop_state(vec![9, 15, 20]);
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Rule {
+                target: 10,
+                rule_index: 1,
+                follow_state: 8,
+                precedence: 0,
+            });
+        atn.state_mut(8)
+            .expect("state 8")
+            .add_transition(Transition::Atom {
+                target: 9,
+                label: 1,
+            });
+        atn.state_mut(8)
+            .expect("state 8")
+            .add_transition(Transition::Epsilon { target: 9 });
+        atn.state_mut(2)
+            .expect("state 2")
+            .add_transition(Transition::Rule {
+                target: 16,
+                rule_index: 2,
+                follow_state: 14,
+                precedence: 0,
+            });
+        atn.state_mut(14)
+            .expect("state 14")
+            .add_transition(Transition::Epsilon { target: 15 });
+        atn
+    }
+
+    fn generated_match_recovery_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 2);
+        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
+        atn.add_state(AtnState::new(1, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(2, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(3, AtnStateKind::RuleStop).with_rule_index(0));
+        atn.add_state(AtnState::new(4, AtnStateKind::RuleStart).with_rule_index(1));
+        atn.add_state(AtnState::new(5, AtnStateKind::RuleStop).with_rule_index(1));
+        atn.set_rule_to_start_state(vec![0, 4]);
+        atn.set_rule_to_stop_state(vec![3, 5]);
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Rule {
+                target: 4,
+                rule_index: 1,
+                follow_state: 2,
+                precedence: 0,
+            });
+        atn.state_mut(2)
+            .expect("state 2")
+            .add_transition(Transition::Atom {
+                target: 3,
+                label: TOKEN_EOF,
+            });
+        atn
+    }
+
+    fn complement_set_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 1);
+        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
+        atn.add_state(AtnState::new(1, AtnStateKind::RuleStop).with_rule_index(0));
+        atn.set_rule_to_start_state(vec![0]);
+        atn.set_rule_to_stop_state(vec![1]);
+        let mut excluded = IntervalSet::new();
+        excluded.add(1);
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::NotSet {
+                target: 1,
+                set: excluded,
+            });
+        atn
+    }
+
+    /// ATN for `start : . EOF ;`: a wildcard whose follow state explicitly matches
+    /// EOF. State 0 (`RuleStart`) -wildcard-> 2 -EOF-> 1 (`RuleStop`).
+    fn wildcard_then_eof_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 1);
+        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
+        atn.add_state(AtnState::new(1, AtnStateKind::RuleStop).with_rule_index(0));
+        atn.add_state(AtnState::new(2, AtnStateKind::Basic).with_rule_index(0));
+        atn.set_rule_to_start_state(vec![0]);
+        atn.set_rule_to_stop_state(vec![1]);
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Wildcard { target: 2 });
+        atn.state_mut(2)
+            .expect("state 2")
+            .add_transition(Transition::Atom {
+                target: 1,
+                label: TOKEN_EOF,
+            });
+        atn
+    }
+
     #[test]
     fn parser_matches_token_and_reports_mismatch() {
         let source = Source {
@@ -6014,6 +8821,580 @@ mod tests {
             "x"
         );
         assert!(parser.match_token(1).is_err());
+    }
+
+    #[test]
+    fn parser_matches_token_sets() {
+        let mut parser = mini_parser(vec![
+            CommonToken::new(1).with_text("x"),
+            CommonToken::eof("parser-test", 1, 1, 1),
+        ]);
+
+        assert_eq!(
+            parser
+                .match_set(&[(1, 1), (3, 4)])
+                .expect("token set should match")
+                .text(),
+            "x"
+        );
+        assert!(parser.match_not_set(&[(1, 1)], 1, 4).is_err());
+    }
+
+    #[test]
+    fn generated_rule_api_tracks_state_and_precedence() {
+        let mut parser = mini_parser(vec![CommonToken::eof("parser-test", 1, 1, 1)]);
+
+        let context = parser.enter_rule(7, 2);
+        assert_eq!(context.rule_index(), 2);
+        assert_eq!(parser.state(), 7);
+        assert_eq!(
+            parser.rule_context_stack,
+            vec![RuleContextFrame {
+                rule_index: 2,
+                invoking_state: 7
+            }]
+        );
+
+        let recursive = parser.enter_recursion_rule(11, 3, 4);
+        assert_eq!(recursive.rule_index(), 3);
+        assert!(parser.precpred(4));
+        assert!(parser.precpred(5));
+        assert!(!parser.precpred(3));
+
+        let next = parser.push_new_recursion_context(13, 3);
+        assert_eq!(next.invoking_state(), 13);
+        parser.unroll_recursion_context();
+        assert_eq!(parser.precedence_stack, vec![0]);
+        assert_eq!(
+            parser.rule_context_stack,
+            vec![RuleContextFrame {
+                rule_index: 2,
+                invoking_state: 7
+            }]
+        );
+
+        parser.exit_rule();
+        assert!(parser.rule_context_stack.is_empty());
+    }
+
+    #[test]
+    fn parser_predicates_support_token_adjacency() {
+        let mut parser = mini_parser(vec![
+            CommonToken::new(1).with_text("=").with_span(0, 0),
+            CommonToken::new(1).with_text(">").with_span(1, 1),
+            CommonToken::eof("parser-test", 2, 1, 2),
+        ]);
+        parser.consume();
+        parser.consume();
+
+        let predicates = [(0, 0, ParserPredicate::TokenPairAdjacent)];
+
+        assert!(parser.parser_semantic_predicate_matches(&predicates, 0, 0));
+
+        let mut parser = mini_parser(vec![
+            CommonToken::new(1).with_text("=").with_span(0, 0),
+            CommonToken::new(1)
+                .with_text(" ")
+                .with_channel(HIDDEN_CHANNEL)
+                .with_span(1, 1),
+            CommonToken::new(1).with_text(">").with_span(2, 2),
+            CommonToken::eof("parser-test", 3, 1, 3),
+        ]);
+        parser.consume();
+        parser.consume();
+
+        assert!(!parser.parser_semantic_predicate_matches(&predicates, 0, 0));
+    }
+
+    #[test]
+    fn parser_predicates_support_context_child_text_checks() {
+        let mut parser = mini_parser(vec![CommonToken::eof("parser-test", 1, 1, 1)]);
+        let mut context = ParserRuleContext::new(1, 0);
+        let mut child_context = ParserRuleContext::new(2, 0);
+        child_context.add_child(ParseTree::Terminal(TerminalNode::new(
+            CommonToken::new(1).with_text("var"),
+        )));
+        context.add_child(ParseTree::Rule(RuleNode::new(child_context)));
+        let predicates = [(
+            1,
+            0,
+            ParserPredicate::ContextChildRuleTextNotEquals {
+                rule_index: 2,
+                text: "var",
+            },
+        )];
+
+        assert!(
+            !parser.parser_semantic_predicate_matches_with_context_and_local(
+                &predicates,
+                1,
+                0,
+                &context,
+                0,
+            )
+        );
+    }
+
+    #[test]
+    fn context_expected_symbols_walks_nullable_parent_contexts() {
+        let atn = nested_nullable_context_atn();
+        let mut parser = mini_parser(vec![CommonToken::eof("parser-test", 1, 1, 1)]);
+        parser.rule_context_stack = vec![
+            RuleContextFrame {
+                rule_index: 0,
+                invoking_state: 0,
+            },
+            RuleContextFrame {
+                rule_index: 1,
+                invoking_state: 1,
+            },
+            RuleContextFrame {
+                rule_index: 2,
+                invoking_state: 2,
+            },
+        ];
+
+        let expected = parser.context_expected_symbols(&atn);
+
+        assert!(expected.contains(&1));
+        assert!(expected.contains(&TOKEN_EOF));
+    }
+
+    #[test]
+    fn prediction_context_reuses_cached_stack_until_rule_stack_changes() {
+        let atn = nested_nullable_context_atn();
+        let mut parser = mini_parser(vec![CommonToken::eof("parser-test", 1, 1, 1)]);
+        parser.rule_context_stack = vec![
+            RuleContextFrame {
+                rule_index: 0,
+                invoking_state: 0,
+            },
+            RuleContextFrame {
+                rule_index: 1,
+                invoking_state: 1,
+            },
+            RuleContextFrame {
+                rule_index: 2,
+                invoking_state: 2,
+            },
+        ];
+
+        let first = parser.prediction_context(&atn);
+        let second = parser.prediction_context(&atn);
+        assert!(Rc::ptr_eq(&first, &second));
+
+        parser.exit_rule();
+        let after_pop = parser.prediction_context(&atn);
+        assert!(!Rc::ptr_eq(&first, &after_pop));
+    }
+
+    #[test]
+    fn generated_match_token_recovers_missing_token_from_context_follow() {
+        let atn = generated_match_recovery_atn();
+        let data = RecognizerData::new(
+            "Mini.g4",
+            Vocabulary::new(
+                [None, Some("'X'"), Some("'Y'")],
+                [None, Some("X"), Some("Y")],
+                [None::<&str>, None, None],
+            ),
+        );
+        let mut parser = BaseParser::new(
+            CommonTokenStream::new(Source {
+                tokens: vec![CommonToken::eof("parser-test", 3, 1, 3)],
+                index: 0,
+            }),
+            data,
+        );
+        parser.rule_context_stack = vec![
+            RuleContextFrame {
+                rule_index: 0,
+                invoking_state: 0,
+            },
+            RuleContextFrame {
+                rule_index: 1,
+                invoking_state: 1,
+            },
+        ];
+
+        let node = parser
+            .match_token_recovering(2, 5, &atn)
+            .expect("generated match should insert missing token");
+
+        assert_eq!(node.children().len(), 1);
+        assert_eq!(node.children()[0].text(), "<missing 'Y'>");
+        // Single-token insertion synthesizes a missing token and consumes nothing,
+        // so no EOF terminal is consumed even though lookahead is EOF.
+        assert!(!node.consumed_eof());
+        assert_eq!(parser.la(1), TOKEN_EOF);
+        assert_eq!(
+            parser.generated_parser_diagnostics,
+            [ParserDiagnostic {
+                line: 1,
+                column: 3,
+                message: "missing 'Y' at '<EOF>'".to_owned(),
+            }]
+        );
+    }
+
+    #[test]
+    fn generated_prediction_diagnostics_use_adaptive_context() {
+        let atn = two_alt_decision_atn();
+        let data = RecognizerData::new(
+            "Mini.g4",
+            Vocabulary::new(
+                [None, Some("'x'"), Some("'y'")],
+                [None, Some("X"), Some("Y")],
+                [None::<&str>, None, None],
+            ),
+        )
+        .with_rule_names(["s"]);
+        let mut parser = BaseParser::new(
+            CommonTokenStream::new(Source {
+                tokens: vec![
+                    CommonToken::new(1)
+                        .with_text("x")
+                        .with_position(1, 0)
+                        .with_span(0, 0),
+                    CommonToken::new(2)
+                        .with_text("y")
+                        .with_position(1, 2)
+                        .with_span(1, 1),
+                    CommonToken::eof("parser-test", 2, 1, 3),
+                ],
+                index: 0,
+            }),
+            data,
+        );
+        parser.set_report_diagnostic_errors(true);
+
+        parser.record_generated_prediction_diagnostic(
+            &atn,
+            1,
+            &ParserAtnPrediction {
+                alt: 1,
+                requires_full_context: true,
+                has_semantic_context: false,
+                diagnostic: Some(ParserAtnPredictionDiagnostic {
+                    kind: ParserAtnPredictionDiagnosticKind::ContextSensitivity,
+                    start_index: 0,
+                    sll_stop_index: 1,
+                    ll_stop_index: 0,
+                    conflicting_alts: vec![1, 2],
+                }),
+            },
+        );
+        parser.record_generated_prediction_diagnostic(
+            &atn,
+            1,
+            &ParserAtnPrediction {
+                alt: 1,
+                requires_full_context: true,
+                has_semantic_context: false,
+                diagnostic: Some(ParserAtnPredictionDiagnostic {
+                    kind: ParserAtnPredictionDiagnosticKind::Ambiguity,
+                    start_index: 0,
+                    sll_stop_index: 1,
+                    ll_stop_index: 1,
+                    conflicting_alts: vec![1, 2],
+                }),
+            },
+        );
+
+        assert_eq!(
+            parser.generated_parser_diagnostics,
+            [
+                ParserDiagnostic {
+                    line: 1,
+                    column: 2,
+                    message: "reportAttemptingFullContext d=0 (s), input='xy'".to_owned(),
+                },
+                ParserDiagnostic {
+                    line: 1,
+                    column: 0,
+                    message: "reportContextSensitivity d=0 (s), input='x'".to_owned(),
+                },
+                ParserDiagnostic {
+                    line: 1,
+                    column: 2,
+                    message: "reportAttemptingFullContext d=0 (s), input='xy'".to_owned(),
+                },
+                ParserDiagnostic {
+                    line: 1,
+                    column: 2,
+                    message: "reportAmbiguity d=0 (s): ambigAlts={1, 2}, input='xy'".to_owned(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn generated_match_not_set_recovers_empty_complement_at_eof() {
+        let atn = complement_set_atn();
+        let mut parser = mini_parser(vec![CommonToken::eof("parser-test", 1, 1, 1)]);
+        parser.rule_context_stack = vec![RuleContextFrame {
+            rule_index: 0,
+            invoking_state: 0,
+        }];
+
+        let node = parser
+            .match_not_set_recovering(&[(1, 1)], 1, 1, 1, &atn)
+            .expect("empty complement should recover at EOF");
+
+        assert_eq!(node.children().len(), 1);
+        // Recovery synthesizes a missing token without consuming EOF, so the
+        // enclosing rule must not record EOF as its stop token.
+        assert!(!node.consumed_eof());
+        assert_eq!(parser.la(1), TOKEN_EOF);
+        assert_eq!(
+            parser.generated_parser_diagnostics,
+            [ParserDiagnostic {
+                line: 1,
+                column: 1,
+                message: "missing {} at '<EOF>'".to_owned(),
+            }]
+        );
+    }
+
+    #[test]
+    fn wildcard_recovers_via_insertion_when_follow_expects_eof_at_eof() {
+        // `start : . EOF ;` on empty input. The wildcard is modeled as an
+        // empty-complement not-set; at EOF the follow state (the explicit EOF
+        // match) expects EOF, so even in the start rule recovery must perform
+        // single-token insertion (`<missing ...>`) rather than aborting — matching
+        // ANTLR's `(start <missing ...> <EOF>)` / "missing ... at '<EOF>'".
+        let atn = wildcard_then_eof_atn();
+        let data = RecognizerData::new(
+            "Mini.g4",
+            Vocabulary::new([None, Some("'x'")], [None, Some("X")], [None::<&str>, None]),
+        );
+        let mut parser = BaseParser::new(
+            CommonTokenStream::new(Source {
+                tokens: vec![CommonToken::eof("parser-test", 1, 1, 1)],
+                index: 0,
+            }),
+            data,
+        );
+        parser.rule_context_stack = vec![RuleContextFrame {
+            rule_index: 0,
+            invoking_state: 0,
+        }];
+
+        let node = parser
+            .match_not_set_recovering(&[], 1, atn.max_token_type(), 2, &atn)
+            .expect("wildcard at EOF should recover by insertion when follow expects EOF");
+
+        // A single `<missing ...>` error node is inserted; EOF is not consumed.
+        assert_eq!(node.children().len(), 1);
+        assert!(!node.consumed_eof());
+        assert!(node.children()[0].text().starts_with("<missing"));
+        assert_eq!(parser.la(1), TOKEN_EOF);
+        assert_eq!(
+            parser.generated_parser_diagnostics,
+            [ParserDiagnostic {
+                line: 1,
+                column: 1,
+                message: "missing 'x' at '<EOF>'".to_owned(),
+            }]
+        );
+    }
+
+    #[test]
+    fn generated_rule_recovery_consumes_to_parent_follow() {
+        let atn = generated_match_recovery_atn();
+        let data = RecognizerData::new(
+            "Mini.g4",
+            Vocabulary::new(
+                [None, Some("'X'"), Some("'Y'"), Some("'Z'")],
+                [None, Some("X"), Some("Y"), Some("Z")],
+                [None::<&str>, None, None, None],
+            ),
+        );
+        let mut parser = BaseParser::new(
+            CommonTokenStream::new(Source {
+                tokens: vec![
+                    CommonToken::new(3).with_text("z"),
+                    CommonToken::eof("parser-test", 1, 1, 1),
+                ],
+                index: 0,
+            }),
+            data,
+        );
+        let _parent = parser.enter_rule(0, 0);
+        let marker = parser.push_invoking_state(1);
+        let mut child = parser.enter_rule(4, 1);
+        parser.discard_invoking_state(marker);
+
+        parser.recover_generated_rule(
+            &mut child,
+            &atn,
+            AntlrError::ParserError {
+                line: 1,
+                column: 0,
+                message: "mismatched input 'z' expecting {'X', 'Y'}".to_owned(),
+            },
+        );
+        let tree = parser.finish_rule(child, false);
+
+        assert_eq!(parser.la(1), TOKEN_EOF);
+        assert_eq!(
+            tree.to_string_tree(&["s".to_owned(), "a".to_owned()]),
+            "(a z)"
+        );
+        assert_eq!(
+            parser.generated_parser_diagnostics,
+            [ParserDiagnostic {
+                line: 1,
+                column: 0,
+                message: "mismatched input 'z' expecting {'X', 'Y'}".to_owned(),
+            }]
+        );
+        parser.exit_rule();
+    }
+
+    #[test]
+    fn greedy_ll1_alt_handles_nullable_loop_exit() {
+        let mut body_symbols = TokenBitSet::default();
+        body_symbols.insert(1);
+        let entry = DecisionLookahead {
+            transitions: vec![
+                TransitionLookSet {
+                    symbols: body_symbols,
+                    nullable: false,
+                },
+                TransitionLookSet {
+                    symbols: TokenBitSet::default(),
+                    nullable: true,
+                },
+            ],
+        };
+
+        assert_eq!(ll1_unique_alt(&entry, 2), None);
+        assert_eq!(ll1_greedy_alt(&entry, 2, false), Some(1));
+        assert_eq!(ll1_greedy_alt(&entry, 1, false), None);
+        assert_eq!(ll1_greedy_alt(&entry, 1, true), None);
+    }
+
+    #[test]
+    fn single_outcome_memo_probe_selects_sparse_or_promote_mode() {
+        let key = |state_number| FastRecognizeKey {
+            state_number,
+            stop_state: 10,
+            index: state_number,
+            rule_start_index: 0,
+            decision_start_index: None,
+            precedence: 0,
+            recovery_symbols_id: 0,
+            recovery_state: None,
+        };
+
+        let mut sparse = mini_parser(vec![CommonToken::eof("parser-test", 1, 1, 1)]);
+        for state_number in 0..(CLEAN_SINGLE_OUTCOME_MEMO_PROBE_LIMIT - 1) {
+            assert!(sparse.should_memoize_single_outcome(&key(state_number)));
+        }
+        assert!(!sparse.should_memoize_single_outcome(&key(CLEAN_SINGLE_OUTCOME_MEMO_PROBE_LIMIT)));
+        assert_eq!(
+            sparse.single_outcome_memo_mode,
+            SingleOutcomeMemoMode::Sparse
+        );
+
+        let mut promote = mini_parser(vec![CommonToken::eof("parser-test", 1, 1, 1)]);
+        let repeated = key(1);
+        for _ in 0..=CLEAN_SINGLE_OUTCOME_MEMO_REPEAT_LIMIT {
+            assert!(promote.should_memoize_single_outcome(&repeated));
+        }
+        assert_eq!(
+            promote.single_outcome_memo_mode,
+            SingleOutcomeMemoMode::Promote
+        );
+    }
+
+    #[test]
+    fn clean_empty_multi_alt_outcomes_are_memoized() {
+        let mut atn = Atn::new(AtnType::Parser, 2);
+        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
+        atn.add_state(AtnState::new(1, AtnStateKind::BlockStart).with_rule_index(0));
+        atn.add_state(AtnState::new(2, AtnStateKind::RuleStop).with_rule_index(0));
+        atn.set_rule_to_start_state(vec![0]);
+        atn.set_rule_to_stop_state(vec![2]);
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Epsilon { target: 1 });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Atom {
+                target: 2,
+                label: 1,
+            });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Atom {
+                target: 2,
+                label: 2,
+            });
+
+        let mut parser = mini_parser(vec![CommonToken::eof("parser-test", 0, 1, 0)]);
+        parser.fast_recovery_enabled = false;
+        let mut visiting = FxHashSet::default();
+        let mut memo = FxHashMap::default();
+        let mut expected = ExpectedTokens::default();
+        let outcomes = parser.recognize_state_fast(
+            &atn,
+            FastRecognizeRequest {
+                state_number: 1,
+                stop_state: 2,
+                index: 0,
+                rule_start_index: 0,
+                decision_start_index: None,
+                precedence: 0,
+                depth: 0,
+                recovery_symbols: parser.empty_recovery_symbols(),
+                recovery_state: None,
+            },
+            &mut visiting,
+            &mut memo,
+            &mut expected,
+        );
+
+        assert!(outcomes.is_empty());
+        assert_eq!(memo.len(), 1);
+        assert!(memo.values().next().expect("memo entry").is_empty());
+    }
+
+    #[test]
+    fn wildcard_matches_non_eof_only() {
+        let mut parser = mini_parser(vec![
+            CommonToken::new(1).with_text("x"),
+            CommonToken::eof("parser-test", 1, 1, 1),
+        ]);
+        assert_eq!(parser.match_wildcard().expect("wildcard").text(), "x");
+        assert!(parser.match_wildcard().is_err());
+    }
+
+    #[test]
+    fn add_parse_child_records_match_even_without_tree_building() {
+        // `sync_decision`'s "is the current context empty" flag must reflect real
+        // matches, not parse-tree children: when `build_parse_trees(false)`,
+        // `children` stays empty but `has_matched_child` must still flip so nested
+        // recovery does not wrongly suppress single-token deletion.
+        let mut parser = mini_parser(vec![CommonToken::eof("parser-test", 1, 1, 1)]);
+        let token = CommonToken::new(1).with_text("x");
+
+        parser.set_build_parse_trees(false);
+        let mut ctx = ParserRuleContext::new(0, 0);
+        assert!(!ctx.has_matched_child());
+        parser.add_parse_child(&mut ctx, ParseTree::Terminal(TerminalNode::new(token.clone())));
+        // Tree building is off, so no child is stored...
+        assert!(ctx.children().is_empty());
+        // ...but the match is recorded, so the context is no longer "empty".
+        assert!(ctx.has_matched_child());
+
+        // With tree building on, the child is stored and the match is recorded.
+        parser.set_build_parse_trees(true);
+        let mut ctx = ParserRuleContext::new(0, 0);
+        parser.add_parse_child(&mut ctx, ParseTree::Terminal(TerminalNode::new(token)));
+        assert_eq!(ctx.children().len(), 1);
+        assert!(ctx.has_matched_child());
     }
 
     #[test]
@@ -6049,6 +9430,41 @@ mod tests {
                 .token_type(),
             TOKEN_EOF
         );
+    }
+
+    #[test]
+    fn adaptive_direct_rule_uses_simulator_decision() {
+        let atn = two_alt_decision_atn();
+        let mut simulator = ParserAtnSimulator::new(&atn);
+        let mut parser = mini_parser(vec![
+            CommonToken::new(2).with_text("y"),
+            CommonToken::eof("parser-test", 1, 1, 1),
+        ]);
+
+        let tree = parser
+            .parse_atn_rule_adaptive_or_fallback(&atn, &mut simulator, 0)
+            .expect("direct adaptive rule should parse");
+
+        assert_eq!(tree.text(), "y");
+        assert_eq!(parser.input.index(), 1);
+    }
+
+    #[test]
+    fn adaptive_direct_rule_restores_input_on_fallback() {
+        let atn = predicate_after_token_atn();
+        let mut simulator = ParserAtnSimulator::new(&atn);
+        let mut parser = mini_parser(vec![
+            CommonToken::new(1).with_text("x"),
+            CommonToken::new(2).with_text("y"),
+            CommonToken::eof("parser-test", 2, 1, 2),
+        ]);
+
+        let tree = parser
+            .parse_atn_rule_adaptive_or_fallback(&atn, &mut simulator, 0)
+            .expect("fallback recognizer should parse");
+
+        assert_eq!(tree.text(), "xy");
+        assert_eq!(parser.input.index(), 2);
     }
 
     #[test]
@@ -6095,21 +9511,76 @@ mod tests {
     }
 
     #[test]
+    fn after_action_stop_uses_rule_context_stop_not_cursor() {
+        // A rule that ends right before EOF without matching it (e.g. `a: ID;`
+        // called from `start: a EOF;`): after matching ID the cursor parks on EOF,
+        // but the rule did not consume it. The @after stop must follow the rule
+        // context's recorded stop (ID at index 0), not the cursor's EOF (index 1).
+        let mut id = CommonToken::new(1).with_text("x");
+        id.set_token_index(0);
+        let mut eof = CommonToken::eof("parser-test", 1, 1, 1);
+        eof.set_token_index(1);
+        let mut parser = mini_parser(vec![id.clone(), eof]);
+        // Advance the cursor onto EOF, as it would be after `a` matched ID.
+        parser.consume();
+        assert_eq!(parser.la(1), TOKEN_EOF);
+
+        // Rule `a` matched only ID, so its context stop is the ID token (index 0),
+        // exactly what finish_rule(consumed_eof = false) records.
+        let mut ctx = ParserRuleContext::new(0, 0);
+        ctx.set_stop(id);
+        let tree = ParseTree::Rule(RuleNode::new(ctx));
+
+        let current_index = parser.input.index();
+        // Cursor-only inference would wrongly pick EOF (the parked cursor)...
+        assert_eq!(parser.after_action_stop_index(current_index), Some(1));
+        // ...but the tree-aware helper follows the rule context stop (ID).
+        assert_eq!(
+            parser.after_action_stop_index_for_tree(&tree, current_index),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn after_action_start_uses_rule_context_start_not_cursor() {
+        // A rule that begins after leading hidden-channel tokens: the rule context
+        // start (set by `enter_rule`) is the first visible token, not the raw cursor
+        // that may still point at the hidden prefix. The @after start must follow
+        // the context start so `$start`/`$text` excludes the hidden prefix.
+        let parser = mini_parser(vec![CommonToken::eof("parser-test", 1, 1, 1)]);
+        let mut id = CommonToken::new(1).with_text("x");
+        // The first visible token sits at stream index 2 (after two hidden tokens).
+        id.set_token_index(2);
+
+        let mut ctx = ParserRuleContext::new(0, 0);
+        ctx.set_start(id);
+        let tree = ParseTree::Rule(RuleNode::new(ctx));
+
+        // The raw fallback (pre-rule cursor) would be 0 (the hidden prefix)...
+        // ...but the tree-aware helper follows the rule context start (index 2).
+        assert_eq!(parser.after_action_start_index_for_tree(&tree, 0), 2);
+
+        // With no rule start recorded, it falls back to the provided index.
+        let empty = ParseTree::Rule(RuleNode::new(ParserRuleContext::new(0, 0)));
+        assert_eq!(parser.after_action_start_index_for_tree(&empty, 7), 7);
+    }
+
+    #[test]
     fn fast_outcome_selection_respects_sll_tie_order() {
         let first = FastRecognizeOutcome {
             index: 1,
             consumed_eof: false,
-            diagnostics: vec![ParserDiagnostic {
+            diagnostics: FastDiagnostics::from_vec(vec![ParserDiagnostic {
                 line: 1,
                 column: 0,
                 message: "mismatched input 'x'".to_owned(),
-            }],
+            }]),
             nodes: NodeList::new(),
         };
         let second = FastRecognizeOutcome {
             index: first.index,
             consumed_eof: first.consumed_eof,
-            diagnostics: Vec::new(),
+            diagnostics: FastDiagnostics::new(),
             nodes: NodeList::new(),
         };
 
@@ -6122,7 +9593,7 @@ mod tests {
         let eof_second = FastRecognizeOutcome {
             index: second.index,
             consumed_eof: true,
-            diagnostics: Vec::new(),
+            diagnostics: FastDiagnostics::new(),
             nodes: NodeList::new(),
         };
         let selected =
@@ -6176,6 +9647,25 @@ mod tests {
 
         assert_eq!(parser.rule_stop_token_index(1, true), Some(1));
         assert_eq!(parser.rule_stop_token_index(1, false), Some(0));
+    }
+
+    #[test]
+    fn generated_parser_action_uses_current_rule_stop_boundary() {
+        let mut parser = mini_parser(vec![
+            CommonToken::new(1).with_text("x"),
+            CommonToken::eof("parser-test", 1, 1, 1),
+        ]);
+
+        parser.match_token(1).expect("token should match");
+        let action = parser.parser_action_at_current(7, 0, 0, false);
+        assert_eq!(action.source_state(), 7);
+        assert_eq!(action.rule_index(), 0);
+        assert_eq!(action.start_index(), 0);
+        assert_eq!(action.stop_index(), Some(0));
+
+        parser.match_eof().expect("EOF should match");
+        let action = parser.parser_action_at_current(8, 0, 0, true);
+        assert_eq!(action.stop_index(), Some(1));
     }
 
     #[test]
