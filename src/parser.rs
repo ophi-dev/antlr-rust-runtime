@@ -3218,13 +3218,13 @@ where
         atn: &Atn,
         state_number: usize,
         current_context_empty: bool,
+        loop_back: bool,
     ) -> Result<Vec<ParseTree>, AntlrError> {
         self.set_state(isize::try_from(state_number).unwrap_or(isize::MAX));
         self.generated_sync_expected = None;
         let Some(state) = atn.state(state_number) else {
             return Ok(Vec::new());
         };
-        let state_kind = state.kind;
         let Some(rule_index) = state.rule_index else {
             return Ok(Vec::new());
         };
@@ -3235,12 +3235,21 @@ where
         let symbol = self.la(1);
         let mut has_expected_symbols = false;
         let mut nullable = false;
+        // Whether EOF is an EXPLICIT expected token of this decision (a real `EOF`
+        // reference in the grammar, e.g. `A* EOF`), as opposed to merely the
+        // implicit rule-follow that a nullable exit inherits (e.g. a start rule's
+        // end). Only an explicit EOF makes a token-before-EOF genuinely extraneous
+        // and worth deleting; an implicit-follow EOF means the loop should simply
+        // exit and leave the token for the (absent) caller — matching ANTLR, which
+        // exits the loop via prediction rather than consuming up to a synthetic EOF.
+        let mut explicit_eof_expected = false;
         for transition in &entry.transitions {
             if transition.symbols.contains(symbol) {
                 return Ok(Vec::new());
             }
             has_expected_symbols |= !transition.symbols.is_empty();
             nullable |= transition.nullable;
+            explicit_eof_expected |= transition.symbols.contains(TOKEN_EOF);
         }
         let context_expected = nullable.then(|| self.context_expected_token_set(atn));
         if nullable {
@@ -3264,22 +3273,22 @@ where
         let can_delete_in_place =
             !(nullable && current_context_empty && self.rule_context_stack.len() > 1);
         // ANTLR's `DefaultErrorStrategy.sync` recovers differently by decision kind:
-        // a loop sync (STAR_LOOP_ENTRY / STAR_LOOP_BACK / PLUS_LOOP_BACK and the
-        // *-block starts) does `consumeUntil` the follow set — multi-token deletion,
-        // one error per skipped token across loop iterations; a plain optional/block
-        // entry (BLOCK_START) does `singleTokenDeletion` — it deletes the one
-        // unexpected token only when LA(2) is expected, otherwise reports a mismatch
-        // and leaves recovery to the rule. Treating an optional block as a loop
-        // would over-consume (e.g. `start: (A)? B EOF;` on `C C B` would delete both
-        // `C`s and accept the input, which ANTLR rejects with `mismatched input`).
-        let loop_sync = matches!(
-            state_kind,
-            AtnStateKind::StarLoopEntry
-                | AtnStateKind::StarLoopBack
-                | AtnStateKind::PlusLoopBack
-                | AtnStateKind::StarBlockStart
-                | AtnStateKind::PlusBlockStart
-        );
+        // a loop-BACK sync (STAR_LOOP_BACK / PLUS_LOOP_BACK — reached only after at
+        // least one iteration) does `consumeUntil` the follow set — multi-token
+        // deletion, one error per skipped token across iterations; a loop ENTRY
+        // (STAR_LOOP_ENTRY) and a plain optional/block entry (BLOCK_START /
+        // *-block / +-block starts) do `singleTokenDeletion` — delete the one
+        // unexpected token only when LA(2) is expected, otherwise report a mismatch
+        // and leave recovery to the rule.
+        //
+        // The generated loop always presents the loop-ENTRY state to this method on
+        // every pass, so `state.kind` cannot distinguish entry from back; the caller
+        // passes `loop_back` (false on a `*` loop's first sync / on a block, true once
+        // an iteration has been taken, and true on a `+` loop's first sync since its
+        // mandatory first element is iteration 1). Treating a loop entry as a
+        // loop-back would over-consume (e.g. `s: A* EOF;` on `c c` would delete both
+        // `c`s, which ANTLR rejects with `mismatched input`).
+        let loop_sync = loop_back;
         if symbol != TOKEN_EOF && can_delete_in_place {
             let mut cursor = self.input.index();
             let mut skipped = Vec::new();
@@ -3294,7 +3303,19 @@ where
                     break;
                 }
                 let next_symbol = self.token_type_at(next);
-                if next_symbol != TOKEN_EOF && expected.contains(next_symbol) {
+                // Stop (and delete the skipped tokens as error nodes) when the next
+                // token is a real expected continuation. EOF counts only when it is
+                // an EXPLICIT grammar token (`A* EOF`): then the deleted tokens are
+                // genuinely extraneous and the generated EOF match consumes the real
+                // EOF afterwards. An implicit-follow EOF (a nullable exit's inherited
+                // rule-follow) does NOT count — the loop must exit and leave the
+                // token, as ANTLR does, instead of deleting up to a synthetic EOF.
+                let next_is_expected_stop = if next_symbol == TOKEN_EOF {
+                    explicit_eof_expected
+                } else {
+                    expected.contains(next_symbol)
+                };
+                if next_is_expected_stop {
                     let current_token = self.input.lt(1).cloned();
                     let expected_symbols = expected.to_btree_set();
                     let message = format!(
@@ -8510,7 +8531,7 @@ mod tests {
             invoking_state: 0,
         }];
         let children = single
-            .sync_decision(&atn, 1, true)
+            .sync_decision(&atn, 1, true, false)
             .expect("single extraneous token recovers");
         assert_eq!(children.len(), 1);
         assert!(matches!(children[0], ParseTree::Error(_)));
@@ -8527,7 +8548,7 @@ mod tests {
             rule_index: 0,
             invoking_state: 0,
         }];
-        let result = double.sync_decision(&atn, 1, true);
+        let result = double.sync_decision(&atn, 1, true, false);
         // No single-token deletion fires (LA(2) is `c`, not expected): sync must NOT
         // consume either `c`. It reports the mismatch at the first `c` (so the parser
         // does not over-consume both and accept the input). Nothing is consumed, so
@@ -8540,6 +8561,97 @@ mod tests {
             other => panic!("expected a mismatched-input ParserError, got {other:?}"),
         }
         assert_eq!(double.la(1), 3);
+    }
+
+    /// The real serialized ATN that `antlr4-rust-gen` emits for
+    /// `grammar T; s : A* EOF; A:'a'; C:'c';` — a `*` loop whose follow set after
+    /// the loop is `EOF`. The loop decision is state 5.
+    fn star_loop_then_eof_atn() -> Atn {
+        AtnDeserializer::new(&SerializedAtn::from_i32(&[
+            4, 1, 3, 11, 2, 0, 7, 0, 1, 0, 5, 0, 4, 8, 0, 10, 0, 12, 0, 7, 9, 0, 1, 0, 1, 0, 1, 0,
+            0, 0, 1, 0, 0, 0, 10, 0, 5, 1, 0, 0, 0, 2, 4, 5, 1, 0, 0, 3, 2, 1, 0, 0, 0, 4, 7, 1, 0,
+            0, 0, 5, 3, 1, 0, 0, 0, 5, 6, 1, 0, 0, 0, 6, 8, 1, 0, 0, 0, 7, 5, 1, 0, 0, 0, 8, 9, 5,
+            0, 0, 1, 9, 1, 1, 0, 0, 0, 1, 5,
+        ]))
+        .deserialize()
+        .expect("star-loop-then-EOF ATN should deserialize")
+    }
+
+    #[test]
+    fn sync_decision_deletes_token_before_eof_at_loop_back() {
+        // `s : A* EOF` on `c`: the loop decision (state 5) can recover onto EOF.
+        // At the loop ENTRY (loop_back = false) a single unexpected token before
+        // EOF is deleted as an error node (then the generated EOF match consumes
+        // the real EOF) — matching ANTLR's `(s c <EOF>)` + "extraneous input".
+        // EOF must be a valid scan-stop for this to fire.
+        let atn = star_loop_then_eof_atn();
+        let mut parser = mini_parser(vec![
+            CommonToken::new(2).with_text("c"),
+            CommonToken::eof("parser-test", 1, 1, 1),
+        ]);
+        parser.rule_context_stack = vec![RuleContextFrame {
+            rule_index: 0,
+            invoking_state: 0,
+        }];
+        let children = parser
+            .sync_decision(&atn, 5, true, false)
+            .expect("single token before EOF recovers");
+        assert_eq!(children.len(), 1);
+        assert!(matches!(children[0], ParseTree::Error(_)));
+        assert_eq!(parser.la(1), TOKEN_EOF, "EOF is left for the rule's EOF match");
+    }
+
+    #[test]
+    fn sync_decision_does_not_delete_two_tokens_before_eof_at_loop_entry() {
+        // `s : A* EOF` on `c c`: at the loop ENTRY (loop_back = false) ANTLR does
+        // single-token deletion, which fails because LA(2) = `c` is not expected —
+        // so it reports `mismatched input` and consumes nothing (ANTLR: `(s c c)`
+        // with no EOF). The scan must NOT multi-token-consume both `c`s here.
+        let atn = star_loop_then_eof_atn();
+        let mut parser = mini_parser(vec![
+            CommonToken::new(2).with_text("c"),
+            CommonToken::new(2).with_text("c"),
+            CommonToken::eof("parser-test", 1, 2, 2),
+        ]);
+        parser.rule_context_stack = vec![RuleContextFrame {
+            rule_index: 0,
+            invoking_state: 0,
+        }];
+        let error = parser
+            .sync_decision(&atn, 5, true, false)
+            .expect_err("two tokens at the loop entry must not be deleted");
+        match error {
+            AntlrError::ParserError { message, .. } => {
+                assert!(message.starts_with("mismatched input"), "got: {message}");
+            }
+            other => panic!("expected mismatched-input ParserError, got {other:?}"),
+        }
+        assert_eq!(parser.la(1), 2, "nothing consumed; cursor still on first `c`");
+    }
+
+    #[test]
+    fn sync_decision_consumes_until_eof_at_loop_back() {
+        // Same `s : A* EOF` decision, but at a loop-BACK (loop_back = true, i.e.
+        // after ≥1 `A` matched). ANTLR uses multi-token `consumeUntil(recoverSet)`
+        // there, so two unexpected tokens before EOF are BOTH deleted and the rule
+        // recovers (matching `(s a c c <EOF>)` for input `a c c`). Here we feed the
+        // post-`a` state directly: `c c <EOF>` with loop_back = true.
+        let atn = star_loop_then_eof_atn();
+        let mut parser = mini_parser(vec![
+            CommonToken::new(2).with_text("c"),
+            CommonToken::new(2).with_text("c"),
+            CommonToken::eof("parser-test", 1, 2, 2),
+        ]);
+        parser.rule_context_stack = vec![RuleContextFrame {
+            rule_index: 0,
+            invoking_state: 0,
+        }];
+        let children = parser
+            .sync_decision(&atn, 5, false, true)
+            .expect("loop-back multi-token deletion recovers onto EOF");
+        assert_eq!(children.len(), 2, "both `c`s deleted as error nodes");
+        assert!(children.iter().all(|c| matches!(c, ParseTree::Error(_))));
+        assert_eq!(parser.la(1), TOKEN_EOF, "EOF left for the rule's EOF match");
     }
 
     fn predicate_after_token_atn() -> Atn {

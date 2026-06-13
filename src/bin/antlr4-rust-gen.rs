@@ -488,6 +488,12 @@ enum GeneratedParserStep {
         track_alt_number: bool,
         allow_semantic_context: bool,
         force_context: bool,
+        /// `true` for a `+` (one-or-more) loop, `false` for a `*` (zero-or-more)
+        /// loop. A `+` loop's mandatory first element is iteration 1, so its first
+        /// loop-back sync recovers like ANTLR's `STAR_LOOP_BACK`/`PLUS_LOOP_BACK`
+        /// (multi-token `consumeUntil`); a `*` loop's first sync is at the entry,
+        /// which recovers like `STAR_LOOP_ENTRY` (single-token deletion).
+        plus_loop: bool,
         fast_path: Option<GeneratedDecisionFastPath>,
         body: Vec<Self>,
     },
@@ -538,6 +544,7 @@ struct StarLoopRender<'a> {
     track_alt_number: bool,
     allow_semantic_context: bool,
     force_context: bool,
+    plus_loop: bool,
     fast_path: Option<&'a GeneratedDecisionFastPath>,
     body: &'a [GeneratedParserStep],
 }
@@ -1611,6 +1618,7 @@ fn compile_generated_parser_star_loop(
         track_alt_number: state_tracks_alt_number(state),
         allow_semantic_context: steps_contain_predicate(&body),
         force_context: state.non_greedy,
+        plus_loop: false,
         fast_path: None,
         body,
     }];
@@ -1683,6 +1691,7 @@ fn compile_generated_parser_plus_loop(
         track_alt_number: state_tracks_alt_number(state),
         allow_semantic_context: steps_contain_predicate(&body),
         force_context: state.non_greedy,
+        plus_loop: true,
         fast_path: None,
         body,
     }];
@@ -2680,6 +2689,7 @@ fn render_generated_step(
             track_alt_number,
             allow_semantic_context,
             force_context,
+            plus_loop,
             fast_path,
             body,
         } => {
@@ -2692,6 +2702,7 @@ fn render_generated_step(
                     track_alt_number: *track_alt_number,
                     allow_semantic_context: *allow_semantic_context,
                     force_context: *force_context,
+                    plus_loop: *plus_loop,
                     fast_path: fast_path.as_ref(),
                     body,
                 },
@@ -2771,7 +2782,9 @@ fn render_generated_decision(
             .expect("writing to a string cannot fail");
         render_generated_fast_prediction_arms(out, &pad, fast_path);
         writeln!(out, "{pad}    _ => {{").expect("writing to a string cannot fail");
-        render_generated_sync_decision(out, &format!("{pad}        "), state);
+        // A non-loop block/optional decision is never a loop-back: ANTLR syncs it
+        // like BLOCK_START (single-token deletion), so pass `false`.
+        render_generated_sync_decision(out, &format!("{pad}        "), state, "false");
         writeln!(
             out,
             "{pad}        __decision_start = antlr4_runtime::IntStream::index(self.base.input());"
@@ -2788,7 +2801,7 @@ fn render_generated_decision(
         writeln!(out, "{pad}}};").expect("writing to a string cannot fail");
     } else {
         if !allow_semantic_context {
-            render_generated_sync_decision(out, &pad, state);
+            render_generated_sync_decision(out, &pad, state, "false");
         }
         writeln!(
             out,
@@ -3088,10 +3101,10 @@ fn render_generated_alt_number_assignment(out: &mut String, pad: &str, alt: usiz
     writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
 }
 
-fn render_generated_sync_decision(out: &mut String, pad: &str, state: usize) {
+fn render_generated_sync_decision(out: &mut String, pad: &str, state: usize, loop_back_expr: &str) {
     writeln!(
         out,
-        "{pad}match self.base.sync_decision(atn(), {state}, !__ctx.has_matched_child()) {{"
+        "{pad}match self.base.sync_decision(atn(), {state}, !__ctx.has_matched_child(), {loop_back_expr}) {{"
     )
     .expect("writing to a string cannot fail");
     writeln!(out, "{pad}    Ok(__sync_children) => {{").expect("writing to a string cannot fail");
@@ -3211,11 +3224,20 @@ fn render_generated_star_loop(
         track_alt_number,
         allow_semantic_context,
         force_context,
+        plus_loop,
         fast_path,
         body,
     } = loop_info;
     let (enter_alt, exit_alt) = alts;
     let pad = "    ".repeat(indent);
+    // Per-loop "iteration started" flag, threaded into `sync_decision` so it
+    // recovers like ANTLR: a `*` loop's first sync is at the loop ENTRY
+    // (single-token deletion), every later sync is a loop-BACK (multi-token
+    // `consumeUntil`). A `+` loop's mandatory first element is iteration 1, so it
+    // is already on the loop-back side at its first sync (init `true`).
+    let loop_iter = format!("__loop_iter_{state}");
+    writeln!(out, "{pad}let mut {loop_iter} = {plus_loop};")
+        .expect("writing to a string cannot fail");
     writeln!(out, "{pad}loop {{").expect("writing to a string cannot fail");
     let inner_pad = format!("{pad}    ");
     if let Some(fast_path) = fast_path.filter(|_| !allow_semantic_context && !force_context) {
@@ -3228,7 +3250,7 @@ fn render_generated_star_loop(
             .expect("writing to a string cannot fail");
         render_generated_fast_prediction_arms(out, &inner_pad, fast_path);
         writeln!(out, "{pad}        _ => {{").expect("writing to a string cannot fail");
-        render_generated_sync_decision(out, &format!("{pad}            "), state);
+        render_generated_sync_decision(out, &format!("{pad}            "), state, &loop_iter);
         writeln!(
             out,
             "{pad}            __decision_start = antlr4_runtime::IntStream::index(self.base.input());"
@@ -3244,7 +3266,7 @@ fn render_generated_star_loop(
         writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
         writeln!(out, "{pad}    }};").expect("writing to a string cannot fail");
     } else {
-        render_generated_sync_decision(out, &inner_pad, state);
+        render_generated_sync_decision(out, &inner_pad, state, &loop_iter);
         writeln!(
             out,
             "{pad}    let __decision_start = antlr4_runtime::IntStream::index(self.base.input());"
@@ -3270,6 +3292,8 @@ fn render_generated_star_loop(
     .expect("writing to a string cannot fail");
     writeln!(out, "{pad}    match __prediction.alt {{").expect("writing to a string cannot fail");
     writeln!(out, "{pad}        {enter_alt} => {{").expect("writing to a string cannot fail");
+    // Once an iteration is taken, every subsequent sync is a loop-back.
+    writeln!(out, "{pad}            {loop_iter} = true;").expect("writing to a string cannot fail");
     render_generated_alt_number_assignment(
         out,
         &format!("{pad}            "),
@@ -7444,6 +7468,7 @@ atn:
             track_alt_number: false,
             allow_semantic_context: false,
             force_context: false,
+            plus_loop: false,
             fast_path: None,
             body: vec![mt(2, 0)],
         }
@@ -7536,7 +7561,9 @@ atn:
             false,
         );
         assert!(rendered.contains("parse_generated_rule_0"));
-        assert!(rendered.contains("sync_decision(atn(), 1, !__ctx.has_matched_child())"));
+        assert!(rendered.contains(
+            "sync_decision(atn(), 1, !__ctx.has_matched_child(), false)"
+        ));
         assert!(rendered.contains("ll1_decision_prediction(atn(), 1)"));
         // Stage 1 is the SLL probe (no LL loop on the empty-context conflict);
         // stage 2 re-runs with the real context only when full context is needed.
@@ -7571,6 +7598,7 @@ atn:
                 track_alt_number: true,
                 allow_semantic_context: false,
                 force_context: false,
+                plus_loop: false,
                 fast_path: None,
                 body: vec![mt(1, 4)],
             }]
@@ -7585,7 +7613,13 @@ atn:
             false,
         );
         assert!(rendered.contains("loop {"));
-        assert!(rendered.contains("sync_decision(atn(), 1, !__ctx.has_matched_child())"));
+        // A `*` loop starts NOT iterated: its first sync is at the loop entry
+        // (single-token deletion), so the iteration flag inits to `false`.
+        assert!(rendered.contains("let mut __loop_iter_1 = false;"));
+        assert!(rendered.contains(
+            "sync_decision(atn(), 1, !__ctx.has_matched_child(), __loop_iter_1)"
+        ));
+        assert!(rendered.contains("__loop_iter_1 = true;"));
         assert!(rendered.contains("1 => {"));
         assert!(rendered.contains("2 => {"));
         assert!(rendered.contains("break;"));
@@ -7612,11 +7646,28 @@ atn:
                     track_alt_number: false,
                     allow_semantic_context: false,
                     force_context: false,
+                    plus_loop: true,
                     fast_path: None,
                     body: vec![mt(1, 3)],
                 }
             ]
         );
+
+        let rendered = render_generated_rule_dispatch(
+            &[Some(body)],
+            &[],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            false,
+        );
+        // A `+` loop's mandatory first element is iteration 1, so the iteration
+        // flag inits to `true`: its first loop-back sync recovers with multi-token
+        // `consumeUntil`, matching ANTLR's PLUS_LOOP_BACK.
+        assert!(rendered.contains("let mut __loop_iter_4 = true;"));
+        assert!(rendered.contains(
+            "sync_decision(atn(), 4, !__ctx.has_matched_child(), __loop_iter_4)"
+        ));
     }
 
     #[test]
@@ -7657,6 +7708,7 @@ atn:
                     track_alt_number: false,
                     allow_semantic_context: false,
                     force_context: false,
+                    plus_loop: true,
                     fast_path: None,
                     body: vec![body_decision],
                 }
@@ -8948,6 +9000,7 @@ s @init {<SetMember("i","1")>} : ;
                 track_alt_number: false,
                 allow_semantic_context: true,
                 force_context: false,
+                plus_loop: false,
                 fast_path: None,
                 body: &body,
             },
@@ -9004,6 +9057,7 @@ s @init {<SetMember("i","1")>} : ;
                 track_alt_number: false,
                 allow_semantic_context: true,
                 force_context: false,
+                plus_loop: false,
                 fast_path: None,
                 body: &body,
             },
