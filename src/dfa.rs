@@ -156,6 +156,11 @@ pub struct DfaState {
     pub prediction: Option<usize>,
     pub requires_full_context: bool,
     pub conflicting_alts: Vec<usize>,
+    /// Whether any config for the predicted alt carries a semantic context.
+    /// Precomputed once at accept time (mirrors Go's `DFAState.predicates`) so
+    /// warm DFA hits don't rescan `configs` on every prediction lookup. Only
+    /// meaningful when `prediction` is `Some`; `false` for non-accept states.
+    pub has_semantic_context_for_alt: bool,
 }
 
 impl DfaState {
@@ -168,6 +173,7 @@ impl DfaState {
             prediction: None,
             requires_full_context: false,
             conflicting_alts: Vec::new(),
+            has_semantic_context_for_alt: false,
         }
     }
 
