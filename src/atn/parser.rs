@@ -943,7 +943,7 @@ impl<'a> ParserAtnSimulator<'a> {
                 intermediate
             } else {
                 self.close_intermediate_reach_set(
-                    &intermediate,
+                    intermediate,
                     full_context,
                     precedence,
                     symbol,
@@ -952,7 +952,7 @@ impl<'a> ParserAtnSimulator<'a> {
             }
         } else {
             self.close_intermediate_reach_set(
-                &intermediate,
+                intermediate,
                 full_context,
                 precedence,
                 symbol,
@@ -974,7 +974,7 @@ impl<'a> ParserAtnSimulator<'a> {
 
     fn close_intermediate_reach_set(
         &self,
-        intermediate: &AtnConfigSet,
+        intermediate: AtnConfigSet,
         full_context: bool,
         precedence: i32,
         symbol: i32,
@@ -987,8 +987,10 @@ impl<'a> ParserAtnSimulator<'a> {
             collect_predicates: false,
             treat_eof_as_epsilon: symbol == TOKEN_EOF,
         };
-        for config in intermediate.configs() {
-            self.closure(config.clone(), &mut reach, merge_cache, &mut scratch, params);
+        // `closure` takes `AtnConfig` by value, so drain the intermediate set by
+        // move instead of cloning each config.
+        for config in intermediate.into_configs() {
+            self.closure(config, &mut reach, merge_cache, &mut scratch, params);
         }
         reach
     }
