@@ -851,8 +851,10 @@ impl<'a> ParserAtnSimulator<'a> {
             if let Some(prediction) = self.alt_that_finished_decision_entry_rule(configs) {
                 let mut dfa_state = DfaState::new(configs.clone());
                 dfa_state.mark_accept(prediction);
-                dfa_state.has_semantic_context_for_alt =
-                    configs_have_semantic_context_for_alt(&dfa_state.configs, prediction);
+                // The set-wide flag gates the per-alt scan: if no config in the
+                // set carries a semantic context, no alt can either.
+                dfa_state.has_semantic_context_for_alt = dfa_state.configs.has_semantic_context()
+                    && configs_have_semantic_context_for_alt(&dfa_state.configs, prediction);
                 let target_state = self.add_dfa_state(edge.decision, dfa_state);
                 if let Some(source) =
                     self.decision_to_dfa[edge.decision].state_mut(edge.source_state)
@@ -894,8 +896,10 @@ impl<'a> ParserAtnSimulator<'a> {
             dfa_state.mark_accept(prediction);
             dfa_state.requires_full_context = requires_full_context;
             dfa_state.conflicting_alts = conflicting_alts;
-            dfa_state.has_semantic_context_for_alt =
-                configs_have_semantic_context_for_alt(&dfa_state.configs, prediction);
+            // The set-wide flag gates the per-alt scan: if no config in the set
+            // carries a semantic context, no alt can either.
+            dfa_state.has_semantic_context_for_alt = dfa_state.configs.has_semantic_context()
+                && configs_have_semantic_context_for_alt(&dfa_state.configs, prediction);
         }
         let target_state = self.add_dfa_state(edge.decision, dfa_state);
         if let Some(source) = self.decision_to_dfa[edge.decision].state_mut(edge.source_state) {
