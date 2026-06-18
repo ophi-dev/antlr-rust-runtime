@@ -1024,6 +1024,13 @@ impl AtnConfigSet {
         &self.configs
     }
 
+    /// Consumes the set and returns its configs, letting callers drain configs
+    /// by value (e.g. feeding `closure`, which takes `AtnConfig` by value)
+    /// instead of cloning each one.
+    pub(crate) fn into_configs(self) -> Vec<AtnConfig> {
+        self.configs
+    }
+
     pub const fn is_empty(&self) -> bool {
         self.configs.is_empty()
     }

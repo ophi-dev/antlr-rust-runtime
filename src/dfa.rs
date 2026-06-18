@@ -156,6 +156,16 @@ pub struct DfaState {
     pub prediction: Option<usize>,
     pub requires_full_context: bool,
     pub conflicting_alts: Vec<usize>,
+    /// Whether any config for the predicted alt carries a semantic context.
+    /// Precomputed once at accept time (mirrors Go's `DFAState.predicates`) so
+    /// warm DFA hits don't rescan `configs` on every prediction lookup. Only
+    /// meaningful when `prediction` is `Some`; `false` for non-accept states.
+    ///
+    /// Crate-private: this is an internal derived cache (a pure function of
+    /// `configs` + `prediction`), kept off the public `DfaState` contract so it
+    /// is neither a struct-literal source break nor a surprising participant in
+    /// the public type's identity.
+    pub(crate) has_semantic_context_for_alt: bool,
 }
 
 impl DfaState {
@@ -168,6 +178,7 @@ impl DfaState {
             prediction: None,
             requires_full_context: false,
             conflicting_alts: Vec::new(),
+            has_semantic_context_for_alt: false,
         }
     }
 

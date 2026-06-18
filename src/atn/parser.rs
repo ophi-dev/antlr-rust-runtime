@@ -851,6 +851,10 @@ impl<'a> ParserAtnSimulator<'a> {
             if let Some(prediction) = self.alt_that_finished_decision_entry_rule(configs) {
                 let mut dfa_state = DfaState::new(configs.clone());
                 dfa_state.mark_accept(prediction);
+                // The set-wide flag gates the per-alt scan: if no config in the
+                // set carries a semantic context, no alt can either.
+                dfa_state.has_semantic_context_for_alt = dfa_state.configs.has_semantic_context()
+                    && configs_have_semantic_context_for_alt(&dfa_state.configs, prediction);
                 let target_state = self.add_dfa_state(edge.decision, dfa_state);
                 if let Some(source) =
                     self.decision_to_dfa[edge.decision].state_mut(edge.source_state)
@@ -892,6 +896,10 @@ impl<'a> ParserAtnSimulator<'a> {
             dfa_state.mark_accept(prediction);
             dfa_state.requires_full_context = requires_full_context;
             dfa_state.conflicting_alts = conflicting_alts;
+            // The set-wide flag gates the per-alt scan: if no config in the set
+            // carries a semantic context, no alt can either.
+            dfa_state.has_semantic_context_for_alt = dfa_state.configs.has_semantic_context()
+                && configs_have_semantic_context_for_alt(&dfa_state.configs, prediction);
         }
         let target_state = self.add_dfa_state(edge.decision, dfa_state);
         if let Some(source) = self.decision_to_dfa[edge.decision].state_mut(edge.source_state) {
@@ -939,7 +947,7 @@ impl<'a> ParserAtnSimulator<'a> {
                 intermediate
             } else {
                 self.close_intermediate_reach_set(
-                    &intermediate,
+                    intermediate,
                     full_context,
                     precedence,
                     symbol,
@@ -948,7 +956,7 @@ impl<'a> ParserAtnSimulator<'a> {
             }
         } else {
             self.close_intermediate_reach_set(
-                &intermediate,
+                intermediate,
                 full_context,
                 precedence,
                 symbol,
@@ -970,7 +978,7 @@ impl<'a> ParserAtnSimulator<'a> {
 
     fn close_intermediate_reach_set(
         &self,
-        intermediate: &AtnConfigSet,
+        intermediate: AtnConfigSet,
         full_context: bool,
         precedence: i32,
         symbol: i32,
@@ -983,8 +991,10 @@ impl<'a> ParserAtnSimulator<'a> {
             collect_predicates: false,
             treat_eof_as_epsilon: symbol == TOKEN_EOF,
         };
-        for config in intermediate.configs() {
-            self.closure(config.clone(), &mut reach, merge_cache, &mut scratch, params);
+        // `closure` takes `AtnConfig` by value, so drain the intermediate set by
+        // move instead of cloning each config.
+        for config in intermediate.into_configs() {
+            self.closure(config, &mut reach, merge_cache, &mut scratch, params);
         }
         reach
     }
@@ -1252,10 +1262,9 @@ impl<'a> ParserAtnSimulator<'a> {
                         prediction: ParserAtnPrediction {
                             alt,
                             requires_full_context: state.requires_full_context,
-                            has_semantic_context: configs_have_semantic_context_for_alt(
-                                &state.configs,
-                                alt,
-                            ),
+                            // Precomputed at accept time (see compute_target_state)
+                            // so this warm-hit path avoids an O(configs) rescan.
+                            has_semantic_context: state.has_semantic_context_for_alt,
                             diagnostic: None,
                         },
                         conflicting_alts,
