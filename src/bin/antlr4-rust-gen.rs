@@ -341,7 +341,7 @@ static ATN_CELL: OnceLock<Atn> = OnceLock::new();
 /// Deserializes and caches the grammar ATN for all lexer instances.
 fn atn() -> &'static Atn {{
     ATN_CELL.get_or_init(|| {{
-        let serialized = METADATA.serialized_atn();
+        let serialized = metadata().serialized_atn();
         AtnDeserializer::new(&serialized)
             .deserialize()
             .expect("generated lexer contains a valid ANTLR serialized ATN")
@@ -361,16 +361,19 @@ where
     I: CharStream,
 {{
     pub fn new(input: I) -> Self {{
-        let metadata = Self::metadata();
-        let data = RecognizerData::new(metadata.grammar_file_name(), metadata.vocabulary())
-            .with_rule_names(metadata.rule_names().iter().copied())
-            .with_channel_names(metadata.channel_names().iter().copied())
-            .with_mode_names(metadata.mode_names().iter().copied());
+        let grammar_metadata = metadata();
+        let data = RecognizerData::new(
+            grammar_metadata.grammar_file_name(),
+            grammar_metadata.vocabulary(),
+        )
+        .with_rule_names(grammar_metadata.rule_names().iter().copied())
+        .with_channel_names(grammar_metadata.channel_names().iter().copied())
+        .with_mode_names(grammar_metadata.mode_names().iter().copied());
         Self {{ base: BaseLexer::new(input, data) }}
     }}
 
     pub fn metadata() -> &'static GrammarMetadata {{
-        &METADATA
+        metadata()
     }}
 
 {action_method}
@@ -383,7 +386,7 @@ where
     I: CharStream,
 {{
     fn metadata() -> &'static GrammarMetadata {{
-        &METADATA
+        metadata()
     }}
 }}
 
@@ -3855,7 +3858,7 @@ static ATN_CELL: OnceLock<Atn> = OnceLock::new();
 /// Deserializes and caches the grammar ATN for all parser instances.
 fn atn() -> &'static Atn {{
     ATN_CELL.get_or_init(|| {{
-        let serialized = METADATA.serialized_atn();
+        let serialized = metadata().serialized_atn();
         AtnDeserializer::new(&serialized)
             .deserialize()
             .expect("generated parser contains a valid ANTLR serialized ATN")
@@ -3919,11 +3922,14 @@ where
     S: TokenSource,
 {{
     pub fn new(input: CommonTokenStream<S>) -> Self {{
-        let metadata = Self::metadata();
-        let data = RecognizerData::new(metadata.grammar_file_name(), metadata.vocabulary())
-            .with_rule_names(metadata.rule_names().iter().copied())
-            .with_channel_names(metadata.channel_names().iter().copied())
-            .with_mode_names(metadata.mode_names().iter().copied());
+        let grammar_metadata = metadata();
+        let data = RecognizerData::new(
+            grammar_metadata.grammar_file_name(),
+            grammar_metadata.vocabulary(),
+        )
+        .with_rule_names(grammar_metadata.rule_names().iter().copied())
+        .with_channel_names(grammar_metadata.channel_names().iter().copied())
+        .with_mode_names(grammar_metadata.mode_names().iter().copied());
 {base_initialization}
         Self {{
             base,
@@ -3934,7 +3940,7 @@ where
     }}
 
     pub fn metadata() -> &'static GrammarMetadata {{
-        &METADATA
+        metadata()
     }}
 
     #[allow(dead_code)]
@@ -4083,7 +4089,7 @@ where
     S: TokenSource,
 {{
     fn metadata() -> &'static GrammarMetadata {{
-        &METADATA
+        metadata()
     }}
 }}
 
@@ -7027,7 +7033,7 @@ fn render_with_target_rule(template: &str, rule_index: usize) -> String {
 /// Renders static grammar metadata shared by generated lexers and parsers.
 fn render_metadata(grammar_name: &str, data: &InterpData) -> String {
     format!(
-        "pub static METADATA: GrammarMetadata = GrammarMetadata::new(\n    \"{}\",\n    &{},\n    &{},\n    &{},\n    &{},\n    &{},\n    &{},\n    &{},\n);\n",
+        "pub static METADATA: GrammarMetadata = GrammarMetadata::new(\n    \"{}\",\n    &{},\n    &{},\n    &{},\n    &{},\n    &{},\n    &{},\n    &{},\n);\n\npub fn metadata() -> &'static GrammarMetadata {{\n    &METADATA\n}}\n\npub fn rule_names() -> &'static [&'static str] {{\n    METADATA.rule_names()\n}}\n",
         rust_string(grammar_name),
         render_str_slice(&data.rule_names),
         render_option_str_slice(&data.literal_names),
@@ -7420,6 +7426,18 @@ atn:
         assert_eq!(data.symbolic_names[1], Some("X".to_owned()));
         assert_eq!(data.rule_names, ["file"]);
         assert_eq!(data.atn, [4, 1, 1, 0]);
+    }
+
+    #[test]
+    fn renders_module_level_metadata_helpers() {
+        let rendered = render_metadata("TParser", &minimal_parser_data());
+
+        assert!(
+            rendered.contains("pub fn metadata() -> &'static GrammarMetadata {\n    &METADATA\n}")
+        );
+        assert!(rendered.contains(
+            "pub fn rule_names() -> &'static [&'static str] {\n    METADATA.rule_names()\n}"
+        ));
     }
 
     #[test]

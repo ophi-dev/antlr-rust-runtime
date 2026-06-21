@@ -24,7 +24,7 @@ mod generated {
 }
 
 use generated::kotlin_lexer::KotlinLexer;
-use generated::kotlin_parser::KotlinParser;
+use generated::kotlin_parser::{self, KotlinParser};
 
 fn dump(out: &mut dyn Write, tree: &ParseTree, rule_names: &[String], depth: usize) -> io::Result<()> {
     let pad = "  ".repeat(depth);
@@ -124,8 +124,7 @@ fn main() -> ExitCode {
         return ExitCode::from(1);
     };
 
-    let rule_names: Vec<String> = KotlinParser::<KotlinLexer<InputStream>>::metadata()
-        .rule_names()
+    let rule_names: Vec<String> = kotlin_parser::rule_names()
         .iter()
         .map(|s| (*s).to_string())
         .collect();
