@@ -79,7 +79,7 @@ use crate::errors::AntlrError;
 use crate::int_stream::IntStream;
 use crate::prediction::{EMPTY_RETURN_STATE, PredictionContext};
 use crate::recognizer::{Recognizer, RecognizerData};
-use crate::token::{CommonToken, TOKEN_EOF, Token, TokenSource, TokenSourceError};
+use crate::token::{CommonToken, TOKEN_EOF, Token, TokenRef, TokenSource, TokenSourceError};
 use crate::token_stream::CommonTokenStream;
 use crate::tree::{ErrorNode, ParseTree, ParserRuleContext, RuleNode, TerminalNode};
 use crate::vocabulary::Vocabulary;
@@ -2516,8 +2516,7 @@ where
     pub fn match_token(&mut self, token_type: i32) -> Result<ParseTree, AntlrError> {
         let current = self
             .input
-            .lt(1)
-            .cloned()
+            .lt_ref(1)
             .ok_or_else(|| AntlrError::ParserError {
                 line: 0,
                 column: 0,
@@ -2525,7 +2524,7 @@ where
             })?;
         if current.token_type() == token_type {
             self.consume();
-            Ok(ParseTree::Terminal(TerminalNode::new(current)))
+            Ok(ParseTree::Terminal(TerminalNode::from_ref(current)))
         } else {
             Err(AntlrError::MismatchedInput {
                 expected: self.vocabulary().display_name(token_type),
@@ -2545,8 +2544,7 @@ where
     ) -> Result<GeneratedMatch, AntlrError> {
         let current = self
             .input
-            .lt(1)
-            .cloned()
+            .lt_ref(1)
             .ok_or_else(|| AntlrError::ParserError {
                 line: 0,
                 column: 0,
@@ -2557,15 +2555,19 @@ where
             let consumed_eof = current.token_type() == TOKEN_EOF;
             self.consume();
             return Ok(GeneratedMatch {
-                children: vec![ParseTree::Terminal(TerminalNode::new(current))],
+                children: vec![ParseTree::Terminal(TerminalNode::from_ref(current))],
                 consumed_eof,
             });
         }
         let mut expected_symbols = BTreeSet::new();
         expected_symbols.insert(token_type);
-        self.recover_generated_match(current, &expected_symbols, follow_state, atn, |symbol| {
-            symbol == token_type
-        })
+        self.recover_generated_match(
+            current.as_ref().clone(),
+            &expected_symbols,
+            follow_state,
+            atn,
+            |symbol| symbol == token_type,
+        )
     }
 
     pub fn match_set_recovering(
@@ -2576,8 +2578,7 @@ where
     ) -> Result<GeneratedMatch, AntlrError> {
         let current = self
             .input
-            .lt(1)
-            .cloned()
+            .lt_ref(1)
             .ok_or_else(|| AntlrError::ParserError {
                 line: 0,
                 column: 0,
@@ -2588,14 +2589,18 @@ where
             let consumed_eof = current.token_type() == TOKEN_EOF;
             self.consume();
             return Ok(GeneratedMatch {
-                children: vec![ParseTree::Terminal(TerminalNode::new(current))],
+                children: vec![ParseTree::Terminal(TerminalNode::from_ref(current))],
                 consumed_eof,
             });
         }
         let expected_symbols = interval_symbols(intervals);
-        self.recover_generated_match(current, &expected_symbols, follow_state, atn, |symbol| {
-            interval_set_contains(intervals, symbol)
-        })
+        self.recover_generated_match(
+            current.as_ref().clone(),
+            &expected_symbols,
+            follow_state,
+            atn,
+            |symbol| interval_set_contains(intervals, symbol),
+        )
     }
 
     pub fn match_not_set_recovering(
@@ -2608,8 +2613,7 @@ where
     ) -> Result<GeneratedMatch, AntlrError> {
         let current = self
             .input
-            .lt(1)
-            .cloned()
+            .lt_ref(1)
             .ok_or_else(|| AntlrError::ParserError {
                 line: 0,
                 column: 0,
@@ -2622,16 +2626,22 @@ where
             let consumed_eof = current.token_type() == TOKEN_EOF;
             self.consume();
             return Ok(GeneratedMatch {
-                children: vec![ParseTree::Terminal(TerminalNode::new(current))],
+                children: vec![ParseTree::Terminal(TerminalNode::from_ref(current))],
                 consumed_eof,
             });
         }
         let expected_symbols =
             interval_complement_symbols(intervals, min_vocabulary, max_vocabulary);
-        self.recover_generated_match(current, &expected_symbols, follow_state, atn, |symbol| {
-            (min_vocabulary..=max_vocabulary).contains(&symbol)
-                && !interval_set_contains(intervals, symbol)
-        })
+        self.recover_generated_match(
+            current.as_ref().clone(),
+            &expected_symbols,
+            follow_state,
+            atn,
+            |symbol| {
+                (min_vocabulary..=max_vocabulary).contains(&symbol)
+                    && !interval_set_contains(intervals, symbol)
+            },
+        )
     }
 
     fn recover_generated_match(
@@ -2767,8 +2777,7 @@ where
     ) -> Result<ParseTree, AntlrError> {
         let current = self
             .input
-            .lt(1)
-            .cloned()
+            .lt_ref(1)
             .ok_or_else(|| AntlrError::ParserError {
                 line: 0,
                 column: 0,
@@ -2776,7 +2785,7 @@ where
             })?;
         if matches(current.token_type()) {
             self.consume();
-            Ok(ParseTree::Terminal(TerminalNode::new(current)))
+            Ok(ParseTree::Terminal(TerminalNode::from_ref(current)))
         } else {
             Err(AntlrError::MismatchedInput {
                 expected: self.interval_display(intervals),
@@ -2820,8 +2829,8 @@ where
         self.invalidate_prediction_context_cache();
         let start_index = self.current_visible_index();
         let mut context = ParserRuleContext::new(rule_index, invoking_state);
-        if let Some(token) = self.token_at(start_index) {
-            context.set_start(token);
+        if let Some(token) = self.token_ref_at(start_index) {
+            context.set_start_ref(token);
         }
         context
     }
@@ -2901,8 +2910,8 @@ where
     /// Finishes a generated parser rule and returns its parse-tree node.
     pub fn finish_rule(&mut self, mut context: ParserRuleContext, consumed_eof: bool) -> ParseTree {
         let stop_index = self.rule_stop_token_index(self.input.index(), consumed_eof);
-        if let Some(token) = stop_index.and_then(|index| self.token_at(index)) {
-            context.set_stop(token);
+        if let Some(token) = stop_index.and_then(|index| self.token_ref_at(index)) {
+            context.set_stop_ref(token);
         }
         self.exit_rule();
         self.rule_node(context)
@@ -2987,8 +2996,8 @@ where
         consumed_eof: bool,
     ) -> ParseTree {
         let stop_index = self.rule_stop_token_index(self.input.index(), consumed_eof);
-        if let Some(token) = stop_index.and_then(|index| self.token_at(index)) {
-            context.set_stop(token);
+        if let Some(token) = stop_index.and_then(|index| self.token_ref_at(index)) {
+            context.set_stop_ref(token);
         }
         self.unroll_recursion_context();
         self.rule_node(context)
@@ -3026,15 +3035,15 @@ where
         self.set_state(state);
         if let Some(stop) = self
             .rule_stop_token_index(self.input.index(), false)
-            .and_then(|index| self.token_at(index))
+            .and_then(|index| self.token_ref_at(index))
         {
-            current.set_stop(stop);
+            current.set_stop_ref(stop);
         }
         let invoking_state = current.invoking_state();
-        let start = current.start().cloned();
+        let start = current.start_ref();
         let mut replacement = ParserRuleContext::new(rule_index, invoking_state);
         if let Some(start) = start {
-            replacement.set_start(start);
+            replacement.set_start_ref(start);
         }
         let previous = std::mem::replace(current, replacement);
         if self.build_parse_trees {
@@ -3671,12 +3680,12 @@ where
                 0
             },
         );
-        if let Some(token) = self.token_at(start_index) {
-            context.set_start(token);
+        if let Some(token) = self.token_ref_at(start_index) {
+            context.set_start_ref(token);
         }
         let stop_index = self.rule_stop_token_index(outcome.index, outcome.consumed_eof);
-        if let Some(token) = stop_index.and_then(|token_index| self.token_at(token_index)) {
-            context.set_stop(token);
+        if let Some(token) = stop_index.and_then(|token_index| self.token_ref_at(token_index)) {
+            context.set_stop_ref(token);
         }
         if self.build_parse_trees {
             if outcome.nodes.has_left_recursive_boundary() {
@@ -3779,28 +3788,26 @@ where
     ) -> Result<ParseTree, AntlrError> {
         match node {
             FastRecognizedNode::Token { index } => {
-                let token =
-                    self.input
-                        .get(*index)
-                        .cloned()
-                        .ok_or_else(|| AntlrError::ParserError {
-                            line: 0,
-                            column: 0,
-                            message: format!("missing token at index {index}"),
-                        })?;
-                Ok(ParseTree::Terminal(TerminalNode::new(token)))
+                let token = self
+                    .input
+                    .get_ref(*index)
+                    .ok_or_else(|| AntlrError::ParserError {
+                        line: 0,
+                        column: 0,
+                        message: format!("missing token at index {index}"),
+                    })?;
+                Ok(ParseTree::Terminal(TerminalNode::from_ref(token)))
             }
             FastRecognizedNode::ErrorToken { index } => {
-                let token =
-                    self.input
-                        .get(*index)
-                        .cloned()
-                        .ok_or_else(|| AntlrError::ParserError {
-                            line: 0,
-                            column: 0,
-                            message: format!("missing error token at index {index}"),
-                        })?;
-                Ok(ParseTree::Error(ErrorNode::new(token)))
+                let token = self
+                    .input
+                    .get_ref(*index)
+                    .ok_or_else(|| AntlrError::ParserError {
+                        line: 0,
+                        column: 0,
+                        message: format!("missing error token at index {index}"),
+                    })?;
+                Ok(ParseTree::Error(ErrorNode::from_ref(token)))
             }
             FastRecognizedNode::MissingToken {
                 token_type,
@@ -3829,11 +3836,11 @@ where
                     *invoking_state,
                     children.len(),
                 );
-                if let Some(token) = self.token_at(*start_index) {
-                    context.set_start(token);
+                if let Some(token) = self.token_ref_at(*start_index) {
+                    context.set_start_ref(token);
                 }
-                if let Some(token) = stop_index.and_then(|index| self.token_at(index)) {
-                    context.set_stop(token);
+                if let Some(token) = stop_index.and_then(|index| self.token_ref_at(index)) {
+                    context.set_stop_ref(token);
                 }
                 if children.has_left_recursive_boundary() {
                     let folded = fold_fast_left_recursive_boundaries(children.to_vec());
@@ -3872,11 +3879,11 @@ where
                     *invoking_state,
                     children.len(),
                 );
-                if let Some(token) = self.token_at(*start_index) {
-                    context.set_start(token);
+                if let Some(token) = self.token_ref_at(*start_index) {
+                    context.set_start_ref(token);
                 }
-                if let Some(token) = stop_index.and_then(|index| self.token_at(index)) {
-                    context.set_stop(token);
+                if let Some(token) = stop_index.and_then(|index| self.token_ref_at(index)) {
+                    context.set_stop_ref(token);
                 }
                 if children.has_left_recursive_boundary() {
                     let folded = fold_fast_left_recursive_boundaries(children.to_vec());
@@ -3970,15 +3977,14 @@ where
             }
             let token = self
                 .input
-                .get(index)
-                .cloned()
+                .get_ref(index)
                 .ok_or_else(|| AntlrError::ParserError {
                     line: 0,
                     column: 0,
                     message: format!("missing token at index {index}"),
                 })?;
             let is_eof = token.token_type() == TOKEN_EOF;
-            context.add_child(ParseTree::Terminal(TerminalNode::new(token)));
+            context.add_child(ParseTree::Terminal(TerminalNode::from_ref(token)));
             if is_eof {
                 return Ok(None);
             }
@@ -4158,11 +4164,11 @@ where
         for (name, value) in outcome.return_values {
             context.set_int_return(name, value);
         }
-        if let Some(token) = self.token_at(start_index) {
-            context.set_start(token);
+        if let Some(token) = self.token_ref_at(start_index) {
+            context.set_start_ref(token);
         }
-        if let Some(token) = self.rule_stop_token(outcome.index, outcome.consumed_eof) {
-            context.set_stop(token);
+        if let Some(token) = self.rule_stop_token_ref(outcome.index, outcome.consumed_eof) {
+            context.set_stop_ref(token);
         }
         if self.build_parse_trees {
             let nodes = fold_left_recursive_boundaries(outcome.nodes);
@@ -6645,6 +6651,11 @@ where
         self.input.get(index).cloned()
     }
 
+    /// Clones the shared token handle at an absolute token-stream index.
+    fn token_ref_at(&mut self, index: usize) -> Option<TokenRef> {
+        self.input.get_ref(index)
+    }
+
     /// Normalizes the current token-stream cursor to the next parser-visible
     /// token before capturing a rule start boundary.
     fn current_visible_index(&mut self) -> usize {
@@ -6768,9 +6779,9 @@ where
     ///
     /// EOF transitions do not advance the token-stream cursor, so an EOF match
     /// must use the current token rather than the previous visible token.
-    fn rule_stop_token(&mut self, index: usize, consumed_eof: bool) -> Option<CommonToken> {
+    fn rule_stop_token_ref(&mut self, index: usize, consumed_eof: bool) -> Option<TokenRef> {
         self.rule_stop_token_index(index, consumed_eof)
-            .and_then(|token_index| self.token_at(token_index))
+            .and_then(|token_index| self.token_ref_at(token_index))
     }
 
     /// Recovers from a semantic predicate with an ANTLR `<fail='...'>` option.
@@ -7171,28 +7182,26 @@ where
     ) -> Result<ParseTree, AntlrError> {
         match node {
             RecognizedNode::Token { index } => {
-                let token =
-                    self.input
-                        .get(*index)
-                        .cloned()
-                        .ok_or_else(|| AntlrError::ParserError {
-                            line: 0,
-                            column: 0,
-                            message: format!("missing token at index {index}"),
-                        })?;
-                Ok(ParseTree::Terminal(TerminalNode::new(token)))
+                let token = self
+                    .input
+                    .get_ref(*index)
+                    .ok_or_else(|| AntlrError::ParserError {
+                        line: 0,
+                        column: 0,
+                        message: format!("missing token at index {index}"),
+                    })?;
+                Ok(ParseTree::Terminal(TerminalNode::from_ref(token)))
             }
             RecognizedNode::ErrorToken { index } => {
-                let token =
-                    self.input
-                        .get(*index)
-                        .cloned()
-                        .ok_or_else(|| AntlrError::ParserError {
-                            line: 0,
-                            column: 0,
-                            message: format!("missing error token at index {index}"),
-                        })?;
-                Ok(ParseTree::Error(ErrorNode::new(token)))
+                let token = self
+                    .input
+                    .get_ref(*index)
+                    .ok_or_else(|| AntlrError::ParserError {
+                        line: 0,
+                        column: 0,
+                        message: format!("missing error token at index {index}"),
+                    })?;
+                Ok(ParseTree::Error(ErrorNode::from_ref(token)))
             }
             RecognizedNode::MissingToken {
                 token_type,
@@ -7225,11 +7234,11 @@ where
                 for (name, value) in return_values {
                     context.set_int_return(name.clone(), *value);
                 }
-                if let Some(token) = self.token_at(*start_index) {
-                    context.set_start(token);
+                if let Some(token) = self.token_ref_at(*start_index) {
+                    context.set_start_ref(token);
                 }
-                if let Some(token) = stop_index.and_then(|index| self.token_at(index)) {
-                    context.set_stop(token);
+                if let Some(token) = stop_index.and_then(|index| self.token_ref_at(index)) {
+                    context.set_stop_ref(token);
                 }
                 for child in children {
                     context.add_child(self.recognized_node_tree(child, track_alt_numbers)?);
@@ -7341,14 +7350,14 @@ where
                 0
             },
         );
-        if let Some(token) = self.parser.token_at(start_index) {
-            context.set_start(token);
+        if let Some(token) = self.parser.token_ref_at(start_index) {
+            context.set_start_ref(token);
         }
         let stop_index = self
             .parser
             .rule_stop_token_index(self.parser.input.index(), consumed_eof);
-        if let Some(token) = stop_index.and_then(|index| self.parser.token_at(index)) {
-            context.set_stop(token);
+        if let Some(token) = stop_index.and_then(|index| self.parser.token_ref_at(index)) {
+            context.set_stop_ref(token);
         }
         if self.parser.build_parse_trees {
             for child in children {
@@ -7483,14 +7492,13 @@ where
                 DirectAdaptiveFallback::TokenMismatch,
             ));
         }
-        let token =
-            self.parser
-                .input
-                .lt(1)
-                .cloned()
-                .ok_or(DirectAdaptiveParseControl::Fallback(
-                    DirectAdaptiveFallback::TokenMismatch,
-                ))?;
+        let token = self
+            .parser
+            .input
+            .lt_ref(1)
+            .ok_or(DirectAdaptiveParseControl::Fallback(
+                DirectAdaptiveFallback::TokenMismatch,
+            ))?;
         let matched_eof = symbol == TOKEN_EOF;
         if !matched_eof {
             self.parser.consume();
@@ -7498,7 +7506,7 @@ where
         let child = self
             .parser
             .build_parse_trees
-            .then(|| ParseTree::Terminal(TerminalNode::new(token)));
+            .then(|| ParseTree::Terminal(TerminalNode::from_ref(token)));
         Ok((matched_eof, child))
     }
 }
@@ -8598,7 +8606,11 @@ mod tests {
             .expect("single token before EOF recovers");
         assert_eq!(children.len(), 1);
         assert!(matches!(children[0], ParseTree::Error(_)));
-        assert_eq!(parser.la(1), TOKEN_EOF, "EOF is left for the rule's EOF match");
+        assert_eq!(
+            parser.la(1),
+            TOKEN_EOF,
+            "EOF is left for the rule's EOF match"
+        );
     }
 
     #[test]
@@ -8626,7 +8638,11 @@ mod tests {
             }
             other => panic!("expected mismatched-input ParserError, got {other:?}"),
         }
-        assert_eq!(parser.la(1), 2, "nothing consumed; cursor still on first `c`");
+        assert_eq!(
+            parser.la(1),
+            2,
+            "nothing consumed; cursor still on first `c`"
+        );
     }
 
     #[test]
@@ -9383,7 +9399,10 @@ mod tests {
         parser.set_build_parse_trees(false);
         let mut ctx = ParserRuleContext::new(0, 0);
         assert!(!ctx.has_matched_child());
-        parser.add_parse_child(&mut ctx, ParseTree::Terminal(TerminalNode::new(token.clone())));
+        parser.add_parse_child(
+            &mut ctx,
+            ParseTree::Terminal(TerminalNode::new(token.clone())),
+        );
         // Tree building is off, so no child is stored...
         assert!(ctx.children().is_empty());
         // ...but the match is recorded, so the context is no longer "empty".

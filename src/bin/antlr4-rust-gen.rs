@@ -566,6 +566,7 @@ struct GeneratedStepRenderContext<'a> {
     init_entry_action_statements: &'a BTreeMap<usize, String>,
     return_action_statements: &'a BTreeMap<usize, Vec<(String, i64)>>,
     track_alt_numbers: bool,
+    needs_child_action_buffering: bool,
     direct_generated_rule_calls: &'a [bool],
     atn_preferred_rule_calls: &'a [bool],
 }
@@ -1930,6 +1931,7 @@ fn render_generated_rule_dispatch(
         &BTreeMap::new(),
         return_action_statements,
         track_alt_numbers,
+        true,
     )
 }
 
@@ -1943,6 +1945,7 @@ fn render_generated_rule_dispatch_with_rule_names(
     init_entry_action_statements: &BTreeMap<usize, String>,
     return_action_statements: &BTreeMap<usize, Vec<(String, i64)>>,
     track_alt_numbers: bool,
+    needs_child_action_buffering: bool,
 ) -> String {
     let mut out = String::new();
     let atn_preferred_rule_calls = generated_atn_preferred_rule_calls(rules, rule_names);
@@ -1982,6 +1985,7 @@ fn render_generated_rule_dispatch_with_rule_names(
         init_entry_action_statements,
         return_action_statements,
         track_alt_numbers,
+        needs_child_action_buffering,
         direct_generated_rule_calls,
         atn_preferred_rule_calls: &atn_preferred_rule_calls,
     };
@@ -2116,7 +2120,8 @@ fn render_generated_rule_method(
         "                if let Some(__error) = __sync_error {{"
     )
     .expect("writing to a string cannot fail");
-    writeln!(out, "                    if allow_fallback {{").expect("writing to a string cannot fail");
+    writeln!(out, "                    if allow_fallback {{")
+        .expect("writing to a string cannot fail");
     writeln!(out, "                        self.base.exit_rule();")
         .expect("writing to a string cannot fail");
     writeln!(
@@ -2150,7 +2155,8 @@ fn render_generated_rule_method(
         "                    let __tree = self.base.finish_rule(__ctx, __consumed_eof);"
     )
     .expect("writing to a string cannot fail");
-    writeln!(out, "                    return Ok(__tree);").expect("writing to a string cannot fail");
+    writeln!(out, "                    return Ok(__tree);")
+        .expect("writing to a string cannot fail");
     writeln!(out, "                }}").expect("writing to a string cannot fail");
     writeln!(
         out,
@@ -2270,7 +2276,8 @@ fn render_generated_left_recursive_rule_method(
         "                if let Some(__error) = __sync_error {{"
     )
     .expect("writing to a string cannot fail");
-    writeln!(out, "                    if allow_fallback {{").expect("writing to a string cannot fail");
+    writeln!(out, "                    if allow_fallback {{")
+        .expect("writing to a string cannot fail");
     writeln!(
         out,
         "                        self.base.unroll_recursion_context();"
@@ -2307,7 +2314,8 @@ fn render_generated_left_recursive_rule_method(
         "                    let __tree = self.base.finish_recursion_rule(__ctx, __consumed_eof);"
     )
     .expect("writing to a string cannot fail");
-    writeln!(out, "                    return Ok(__tree);").expect("writing to a string cannot fail");
+    writeln!(out, "                    return Ok(__tree);")
+        .expect("writing to a string cannot fail");
     writeln!(out, "                }}").expect("writing to a string cannot fail");
     writeln!(
         out,
@@ -2553,6 +2561,20 @@ fn render_generated_step(
             } else {
                 generated_child_call
             };
+            if !render_context.needs_child_action_buffering {
+                writeln!(out, "{pad}let __child = {child_call};")
+                    .expect("writing to a string cannot fail");
+                writeln!(
+                    out,
+                    "{pad}self.base.discard_invoking_state(__invoking_marker);"
+                )
+                .expect("writing to a string cannot fail");
+                writeln!(out, "{pad}let __child = __child?;")
+                    .expect("writing to a string cannot fail");
+                writeln!(out, "{pad}self.base.add_parse_child(&mut __ctx, __child);")
+                    .expect("writing to a string cannot fail");
+                return;
+            }
             // Snapshot the buffer length and member state before the child so we
             // can tell, after it returns, whether it ran on the interpreter path.
             writeln!(
@@ -2616,8 +2638,11 @@ fn render_generated_step(
                 "{pad}    let __child_members = self.base.int_members_checkpoint();"
             )
             .expect("writing to a string cannot fail");
-            writeln!(out, "{pad}    if __child_members != __child_member_checkpoint {{")
-                .expect("writing to a string cannot fail");
+            writeln!(
+                out,
+                "{pad}    if __child_members != __child_member_checkpoint {{"
+            )
+            .expect("writing to a string cannot fail");
             writeln!(
                 out,
                 "{pad}        self.generated_actions.push(GeneratedAction::MemberSnapshot(__child_members));"
@@ -3739,6 +3764,7 @@ fn render_parser_with_options(
         &init_entry_action_statements,
         &generated_return_action_statements(&return_actions),
         track_alt_numbers,
+        has_action_dispatch || has_return_actions,
     );
     let init_action_rules = init_actions
         .iter()
@@ -5955,7 +5981,10 @@ fn init_entry_action_statements(
 ) -> io::Result<BTreeMap<usize, String>> {
     let mut statements = BTreeMap::new();
     for (rule_index, action) in init_actions.iter().enumerate() {
-        let Some(action) = action.as_ref().filter(|a| init_action_mutates_members_only(a)) else {
+        let Some(action) = action
+            .as_ref()
+            .filter(|a| init_action_mutates_members_only(a))
+        else {
             continue;
         };
         statements.insert(rule_index, render_action_statement(action, members)?);
@@ -7561,9 +7590,7 @@ atn:
             false,
         );
         assert!(rendered.contains("parse_generated_rule_0"));
-        assert!(rendered.contains(
-            "sync_decision(atn(), 1, !__ctx.has_matched_child(), false)"
-        ));
+        assert!(rendered.contains("sync_decision(atn(), 1, !__ctx.has_matched_child(), false)"));
         assert!(rendered.contains("ll1_decision_prediction(atn(), 1)"));
         // Stage 1 is the SLL probe (no LL loop on the empty-context conflict);
         // stage 2 re-runs with the real context only when full context is needed.
@@ -7616,9 +7643,9 @@ atn:
         // A `*` loop starts NOT iterated: its first sync is at the loop entry
         // (single-token deletion), so the iteration flag inits to `false`.
         assert!(rendered.contains("let mut __loop_iter_1 = false;"));
-        assert!(rendered.contains(
-            "sync_decision(atn(), 1, !__ctx.has_matched_child(), __loop_iter_1)"
-        ));
+        assert!(
+            rendered.contains("sync_decision(atn(), 1, !__ctx.has_matched_child(), __loop_iter_1)")
+        );
         assert!(rendered.contains("__loop_iter_1 = true;"));
         assert!(rendered.contains("1 => {"));
         assert!(rendered.contains("2 => {"));
@@ -7665,9 +7692,9 @@ atn:
         // flag inits to `true`: its first loop-back sync recovers with multi-token
         // `consumeUntil`, matching ANTLR's PLUS_LOOP_BACK.
         assert!(rendered.contains("let mut __loop_iter_4 = true;"));
-        assert!(rendered.contains(
-            "sync_decision(atn(), 4, !__ctx.has_matched_child(), __loop_iter_4)"
-        ));
+        assert!(
+            rendered.contains("sync_decision(atn(), 4, !__ctx.has_matched_child(), __loop_iter_4)")
+        );
     }
 
     #[test]
@@ -7916,7 +7943,9 @@ atn:
             &BTreeMap::new(),
             &BTreeMap::new(),
             &BTreeMap::new(),
-            false);
+            false,
+            true,
+        );
 
         // ATN-preferred children route through `parse_rule_precedence_from_generated`:
         // the rule's generated dispatch arm is `generated_only()`-guarded, so in normal
@@ -7953,7 +7982,9 @@ atn:
             &BTreeMap::new(),
             &BTreeMap::new(),
             &BTreeMap::new(),
-            false);
+            false,
+            true,
+        );
 
         assert!(rendered.contains(
             "0 if self.generated_only() => Some(self.parse_generated_rule_0_dispatch(precedence, allow_fallback))"
@@ -8287,6 +8318,7 @@ atn:
                 init_entry_action_statements: &BTreeMap::new(),
                 return_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
+                needs_child_action_buffering: true,
                 direct_generated_rule_calls: &[],
                 atn_preferred_rule_calls: &[],
             },
@@ -8304,6 +8336,7 @@ atn:
     fn render_call_rule_step(
         direct_generated_rule_calls: &[bool],
         atn_preferred_rule_calls: &[bool],
+        needs_child_action_buffering: bool,
     ) -> String {
         let mut rendered = String::new();
         render_generated_step(
@@ -8319,6 +8352,7 @@ atn:
                 init_entry_action_statements: &BTreeMap::new(),
                 return_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
+                needs_child_action_buffering,
                 direct_generated_rule_calls,
                 atn_preferred_rule_calls,
             },
@@ -8333,7 +8367,7 @@ atn:
         // `parse_rule_precedence_from_generated`, which preserves interpreted routing
         // (the rule's generated dispatch arm is guarded by `generated_only()`) while
         // BUFFERING the child's body actions and `@after` in position.
-        let rendered = render_call_rule_step(&[true, false], &[true, true]);
+        let rendered = render_call_rule_step(&[true, false], &[true, true], true);
 
         assert!(rendered.contains("self.parse_rule_precedence_from_generated(1, 0)"));
         assert!(!rendered.contains("self.parse_interpreted_rule_precedence(1, 0)"));
@@ -8348,7 +8382,7 @@ atn:
         // parent's buffered actions. The wrapper buffers them in position instead while
         // still parsing the child interpreted (the dispatch arm is `generated_only()`
         // guarded).
-        let rendered = render_call_rule_step(&[true, true], &[true, true]);
+        let rendered = render_call_rule_step(&[true, true], &[true, true], true);
 
         assert!(rendered.contains("self.parse_rule_precedence_from_generated(1, 0)"));
         assert!(!rendered.contains("self.parse_interpreted_rule_precedence(1, 0)"));
@@ -8433,7 +8467,9 @@ atn:
 
         // Each buffered action is pushed as `GeneratedAction::Parser { action, tree }`,
         // tagging `$ctx`-rooted actions with this child's tree (the rest `None`).
-        assert!(fallback.contains("self.generated_actions.push(GeneratedAction::Parser { action, tree: __tree });"));
+        assert!(fallback.contains(
+            "self.generated_actions.push(GeneratedAction::Parser { action, tree: __tree });"
+        ));
         assert!(fallback.contains("CTX_ROOTED_ACTION_STATES.contains(&action.source_state())"));
         assert!(!fallback.contains("self.run_action(action, &tree);"));
         assert!(fallback.contains("Ok(tree)"));
@@ -8449,7 +8485,9 @@ atn:
         .expect("parser should render");
 
         assert!(rendered.contains("matches!(rule_index, 0)"));
-        assert!(rendered.contains("let __has_after_actions = Self::has_after_actions(rule_index);"));
+        assert!(
+            rendered.contains("let __has_after_actions = Self::has_after_actions(rule_index);")
+        );
         // The @after start comes from the rule context (first visible token), not
         // the raw pre-rule cursor, so a leading hidden prefix is excluded.
         assert!(rendered.contains(
@@ -8567,8 +8605,8 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
         // on the parent context, losing the child subtree). Assert the generated
         // catch arm gates the `Fatal` return on `allow_fallback` and otherwise runs
         // `recover_generated_rule` + `finish_rule` + `Ok`.
-        let rendered = render_parser("TParser", &minimal_parser_data(), None)
-            .expect("parser should render");
+        let rendered =
+            render_parser("TParser", &minimal_parser_data(), None).expect("parser should render");
         let sync_arm = rendered
             .find("if let Some(__error) = __sync_error {")
             .expect("sync-error catch arm present");
@@ -8580,12 +8618,18 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
         let fatal = rest
             .find("return Err(GeneratedRuleError::Fatal(__error));")
             .expect("fatal return present");
-        assert!(guard < fatal, "Fatal return must be inside the allow_fallback guard");
+        assert!(
+            guard < fatal,
+            "Fatal return must be inside the allow_fallback guard"
+        );
         // And the nested-child path recovers locally and returns Ok.
         let recover = rest
             .find("self.base.recover_generated_rule(&mut __ctx, atn(), __error);")
             .expect("local recovery present in sync arm");
-        assert!(recover > guard, "recover path follows the guarded fatal return");
+        assert!(
+            recover > guard,
+            "recover path follows the guarded fatal return"
+        );
         assert!(rest[recover..].contains("return Ok(__tree);"));
     }
 
@@ -8652,6 +8696,7 @@ s @init {<SetMember("i","1")>} : ;
                 init_entry_action_statements: &BTreeMap::new(),
                 return_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
+                needs_child_action_buffering: true,
                 direct_generated_rule_calls: &[],
                 atn_preferred_rule_calls: &[],
             },
@@ -8662,7 +8707,8 @@ s @init {<SetMember("i","1")>} : ;
         // changed members (i.e. it ran interpreted).
         assert!(rendered.contains("let __child_action_marker = self.generated_actions.len();"));
         assert!(
-            rendered.contains("let __child_member_checkpoint = self.base.int_members_checkpoint();")
+            rendered
+                .contains("let __child_member_checkpoint = self.base.int_members_checkpoint();")
         );
         assert!(rendered.contains("if self.generated_actions.len() == __child_action_marker {"));
         assert!(rendered.contains("if __child_members != __child_member_checkpoint {"));
@@ -8672,8 +8718,24 @@ s @init {<SetMember("i","1")>} : ;
         // Marker capture must precede the child call, which must precede the snapshot.
         let marker = rendered.find("__child_action_marker = ").expect("marker");
         let call = rendered.find("let __child =").expect("child call");
-        let snapshot = rendered.find("GeneratedAction::MemberSnapshot").expect("snapshot");
+        let snapshot = rendered
+            .find("GeneratedAction::MemberSnapshot")
+            .expect("snapshot");
         assert!(marker < call && call < snapshot);
+    }
+
+    #[test]
+    fn call_rule_step_skips_child_action_scaffolding_without_parser_actions() {
+        let rendered = render_call_rule_step(&[true, true], &[false, false], false);
+
+        assert!(rendered.contains("let __child = self.parse_generated_rule_1_dispatch(0, false).map_err(GeneratedRuleError::into_error);"));
+        assert!(rendered.contains("self.base.discard_invoking_state(__invoking_marker);"));
+        assert!(rendered.contains("let __child = __child?;"));
+        assert!(rendered.contains("self.base.add_parse_child(&mut __ctx, __child);"));
+        assert!(!rendered.contains("__child_action_marker"));
+        assert!(!rendered.contains("__child_member_checkpoint"));
+        assert!(!rendered.contains("GeneratedAction::MemberSnapshot"));
+        assert!(!rendered.contains("CTX_ROOTED_ACTION_STATES.contains"));
     }
 
     #[test]
@@ -8695,9 +8757,9 @@ s @init {<SetMember("i","1")>} : ;
                 newline: false,
             },
         ])));
-        assert!(!action_is_ctx_rooted(&ActionTemplate::RuleInvocationStack {
-            newline: true
-        }));
+        assert!(!action_is_ctx_rooted(
+            &ActionTemplate::RuleInvocationStack { newline: true }
+        ));
         assert!(!action_is_ctx_rooted(&ActionTemplate::StringTree {
             target: StringTreeTarget::Rule(1),
             newline: true,
@@ -8706,7 +8768,9 @@ s @init {<SetMember("i","1")>} : ;
             target: StringTreeTarget::Label("r".to_owned()),
             newline: true,
         }));
-        assert!(!action_is_ctx_rooted(&ActionTemplate::Text { newline: true }));
+        assert!(!action_is_ctx_rooted(&ActionTemplate::Text {
+            newline: true
+        }));
     }
 
     #[test]
@@ -8715,12 +8779,12 @@ s @init {<SetMember("i","1")>} : ;
         // its own tagged tree when present (a child's $ctx action), falling back to
         // the replay tree only when untagged (a rule's own / tree-search actions).
         // The ctx-rooted allowlist const is always emitted.
-        let rendered = render_parser("TParser", &minimal_parser_data(), None)
-            .expect("parser should render");
-        assert!(rendered.contains(
-            "GeneratedAction::Parser { action, tree: action_tree } => {"
-        ));
-        assert!(rendered.contains("self.run_action(action, action_tree.as_ref().unwrap_or(tree));"));
+        let rendered =
+            render_parser("TParser", &minimal_parser_data(), None).expect("parser should render");
+        assert!(rendered.contains("GeneratedAction::Parser { action, tree: action_tree } => {"));
+        assert!(
+            rendered.contains("self.run_action(action, action_tree.as_ref().unwrap_or(tree));")
+        );
         assert!(rendered.contains("const CTX_ROOTED_ACTION_STATES: &[usize] = &["));
     }
 
@@ -8729,10 +8793,11 @@ s @init {<SetMember("i","1")>} : ;
         // The CallRule step emits the re-tag loop that tags the child's untagged
         // `$ctx`-rooted buffered actions with the child tree (innermost-wins via the
         // `is_none()` guard).
-        let rendered = render_call_rule_step(&[], &[]);
-        assert!(rendered.contains(
-            "for __buffered in &mut self.generated_actions[__child_action_marker..]"
-        ));
+        let rendered = render_call_rule_step(&[], &[], true);
+        assert!(
+            rendered
+                .contains("for __buffered in &mut self.generated_actions[__child_action_marker..]")
+        );
         assert!(rendered.contains(
             "if tree.is_none() && CTX_ROOTED_ACTION_STATES.contains(&action.source_state())"
         ));
@@ -8775,7 +8840,9 @@ s @init {<SetMember("i","1")>} : ;
 
         assert!(rendered.contains("parser_action_at_current(4, 0"));
         assert!(rendered.contains("parser_action_at_current(6, 0"));
-        assert!(rendered.contains("self.generated_actions.push(GeneratedAction::Parser { action, tree: None });"));
+        assert!(rendered.contains(
+            "self.generated_actions.push(GeneratedAction::Parser { action, tree: None });"
+        ));
         assert!(rendered.contains("println!(\"alt 2\");"));
     }
 
@@ -8802,9 +8869,9 @@ s @init {<SetMember("i","1")>} : ;
 
         // Recovering not-set over 1..=max with an empty exclusion = "any token",
         // threading the wildcard's follow state for EOF-insertion follow checks.
-        assert!(rendered.contains(
-            "match_not_set_recovering(&[], 1, atn().max_token_type(), 7, atn())"
-        ));
+        assert!(
+            rendered.contains("match_not_set_recovering(&[], 1, atn().max_token_type(), 7, atn())")
+        );
         assert!(rendered.contains("__consumed_eof |= __match.consumed_eof();"));
         // The old non-recovering call must be gone.
         assert!(!rendered.contains("self.base.match_wildcard()"));
@@ -8832,6 +8899,7 @@ s @init {<SetMember("i","1")>} : ;
                 init_entry_action_statements: &BTreeMap::new(),
                 return_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
+                needs_child_action_buffering: true,
                 direct_generated_rule_calls: &[],
                 atn_preferred_rule_calls: &[],
             },
@@ -8880,6 +8948,7 @@ s @init {<SetMember("i","1")>} : ;
                 init_entry_action_statements: &BTreeMap::new(),
                 return_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
+                needs_child_action_buffering: true,
                 direct_generated_rule_calls: &[],
                 atn_preferred_rule_calls: &[],
             },
@@ -8922,6 +8991,7 @@ s @init {<SetMember("i","1")>} : ;
                 init_entry_action_statements: &BTreeMap::new(),
                 return_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
+                needs_child_action_buffering: true,
                 direct_generated_rule_calls: &[],
                 atn_preferred_rule_calls: &[],
             },
@@ -8965,6 +9035,7 @@ s @init {<SetMember("i","1")>} : ;
                 init_entry_action_statements: &BTreeMap::new(),
                 return_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
+                needs_child_action_buffering: true,
                 direct_generated_rule_calls: &[],
                 atn_preferred_rule_calls: &[],
             },
@@ -9010,6 +9081,7 @@ s @init {<SetMember("i","1")>} : ;
                 init_entry_action_statements: &BTreeMap::new(),
                 return_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
+                needs_child_action_buffering: true,
                 direct_generated_rule_calls: &[],
                 atn_preferred_rule_calls: &[],
             },
@@ -9067,6 +9139,7 @@ s @init {<SetMember("i","1")>} : ;
                 init_entry_action_statements: &BTreeMap::new(),
                 return_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
+                needs_child_action_buffering: true,
                 direct_generated_rule_calls: &[],
                 atn_preferred_rule_calls: &[],
             },
@@ -9105,7 +9178,9 @@ s @init {<SetMember("i","1")>} : ;
         );
 
         assert!(rendered.contains("__ctx.set_int_return(\"y\", 1000);"));
-        assert!(rendered.contains("self.generated_actions.push(GeneratedAction::Parser { action, tree: None });"));
+        assert!(rendered.contains(
+            "self.generated_actions.push(GeneratedAction::Parser { action, tree: None });"
+        ));
     }
 
     #[test]
@@ -9676,4 +9751,3 @@ continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#,
         }
     }
 }
-

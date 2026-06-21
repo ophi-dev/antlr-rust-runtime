@@ -1,5 +1,7 @@
 use crate::errors::AntlrError;
-use crate::token::{CommonToken, Token};
+use std::rc::Rc;
+
+use crate::token::{CommonToken, Token, TokenRef};
 use std::collections::BTreeMap;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -175,8 +177,8 @@ pub struct ParserRuleContext {
     rule_index: usize,
     invoking_state: isize,
     alt_number: usize,
-    start: Option<CommonToken>,
-    stop: Option<CommonToken>,
+    start: Option<TokenRef>,
+    stop: Option<TokenRef>,
     int_returns: Option<Box<IntReturns>>,
     children: Vec<ParseTree>,
     /// Whether any child has been offered to this context, independent of whether
@@ -243,19 +245,31 @@ impl ParserRuleContext {
         self.alt_number = alt_number;
     }
 
-    pub const fn start(&self) -> Option<&CommonToken> {
-        self.start.as_ref()
+    pub fn start(&self) -> Option<&CommonToken> {
+        self.start.as_deref()
     }
 
-    pub const fn stop(&self) -> Option<&CommonToken> {
-        self.stop.as_ref()
+    pub(crate) fn start_ref(&self) -> Option<TokenRef> {
+        self.start.as_ref().map(Rc::clone)
+    }
+
+    pub fn stop(&self) -> Option<&CommonToken> {
+        self.stop.as_deref()
     }
 
     pub fn set_start(&mut self, token: CommonToken) {
+        self.start = Some(Rc::new(token));
+    }
+
+    pub(crate) fn set_start_ref(&mut self, token: TokenRef) {
         self.start = Some(token);
     }
 
     pub fn set_stop(&mut self, token: CommonToken) {
+        self.stop = Some(Rc::new(token));
+    }
+
+    pub(crate) fn set_stop_ref(&mut self, token: TokenRef) {
         self.stop = Some(token);
     }
 
@@ -332,16 +346,22 @@ impl ParserRuleContext {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TerminalNode {
-    token: CommonToken,
+    token: TokenRef,
 }
 
 impl TerminalNode {
-    pub const fn new(token: CommonToken) -> Self {
+    pub fn new(token: CommonToken) -> Self {
+        Self {
+            token: Rc::new(token),
+        }
+    }
+
+    pub(crate) const fn from_ref(token: TokenRef) -> Self {
         Self { token }
     }
 
-    pub const fn symbol(&self) -> &CommonToken {
-        &self.token
+    pub fn symbol(&self) -> &CommonToken {
+        self.token.as_ref()
     }
 
     pub fn text(&self) -> String {
@@ -351,16 +371,22 @@ impl TerminalNode {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ErrorNode {
-    token: CommonToken,
+    token: TokenRef,
 }
 
 impl ErrorNode {
-    pub const fn new(token: CommonToken) -> Self {
+    pub fn new(token: CommonToken) -> Self {
+        Self {
+            token: Rc::new(token),
+        }
+    }
+
+    pub(crate) const fn from_ref(token: TokenRef) -> Self {
         Self { token }
     }
 
-    pub const fn symbol(&self) -> &CommonToken {
-        &self.token
+    pub fn symbol(&self) -> &CommonToken {
+        self.token.as_ref()
     }
 
     pub fn text(&self) -> String {

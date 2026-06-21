@@ -1,10 +1,14 @@
 use crate::int_stream::{EOF, IntStream, UNKNOWN_SOURCE_NAME};
-use crate::token::{CommonToken, DEFAULT_CHANNEL, TOKEN_EOF, Token, TokenSource, TokenSourceError};
+use std::rc::Rc;
+
+use crate::token::{
+    CommonToken, DEFAULT_CHANNEL, TOKEN_EOF, Token, TokenRef, TokenSource, TokenSourceError,
+};
 
 #[derive(Debug)]
 pub struct CommonTokenStream<S> {
     source: S,
-    tokens: Vec<CommonToken>,
+    tokens: Vec<TokenRef>,
     next_visible_after: Vec<usize>,
     cursor: usize,
     fetched_eof: bool,
@@ -48,7 +52,13 @@ where
     /// as needed.
     pub fn get(&mut self, index: usize) -> Option<&CommonToken> {
         self.sync(index);
-        self.tokens.get(index)
+        self.tokens.get(index).map(Rc::as_ref)
+    }
+
+    /// Returns a shared reference-counted token at an absolute buffered index.
+    pub fn get_ref(&mut self, index: usize) -> Option<TokenRef> {
+        self.sync(index);
+        self.tokens.get(index).map(Rc::clone)
     }
 
     /// Returns the token at one-based lookahead/lookbehind offset, skipping
@@ -71,7 +81,30 @@ where
             remaining -= 1;
         }
         self.sync(index);
-        self.tokens.get(index)
+        self.tokens.get(index).map(Rc::as_ref)
+    }
+
+    /// Returns the token at one-based lookahead/lookbehind offset as a shared
+    /// reference-counted token.
+    pub fn lt_ref(&mut self, offset: isize) -> Option<TokenRef> {
+        if offset == 0 {
+            return None;
+        }
+        if offset < 0 {
+            return offset
+                .checked_neg()
+                .map(isize::cast_unsigned)
+                .and_then(|offset| self.lb_ref(offset));
+        }
+
+        let mut index = self.next_token_on_channel(self.cursor, self.channel);
+        let mut remaining = offset;
+        while remaining > 1 {
+            index = self.next_token_on_channel(index + 1, self.channel);
+            remaining -= 1;
+        }
+        self.sync(index);
+        self.tokens.get(index).map(Rc::clone)
     }
 
     pub fn lb(&self, offset: usize) -> Option<&CommonToken> {
@@ -84,15 +117,28 @@ where
             index = self.previous_token_on_channel(index, self.channel)?;
             remaining -= 1;
         }
-        self.tokens.get(index)
+        self.tokens.get(index).map(Rc::as_ref)
+    }
+
+    fn lb_ref(&self, offset: usize) -> Option<TokenRef> {
+        if offset == 0 || self.cursor == 0 {
+            return None;
+        }
+        let mut index = self.cursor;
+        let mut remaining = offset;
+        while remaining > 0 {
+            index = self.previous_token_on_channel(index, self.channel)?;
+            remaining -= 1;
+        }
+        self.tokens.get(index).map(Rc::clone)
     }
 
     pub const fn token_source(&self) -> &S {
         &self.source
     }
 
-    pub fn tokens(&self) -> &[CommonToken] {
-        &self.tokens
+    pub fn tokens(&self) -> impl Iterator<Item = &CommonToken> {
+        self.tokens.iter().map(Rc::as_ref)
     }
 
     /// Ensures the buffer contains `index`, unless EOF has already been fetched.
@@ -120,7 +166,7 @@ where
         let token_index = isize::try_from(self.tokens.len()).unwrap_or(isize::MAX);
         token.set_token_index(token_index);
         self.fetched_eof = token.token_type() == TOKEN_EOF;
-        self.tokens.push(token);
+        self.tokens.push(Rc::new(token));
         self.next_visible_after.push(UNKNOWN_NEXT_VISIBLE);
     }
 
@@ -224,7 +270,9 @@ where
     /// round-trip when they only need lookahead types.
     pub fn token_type_at_index(&mut self, index: usize) -> i32 {
         self.sync(index);
-        self.tokens.get(index).map_or(TOKEN_EOF, Token::token_type)
+        self.tokens
+            .get(index)
+            .map_or(TOKEN_EOF, |token| token.token_type())
     }
 
     /// Returns the next parser-visible token index after consuming the token
@@ -268,7 +316,7 @@ where
         }
         self.tokens[start..=stop.min(self.tokens.len().saturating_sub(1))]
             .iter()
-            .filter_map(Token::text)
+            .filter_map(|token| token.text())
             .collect::<Vec<_>>()
             .join("")
     }
