@@ -345,6 +345,7 @@ def generate_rust_modules(
             str(interp_dir / f"{spec.lexer_name}.interp"),
             "--grammar",
             str(grammar_dir / spec.grammar_files[0]),
+            "--allow-unsupported-lexer-actions",
         ]
     )
     parser_cmd = [
