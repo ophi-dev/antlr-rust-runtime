@@ -15,7 +15,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
 
-use antlr4_runtime::{InputStream, ParseTree};
+use antlr4_runtime::ParseTree;
 
 mod generated {
     #![allow(dead_code, unused_imports, unreachable_pub, unused_qualifications)]
@@ -24,7 +24,23 @@ mod generated {
 }
 
 use generated::kotlin_lexer::KotlinLexer;
-use generated::kotlin_parser::{self, KotlinParser};
+use generated::kotlin_parser;
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum EntryRule {
+    KotlinFile,
+    Script,
+}
+
+impl EntryRule {
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "kotlinFile" => Some(Self::KotlinFile),
+            "script" => Some(Self::Script),
+            _ => None,
+        }
+    }
+}
 
 fn dump<S: AsRef<str>>(
     out: &mut dyn Write,
@@ -59,10 +75,22 @@ fn main() -> ExitCode {
     let mut output: Option<PathBuf> = None;
     let mut iters: usize = 1;
     let mut report_time = false;
+    let mut entry_rule = EntryRule::KotlinFile;
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--input" => input = args.next().map(PathBuf::from),
             "--output" => output = args.next().map(PathBuf::from),
+            "--rule" => {
+                let Some(value) = args.next() else {
+                    eprintln!("missing value for --rule <kotlinFile|script>");
+                    return ExitCode::from(2);
+                };
+                let Some(parsed) = EntryRule::parse(&value) else {
+                    eprintln!("invalid --rule value: {value} (expected kotlinFile or script)");
+                    return ExitCode::from(2);
+                };
+                entry_rule = parsed;
+            }
             "--iters" => {
                 let Some(value) = args.next() else {
                     eprintln!("missing value for --iters <n>");
@@ -102,7 +130,10 @@ fn main() -> ExitCode {
         let mut started = None;
         let tree = match kotlin_parser::parse(&src, KotlinLexer::new, |parser| {
             started = Some(Instant::now());
-            parser.kotlin_file()
+            match entry_rule {
+                EntryRule::KotlinFile => parser.kotlin_file(),
+                EntryRule::Script => parser.script(),
+            }
         }) {
             Ok(tree) => tree,
             Err(err) => {

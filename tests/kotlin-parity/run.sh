@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # End-to-end Kotlin parse-tree parity smoke. Generates Python and Rust parsers
 # from the antlr/grammars-v4 Kotlin grammar, parses every snippet under
-# tests/kotlin-parity/snippets/*.kt with both, and asserts the dumped trees are
-# byte-identical.
+# tests/kotlin-parity/snippets/*.kt and script-snippets/*.kts with both, and
+# asserts the dumped trees are byte-identical.
 #
 # Required environment / arguments:
 #   ANTLR4_JAR (or --antlr-jar):     path to antlr-4.13.2-complete.jar
@@ -99,25 +99,38 @@ if [ "${#SNIPPETS[@]}" -eq 0 ]; then
     exit 2
 fi
 
-failures=0
-for snippet in "${SNIPPETS[@]}"; do
-    name="$(basename "$snippet" .kt)"
-    py_out="$WORK_DIR/$name.python.txt"
-    rs_out="$WORK_DIR/$name.rust.txt"
+run_snippet() {
+    local snippet="$1"
+    local rule="$2"
+    local name="$3"
+    local py_out="$WORK_DIR/$rule-$name.python.txt"
+    local rs_out="$WORK_DIR/$rule-$name.rust.txt"
     "$PYTHON" "$SCRIPT_DIR/dump_python.py" \
         --gen-dir "$WORK_DIR/py-gen" \
         --lexer KotlinLexer \
         --parser KotlinParser \
-        --rule kotlinFile \
+        --rule "$rule" \
         --input "$snippet" \
         --output "$py_out"
-    "$DUMPER_BIN" --input "$snippet" --output "$rs_out"
+    "$DUMPER_BIN" --input "$snippet" --output "$rs_out" --rule "$rule"
     if diff -u "$py_out" "$rs_out"; then
-        echo "Kotlin parity [$name]: parse trees match"
+        echo "Kotlin parity [$rule:$name]: parse trees match"
     else
-        echo "Kotlin parity [$name]: parse trees diverge (diff above)" >&2
+        echo "Kotlin parity [$rule:$name]: parse trees diverge (diff above)" >&2
         failures=$((failures + 1))
     fi
+}
+
+failures=0
+for snippet in "${SNIPPETS[@]}"; do
+    name="$(basename "$snippet" .kt)"
+    run_snippet "$snippet" kotlinFile "$name"
+done
+
+SCRIPT_SNIPPETS=("$SCRIPT_DIR"/script-snippets/*.kts)
+for snippet in "${SCRIPT_SNIPPETS[@]}"; do
+    name="$(basename "$snippet" .kts)"
+    run_snippet "$snippet" script "$name"
 done
 
 if [ "$failures" -gt 0 ]; then

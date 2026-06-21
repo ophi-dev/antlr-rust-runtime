@@ -2064,6 +2064,15 @@ struct FastRecognizeRequest {
     recovery_state: Option<usize>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct FastRecognizeTopRequest {
+    start_state: usize,
+    stop_state: usize,
+    start_index: usize,
+    precedence: i32,
+    caller_follow_state: Option<usize>,
+}
+
 /// Memo key for the fast recognizer. `recovery_symbols` must come from
 /// `intern_recovery_symbols` or `empty_recovery_symbols` before it reaches this
 /// key, so equal sets share one allocation and the key can store that
@@ -3671,10 +3680,17 @@ where
         let start_index = self.current_visible_index();
         self.clear_prediction_diagnostics();
         self.reset_per_parse_caches();
+        let caller_follow_state = self.pending_invoking_follow_state(atn);
         self.fast_recovery_enabled = false;
         self.fast_token_nodes_enabled = false;
-        let first_pass =
-            self.fast_recognize_top(atn, start_state, stop_state, start_index, precedence);
+        let top_request = FastRecognizeTopRequest {
+            start_state,
+            stop_state,
+            start_index,
+            precedence,
+            caller_follow_state,
+        };
+        let first_pass = self.fast_recognize_top(atn, top_request);
         self.fast_token_nodes_enabled = true;
         self.fast_recovery_enabled = true;
         let needs_tree_retry = matches!(
@@ -3699,8 +3715,7 @@ where
         };
         let (outcome, _expected) = if needs_retry {
             self.fast_first_set_prefilter = false;
-            let retry =
-                self.fast_recognize_top(atn, start_state, stop_state, start_index, precedence);
+            let retry = self.fast_recognize_top(atn, top_request);
             self.fast_first_set_prefilter = true;
             let selected = if needs_tree_retry {
                 match retry {
@@ -3719,7 +3734,6 @@ where
         } else {
             first_pass.expect("first_pass is Ok in the no-retry branch")
         };
-
         self.record_syntax_errors(outcome.diagnostics.len());
         report_parser_diagnostics(&self.prediction_diagnostics);
         report_parser_diagnostics(&outcome.diagnostics);
@@ -3780,6 +3794,31 @@ where
         Ok(self.rule_node(context))
     }
 
+    fn pending_invoking_follow_state(&self, atn: &Atn) -> Option<usize> {
+        let invoking_state = self.pending_invoking_states.last().copied()?;
+        let state_number = usize::try_from(invoking_state).ok()?;
+        match atn.state(state_number)?.transitions.first()? {
+            Transition::Rule { follow_state, .. } => Some(*follow_state),
+            _ => None,
+        }
+    }
+
+    fn is_caller_follow_boundary_token(&mut self, index: usize) -> bool {
+        // Generated callers own statement separators; leave them available when
+        // an interpreted child rule can either stop before or consume one.
+        self.token_at(index)
+            .as_ref()
+            .and_then(Token::text)
+            .is_some_and(|text| text == ";" || text.contains('\n'))
+    }
+
+    fn caller_follow_token_info(&mut self, index: usize) -> (i32, bool) {
+        (
+            self.token_type_at(index),
+            self.is_caller_follow_boundary_token(index),
+        )
+    }
+
     /// Runs the fast recognizer once from the rule's start state and returns
     /// the best outcome or the per-attempt expected-token accumulator. The
     /// caller flips `fast_first_set_prefilter` between calls when a retry is
@@ -3787,11 +3826,15 @@ where
     fn fast_recognize_top(
         &mut self,
         atn: &Atn,
-        start_state: usize,
-        stop_state: usize,
-        start_index: usize,
-        precedence: i32,
+        request: FastRecognizeTopRequest,
     ) -> Result<(FastRecognizeOutcome, ExpectedTokens), ExpectedTokens> {
+        let FastRecognizeTopRequest {
+            start_state,
+            stop_state,
+            start_index,
+            precedence,
+            caller_follow_state,
+        } = request;
         // `input.size()` is intentionally only the currently buffered token
         // count here. Do not restore an up-front fill just to size this map:
         // the fixed floor avoids small-input churn, and large inputs grow the
@@ -3827,7 +3870,14 @@ where
             perf_counters::dump();
             perf_counters::reset();
         }
-        match select_best_fast_outcome(outcomes.into_iter(), self.prediction_mode) {
+        let caller_follow =
+            caller_follow_state.map(|state| self.cached_state_expected_token_set(atn, state));
+        match select_best_fast_outcome(
+            outcomes.into_iter(),
+            self.prediction_mode,
+            caller_follow.as_deref(),
+            |index| self.caller_follow_token_info(index),
+        ) {
             Some(outcome) => Ok((outcome, expected)),
             None => Err(expected),
         }
@@ -7906,9 +7956,6 @@ fn state_is_left_recursive_rule(atn: &Atn, state: &AtnState) -> bool {
         .is_some_and(|rule_start| rule_start.left_recursive_rule)
 }
 
-/// Chooses the outermost parse result that consumed the most input.
-///
-/// The recognizer intentionally keeps shorter endpoints available while walking
 /// Picks the better of two `parse_atn_rule` passes (with and without the
 /// FIRST-set prefilter). A clean outcome (no diagnostics) always wins over a
 /// recovered one; among recovered outcomes the second pass is preferred
@@ -7933,29 +7980,58 @@ fn select_better_top_outcome(
     }
 }
 
+/// Chooses the outermost parse result that consumed the most input.
+///
+/// The recognizer intentionally keeps shorter endpoints available while walking
 /// nested rule transitions so callers can satisfy following tokens such as
 /// `expr 'and' expr`. Only the public rule entry commits to one endpoint.
 fn select_best_fast_outcome(
     outcomes: impl Iterator<Item = FastRecognizeOutcome>,
     prediction_mode: PredictionMode,
+    caller_follow: Option<&TokenBitSet>,
+    mut token_info_at: impl FnMut(usize) -> (i32, bool),
 ) -> Option<FastRecognizeOutcome> {
-    outcomes.reduce(|best, outcome| {
+    let mut best = None;
+    let mut best_caller_follow = None;
+    for outcome in outcomes {
+        let (token_type, is_boundary) = token_info_at(outcome.index);
+        if matches!(
+            prediction_mode,
+            PredictionMode::Ll | PredictionMode::LlExactAmbigDetection
+        ) && outcome.diagnostics.is_empty()
+            && let Some(follow) = caller_follow
+            && is_boundary
+            && follow.contains(token_type)
+        {
+            let replace =
+                best_caller_follow
+                    .as_ref()
+                    .is_none_or(|existing: &FastRecognizeOutcome| {
+                        (outcome.index, outcome.consumed_eof)
+                            < (existing.index, existing.consumed_eof)
+                    });
+            if replace {
+                best_caller_follow = Some(outcome.clone());
+            }
+        }
+        let Some(existing) = best else {
+            best = Some(outcome);
+            continue;
+        };
         let outcome_position = (outcome.index, outcome.consumed_eof);
-        let best_position = (best.index, best.consumed_eof);
+        let best_position = (existing.index, existing.consumed_eof);
         let better = match prediction_mode {
             PredictionMode::Ll | PredictionMode::LlExactAmbigDetection => outcome_is_better(
                 outcome_position,
                 &outcome.diagnostics,
                 best_position,
-                &best.diagnostics,
+                &existing.diagnostics,
             ),
-            PredictionMode::Sll => outcome.index > best.index,
+            PredictionMode::Sll => outcome.index > existing.index,
         };
-        if better {
-            return outcome;
-        }
-        best
-    })
+        best = Some(if better { outcome } else { existing });
+    }
+    best_caller_follow.or(best)
 }
 
 fn select_best_outcome(
@@ -9810,6 +9886,8 @@ mod tests {
         let selected = select_best_fast_outcome(
             [first.clone(), second.clone()].into_iter(),
             PredictionMode::Sll,
+            None,
+            |_| (TOKEN_EOF, false),
         )
         .expect("one outcome should be selected");
         assert_eq!(selected.diagnostics.len(), 1);
@@ -9819,13 +9897,67 @@ mod tests {
             diagnostics: FastDiagnostics::new(),
             nodes: NodeList::new(),
         };
-        let selected =
-            select_best_fast_outcome([first.clone(), eof_second].into_iter(), PredictionMode::Sll)
-                .expect("one outcome should be selected");
+        let selected = select_best_fast_outcome(
+            [first.clone(), eof_second].into_iter(),
+            PredictionMode::Sll,
+            None,
+            |_| (TOKEN_EOF, false),
+        )
+        .expect("one outcome should be selected");
         assert!(!selected.consumed_eof);
-        let selected = select_best_fast_outcome([first, second].into_iter(), PredictionMode::Ll)
-            .expect("one outcome should be selected");
+        let selected = select_best_fast_outcome(
+            [first, second].into_iter(),
+            PredictionMode::Ll,
+            None,
+            |_| (TOKEN_EOF, false),
+        )
+        .expect("one outcome should be selected");
         assert!(selected.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn fast_outcome_selection_prefers_generated_caller_follow() {
+        let earlier = FastRecognizeOutcome {
+            index: 7,
+            consumed_eof: false,
+            diagnostics: FastDiagnostics::new(),
+            nodes: NodeList::new(),
+        };
+        let later = FastRecognizeOutcome {
+            index: 8,
+            consumed_eof: false,
+            diagnostics: FastDiagnostics::new(),
+            nodes: NodeList::new(),
+        };
+        let mut follow = TokenBitSet::default();
+        follow.insert(5);
+
+        let selected = select_best_fast_outcome(
+            [later.clone(), earlier.clone()].into_iter(),
+            PredictionMode::Ll,
+            Some(&follow),
+            |index| (if index == 7 { 5 } else { TOKEN_EOF }, index == 7),
+        )
+        .expect("one outcome should be selected");
+        assert_eq!(selected.index, 7);
+
+        let selected = select_best_fast_outcome(
+            [later.clone(), earlier.clone()].into_iter(),
+            PredictionMode::Ll,
+            Some(&follow),
+            |index| (if index == 7 { 5 } else { TOKEN_EOF }, false),
+        )
+        .expect("one outcome should be selected");
+        assert_eq!(selected.index, 8);
+
+        let selected = select_best_fast_outcome(
+            [earlier, later].into_iter(),
+            PredictionMode::Sll,
+            Some(&follow),
+            |index| (if index == 7 { 5 } else { TOKEN_EOF }, index == 7),
+        )
+        .expect("one outcome should be selected");
+        assert_eq!(selected.index, 8);
     }
 
     #[test]
