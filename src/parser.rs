@@ -3189,8 +3189,7 @@ where
     pub fn match_wildcard(&mut self) -> Result<ParseTree, AntlrError> {
         let current = self
             .input
-            .lt(1)
-            .cloned()
+            .lt_ref(1)
             .ok_or_else(|| AntlrError::ParserError {
                 line: 0,
                 column: 0,
@@ -3203,7 +3202,7 @@ where
             });
         }
         self.consume();
-        Ok(ParseTree::Terminal(TerminalNode::new(current)))
+        Ok(ParseTree::Terminal(TerminalNode::from_ref(current)))
     }
 
     /// Generated parser synchronization hook. The current interpreter owns
