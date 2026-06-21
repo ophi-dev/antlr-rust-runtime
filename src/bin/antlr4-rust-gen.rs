@@ -3958,6 +3958,16 @@ where
         metadata()
     }}
 
+    #[must_use]
+    pub const fn token_stream(&self) -> &CommonTokenStream<S> {{
+        self.base.token_stream()
+    }}
+
+    #[must_use]
+    pub fn into_token_stream(self) -> CommonTokenStream<S> {{
+        self.base.into_token_stream()
+    }}
+
     #[allow(dead_code)]
     fn simulator(&mut self) -> &mut antlr4_runtime::ParserAtnSimulator<'static> {{
         self.simulator
@@ -9060,6 +9070,17 @@ s : ;
         assert!(rendered.contains("if __from_generated && allow_generated_fallback {"));
         assert!(rendered.contains("self.base.report_generated_parser_diagnostics();"));
         assert!(!rendered.contains("self.base.report_token_source_errors();"));
+    }
+
+    #[test]
+    fn generated_parser_exposes_owned_token_stream() {
+        let rendered =
+            render_parser("TParser", &minimal_parser_data(), None).expect("parser should render");
+
+        assert!(rendered.contains("pub const fn token_stream(&self) -> &CommonTokenStream<S>"));
+        assert!(rendered.contains("self.base.token_stream()"));
+        assert!(rendered.contains("pub fn into_token_stream(self) -> CommonTokenStream<S>"));
+        assert!(rendered.contains("self.base.into_token_stream()"));
     }
 
     #[test]
