@@ -9,6 +9,7 @@ use crate::token::{
 pub struct CommonTokenStream<S> {
     source: S,
     tokens: Vec<TokenRef>,
+    public_tokens: Vec<CommonToken>,
     next_visible_after: Vec<usize>,
     cursor: usize,
     fetched_eof: bool,
@@ -32,6 +33,7 @@ where
         Self {
             source,
             tokens: Vec::new(),
+            public_tokens: Vec::new(),
             next_visible_after: Vec::new(),
             cursor: 0,
             fetched_eof: false,
@@ -137,8 +139,8 @@ where
         &self.source
     }
 
-    pub fn tokens(&self) -> impl DoubleEndedIterator + ExactSizeIterator<Item = &CommonToken> {
-        self.tokens.iter().map(Rc::as_ref)
+    pub fn tokens(&self) -> &[CommonToken] {
+        &self.public_tokens
     }
 
     /// Ensures the buffer contains `index`, unless EOF has already been fetched.
@@ -166,7 +168,8 @@ where
         let token_index = isize::try_from(self.tokens.len()).unwrap_or(isize::MAX);
         token.set_token_index(token_index);
         self.fetched_eof = token.token_type() == TOKEN_EOF;
-        self.tokens.push(Rc::new(token));
+        self.tokens.push(Rc::new(token.clone()));
+        self.public_tokens.push(token);
         self.next_visible_after.push(UNKNOWN_NEXT_VISIBLE);
     }
 
@@ -428,7 +431,7 @@ mod tests {
     }
 
     #[test]
-    fn tokens_iterator_keeps_slice_like_capabilities() {
+    fn tokens_returns_public_slice() {
         let source = VecTokenSource {
             tokens: vec![
                 CommonToken::new(1).with_text("a"),
@@ -440,8 +443,17 @@ mod tests {
         let mut stream = CommonTokenStream::new(source);
         stream.fill();
 
-        let mut tokens = stream.tokens();
-        assert_eq!(tokens.len(), 3);
-        assert_eq!(tokens.next_back().map(Token::token_type), Some(TOKEN_EOF));
+        fn token_count(tokens: &[CommonToken]) -> usize {
+            tokens.len()
+        }
+
+        let tokens = stream.tokens();
+        assert_eq!(token_count(tokens), 3);
+        assert_eq!(tokens[0].token_type(), 1);
+        assert_eq!(tokens.first().map(Token::token_type), Some(1));
+        assert_eq!(
+            tokens.iter().next_back().map(Token::token_type),
+            Some(TOKEN_EOF)
+        );
     }
 }
