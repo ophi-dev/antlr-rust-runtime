@@ -321,24 +321,28 @@ fn merge_two_context_entries(
     if left_return_state == right_return_state && left_parent == right_parent {
         return PredictionContext::singleton(left_parent, left_return_state);
     }
-    let (first_parent, first_return_state, second_parent, second_return_state) =
-        if compare_entries(&right_parent, right_return_state, &left_parent, left_return_state)
-            == Ordering::Less
-        {
-            (
-                right_parent,
-                right_return_state,
-                left_parent,
-                left_return_state,
-            )
-        } else {
-            (
-                left_parent,
-                left_return_state,
-                right_parent,
-                right_return_state,
-            )
-        };
+    let (first_parent, first_return_state, second_parent, second_return_state) = if compare_entries(
+        &right_parent,
+        right_return_state,
+        &left_parent,
+        left_return_state,
+    )
+        == Ordering::Less
+    {
+        (
+            right_parent,
+            right_return_state,
+            left_parent,
+            left_return_state,
+        )
+    } else {
+        (
+            left_parent,
+            left_return_state,
+            right_parent,
+            right_return_state,
+        )
+    };
     PredictionContext::array(
         vec![first_parent, second_parent],
         vec![first_return_state, second_return_state],
@@ -354,10 +358,7 @@ fn merge_array_with_entry(
     entry_on_left: bool,
 ) -> Rc<PredictionContext> {
     let mut insert_index = array_parents.len();
-    for (index, (parent, return_state)) in array_parents
-        .iter()
-        .zip(array_return_states)
-        .enumerate()
+    for (index, (parent, return_state)) in array_parents.iter().zip(array_return_states).enumerate()
     {
         let ordering = compare_entries(&entry_parent, entry_return_state, parent, *return_state);
         if ordering == Ordering::Equal && parent == &entry_parent {
@@ -392,7 +393,8 @@ fn merge_arrays(
     right_return_states: &[usize],
 ) -> Rc<PredictionContext> {
     let mut parents = Vec::with_capacity(left_parents.len() + right_parents.len());
-    let mut return_states = Vec::with_capacity(left_return_states.len() + right_return_states.len());
+    let mut return_states =
+        Vec::with_capacity(left_return_states.len() + right_return_states.len());
     let mut left_index = 0;
     let mut right_index = 0;
 
@@ -1379,12 +1381,9 @@ mod tests {
         // operand order. (A shared trailing entry keeps both operands distinct so
         // `merge` does not short-circuit on `left == right`.)
         let shared = PredictionContext::singleton(Rc::clone(&empty), 30);
-        let left_array = PredictionContext::array(
-            vec![Rc::clone(&parent_a), Rc::clone(&shared)],
-            vec![7, 30],
-        );
-        let right_array =
-            PredictionContext::array(vec![Rc::clone(&parent_b), shared], vec![7, 30]);
+        let left_array =
+            PredictionContext::array(vec![Rc::clone(&parent_a), Rc::clone(&shared)], vec![7, 30]);
+        let right_array = PredictionContext::array(vec![Rc::clone(&parent_b), shared], vec![7, 30]);
         let merged_arrays_lr =
             PredictionContext::merge(Rc::clone(&left_array), Rc::clone(&right_array));
         let merged_arrays_rl = PredictionContext::merge(right_array, left_array);

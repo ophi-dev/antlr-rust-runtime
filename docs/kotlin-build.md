@@ -51,6 +51,19 @@ Replace the path with the relative path from the smoke crate to this checkout.
 Then include the generated modules and parse a Kotlin sample:
 
 ```rust
+use generated::kotlin_lexer::KotlinLexer;
+use generated::kotlin_parser::{self, KotlinParser};
+
+let tree = kotlin_parser::parse("fun main() {}", KotlinLexer::new, KotlinParser::kotlin_file)
+    .expect("entry rule parses");
+assert!(tree.text().contains("fun"));
+```
+
+The generated helper is additive. The explicit path is still available when the
+caller needs to name the input source, adjust parser options, or attach custom
+error handling before the entry rule:
+
+```rust
 use antlr4_runtime::{CommonTokenStream, InputStream};
 use generated::kotlin_lexer::KotlinLexer;
 use generated::kotlin_parser::KotlinParser;
