@@ -37,6 +37,21 @@ This emits:
 
 The generated lexer and parser cache a deserialized ATN with `OnceLock` and delegate recognition to `antlr4_runtime`.
 
+## Choose the Kotlin Entry Rule
+
+`antlr4-rust-gen` emits one public parser method for every grammar rule and
+lists those methods in the generated parser rustdoc. Choose the method that
+matches the Kotlin input shape rather than assuming the first rule is always
+right:
+
+- `.kt` compilation units use `parser.kotlin_file()`.
+- `.kts` script-style input uses `parser.script()`.
+
+ANTLR recovery can produce a parse tree even when the wrong entry rule is used,
+but the tree will contain recovered error nodes and diagnostics. When adding a
+new Kotlin input form, confirm the entry rule against the upstream grammar and
+check parser diagnostics.
+
 ## Smoke Crate
 
 Create any Rust crate that depends on this runtime:
