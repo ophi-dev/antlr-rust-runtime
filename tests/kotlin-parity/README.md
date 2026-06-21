@@ -18,6 +18,7 @@ needed.
 | --- | --- |
 | `snippets/01-nested-types.kt` | nested `interface` / `companion object` / `enum class` with a trailing comma / `sealed class` with inheritance call. Exercises the speculative recognizer's greedy loop tie-breaking on `(enumEntry NL*)+`, FIRST-set lookahead pruning across deeply nested rule alternatives, and left-recursive boundary folding under `expression`. |
 | `snippets/02-dataframe.kt` | imports with wildcards, `@DataSchema` annotation, a `dataFrameOf("int")(1).group { int }.into("group").cast<B>(verify = false)` builder chain with a string literal arg, generic type arguments, and indexed access `df[0].group.int`. Exercises the lexer mode stack (string `"..."` open/close inside `(...)` parens — `popMode` must scope back to the right outer mode), function-call chains with multiple parenthesized argument lists, and named arguments. |
+| `snippets/03-string-templates.kt` | line string templates with `${foo()}`, suffix text after `}`, and following declarations. Regresses the Kotlin `RCURL` mode-pop path: the generated lexer must return to line-string mode after `}` so template suffix text and later statements are tokenized correctly. |
 
 Add new snippets by dropping `.kt` files into `snippets/`; the harness picks
 them up automatically.

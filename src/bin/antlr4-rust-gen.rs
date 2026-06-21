@@ -22,9 +22,9 @@ use rust_names::{
 };
 use templates::{
     is_after_action, is_definitions_action, is_init_action, is_members_action, is_options_block,
-    matching_template_close, named_action_templates, next_parser_action_block,
-    next_predicate_action_block, next_template_block, parse_template_string,
-    split_template_arguments, template_sequence_bodies,
+    matching_action_brace, matching_template_close, named_action_templates,
+    next_parser_action_block, next_predicate_action_block, next_template_block,
+    parse_template_string, split_template_arguments, template_sequence_bodies,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -279,6 +279,7 @@ fn render_lexer(
         |source| lexer_predicate_templates(data, source),
     )?;
     let adjusts_accept_position = grammar_source.is_some_and(uses_position_adjusting_lexer);
+    let has_action_dispatch = lexer_actions_need_dispatch(&actions);
     let action_method = render_lexer_action_method(&actions);
     let predicate_method = render_lexer_predicate_method(&predicates);
     let accept_adjust_method = if adjusts_accept_position {
@@ -287,7 +288,7 @@ fn render_lexer(
         String::new()
     };
     let next_token_call = match (
-        actions.is_empty(),
+        !has_action_dispatch,
         predicates.is_empty(),
         adjusts_accept_position,
     ) {
@@ -4188,6 +4189,11 @@ enum ActionTemplate {
         member: String,
         newline: bool,
     },
+    LexerPopMode,
+    UnsupportedLexerAction {
+        rule_name: String,
+        body: String,
+    },
     Sequence(Vec<Self>),
 }
 
@@ -4320,31 +4326,126 @@ fn lexer_action_templates(
     data: &InterpData,
     grammar_source: &str,
 ) -> io::Result<Vec<((i32, i32), ActionTemplate)>> {
-    let templates = extract_supported_action_templates(grammar_source)?;
-    if templates.is_empty() {
-        return Ok(Vec::new());
-    }
     let actions = lexer_custom_actions(data)?;
     if actions.is_empty() {
         return Ok(Vec::new());
     }
+    let templates = extract_lexer_action_templates(grammar_source, &data.rule_names);
     if actions.len() == templates.len() {
         return Ok(actions.into_iter().zip(templates).collect());
     }
+    Err(io::Error::new(
+        io::ErrorKind::InvalidData,
+        format!(
+            "lexer ATN has {} custom action(s), but grammar source yielded {} lexer action template(s)",
+            actions.len(),
+            templates.len()
+        ),
+    ))
+}
 
-    let filtered_templates =
-        extract_supported_rule_action_templates(grammar_source, &data.rule_names)?;
-    if actions.len() != filtered_templates.len() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!(
-                "grammar has {} supported action template(s), but lexer ATN has {} custom action(s)",
-                filtered_templates.len(),
-                actions.len()
-            ),
+/// Extracts lexer action templates in the same source order ANTLR uses for
+/// custom lexer-action indexes.
+fn extract_lexer_action_templates(
+    grammar_source: &str,
+    rule_names: &[String],
+) -> Vec<ActionTemplate> {
+    let mut actions = Vec::new();
+    let mut offset = 0;
+    while let Some(block) = next_action_block(grammar_source, offset) {
+        offset = block.after_brace;
+        if block.predicate
+            || !rule_action_included(grammar_source, block.open_brace, Some(rule_names))
+            || is_after_action(grammar_source, block.open_brace)
+            || is_init_action(grammar_source, block.open_brace)
+            || is_definitions_action(grammar_source, block.open_brace)
+            || is_members_action(grammar_source, block.open_brace)
+            || is_options_block(grammar_source, block.open_brace)
+        {
+            continue;
+        }
+        let template = parse_lexer_action_block_template(block.body).unwrap_or_else(|| {
+            unsupported_lexer_action_template(grammar_source, block.open_brace, block.body)
+        });
+        actions.push(resolve_action_template_labels(
+            template,
+            grammar_source,
+            block.open_brace,
         ));
     }
-    Ok(actions.into_iter().zip(filtered_templates).collect())
+    actions
+}
+
+fn parse_lexer_action_block_template(body: &str) -> Option<ActionTemplate> {
+    parse_action_block_template(body).or_else(|| parse_lexer_pop_mode_action(body))
+}
+
+fn parse_lexer_pop_mode_action(body: &str) -> Option<ActionTemplate> {
+    let body = body
+        .chars()
+        .filter(|ch| !ch.is_ascii_whitespace() && *ch != ';')
+        .collect::<String>();
+    matches!(
+        body.as_str(),
+        "popMode()"
+            | "this.popMode()"
+            | "if(!_modeStack.isEmpty()){popMode()}"
+            | "if(!this._modeStack.isEmpty()){popMode()}"
+            | "if(!_modeStack.isEmpty())popMode()"
+            | "if(!this._modeStack.isEmpty())popMode()"
+    )
+    .then_some(ActionTemplate::LexerPopMode)
+}
+
+fn unsupported_lexer_action_template(
+    source: &str,
+    open_brace: usize,
+    body: &str,
+) -> ActionTemplate {
+    let rule = statement_rule_header(source, open_brace).map_or("<unknown>", |header| header.name);
+    ActionTemplate::UnsupportedLexerAction {
+        rule_name: rule.to_owned(),
+        body: one_line_action_body(body),
+    }
+}
+
+fn one_line_action_body(body: &str) -> String {
+    const ACTION_SUMMARY_LIMIT: usize = 96;
+
+    let mut out = String::new();
+    for (index, part) in body.split_whitespace().enumerate() {
+        if index > 0 {
+            out.push(' ');
+        }
+        out.push_str(part);
+        if out.len() > ACTION_SUMMARY_LIMIT {
+            let mut limit = ACTION_SUMMARY_LIMIT;
+            while !out.is_char_boundary(limit) {
+                limit -= 1;
+            }
+            out.truncate(limit);
+            out.push_str("...");
+            break;
+        }
+    }
+    out
+}
+
+fn rust_block_comment_text(value: &str) -> String {
+    let mut out = String::new();
+    let mut cursor = 0;
+    while let Some(relative_index) = value[cursor..].find("*/") {
+        let index = cursor + relative_index;
+        out.push_str(&value[cursor..index]);
+        out.push_str("* /");
+        cursor = index + 2;
+    }
+    if cursor == 0 {
+        value.to_owned()
+    } else {
+        out.push_str(&value[cursor..]);
+        out
+    }
 }
 
 /// Pairs supported lexer semantic predicates with serialized predicate
@@ -4630,6 +4731,103 @@ fn rule_action_included(source: &str, position: usize, rule_names: Option<&[Stri
     };
     rule_names.is_none_or(|names| names.iter().any(|name| name == header.name))
         && !has_prior_rule_definition(source, header.name, header.start)
+}
+
+fn next_action_block(source: &str, offset: usize) -> Option<templates::TemplateBlock<'_>> {
+    let open_brace = find_action_open_brace(source, offset)?;
+    let close_brace = matching_action_brace(source, open_brace + 1)?;
+    let after_brace = close_brace + 1;
+    Some(templates::TemplateBlock {
+        open_brace,
+        body: &source[open_brace + 1..close_brace],
+        after_brace,
+        predicate: source[after_brace..].trim_start().starts_with('?'),
+    })
+}
+
+fn find_action_open_brace(source: &str, offset: usize) -> Option<usize> {
+    let mut index = offset;
+    let mut single_quoted = false;
+    let mut double_quoted = false;
+    let mut escaped = false;
+    let mut line_comment = false;
+    let mut block_comment = false;
+    let mut char_set = false;
+    while let Some(ch) = source[index..].chars().next() {
+        let size = ch.len_utf8();
+        if line_comment {
+            line_comment = ch != '\n';
+            index += size;
+            continue;
+        }
+        if block_comment {
+            if source.as_bytes().get(index..index + 2) == Some(b"*/") {
+                block_comment = false;
+                index += 2;
+            } else {
+                index += size;
+            }
+            continue;
+        }
+        if char_set {
+            match ch {
+                _ if escaped => escaped = false,
+                '\\' => escaped = true,
+                ']' => char_set = false,
+                _ => {}
+            }
+            index += size;
+            continue;
+        }
+        if escaped {
+            escaped = false;
+            index += size;
+            continue;
+        }
+        if single_quoted {
+            match ch {
+                '\\' => escaped = true,
+                '\'' => single_quoted = false,
+                _ => {}
+            }
+            index += size;
+            continue;
+        }
+        if double_quoted {
+            match ch {
+                '\\' => escaped = true,
+                '"' => double_quoted = false,
+                _ => {}
+            }
+            index += size;
+            continue;
+        }
+        match ch {
+            '/' if source.as_bytes().get(index..index + 2) == Some(b"//") => {
+                line_comment = true;
+                index += 2;
+            }
+            '/' if source.as_bytes().get(index..index + 2) == Some(b"/*") => {
+                block_comment = true;
+                index += 2;
+            }
+            '\'' => {
+                single_quoted = true;
+                index += size;
+            }
+            '"' => {
+                double_quoted = true;
+                index += size;
+            }
+            '[' => {
+                char_set = true;
+                index += size;
+            }
+            '{' => return Some(index),
+            _ => index += size,
+        }
+    }
+    None
 }
 
 /// Finds grammar predicate templates in the same order as ANTLR serializes
@@ -5914,7 +6112,9 @@ fn render_inline_parser_action_statement(
         | ActionTemplate::TokenDisplay { .. }
         | ActionTemplate::ExpectedTokenNames { .. }
         | ActionTemplate::Literal { .. }
-        | ActionTemplate::MemberValue { .. } => Ok(String::new()),
+        | ActionTemplate::MemberValue { .. }
+        | ActionTemplate::UnsupportedLexerAction { .. }
+        | ActionTemplate::LexerPopMode => Ok(String::new()),
     }
 }
 
@@ -6022,7 +6222,9 @@ fn collect_return_actions(
         | ActionTemplate::Literal { .. }
         | ActionTemplate::SetMember { .. }
         | ActionTemplate::AddMember { .. }
-        | ActionTemplate::MemberValue { .. } => {}
+        | ActionTemplate::MemberValue { .. }
+        | ActionTemplate::UnsupportedLexerAction { .. }
+        | ActionTemplate::LexerPopMode => {}
     }
 }
 
@@ -6071,7 +6273,9 @@ fn collect_member_actions(
         | ActionTemplate::ExpectedTokenNames { .. }
         | ActionTemplate::Literal { .. }
         | ActionTemplate::SetMember { .. }
-        | ActionTemplate::MemberValue { .. } => {}
+        | ActionTemplate::MemberValue { .. }
+        | ActionTemplate::UnsupportedLexerAction { .. }
+        | ActionTemplate::LexerPopMode => {}
     }
     Ok(())
 }
@@ -6133,6 +6337,20 @@ fn render_lexer_action_method(actions: &[((i32, i32), ActionTemplate)]) -> Strin
     if actions.is_empty() {
         return String::new();
     }
+    let mut comments = String::new();
+    for (_, template) in actions {
+        if let ActionTemplate::UnsupportedLexerAction { rule_name, body } = template {
+            writeln!(
+                comments,
+                "    {}",
+                render_unsupported_lexer_action_comment(rule_name, body)
+            )
+            .expect("writing to a string cannot fail");
+        }
+    }
+    if !lexer_actions_need_dispatch(actions) {
+        return comments;
+    }
     let mut arms = String::new();
     for ((rule_index, action_index), template) in actions {
         let statement = render_lexer_action_statement(template);
@@ -6144,8 +6362,15 @@ fn render_lexer_action_method(actions: &[((i32, i32), ActionTemplate)]) -> Strin
     }
     arms.push_str("            _ => {}\n");
     format!(
-        "    fn run_action(_base: &mut BaseLexer<I>, action: antlr4_runtime::LexerCustomAction) {{\n        match (action.rule_index(), action.action_index()) {{\n{arms}        }}\n    }}\n"
+        "{comments}    fn run_action(_base: &mut BaseLexer<I>, action: antlr4_runtime::LexerCustomAction) {{\n        match (action.rule_index(), action.action_index()) {{\n{arms}        }}\n    }}\n"
     )
+}
+
+fn lexer_actions_need_dispatch(actions: &[((i32, i32), ActionTemplate)]) -> bool {
+    actions.iter().any(|(_, template)| match template {
+        ActionTemplate::UnsupportedLexerAction { .. } => false,
+        _ => !render_lexer_action_statement(template).is_empty(),
+    })
 }
 
 /// Renders one supported lexer target-template action as Rust code.
@@ -6192,6 +6417,10 @@ fn render_lexer_action_statement(template: &ActionTemplate) -> String {
         ActionTemplate::SetMember { .. } => String::new(),
         ActionTemplate::AddMember { .. } => String::new(),
         ActionTemplate::MemberValue { .. } => String::new(),
+        ActionTemplate::LexerPopMode => "_base.pop_mode();".to_owned(),
+        ActionTemplate::UnsupportedLexerAction { rule_name, body } => {
+            render_unsupported_lexer_action_comment(rule_name, body)
+        }
         ActionTemplate::Sequence(actions) => actions
             .iter()
             .map(render_lexer_action_statement)
@@ -6202,6 +6431,14 @@ fn render_lexer_action_statement(template: &ActionTemplate) -> String {
             format!("{write}(\"{}\");", rust_string(value))
         }
     }
+}
+
+fn render_unsupported_lexer_action_comment(rule_name: &str, body: &str) -> String {
+    format!(
+        "/* TODO unsupported embedded lexer action in rule {}: {{{}}}; rewrite target-specific actions as portable lexer commands where possible */",
+        rust_block_comment_text(rule_name),
+        rust_block_comment_text(body)
+    )
 }
 
 /// Emits the generated lexer predicate dispatcher for grammar-specific
@@ -6427,6 +6664,8 @@ fn render_action_statement(
                 "{write}(\"{{}}\", self.base.int_member({member}).unwrap_or_default());"
             ))
         }
+        ActionTemplate::UnsupportedLexerAction { .. } => Ok(String::new()),
+        ActionTemplate::LexerPopMode => Ok(String::new()),
         ActionTemplate::Sequence(actions) => {
             let mut rendered = Vec::with_capacity(actions.len());
             for action in actions {
@@ -6534,7 +6773,9 @@ fn render_parser_after_action_statement(template: &ActionTemplate, rule_index: u
         ActionTemplate::SetIntReturn { .. }
         | ActionTemplate::SetMember { .. }
         | ActionTemplate::AddMember { .. }
-        | ActionTemplate::MemberValue { .. } => String::new(),
+        | ActionTemplate::MemberValue { .. }
+        | ActionTemplate::UnsupportedLexerAction { .. }
+        | ActionTemplate::LexerPopMode => String::new(),
         ActionTemplate::Sequence(actions) => actions
             .iter()
             .map(|action| render_parser_after_action_statement(action, rule_index))
@@ -9449,6 +9690,103 @@ continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#,
                 text: "var".to_owned(),
             })
         );
+    }
+
+    #[test]
+    fn maps_kotlin_rcurl_java_action_to_lexer_pop_mode() {
+        for body in [
+            "popMode()",
+            "popMode();",
+            "this.popMode()",
+            "this.popMode();",
+            "if (!_modeStack.isEmpty()) { popMode(); }",
+            "if (!this._modeStack.isEmpty()) { popMode(); }",
+            "if (!_modeStack.isEmpty()) popMode()",
+            "if (!this._modeStack.isEmpty()) popMode();",
+        ] {
+            assert_eq!(
+                parse_lexer_pop_mode_action(body),
+                Some(ActionTemplate::LexerPopMode),
+                "{body}"
+            );
+        }
+
+        let grammar = r#"
+lexer grammar KotlinLexer;
+
+LCURL: '{' -> pushMode(DEFAULT_MODE);
+RCURL: '}' { if (!_modeStack.isEmpty()) { popMode(); } };
+LineStrRef: '${' -> pushMode(DEFAULT_MODE);
+"#;
+        let rule_names = vec![
+            "LCURL".to_owned(),
+            "RCURL".to_owned(),
+            "LineStrRef".to_owned(),
+        ];
+
+        let actions = extract_lexer_action_templates(grammar, &rule_names);
+
+        assert_eq!(actions, [ActionTemplate::LexerPopMode]);
+        let method = render_lexer_action_method(&[((1, 0), actions[0].clone())]);
+        assert!(method.contains("fn run_action"));
+        assert!(method.contains("_base.pop_mode();"));
+    }
+
+    #[test]
+    fn lexer_action_scan_ignores_braces_inside_character_sets() {
+        let grammar = r#"
+lexer grammar L;
+
+LETTER: [\p{L}{}]+;
+ESCAPED_RBRACK: [\]]+;
+RCURL: '}' { popMode(); };
+"#;
+        let rule_names = vec![
+            "LETTER".to_owned(),
+            "ESCAPED_RBRACK".to_owned(),
+            "RCURL".to_owned(),
+        ];
+
+        let actions = extract_lexer_action_templates(grammar, &rule_names);
+
+        assert_eq!(actions, [ActionTemplate::LexerPopMode]);
+    }
+
+    #[test]
+    fn unsupported_lexer_action_renders_todo_marker() {
+        let grammar = r#"
+lexer grammar L;
+
+ID: [a-z]+ { customJava(); };
+"#;
+        let rule_names = vec!["ID".to_owned()];
+
+        let actions = extract_lexer_action_templates(grammar, &rule_names);
+
+        assert_eq!(
+            actions,
+            [ActionTemplate::UnsupportedLexerAction {
+                rule_name: "ID".to_owned(),
+                body: "customJava();".to_owned(),
+            }]
+        );
+        assert_eq!(
+            render_lexer_action_statement(&actions[0]),
+            "/* TODO unsupported embedded lexer action in rule ID: {customJava();}; rewrite target-specific actions as portable lexer commands where possible */"
+        );
+        let method = render_lexer_action_method(&[((1, 0), actions[0].clone())]);
+        assert!(method.contains("TODO unsupported embedded lexer action in rule ID"));
+        assert!(!method.contains("fn run_action"));
+        assert_eq!(rust_block_comment_text("a */ b"), "a * / b");
+    }
+
+    #[test]
+    fn lexer_action_diagnostic_summary_truncates_on_char_boundary() {
+        let body = format!("{}\u{00e9} tail", "a".repeat(95));
+
+        let summary = one_line_action_body(&body);
+
+        assert_eq!(summary, format!("{}...", "a".repeat(95)));
     }
 
     fn linear_rule_atn() -> Atn {
