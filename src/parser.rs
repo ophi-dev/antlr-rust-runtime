@@ -2064,6 +2064,15 @@ struct FastRecognizeRequest {
     recovery_state: Option<usize>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct FastRecognizeTopRequest {
+    start_state: usize,
+    stop_state: usize,
+    start_index: usize,
+    precedence: i32,
+    caller_follow_state: Option<usize>,
+}
+
 /// Memo key for the fast recognizer. `recovery_symbols` must come from
 /// `intern_recovery_symbols` or `empty_recovery_symbols` before it reaches this
 /// key, so equal sets share one allocation and the key can store that
@@ -3671,10 +3680,17 @@ where
         let start_index = self.current_visible_index();
         self.clear_prediction_diagnostics();
         self.reset_per_parse_caches();
+        let caller_follow_state = self.pending_invoking_follow_state(atn);
         self.fast_recovery_enabled = false;
         self.fast_token_nodes_enabled = false;
-        let first_pass =
-            self.fast_recognize_top(atn, start_state, stop_state, start_index, precedence);
+        let top_request = FastRecognizeTopRequest {
+            start_state,
+            stop_state,
+            start_index,
+            precedence,
+            caller_follow_state,
+        };
+        let first_pass = self.fast_recognize_top(atn, top_request);
         self.fast_token_nodes_enabled = true;
         self.fast_recovery_enabled = true;
         let needs_tree_retry = matches!(
@@ -3699,8 +3715,7 @@ where
         };
         let (outcome, _expected) = if needs_retry {
             self.fast_first_set_prefilter = false;
-            let retry =
-                self.fast_recognize_top(atn, start_state, stop_state, start_index, precedence);
+            let retry = self.fast_recognize_top(atn, top_request);
             self.fast_first_set_prefilter = true;
             let selected = if needs_tree_retry {
                 match retry {
@@ -3719,7 +3734,6 @@ where
         } else {
             first_pass.expect("first_pass is Ok in the no-retry branch")
         };
-
         self.record_syntax_errors(outcome.diagnostics.len());
         report_parser_diagnostics(&self.prediction_diagnostics);
         report_parser_diagnostics(&outcome.diagnostics);
@@ -3780,6 +3794,32 @@ where
         Ok(self.rule_node(context))
     }
 
+    fn pending_invoking_follow_state(&self, atn: &Atn) -> Option<usize> {
+        let invoking_state = self.pending_invoking_states.last().copied()?;
+        let state_number = usize::try_from(invoking_state).ok()?;
+        match atn.state(state_number)?.transitions.first()? {
+            Transition::Rule { follow_state, .. } => Some(*follow_state),
+            _ => None,
+        }
+    }
+
+    fn caller_follow_token_info(&mut self, index: usize) -> (i32, bool, bool) {
+        // Generated callers own statement separators; leave them available when
+        // an interpreted child rule can either stop before or consume one.
+        let token_type = self.token_type_at(index);
+        let visible_channel = self.input.channel();
+        let token = self.token_at(index);
+        let is_boundary = token
+            .as_ref()
+            .and_then(Token::text)
+            .is_some_and(is_caller_follow_boundary_text);
+        let is_boundary_gap = token.as_ref().is_some_and(|token| {
+            token.channel() != visible_channel
+                || token.text().is_some_and(is_caller_follow_boundary_gap_text)
+        });
+        (token_type, is_boundary, is_boundary_gap)
+    }
+
     /// Runs the fast recognizer once from the rule's start state and returns
     /// the best outcome or the per-attempt expected-token accumulator. The
     /// caller flips `fast_first_set_prefilter` between calls when a retry is
@@ -3787,11 +3827,15 @@ where
     fn fast_recognize_top(
         &mut self,
         atn: &Atn,
-        start_state: usize,
-        stop_state: usize,
-        start_index: usize,
-        precedence: i32,
+        request: FastRecognizeTopRequest,
     ) -> Result<(FastRecognizeOutcome, ExpectedTokens), ExpectedTokens> {
+        let FastRecognizeTopRequest {
+            start_state,
+            stop_state,
+            start_index,
+            precedence,
+            caller_follow_state,
+        } = request;
         // `input.size()` is intentionally only the currently buffered token
         // count here. Do not restore an up-front fill just to size this map:
         // the fixed floor avoids small-input churn, and large inputs grow the
@@ -3827,7 +3871,14 @@ where
             perf_counters::dump();
             perf_counters::reset();
         }
-        match select_best_fast_outcome(outcomes.into_iter(), self.prediction_mode) {
+        let caller_follow =
+            caller_follow_state.map(|state| self.cached_state_expected_token_set(atn, state));
+        match select_best_fast_outcome(
+            outcomes.into_iter(),
+            self.prediction_mode,
+            caller_follow.as_deref(),
+            |index| self.caller_follow_token_info(index),
+        ) {
             Some(outcome) => Ok((outcome, expected)),
             None => Err(expected),
         }
@@ -7126,7 +7177,8 @@ where
     ///
     /// * `rule_first_set_cache` and `decision_lookahead_cache` are pure
     ///   functions of the ATN's state graph.
-    /// * `state_expected_cache`, `rule_stop_reach_cache`, and
+    /// * `state_expected_cache`, `state_expected_token_cache`,
+    ///   `rule_stop_reach_cache`, and
     ///   `recovery_symbols_intern` together form
     ///   the identity invariant that lets `FastRecognizeKey` hash
     ///   `recovery_symbols` by pointer; they have to be cleared in lockstep
@@ -7143,6 +7195,7 @@ where
         self.single_outcome_probe_repeats = 0;
         self.recovery_symbols_intern.clear();
         self.state_expected_cache.clear();
+        self.state_expected_token_cache.clear();
     }
 
     /// Buffers ANTLR-style diagnostic-listener messages for decision states
@@ -7893,6 +7946,15 @@ fn expected_symbol_display(symbol: i32, vocabulary: &Vocabulary) -> String {
     vocabulary.display_name(symbol)
 }
 
+fn is_caller_follow_boundary_text(text: &str) -> bool {
+    text.chars().any(|ch| ch == ';' || ch == '\n')
+        && text.chars().all(|ch| ch.is_whitespace() || ch == ';')
+}
+
+fn is_caller_follow_boundary_gap_text(text: &str) -> bool {
+    text.chars().all(|ch| ch.is_whitespace() || ch == ';')
+}
+
 /// Returns whether `state` belongs to an ANTLR-transformed left-recursive rule.
 /// Inline insertion in those precedence loops can synthesize a missing operand
 /// before an operator and then block the legitimate loop-exit path.
@@ -7906,9 +7968,6 @@ fn state_is_left_recursive_rule(atn: &Atn, state: &AtnState) -> bool {
         .is_some_and(|rule_start| rule_start.left_recursive_rule)
 }
 
-/// Chooses the outermost parse result that consumed the most input.
-///
-/// The recognizer intentionally keeps shorter endpoints available while walking
 /// Picks the better of two `parse_atn_rule` passes (with and without the
 /// FIRST-set prefilter). A clean outcome (no diagnostics) always wins over a
 /// recovered one; among recovered outcomes the second pass is preferred
@@ -7933,29 +7992,73 @@ fn select_better_top_outcome(
     }
 }
 
+/// Chooses the outermost parse result that consumed the most input.
+///
+/// The recognizer intentionally keeps shorter endpoints available while walking
 /// nested rule transitions so callers can satisfy following tokens such as
 /// `expr 'and' expr`. Only the public rule entry commits to one endpoint.
 fn select_best_fast_outcome(
     outcomes: impl Iterator<Item = FastRecognizeOutcome>,
     prediction_mode: PredictionMode,
+    caller_follow: Option<&TokenBitSet>,
+    mut token_info_at: impl FnMut(usize) -> (i32, bool, bool),
 ) -> Option<FastRecognizeOutcome> {
-    outcomes.reduce(|best, outcome| {
+    let mut best = None;
+    let mut best_caller_follow = None;
+    for outcome in outcomes {
+        if matches!(
+            prediction_mode,
+            PredictionMode::Ll | PredictionMode::LlExactAmbigDetection
+        ) && outcome.diagnostics.is_empty()
+            && let Some(follow) = caller_follow
+        {
+            let (token_type, is_boundary, _) = token_info_at(outcome.index);
+            if is_boundary && follow.contains(token_type) {
+                let replace =
+                    best_caller_follow
+                        .as_ref()
+                        .is_none_or(|existing: &FastRecognizeOutcome| {
+                            (outcome.index, outcome.consumed_eof)
+                                < (existing.index, existing.consumed_eof)
+                        });
+                if replace {
+                    best_caller_follow = Some(outcome.clone());
+                }
+            }
+        }
+        let Some(existing) = best else {
+            best = Some(outcome);
+            continue;
+        };
         let outcome_position = (outcome.index, outcome.consumed_eof);
-        let best_position = (best.index, best.consumed_eof);
+        let best_position = (existing.index, existing.consumed_eof);
         let better = match prediction_mode {
             PredictionMode::Ll | PredictionMode::LlExactAmbigDetection => outcome_is_better(
                 outcome_position,
                 &outcome.diagnostics,
                 best_position,
-                &best.diagnostics,
+                &existing.diagnostics,
             ),
-            PredictionMode::Sll => outcome.index > best.index,
+            PredictionMode::Sll => outcome.index > existing.index,
         };
-        if better {
-            return outcome;
-        }
+        best = Some(if better { outcome } else { existing });
+    }
+    let should_use_caller_follow =
+        best_caller_follow
+            .as_ref()
+            .zip(best.as_ref())
+            .is_some_and(|(candidate, selected)| {
+                if !selected.diagnostics.is_empty() {
+                    return true;
+                }
+                candidate.index < selected.index
+                    && (candidate.index..selected.index).all(|index| token_info_at(index).2)
+            });
+    if should_use_caller_follow {
+        best_caller_follow
+    } else {
         best
-    })
+    }
 }
 
 fn select_best_outcome(
@@ -9810,6 +9913,8 @@ mod tests {
         let selected = select_best_fast_outcome(
             [first.clone(), second.clone()].into_iter(),
             PredictionMode::Sll,
+            None,
+            |_| panic!("caller-follow token probe should not run"),
         )
         .expect("one outcome should be selected");
         assert_eq!(selected.diagnostics.len(), 1);
@@ -9819,13 +9924,182 @@ mod tests {
             diagnostics: FastDiagnostics::new(),
             nodes: NodeList::new(),
         };
-        let selected =
-            select_best_fast_outcome([first.clone(), eof_second].into_iter(), PredictionMode::Sll)
-                .expect("one outcome should be selected");
+        let selected = select_best_fast_outcome(
+            [first.clone(), eof_second].into_iter(),
+            PredictionMode::Sll,
+            None,
+            |_| panic!("caller-follow token probe should not run"),
+        )
+        .expect("one outcome should be selected");
         assert!(!selected.consumed_eof);
-        let selected = select_best_fast_outcome([first, second].into_iter(), PredictionMode::Ll)
-            .expect("one outcome should be selected");
+        let selected = select_best_fast_outcome(
+            [first, second].into_iter(),
+            PredictionMode::Ll,
+            None,
+            |_| panic!("caller-follow token probe should not run"),
+        )
+        .expect("one outcome should be selected");
         assert!(selected.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn fast_outcome_selection_prefers_generated_caller_follow() {
+        let earlier = FastRecognizeOutcome {
+            index: 7,
+            consumed_eof: false,
+            diagnostics: FastDiagnostics::new(),
+            nodes: NodeList::new(),
+        };
+        let later = FastRecognizeOutcome {
+            index: 8,
+            consumed_eof: false,
+            diagnostics: FastDiagnostics::new(),
+            nodes: NodeList::new(),
+        };
+        let mut follow = TokenBitSet::default();
+        follow.insert(5);
+
+        let selected = select_best_fast_outcome(
+            [later.clone(), earlier.clone()].into_iter(),
+            PredictionMode::Ll,
+            Some(&follow),
+            |index| (if index == 7 { 5 } else { TOKEN_EOF }, index == 7, true),
+        )
+        .expect("one outcome should be selected");
+        assert_eq!(selected.index, 7);
+
+        let selected = select_best_fast_outcome(
+            [later.clone(), earlier.clone()].into_iter(),
+            PredictionMode::Ll,
+            Some(&follow),
+            |index| (if index == 7 { 5 } else { TOKEN_EOF }, false, true),
+        )
+        .expect("one outcome should be selected");
+        assert_eq!(selected.index, 8);
+
+        let indented_next_statement = FastRecognizeOutcome {
+            index: 9,
+            consumed_eof: false,
+            diagnostics: FastDiagnostics::new(),
+            nodes: NodeList::new(),
+        };
+        let selected = select_best_fast_outcome(
+            [indented_next_statement, earlier.clone()].into_iter(),
+            PredictionMode::Ll,
+            Some(&follow),
+            |index| {
+                let is_boundary = index == 7;
+                let is_boundary_gap = matches!(index, 7 | 8);
+                (
+                    if index == 7 { 5 } else { TOKEN_EOF },
+                    is_boundary,
+                    is_boundary_gap,
+                )
+            },
+        )
+        .expect("one outcome should be selected");
+        assert_eq!(selected.index, 7);
+
+        let continuation = FastRecognizeOutcome {
+            index: 10,
+            consumed_eof: false,
+            diagnostics: FastDiagnostics::new(),
+            nodes: NodeList::new(),
+        };
+        let selected = select_best_fast_outcome(
+            [continuation, earlier.clone()].into_iter(),
+            PredictionMode::Ll,
+            Some(&follow),
+            |index| {
+                let is_boundary = matches!(index, 7 | 9);
+                (
+                    if index == 7 { 5 } else { TOKEN_EOF },
+                    is_boundary,
+                    is_boundary,
+                )
+            },
+        )
+        .expect("one outcome should be selected");
+        assert_eq!(selected.index, 10);
+
+        let selected = select_best_fast_outcome(
+            [earlier, later].into_iter(),
+            PredictionMode::Sll,
+            Some(&follow),
+            |_| panic!("caller-follow token probe should not run in SLL mode"),
+        )
+        .expect("one outcome should be selected");
+        assert_eq!(selected.index, 8);
+    }
+
+    #[test]
+    fn caller_follow_boundary_text_requires_separator_shape() {
+        assert!(is_caller_follow_boundary_text(";"));
+        assert!(is_caller_follow_boundary_text("\n"));
+        assert!(is_caller_follow_boundary_text("\r\n  "));
+        assert!(is_caller_follow_boundary_text(";\n"));
+        assert!(!is_caller_follow_boundary_text("\"\"\"line1\nline2\"\"\""));
+        assert!(!is_caller_follow_boundary_text("/* line1\nline2 */"));
+        assert!(!is_caller_follow_boundary_text("identifier"));
+        assert!(is_caller_follow_boundary_gap_text(" \t "));
+        assert!(is_caller_follow_boundary_gap_text("\n  "));
+        assert!(is_caller_follow_boundary_gap_text(";\t"));
+        assert!(!is_caller_follow_boundary_gap_text(
+            "\"\"\"line1\nline2\"\"\""
+        ));
+        assert!(!is_caller_follow_boundary_gap_text("/* line1\nline2 */"));
+    }
+
+    #[test]
+    fn caller_follow_token_info_treats_hidden_tokens_as_boundary_gaps() {
+        let mut parser = mini_parser(vec![
+            CommonToken::new(5).with_text("\n"),
+            CommonToken::new(6)
+                .with_text("// comment\n")
+                .with_channel(HIDDEN_CHANNEL),
+            CommonToken::new(1).with_text("x"),
+            CommonToken::eof("parser-test", 1, 2, 0),
+        ]);
+
+        assert_eq!(parser.caller_follow_token_info(0), (5, true, true));
+        assert_eq!(parser.caller_follow_token_info(1), (6, false, true));
+        assert_eq!(parser.caller_follow_token_info(2), (1, false, false));
+    }
+
+    #[test]
+    fn caller_follow_token_info_uses_stream_visible_channel() {
+        let source = Source {
+            tokens: vec![
+                CommonToken::new(5).with_text("\n").with_channel(2),
+                CommonToken::new(1).with_text("x").with_channel(2),
+                CommonToken::new(6)
+                    .with_text("// comment\n")
+                    .with_channel(HIDDEN_CHANNEL),
+                CommonToken::eof("parser-test", 1, 2, 0),
+            ],
+            index: 0,
+        };
+        let data = RecognizerData::new(
+            "Mini.g4",
+            Vocabulary::new([None, Some("'x'")], [None, Some("X")], [None::<&str>, None]),
+        );
+        let mut parser = BaseParser::new(CommonTokenStream::with_channel(source, 2), data);
+
+        assert_eq!(parser.caller_follow_token_info(0), (5, true, true));
+        assert_eq!(parser.caller_follow_token_info(1), (1, false, false));
+        assert_eq!(parser.caller_follow_token_info(2), (6, false, true));
+    }
+
+    #[test]
+    fn reset_per_parse_caches_clears_state_expected_token_cache() {
+        let atn = token_then_eof_atn();
+        let mut parser = mini_parser(Vec::new());
+
+        let _ = parser.cached_state_expected_token_set(&atn, 0);
+        assert!(!parser.state_expected_token_cache.is_empty());
+
+        parser.reset_per_parse_caches();
+        assert!(parser.state_expected_token_cache.is_empty());
     }
 
     #[test]
