@@ -3837,6 +3837,7 @@ fn render_parser_with_options(
     );
     let parse_convenience = render_parser_parse_convenience(&type_name);
     let base_initialization = render_parser_base_initialization(&int_members);
+    let parser_rustdoc = render_parser_rustdoc(data);
     let mut rule_methods = String::new();
     for (index, rule) in data.rule_names.iter().enumerate() {
         writeln!(
@@ -3879,7 +3880,7 @@ fn atn() -> &'static Atn {{
 
 {parse_convenience}
 
-#[derive(Debug)]
+{parser_rustdoc}#[derive(Debug)]
 pub struct {type_name}<S>
 where
     S: TokenSource,
@@ -7400,6 +7401,42 @@ fn render_with_target_rule(template: &str, rule_index: usize) -> String {
     out
 }
 
+/// Renders the generated parser type rustdoc that surfaces callable rule methods.
+fn render_parser_rustdoc(data: &InterpData) -> String {
+    let method_capacity = data
+        .rule_names
+        .iter()
+        .map(|rule| rule.len() + "/// - `()`\n".len())
+        .sum::<usize>();
+    let mut out = String::with_capacity(256 + method_capacity);
+    writeln!(
+        out,
+        "/// Generated parser. Each grammar rule is exposed as a public method."
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(out, "///").expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "/// Pick the method that matches the grammar's intended top-level rule for"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "/// the input being parsed; the generator cannot infer that semantic choice."
+    )
+    .expect("writing to a string cannot fail");
+    if !data.rule_names.is_empty() {
+        writeln!(out, "///").expect("writing to a string cannot fail");
+        writeln!(out, "/// Available parser entry-rule methods:")
+            .expect("writing to a string cannot fail");
+        for rule in &data.rule_names {
+            writeln!(out, "/// - `{}()`", rust_function_name(rule))
+                .expect("writing to a string cannot fail");
+        }
+    }
+    out
+}
+
 /// Renders static grammar metadata shared by generated lexers and parsers.
 fn render_metadata(grammar_name: &str, data: &InterpData) -> String {
     format!(
@@ -7847,6 +7884,39 @@ atn:
         assert_eq!(rust_function_name("try"), "r#try");
         assert_eq!(rust_function_name("Self"), "r#self");
         assert!(is_rust_keyword("Self"));
+    }
+
+    #[test]
+    fn renders_parser_rustdoc_with_entry_rule_methods() {
+        let data = InterpData {
+            rule_names: vec![
+                "kotlinFile".to_owned(),
+                "script".to_owned(),
+                "try".to_owned(),
+            ],
+            ..InterpData::default()
+        };
+
+        let rendered = render_parser_rustdoc(&data);
+
+        assert!(rendered.contains("Available parser entry-rule methods:"));
+        assert!(rendered.contains("/// - `kotlin_file()`"));
+        assert!(rendered.contains("/// - `script()`"));
+        assert!(rendered.contains("/// - `r#try()`"));
+        assert!(rendered.contains("cannot infer that semantic choice"));
+    }
+
+    #[test]
+    fn generated_parser_rustdoc_is_attached_to_parser_type() {
+        let rendered =
+            render_parser("DemoParser", &minimal_parser_data(), None).expect("parser renders");
+
+        assert!(rendered.contains(
+            "/// Generated parser. Each grammar rule is exposed as a public method.\n///\n/// Pick the method"
+        ));
+        assert!(rendered.contains(
+            "/// Available parser entry-rule methods:\n/// - `s()`\n#[derive(Debug)]\npub struct DemoParser<S>"
+        ));
     }
 
     fn compile_test_parser_rule(
