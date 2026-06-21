@@ -3809,7 +3809,7 @@ where
         self.token_at(index)
             .as_ref()
             .and_then(Token::text)
-            .is_some_and(|text| text == ";" || text.contains('\n'))
+            .is_some_and(is_caller_follow_boundary_text)
     }
 
     fn caller_follow_token_info(&mut self, index: usize) -> (i32, bool) {
@@ -7943,6 +7943,11 @@ fn expected_symbol_display(symbol: i32, vocabulary: &Vocabulary) -> String {
     vocabulary.display_name(symbol)
 }
 
+fn is_caller_follow_boundary_text(text: &str) -> bool {
+    text.chars().any(|ch| ch == ';' || ch == '\n')
+        && text.chars().all(|ch| ch.is_whitespace() || ch == ';')
+}
+
 /// Returns whether `state` belongs to an ANTLR-transformed left-recursive rule.
 /// Inline insertion in those precedence loops can synthesize a missing operand
 /// before an operator and then block the legitimate loop-exit path.
@@ -9958,6 +9963,17 @@ mod tests {
         )
         .expect("one outcome should be selected");
         assert_eq!(selected.index, 8);
+    }
+
+    #[test]
+    fn caller_follow_boundary_text_requires_separator_shape() {
+        assert!(is_caller_follow_boundary_text(";"));
+        assert!(is_caller_follow_boundary_text("\n"));
+        assert!(is_caller_follow_boundary_text("\r\n  "));
+        assert!(is_caller_follow_boundary_text(";\n"));
+        assert!(!is_caller_follow_boundary_text("\"\"\"line1\nline2\"\"\""));
+        assert!(!is_caller_follow_boundary_text("/* line1\nline2 */"));
+        assert!(!is_caller_follow_boundary_text("identifier"));
     }
 
     #[test]
