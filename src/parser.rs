@@ -79,7 +79,9 @@ use crate::errors::AntlrError;
 use crate::int_stream::IntStream;
 use crate::prediction::{EMPTY_RETURN_STATE, PredictionContext};
 use crate::recognizer::{Recognizer, RecognizerData};
-use crate::token::{CommonToken, TOKEN_EOF, Token, TokenRef, TokenSource, TokenSourceError};
+use crate::token::{
+    CommonToken, DEFAULT_CHANNEL, TOKEN_EOF, Token, TokenRef, TokenSource, TokenSourceError,
+};
 use crate::token_stream::CommonTokenStream;
 use crate::tree::{ErrorNode, ParseTree, ParserRuleContext, RuleNode, TerminalNode};
 use crate::vocabulary::Vocabulary;
@@ -3807,16 +3809,15 @@ where
         // Generated callers own statement separators; leave them available when
         // an interpreted child rule can either stop before or consume one.
         let token_type = self.token_type_at(index);
-        let (is_boundary, is_boundary_gap) = self
-            .token_at(index)
+        let token = self.token_at(index);
+        let is_boundary = token
             .as_ref()
             .and_then(Token::text)
-            .map_or((false, false), |text| {
-                (
-                    is_caller_follow_boundary_text(text),
-                    is_caller_follow_boundary_gap_text(text),
-                )
-            });
+            .is_some_and(is_caller_follow_boundary_text);
+        let is_boundary_gap = token.as_ref().is_some_and(|token| {
+            token.channel() != DEFAULT_CHANNEL
+                || token.text().is_some_and(is_caller_follow_boundary_gap_text)
+        });
         (token_type, is_boundary, is_boundary_gap)
     }
 
@@ -10046,6 +10047,22 @@ mod tests {
             "\"\"\"line1\nline2\"\"\""
         ));
         assert!(!is_caller_follow_boundary_gap_text("/* line1\nline2 */"));
+    }
+
+    #[test]
+    fn caller_follow_token_info_treats_hidden_tokens_as_boundary_gaps() {
+        let mut parser = mini_parser(vec![
+            CommonToken::new(5).with_text("\n"),
+            CommonToken::new(6)
+                .with_text("// comment\n")
+                .with_channel(HIDDEN_CHANNEL),
+            CommonToken::new(1).with_text("x"),
+            CommonToken::eof("parser-test", 1, 2, 0),
+        ]);
+
+        assert_eq!(parser.caller_follow_token_info(0), (5, true, true));
+        assert_eq!(parser.caller_follow_token_info(1), (6, false, true));
+        assert_eq!(parser.caller_follow_token_info(2), (1, false, false));
     }
 
     #[test]
