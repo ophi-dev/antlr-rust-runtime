@@ -3908,7 +3908,8 @@ fn render_parser_with_options(
     let parse_convenience = render_parser_parse_convenience(&type_name);
     let base_initialization = render_parser_base_initialization(&int_members);
     let public_rule_method_names = parser_public_rule_method_names(&data.rule_names);
-    let parser_rustdoc = render_parser_rustdoc(&public_rule_method_names);
+    let entry_rule_indices = likely_parser_entry_rule_indices(data)?;
+    let parser_rustdoc = render_parser_rustdoc(&public_rule_method_names, &entry_rule_indices);
     let mut rule_methods = String::new();
     for (index, rule_method_name) in public_rule_method_names.iter().enumerate() {
         writeln!(
@@ -7485,13 +7486,51 @@ fn render_with_target_rule(template: &str, rule_index: usize) -> String {
     out
 }
 
+fn likely_parser_entry_rule_indices(data: &InterpData) -> io::Result<Vec<usize>> {
+    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
+        .deserialize()
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    Ok(likely_parser_entry_rule_indices_from_atn(
+        &atn,
+        data.rule_names.len(),
+    ))
+}
+
+fn likely_parser_entry_rule_indices_from_atn(atn: &Atn, rule_count: usize) -> Vec<usize> {
+    let mut called_by_other_rule = vec![false; rule_count];
+    for state in atn.states() {
+        for transition in &state.transitions {
+            let Transition::Rule { rule_index, .. } = transition else {
+                continue;
+            };
+            if *rule_index >= rule_count || state.rule_index == Some(*rule_index) {
+                continue;
+            }
+            called_by_other_rule[*rule_index] = true;
+        }
+    }
+    called_by_other_rule
+        .iter()
+        .enumerate()
+        .filter_map(|(index, called)| (!called).then_some(index))
+        .collect()
+}
+
 /// Renders the generated parser type rustdoc that surfaces callable rule methods.
-fn render_parser_rustdoc(public_rule_method_names: &[String]) -> String {
-    let method_capacity = public_rule_method_names
+fn render_parser_rustdoc(
+    public_rule_method_names: &[String],
+    entry_rule_indices: &[usize],
+) -> String {
+    let all_method_capacity = public_rule_method_names
         .iter()
         .map(|method| method.len() + "/// - `()`\n".len())
         .sum::<usize>();
-    let mut out = String::with_capacity(256 + method_capacity);
+    let entry_method_capacity = entry_rule_indices
+        .iter()
+        .filter_map(|index| public_rule_method_names.get(*index))
+        .map(|method| method.len() + "/// - `()`\n".len())
+        .sum::<usize>();
+    let mut out = String::with_capacity(384 + all_method_capacity + entry_method_capacity);
     writeln!(
         out,
         "/// Generated parser. Each grammar rule is exposed as a public method."
@@ -7500,18 +7539,41 @@ fn render_parser_rustdoc(public_rule_method_names: &[String]) -> String {
     writeln!(out, "///").expect("writing to a string cannot fail");
     writeln!(
         out,
-        "/// Pick the method that matches the grammar's intended top-level rule for"
+        "/// Pick an entry-rule method that matches the grammar's intended"
     )
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "/// the input being parsed; the generator cannot infer that semantic choice."
+        "/// top-level construct for the input being parsed. The generator can"
     )
     .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "/// identify rules that are not called by another rule, but it cannot"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "/// infer the semantic choice between multiple candidates."
+    )
+    .expect("writing to a string cannot fail");
+    if !entry_rule_indices.is_empty() {
+        writeln!(out, "///").expect("writing to a string cannot fail");
+        writeln!(
+            out,
+            "/// Likely parser entry-rule methods (not called by other rules):"
+        )
+        .expect("writing to a string cannot fail");
+        for index in entry_rule_indices {
+            let Some(method_name) = public_rule_method_names.get(*index) else {
+                continue;
+            };
+            writeln!(out, "/// - `{method_name}()`").expect("writing to a string cannot fail");
+        }
+    }
     if !public_rule_method_names.is_empty() {
         writeln!(out, "///").expect("writing to a string cannot fail");
-        writeln!(out, "/// Available parser entry-rule methods:")
-            .expect("writing to a string cannot fail");
+        writeln!(out, "/// All parser rule methods:").expect("writing to a string cannot fail");
         for method_name in public_rule_method_names {
             writeln!(out, "/// - `{method_name}()`").expect("writing to a string cannot fail");
         }
@@ -7956,8 +8018,8 @@ atn:
 
     #[test]
     fn converts_names_to_rust_identifiers() {
-        assert_eq!(module_name("KotlinLexer"), "kotlin_lexer");
-        assert_eq!(rust_function_name("kotlinFile"), "kotlin_file");
+        assert_eq!(module_name("ExprLexer"), "expr_lexer");
+        assert_eq!(rust_function_name("sourceFile"), "source_file");
         assert_eq!(rust_const_name("LPAREN"), "LPAREN");
         assert_eq!(rust_const_name("Q_COLONCOLON"), "Q_COLONCOLON");
         assert_eq!(rust_const_name("LineStrExprStart"), "LINE_STR_EXPR_START");
@@ -7972,20 +8034,38 @@ atn:
     fn renders_parser_rustdoc_with_entry_rule_methods() {
         let data = InterpData {
             rule_names: vec![
-                "kotlinFile".to_owned(),
+                "sourceFile".to_owned(),
+                "declaration".to_owned(),
                 "script".to_owned(),
                 "try".to_owned(),
             ],
             ..InterpData::default()
         };
+        let entry_rule_indices = vec![0, 2];
 
-        let rendered = render_parser_rustdoc(&parser_public_rule_method_names(&data.rule_names));
+        let rendered = render_parser_rustdoc(
+            &parser_public_rule_method_names(&data.rule_names),
+            &entry_rule_indices,
+        );
 
-        assert!(rendered.contains("Available parser entry-rule methods:"));
-        assert!(rendered.contains("/// - `kotlin_file()`"));
+        assert!(rendered.contains("Likely parser entry-rule methods"));
+        assert!(rendered.contains("/// - `source_file()`"));
         assert!(rendered.contains("/// - `script()`"));
+        assert!(rendered.contains("All parser rule methods:"));
+        assert!(rendered.contains("/// - `declaration()`"));
         assert!(rendered.contains("/// - `r#try()`"));
-        assert!(rendered.contains("cannot infer that semantic choice"));
+        assert!(rendered.contains("cannot"));
+        assert!(rendered.contains("semantic choice"));
+    }
+
+    #[test]
+    fn infers_entry_rule_candidates_from_rule_call_graph() {
+        let atn = entry_candidate_atn();
+
+        assert_eq!(
+            likely_parser_entry_rule_indices_from_atn(&atn, 4),
+            vec![0, 2, 3]
+        );
     }
 
     #[test]
@@ -7994,10 +8074,13 @@ atn:
             render_parser("DemoParser", &minimal_parser_data(), None).expect("parser renders");
 
         assert!(rendered.contains(
-            "/// Generated parser. Each grammar rule is exposed as a public method.\n///\n/// Pick the method"
+            "/// Generated parser. Each grammar rule is exposed as a public method.\n///\n/// Pick an entry-rule method"
         ));
         assert!(rendered.contains(
-            "/// Available parser entry-rule methods:\n/// - `s()`\n#[derive(Debug)]\npub struct DemoParser<S>"
+            "/// Likely parser entry-rule methods (not called by other rules):\n/// - `s()`"
+        ));
+        assert!(rendered.contains(
+            "/// All parser rule methods:\n/// - `s()`\n#[derive(Debug)]\npub struct DemoParser<S>"
         ));
     }
 
@@ -10540,6 +10623,60 @@ ID: [a-z]+ { customJava(); };
         atn.add_decision_state(3);
         atn.set_rule_to_start_state(vec![0]);
         atn.set_rule_to_stop_state(vec![9]);
+        atn
+    }
+
+    fn entry_candidate_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 2);
+        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
+        atn.add_state(AtnState::new(1, AtnStateKind::RuleStop).with_rule_index(0));
+        atn.add_state(AtnState::new(2, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(3, AtnStateKind::RuleStart).with_rule_index(1));
+        atn.add_state(AtnState::new(4, AtnStateKind::RuleStop).with_rule_index(1));
+        atn.add_state(AtnState::new(5, AtnStateKind::RuleStart).with_rule_index(2));
+        atn.add_state(AtnState::new(6, AtnStateKind::RuleStop).with_rule_index(2));
+        atn.add_state(AtnState::new(7, AtnStateKind::Basic).with_rule_index(2));
+        atn.add_state(AtnState::new(8, AtnStateKind::RuleStart).with_rule_index(3));
+        atn.add_state(AtnState::new(9, AtnStateKind::RuleStop).with_rule_index(3));
+        atn.add_state(AtnState::new(10, AtnStateKind::Basic).with_rule_index(3));
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Rule {
+                target: 3,
+                rule_index: 1,
+                follow_state: 2,
+                precedence: 0,
+            });
+        atn.state_mut(2)
+            .expect("state 2")
+            .add_transition(Transition::Epsilon { target: 1 });
+        atn.state_mut(3)
+            .expect("state 3")
+            .add_transition(Transition::Epsilon { target: 4 });
+        atn.state_mut(5)
+            .expect("state 5")
+            .add_transition(Transition::Rule {
+                target: 3,
+                rule_index: 1,
+                follow_state: 7,
+                precedence: 0,
+            });
+        atn.state_mut(7)
+            .expect("state 7")
+            .add_transition(Transition::Epsilon { target: 6 });
+        atn.state_mut(8)
+            .expect("state 8")
+            .add_transition(Transition::Rule {
+                target: 8,
+                rule_index: 3,
+                follow_state: 10,
+                precedence: 0,
+            });
+        atn.state_mut(10)
+            .expect("state 10")
+            .add_transition(Transition::Epsilon { target: 9 });
+        atn.set_rule_to_start_state(vec![0, 3, 5, 8]);
+        atn.set_rule_to_stop_state(vec![1, 4, 6, 9]);
         atn
     }
 
