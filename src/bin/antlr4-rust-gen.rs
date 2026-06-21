@@ -3824,6 +3824,7 @@ fn render_parser_with_options(
         "#[allow(dead_code)]\nconst CTX_ROOTED_ACTION_STATES: &[usize] = &{};\n",
         render_usize_array(&ctx_rooted_action_states.iter().copied().collect::<Vec<_>>())
     );
+    let parse_convenience = render_parser_parse_convenience(&type_name);
     let base_initialization = render_parser_base_initialization(&int_members);
     let mut rule_methods = String::new();
     for (index, rule) in data.rule_names.iter().enumerate() {
@@ -3864,6 +3865,8 @@ fn atn() -> &'static Atn {{
             .expect("generated parser contains a valid ANTLR serialized ATN")
     }})
 }}
+
+{parse_convenience}
 
 #[derive(Debug)]
 pub struct {type_name}<S>
@@ -7348,6 +7351,31 @@ fn render_parser_base_initialization(members: &[IntMemberTemplate]) -> String {
     out
 }
 
+/// Renders the parser-module convenience that wires text input through the
+/// caller-selected lexer, token stream, parser, and entry rule in one call.
+fn render_parser_parse_convenience(type_name: &str) -> String {
+    format!(
+        r#"/// Parses UTF-8 text by constructing the lexer, token stream, parser, and
+/// caller-selected entry rule in one call.
+///
+/// Pass the generated lexer constructor and a parser entry rule, for example
+/// `parse(src, MyGrammarLexer::new, {type_name}::file)`.
+pub fn parse<L, R>(
+    input: impl AsRef<str>,
+    lexer: impl FnOnce(antlr4_runtime::InputStream) -> L,
+    entry: impl FnOnce(&mut {type_name}<L>) -> Result<R, antlr4_runtime::AntlrError>,
+) -> Result<R, antlr4_runtime::AntlrError>
+where
+    L: TokenSource,
+{{
+    let lexer = lexer(antlr4_runtime::InputStream::new(input.as_ref()));
+    let tokens = CommonTokenStream::new(lexer);
+    let mut parser = {type_name}::new(tokens);
+    entry(&mut parser)
+}}"#
+    )
+}
+
 fn member_id(members: &[IntMemberTemplate], name: &str) -> io::Result<usize> {
     members
         .iter()
@@ -8573,6 +8601,18 @@ s : ;
             error.to_string(),
             "generated parser did not emit 1 rule(s): s"
         );
+    }
+
+    #[test]
+    fn renders_parse_convenience_without_replacing_manual_constructor() {
+        let rendered =
+            render_parser("TParser", &minimal_parser_data(), None).expect("parser should render");
+
+        assert!(rendered.contains("pub fn parse<L, R>("));
+        assert!(rendered.contains("lexer: impl FnOnce(antlr4_runtime::InputStream) -> L"));
+        assert!(rendered.contains("antlr4_runtime::InputStream::new(input.as_ref())"));
+        assert!(rendered.contains("let tokens = CommonTokenStream::new(lexer);"));
+        assert!(rendered.contains("pub fn new(input: CommonTokenStream<S>) -> Self"));
     }
 
     #[test]

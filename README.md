@@ -121,7 +121,22 @@ mod generated {
 }
 ```
 
-Call the generated lexer and parser:
+Call the generated parser helper for the compact path:
+
+```rust
+use generated::json::{self, Json};
+use generated::json_lexer::JsonLexer;
+
+fn main() -> Result<(), antlr4_runtime::AntlrError> {
+    let tree = json::parse(r#"{"a":1}"#, JsonLexer::new, Json::json)?;
+
+    println!("{}", tree.text());
+    Ok(())
+}
+```
+
+Or construct each layer explicitly when you need to set source names, parser
+options, or custom error handling before invoking the entry rule:
 
 ```rust
 use antlr4_runtime::{CommonTokenStream, InputStream};

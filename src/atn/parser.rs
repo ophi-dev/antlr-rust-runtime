@@ -1115,8 +1115,8 @@ impl<'a> ParserAtnSimulator<'a> {
                         // ANTLR: stop collecting predicates once an action edge is
                         // crossed, so a predicate after an action is deferred to
                         // parse time rather than evaluated during prediction.
-                        let target_collect_predicates = collect_predicates
-                            && !matches!(transition, Transition::Action { .. });
+                        let target_collect_predicates =
+                            collect_predicates && !matches!(transition, Transition::Action { .. });
                         scratch.stack.push((target, target_collect_predicates));
                     }
                 } else if treat_eof_as_epsilon

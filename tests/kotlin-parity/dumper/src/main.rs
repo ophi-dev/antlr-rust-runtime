@@ -15,7 +15,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
 
-use antlr4_runtime::{CommonTokenStream, InputStream, ParseTree};
+use antlr4_runtime::{InputStream, ParseTree};
 
 mod generated {
     #![allow(dead_code, unused_imports, unreachable_pub, unused_qualifications)]
@@ -95,18 +95,21 @@ fn main() -> ExitCode {
     let mut min_us: u128 = u128::MAX;
     let mut total_us: u128 = 0;
     for _ in 0..iters {
-        let lexer = KotlinLexer::new(InputStream::new(&src));
-        let tokens = CommonTokenStream::new(lexer);
-        let mut parser = KotlinParser::new(tokens);
-        let started = Instant::now();
-        let tree = match parser.kotlin_file() {
+        let mut started = None;
+        let tree = match kotlin_parser::parse(&src, KotlinLexer::new, |parser| {
+            started = Some(Instant::now());
+            parser.kotlin_file()
+        }) {
             Ok(tree) => tree,
             Err(err) => {
                 eprintln!("parse failed: {err}");
                 return ExitCode::from(1);
             }
         };
-        let elapsed = started.elapsed().as_micros();
+        let elapsed = started
+            .expect("parse helper should enter the entry rule")
+            .elapsed()
+            .as_micros();
         min_us = min_us.min(elapsed);
         total_us += elapsed;
         last_tree = Some(tree);
