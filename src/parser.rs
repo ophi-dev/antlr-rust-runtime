@@ -79,9 +79,7 @@ use crate::errors::AntlrError;
 use crate::int_stream::IntStream;
 use crate::prediction::{EMPTY_RETURN_STATE, PredictionContext};
 use crate::recognizer::{Recognizer, RecognizerData};
-use crate::token::{
-    CommonToken, DEFAULT_CHANNEL, TOKEN_EOF, Token, TokenRef, TokenSource, TokenSourceError,
-};
+use crate::token::{CommonToken, TOKEN_EOF, Token, TokenRef, TokenSource, TokenSourceError};
 use crate::token_stream::CommonTokenStream;
 use crate::tree::{ErrorNode, ParseTree, ParserRuleContext, RuleNode, TerminalNode};
 use crate::vocabulary::Vocabulary;
@@ -3809,13 +3807,14 @@ where
         // Generated callers own statement separators; leave them available when
         // an interpreted child rule can either stop before or consume one.
         let token_type = self.token_type_at(index);
+        let visible_channel = self.input.channel();
         let token = self.token_at(index);
         let is_boundary = token
             .as_ref()
             .and_then(Token::text)
             .is_some_and(is_caller_follow_boundary_text);
         let is_boundary_gap = token.as_ref().is_some_and(|token| {
-            token.channel() != DEFAULT_CHANNEL
+            token.channel() != visible_channel
                 || token.text().is_some_and(is_caller_follow_boundary_gap_text)
         });
         (token_type, is_boundary, is_boundary_gap)
@@ -7178,7 +7177,8 @@ where
     ///
     /// * `rule_first_set_cache` and `decision_lookahead_cache` are pure
     ///   functions of the ATN's state graph.
-    /// * `state_expected_cache`, `rule_stop_reach_cache`, and
+    /// * `state_expected_cache`, `state_expected_token_cache`,
+    ///   `rule_stop_reach_cache`, and
     ///   `recovery_symbols_intern` together form
     ///   the identity invariant that lets `FastRecognizeKey` hash
     ///   `recovery_symbols` by pointer; they have to be cleared in lockstep
@@ -7195,6 +7195,7 @@ where
         self.single_outcome_probe_repeats = 0;
         self.recovery_symbols_intern.clear();
         self.state_expected_cache.clear();
+        self.state_expected_token_cache.clear();
     }
 
     /// Buffers ANTLR-style diagnostic-listener messages for decision states
@@ -10063,6 +10064,42 @@ mod tests {
         assert_eq!(parser.caller_follow_token_info(0), (5, true, true));
         assert_eq!(parser.caller_follow_token_info(1), (6, false, true));
         assert_eq!(parser.caller_follow_token_info(2), (1, false, false));
+    }
+
+    #[test]
+    fn caller_follow_token_info_uses_stream_visible_channel() {
+        let source = Source {
+            tokens: vec![
+                CommonToken::new(5).with_text("\n").with_channel(2),
+                CommonToken::new(1).with_text("x").with_channel(2),
+                CommonToken::new(6)
+                    .with_text("// comment\n")
+                    .with_channel(HIDDEN_CHANNEL),
+                CommonToken::eof("parser-test", 1, 2, 0),
+            ],
+            index: 0,
+        };
+        let data = RecognizerData::new(
+            "Mini.g4",
+            Vocabulary::new([None, Some("'x'")], [None, Some("X")], [None::<&str>, None]),
+        );
+        let mut parser = BaseParser::new(CommonTokenStream::with_channel(source, 2), data);
+
+        assert_eq!(parser.caller_follow_token_info(0), (5, true, true));
+        assert_eq!(parser.caller_follow_token_info(1), (1, false, false));
+        assert_eq!(parser.caller_follow_token_info(2), (6, false, true));
+    }
+
+    #[test]
+    fn reset_per_parse_caches_clears_state_expected_token_cache() {
+        let atn = token_then_eof_atn();
+        let mut parser = mini_parser(Vec::new());
+
+        let _ = parser.cached_state_expected_token_set(&atn, 0);
+        assert!(!parser.state_expected_token_cache.is_empty());
+
+        parser.reset_per_parse_caches();
+        assert!(parser.state_expected_token_cache.is_empty());
     }
 
     #[test]

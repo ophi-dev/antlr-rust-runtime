@@ -278,6 +278,11 @@ where
             .map_or(TOKEN_EOF, |token| token.token_type())
     }
 
+    /// Returns the token channel visible to `LT/LA` operations.
+    pub const fn channel(&self) -> i32 {
+        self.channel
+    }
+
     /// Returns the next parser-visible token index after consuming the token
     /// at `index`, skipping hidden-channel tokens. The parser's stream cursor
     /// is not modified. Used by speculative recognition that simulates token
