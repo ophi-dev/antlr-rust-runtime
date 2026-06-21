@@ -4332,6 +4332,7 @@ fn lexer_action_templates(
     }
     let templates = extract_lexer_action_templates(grammar_source, &data.rule_names);
     if actions.len() == templates.len() {
+        reject_mixed_lexer_action_templates(&templates)?;
         return Ok(actions.into_iter().zip(templates).collect());
     }
     Err(io::Error::new(
@@ -4374,6 +4375,26 @@ fn extract_lexer_action_templates(
         ));
     }
     actions
+}
+
+fn reject_mixed_lexer_action_templates(actions: &[ActionTemplate]) -> io::Result<()> {
+    let has_supported_dispatch = actions.iter().any(lexer_action_template_needs_dispatch);
+    if !has_supported_dispatch {
+        return Ok(());
+    }
+    if let Some(ActionTemplate::UnsupportedLexerAction { rule_name, body }) = actions
+        .iter()
+        .find(|action| matches!(action, ActionTemplate::UnsupportedLexerAction { .. }))
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "unsupported embedded lexer action in rule {rule_name}: {{{body}}}; \
+                 rewrite target-specific actions as portable lexer commands where possible"
+            ),
+        ));
+    }
+    Ok(())
 }
 
 fn parse_lexer_action_block_template(body: &str) -> Option<ActionTemplate> {
@@ -6367,10 +6388,16 @@ fn render_lexer_action_method(actions: &[((i32, i32), ActionTemplate)]) -> Strin
 }
 
 fn lexer_actions_need_dispatch(actions: &[((i32, i32), ActionTemplate)]) -> bool {
-    actions.iter().any(|(_, template)| match template {
+    actions
+        .iter()
+        .any(|(_, template)| lexer_action_template_needs_dispatch(template))
+}
+
+fn lexer_action_template_needs_dispatch(template: &ActionTemplate) -> bool {
+    match template {
         ActionTemplate::UnsupportedLexerAction { .. } => false,
         _ => !render_lexer_action_statement(template).is_empty(),
-    })
+    }
 }
 
 /// Renders one supported lexer target-template action as Rust code.
@@ -9778,6 +9805,25 @@ ID: [a-z]+ { customJava(); };
         assert!(method.contains("TODO unsupported embedded lexer action in rule ID"));
         assert!(!method.contains("fn run_action"));
         assert_eq!(rust_block_comment_text("a */ b"), "a * / b");
+    }
+
+    #[test]
+    fn mixed_supported_and_unsupported_lexer_actions_fail_generation() {
+        let actions = vec![
+            ActionTemplate::UnsupportedLexerAction {
+                rule_name: "ID".to_owned(),
+                body: "setType(Foo);".to_owned(),
+            },
+            ActionTemplate::LexerPopMode,
+        ];
+
+        let error = reject_mixed_lexer_action_templates(&actions).unwrap_err();
+
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains(
+            "unsupported embedded lexer action in rule ID: {setType(Foo);}; \
+                 rewrite target-specific actions as portable lexer commands where possible"
+        ));
     }
 
     #[test]
