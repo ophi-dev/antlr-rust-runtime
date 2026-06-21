@@ -3879,12 +3879,10 @@ fn render_parser_with_options(
     );
     let parse_convenience = render_parser_parse_convenience(&type_name);
     let base_initialization = render_parser_base_initialization(&int_members);
-    let parser_rustdoc = render_parser_rustdoc(data);
+    let public_rule_method_names = parser_public_rule_method_names(&data.rule_names);
+    let parser_rustdoc = render_parser_rustdoc(&public_rule_method_names);
     let mut rule_methods = String::new();
-    for (index, rule_method_name) in parser_public_rule_method_names(&data.rule_names)
-        .iter()
-        .enumerate()
-    {
+    for (index, rule_method_name) in public_rule_method_names.iter().enumerate() {
         writeln!(
             rule_methods,
             "    pub fn {rule_method_name}(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{"
@@ -7456,11 +7454,10 @@ fn render_with_target_rule(template: &str, rule_index: usize) -> String {
 }
 
 /// Renders the generated parser type rustdoc that surfaces callable rule methods.
-fn render_parser_rustdoc(data: &InterpData) -> String {
-    let method_capacity = data
-        .rule_names
+fn render_parser_rustdoc(public_rule_method_names: &[String]) -> String {
+    let method_capacity = public_rule_method_names
         .iter()
-        .map(|rule| rule.len() + "/// - `()`\n".len())
+        .map(|method| method.len() + "/// - `()`\n".len())
         .sum::<usize>();
     let mut out = String::with_capacity(256 + method_capacity);
     writeln!(
@@ -7479,13 +7476,12 @@ fn render_parser_rustdoc(data: &InterpData) -> String {
         "/// the input being parsed; the generator cannot infer that semantic choice."
     )
     .expect("writing to a string cannot fail");
-    if !data.rule_names.is_empty() {
+    if !public_rule_method_names.is_empty() {
         writeln!(out, "///").expect("writing to a string cannot fail");
         writeln!(out, "/// Available parser entry-rule methods:")
             .expect("writing to a string cannot fail");
-        for rule in &data.rule_names {
-            writeln!(out, "/// - `{}()`", rust_function_name(rule))
-                .expect("writing to a string cannot fail");
+        for method_name in public_rule_method_names {
+            writeln!(out, "/// - `{method_name}()`").expect("writing to a string cannot fail");
         }
     }
     out
@@ -7951,7 +7947,7 @@ atn:
             ..InterpData::default()
         };
 
-        let rendered = render_parser_rustdoc(&data);
+        let rendered = render_parser_rustdoc(&parser_public_rule_method_names(&data.rule_names));
 
         assert!(rendered.contains("Available parser entry-rule methods:"));
         assert!(rendered.contains("/// - `kotlin_file()`"));
@@ -9158,6 +9154,8 @@ s : ;
         assert!(rendered.contains(
             "pub fn token_stream_rule(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError>"
         ));
+        assert!(rendered.contains("/// - `token_stream_rule()`"));
+        assert!(!rendered.contains("/// - `token_stream()`"));
         assert!(!rendered.contains("pub fn token_stream(&mut self)"));
     }
 
