@@ -316,7 +316,7 @@ impl ParserRuleContext {
             ParseTree::Rule(rule) if rule.context().rule_index() == rule_index => {
                 Some(rule.context())
             }
-            ParseTree::Rule(_) | ParseTree::Terminal(_) | ParseTree::Error(_) => None,
+            _ => None,
         })
     }
 
@@ -324,7 +324,7 @@ impl ParserRuleContext {
     pub fn child_token(&self, token_type: i32) -> Option<&TerminalNode> {
         self.children.iter().find_map(|child| match child {
             ParseTree::Terminal(node) if node.symbol().token_type() == token_type => Some(node),
-            ParseTree::Rule(_) | ParseTree::Terminal(_) | ParseTree::Error(_) => None,
+            _ => None,
         })
     }
 
