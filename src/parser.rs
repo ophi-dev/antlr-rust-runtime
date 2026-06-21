@@ -7999,24 +7999,24 @@ fn select_best_fast_outcome(
     let mut best = None;
     let mut best_caller_follow = None;
     for outcome in outcomes {
-        let (token_type, is_boundary) = token_info_at(outcome.index);
         if matches!(
             prediction_mode,
             PredictionMode::Ll | PredictionMode::LlExactAmbigDetection
         ) && outcome.diagnostics.is_empty()
             && let Some(follow) = caller_follow
-            && is_boundary
-            && follow.contains(token_type)
         {
-            let replace =
-                best_caller_follow
-                    .as_ref()
-                    .is_none_or(|existing: &FastRecognizeOutcome| {
-                        (outcome.index, outcome.consumed_eof)
-                            < (existing.index, existing.consumed_eof)
-                    });
-            if replace {
-                best_caller_follow = Some(outcome.clone());
+            let (token_type, is_boundary) = token_info_at(outcome.index);
+            if is_boundary && follow.contains(token_type) {
+                let replace =
+                    best_caller_follow
+                        .as_ref()
+                        .is_none_or(|existing: &FastRecognizeOutcome| {
+                            (outcome.index, outcome.consumed_eof)
+                                < (existing.index, existing.consumed_eof)
+                        });
+                if replace {
+                    best_caller_follow = Some(outcome.clone());
+                }
             }
         }
         let Some(existing) = best else {
@@ -9892,7 +9892,7 @@ mod tests {
             [first.clone(), second.clone()].into_iter(),
             PredictionMode::Sll,
             None,
-            |_| (TOKEN_EOF, false),
+            |_| panic!("caller-follow token probe should not run"),
         )
         .expect("one outcome should be selected");
         assert_eq!(selected.diagnostics.len(), 1);
@@ -9906,7 +9906,7 @@ mod tests {
             [first.clone(), eof_second].into_iter(),
             PredictionMode::Sll,
             None,
-            |_| (TOKEN_EOF, false),
+            |_| panic!("caller-follow token probe should not run"),
         )
         .expect("one outcome should be selected");
         assert!(!selected.consumed_eof);
@@ -9914,7 +9914,7 @@ mod tests {
             [first, second].into_iter(),
             PredictionMode::Ll,
             None,
-            |_| (TOKEN_EOF, false),
+            |_| panic!("caller-follow token probe should not run"),
         )
         .expect("one outcome should be selected");
         assert!(selected.diagnostics.is_empty());
@@ -9959,7 +9959,7 @@ mod tests {
             [earlier, later].into_iter(),
             PredictionMode::Sll,
             Some(&follow),
-            |index| (if index == 7 { 5 } else { TOKEN_EOF }, index == 7),
+            |_| panic!("caller-follow token probe should not run in SLL mode"),
         )
         .expect("one outcome should be selected");
         assert_eq!(selected.index, 8);
