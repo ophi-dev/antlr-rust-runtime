@@ -2155,6 +2155,11 @@ fn render_generated_rule_method(
     .expect("writing to a string cannot fail");
     writeln!(
         out,
+        "                        self.base.record_generated_syntax_error();"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
         "                        return Err(GeneratedRuleError::Fatal(__error));"
     )
     .expect("writing to a string cannot fail");
@@ -2310,6 +2315,11 @@ fn render_generated_left_recursive_rule_method(
     writeln!(
         out,
         "                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                        self.base.record_generated_syntax_error();"
     )
     .expect("writing to a string cannot fail");
     writeln!(
@@ -9215,6 +9225,13 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
         assert!(
             guard < fatal,
             "Fatal return must be inside the allow_fallback guard"
+        );
+        let count = rest
+            .find("self.base.record_generated_syntax_error();")
+            .expect("fatal sync path records syntax error");
+        assert!(
+            guard < count && count < fatal,
+            "fatal sync path must increment before returning"
         );
         // And the nested-child path recovers locally and returns Ok.
         let recover = rest

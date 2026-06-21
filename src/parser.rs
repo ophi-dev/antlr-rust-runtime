@@ -2349,6 +2349,12 @@ where
         self.syntax_errors
     }
 
+    /// Records a syntax error that generated parser code returns as fatal before
+    /// it can recover into the current rule context.
+    pub const fn record_generated_syntax_error(&mut self) {
+        self.record_syntax_errors(1);
+    }
+
     const fn record_syntax_errors(&mut self, count: usize) {
         self.syntax_errors = self.syntax_errors.saturating_add(count);
     }
