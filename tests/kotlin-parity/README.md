@@ -24,6 +24,7 @@ needed.
 | `script-snippets/02-top-level-val.kts` | issue #32 regression for a valid top-level `val` followed by newline. |
 | `script-snippets/03-blank-separated-vals.kts` | issue #32 regression for blank-line-separated top-level `val` declarations followed by a call. |
 | `script-snippets/04-newline-member-access.kts` | valid script expression where a newline before member access is a continuation, not a statement separator. |
+| `script-snippets/05-indented-top-level-val.kts` | issue #32 regression with indentation trivia before the next top-level `val`. |
 
 Add new file snippets by dropping `.kt` files into `snippets/`, and script
 snippets by dropping `.kts` files into `script-snippets/`; the harness picks

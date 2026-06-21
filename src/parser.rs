@@ -3803,20 +3803,21 @@ where
         }
     }
 
-    fn is_caller_follow_boundary_token(&mut self, index: usize) -> bool {
+    fn caller_follow_token_info(&mut self, index: usize) -> (i32, bool, bool) {
         // Generated callers own statement separators; leave them available when
         // an interpreted child rule can either stop before or consume one.
-        self.token_at(index)
+        let token_type = self.token_type_at(index);
+        let (is_boundary, is_boundary_gap) = self
+            .token_at(index)
             .as_ref()
             .and_then(Token::text)
-            .is_some_and(is_caller_follow_boundary_text)
-    }
-
-    fn caller_follow_token_info(&mut self, index: usize) -> (i32, bool) {
-        (
-            self.token_type_at(index),
-            self.is_caller_follow_boundary_token(index),
-        )
+            .map_or((false, false), |text| {
+                (
+                    is_caller_follow_boundary_text(text),
+                    is_caller_follow_boundary_gap_text(text),
+                )
+            });
+        (token_type, is_boundary, is_boundary_gap)
     }
 
     /// Runs the fast recognizer once from the rule's start state and returns
@@ -7948,6 +7949,10 @@ fn is_caller_follow_boundary_text(text: &str) -> bool {
         && text.chars().all(|ch| ch.is_whitespace() || ch == ';')
 }
 
+fn is_caller_follow_boundary_gap_text(text: &str) -> bool {
+    text.chars().all(|ch| ch.is_whitespace() || ch == ';')
+}
+
 /// Returns whether `state` belongs to an ANTLR-transformed left-recursive rule.
 /// Inline insertion in those precedence loops can synthesize a missing operand
 /// before an operator and then block the legitimate loop-exit path.
@@ -7994,7 +7999,7 @@ fn select_best_fast_outcome(
     outcomes: impl Iterator<Item = FastRecognizeOutcome>,
     prediction_mode: PredictionMode,
     caller_follow: Option<&TokenBitSet>,
-    mut token_info_at: impl FnMut(usize) -> (i32, bool),
+    mut token_info_at: impl FnMut(usize) -> (i32, bool, bool),
 ) -> Option<FastRecognizeOutcome> {
     let mut best = None;
     let mut best_caller_follow = None;
@@ -8005,7 +8010,7 @@ fn select_best_fast_outcome(
         ) && outcome.diagnostics.is_empty()
             && let Some(follow) = caller_follow
         {
-            let (token_type, is_boundary) = token_info_at(outcome.index);
+            let (token_type, is_boundary, _) = token_info_at(outcome.index);
             if is_boundary && follow.contains(token_type) {
                 let replace =
                     best_caller_follow
@@ -8045,7 +8050,7 @@ fn select_best_fast_outcome(
                     return true;
                 }
                 candidate.index < selected.index
-                    && (candidate.index..selected.index).all(|index| token_info_at(index).1)
+                    && (candidate.index..selected.index).all(|index| token_info_at(index).2)
             });
     if should_use_caller_follow {
         best_caller_follow
@@ -9956,7 +9961,7 @@ mod tests {
             [later.clone(), earlier.clone()].into_iter(),
             PredictionMode::Ll,
             Some(&follow),
-            |index| (if index == 7 { 5 } else { TOKEN_EOF }, index == 7),
+            |index| (if index == 7 { 5 } else { TOKEN_EOF }, index == 7, true),
         )
         .expect("one outcome should be selected");
         assert_eq!(selected.index, 7);
@@ -9965,10 +9970,33 @@ mod tests {
             [later.clone(), earlier.clone()].into_iter(),
             PredictionMode::Ll,
             Some(&follow),
-            |index| (if index == 7 { 5 } else { TOKEN_EOF }, false),
+            |index| (if index == 7 { 5 } else { TOKEN_EOF }, false, true),
         )
         .expect("one outcome should be selected");
         assert_eq!(selected.index, 8);
+
+        let indented_next_statement = FastRecognizeOutcome {
+            index: 9,
+            consumed_eof: false,
+            diagnostics: FastDiagnostics::new(),
+            nodes: NodeList::new(),
+        };
+        let selected = select_best_fast_outcome(
+            [indented_next_statement, earlier.clone()].into_iter(),
+            PredictionMode::Ll,
+            Some(&follow),
+            |index| {
+                let is_boundary = index == 7;
+                let is_boundary_gap = matches!(index, 7 | 8);
+                (
+                    if index == 7 { 5 } else { TOKEN_EOF },
+                    is_boundary,
+                    is_boundary_gap,
+                )
+            },
+        )
+        .expect("one outcome should be selected");
+        assert_eq!(selected.index, 7);
 
         let continuation = FastRecognizeOutcome {
             index: 10,
@@ -9982,7 +10010,11 @@ mod tests {
             Some(&follow),
             |index| {
                 let is_boundary = matches!(index, 7 | 9);
-                (if index == 7 { 5 } else { TOKEN_EOF }, is_boundary)
+                (
+                    if index == 7 { 5 } else { TOKEN_EOF },
+                    is_boundary,
+                    is_boundary,
+                )
             },
         )
         .expect("one outcome should be selected");
@@ -10007,6 +10039,13 @@ mod tests {
         assert!(!is_caller_follow_boundary_text("\"\"\"line1\nline2\"\"\""));
         assert!(!is_caller_follow_boundary_text("/* line1\nline2 */"));
         assert!(!is_caller_follow_boundary_text("identifier"));
+        assert!(is_caller_follow_boundary_gap_text(" \t "));
+        assert!(is_caller_follow_boundary_gap_text("\n  "));
+        assert!(is_caller_follow_boundary_gap_text(";\t"));
+        assert!(!is_caller_follow_boundary_gap_text(
+            "\"\"\"line1\nline2\"\"\""
+        ));
+        assert!(!is_caller_follow_boundary_gap_text("/* line1\nline2 */"));
     }
 
     #[test]
