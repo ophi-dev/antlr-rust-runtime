@@ -7362,7 +7362,7 @@ pub fn parse<L, R>(
 where
     L: TokenSource,
 {{
-    let lexer = lexer(antlr4_runtime::InputStream::new(input));
+    let lexer = lexer(antlr4_runtime::InputStream::new(input.as_ref()));
     let tokens = CommonTokenStream::new(lexer);
     let mut parser = {type_name}::new(tokens);
     entry(&mut parser)
@@ -8592,6 +8592,7 @@ s : ;
 
         assert!(rendered.contains("pub fn parse<L, R>("));
         assert!(rendered.contains("lexer: impl FnOnce(antlr4_runtime::InputStream) -> L"));
+        assert!(rendered.contains("antlr4_runtime::InputStream::new(input.as_ref())"));
         assert!(rendered.contains("let tokens = CommonTokenStream::new(lexer);"));
         assert!(rendered.contains("pub fn new(input: CommonTokenStream<S>) -> Self"));
     }
