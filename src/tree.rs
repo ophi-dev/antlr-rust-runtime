@@ -300,6 +300,39 @@ impl ParserRuleContext {
         &self.children
     }
 
+    /// Returns the number of direct children in this context.
+    pub const fn child_count(&self) -> usize {
+        self.children.len()
+    }
+
+    /// Finds the first direct child rule with `rule_index`.
+    pub fn child_rule(&self, rule_index: usize) -> Option<&Self> {
+        self.child_rules(rule_index).next()
+    }
+
+    /// Iterates over direct child rules with `rule_index`.
+    pub fn child_rules(&self, rule_index: usize) -> impl Iterator<Item = &Self> + '_ {
+        self.children.iter().filter_map(move |child| match child {
+            ParseTree::Rule(rule) if rule.context().rule_index() == rule_index => {
+                Some(rule.context())
+            }
+            ParseTree::Rule(_) | ParseTree::Terminal(_) | ParseTree::Error(_) => None,
+        })
+    }
+
+    /// Finds the first direct terminal child with `token_type`.
+    pub fn child_token(&self, token_type: i32) -> Option<&TerminalNode> {
+        self.children.iter().find_map(|child| match child {
+            ParseTree::Terminal(node) if node.symbol().token_type() == token_type => Some(node),
+            ParseTree::Rule(_) | ParseTree::Terminal(_) | ParseTree::Error(_) => None,
+        })
+    }
+
+    /// Returns whether this context has a direct terminal child with `token_type`.
+    pub fn has_token(&self, token_type: i32) -> bool {
+        self.child_token(token_type).is_some()
+    }
+
     pub fn add_child(&mut self, child: ParseTree) {
         self.matched_child = true;
         self.children.push(child);
@@ -485,5 +518,72 @@ mod tests {
             tree.rule_invocation_stack(1, &["s".to_owned(), "a".to_owned()]),
             Some(vec!["a".to_owned(), "s".to_owned()])
         );
+    }
+
+    #[test]
+    fn finds_direct_child_rules_by_index() {
+        let mut direct = ParserRuleContext::new(1, -1);
+        direct.add_child(ParseTree::Terminal(TerminalNode::new(
+            CommonToken::new(10).with_text("direct"),
+        )));
+
+        let mut nested_match = ParserRuleContext::new(1, -1);
+        nested_match.add_child(ParseTree::Terminal(TerminalNode::new(
+            CommonToken::new(11).with_text("nested"),
+        )));
+        let mut wrapper = ParserRuleContext::new(2, -1);
+        wrapper.add_child(ParseTree::Rule(RuleNode::new(nested_match)));
+
+        let mut root = ParserRuleContext::new(0, -1);
+        root.add_child(ParseTree::Terminal(TerminalNode::new(
+            CommonToken::new(12).with_text("prefix"),
+        )));
+        root.add_child(ParseTree::Rule(RuleNode::new(direct)));
+        root.add_child(ParseTree::Rule(RuleNode::new(wrapper)));
+
+        assert_eq!(root.child_count(), 3);
+        assert_eq!(root.child_rules(1).count(), 1);
+        assert_eq!(
+            root.child_rule(1).map(ParserRuleContext::text),
+            Some("direct".to_owned())
+        );
+        assert_eq!(
+            root.child_rule(2).map(ParserRuleContext::rule_index),
+            Some(2)
+        );
+        assert!(root.child_rule(3).is_none());
+    }
+
+    #[test]
+    fn finds_direct_terminal_children_by_token_type() {
+        let mut nested = ParserRuleContext::new(1, -1);
+        nested.add_child(ParseTree::Terminal(TerminalNode::new(
+            CommonToken::new(13).with_text("nested"),
+        )));
+
+        let mut root = ParserRuleContext::new(0, -1);
+        root.add_child(ParseTree::Error(ErrorNode::new(
+            CommonToken::new(12).with_text("error"),
+        )));
+        root.add_child(ParseTree::Terminal(TerminalNode::new(
+            CommonToken::new(10).with_text("direct"),
+        )));
+        root.add_child(ParseTree::Terminal(TerminalNode::new(
+            CommonToken::new(11).with_text("other"),
+        )));
+        root.add_child(ParseTree::Rule(RuleNode::new(nested)));
+
+        assert_eq!(root.child_count(), 4);
+        assert!(root.has_token(10));
+        assert_eq!(
+            root.child_token(10).map(TerminalNode::text),
+            Some("direct".to_owned())
+        );
+        assert_eq!(
+            root.child_token(11).map(TerminalNode::text),
+            Some("other".to_owned())
+        );
+        assert!(root.child_token(12).is_none());
+        assert!(root.child_token(13).is_none());
     }
 }
