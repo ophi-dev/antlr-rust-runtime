@@ -42,7 +42,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .lexer_name
             .clone()
             .unwrap_or_else(|| grammar_name_from_path(&lexer));
-        let module = render_lexer(&grammar_name, &data, grammar_source.as_deref())?;
+        let module = render_lexer(
+            &grammar_name,
+            &data,
+            grammar_source.as_deref(),
+            args.allow_unsupported_lexer_actions,
+        )?;
         fs::write(
             args.out_dir
                 .join(format!("{}.rs", module_name(&grammar_name))),
@@ -83,6 +88,7 @@ struct Args {
     grammar: Option<PathBuf>,
     out_dir: PathBuf,
     require_generated_parser: bool,
+    allow_unsupported_lexer_actions: bool,
 }
 
 impl Args {
@@ -101,6 +107,7 @@ impl Args {
         let mut grammar = None;
         let mut out_dir = None;
         let mut require_generated_parser = false;
+        let mut allow_unsupported_lexer_actions = false;
 
         let mut iter = env::args().skip(1);
         while let Some(arg) = iter.next() {
@@ -112,6 +119,7 @@ impl Args {
                 "--grammar" => grammar = Some(PathBuf::from(next_arg(&mut iter, "--grammar")?)),
                 "--out-dir" => out_dir = Some(PathBuf::from(next_arg(&mut iter, "--out-dir")?)),
                 "--require-generated-parser" => require_generated_parser = true,
+                "--allow-unsupported-lexer-actions" => allow_unsupported_lexer_actions = true,
                 "--help" | "-h" => return Err(usage()),
                 other => return Err(format!("unknown argument {other}\n\n{}", usage())),
             }
@@ -132,6 +140,7 @@ impl Args {
             grammar,
             out_dir: out_dir.unwrap_or_else(|| PathBuf::from(".")),
             require_generated_parser,
+            allow_unsupported_lexer_actions,
         })
     }
 }
@@ -142,7 +151,7 @@ fn next_arg(iter: &mut impl Iterator<Item = String>, flag: &str) -> Result<Strin
 }
 
 fn usage() -> String {
-    "usage: antlr4-rust-gen [--lexer Lexer.interp] [--parser Parser.interp] [--grammar Grammar.g4] [--out-dir DIR] [--require-generated-parser]"
+    "usage: antlr4-rust-gen [--lexer Lexer.interp] [--parser Parser.interp] [--grammar Grammar.g4] [--out-dir DIR] [--require-generated-parser] [--allow-unsupported-lexer-actions]"
         .to_owned()
 }
 
@@ -266,13 +275,14 @@ fn render_lexer(
     grammar_name: &str,
     data: &InterpData,
     grammar_source: Option<&str>,
+    allow_unsupported_lexer_actions: bool,
 ) -> io::Result<String> {
     let type_name = rust_type_name(grammar_name);
     let metadata = render_metadata(grammar_name, data);
     let token_constants = render_token_constants(data);
     let actions = grammar_source.map_or_else(
         || Ok(Vec::new()),
-        |source| lexer_action_templates(data, source),
+        |source| lexer_action_templates(data, source, allow_unsupported_lexer_actions),
     )?;
     let predicates = grammar_source.map_or_else(
         || Ok(Vec::new()),
@@ -4325,6 +4335,7 @@ struct IntMemberTemplate {
 fn lexer_action_templates(
     data: &InterpData,
     grammar_source: &str,
+    allow_unsupported_only: bool,
 ) -> io::Result<Vec<((i32, i32), ActionTemplate)>> {
     let actions = lexer_custom_actions(data)?;
     if actions.is_empty() {
@@ -4332,7 +4343,7 @@ fn lexer_action_templates(
     }
     let templates = extract_lexer_action_templates(grammar_source, &data.rule_names);
     if actions.len() == templates.len() {
-        reject_mixed_lexer_action_templates(&templates)?;
+        reject_unsupported_lexer_action_templates(&templates, allow_unsupported_only)?;
         return Ok(actions.into_iter().zip(templates).collect());
     }
     Err(io::Error::new(
@@ -4377,15 +4388,18 @@ fn extract_lexer_action_templates(
     actions
 }
 
-fn reject_mixed_lexer_action_templates(actions: &[ActionTemplate]) -> io::Result<()> {
-    let has_supported_dispatch = actions.iter().any(lexer_action_template_needs_dispatch);
-    if !has_supported_dispatch {
-        return Ok(());
-    }
+fn reject_unsupported_lexer_action_templates(
+    actions: &[ActionTemplate],
+    allow_unsupported_only: bool,
+) -> io::Result<()> {
     if let Some(ActionTemplate::UnsupportedLexerAction { rule_name, body }) = actions
         .iter()
         .find(|action| matches!(action, ActionTemplate::UnsupportedLexerAction { .. }))
     {
+        let has_supported_dispatch = actions.iter().any(lexer_action_template_needs_dispatch);
+        if allow_unsupported_only && !has_supported_dispatch {
+            return Ok(());
+        }
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!(
@@ -9805,10 +9819,19 @@ ID: [a-z]+ { customJava(); };
         assert!(method.contains("TODO unsupported embedded lexer action in rule ID"));
         assert!(!method.contains("fn run_action"));
         assert_eq!(rust_block_comment_text("a */ b"), "a * / b");
+
+        let error = reject_unsupported_lexer_action_templates(&actions, false).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains(
+            "unsupported embedded lexer action in rule ID: {customJava();}; \
+                 rewrite target-specific actions as portable lexer commands where possible"
+        ));
+        reject_unsupported_lexer_action_templates(&actions, true)
+            .expect("unsupported-only lexer actions should be allowed in compatibility mode");
     }
 
     #[test]
-    fn mixed_supported_and_unsupported_lexer_actions_fail_generation() {
+    fn mixed_supported_and_unsupported_lexer_actions_fail_even_when_allowed() {
         let actions = vec![
             ActionTemplate::UnsupportedLexerAction {
                 rule_name: "ID".to_owned(),
@@ -9817,7 +9840,7 @@ ID: [a-z]+ { customJava(); };
             ActionTemplate::LexerPopMode,
         ];
 
-        let error = reject_mixed_lexer_action_templates(&actions).unwrap_err();
+        let error = reject_unsupported_lexer_action_templates(&actions, true).unwrap_err();
 
         assert_eq!(error.kind(), io::ErrorKind::InvalidData);
         assert!(error.to_string().contains(
