@@ -1,5 +1,6 @@
 use crate::char_stream::TextInterval;
 use std::fmt;
+use std::ops::Range;
 use std::rc::Rc;
 
 pub const TOKEN_EOF: i32 = -1;
@@ -37,16 +38,46 @@ impl From<i32> for TokenChannel {
 pub trait Token: fmt::Debug {
     fn token_type(&self) -> i32;
     fn channel(&self) -> i32;
+    /// Zero-based absolute start index measured in Unicode scalar values.
     fn start(&self) -> usize;
+    /// Zero-based absolute inclusive stop index measured in Unicode scalar
+    /// values.
     fn stop(&self) -> usize;
     fn token_index(&self) -> isize;
+    /// One-based source line where the token starts.
     fn line(&self) -> usize;
+    /// Zero-based source column where the token starts, measured in Unicode
+    /// scalar values from the start of `line`.
     fn column(&self) -> usize;
     fn text(&self) -> Option<&str>;
     fn source_name(&self) -> &str;
 
     fn interval(&self) -> TextInterval {
         TextInterval::new(self.start(), self.stop())
+    }
+
+    /// Zero-based absolute start offset measured in UTF-8 bytes.
+    ///
+    /// The default implementation treats the character index as a byte offset,
+    /// which is exact for ASCII and preserves compatibility for token
+    /// implementations that do not expose source byte bounds.
+    fn start_byte(&self) -> usize {
+        self.start()
+    }
+
+    /// Zero-based exclusive end offset measured in UTF-8 bytes.
+    ///
+    /// Unlike [`Self::stop`], this is exclusive so
+    /// `token.start_byte()..token.stop_byte()` can slice the original UTF-8
+    /// source when the token carries source byte bounds. The default
+    /// implementation treats character indices as byte offsets.
+    fn stop_byte(&self) -> usize {
+        default_stop_byte(self.start(), self.stop())
+    }
+
+    /// Zero-based UTF-8 byte span for the token text.
+    fn byte_span(&self) -> Range<usize> {
+        self.start_byte()..self.stop_byte()
     }
 }
 
@@ -60,7 +91,14 @@ pub struct CommonToken {
     line: usize,
     column: usize,
     text: Option<TokenText>,
+    byte_span: Option<TokenByteSpan>,
     source_name: Rc<str>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct TokenByteSpan {
+    start_byte: u32,
+    stop_byte: u32,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -117,6 +155,7 @@ impl CommonToken {
             line: 1,
             column: 0,
             text: None,
+            byte_span: None,
             source_name: Rc::from(""),
         }
     }
@@ -131,6 +170,7 @@ impl CommonToken {
             line,
             column,
             text: Some(TokenText::Explicit(Rc::from("<EOF>"))),
+            byte_span: None,
             source_name: source_name.into(),
         }
     }
@@ -150,6 +190,23 @@ impl CommonToken {
         );
         self.text = Some(TokenText::Source {
             input,
+            start_byte,
+            stop_byte,
+        });
+        self.byte_span = Some(TokenByteSpan {
+            start_byte,
+            stop_byte,
+        });
+        self
+    }
+
+    #[must_use]
+    pub(crate) fn with_byte_span(mut self, start_byte: u32, stop_byte: u32) -> Self {
+        debug_assert!(
+            start_byte <= stop_byte,
+            "invalid token byte span: start={start_byte}, stop={stop_byte}"
+        );
+        self.byte_span = Some(TokenByteSpan {
             start_byte,
             stop_byte,
         });
@@ -184,6 +241,16 @@ impl CommonToken {
 
     pub const fn set_token_index(&mut self, token_index: isize) {
         self.token_index = token_index;
+    }
+
+    const fn source_byte_span(&self) -> Option<Range<usize>> {
+        match self.byte_span {
+            Some(TokenByteSpan {
+                start_byte,
+                stop_byte,
+            }) => Some(start_byte as usize..stop_byte as usize),
+            None => None,
+        }
     }
 }
 
@@ -223,6 +290,16 @@ impl Token for CommonToken {
     fn source_name(&self) -> &str {
         self.source_name.as_ref()
     }
+
+    fn start_byte(&self) -> usize {
+        self.source_byte_span()
+            .map_or(self.start, |byte_span| byte_span.start)
+    }
+
+    fn stop_byte(&self) -> usize {
+        self.source_byte_span()
+            .map_or_else(|| default_stop_byte(self.start, self.stop), |span| span.end)
+    }
 }
 
 impl fmt::Display for CommonToken {
@@ -254,6 +331,13 @@ fn display_token_boundary(value: usize) -> String {
         "-1".to_owned()
     } else {
         value.to_string()
+    }
+}
+
+const fn default_stop_byte(start: usize, stop: usize) -> usize {
+    match stop.checked_add(1) {
+        Some(end) if end >= start => end,
+        Some(_) | None => start,
     }
 }
 
@@ -378,5 +462,38 @@ mod tests {
     fn eof_display_uses_antlr_empty_input_stop_index() {
         let token = CommonToken::eof("", 0, 1, 0);
         assert_eq!(token.to_string(), "[@-1,0:-1='<EOF>',<-1>,1:0]");
+    }
+
+    #[test]
+    fn source_backed_token_exposes_utf8_byte_span() {
+        let source: Rc<str> = Rc::from("éβz");
+        let token = CommonToken::new(1)
+            .with_span(1, 1)
+            .with_source_text(source, 2, 4);
+
+        assert_eq!(token.start(), 1);
+        assert_eq!(token.stop(), 1);
+        assert_eq!(token.start_byte(), 2);
+        assert_eq!(token.stop_byte(), 4);
+        assert_eq!(token.byte_span(), 2..4);
+        assert_eq!(token.text(), Some("β"));
+    }
+
+    #[test]
+    fn explicit_text_byte_span_falls_back_to_character_span() {
+        let token = CommonToken::new(1).with_text("β").with_span(3, 3);
+
+        assert_eq!(token.byte_span(), 3..4);
+    }
+
+    #[test]
+    fn explicit_text_can_carry_utf8_byte_span() {
+        let token = CommonToken::new(TOKEN_EOF)
+            .with_text("<EOF>")
+            .with_span(1, 0)
+            .with_byte_span(2, 2);
+
+        assert_eq!(token.text(), Some("<EOF>"));
+        assert_eq!(token.byte_span(), 2..2);
     }
 }

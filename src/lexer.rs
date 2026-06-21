@@ -353,25 +353,30 @@ where
                 None
             }
         });
-        let source_text = if text.is_none() && stop != usize::MAX {
+        let source_interval = if text.is_none() && stop != usize::MAX && self.token_start <= stop {
             self.input
                 .text_source_interval(TextInterval::new(self.token_start, stop))
-                .and_then(|(input, start_byte, stop_byte)| {
-                    Some(crate::token::TokenSourceText {
-                        input,
-                        start_byte: u32::try_from(start_byte).ok()?,
-                        stop_byte: u32::try_from(stop_byte).ok()?,
-                    })
-                })
         } else {
             None
         };
+        let source_text = source_interval
+            .as_ref()
+            .and_then(|(input, start_byte, stop_byte)| {
+                Some(crate::token::TokenSourceText {
+                    input: Rc::clone(input),
+                    start_byte: u32::try_from(*start_byte).ok()?,
+                    stop_byte: u32::try_from(*stop_byte).ok()?,
+                })
+            });
+        let source_byte_span = source_text
+            .as_ref()
+            .map(|source_text| (source_text.start_byte, source_text.stop_byte));
         let text = text.or_else(|| {
             source_text
                 .is_none()
                 .then(|| self.input.text(TextInterval::new(self.token_start, stop)))
         });
-        self.factory.create(TokenSpec {
+        let mut token = self.factory.create(TokenSpec {
             token_type,
             channel,
             start: self.token_start,
@@ -381,7 +386,13 @@ where
             text,
             source_text,
             source_name: self.input.source_name(),
-        })
+        });
+        if let Some((start_byte, stop_byte)) =
+            source_byte_span.or_else(|| self.token_byte_span(stop))
+        {
+            token = token.with_byte_span(start_byte, stop_byte);
+        }
+        token
     }
 
     /// Returns the current token text from the token start through the input
@@ -428,12 +439,44 @@ where
 
     /// Builds the synthetic EOF token at the current input cursor.
     pub fn eof_token(&self) -> CommonToken {
-        CommonToken::eof(
+        let token = CommonToken::eof(
             self.input.source_name(),
             self.input.index(),
             self.line,
             self.column,
-        )
+        );
+        match self.eof_byte_offset() {
+            Some(byte_offset) => token.with_byte_span(byte_offset, byte_offset),
+            None => token,
+        }
+    }
+
+    fn eof_byte_offset(&self) -> Option<u32> {
+        self.byte_offset_at(self.input.index())
+    }
+
+    fn token_byte_span(&self, stop: usize) -> Option<(u32, u32)> {
+        if stop != usize::MAX && self.token_start <= stop {
+            let (_, start_byte, stop_byte) = self
+                .input
+                .text_source_interval(TextInterval::new(self.token_start, stop))?;
+            return Some((
+                u32::try_from(start_byte).ok()?,
+                u32::try_from(stop_byte).ok()?,
+            ));
+        }
+        let byte_offset = self.byte_offset_at(self.token_start)?;
+        Some((byte_offset, byte_offset))
+    }
+
+    fn byte_offset_at(&self, index: usize) -> Option<u32> {
+        let byte_offset = if index == 0 {
+            0
+        } else {
+            let previous = TextInterval::new(index - 1, index - 1);
+            self.input.text_source_interval(previous)?.2
+        };
+        u32::try_from(byte_offset).ok()
     }
 }
 
@@ -605,4 +648,78 @@ where
 
 fn lexer_dfa_edge_label(symbol: i32) -> Option<String> {
     char::from_u32(symbol.cast_unsigned()).map(|ch| format!("'{ch}'"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::char_stream::InputStream;
+    use crate::recognizer::RecognizerData;
+    use crate::token::{DEFAULT_CHANNEL, Token};
+    use crate::vocabulary::Vocabulary;
+
+    #[test]
+    fn eof_token_uses_utf8_byte_offset_after_non_ascii_input() {
+        let data = RecognizerData::new(
+            "T",
+            Vocabulary::new(
+                std::iter::empty::<Option<&str>>(),
+                std::iter::empty::<Option<&str>>(),
+                std::iter::empty::<Option<&str>>(),
+            ),
+        );
+        let mut lexer = BaseLexer::new(InputStream::new("β"), data);
+        lexer.consume_char();
+
+        let token = lexer.eof_token();
+
+        assert_eq!(token.start(), 1);
+        assert_eq!(token.stop(), 0);
+        assert_eq!(token.text(), Some("<EOF>"));
+        assert_eq!(token.byte_span(), 2..2);
+    }
+
+    #[test]
+    fn eof_rule_token_uses_utf8_byte_offset_after_non_ascii_input() {
+        let data = RecognizerData::new(
+            "T",
+            Vocabulary::new(
+                std::iter::empty::<Option<&str>>(),
+                std::iter::empty::<Option<&str>>(),
+                std::iter::empty::<Option<&str>>(),
+            ),
+        );
+        let mut lexer = BaseLexer::new(InputStream::new("β"), data);
+        lexer.consume_char();
+        lexer.begin_token();
+
+        let token = lexer.emit_with_stop(1, DEFAULT_CHANNEL, 0, Some("<EOF>".to_owned()));
+
+        assert_eq!(token.start(), 1);
+        assert_eq!(token.stop(), 0);
+        assert_eq!(token.text(), Some("<EOF>"));
+        assert_eq!(token.byte_span(), 2..2);
+    }
+
+    #[test]
+    fn emit_implicit_text_uses_utf8_byte_span_for_non_ascii_input() {
+        let data = RecognizerData::new(
+            "T",
+            Vocabulary::new(
+                std::iter::empty::<Option<&str>>(),
+                std::iter::empty::<Option<&str>>(),
+                std::iter::empty::<Option<&str>>(),
+            ),
+        );
+        let mut lexer = BaseLexer::new(InputStream::new("β"), data);
+        lexer.begin_token();
+        lexer.consume_char();
+
+        let token = lexer.emit(1, DEFAULT_CHANNEL, None);
+
+        assert_eq!(token.start(), 0);
+        assert_eq!(token.stop(), 0);
+        assert_eq!(token.text(), Some("β"));
+        assert_eq!(token.byte_span(), 0..2);
+    }
 }
