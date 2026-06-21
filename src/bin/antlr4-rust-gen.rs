@@ -4944,21 +4944,108 @@ struct RuleHeader<'a> {
 /// Returns the grammar rule that owns an action or signature position by reading
 /// the current rule header before the first colon in the statement.
 fn statement_rule_header(source: &str, position: usize) -> Option<RuleHeader<'_>> {
-    let prefix = source.get(..position)?;
-    let (start, header) = prefix.rfind(':').map_or_else(
-        || {
-            let header_start = prefix.rfind([';', '}']).map_or(0, |index| index + 1);
-            (header_start, &prefix[header_start..])
-        },
-        |colon| {
-            let header_start = source[..colon]
-                .rfind([';', '}'])
-                .map_or(0, |index| index + 1);
-            (header_start, &source[header_start..colon])
-        },
-    );
+    source.get(..position)?;
+    let colon = last_rule_header_colon(source, position)?;
+    let start = source[..colon]
+        .rfind([';', '}'])
+        .map_or(0, |index| index + 1);
+    let header = &source[start..colon];
     let name = leading_rule_name(header)?;
     Some(RuleHeader { name, start })
+}
+
+fn last_rule_header_colon(source: &str, position: usize) -> Option<usize> {
+    let mut last = None;
+    let mut index = 0;
+    let mut single_quoted = false;
+    let mut double_quoted = false;
+    let mut escaped = false;
+    let mut line_comment = false;
+    let mut block_comment = false;
+    let mut char_set = false;
+    while index < position {
+        let ch = source[index..].chars().next()?;
+        let size = ch.len_utf8();
+        if line_comment {
+            line_comment = ch != '\n';
+            index += size;
+            continue;
+        }
+        if block_comment {
+            if source.as_bytes().get(index..index + 2) == Some(b"*/") {
+                block_comment = false;
+                index += 2;
+            } else {
+                index += size;
+            }
+            continue;
+        }
+        if char_set {
+            match ch {
+                _ if escaped => escaped = false,
+                '\\' => escaped = true,
+                ']' => char_set = false,
+                _ => {}
+            }
+            index += size;
+            continue;
+        }
+        if escaped {
+            escaped = false;
+            index += size;
+            continue;
+        }
+        if single_quoted {
+            match ch {
+                '\\' => escaped = true,
+                '\'' => single_quoted = false,
+                _ => {}
+            }
+            index += size;
+            continue;
+        }
+        if double_quoted {
+            match ch {
+                '\\' => escaped = true,
+                '"' => double_quoted = false,
+                _ => {}
+            }
+            index += size;
+            continue;
+        }
+        match ch {
+            '/' if source.as_bytes().get(index..index + 2) == Some(b"//") => {
+                line_comment = true;
+                index += 2;
+            }
+            '/' if source.as_bytes().get(index..index + 2) == Some(b"/*") => {
+                block_comment = true;
+                index += 2;
+            }
+            '\'' => {
+                single_quoted = true;
+                index += size;
+            }
+            '"' => {
+                double_quoted = true;
+                index += size;
+            }
+            '[' => {
+                char_set = true;
+                index += size;
+            }
+            '{' => {
+                index = matching_action_brace(source, index + 1)
+                    .map_or(index + size, |close| close.saturating_add(1).min(position));
+            }
+            ':' => {
+                last = Some(index);
+                index += size;
+            }
+            _ => index += size,
+        }
+    }
+    last
 }
 
 /// Reports whether an earlier rule with the same name already owns the active
@@ -9791,6 +9878,46 @@ RCURL: '}' { popMode(); };
         let actions = extract_lexer_action_templates(grammar, &rule_names);
 
         assert_eq!(actions, [ActionTemplate::LexerPopMode]);
+    }
+
+    #[test]
+    fn lexer_action_scan_keeps_actions_after_prior_action_templates() {
+        let grammar = r#"
+lexer grammar L;
+I : ({<PlusText("stuff fail: "):writeln()>} 'a'
+| {<PlusText("stuff0:"):writeln()>}
+       'a' {<PlusText("stuff1: "):writeln()>}
+       'b' {<PlusText("stuff2: "):writeln()>})
+       {<Text():writeln()>} ;
+WS : (' '|'\n') -> skip ;
+J : .;
+"#;
+        let rule_names = vec!["I".to_owned(), "WS".to_owned(), "J".to_owned()];
+
+        let actions = extract_lexer_action_templates(grammar, &rule_names);
+
+        assert_eq!(
+            actions,
+            [
+                ActionTemplate::TextWithPrefix {
+                    prefix: "stuff fail: ".to_owned(),
+                    newline: true,
+                },
+                ActionTemplate::TextWithPrefix {
+                    prefix: "stuff0:".to_owned(),
+                    newline: true,
+                },
+                ActionTemplate::TextWithPrefix {
+                    prefix: "stuff1: ".to_owned(),
+                    newline: true,
+                },
+                ActionTemplate::TextWithPrefix {
+                    prefix: "stuff2: ".to_owned(),
+                    newline: true,
+                },
+                ActionTemplate::Text { newline: true },
+            ]
+        );
     }
 
     #[test]
