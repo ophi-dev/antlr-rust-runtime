@@ -8036,7 +8036,22 @@ fn select_best_fast_outcome(
         };
         best = Some(if better { outcome } else { existing });
     }
-    best_caller_follow.or(best)
+    let should_use_caller_follow =
+        best_caller_follow
+            .as_ref()
+            .zip(best.as_ref())
+            .is_some_and(|(candidate, selected)| {
+                if !selected.diagnostics.is_empty() {
+                    return true;
+                }
+                candidate.index < selected.index
+                    && (candidate.index..selected.index).all(|index| token_info_at(index).1)
+            });
+    if should_use_caller_follow {
+        best_caller_follow
+    } else {
+        best
+    }
 }
 
 fn select_best_outcome(
@@ -9954,6 +9969,24 @@ mod tests {
         )
         .expect("one outcome should be selected");
         assert_eq!(selected.index, 8);
+
+        let continuation = FastRecognizeOutcome {
+            index: 10,
+            consumed_eof: false,
+            diagnostics: FastDiagnostics::new(),
+            nodes: NodeList::new(),
+        };
+        let selected = select_best_fast_outcome(
+            [continuation, earlier.clone()].into_iter(),
+            PredictionMode::Ll,
+            Some(&follow),
+            |index| {
+                let is_boundary = matches!(index, 7 | 9);
+                (if index == 7 { 5 } else { TOKEN_EOF }, is_boundary)
+            },
+        )
+        .expect("one outcome should be selected");
+        assert_eq!(selected.index, 10);
 
         let selected = select_best_fast_outcome(
             [earlier, later].into_iter(),
