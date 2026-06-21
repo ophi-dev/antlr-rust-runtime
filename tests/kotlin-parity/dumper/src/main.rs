@@ -26,14 +26,18 @@ mod generated {
 use generated::kotlin_lexer::KotlinLexer;
 use generated::kotlin_parser::{self, KotlinParser};
 
-fn dump(out: &mut dyn Write, tree: &ParseTree, rule_names: &[String], depth: usize) -> io::Result<()> {
+fn dump<S: AsRef<str>>(
+    out: &mut dyn Write,
+    tree: &ParseTree,
+    rule_names: &[S],
+    depth: usize,
+) -> io::Result<()> {
     let pad = "  ".repeat(depth);
     match tree {
         ParseTree::Rule(rl) => {
             let name = rule_names
                 .get(rl.context().rule_index())
-                .map(String::as_str)
-                .unwrap_or("<?>");
+                .map_or("<?>", |name| name.as_ref());
             writeln!(
                 out,
                 "{pad}Rule({name}, children={})",
@@ -127,10 +131,7 @@ fn main() -> ExitCode {
         return ExitCode::from(1);
     };
 
-    let rule_names: Vec<String> = kotlin_parser::rule_names()
-        .iter()
-        .map(|s| (*s).to_string())
-        .collect();
+    let rule_names = kotlin_parser::rule_names();
 
     let mut sink: Box<dyn Write> = match output {
         Some(path) => match fs::File::create(&path) {
