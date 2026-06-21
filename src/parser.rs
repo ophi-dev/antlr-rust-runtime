@@ -788,12 +788,6 @@ impl NodeList {
         })
     }
 
-    fn syntax_error_count(&self) -> usize {
-        self.iter()
-            .map(|node| fast_recognized_node_syntax_error_count(node.as_ref()))
-            .sum()
-    }
-
     /// Builds a list from an already ordered vector.
     fn from_vec(nodes: Vec<Rc<FastRecognizedNode>>) -> Self {
         let mut list = Self::new();
@@ -2981,7 +2975,6 @@ where
         self.push_generated_parser_diagnostic(diagnostic);
         self.generated_sync_expected = None;
         let recovery_symbols = self.context_expected_symbols(atn);
-        let mut recovered_errors = 0_usize;
         loop {
             let symbol = self.la(1);
             if symbol == TOKEN_EOF || recovery_symbols.contains(&symbol) {
@@ -2992,9 +2985,8 @@ where
             };
             self.consume();
             self.add_parse_child(context, ParseTree::Error(ErrorNode::new(token)));
-            recovered_errors += 1;
         }
-        self.record_syntax_errors(recovered_errors.max(1));
+        self.record_syntax_errors(1);
     }
 
     fn push_generated_parser_diagnostic(&mut self, diagnostic: ParserDiagnostic) {
@@ -3388,7 +3380,7 @@ where
                         current_token.as_ref(),
                         message,
                     ));
-                    self.record_syntax_errors(skipped.len());
+                    self.record_syntax_errors(1);
                     let mut children = Vec::with_capacity(skipped.len());
                     for index in skipped {
                         if let Some(token) = self.token_at(index) {
@@ -3721,11 +3713,7 @@ where
             first_pass.expect("first_pass is Ok in the no-retry branch")
         };
 
-        let syntax_error_count = outcome
-            .nodes
-            .syntax_error_count()
-            .max(outcome.diagnostics.len());
-        self.record_syntax_errors(syntax_error_count);
+        self.record_syntax_errors(outcome.diagnostics.len());
         report_parser_diagnostics(&self.prediction_diagnostics);
         report_parser_diagnostics(&outcome.diagnostics);
         report_token_source_errors(&self.input.drain_source_errors());
@@ -4204,9 +4192,7 @@ where
             return Err(error);
         };
 
-        let syntax_error_count =
-            recognized_nodes_syntax_error_count(&outcome.nodes).max(outcome.diagnostics.len());
-        self.record_syntax_errors(syntax_error_count);
+        self.record_syntax_errors(outcome.diagnostics.len());
         report_parser_diagnostics(&self.prediction_diagnostics);
         report_parser_diagnostics(&outcome.diagnostics);
         report_token_source_errors(&self.input.drain_source_errors());
@@ -7692,14 +7678,6 @@ fn fast_node_has_left_recursive_boundary(node: &FastRecognizedNode) -> bool {
     }
 }
 
-fn fast_recognized_node_syntax_error_count(node: &FastRecognizedNode) -> usize {
-    match node {
-        FastRecognizedNode::ErrorToken { .. } | FastRecognizedNode::MissingToken { .. } => 1,
-        FastRecognizedNode::Rule { children, .. } => children.syntax_error_count(),
-        FastRecognizedNode::Token { .. } | FastRecognizedNode::LeftRecursiveBoundary { .. } => 0,
-    }
-}
-
 fn fast_recognized_nodes_start_index(nodes: &[Rc<FastRecognizedNode>]) -> Option<usize> {
     nodes
         .iter()
@@ -7752,18 +7730,6 @@ const fn fast_recognized_node_stop_index(node: &FastRecognizedNode) -> Option<us
 
 fn recognized_nodes_start_index(nodes: &[RecognizedNode]) -> Option<usize> {
     nodes.iter().find_map(recognized_node_start_index)
-}
-
-fn recognized_nodes_syntax_error_count(nodes: &[RecognizedNode]) -> usize {
-    nodes.iter().map(recognized_node_syntax_error_count).sum()
-}
-
-fn recognized_node_syntax_error_count(node: &RecognizedNode) -> usize {
-    match node {
-        RecognizedNode::ErrorToken { .. } | RecognizedNode::MissingToken { .. } => 1,
-        RecognizedNode::Rule { children, .. } => recognized_nodes_syntax_error_count(children),
-        RecognizedNode::Token { .. } | RecognizedNode::LeftRecursiveBoundary { .. } => 0,
-    }
 }
 
 const fn recognized_node_start_index(node: &RecognizedNode) -> Option<usize> {
@@ -8754,7 +8720,7 @@ mod tests {
             .expect("loop-back multi-token deletion recovers onto EOF");
         assert_eq!(children.len(), 2, "both `c`s deleted as error nodes");
         assert!(children.iter().all(|c| matches!(c, ParseTree::Error(_))));
-        assert_eq!(parser.number_of_syntax_errors(), 2);
+        assert_eq!(parser.number_of_syntax_errors(), 1);
         assert_eq!(parser.la(1), TOKEN_EOF, "EOF left for the rule's EOF match");
     }
 
