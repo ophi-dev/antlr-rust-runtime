@@ -137,7 +137,7 @@ where
         &self.source
     }
 
-    pub fn tokens(&self) -> impl Iterator<Item = &CommonToken> {
+    pub fn tokens(&self) -> impl DoubleEndedIterator + ExactSizeIterator<Item = &CommonToken> {
         self.tokens.iter().map(Rc::as_ref)
     }
 
@@ -425,5 +425,23 @@ mod tests {
         let mut stream = CommonTokenStream::new(source);
 
         assert_eq!(stream.text(10, 12), "");
+    }
+
+    #[test]
+    fn tokens_iterator_keeps_slice_like_capabilities() {
+        let source = VecTokenSource {
+            tokens: vec![
+                CommonToken::new(1).with_text("a"),
+                CommonToken::new(2).with_text("b"),
+                CommonToken::eof("vec", 2, 1, 2),
+            ],
+            index: 0,
+        };
+        let mut stream = CommonTokenStream::new(source);
+        stream.fill();
+
+        let mut tokens = stream.tokens();
+        assert_eq!(tokens.len(), 3);
+        assert_eq!(tokens.next_back().map(Token::token_type), Some(TOKEN_EOF));
     }
 }
