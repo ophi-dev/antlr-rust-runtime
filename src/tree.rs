@@ -89,10 +89,10 @@ impl ParseTree {
 
     /// Returns the first rule invocation stack for `rule_index`, ordered from
     /// the selected rule outward to the root rule.
-    pub fn rule_invocation_stack(
+    pub fn rule_invocation_stack<S: AsRef<str>>(
         &self,
         rule_index: usize,
-        rule_names: &[impl AsRef<str>],
+        rule_names: &[S],
     ) -> Option<Vec<String>> {
         let mut stack = Vec::new();
         if self.find_rule_path(rule_index, rule_names, &mut stack) {
@@ -102,10 +102,10 @@ impl ParseTree {
         None
     }
 
-    fn find_rule_path(
+    fn find_rule_path<S: AsRef<str>>(
         &self,
         rule_index: usize,
-        rule_names: &[impl AsRef<str>],
+        rule_names: &[S],
         stack: &mut Vec<String>,
     ) -> bool {
         let Self::Rule(rule) = self else {
