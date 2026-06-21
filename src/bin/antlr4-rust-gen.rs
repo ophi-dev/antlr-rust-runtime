@@ -3687,6 +3687,48 @@ fn render_parser(
     )
 }
 
+const GENERATED_PARSER_RESERVED_RULE_METHODS: &[&str] = &["token_stream", "into_token_stream"];
+
+fn parser_public_rule_method_names(rule_names: &[String]) -> Vec<String> {
+    let mut used = GENERATED_PARSER_RESERVED_RULE_METHODS
+        .iter()
+        .map(|name| (*name).to_owned())
+        .collect::<BTreeSet<_>>();
+    rule_names
+        .iter()
+        .map(|rule| {
+            let base = rust_function_name(rule);
+            let name = unique_rule_method_name(&base, &used);
+            used.insert(name.clone());
+            name
+        })
+        .collect()
+}
+
+fn unique_rule_method_name(base: &str, used: &BTreeSet<String>) -> String {
+    if !used.contains(base) {
+        return base.to_owned();
+    }
+
+    let plain = base.strip_prefix("r#").unwrap_or(base);
+    let reserved_collision = GENERATED_PARSER_RESERVED_RULE_METHODS.contains(&base);
+    let stem = if reserved_collision {
+        format!("{plain}_rule")
+    } else {
+        plain.to_owned()
+    };
+    let (mut candidate, mut suffix) = if reserved_collision {
+        (stem.clone(), 2)
+    } else {
+        (format!("{stem}_2"), 3)
+    };
+    while used.contains(&candidate) {
+        candidate = format!("{stem}_{suffix}");
+        suffix += 1;
+    }
+    candidate
+}
+
 fn render_parser_with_options(
     grammar_name: &str,
     data: &InterpData,
@@ -3839,11 +3881,13 @@ fn render_parser_with_options(
     let base_initialization = render_parser_base_initialization(&int_members);
     let parser_rustdoc = render_parser_rustdoc(data);
     let mut rule_methods = String::new();
-    for (index, rule) in data.rule_names.iter().enumerate() {
+    for (index, rule_method_name) in parser_public_rule_method_names(&data.rule_names)
+        .iter()
+        .enumerate()
+    {
         writeln!(
             rule_methods,
-            "    pub fn {}(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{",
-            rust_function_name(rule)
+            "    pub fn {rule_method_name}(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{"
         )
         .expect("writing to a string cannot fail");
         writeln!(rule_methods, "        self.parse_rule({index})")
@@ -7929,6 +7973,26 @@ atn:
         ));
     }
 
+    #[test]
+    fn parser_rule_method_names_reserve_token_stream_accessors() {
+        let rule_names = vec![
+            "tokenStream".to_owned(),
+            "into_token_stream".to_owned(),
+            "token_stream_rule".to_owned(),
+            "regularRule".to_owned(),
+        ];
+
+        assert_eq!(
+            parser_public_rule_method_names(&rule_names),
+            [
+                "token_stream_rule",
+                "into_token_stream_rule",
+                "token_stream_rule_2",
+                "regular_rule"
+            ]
+        );
+    }
+
     fn compile_test_parser_rule(
         atn: &Atn,
         rule_index: usize,
@@ -9081,6 +9145,20 @@ s : ;
         assert!(rendered.contains("self.base.token_stream()"));
         assert!(rendered.contains("pub fn into_token_stream(self) -> CommonTokenStream<S>"));
         assert!(rendered.contains("self.base.into_token_stream()"));
+    }
+
+    #[test]
+    fn generated_parser_renames_rule_wrapper_that_collides_with_token_stream_accessor() {
+        let mut data = minimal_parser_data();
+        data.rule_names = vec!["tokenStream".to_owned()];
+
+        let rendered = render_parser("TParser", &data, None).expect("parser should render");
+
+        assert!(rendered.contains("pub const fn token_stream(&self) -> &CommonTokenStream<S>"));
+        assert!(rendered.contains(
+            "pub fn token_stream_rule(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError>"
+        ));
+        assert!(!rendered.contains("pub fn token_stream(&mut self)"));
     }
 
     #[test]
