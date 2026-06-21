@@ -3706,6 +3706,7 @@ where
             };
             selected.map_err(|expected| {
                 let error = self.recognition_error(rule_index, start_index, &expected);
+                self.record_syntax_errors(1);
                 report_token_source_errors(&self.input.drain_source_errors());
                 error
             })?
@@ -4188,6 +4189,7 @@ where
         );
         let Some(outcome) = select_best_outcome(outcomes.into_iter(), self.prediction_mode) else {
             let error = self.recognition_error(rule_index, start_index, &expected);
+            self.record_syntax_errors(1);
             report_token_source_errors(&self.input.drain_source_errors());
             return Err(error);
         };
@@ -9629,6 +9631,22 @@ mod tests {
                 .text(),
             Some("y")
         );
+    }
+
+    #[test]
+    fn parser_syntax_error_count_tracks_failed_interpreted_parse() {
+        let atn = token_then_eof_atn();
+        let mut parser = mini_parser(vec![
+            CommonToken::new(2).with_text("y"),
+            CommonToken::eof("parser-test", 1, 1, 1),
+        ]);
+
+        let error = parser
+            .parse_atn_rule(&atn, 0)
+            .expect_err("start-rule mismatch should remain a parser error");
+
+        assert_eq!(parser.number_of_syntax_errors(), 1);
+        assert!(matches!(error, AntlrError::ParserError { .. }));
     }
 
     #[test]
