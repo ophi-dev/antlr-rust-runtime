@@ -2316,6 +2316,18 @@ where
         &mut self.input
     }
 
+    /// Returns the token stream owned by this parser.
+    #[must_use]
+    pub const fn token_stream(&self) -> &CommonTokenStream<S> {
+        &self.input
+    }
+
+    /// Consumes this parser and returns its token stream.
+    #[must_use]
+    pub fn into_token_stream(self) -> CommonTokenStream<S> {
+        self.input
+    }
+
     /// Emits diagnostics buffered by the token stream while generated parser
     /// code was fetching lexer tokens directly.
     pub fn report_token_source_errors(&mut self) {
@@ -9445,6 +9457,34 @@ mod tests {
                 .token_type(),
             TOKEN_EOF
         );
+    }
+
+    #[test]
+    fn parser_exposes_buffered_token_stream_after_parse() {
+        let atn = token_then_eof_atn();
+        let mut parser = mini_parser(vec![
+            CommonToken::new(1).with_text("x"),
+            CommonToken::eof("parser-test", 1, 1, 1),
+        ]);
+
+        let tree = parser
+            .parse_atn_rule(&atn, 0)
+            .expect("artificial parser rule should parse");
+        assert_eq!(tree.text(), "x<EOF>");
+
+        let stream = parser.token_stream();
+        let source_index_after_parse = stream.token_source().index;
+        let buffered = stream.tokens();
+        assert_eq!(buffered.len(), 2);
+        assert_eq!(buffered[0].text(), Some("x"));
+        assert_eq!(buffered[0].token_index(), 0);
+        assert_eq!(buffered[1].token_type(), TOKEN_EOF);
+        assert_eq!(stream.token_source().index, source_index_after_parse);
+
+        let stream = parser.into_token_stream();
+        assert_eq!(stream.token_source().index, source_index_after_parse);
+        assert_eq!(stream.tokens()[0].text(), Some("x"));
+        assert_eq!(stream.tokens()[1].token_type(), TOKEN_EOF);
     }
 
     #[test]
