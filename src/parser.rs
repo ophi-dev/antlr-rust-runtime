@@ -9252,10 +9252,7 @@ mod tests {
         let tree = parser.finish_rule(child, false);
 
         assert_eq!(parser.la(1), TOKEN_EOF);
-        assert_eq!(
-            tree.to_string_tree(&["s".to_owned(), "a".to_owned()]),
-            "(a z)"
-        );
+        assert_eq!(tree.to_string_tree(&["s", "a"]), "(a z)");
         assert_eq!(
             parser.generated_parser_diagnostics,
             [ParserDiagnostic {

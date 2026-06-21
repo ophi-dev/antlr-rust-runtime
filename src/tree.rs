@@ -20,7 +20,7 @@ impl ParseTree {
         }
     }
 
-    pub fn to_string_tree(&self, rule_names: &[String]) -> String {
+    pub fn to_string_tree<S: AsRef<str>>(&self, rule_names: &[S]) -> String {
         match self {
             Self::Rule(rule) => rule.to_string_tree(rule_names),
             Self::Terminal(node) => escape_tree_text(&node.text()),
@@ -92,7 +92,7 @@ impl ParseTree {
     pub fn rule_invocation_stack(
         &self,
         rule_index: usize,
-        rule_names: &[String],
+        rule_names: &[impl AsRef<str>],
     ) -> Option<Vec<String>> {
         let mut stack = Vec::new();
         if self.find_rule_path(rule_index, rule_names, &mut stack) {
@@ -105,7 +105,7 @@ impl ParseTree {
     fn find_rule_path(
         &self,
         rule_index: usize,
-        rule_names: &[String],
+        rule_names: &[impl AsRef<str>],
         stack: &mut Vec<String>,
     ) -> bool {
         let Self::Rule(rule) = self else {
@@ -115,7 +115,7 @@ impl ParseTree {
         stack.push(
             rule_names
                 .get(current_index)
-                .map_or("<unknown>", String::as_str)
+                .map_or("<unknown>", |name| name.as_ref())
                 .to_owned(),
         );
         if current_index == rule_index
@@ -167,7 +167,7 @@ impl RuleNode {
         self.context.text()
     }
 
-    pub fn to_string_tree(&self, rule_names: &[String]) -> String {
+    pub fn to_string_tree<S: AsRef<str>>(&self, rule_names: &[S]) -> String {
         self.context.to_string_tree(rule_names)
     }
 }
@@ -361,10 +361,10 @@ impl ParserRuleContext {
         self.children.iter().map(ParseTree::text).collect()
     }
 
-    pub fn to_string_tree(&self, rule_names: &[String]) -> String {
+    pub fn to_string_tree<S: AsRef<str>>(&self, rule_names: &[S]) -> String {
         let name = rule_names
             .get(self.rule_index)
-            .map_or("<unknown>", String::as_str);
+            .map_or("<unknown>", |name| name.as_ref());
         let display_name = if self.alt_number == 0 {
             name.to_owned()
         } else {
@@ -493,7 +493,7 @@ mod tests {
             CommonToken::new(1).with_text("x"),
         )));
         let tree = ParseTree::Rule(RuleNode::new(ctx));
-        assert_eq!(tree.to_string_tree(&["expr".to_owned()]), "(expr x)");
+        assert_eq!(tree.to_string_tree(&["expr"]), "(expr x)");
     }
 
     #[test]
@@ -527,7 +527,7 @@ mod tests {
         let tree = ParseTree::Rule(RuleNode::new(root));
 
         assert_eq!(
-            tree.rule_invocation_stack(1, &["s".to_owned(), "a".to_owned()]),
+            tree.rule_invocation_stack(1, &["s", "a"]),
             Some(vec!["a".to_owned(), "s".to_owned()])
         );
     }

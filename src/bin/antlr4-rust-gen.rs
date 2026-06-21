@@ -6559,10 +6559,9 @@ fn render_rule_invocation_stack_write(
     tree_expr: &str,
     rule_index_expr: &str,
 ) -> String {
-    let rule_names =
-        "METADATA.rule_names().iter().map(|name| (*name).to_owned()).collect::<Vec<_>>()";
+    let rule_names = "METADATA.rule_names()";
     format!(
-        "let stack = {tree_expr}.rule_invocation_stack({rule_index_expr}, &{rule_names}).unwrap_or_default().join(\", \"); {write}(\"[{{}}]\", stack);"
+        "let stack = {tree_expr}.rule_invocation_stack({rule_index_expr}, {rule_names}).unwrap_or_default().join(\", \"); {write}(\"[{{}}]\", stack);"
     )
 }
 
@@ -6613,19 +6612,18 @@ fn render_after_token_display_write(
 /// Emits the generated print statement for either the current parse tree or a
 /// selected child rule tree found inside it.
 fn render_string_tree_write(write: &str, tree_expr: &str, target: &StringTreeTarget) -> String {
-    let rule_names =
-        "METADATA.rule_names().iter().map(|name| (*name).to_owned()).collect::<Vec<_>>()";
+    let rule_names = "METADATA.rule_names()";
     match target {
         StringTreeTarget::Current => {
-            format!("{write}(\"{{}}\", {tree_expr}.to_string_tree(&{rule_names}));")
+            format!("{write}(\"{{}}\", {tree_expr}.to_string_tree({rule_names}));")
         }
         StringTreeTarget::Rule(rule_index) => format!(
-            "let text = {tree_expr}.first_rule({rule_index}).map_or_else(String::new, |node| node.to_string_tree(&{rule_names})); {write}(\"{{}}\", text);"
+            "let text = {tree_expr}.first_rule({rule_index}).map_or_else(String::new, |node| node.to_string_tree({rule_names})); {write}(\"{{}}\", text);"
         ),
         StringTreeTarget::Label(label) => {
             let label = rust_string(label);
             format!(
-                "let text = METADATA.rule_names().iter().position(|name| *name == \"{label}\").and_then(|rule_index| {tree_expr}.first_rule(rule_index)).map_or_else(String::new, |node| node.to_string_tree(&{rule_names})); {write}(\"{{}}\", text);"
+                "let text = METADATA.rule_names().iter().position(|name| *name == \"{label}\").and_then(|rule_index| {tree_expr}.first_rule(rule_index)).map_or_else(String::new, |node| node.to_string_tree({rule_names})); {write}(\"{{}}\", text);"
             )
         }
     }
