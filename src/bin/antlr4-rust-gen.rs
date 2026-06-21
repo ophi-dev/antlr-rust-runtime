@@ -4179,6 +4179,7 @@ where
 {{
     fn build_parse_trees(&self) -> bool {{ self.base.build_parse_trees() }}
     fn set_build_parse_trees(&mut self, build: bool) {{ self.base.set_build_parse_trees(build); }}
+    fn number_of_syntax_errors(&self) -> usize {{ self.base.number_of_syntax_errors() }}
     fn report_diagnostic_errors(&self) -> bool {{ self.base.report_diagnostic_errors() }}
     fn set_report_diagnostic_errors(&mut self, report: bool) {{ self.base.set_report_diagnostic_errors(report); }}
     fn prediction_mode(&self) -> antlr4_runtime::PredictionMode {{ self.base.prediction_mode() }}
@@ -9129,6 +9130,7 @@ s : ;
 
         assert!(rendered.contains("if __from_generated && allow_generated_fallback {"));
         assert!(rendered.contains("self.base.report_generated_parser_diagnostics();"));
+        assert!(rendered.contains("fn number_of_syntax_errors(&self) -> usize"));
         assert!(!rendered.contains("self.base.report_token_source_errors();"));
     }
 
