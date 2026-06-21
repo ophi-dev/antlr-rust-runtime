@@ -158,14 +158,15 @@ fn main() -> Result<(), antlr4_runtime::AntlrError> {
 
 Generated parsers expose one public method per grammar rule. Call the method
 that matches the grammar's intended top-level rule for the input; the generator
-cannot infer that semantic choice from `.interp` metadata. The generated parser
-rustdoc lists the available rule methods.
+can identify rules that are not called by other rules, but it cannot infer the
+semantic choice between multiple top-level forms. The generated parser rustdoc
+lists likely entry methods first, followed by all rule methods.
 
 For the JSON grammar above, `json()` is the natural entry. Larger grammars may
-have several top-level forms: with the Kotlin grammar, `.kt` compilation units
-typically use `kotlin_file()`, while script-style `.kts` input uses `script()`.
-Calling the wrong rule can still recover and return a parse tree with error
-nodes, so check parser diagnostics when adding a new input form.
+have several top-level forms, so confirm the intended entry rule against that
+grammar's documentation. Calling the wrong rule can still recover and return a
+parse tree with error nodes, so check parser diagnostics when adding a new input
+form.
 
 ## Technical Notes
 

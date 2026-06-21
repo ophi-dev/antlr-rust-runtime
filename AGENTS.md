@@ -1,5 +1,13 @@
 # Development notes
 
+## Codegen boundaries
+
+Generic runtime and codegen paths must stay grammar-agnostic. Do not add
+language-specific rule names, grammar names, file extensions, or semantic
+workarounds to `src/bin/antlr4-rust-gen.rs` or runtime modules; model the
+behavior from ANTLR metadata/ATN structure instead, and keep language-specific
+guidance in docs or tests for that language.
+
 ## Kotlin parser parity perf benchmark
 
 Reproduces the timings against the Kotlin grammar from `antlr/grammars-v4`.
