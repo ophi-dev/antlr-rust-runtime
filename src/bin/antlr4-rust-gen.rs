@@ -2173,6 +2173,11 @@ fn render_generated_rule_method(
     .expect("writing to a string cannot fail");
     writeln!(
         out,
+        "                        self.base.record_generated_syntax_error();"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
         "                        return Err(GeneratedRuleError::Fatal(__error));"
     )
     .expect("writing to a string cannot fail");
@@ -2328,6 +2333,11 @@ fn render_generated_left_recursive_rule_method(
     writeln!(
         out,
         "                        self.base.restore_generated_diagnostics(__generated_diagnostic_marker);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "                        self.base.record_generated_syntax_error();"
     )
     .expect("writing to a string cannot fail");
     writeln!(
@@ -4199,6 +4209,7 @@ where
 {{
     fn build_parse_trees(&self) -> bool {{ self.base.build_parse_trees() }}
     fn set_build_parse_trees(&mut self, build: bool) {{ self.base.set_build_parse_trees(build); }}
+    fn number_of_syntax_errors(&self) -> usize {{ self.base.number_of_syntax_errors() }}
     fn report_diagnostic_errors(&self) -> bool {{ self.base.report_diagnostic_errors() }}
     fn set_report_diagnostic_errors(&mut self, report: bool) {{ self.base.set_report_diagnostic_errors(report); }}
     fn prediction_mode(&self) -> antlr4_runtime::PredictionMode {{ self.base.prediction_mode() }}
@@ -9170,6 +9181,7 @@ s : ;
 
         assert!(rendered.contains("if __from_generated && allow_generated_fallback {"));
         assert!(rendered.contains("self.base.report_generated_parser_diagnostics();"));
+        assert!(rendered.contains("fn number_of_syntax_errors(&self) -> usize"));
         assert!(!rendered.contains("self.base.report_token_source_errors();"));
     }
 
@@ -9254,6 +9266,13 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
         assert!(
             guard < fatal,
             "Fatal return must be inside the allow_fallback guard"
+        );
+        let count = rest
+            .find("self.base.record_generated_syntax_error();")
+            .expect("fatal sync path records syntax error");
+        assert!(
+            guard < count && count < fatal,
+            "fatal sync path must increment before returning"
         );
         // And the nested-child path recovers locally and returns Ok.
         let recover = rest
