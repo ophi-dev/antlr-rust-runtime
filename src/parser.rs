@@ -449,6 +449,12 @@ pub trait Parser: Recognizer {
     /// Enables or disables parse-tree construction for subsequent rule calls.
     fn set_build_parse_trees(&mut self, build: bool);
 
+    /// Returns the number of parser syntax errors recorded by committed parse
+    /// paths so far.
+    fn number_of_syntax_errors(&self) -> usize {
+        0
+    }
+
     /// Reports whether prediction diagnostic-listener messages are emitted
     /// during parser ATN recognition.
     fn report_diagnostic_errors(&self) -> bool {
@@ -480,6 +486,7 @@ pub struct BaseParser<S> {
     input: CommonTokenStream<S>,
     data: RecognizerData,
     build_parse_trees: bool,
+    syntax_errors: usize,
     report_diagnostic_errors: bool,
     prediction_mode: PredictionMode,
     prediction_diagnostics: Vec<ParserDiagnostic>,
@@ -564,6 +571,13 @@ pub struct BaseParser<S> {
     /// selected rule spans after recognition, avoiding many speculative `Rc`
     /// nodes that are thrown away with losing paths.
     fast_token_nodes_enabled: bool,
+}
+
+/// Rollback marker for speculative generated parser paths.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct GeneratedDiagnosticsCheckpoint {
+    diagnostics_len: usize,
+    syntax_errors: usize,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -2280,6 +2294,7 @@ where
             input,
             data,
             build_parse_trees: true,
+            syntax_errors: 0,
             report_diagnostic_errors: false,
             prediction_mode: PredictionMode::Ll,
             prediction_diagnostics: Vec::new(),
@@ -2316,21 +2331,54 @@ where
         &mut self.input
     }
 
+    /// Returns the token stream owned by this parser.
+    #[must_use]
+    pub const fn token_stream(&self) -> &CommonTokenStream<S> {
+        &self.input
+    }
+
+    /// Consumes this parser and returns its token stream.
+    #[must_use]
+    pub fn into_token_stream(self) -> CommonTokenStream<S> {
+        self.input
+    }
+
+    /// Returns the number of parser syntax errors recorded by committed parse
+    /// paths so far.
+    pub const fn number_of_syntax_errors(&self) -> usize {
+        self.syntax_errors
+    }
+
+    /// Records a syntax error that generated parser code returns as fatal before
+    /// it can recover into the current rule context.
+    pub const fn record_generated_syntax_error(&mut self) {
+        self.record_syntax_errors(1);
+    }
+
+    const fn record_syntax_errors(&mut self, count: usize) {
+        self.syntax_errors = self.syntax_errors.saturating_add(count);
+    }
+
     /// Emits diagnostics buffered by the token stream while generated parser
     /// code was fetching lexer tokens directly.
     pub fn report_token_source_errors(&mut self) {
         report_token_source_errors(&self.input.drain_source_errors());
     }
 
-    /// Captures the current generated-parser diagnostic buffer length before a
+    /// Captures generated-parser diagnostics and syntax-error count before a
     /// speculative generated rule path.
-    pub const fn generated_diagnostics_checkpoint(&self) -> usize {
-        self.generated_parser_diagnostics.len()
+    pub const fn generated_diagnostics_checkpoint(&self) -> GeneratedDiagnosticsCheckpoint {
+        GeneratedDiagnosticsCheckpoint {
+            diagnostics_len: self.generated_parser_diagnostics.len(),
+            syntax_errors: self.syntax_errors,
+        }
     }
 
     /// Restores generated-parser diagnostics after a speculative rule path failed.
-    pub fn restore_generated_diagnostics(&mut self, marker: usize) {
-        self.generated_parser_diagnostics.truncate(marker);
+    pub fn restore_generated_diagnostics(&mut self, marker: GeneratedDiagnosticsCheckpoint) {
+        self.generated_parser_diagnostics
+            .truncate(marker.diagnostics_len);
+        self.syntax_errors = marker.syntax_errors;
         self.generated_sync_expected = None;
     }
 
@@ -2661,8 +2709,8 @@ where
                 "extraneous input {} expecting {expected_display}",
                 token_input_display(&current)
             );
-            self.generated_parser_diagnostics
-                .push(diagnostic_for_token(Some(&current), message));
+            self.push_generated_parser_diagnostic(diagnostic_for_token(Some(&current), message));
+            self.record_syntax_errors(1);
             self.generated_sync_expected = None;
             // Single-token deletion: skip `current`, then accept `next`. The
             // accepted token can be EOF only if it is a real EOF terminal.
@@ -2700,8 +2748,8 @@ where
                 "missing {expected_display} at {}",
                 token_input_display(&current)
             );
-            self.generated_parser_diagnostics
-                .push(diagnostic_for_token(Some(&current), message));
+            self.push_generated_parser_diagnostic(diagnostic_for_token(Some(&current), message));
+            self.record_syntax_errors(1);
             self.generated_sync_expected = None;
             let token_type = expected_symbols.iter().next().copied().unwrap_or(TOKEN_EOF);
             let mut missing_symbol = BTreeSet::new();
@@ -2944,6 +2992,7 @@ where
             self.consume();
             self.add_parse_child(context, ParseTree::Error(ErrorNode::new(token)));
         }
+        self.record_syntax_errors(1);
     }
 
     fn push_generated_parser_diagnostic(&mut self, diagnostic: ParserDiagnostic) {
@@ -3333,8 +3382,11 @@ where
                             .map_or_else(|| "'<EOF>'".to_owned(), token_input_display),
                         self.expected_symbols_display(&expected_symbols)
                     );
-                    self.generated_parser_diagnostics
-                        .push(diagnostic_for_token(current_token.as_ref(), message));
+                    self.push_generated_parser_diagnostic(diagnostic_for_token(
+                        current_token.as_ref(),
+                        message,
+                    ));
+                    self.record_syntax_errors(1);
                     let mut children = Vec::with_capacity(skipped.len());
                     for index in skipped {
                         if let Some(token) = self.token_at(index) {
@@ -3660,6 +3712,7 @@ where
             };
             selected.map_err(|expected| {
                 let error = self.recognition_error(rule_index, start_index, &expected);
+                self.record_syntax_errors(1);
                 report_token_source_errors(&self.input.drain_source_errors());
                 error
             })?
@@ -3667,6 +3720,7 @@ where
             first_pass.expect("first_pass is Ok in the no-retry branch")
         };
 
+        self.record_syntax_errors(outcome.diagnostics.len());
         report_parser_diagnostics(&self.prediction_diagnostics);
         report_parser_diagnostics(&outcome.diagnostics);
         report_token_source_errors(&self.input.drain_source_errors());
@@ -4141,10 +4195,12 @@ where
         );
         let Some(outcome) = select_best_outcome(outcomes.into_iter(), self.prediction_mode) else {
             let error = self.recognition_error(rule_index, start_index, &expected);
+            self.record_syntax_errors(1);
             report_token_source_errors(&self.input.drain_source_errors());
             return Err(error);
         };
 
+        self.record_syntax_errors(outcome.diagnostics.len());
         report_parser_diagnostics(&self.prediction_diagnostics);
         report_parser_diagnostics(&outcome.diagnostics);
         report_token_source_errors(&self.input.drain_source_errors());
@@ -8309,6 +8365,10 @@ where
         self.build_parse_trees = build;
     }
 
+    fn number_of_syntax_errors(&self) -> usize {
+        Self::number_of_syntax_errors(self)
+    }
+
     fn report_diagnostic_errors(&self) -> bool {
         self.report_diagnostic_errors
     }
@@ -8542,6 +8602,7 @@ mod tests {
             .expect("single extraneous token recovers");
         assert_eq!(children.len(), 1);
         assert!(matches!(children[0], ParseTree::Error(_)));
+        assert_eq!(single.number_of_syntax_errors(), 1);
         // Exactly one token consumed (the cursor now sits on `b`).
         assert_eq!(single.la(1), 2);
 
@@ -8605,6 +8666,7 @@ mod tests {
             .expect("single token before EOF recovers");
         assert_eq!(children.len(), 1);
         assert!(matches!(children[0], ParseTree::Error(_)));
+        assert_eq!(parser.number_of_syntax_errors(), 1);
         assert_eq!(
             parser.la(1),
             TOKEN_EOF,
@@ -8666,6 +8728,7 @@ mod tests {
             .expect("loop-back multi-token deletion recovers onto EOF");
         assert_eq!(children.len(), 2, "both `c`s deleted as error nodes");
         assert!(children.iter().all(|c| matches!(c, ParseTree::Error(_))));
+        assert_eq!(parser.number_of_syntax_errors(), 1);
         assert_eq!(parser.la(1), TOKEN_EOF, "EOF left for the rule's EOF match");
     }
 
@@ -9031,6 +9094,7 @@ mod tests {
                 invoking_state: 1,
             },
         ];
+        assert_eq!(parser.number_of_syntax_errors(), 0);
 
         let node = parser
             .match_token_recovering(2, 5, &atn)
@@ -9042,6 +9106,7 @@ mod tests {
         // so no EOF terminal is consumed even though lookahead is EOF.
         assert!(!node.consumed_eof());
         assert_eq!(parser.la(1), TOKEN_EOF);
+        assert_eq!(parser.number_of_syntax_errors(), 1);
         assert_eq!(
             parser.generated_parser_diagnostics,
             [ParserDiagnostic {
@@ -9050,6 +9115,81 @@ mod tests {
                 message: "missing 'Y' at '<EOF>'".to_owned(),
             }]
         );
+    }
+
+    #[test]
+    fn generated_match_token_counts_single_token_deletion_recovery() {
+        let atn = generated_match_recovery_atn();
+        let data = RecognizerData::new(
+            "Mini.g4",
+            Vocabulary::new(
+                [None, Some("'X'"), Some("'Y'"), Some("'Z'")],
+                [None, Some("X"), Some("Y"), Some("Z")],
+                [None::<&str>, None, None, None],
+            ),
+        );
+        let mut parser = BaseParser::new(
+            CommonTokenStream::new(Source {
+                tokens: vec![
+                    CommonToken::new(3).with_text("z"),
+                    CommonToken::new(2).with_text("y"),
+                    CommonToken::eof("parser-test", 3, 1, 3),
+                ],
+                index: 0,
+            }),
+            data,
+        );
+
+        let node = parser
+            .match_token_recovering(2, 5, &atn)
+            .expect("generated match should delete the extraneous token");
+
+        assert_eq!(node.children().len(), 2);
+        assert!(matches!(node.children()[0], ParseTree::Error(_)));
+        assert_eq!(node.children()[0].text(), "z");
+        assert_eq!(node.children()[1].text(), "y");
+        assert_eq!(parser.number_of_syntax_errors(), 1);
+    }
+
+    #[test]
+    fn generated_diagnostic_restore_rolls_back_syntax_error_count() {
+        let atn = generated_match_recovery_atn();
+        let data = RecognizerData::new(
+            "Mini.g4",
+            Vocabulary::new(
+                [None, Some("'X'"), Some("'Y'")],
+                [None, Some("X"), Some("Y")],
+                [None::<&str>, None, None],
+            ),
+        );
+        let mut parser = BaseParser::new(
+            CommonTokenStream::new(Source {
+                tokens: vec![CommonToken::eof("parser-test", 3, 1, 3)],
+                index: 0,
+            }),
+            data,
+        );
+        parser.rule_context_stack = vec![
+            RuleContextFrame {
+                rule_index: 0,
+                invoking_state: 0,
+            },
+            RuleContextFrame {
+                rule_index: 1,
+                invoking_state: 1,
+            },
+        ];
+        let marker = parser.generated_diagnostics_checkpoint();
+
+        let _ = parser
+            .match_token_recovering(2, 5, &atn)
+            .expect("generated match should insert missing token");
+        assert_eq!(parser.number_of_syntax_errors(), 1);
+
+        parser.restore_generated_diagnostics(marker);
+
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+        assert!(parser.generated_parser_diagnostics.is_empty());
     }
 
     #[test]
@@ -9253,6 +9393,7 @@ mod tests {
 
         assert_eq!(parser.la(1), TOKEN_EOF);
         assert_eq!(tree.to_string_tree(&["s", "a"]), "(a z)");
+        assert_eq!(parser.number_of_syntax_errors(), 1);
         assert_eq!(
             parser.generated_parser_diagnostics,
             [ParserDiagnostic {
@@ -9424,6 +9565,7 @@ mod tests {
             .parse_atn_rule(&atn, 0)
             .expect("artificial parser rule should parse");
         assert_eq!(tree.text(), "x<EOF>");
+        assert_eq!(parser.number_of_syntax_errors(), 0);
         assert_eq!(
             tree.first_rule_stop(0)
                 .expect("rule should stop at EOF")
@@ -9445,6 +9587,72 @@ mod tests {
                 .token_type(),
             TOKEN_EOF
         );
+    }
+
+    #[test]
+    fn parser_exposes_buffered_token_stream_after_parse() {
+        let atn = token_then_eof_atn();
+        let mut parser = mini_parser(vec![
+            CommonToken::new(1).with_text("x"),
+            CommonToken::eof("parser-test", 1, 1, 1),
+        ]);
+
+        let tree = parser
+            .parse_atn_rule(&atn, 0)
+            .expect("artificial parser rule should parse");
+        assert_eq!(tree.text(), "x<EOF>");
+
+        let stream = parser.token_stream();
+        let source_index_after_parse = stream.token_source().index;
+        let buffered = stream.tokens();
+        assert_eq!(buffered.len(), 2);
+        assert_eq!(buffered[0].text(), Some("x"));
+        assert_eq!(buffered[0].token_index(), 0);
+        assert_eq!(buffered[1].token_type(), TOKEN_EOF);
+        assert_eq!(stream.token_source().index, source_index_after_parse);
+
+        let stream = parser.into_token_stream();
+        assert_eq!(stream.token_source().index, source_index_after_parse);
+        assert_eq!(stream.tokens()[0].text(), Some("x"));
+        assert_eq!(stream.tokens()[1].token_type(), TOKEN_EOF);
+    }
+
+    #[test]
+    fn parser_syntax_error_count_tracks_interpreted_recovery() {
+        let atn = token_then_eof_atn();
+        let mut parser = mini_parser(vec![
+            CommonToken::new(1).with_text("x"),
+            CommonToken::new(2).with_text("y"),
+            CommonToken::eof("parser-test", 2, 1, 2),
+        ]);
+
+        let tree = parser
+            .parse_atn_rule(&atn, 0)
+            .expect("invalid token should recover into an error node");
+
+        assert_eq!(parser.number_of_syntax_errors(), 1);
+        assert_eq!(
+            tree.first_error_token()
+                .expect("recovery should embed an error token")
+                .text(),
+            Some("y")
+        );
+    }
+
+    #[test]
+    fn parser_syntax_error_count_tracks_failed_interpreted_parse() {
+        let atn = token_then_eof_atn();
+        let mut parser = mini_parser(vec![
+            CommonToken::new(2).with_text("y"),
+            CommonToken::eof("parser-test", 1, 1, 1),
+        ]);
+
+        let error = parser
+            .parse_atn_rule(&atn, 0)
+            .expect_err("start-rule mismatch should remain a parser error");
+
+        assert_eq!(parser.number_of_syntax_errors(), 1);
+        assert!(matches!(error, AntlrError::ParserError { .. }));
     }
 
     #[test]
