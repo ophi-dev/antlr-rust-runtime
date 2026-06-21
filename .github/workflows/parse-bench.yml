@@ -46,7 +46,7 @@ jobs:
         # actions/setup-python v6
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
-          python-version: '3.11'
+          python-version: '3.14'
 
       - name: Set up Rust
         run: |
