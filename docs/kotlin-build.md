@@ -74,6 +74,26 @@ let tree = kotlin_parser::parse("fun main() {}", KotlinLexer::new, KotlinParser:
 assert!(tree.text().contains("fun"));
 ```
 
+Use `parse_with_parser` when a caller also needs parser state after the entry
+rule, such as syntax diagnostics or the token stream:
+
+```rust
+use antlr4_runtime::Parser;
+use generated::kotlin_lexer::KotlinLexer;
+use generated::kotlin_parser::{self, KotlinParser};
+
+let output =
+    kotlin_parser::parse_with_parser("fun main() {}", KotlinLexer::new, KotlinParser::kotlin_file)
+        .expect("entry rule parses");
+let syntax_errors = output.parser.number_of_syntax_errors();
+let tree = output.result;
+let tokens = output.parser.into_token_stream();
+
+assert_eq!(syntax_errors, 0);
+assert!(tree.text().contains("fun"));
+assert!(!tokens.tokens().is_empty());
+```
+
 The generated helper is additive. The explicit path is still available when the
 caller needs to name the input source, adjust parser options, or attach custom
 error handling before the entry rule:

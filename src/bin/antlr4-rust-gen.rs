@@ -7903,11 +7903,27 @@ fn render_parser_base_initialization(members: &[IntMemberTemplate]) -> String {
 /// caller-selected lexer, token stream, parser, and entry rule in one call.
 fn render_parser_parse_convenience(type_name: &str) -> String {
     format!(
-        r#"/// Parses UTF-8 text by constructing the lexer, token stream, parser, and
+        r#"/// Result from [`parse_with_parser`].
+///
+/// Keeps the generated parser available after the entry rule runs so callers
+/// can inspect diagnostics or recover the parser-owned token stream.
+#[derive(Debug)]
+pub struct ParseOutput<R, L>
+where
+    L: TokenSource,
+{{
+    pub result: R,
+    pub parser: {type_name}<L>,
+}}
+
+/// Parses UTF-8 text by constructing the lexer, token stream, parser, and
 /// caller-selected entry rule in one call.
 ///
 /// Pass the generated lexer constructor and a parser entry rule, for example
 /// `parse(src, MyGrammarLexer::new, {type_name}::file)`.
+///
+/// Use [`parse_with_parser`] instead when the caller needs parser diagnostics
+/// or the parser-owned token stream after the entry rule runs.
 pub fn parse<L, R>(
     input: impl AsRef<str>,
     lexer: impl FnOnce(antlr4_runtime::InputStream) -> L,
@@ -7916,10 +7932,27 @@ pub fn parse<L, R>(
 where
     L: TokenSource,
 {{
+    parse_with_parser(input, lexer, entry).map(|output| output.result)
+}}
+
+/// Parses UTF-8 text like [`parse`] while returning the parser after the entry
+/// rule has run.
+///
+/// This keeps the compact generated setup path available for callers that also
+/// need `Parser::number_of_syntax_errors()` or `{type_name}::into_token_stream()`.
+pub fn parse_with_parser<L, R>(
+    input: impl AsRef<str>,
+    lexer: impl FnOnce(antlr4_runtime::InputStream) -> L,
+    entry: impl FnOnce(&mut {type_name}<L>) -> Result<R, antlr4_runtime::AntlrError>,
+) -> Result<ParseOutput<R, L>, antlr4_runtime::AntlrError>
+where
+    L: TokenSource,
+{{
     let lexer = lexer(antlr4_runtime::InputStream::new(input.as_ref()));
     let tokens = CommonTokenStream::new(lexer);
     let mut parser = {type_name}::new(tokens);
-    entry(&mut parser)
+    let result = entry(&mut parser)?;
+    Ok(ParseOutput {{ result, parser }})
 }}"#
     )
 }
@@ -9250,10 +9283,19 @@ s : ;
         let rendered =
             render_parser("TParser", &minimal_parser_data(), None).expect("parser should render");
 
+        assert!(rendered.contains("pub struct ParseOutput<R, L>"));
+        assert!(rendered.contains("pub result: R,"));
+        assert!(rendered.contains("pub parser: TParser<L>,"));
         assert!(rendered.contains("pub fn parse<L, R>("));
+        assert!(rendered.contains("pub fn parse_with_parser<L, R>("));
         assert!(rendered.contains("lexer: impl FnOnce(antlr4_runtime::InputStream) -> L"));
         assert!(rendered.contains("antlr4_runtime::InputStream::new(input.as_ref())"));
         assert!(rendered.contains("let tokens = CommonTokenStream::new(lexer);"));
+        assert!(rendered.contains("let result = entry(&mut parser)?;"));
+        assert!(rendered.contains("Ok(ParseOutput { result, parser })"));
+        assert!(
+            rendered.contains("parse_with_parser(input, lexer, entry).map(|output| output.result)")
+        );
         assert!(rendered.contains("pub fn new(input: CommonTokenStream<S>) -> Self"));
     }
 
