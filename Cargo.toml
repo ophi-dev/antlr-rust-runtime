@@ -1,6 +1,6 @@
 [package]
 name = "antlr-rust-runtime"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 rust-version = "1.95"
 description = "High performance Rust runtime and target support for ANTLR v4 generated parsers"
