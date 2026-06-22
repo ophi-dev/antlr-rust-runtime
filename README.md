@@ -1,6 +1,6 @@
 # ANTLR4 Runtime for Rust
 
-![Crates.io Version](https://img.shields.io/crates/v/antlr-rust-runtime)
+[![Crates.io Version](https://img.shields.io/crates/v/antlr-rust-runtime)](https://crates.io/crates/antlr-rust-runtime)
 [![ANTLR Runtime Testsuite](https://github.com/ophi-dev/antlr-rust-runtime/actions/workflows/antlr-runtime-testsuite.yml/badge.svg)](https://github.com/ophi-dev/antlr-rust-runtime/actions/workflows/antlr-runtime-testsuite.yml)
 
 `antlr-rust-runtime` is a pure Rust runtime and metadata generator for ANTLR v4
