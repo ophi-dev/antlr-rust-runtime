@@ -7902,13 +7902,14 @@ fn render_parser_base_initialization(members: &[IntMemberTemplate]) -> String {
 /// Renders the parser-module convenience that wires text input through the
 /// caller-selected lexer, token stream, parser, and entry rule in one call.
 fn render_parser_parse_convenience(type_name: &str) -> String {
+    let output_type_name = format!("{type_name}ParseOutput");
     format!(
         r#"/// Result from [`parse_with_parser`].
 ///
 /// Keeps the generated parser available after the entry rule runs so callers
 /// can inspect diagnostics or recover the parser-owned token stream.
 #[derive(Debug)]
-pub struct ParseOutput<R, L>
+pub struct {output_type_name}<R, L>
 where
     L: TokenSource,
 {{
@@ -7924,13 +7925,11 @@ where
 ///
 /// Use [`parse_with_parser`] instead when the caller needs parser diagnostics
 /// or the parser-owned token stream after the entry rule runs.
-pub fn parse<L, R>(
+pub fn parse<L: TokenSource, R>(
     input: impl AsRef<str>,
     lexer: impl FnOnce(antlr4_runtime::InputStream) -> L,
     entry: impl FnOnce(&mut {type_name}<L>) -> Result<R, antlr4_runtime::AntlrError>,
 ) -> Result<R, antlr4_runtime::AntlrError>
-where
-    L: TokenSource,
 {{
     parse_with_parser(input, lexer, entry).map(|output| output.result)
 }}
@@ -7940,19 +7939,17 @@ where
 ///
 /// This keeps the compact generated setup path available for callers that also
 /// need `Parser::number_of_syntax_errors()` or `{type_name}::into_token_stream()`.
-pub fn parse_with_parser<L, R>(
+pub fn parse_with_parser<L: TokenSource, R>(
     input: impl AsRef<str>,
     lexer: impl FnOnce(antlr4_runtime::InputStream) -> L,
     entry: impl FnOnce(&mut {type_name}<L>) -> Result<R, antlr4_runtime::AntlrError>,
-) -> Result<ParseOutput<R, L>, antlr4_runtime::AntlrError>
-where
-    L: TokenSource,
+) -> Result<{output_type_name}<R, L>, antlr4_runtime::AntlrError>
 {{
     let lexer = lexer(antlr4_runtime::InputStream::new(input.as_ref()));
     let tokens = CommonTokenStream::new(lexer);
     let mut parser = {type_name}::new(tokens);
     let result = entry(&mut parser)?;
-    Ok(ParseOutput {{ result, parser }})
+    Ok({output_type_name} {{ result, parser }})
 }}"#
     )
 }
@@ -9283,20 +9280,41 @@ s : ;
         let rendered =
             render_parser("TParser", &minimal_parser_data(), None).expect("parser should render");
 
-        assert!(rendered.contains("pub struct ParseOutput<R, L>"));
+        assert!(rendered.contains("pub struct TParserParseOutput<R, L>"));
         assert!(rendered.contains("pub result: R,"));
         assert!(rendered.contains("pub parser: TParser<L>,"));
-        assert!(rendered.contains("pub fn parse<L, R>("));
-        assert!(rendered.contains("pub fn parse_with_parser<L, R>("));
+        assert!(rendered.contains("pub fn parse<L: TokenSource, R>("));
+        assert!(rendered.contains("pub fn parse_with_parser<L: TokenSource, R>("));
+        assert!(
+            !rendered
+                .contains(") -> Result<R, antlr4_runtime::AntlrError>\nwhere\n    L: TokenSource,")
+        );
+        assert!(!rendered.contains(
+            ") -> Result<TParserParseOutput<R, L>, antlr4_runtime::AntlrError>\nwhere\n    L: TokenSource,"
+        ));
         assert!(rendered.contains("lexer: impl FnOnce(antlr4_runtime::InputStream) -> L"));
         assert!(rendered.contains("antlr4_runtime::InputStream::new(input.as_ref())"));
         assert!(rendered.contains("let tokens = CommonTokenStream::new(lexer);"));
         assert!(rendered.contains("let result = entry(&mut parser)?;"));
-        assert!(rendered.contains("Ok(ParseOutput { result, parser })"));
+        assert!(rendered.contains("Ok(TParserParseOutput { result, parser })"));
         assert!(
             rendered.contains("parse_with_parser(input, lexer, entry).map(|output| output.result)")
         );
         assert!(rendered.contains("pub fn new(input: CommonTokenStream<S>) -> Self"));
+    }
+
+    #[test]
+    fn generated_parse_output_name_does_not_collide_with_parser_type() {
+        let rendered = render_parser("ParseOutput", &minimal_parser_data(), None)
+            .expect("parser should render");
+
+        assert!(rendered.contains("pub struct ParseOutputParseOutput<R, L>"));
+        assert!(rendered.contains("pub parser: ParseOutput<L>,"));
+        assert!(
+            rendered
+                .contains(") -> Result<ParseOutputParseOutput<R, L>, antlr4_runtime::AntlrError>")
+        );
+        assert!(rendered.contains("Ok(ParseOutputParseOutput { result, parser })"));
     }
 
     #[test]
