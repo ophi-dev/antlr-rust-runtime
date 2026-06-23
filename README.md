@@ -135,6 +135,26 @@ fn main() -> Result<(), antlr4_runtime::AntlrError> {
 }
 ```
 
+Use `parse_with_parser` when you want the compact setup path and also need the
+parser afterward for diagnostics or the owned token stream:
+
+```rust
+use antlr4_runtime::Parser;
+use generated::json::{self, Json};
+use generated::json_lexer::JsonLexer;
+
+fn main() -> Result<(), antlr4_runtime::AntlrError> {
+    let output = json::parse_with_parser(r#"{"a":1}"#, JsonLexer::new, Json::json)?;
+    let syntax_errors = output.parser.number_of_syntax_errors();
+    let tree = output.result;
+    let tokens = output.parser.into_token_stream();
+
+    println!("{} errors across {} tokens", syntax_errors, tokens.tokens().len());
+    println!("{}", tree.text());
+    Ok(())
+}
+```
+
 Or construct each layer explicitly when you need to set source names, parser
 options, or custom error handling before invoking the entry rule:
 
