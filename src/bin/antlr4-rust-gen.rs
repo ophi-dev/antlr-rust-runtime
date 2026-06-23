@@ -459,8 +459,7 @@ where
         self.base.lexer_dfa_string()
     }}
 }}
-{generated_footer}
-"#
+{generated_footer}"#
     ))
 }
 
@@ -4216,8 +4215,7 @@ where
     fn prediction_mode(&self) -> antlr4_runtime::PredictionMode {{ self.base.prediction_mode() }}
     fn set_prediction_mode(&mut self, mode: antlr4_runtime::PredictionMode) {{ self.base.set_prediction_mode(mode); }}
 }}
-{generated_footer}
-"#
+{generated_footer}"#
     ))
 }
 
@@ -8147,9 +8145,8 @@ atn:
             assert!(!rendered.contains("#!["));
             assert!(rendered.contains(GENERATED_MODULE_FOOTER));
             assert!(
-                rendered
-                    .trim_end()
-                    .ends_with("pub use self::__antlr4_rust_generated::*;")
+                rendered.ends_with("pub use self::__antlr4_rust_generated::*;\n"),
+                "generated module should end with exactly one trailing newline and no blank line at EOF"
             );
         }
     }
