@@ -1,7 +1,9 @@
+use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap};
 use std::hash::BuildHasherDefault;
 use std::rc::Rc;
 
+use crate::atn::Atn;
 use crate::char_stream::{CharStream, TextInterval};
 use crate::int_stream::EOF;
 use crate::prediction::PredictionFxHasher;
@@ -112,32 +114,31 @@ pub struct BaseLexer<I, F = CommonTokenFactory> {
     column: usize,
     hit_eof: bool,
     errors: Vec<TokenSourceError>,
-    lexer_dfa: LexerDfaTrace,
+    dfa_cache: Rc<RefCell<LexerDfaCache>>,
+    dfa_edges: BTreeSet<LexerDfaEdge>,
 }
 
-/// Compact observation log for the default-mode lexer DFA printed by `showDFA`
-/// runtime-suite descriptors.
+/// Learned lexer DFA: the input-independent state/transition tables built up
+/// by ATN simulation.
+///
+/// Semantic-predicate-dependent states are stored flagged and every consumer
+/// re-simulates them instead of trusting their cached data, so the cache can
+/// be shared across lexer instances (and inputs) for the same ATN — see
+/// [`BaseLexer::with_shared_dfa`].
 #[derive(Clone, Debug, Default)]
-struct LexerDfaTrace {
+struct LexerDfaCache {
     state_numbers: FxHashMap<LexerDfaKey, usize>,
     accept_predictions: FxHashMap<usize, i32>,
-    edges: BTreeSet<LexerDfaEdge>,
     cached_states: FxHashMap<usize, Rc<LexerDfaCachedState>>,
     transitions: FxHashMap<(usize, i32), LexerDfaCachedTransition>,
     mode_starts: FxHashMap<i32, usize>,
 }
 
-impl LexerDfaTrace {
-    fn new() -> Self {
-        Self {
-            state_numbers: FxHashMap::default(),
-            accept_predictions: FxHashMap::default(),
-            edges: BTreeSet::new(),
-            cached_states: FxHashMap::default(),
-            transitions: FxHashMap::default(),
-            mode_starts: FxHashMap::default(),
-        }
-    }
+thread_local! {
+    /// Learned lexer DFAs shared across lexer instances, keyed by a generated
+    /// lexer's static ATN identity (mirrors the parser's shared decision DFAs).
+    static SHARED_LEXER_DFA_CACHES: RefCell<HashMap<usize, Rc<RefCell<LexerDfaCache>>>> =
+        RefCell::new(HashMap::new());
 }
 
 /// Normalized lexer ATN config-set identity used for observed DFA traces.
@@ -251,8 +252,27 @@ where
             column: 0,
             hit_eof: false,
             errors: Vec::new(),
-            lexer_dfa: LexerDfaTrace::new(),
+            dfa_cache: Rc::new(RefCell::new(LexerDfaCache::default())),
+            dfa_edges: BTreeSet::new(),
         }
+    }
+
+    /// Switches this lexer to the thread-shared learned DFA for `atn`.
+    ///
+    /// Generated lexers create a fresh instance per parse; without sharing,
+    /// every instance relearns the same DFA through ATN simulation. The shared
+    /// cache is keyed by the generated lexer's `&'static Atn` identity and
+    /// holds only input-independent data, so it stays valid across inputs.
+    /// The `showDFA` edge trace stays per-instance: it reports only edges this
+    /// instance learned, matching a fresh observation log per lexer.
+    #[must_use]
+    pub fn with_shared_dfa(mut self, atn: &'static Atn) -> Self {
+        let ptr: *const Atn = atn;
+        let key = ptr as usize;
+        self.dfa_cache = SHARED_LEXER_DFA_CACHES.with(|caches| {
+            Rc::clone(caches.borrow_mut().entry(key).or_insert_with(Rc::default))
+        });
+        self
     }
 
     pub const fn input(&self) -> &I {
@@ -559,23 +579,22 @@ where
     /// Returns the stable state number for a normalized lexer DFA config set,
     /// creating one if this input path has not reached it before.
     pub(crate) fn lexer_dfa_state(
-        &mut self,
+        &self,
         key: LexerDfaKey,
         accept_prediction: Option<i32>,
     ) -> usize {
-        let next = self.lexer_dfa.state_numbers.len();
-        let state = *self.lexer_dfa.state_numbers.entry(key).or_insert(next);
+        let mut cache = self.dfa_cache.borrow_mut();
+        let next = cache.state_numbers.len();
+        let state = *cache.state_numbers.entry(key).or_insert(next);
         if let Some(prediction) = accept_prediction {
-            self.lexer_dfa.accept_predictions.insert(state, prediction);
+            cache.accept_predictions.insert(state, prediction);
         }
         state
     }
 
     /// Records a visible lexer DFA edge unless it was already observed.
     pub fn record_lexer_dfa_edge(&mut self, from: usize, symbol: i32, to: usize) {
-        self.lexer_dfa
-            .edges
-            .insert(LexerDfaEdge { from, symbol, to });
+        self.dfa_edges.insert(LexerDfaEdge { from, symbol, to });
     }
 
     pub(crate) fn cached_lexer_dfa_transition(
@@ -583,48 +602,58 @@ where
         state: usize,
         symbol: i32,
     ) -> Option<LexerDfaCachedTransition> {
-        self.lexer_dfa.transitions.get(&(state, symbol)).cloned()
+        self.dfa_cache
+            .borrow()
+            .transitions
+            .get(&(state, symbol))
+            .cloned()
     }
 
     pub(crate) fn cache_lexer_dfa_transition(
-        &mut self,
+        &self,
         state: usize,
         symbol: i32,
         transition: LexerDfaCachedTransition,
     ) {
-        self.lexer_dfa
+        self.dfa_cache
+            .borrow_mut()
             .transitions
             .entry((state, symbol))
             .or_insert(transition);
     }
 
     pub(crate) fn cached_lexer_dfa_state(&self, state: usize) -> Option<Rc<LexerDfaCachedState>> {
-        self.lexer_dfa.cached_states.get(&state).cloned()
+        self.dfa_cache.borrow().cached_states.get(&state).cloned()
     }
 
     pub(crate) fn cache_lexer_dfa_state(
-        &mut self,
+        &self,
         state: usize,
         cached_state: LexerDfaCachedState,
     ) {
-        self.lexer_dfa
+        self.dfa_cache
+            .borrow_mut()
             .cached_states
             .entry(state)
             .or_insert_with(|| Rc::new(cached_state));
     }
 
     pub(crate) fn cached_lexer_mode_start(&self, mode: i32) -> Option<usize> {
-        self.lexer_dfa.mode_starts.get(&mode).copied()
+        self.dfa_cache.borrow().mode_starts.get(&mode).copied()
     }
 
-    pub(crate) fn cache_lexer_mode_start(&mut self, mode: i32, state: usize) {
-        self.lexer_dfa.mode_starts.entry(mode).or_insert(state);
+    pub(crate) fn cache_lexer_mode_start(&self, mode: i32, state: usize) {
+        self.dfa_cache
+            .borrow_mut()
+            .mode_starts
+            .entry(mode)
+            .or_insert(state);
     }
 
     /// Serializes the observed default-mode lexer DFA in ANTLR's text shape.
     pub fn lexer_dfa_string(&self) -> String {
         let mut out = String::new();
-        for edge in &self.lexer_dfa.edges {
+        for edge in &self.dfa_edges {
             let Some(label) = lexer_dfa_edge_label(edge.symbol) else {
                 continue;
             };
@@ -639,10 +668,14 @@ where
     }
 
     fn lexer_dfa_state_string(&self, state: usize) -> String {
-        self.lexer_dfa.accept_predictions.get(&state).map_or_else(
-            || format!("s{state}"),
-            |prediction| format!(":s{state}=>{prediction}"),
-        )
+        self.dfa_cache
+            .borrow()
+            .accept_predictions
+            .get(&state)
+            .map_or_else(
+                || format!("s{state}"),
+                |prediction| format!(":s{state}=>{prediction}"),
+            )
     }
 }
 

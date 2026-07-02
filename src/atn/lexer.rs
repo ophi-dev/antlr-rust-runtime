@@ -598,7 +598,7 @@ where
 }
 
 fn cached_mode_start_state<I, F, P>(
-    lexer: &mut BaseLexer<I, F>,
+    lexer: &BaseLexer<I, F>,
     atn: &Atn,
     mode: i32,
     start: usize,
@@ -645,7 +645,7 @@ where
 }
 
 fn cache_dfa_state<I, F>(
-    lexer: &mut BaseLexer<I, F>,
+    lexer: &BaseLexer<I, F>,
     atn: &Atn,
     active: &[LexerConfig],
     has_semantic_context: bool,
@@ -1057,12 +1057,12 @@ mod tests {
             "T",
             Vocabulary::new([None, Some("T")], [None, Some("T")], [None::<&str>, None]),
         );
-        let mut lexer = BaseLexer::new(InputStream::new(""), data);
+        let lexer = BaseLexer::new(InputStream::new(""), data);
 
-        let predicate_state = cache_dfa_state(&mut lexer, &atn, &[], true, 0, 0);
+        let predicate_state = cache_dfa_state(&lexer, &atn, &[], true, 0, 0);
         assert!(lexer.cached_lexer_dfa_state(predicate_state).is_none());
 
-        let plain_state = cache_dfa_state(&mut lexer, &atn, &[], false, 0, 0);
+        let plain_state = cache_dfa_state(&lexer, &atn, &[], false, 0, 0);
         assert_eq!(predicate_state, plain_state);
         assert!(lexer.cached_lexer_dfa_state(plain_state).is_some());
     }

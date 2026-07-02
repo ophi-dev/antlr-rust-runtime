@@ -397,7 +397,7 @@ where
         .with_rule_names(grammar_metadata.rule_names().iter().copied())
         .with_channel_names(grammar_metadata.channel_names().iter().copied())
         .with_mode_names(grammar_metadata.mode_names().iter().copied());
-        Self {{ base: BaseLexer::new(input, data) }}
+        Self {{ base: BaseLexer::new(input, data).with_shared_dfa(atn()) }}
     }}
 
     pub fn metadata() -> &'static GrammarMetadata {{
