@@ -522,12 +522,13 @@ where
 
         if !cached_state.has_semantic_context {
             if let Some(cached) = lexer.cached_lexer_dfa_transition(dfa_state, symbol) {
-                let source_state = dfa_state;
+                // A cached transition implies its DFA edge was already recorded
+                // when the transition was cached (the sole
+                // `cache_lexer_dfa_transition` site records it first, under the
+                // same suppress-edge gate), so re-recording here would be a
+                // per-character BTreeSet re-insert of a duplicate.
                 dfa_state = cached.target_state;
                 position += cached.position_delta;
-                if symbol != EOF {
-                    lexer.record_lexer_dfa_edge(source_state, symbol, dfa_state);
-                }
                 continue;
             }
         }
