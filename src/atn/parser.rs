@@ -207,36 +207,87 @@ fn initial_decision_dfas(atn: &Atn) -> Vec<Dfa> {
         .collect()
 }
 
-/// Reconciles a dropping simulator's DFAs with tables that another simulator
-/// checked in first. The two evolved independently (the later-constructed one
-/// started cold), so their state numbers are not comparable and edges cannot
-/// be merged by numeric id — per decision, keep whichever whole DFA learned
-/// more, measured as (state count, learned edge count); each is a
-/// self-consistent DFA on its own. The edge count breaks state-count ties:
-/// a cold overlapping parser can reach the same number of states while
-/// having learned only a subset of the warm DFA's transitions.
-fn keep_larger_decision_dfas(shared: &mut Vec<Dfa>, mut local: Vec<Dfa>) {
+/// Merges a dropping simulator's DFAs into tables that another simulator
+/// checked in first, losslessly. The two evolved independently (the
+/// later-constructed one started cold), so numeric state ids are not
+/// comparable — but DFA states ARE comparable by their ATN config set, the
+/// same identity `Dfa::add_state` dedups on. Re-keying `local`'s states into
+/// `shared`'s numbering and unioning edges/starts means overlapping
+/// simulators never lose learned coverage, however it is distributed.
+/// Walking every state is fine here: this only runs on the rare
+/// overlapping-simulators drop path.
+fn union_decision_dfas(shared: &mut Vec<Dfa>, local: Vec<Dfa>) {
     if shared.len() != local.len() {
         *shared = local;
         return;
     }
-    for (shared_dfa, local_dfa) in shared.iter_mut().zip(&mut local) {
-        if learned_dfa_size(local_dfa) > learned_dfa_size(shared_dfa) {
-            std::mem::swap(shared_dfa, local_dfa);
-        }
+    for (shared_dfa, local_dfa) in shared.iter_mut().zip(local) {
+        union_decision_dfa(shared_dfa, local_dfa);
     }
 }
 
-/// How much a DFA has learned, for [`keep_larger_decision_dfas`]'s
-/// whole-DFA comparison. Walking every state is fine here: this only runs
-/// on the rare overlapping-simulators drop path.
-fn learned_dfa_size(dfa: &Dfa) -> (usize, usize) {
-    let edges = dfa
-        .states()
-        .iter()
-        .map(|state| state.edges.iter().flatten().count())
-        .sum();
-    (dfa.states().len(), edges)
+fn union_decision_dfa(shared: &mut Dfa, local: Dfa) {
+    if shared.is_precedence_dfa() != local.is_precedence_dfa() {
+        // A mode flip resets the tables (`set_precedence_dfa`), so the two are
+        // not unionable; keep whichever learned more states.
+        if local.states().len() > shared.states().len() {
+            *shared = local;
+        }
+        return;
+    }
+    // Pass 1: map every local state number to a shared state number by
+    // config-set identity, inserting the states shared has not learned.
+    // Their edges reference local numbering, so they are cleared here and
+    // re-added in pass 2 under the shared numbering.
+    let mut renumber = Vec::with_capacity(local.states().len());
+    for state in local.states() {
+        let number = shared
+            .state_number_for_configs(&state.configs)
+            .unwrap_or_else(|| {
+                let mut missing = state.clone();
+                missing.edges = Vec::new();
+                shared.insert_state(missing)
+            });
+        renumber.push(number);
+    }
+    // Pass 2: union edges, translating targets into shared numbering. The
+    // incumbent's entries win; only gaps are filled. Accept metadata needs no
+    // reconciliation: it is a pure function of the config set, and equal
+    // config sets produced it through the same accept-time computation.
+    for (state, &mapped) in local.states().iter().zip(&renumber) {
+        for (index, target) in state.edges.iter().enumerate() {
+            let (Some(target), Ok(index)) = (*target, i32::try_from(index)) else {
+                continue;
+            };
+            // Inverse of `edge_index`: slot 0 holds EOF (symbol -1).
+            let symbol = index - 1;
+            let Some(&mapped_target) = renumber.get(target) else {
+                continue;
+            };
+            let Some(shared_state) = shared.state_mut(mapped) else {
+                continue;
+            };
+            if shared_state.edge(symbol).is_none() {
+                shared_state.add_edge(symbol, mapped_target);
+            }
+        }
+    }
+    if shared.start_state().is_none()
+        && let Some(start) = local.start_state()
+        && let Some(&mapped) = renumber.get(start)
+    {
+        shared.set_start_state(mapped);
+    }
+    for (precedence, start) in local.precedence_start_states().iter().enumerate() {
+        let Some(start) = *start else {
+            continue;
+        };
+        if shared.precedence_start_state(precedence).is_none()
+            && let Some(&mapped) = renumber.get(start)
+        {
+            shared.set_precedence_start_state(precedence, mapped);
+        }
+    }
 }
 
 impl Drop for ParserAtnSimulator<'_> {
@@ -247,15 +298,13 @@ impl Drop for ParserAtnSimulator<'_> {
         // Check the DFAs back IN by move. The slot is normally vacant because
         // `new_shared` checked them out; it is occupied only when another
         // simulator for the same ATN was created while this one was alive
-        // (that one started cold and checked its copy in first) — then keep
-        // the more-learned tables per decision. A warm-but-clean DFA must
-        // still win here, so this cannot gate on a dirty flag: the occupying
-        // copy grew from empty and may know far less.
+        // (that one started cold and checked its copy in first) — then union
+        // the two by config-set identity so neither side's learning is lost.
         let dfas = std::mem::take(&mut self.decision_to_dfa);
         SHARED_DECISION_DFAS.with(|cache| {
             let mut cache = cache.borrow_mut();
             if let Some(shared) = cache.get_mut(&key) {
-                keep_larger_decision_dfas(shared, dfas);
+                union_decision_dfas(shared, dfas);
             } else {
                 cache.insert(key, dfas);
             }
@@ -1383,6 +1432,54 @@ pub enum ParserAtnSimulatorError {
 mod tests {
     use super::*;
     use crate::atn::{AtnStateKind, AtnType};
+
+    #[test]
+    fn union_decision_dfa_preserves_disjoint_coverage() {
+        fn configs(atn_state: usize) -> AtnConfigSet {
+            let mut set = AtnConfigSet::new();
+            set.add(AtnConfig::new(atn_state, 1, PredictionContext::empty()));
+            set
+        }
+        fn state(atn_state: usize) -> DfaState {
+            DfaState::new(configs(atn_state))
+        }
+
+        // Two DFAs that evolved independently from the same grammar: equal
+        // state/edge counts, but disjoint transitions and different state
+        // numbering for the shared successor.
+        let mut shared = Dfa::with_max_token_type(0, 0, 8);
+        let shared_root = shared.add_state(state(10));
+        let shared_a = shared.add_state(state(11));
+        shared
+            .state_mut(shared_root)
+            .expect("shared root")
+            .add_edge(1, shared_a);
+        shared.set_start_state(shared_root);
+
+        let mut local = Dfa::with_max_token_type(0, 0, 8);
+        let local_b = local.add_state(state(12));
+        let local_root = local.add_state(state(10));
+        local
+            .state_mut(local_root)
+            .expect("local root")
+            .add_edge(2, local_b);
+        local.set_precedence_start_state(3, local_root);
+
+        union_decision_dfa(&mut shared, local);
+
+        // The root (same config set) gained local's edge without losing its
+        // own, with the target re-keyed into shared numbering.
+        let root = shared.state(shared_root).expect("root");
+        assert_eq!(root.edge(1), Some(shared_a));
+        let merged_b = shared
+            .state_number_for_configs(&configs(12))
+            .expect("local-only state adopted");
+        assert_eq!(root.edge(2), Some(merged_b));
+        assert_eq!(shared.states().len(), 3);
+        // Start-state gaps fill from local; incumbents are kept.
+        assert_eq!(shared.start_state(), Some(shared_root));
+        assert_eq!(shared.precedence_start_state(3), Some(shared_root));
+    }
 
     #[test]
     fn adaptive_predict_reuses_dense_dfa_edges() {
