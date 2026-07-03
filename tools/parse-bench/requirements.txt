@@ -1,2 +1,2 @@
 antlr4-python3-runtime==4.13.2
-tree-sitter-language-pack==0.13.0
+tree-sitter-language-pack==1.12.2
