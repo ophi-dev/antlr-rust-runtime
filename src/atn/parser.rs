@@ -211,17 +211,32 @@ fn initial_decision_dfas(atn: &Atn) -> Vec<Dfa> {
 /// checked in first. The two evolved independently (the later-constructed one
 /// started cold), so their state numbers are not comparable and edges cannot
 /// be merged by numeric id — per decision, keep whichever whole DFA learned
-/// more states; each is a self-consistent DFA on its own.
+/// more, measured as (state count, learned edge count); each is a
+/// self-consistent DFA on its own. The edge count breaks state-count ties:
+/// a cold overlapping parser can reach the same number of states while
+/// having learned only a subset of the warm DFA's transitions.
 fn keep_larger_decision_dfas(shared: &mut Vec<Dfa>, mut local: Vec<Dfa>) {
     if shared.len() != local.len() {
         *shared = local;
         return;
     }
     for (shared_dfa, local_dfa) in shared.iter_mut().zip(&mut local) {
-        if local_dfa.states().len() > shared_dfa.states().len() {
+        if learned_dfa_size(local_dfa) > learned_dfa_size(shared_dfa) {
             std::mem::swap(shared_dfa, local_dfa);
         }
     }
+}
+
+/// How much a DFA has learned, for [`keep_larger_decision_dfas`]'s
+/// whole-DFA comparison. Walking every state is fine here: this only runs
+/// on the rare overlapping-simulators drop path.
+fn learned_dfa_size(dfa: &Dfa) -> (usize, usize) {
+    let edges = dfa
+        .states()
+        .iter()
+        .map(|state| state.edges.iter().flatten().count())
+        .sum();
+    (dfa.states().len(), edges)
 }
 
 impl Drop for ParserAtnSimulator<'_> {
