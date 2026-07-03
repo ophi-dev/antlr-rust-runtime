@@ -129,10 +129,29 @@ pub struct BaseLexer<I, F = CommonTokenFactory> {
 struct LexerDfaCache {
     state_numbers: FxHashMap<LexerDfaKey, usize>,
     accept_predictions: FxHashMap<usize, i32>,
-    cached_states: FxHashMap<usize, Rc<LexerDfaCachedState>>,
-    transitions: FxHashMap<(usize, i32), LexerDfaCachedTransition>,
+    /// Dense by DFA state number (states are numbered contiguously from 0).
+    cached_states: Vec<Option<Rc<LexerDfaCachedState>>>,
+    /// Per-source-state edge rows for symbols in `0..DENSE_EDGE_SYMBOLS`,
+    /// allocated lazily on the first cached transition out of a state. The
+    /// per-character lookup is then one bounds check and an array index —
+    /// the same scheme as Go's `edges[t-MinDFAEdge]`.
+    dense_edges: Vec<Option<Box<DenseEdgeRow>>>,
+    /// Transitions on symbols outside the dense range (supplementary planes).
+    sparse_edges: FxHashMap<(usize, i32), LexerDfaCachedTransition>,
     mode_starts: FxHashMap<i32, usize>,
 }
+
+/// Dense-row width: ASCII, matching the reference runtimes' DFA edge arrays.
+const DENSE_EDGE_SYMBOLS: usize = 128;
+
+type DenseEdgeRow = [LexerDfaCachedTransition; DENSE_EDGE_SYMBOLS];
+
+/// Sentinel for an empty dense-row slot; no real transition targets it
+/// because DFA state numbers are assigned contiguously from 0.
+const EMPTY_DENSE_EDGE: LexerDfaCachedTransition = LexerDfaCachedTransition {
+    target_state: usize::MAX,
+    position_delta: 0,
+};
 
 thread_local! {
     /// Learned lexer DFAs shared across lexer instances, keyed by a generated
@@ -192,7 +211,7 @@ impl LexerDfaConfigKey {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) struct LexerDfaCachedTransition {
     pub(crate) target_state: usize,
     pub(crate) position_delta: usize,
@@ -602,11 +621,14 @@ where
         state: usize,
         symbol: i32,
     ) -> Option<LexerDfaCachedTransition> {
-        self.dfa_cache
-            .borrow()
-            .transitions
-            .get(&(state, symbol))
-            .cloned()
+        let cache = self.dfa_cache.borrow();
+        if let Ok(sym) = usize::try_from(symbol)
+            && sym < DENSE_EDGE_SYMBOLS
+        {
+            let transition = cache.dense_edges.get(state)?.as_ref()?[sym];
+            return (transition.target_state != usize::MAX).then_some(transition);
+        }
+        cache.sparse_edges.get(&(state, symbol)).copied()
     }
 
     pub(crate) fn cache_lexer_dfa_transition(
@@ -615,15 +637,30 @@ where
         symbol: i32,
         transition: LexerDfaCachedTransition,
     ) {
-        self.dfa_cache
-            .borrow_mut()
-            .transitions
-            .entry((state, symbol))
-            .or_insert(transition);
+        let mut cache = self.dfa_cache.borrow_mut();
+        if let Ok(sym) = usize::try_from(symbol)
+            && sym < DENSE_EDGE_SYMBOLS
+        {
+            if cache.dense_edges.len() <= state {
+                cache.dense_edges.resize_with(state + 1, || None);
+            }
+            let row = cache.dense_edges[state]
+                .get_or_insert_with(|| Box::new([EMPTY_DENSE_EDGE; DENSE_EDGE_SYMBOLS]));
+            // First write wins, matching the previous map `entry().or_insert`.
+            if row[sym].target_state == usize::MAX {
+                row[sym] = transition;
+            }
+            return;
+        }
+        cache.sparse_edges.entry((state, symbol)).or_insert(transition);
     }
 
     pub(crate) fn cached_lexer_dfa_state(&self, state: usize) -> Option<Rc<LexerDfaCachedState>> {
-        self.dfa_cache.borrow().cached_states.get(&state).cloned()
+        self.dfa_cache
+            .borrow()
+            .cached_states
+            .get(state)
+            .and_then(Clone::clone)
     }
 
     pub(crate) fn cache_lexer_dfa_state(
@@ -631,11 +668,11 @@ where
         state: usize,
         cached_state: LexerDfaCachedState,
     ) {
-        self.dfa_cache
-            .borrow_mut()
-            .cached_states
-            .entry(state)
-            .or_insert_with(|| Rc::new(cached_state));
+        let mut cache = self.dfa_cache.borrow_mut();
+        if cache.cached_states.len() <= state {
+            cache.cached_states.resize_with(state + 1, || None);
+        }
+        cache.cached_states[state].get_or_insert_with(|| Rc::new(cached_state));
     }
 
     pub(crate) fn cached_lexer_mode_start(&self, mode: i32) -> Option<usize> {
