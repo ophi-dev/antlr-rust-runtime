@@ -235,12 +235,18 @@ impl Drop for ParserAtnSimulator<'_> {
         let Some(key) = self.shared_cache_key else {
             return;
         };
+        // Check the DFAs back IN by move. The slot is normally vacant because
+        // `new_shared` checked them out; it is occupied only when another
+        // simulator for the same ATN was created while this one was alive
+        // (that one started cold and checked its copy in first) — then fall
+        // back to the clone-based merge to keep the more-learned tables.
+        let dfas = std::mem::take(&mut self.decision_to_dfa);
         SHARED_DECISION_DFAS.with(|cache| {
             let mut cache = cache.borrow_mut();
             if let Some(shared) = cache.get_mut(&key) {
-                merge_shared_decision_dfas(shared, &self.decision_to_dfa);
+                merge_shared_decision_dfas(shared, &dfas);
             } else {
-                cache.insert(key, self.decision_to_dfa.clone());
+                cache.insert(key, dfas);
             }
         });
     }
@@ -263,14 +269,21 @@ impl<'a> ParserAtnSimulator<'a> {
     /// this cache every parse relearns the same adaptive DFA; with it, later
     /// parser instances reuse the SLL cache learned by earlier instances while
     /// still keeping mutable simulator state local to the parser during a parse.
+    ///
+    /// The DFAs are checked OUT of the cache by move (and back in on drop):
+    /// cloning a warm DFA per parser instance costs O(learned states) — ~10%
+    /// of a small parse. A second simulator created for the same ATN while one
+    /// is alive finds the slot empty and starts cold; the drop-time check-in
+    /// then keeps whichever tables learned more.
     pub fn new_shared(atn: &'static Atn) -> Self {
         let ptr: *const Atn = atn;
         let key = ptr as usize;
         let mut decision_to_dfa = SHARED_DECISION_DFAS
-            .with(|cache| cache.borrow().get(&key).cloned())
+            .with(|cache| cache.borrow_mut().remove(&key))
             .unwrap_or_else(|| initial_decision_dfas(atn));
         // Start from a clean baseline: only states/edges this parser actually
-        // learns will mark a DFA dirty, so the drop-time merge can skip the rest.
+        // learns will mark a DFA dirty, so an occupied-slot merge on drop can
+        // skip the rest.
         for dfa in &mut decision_to_dfa {
             dfa.clear_dirty();
         }
