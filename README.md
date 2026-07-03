@@ -273,15 +273,18 @@ group (**> 1.0** means Rust is faster than Go; **< 1.0** means slower):
 
 | Language | Fixtures | Rust vs Go (parse time) |
 |----------|---------:|-------------------------|
-| Kotlin   | 4        | ~10× faster             |
-| Java     | 4        | ~0.9× (roughly on par)  |
-| C#       | 4        | ~0.45× (Go ~2.2× faster)|
-| Trino SQL| 5        | ~0.4× (Go ~2.6× faster) |
+| Kotlin   | 4        | ~18× faster             |
+| Java     | 4        | ~1.8× faster            |
+| C#       | 4        | ~1.2× faster            |
+| Trino SQL| 5        | ~1.1× faster            |
 
-Rust is dramatically faster on Kotlin (expression-ladder memoization in the
-generated walker) and near parity on Java; C# and Trino remain ahead for Go and
-are the focus of ongoing prediction/closure optimization. Numbers are quick-mode
-(`--quick`, best-of-min) on an Apple M3 Pro and are indicative — re-run the
+Rust is faster than Go on every fixture in all four language groups. Kotlin
+leads dramatically (expression-ladder memoization in the generated walker);
+the former C#/Trino deficit (Go was 2.2–2.6× faster) was closed by sharing
+the learned lexer DFA across lexer instances, an O(1) happy path for the
+error-sync follow-set check, dense lexer DFA edge tables, and move (instead
+of clone) semantics for the shared parser DFA cache (issue #15). Numbers are
+warm-parse minimums on an Apple M3 Pro and are indicative — re-run the
 benchmark on your own hardware for authoritative figures.
 
 ## Useful Information
