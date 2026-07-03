@@ -115,7 +115,6 @@ pub struct BaseLexer<I, F = CommonTokenFactory> {
     hit_eof: bool,
     errors: Vec<TokenSourceError>,
     dfa_cache: Rc<RefCell<LexerDfaCache>>,
-    dfa_edges: BTreeSet<LexerDfaEdge>,
 }
 
 /// Learned lexer DFA: the input-independent state/transition tables built up
@@ -129,6 +128,10 @@ pub struct BaseLexer<I, F = CommonTokenFactory> {
 struct LexerDfaCache {
     state_numbers: FxHashMap<LexerDfaKey, usize>,
     accept_predictions: FxHashMap<usize, i32>,
+    /// `showDFA` edge trace. Lives with the tables it describes, so a lexer
+    /// on a shared cache reports the accumulated DFA — matching the reference
+    /// runtimes, whose static shared DFA is what `showDFA` prints.
+    edges: BTreeSet<LexerDfaEdge>,
     /// Dense by DFA state number (states are numbered contiguously from 0).
     cached_states: Vec<Option<Rc<LexerDfaCachedState>>>,
     /// Per-source-state edge rows for symbols in `0..DENSE_EDGE_SYMBOLS`,
@@ -272,7 +275,6 @@ where
             hit_eof: false,
             errors: Vec::new(),
             dfa_cache: Rc::new(RefCell::new(LexerDfaCache::default())),
-            dfa_edges: BTreeSet::new(),
         }
     }
 
@@ -282,8 +284,9 @@ where
     /// every instance relearns the same DFA through ATN simulation. The shared
     /// cache is keyed by the generated lexer's `&'static Atn` identity and
     /// holds only input-independent data, so it stays valid across inputs.
-    /// The `showDFA` edge trace stays per-instance: it reports only edges this
-    /// instance learned, matching a fresh observation log per lexer.
+    /// The `showDFA` edge trace lives in the cache too, so it reports the
+    /// accumulated DFA — the same view the reference runtimes print from
+    /// their static shared DFA.
     #[must_use]
     pub fn with_shared_dfa(mut self, atn: &'static Atn) -> Self {
         let ptr: *const Atn = atn;
@@ -612,8 +615,11 @@ where
     }
 
     /// Records a visible lexer DFA edge unless it was already observed.
-    pub fn record_lexer_dfa_edge(&mut self, from: usize, symbol: i32, to: usize) {
-        self.dfa_edges.insert(LexerDfaEdge { from, symbol, to });
+    pub fn record_lexer_dfa_edge(&self, from: usize, symbol: i32, to: usize) {
+        self.dfa_cache
+            .borrow_mut()
+            .edges
+            .insert(LexerDfaEdge { from, symbol, to });
     }
 
     pub(crate) fn cached_lexer_dfa_transition(
@@ -660,7 +666,8 @@ where
             .borrow()
             .cached_states
             .get(state)
-            .and_then(Clone::clone)
+            .cloned()
+            .flatten()
     }
 
     pub(crate) fn cache_lexer_dfa_state(
@@ -690,7 +697,8 @@ where
     /// Serializes the observed default-mode lexer DFA in ANTLR's text shape.
     pub fn lexer_dfa_string(&self) -> String {
         let mut out = String::new();
-        for edge in &self.dfa_edges {
+        let cache = self.dfa_cache.borrow();
+        for edge in &cache.edges {
             let Some(label) = lexer_dfa_edge_label(edge.symbol) else {
                 continue;
             };

@@ -207,25 +207,19 @@ fn initial_decision_dfas(atn: &Atn) -> Vec<Dfa> {
         .collect()
 }
 
-fn merge_shared_decision_dfas(shared: &mut Vec<Dfa>, local: &[Dfa]) {
+/// Reconciles a dropping simulator's DFAs with tables that another simulator
+/// checked in first. The two evolved independently (the later-constructed one
+/// started cold), so their state numbers are not comparable and edges cannot
+/// be merged by numeric id — per decision, keep whichever whole DFA learned
+/// more states; each is a self-consistent DFA on its own.
+fn keep_larger_decision_dfas(shared: &mut Vec<Dfa>, mut local: Vec<Dfa>) {
     if shared.len() != local.len() {
-        *shared = local.to_vec();
+        *shared = local;
         return;
     }
-    for (shared_dfa, local_dfa) in shared.iter_mut().zip(local) {
-        // Skip DFAs this parser never extended — cloning them back would be pure
-        // churn on an already-warm cache (the common steady-state case).
-        if !local_dfa.is_dirty() {
-            continue;
-        }
-        // State numbers are stable for a DFA cloned from the shared cache and
-        // then extended locally. If this local DFA has at least as many states,
-        // it is a complete valid replacement for the shared one. If it is
-        // smaller, it may be a stale parser instance that predates another
-        // parser's cache update, so do not merge edges by numeric state id.
-        if local_dfa.states().len() >= shared_dfa.states().len() {
-            *shared_dfa = local_dfa.clone();
-            shared_dfa.clear_dirty();
+    for (shared_dfa, local_dfa) in shared.iter_mut().zip(&mut local) {
+        if local_dfa.states().len() > shared_dfa.states().len() {
+            std::mem::swap(shared_dfa, local_dfa);
         }
     }
 }
@@ -238,13 +232,15 @@ impl Drop for ParserAtnSimulator<'_> {
         // Check the DFAs back IN by move. The slot is normally vacant because
         // `new_shared` checked them out; it is occupied only when another
         // simulator for the same ATN was created while this one was alive
-        // (that one started cold and checked its copy in first) — then fall
-        // back to the clone-based merge to keep the more-learned tables.
+        // (that one started cold and checked its copy in first) — then keep
+        // the more-learned tables per decision. A warm-but-clean DFA must
+        // still win here, so this cannot gate on a dirty flag: the occupying
+        // copy grew from empty and may know far less.
         let dfas = std::mem::take(&mut self.decision_to_dfa);
         SHARED_DECISION_DFAS.with(|cache| {
             let mut cache = cache.borrow_mut();
             if let Some(shared) = cache.get_mut(&key) {
-                merge_shared_decision_dfas(shared, &dfas);
+                keep_larger_decision_dfas(shared, dfas);
             } else {
                 cache.insert(key, dfas);
             }
@@ -278,15 +274,9 @@ impl<'a> ParserAtnSimulator<'a> {
     pub fn new_shared(atn: &'static Atn) -> Self {
         let ptr: *const Atn = atn;
         let key = ptr as usize;
-        let mut decision_to_dfa = SHARED_DECISION_DFAS
+        let decision_to_dfa = SHARED_DECISION_DFAS
             .with(|cache| cache.borrow_mut().remove(&key))
             .unwrap_or_else(|| initial_decision_dfas(atn));
-        // Start from a clean baseline: only states/edges this parser actually
-        // learns will mark a DFA dirty, so an occupied-slot merge on drop can
-        // skip the rest.
-        for dfa in &mut decision_to_dfa {
-            dfa.clear_dirty();
-        }
         let context_cache = SHARED_CONTEXT_CACHES.with(|cache| {
             Rc::clone(
                 cache
