@@ -1216,6 +1216,8 @@ type DecisionLookaheadCache = FxHashMap<usize, Rc<DecisionLookahead>>;
 struct SharedAtnCache {
     first_set: FirstSetCache,
     decision_lookahead: DecisionLookaheadCache,
+    state_expected_tokens: FxHashMap<usize, Rc<TokenBitSet>>,
+    rule_stop_reach: FxHashMap<usize, bool>,
 }
 
 thread_local! {
@@ -3317,15 +3319,14 @@ where
             nullable |= transition.nullable;
             explicit_eof_expected |= transition.symbols.contains(TOKEN_EOF);
         }
-        let context_expected = nullable.then(|| self.context_expected_token_set(atn));
-        if nullable {
-            if context_expected
-                .as_ref()
-                .is_some_and(|expected| expected.contains(symbol))
-            {
-                return Ok(Vec::new());
-            }
+        // Happy path: a nullable decision exits when the symbol is in the
+        // rule-stack follow set. Answer the membership question with an
+        // early-exit walk; the full union below is only needed for the
+        // mismatch/deletion diagnostics.
+        if nullable && self.context_expected_contains(atn, symbol) {
+            return Ok(Vec::new());
         }
+        let context_expected = nullable.then(|| self.context_expected_token_set(atn));
         if !has_expected_symbols && context_expected.as_ref().is_none_or(TokenBitSet::is_empty) {
             return Ok(Vec::new());
         }
@@ -3473,6 +3474,42 @@ where
         let mut expected = TokenBitSet::default();
         self.collect_context_expected_token_set(atn, &context, &mut expected);
         expected
+    }
+
+    /// Reports whether `symbol` is in `context_expected_token_set(atn)`
+    /// without materializing the union.
+    ///
+    /// This walks the rule-invocation stack directly, innermost frame first —
+    /// the same frames, in the same order, with the same rule-stop gating as
+    /// `collect_context_expected_token_set` over `prediction_context(atn)`
+    /// (whose chain head is the innermost frame's follow state). The nullable
+    /// exit in `sync_decision` asks only this membership question, and on
+    /// valid input the innermost frame answers it, so the early exit replaces
+    /// an O(stack-depth) set union per loop/optional exit with one probe.
+    fn context_expected_contains(&mut self, atn: &Atn, symbol: i32) -> bool {
+        for index in (1..self.rule_context_stack.len()).rev() {
+            let invoking_state = self.rule_context_stack[index].invoking_state;
+            let Ok(state_number) = usize::try_from(invoking_state) else {
+                continue;
+            };
+            let Some(Transition::Rule { follow_state, .. }) = atn
+                .state(state_number)
+                .and_then(|state| state.transitions.first())
+            else {
+                continue;
+            };
+            let follow_state = *follow_state;
+            if self
+                .cached_state_expected_token_set(atn, follow_state)
+                .contains(symbol)
+            {
+                return true;
+            }
+            if !self.cached_state_can_reach_rule_stop(atn, follow_state) {
+                return false;
+            }
+        }
+        symbol == TOKEN_EOF
     }
 
     fn collect_context_expected_symbols(
@@ -6531,7 +6568,19 @@ where
         if let Some(cached) = self.state_expected_token_cache.get(&state_number) {
             return Rc::clone(cached);
         }
-        let symbols = Rc::new(state_expected_token_set(atn, state_number));
+        // Purely a function of the ATN, so back the per-parser cache with the
+        // thread-shared one — fresh parser instances (one per parse in
+        // generated usage) start warm instead of rewalking the ATN.
+        let symbols = with_shared_atn_caches(atn, |cache| {
+            if let Some(cached) = cache.state_expected_tokens.get(&state_number) {
+                return Rc::clone(cached);
+            }
+            let symbols = Rc::new(state_expected_token_set(atn, state_number));
+            cache
+                .state_expected_tokens
+                .insert(state_number, Rc::clone(&symbols));
+            symbols
+        });
         self.state_expected_token_cache
             .insert(state_number, Rc::clone(&symbols));
         symbols
@@ -6545,7 +6594,12 @@ where
         if let Some(reaches) = self.rule_stop_reach_cache[state_number] {
             return reaches;
         }
-        let reaches = state_can_reach_rule_stop(atn, state_number);
+        let reaches = with_shared_atn_caches(atn, |cache| {
+            *cache
+                .rule_stop_reach
+                .entry(state_number)
+                .or_insert_with(|| state_can_reach_rule_stop(atn, state_number))
+        });
         self.rule_stop_reach_cache[state_number] = Some(reaches);
         reaches
     }

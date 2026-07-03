@@ -102,6 +102,10 @@ impl Dfa {
             .and_then(|state| *state)
     }
 
+    pub(crate) fn precedence_start_states(&self) -> &[Option<usize>] {
+        &self.precedence_start_states
+    }
+
     pub fn set_precedence_start_state(&mut self, precedence: usize, state_number: usize) {
         if precedence >= self.precedence_start_states.len() {
             self.precedence_start_states.resize(precedence + 1, None);
