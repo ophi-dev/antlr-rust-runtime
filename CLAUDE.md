@@ -37,6 +37,14 @@ cargo run --release --bin antlr4-rust-gen -- \
 The output crate must depend on this runtime (`antlr-rust-runtime = { path = ... }`).
 Both the kotlin-parity dumper and the parse-bench runner are examples.
 
+Every run also writes a `semantics.json` manifest into `--out-dir` listing each
+semantic predicate/action coordinate and its disposition. `--sem-unknown
+error|assume-true|assume-false` controls untranslated coordinates (default
+`assume-true`, deprecated; see the README "Semantic Predicates and Actions"
+section and issue #9).
+Generated parsers also expose `with_hooks(tokens, hooks)` for parser-side
+`SemanticHooks` handling of unrecognized predicates/actions.
+
 ## Kotlin parser parity perf benchmark
 
 Reproduces the timings against the Kotlin grammar from `antlr/grammars-v4`.

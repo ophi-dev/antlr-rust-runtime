@@ -228,6 +228,58 @@ See [docs/kotlin-build.md](docs/kotlin-build.md) for the Kotlin smoke workflow.
 See [docs/runtime-testsuite.md](docs/runtime-testsuite.md) for the upstream
 runtime-testsuite harness.
 
+### Semantic Predicates and Actions: the Compatibility Boundary
+
+ANTLR grammars may embed **target-language** semantic predicates and actions
+(`{isTypeName()}?`, `{this.count++;}`). The serialized ATN records *where*
+they occur, but not executable code, so a metadata-first runtime cannot run
+arbitrary grammar-embedded snippets. The boundary is:
+
+- **Target-agnostic grammars** — no embedded code, or only built-in lexer
+  commands (`skip`, `channel(...)`, `mode(...)`, `type(...)`) — are fully
+  supported.
+- **Recognized predicate/action shapes** — a library of common idioms
+  (constant predicates, lookahead text/type checks, integer member counters,
+  column predicates, and the upstream testsuite's action templates) — are
+  translated into runtime metadata by `antlr4-rust-gen` when the grammar
+  source is passed via `--grammar`.
+- **Everything else is not silently guessed.** Each generator run writes a
+  `semantics.json` manifest next to the generated modules listing every
+  predicate/action coordinate with its grammar source span, body, and
+  disposition (`translated`, `assume-true`, `assume-false`, or `ignored`).
+
+Unknown coordinates are governed by `--sem-unknown`:
+
+```bash
+antlr4-rust-gen --lexer L.interp --parser P.interp --grammar G.g4 \
+    --out-dir src/generated --sem-unknown error
+```
+
+- `assume-true` (current default, deprecated): unknown predicates pass,
+  unknown actions are no-ops — the historical behavior. A future minor
+  release changes the default to `error`.
+- `assume-false`: unknown predicates fail, removing the guarded alternatives.
+- `error`: generation fails, naming each coordinate:
+
+  ```text
+  unsupported semantic predicate: rule=s(0) pred_index=0 at 2:4: {isTypeName()}
+  ```
+
+At runtime the same policy exists as
+`ParserRuntimeOptions::unknown_predicate_policy`
+(`UnknownSemanticPolicy::{AssumeTrue, AssumeFalse, Error}`); under `Error`,
+evaluating an unknown predicate coordinate fails the parse with
+`AntlrError::Unsupported` instead of producing a tree whose shape silently
+depended on a guess.
+
+Generated parsers also expose a parser-side hook escape hatch:
+`MyParser::with_hooks(tokens, hooks)`, where `hooks` implements
+`SemanticHooks`. Unknown parser predicates are offered to
+`SemanticHooks::sempred` before the fallback policy is applied, and unhandled
+parser action events are offered to `SemanticHooks::action` after the committed
+parse path is selected. Predicate hooks may run speculatively during
+prediction, so they must be replay-safe.
+
 ## Runtime Testsuite
 
 On the maintainer checkout, where the ANTLR jar and upstream runtime-testsuite

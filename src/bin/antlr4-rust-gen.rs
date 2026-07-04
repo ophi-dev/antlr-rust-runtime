@@ -51,6 +51,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .as_deref()
         .map(fs::read_to_string)
         .transpose()?;
+    let mut manifest_grammars: Vec<(&'static str, String, Vec<SemanticsEntry>)> = Vec::new();
 
     if let Some(lexer) = args.lexer {
         let data = InterpData::parse(&fs::read_to_string(&lexer)?)?;
@@ -58,17 +59,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .lexer_name
             .clone()
             .unwrap_or_else(|| grammar_name_from_path(&lexer));
+        let entries = collect_lexer_semantics(
+            &data,
+            grammar_source.as_deref(),
+            args.allow_unsupported_lexer_actions,
+            args.sem_unknown,
+        )?;
+        enforce_sem_unknown(args.sem_unknown, &entries)?;
         let module = render_lexer(
             &grammar_name,
             &data,
             grammar_source.as_deref(),
             args.allow_unsupported_lexer_actions,
+            args.sem_unknown,
         )?;
         fs::write(
             args.out_dir
                 .join(format!("{}.rs", module_name(&grammar_name))),
             module,
         )?;
+        manifest_grammars.push(("lexer", grammar_name, entries));
     }
 
     if let Some(parser) = args.parser {
@@ -77,12 +87,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .parser_name
             .clone()
             .unwrap_or_else(|| grammar_name_from_path(&parser));
+        let entries = collect_parser_semantics(&data, grammar_source.as_deref(), args.sem_unknown)?;
+        enforce_sem_unknown(args.sem_unknown, &entries)?;
         let module = render_parser_with_options(
             &grammar_name,
             &data,
             grammar_source.as_deref(),
             ParserRenderOptions {
                 require_generated_parser: args.require_generated_parser,
+                sem_unknown: args.sem_unknown,
             },
         )?;
         fs::write(
@@ -90,9 +103,566 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .join(format!("{}.rs", module_name(&grammar_name))),
             module,
         )?;
+        manifest_grammars.push(("parser", grammar_name, entries));
     }
 
+    write_semantics_manifest(&args.out_dir, args.sem_unknown, &manifest_grammars)?;
     Ok(())
+}
+
+/// Disposition policy for semantic predicate/action coordinates that the
+/// generator cannot translate into runtime metadata.
+///
+/// Mirrors the runtime's `UnknownSemanticPolicy`; the generator additionally
+/// uses [`Self::Error`] to fail code generation before emitting a module whose
+/// semantics would be unreliable.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum SemUnknownPolicy {
+    /// Unknown predicates pass unconditionally and unknown actions are
+    /// no-ops. Matches the historical metadata-only behavior; deprecated as a
+    /// default and slated to change to [`Self::Error`] in a future minor
+    /// release.
+    #[default]
+    AssumeTrue,
+    /// Unknown predicates fail unconditionally; unknown actions remain
+    /// no-ops.
+    AssumeFalse,
+    /// Fail code generation when any semantic coordinate has no Rust
+    /// implementation.
+    Error,
+}
+
+impl SemUnknownPolicy {
+    fn parse_flag(value: &str) -> Result<Self, String> {
+        match value {
+            "error" => Ok(Self::Error),
+            "assume-true" => Ok(Self::AssumeTrue),
+            "assume-false" => Ok(Self::AssumeFalse),
+            other => Err(format!(
+                "--sem-unknown accepts error, assume-true, or assume-false; got {other}\n\n{}",
+                usage()
+            )),
+        }
+    }
+
+    const fn manifest_name(self) -> &'static str {
+        match self {
+            Self::AssumeTrue => "assume-true",
+            Self::AssumeFalse => "assume-false",
+            Self::Error => "error",
+        }
+    }
+
+    /// Manifest disposition recorded for a predicate coordinate that has no
+    /// translated template. [`Self::Error`] aborts generation before a
+    /// manifest is written, so its mapping is only ever read by the
+    /// fail-loud report.
+    const fn unknown_predicate_disposition(self) -> SemanticsDisposition {
+        match self {
+            Self::AssumeTrue | Self::Error => SemanticsDisposition::AssumeTrue,
+            Self::AssumeFalse => SemanticsDisposition::AssumeFalse,
+        }
+    }
+}
+
+/// Coordinate kinds tracked by the `semantics.json` manifest.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SemanticsKind {
+    LexerAction,
+    LexerPredicate,
+    ParserPredicate,
+    ParserAction,
+}
+
+impl SemanticsKind {
+    const fn manifest_name(self) -> &'static str {
+        match self {
+            Self::LexerAction => "lexer-action",
+            Self::LexerPredicate => "lexer-predicate",
+            Self::ParserPredicate => "parser-predicate",
+            Self::ParserAction => "parser-action",
+        }
+    }
+
+    const fn error_label(self) -> &'static str {
+        match self {
+            Self::LexerAction => "unsupported grammar action",
+            Self::LexerPredicate | Self::ParserPredicate => "unsupported semantic predicate",
+            Self::ParserAction => "unsupported grammar action",
+        }
+    }
+}
+
+/// How generation disposed of one semantic coordinate.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SemanticsDisposition {
+    /// A supported template translated the coordinate into runtime metadata
+    /// or generated Rust code.
+    Translated,
+    /// No implementation exists; recognition treats the predicate as passing.
+    AssumeTrue,
+    /// No implementation exists; recognition treats the predicate as failing.
+    AssumeFalse,
+    /// No implementation exists; the action is a no-op at recognition time.
+    Ignored,
+}
+
+impl SemanticsDisposition {
+    const fn manifest_name(self) -> &'static str {
+        match self {
+            Self::Translated => "translated",
+            Self::AssumeTrue => "assume-true",
+            Self::AssumeFalse => "assume-false",
+            Self::Ignored => "ignored",
+        }
+    }
+}
+
+/// One semantic predicate/action coordinate inventoried for the manifest.
+///
+/// Every field except `kind` and `disposition` is best-effort: source spans
+/// and bodies require `--grammar`, and parser actions are keyed by ATN state
+/// because their source pairing is heuristic.
+#[derive(Clone, Debug)]
+struct SemanticsEntry {
+    kind: SemanticsKind,
+    rule_index: Option<usize>,
+    rule_name: Option<String>,
+    index: Option<usize>,
+    atn_state: Option<usize>,
+    line: Option<usize>,
+    column: Option<usize>,
+    body: Option<String>,
+    disposition: SemanticsDisposition,
+    template: Option<String>,
+}
+
+impl SemanticsEntry {
+    /// Renders the fail-loud error line for this coordinate, matching the
+    /// shape documented in the compatibility-boundary docs.
+    fn describe_unsupported(&self) -> String {
+        let mut message = String::from(self.kind.error_label());
+        message.push(':');
+        match (&self.rule_name, self.rule_index) {
+            (Some(name), Some(rule_index)) => {
+                let _ = write!(message, " rule={name}({rule_index})");
+            }
+            (None, Some(rule_index)) => {
+                let _ = write!(message, " rule_index={rule_index}");
+            }
+            _ => {}
+        }
+        if let Some(index) = self.index {
+            let label = match self.kind {
+                SemanticsKind::LexerPredicate | SemanticsKind::ParserPredicate => "pred_index",
+                SemanticsKind::LexerAction | SemanticsKind::ParserAction => "action_index",
+            };
+            let _ = write!(message, " {label}={index}");
+        }
+        if let Some(atn_state) = self.atn_state {
+            let _ = write!(message, " atn_state={atn_state}");
+        }
+        if let (Some(line), Some(column)) = (self.line, self.column) {
+            let _ = write!(message, " at {line}:{column}");
+        }
+        if let Some(body) = &self.body {
+            let _ = write!(message, ": {{{body}}}");
+        }
+        message
+    }
+}
+
+/// Fails generation under `--sem-unknown=error` when any coordinate lacks a
+/// Rust implementation, listing each one with its grammar source span.
+fn enforce_sem_unknown(policy: SemUnknownPolicy, entries: &[SemanticsEntry]) -> io::Result<()> {
+    if policy != SemUnknownPolicy::Error {
+        return Ok(());
+    }
+    let unsupported = entries
+        .iter()
+        .filter(|entry| entry.disposition != SemanticsDisposition::Translated)
+        .collect::<Vec<_>>();
+    if unsupported.is_empty() {
+        return Ok(());
+    }
+    let mut message = String::new();
+    for entry in &unsupported {
+        message.push_str(&entry.describe_unsupported());
+        message.push('\n');
+    }
+    let _ = write!(
+        message,
+        "--sem-unknown=error: {} semantic coordinate(s) have no Rust implementation; \
+         pass --grammar so supported templates can be translated, or accept a \
+         documented fallback with --sem-unknown=assume-true / assume-false",
+        unsupported.len()
+    );
+    Err(io::Error::new(io::ErrorKind::InvalidData, message))
+}
+
+/// Inventories every custom-action and predicate coordinate in a lexer
+/// `.interp`, mirroring the pairing rules `render_lexer` uses so manifest
+/// dispositions match what the generated module will do.
+fn collect_lexer_semantics(
+    data: &InterpData,
+    grammar_source: Option<&str>,
+    allow_unsupported_lexer_actions: bool,
+    policy: SemUnknownPolicy,
+) -> io::Result<Vec<SemanticsEntry>> {
+    let mut entries = Vec::new();
+
+    let action_coordinates = lexer_custom_actions(data)?;
+    if !action_coordinates.is_empty() {
+        let templates = grammar_source
+            .map(|source| lexer_action_templates(data, source, allow_unsupported_lexer_actions))
+            .transpose()?;
+        let blocks = grammar_source
+            .map(|source| lexer_action_source_blocks(source, &data.rule_names))
+            .unwrap_or_default();
+        for (position, (rule_index, action_index)) in action_coordinates.iter().enumerate() {
+            let template = templates
+                .as_ref()
+                .and_then(|templates| templates.get(position))
+                .map(|(_, template)| template);
+            let translated = template.is_some_and(|template| {
+                !matches!(template, ActionTemplate::UnsupportedLexerAction { .. })
+            });
+            let block = blocks.get(position);
+            let rule_index = usize::try_from(*rule_index).ok();
+            entries.push(SemanticsEntry {
+                kind: SemanticsKind::LexerAction,
+                rule_index,
+                rule_name: rule_index.and_then(|rule| data.rule_names.get(rule).cloned()),
+                index: usize::try_from(*action_index).ok(),
+                atn_state: None,
+                line: block.map(|(line, _, _)| *line),
+                column: block.map(|(_, column, _)| *column),
+                body: block.map(|(_, _, body)| body.clone()),
+                disposition: if translated {
+                    SemanticsDisposition::Translated
+                } else {
+                    SemanticsDisposition::Ignored
+                },
+                template: template
+                    .filter(|_| translated)
+                    .map(|template| format!("{template:?}")),
+            });
+        }
+    }
+
+    let predicate_coordinates = lexer_predicate_transitions(data)?;
+    if !predicate_coordinates.is_empty() {
+        let templates = grammar_source
+            .map(|source| lexer_predicate_templates(data, source))
+            .transpose()?
+            .unwrap_or_default();
+        let blocks = grammar_source
+            .map(predicate_source_blocks)
+            .unwrap_or_default();
+        for (position, (rule_index, pred_index)) in predicate_coordinates.iter().enumerate() {
+            let template = templates
+                .iter()
+                .find(|((rule, pred), _)| rule == rule_index && pred == pred_index)
+                .map(|(_, template)| template);
+            let block = blocks.get(position);
+            entries.push(SemanticsEntry {
+                kind: SemanticsKind::LexerPredicate,
+                rule_index: Some(*rule_index),
+                rule_name: data.rule_names.get(*rule_index).cloned(),
+                index: Some(*pred_index),
+                atn_state: None,
+                line: block.map(|(line, _, _)| *line),
+                column: block.map(|(_, column, _)| *column),
+                body: block.map(|(_, _, body)| body.clone()),
+                disposition: if template.is_some() {
+                    SemanticsDisposition::Translated
+                } else {
+                    policy.unknown_predicate_disposition()
+                },
+                template: template.map(|template| format!("{template:?}")),
+            });
+        }
+    }
+
+    Ok(entries)
+}
+
+/// Inventories every predicate coordinate and action-transition state in a
+/// parser `.interp`, mirroring `render_parser_with_options` pairing.
+fn collect_parser_semantics(
+    data: &InterpData,
+    grammar_source: Option<&str>,
+    policy: SemUnknownPolicy,
+) -> io::Result<Vec<SemanticsEntry>> {
+    let mut entries = Vec::new();
+
+    let predicate_coordinates = lexer_predicate_transitions(data)?;
+    if !predicate_coordinates.is_empty() {
+        let templates = grammar_source
+            .map(|source| parser_predicate_templates(data, source))
+            .transpose()?
+            .unwrap_or_default();
+        let blocks = grammar_source
+            .map(predicate_source_blocks)
+            .unwrap_or_default();
+        for (position, coordinate) in predicate_coordinates.iter().enumerate() {
+            let template = templates
+                .iter()
+                .find(|(covered, _)| covered == coordinate)
+                .map(|(_, template)| template);
+            let block = blocks.get(position);
+            let (rule_index, pred_index) = *coordinate;
+            entries.push(SemanticsEntry {
+                kind: SemanticsKind::ParserPredicate,
+                rule_index: Some(rule_index),
+                rule_name: data.rule_names.get(rule_index).cloned(),
+                index: Some(pred_index),
+                atn_state: None,
+                line: block.map(|(line, _, _)| *line),
+                column: block.map(|(_, column, _)| *column),
+                body: block.map(|(_, _, body)| body.clone()),
+                disposition: if template.is_some() {
+                    SemanticsDisposition::Translated
+                } else {
+                    policy.unknown_predicate_disposition()
+                },
+                template: template.map(|template| format!("{template:?}")),
+            });
+        }
+    }
+
+    let action_states = parser_action_states(data)?;
+    if !action_states.is_empty() {
+        let templates = grammar_source
+            .map(|source| parser_action_templates(data, source))
+            .transpose()?
+            .unwrap_or_default();
+        let state_rules = parser_action_state_rules(data)?;
+        let blocks = grammar_source
+            .map(|source| parser_action_source_blocks(source, &data.rule_names))
+            .unwrap_or_default();
+        for (position, state) in action_states.iter().enumerate() {
+            let template = templates
+                .iter()
+                .find(|(covered, _)| covered == state)
+                .map(|(_, template)| template);
+            let rule_index = state_rules.get(state).copied();
+            let block = blocks.get(position);
+            entries.push(SemanticsEntry {
+                kind: SemanticsKind::ParserAction,
+                rule_index,
+                rule_name: rule_index.and_then(|rule| data.rule_names.get(rule).cloned()),
+                index: None,
+                atn_state: Some(*state),
+                line: block.map(|(line, _, _)| *line),
+                column: block.map(|(_, column, _)| *column),
+                body: block.map(|(_, _, body)| body.clone()),
+                disposition: if template.is_some() {
+                    SemanticsDisposition::Translated
+                } else {
+                    SemanticsDisposition::Ignored
+                },
+                template: template.map(|template| format!("{template:?}")),
+            });
+        }
+    }
+
+    Ok(entries)
+}
+
+/// Collects `(line, column, body)` for every semantic-predicate block in
+/// grammar source order, the same order ANTLR assigns predicate indexes.
+fn predicate_source_blocks(source: &str) -> Vec<(usize, usize, String)> {
+    let mut blocks = Vec::new();
+    let mut offset = 0;
+    while let Some(block) = next_predicate_action_block(source, offset) {
+        offset = block.after_brace;
+        let (line, column) = line_column(source, block.open_brace);
+        blocks.push((line, column, one_line_action_body(block.body)));
+    }
+    blocks
+}
+
+/// Collects `(line, column, body)` for every lexer custom-action block using
+/// the same filter chain as `extract_lexer_action_templates`, so positions
+/// pair 1:1 with serialized custom-action coordinates.
+fn lexer_action_source_blocks(source: &str, rule_names: &[String]) -> Vec<(usize, usize, String)> {
+    let mut blocks = Vec::new();
+    let mut offset = 0;
+    while let Some(block) = next_action_block(source, offset) {
+        offset = block.after_brace;
+        if !is_lexer_custom_action_block(source, &block, rule_names) {
+            continue;
+        }
+        let (line, column) = line_column(source, block.open_brace);
+        blocks.push((line, column, one_line_action_body(block.body)));
+    }
+    blocks
+}
+
+/// Collects `(line, column, body)` for parser action blocks in the same
+/// source order used to pair action-transition states. Unsupported bodies are
+/// still returned so the manifest can document hook/policy fallbacks.
+fn parser_action_source_blocks(source: &str, rule_names: &[String]) -> Vec<(usize, usize, String)> {
+    let mut blocks = Vec::new();
+    let mut offset = 0;
+    while let Some(block) = next_parser_action_block(source, offset, |body| {
+        parse_int_return_assignment(body).is_some()
+    }) {
+        offset = block.after_brace;
+        if !rule_action_included(source, block.open_brace, Some(rule_names))
+            || block.predicate
+            || is_after_action(source, block.open_brace)
+            || is_init_action(source, block.open_brace)
+            || is_definitions_action(source, block.open_brace)
+            || is_members_action(source, block.open_brace)
+            || is_options_block(source, block.open_brace)
+        {
+            continue;
+        }
+        let (line, column) = line_column(source, block.open_brace);
+        blocks.push((line, column, one_line_action_body(block.body)));
+    }
+    blocks
+}
+
+/// Converts a byte offset into a 1-based line and 0-based column, matching
+/// ANTLR's source position convention.
+fn line_column(source: &str, offset: usize) -> (usize, usize) {
+    let offset = offset.min(source.len());
+    let prefix = &source[..offset];
+    let line = prefix.bytes().filter(|byte| *byte == b'\n').count() + 1;
+    let column = prefix
+        .rfind('\n')
+        .map_or(offset, |newline| offset - newline - 1);
+    (line, column)
+}
+
+/// Writes the `semantics.json` compatibility manifest next to the generated
+/// modules. The manifest lists every semantic coordinate and how generation
+/// disposed of it, making the supported/unsupported boundary inspectable.
+fn write_semantics_manifest(
+    out_dir: &Path,
+    policy: SemUnknownPolicy,
+    grammars: &[(&'static str, String, Vec<SemanticsEntry>)],
+) -> io::Result<()> {
+    fs::write(
+        out_dir.join("semantics.json"),
+        render_semantics_manifest(policy, grammars),
+    )
+}
+
+fn render_semantics_manifest(
+    policy: SemUnknownPolicy,
+    grammars: &[(&'static str, String, Vec<SemanticsEntry>)],
+) -> String {
+    const DEPRECATION_NOTE: &str = "unknown coordinates currently default to assume-true; \
+                                    a future minor release changes the default to error";
+    let mut out = String::new();
+    out.push_str("{\n  \"version\": 1,\n");
+    let _ = writeln!(
+        out,
+        "  \"policy\": {},",
+        json_string(policy.manifest_name())
+    );
+    let _ = writeln!(out, "  \"note\": {},", json_string(DEPRECATION_NOTE));
+    out.push_str("  \"grammars\": [");
+    for (grammar_position, (kind, name, entries)) in grammars.iter().enumerate() {
+        if grammar_position > 0 {
+            out.push(',');
+        }
+        out.push_str("\n    {\n");
+        let _ = writeln!(out, "      \"kind\": {},", json_string(kind));
+        let _ = writeln!(out, "      \"name\": {},", json_string(name));
+        out.push_str("      \"coordinates\": [");
+        for (entry_position, entry) in entries.iter().enumerate() {
+            if entry_position > 0 {
+                out.push(',');
+            }
+            out.push_str("\n        ");
+            write_semantics_entry(&mut out, entry);
+        }
+        if entries.is_empty() {
+            out.push_str("]\n    }");
+        } else {
+            out.push_str("\n      ]\n    }");
+        }
+    }
+    if grammars.is_empty() {
+        out.push_str("]\n}\n");
+    } else {
+        out.push_str("\n  ]\n}\n");
+    }
+    out
+}
+
+fn write_semantics_entry(out: &mut String, entry: &SemanticsEntry) {
+    out.push('{');
+    let _ = write!(out, "\"kind\": {}", json_string(entry.kind.manifest_name()));
+    let _ = write!(
+        out,
+        ", \"rule\": {}",
+        json_optional_string(entry.rule_name.as_deref())
+    );
+    let _ = write!(
+        out,
+        ", \"rule_index\": {}",
+        json_optional_number(entry.rule_index)
+    );
+    let _ = write!(out, ", \"index\": {}", json_optional_number(entry.index));
+    let _ = write!(
+        out,
+        ", \"atn_state\": {}",
+        json_optional_number(entry.atn_state)
+    );
+    let _ = write!(out, ", \"line\": {}", json_optional_number(entry.line));
+    let _ = write!(out, ", \"column\": {}", json_optional_number(entry.column));
+    let _ = write!(
+        out,
+        ", \"body\": {}",
+        json_optional_string(entry.body.as_deref())
+    );
+    let _ = write!(
+        out,
+        ", \"disposition\": {}",
+        json_string(entry.disposition.manifest_name())
+    );
+    let _ = write!(
+        out,
+        ", \"template\": {}",
+        json_optional_string(entry.template.as_deref())
+    );
+    out.push('}');
+}
+
+fn json_optional_number(value: Option<usize>) -> String {
+    value.map_or_else(|| "null".to_owned(), |number| number.to_string())
+}
+
+fn json_optional_string(value: Option<&str>) -> String {
+    value.map_or_else(|| "null".to_owned(), json_string)
+}
+
+/// Escapes a string for JSON output; the generator hand-rolls this to avoid a
+/// serialization dependency in a binary meant to be vendored into pipelines.
+fn json_string(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() + 2);
+    out.push('"');
+    for ch in value.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            control if (control as u32) < 0x20 => {
+                let _ = write!(out, "\\u{:04x}", control as u32);
+            }
+            other => out.push(other),
+        }
+    }
+    out.push('"');
+    out
 }
 
 #[derive(Debug)]
@@ -105,6 +675,7 @@ struct Args {
     out_dir: PathBuf,
     require_generated_parser: bool,
     allow_unsupported_lexer_actions: bool,
+    sem_unknown: SemUnknownPolicy,
 }
 
 impl Args {
@@ -124,6 +695,7 @@ impl Args {
         let mut out_dir = None;
         let mut require_generated_parser = false;
         let mut allow_unsupported_lexer_actions = false;
+        let mut sem_unknown = SemUnknownPolicy::default();
 
         let mut iter = env::args().skip(1);
         while let Some(arg) = iter.next() {
@@ -136,6 +708,10 @@ impl Args {
                 "--out-dir" => out_dir = Some(PathBuf::from(next_arg(&mut iter, "--out-dir")?)),
                 "--require-generated-parser" => require_generated_parser = true,
                 "--allow-unsupported-lexer-actions" => allow_unsupported_lexer_actions = true,
+                "--sem-unknown" => {
+                    sem_unknown =
+                        SemUnknownPolicy::parse_flag(&next_arg(&mut iter, "--sem-unknown")?)?;
+                }
                 "--help" | "-h" => return Err(usage()),
                 other => return Err(format!("unknown argument {other}\n\n{}", usage())),
             }
@@ -157,6 +733,7 @@ impl Args {
             out_dir: out_dir.unwrap_or_else(|| PathBuf::from(".")),
             require_generated_parser,
             allow_unsupported_lexer_actions,
+            sem_unknown,
         })
     }
 }
@@ -167,7 +744,7 @@ fn next_arg(iter: &mut impl Iterator<Item = String>, flag: &str) -> Result<Strin
 }
 
 fn usage() -> String {
-    "usage: antlr4-rust-gen [--lexer Lexer.interp] [--parser Parser.interp] [--grammar Grammar.g4] [--out-dir DIR] [--require-generated-parser] [--allow-unsupported-lexer-actions]"
+    "usage: antlr4-rust-gen [--lexer Lexer.interp] [--parser Parser.interp] [--grammar Grammar.g4] [--out-dir DIR] [--require-generated-parser] [--allow-unsupported-lexer-actions] [--sem-unknown error|assume-true|assume-false]"
         .to_owned()
 }
 
@@ -292,6 +869,7 @@ fn render_lexer(
     data: &InterpData,
     grammar_source: Option<&str>,
     allow_unsupported_lexer_actions: bool,
+    sem_unknown: SemUnknownPolicy,
 ) -> io::Result<String> {
     let type_name = rust_type_name(grammar_name);
     let metadata = render_metadata(grammar_name, data);
@@ -304,6 +882,12 @@ fn render_lexer(
         || Ok(Vec::new()),
         |source| lexer_predicate_templates(data, source),
     )?;
+    // Predicate coordinates with no translated template normally fall back to
+    // always-true; `--sem-unknown=assume-false` flips that fallback, which
+    // requires the hook-taking token path even when no dispatch is generated.
+    let unknown_predicates_assume_false = sem_unknown == SemUnknownPolicy::AssumeFalse
+        && predicates.is_empty()
+        && !lexer_predicate_transitions(data)?.is_empty();
     let adjusts_accept_position = grammar_source.is_some_and(uses_position_adjusting_lexer);
     let lexer_dfa_data = compiled_lexer_dfa_words(data);
     let has_action_dispatch = lexer_actions_need_dispatch(&actions);
@@ -314,7 +898,10 @@ fn render_lexer(
     } else {
         String::new()
     };
-    let next_token_call = if !has_action_dispatch && predicates.is_empty() && !adjusts_accept_position
+    let next_token_call = if !has_action_dispatch
+        && predicates.is_empty()
+        && !adjusts_accept_position
+        && !unknown_predicates_assume_false
     {
         "antlr4_runtime::atn::lexer::next_token_compiled(&mut self.base, atn(), lexer_dfa())"
             .to_owned()
@@ -324,10 +911,12 @@ fn render_lexer(
         } else {
             "|_, _| {}"
         };
-        let predicate = if predicates.is_empty() {
-            "|_, _| true"
-        } else {
+        let predicate = if !predicates.is_empty() {
             "Self::run_predicate"
+        } else if unknown_predicates_assume_false {
+            "|_, _| false"
+        } else {
+            "|_, _| true"
         };
         let adjuster = if adjusts_accept_position {
             "Self::adjust_accept_position"
@@ -644,6 +1233,7 @@ struct GeneratedParserCompileContext<'a> {
 #[derive(Clone, Copy, Debug, Default)]
 struct ParserRenderOptions {
     require_generated_parser: bool,
+    sem_unknown: SemUnknownPolicy,
 }
 
 #[derive(Clone, Copy)]
@@ -3652,17 +4242,20 @@ fn render_parser_parse_rule_fallback(
     has_predicate_dispatch: bool,
     has_return_actions: bool,
     buffer_actions: bool,
+    unknown_policy_literal: Option<&str>,
 ) -> io::Result<String> {
     let mut out = String::new();
-    if has_predicate_dispatch || has_return_actions {
+    if has_predicate_dispatch || has_return_actions || unknown_policy_literal.is_some() {
         writeln!(
             out,
-            "let (tree, actions) = self.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence, antlr4_runtime::ParserRuntimeOptions {{ init_action_rules: &{}, track_alt_numbers: {track_alt_numbers}, predicates: &{}, rule_args: &{}, member_actions: &{}, return_actions: &{} }})?;",
+            "let (tree, actions) = self.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence, antlr4_runtime::ParserRuntimeOptions {{ init_action_rules: &{}, track_alt_numbers: {track_alt_numbers}, predicates: &{}, rule_args: &{}, member_actions: &{}, return_actions: &{}, unknown_predicate_policy: {} }})?;",
             render_usize_array(init_action_rules),
             render_parser_predicate_array(predicates, data, int_members)?,
             render_parser_rule_arg_array(rule_args),
             render_parser_member_action_array(member_actions),
-            render_parser_return_action_array(return_actions, data)?
+            render_parser_return_action_array(return_actions, data)?,
+            unknown_policy_literal
+                .unwrap_or("antlr4_runtime::UnknownSemanticPolicy::AssumeTrue")
         )
         .expect("writing to a string cannot fail");
     } else if track_alt_numbers {
@@ -3822,13 +4415,19 @@ fn render_parser_with_options(
         .keys()
         .copied()
         .collect::<BTreeSet<_>>();
-    let action_states = actions
-        .iter()
-        .map(|(source_state, _)| *source_state)
+    let action_states = parser_action_states(data)?
+        .into_iter()
         .collect::<BTreeSet<_>>();
     let generated_action_states = action_states.clone();
-    let predicate_coordinates = grammar_source
-        .map_or_else(|| Ok(Vec::new()), |_| lexer_predicate_transitions(data))?
+    // Under a non-default unknown-coordinate policy every predicate transition
+    // must reach the interpreter (which applies the policy), so the coordinate
+    // inventory is read from the ATN even without grammar source.
+    let predicate_coordinates =
+        if grammar_source.is_some() || options.sem_unknown != SemUnknownPolicy::AssumeTrue {
+            lexer_predicate_transitions(data)?
+        } else {
+            Vec::new()
+        }
         .into_iter()
         .collect::<BTreeSet<_>>();
     let generated_predicate_coordinates = predicates
@@ -3838,7 +4437,7 @@ fn render_parser_with_options(
         })
         .collect::<BTreeSet<_>>();
     let has_init_actions = init_actions.iter().any(Option::is_some);
-    let has_action_dispatch = !actions.is_empty() || has_init_actions;
+    let has_action_dispatch = !action_states.is_empty() || has_init_actions;
     let has_predicate_dispatch = !predicates.is_empty();
     let has_return_actions = !return_actions.is_empty();
     let track_alt_numbers = grammar_source.is_some_and(uses_alt_number_contexts);
@@ -3882,6 +4481,13 @@ fn render_parser_with_options(
         .enumerate()
         .filter_map(|(index, action)| action.as_ref().map(|_| index))
         .collect::<Vec<_>>();
+    // A non-default policy must reach the interpreter through the emitted
+    // runtime options, so its literal forces the options-carrying call shape.
+    let unknown_policy_literal = match options.sem_unknown {
+        SemUnknownPolicy::AssumeTrue => None,
+        SemUnknownPolicy::AssumeFalse => Some("antlr4_runtime::UnknownSemanticPolicy::AssumeFalse"),
+        SemUnknownPolicy::Error => Some("antlr4_runtime::UnknownSemanticPolicy::Error"),
+    };
     let parse_rule_fallback = render_parser_parse_rule_fallback(
         &init_action_rules,
         track_alt_numbers,
@@ -3895,6 +4501,7 @@ fn render_parser_with_options(
         has_predicate_dispatch,
         has_return_actions,
         false,
+        unknown_policy_literal,
     )?;
     let parse_rule_fallback_buffered = render_parser_parse_rule_fallback(
         &init_action_rules,
@@ -3909,6 +4516,7 @@ fn render_parser_with_options(
         has_predicate_dispatch,
         has_return_actions,
         true,
+        unknown_policy_literal,
     )?;
     let after_action_dispatch = render_parser_after_action_dispatch(&after_actions);
     let parser_predicate_constant =
@@ -3917,7 +4525,12 @@ fn render_parser_with_options(
         && !track_alt_numbers
         && !has_predicate_dispatch
         && !has_return_actions;
-    let action_method = render_parser_action_method(&actions, &init_actions, &int_members)?;
+    let action_method = render_parser_action_method(
+        &actions,
+        &init_actions,
+        &int_members,
+        !action_states.is_empty(),
+    )?;
     // ATN action source-states whose action is `$ctx`-rooted (renders the current
     // rule's own tree). A nested child's buffered action at one of these states is
     // re-tagged with the child tree at the call site so it renders the child
@@ -3981,11 +4594,12 @@ fn atn() -> &'static Atn {{
 {parse_convenience}
 
 {parser_rustdoc}#[derive(Debug)]
-pub struct {type_name}<S>
+pub struct {type_name}<S, H = antlr4_runtime::NoSemanticHooks>
 where
     S: TokenSource,
+    H: antlr4_runtime::SemanticHooks,
 {{
-    base: BaseParser<S>,
+    base: BaseParser<S, H>,
     simulator: Option<antlr4_runtime::ParserAtnSimulator<'static>>,
     generated_actions: Vec<GeneratedAction>,
     generated_only: bool,
@@ -4032,11 +4646,21 @@ impl GeneratedRuleError {{
     }}
 }}
 
-impl<S> {type_name}<S>
+impl<S> {type_name}<S, antlr4_runtime::NoSemanticHooks>
 where
     S: TokenSource,
 {{
     pub fn new(input: CommonTokenStream<S>) -> Self {{
+        Self::with_hooks(input, antlr4_runtime::NoSemanticHooks)
+    }}
+}}
+
+impl<S, H> {type_name}<S, H>
+where
+    S: TokenSource,
+    H: antlr4_runtime::SemanticHooks,
+{{
+    pub fn with_hooks(input: CommonTokenStream<S>, hooks: H) -> Self {{
         let grammar_metadata = metadata();
         let data = RecognizerData::new(
             grammar_metadata.grammar_file_name(),
@@ -4209,18 +4833,20 @@ where
 {action_method}
 }}
 
-impl<S> GeneratedParser for {type_name}<S>
+impl<S, H> GeneratedParser for {type_name}<S, H>
 where
     S: TokenSource,
+    H: antlr4_runtime::SemanticHooks,
 {{
     fn metadata() -> &'static GrammarMetadata {{
         metadata()
     }}
 }}
 
-impl<S> Recognizer for {type_name}<S>
+impl<S, H> Recognizer for {type_name}<S, H>
 where
     S: TokenSource,
+    H: antlr4_runtime::SemanticHooks,
 {{
     fn data(&self) -> &antlr4_runtime::RecognizerData {{
         self.base.data()
@@ -4231,9 +4857,10 @@ where
     }}
 }}
 
-impl<S> Parser for {type_name}<S>
+impl<S, H> Parser for {type_name}<S, H>
 where
     S: TokenSource,
+    H: antlr4_runtime::SemanticHooks,
 {{
     fn build_parse_trees(&self) -> bool {{ self.base.build_parse_trees() }}
     fn set_build_parse_trees(&mut self, build: bool) {{ self.base.set_build_parse_trees(build); }}
@@ -4487,14 +5114,7 @@ fn extract_lexer_action_templates(
     let mut offset = 0;
     while let Some(block) = next_action_block(grammar_source, offset) {
         offset = block.after_brace;
-        if block.predicate
-            || !rule_action_included(grammar_source, block.open_brace, Some(rule_names))
-            || is_after_action(grammar_source, block.open_brace)
-            || is_init_action(grammar_source, block.open_brace)
-            || is_definitions_action(grammar_source, block.open_brace)
-            || is_members_action(grammar_source, block.open_brace)
-            || is_options_block(grammar_source, block.open_brace)
-        {
+        if !is_lexer_custom_action_block(grammar_source, &block, rule_names) {
             continue;
         }
         let template = parse_lexer_action_block_template(block.body).unwrap_or_else(|| {
@@ -4507,6 +5127,23 @@ fn extract_lexer_action_templates(
         ));
     }
     actions
+}
+
+/// Reports whether an action block found in grammar source participates in
+/// ANTLR's lexer custom-action numbering. Shared by template extraction and
+/// the semantics-manifest span collector so their walks cannot drift apart.
+fn is_lexer_custom_action_block(
+    source: &str,
+    block: &templates::TemplateBlock<'_>,
+    rule_names: &[String],
+) -> bool {
+    !block.predicate
+        && rule_action_included(source, block.open_brace, Some(rule_names))
+        && !is_after_action(source, block.open_brace)
+        && !is_init_action(source, block.open_brace)
+        && !is_definitions_action(source, block.open_brace)
+        && !is_members_action(source, block.open_brace)
+        && !is_options_block(source, block.open_brace)
 }
 
 fn reject_unsupported_lexer_action_templates(
@@ -4681,20 +5318,21 @@ fn parser_action_templates(
     data: &InterpData,
     grammar_source: &str,
 ) -> io::Result<Vec<(usize, ActionTemplate)>> {
-    let templates = extract_supported_action_templates(grammar_source)?;
-    match parser_action_templates_from_templates(data, templates) {
+    let templates = extract_action_template_slots_filtered(grammar_source, None);
+    match parser_action_templates_from_template_slots(data, templates) {
         Ok(actions) => Ok(actions),
         Err(unfiltered_error) => {
             let templates =
-                extract_supported_rule_action_templates(grammar_source, &data.rule_names)?;
-            parser_action_templates_from_templates(data, templates).map_err(|_| unfiltered_error)
+                extract_action_template_slots_filtered(grammar_source, Some(&data.rule_names));
+            parser_action_templates_from_template_slots(data, templates)
+                .map_err(|_| unfiltered_error)
         }
     }
 }
 
-fn parser_action_templates_from_templates(
+fn parser_action_templates_from_template_slots(
     data: &InterpData,
-    templates: Vec<ActionTemplate>,
+    templates: Vec<Option<ActionTemplate>>,
 ) -> io::Result<Vec<(usize, ActionTemplate)>> {
     if templates.is_empty() {
         return Ok(Vec::new());
@@ -4706,12 +5344,22 @@ fn parser_action_templates_from_templates(
         // user-visible print action instead of a later raw assignment action.
         if templates
             .iter()
+            .flatten()
             .any(|template| matches!(template, ActionTemplate::RuleValue { .. }))
         {
-            return Ok(states.into_iter().zip(templates).collect());
+            return Ok(states
+                .into_iter()
+                .zip(templates)
+                .filter_map(|(state, template)| template.map(|template| (state, template)))
+                .collect());
         }
         let skip = states.len() - templates.len();
-        return Ok(states.into_iter().skip(skip).zip(templates).collect());
+        return Ok(states
+            .into_iter()
+            .skip(skip)
+            .zip(templates)
+            .filter_map(|(state, template)| template.map(|template| (state, template)))
+            .collect());
     }
     if states.len() != templates.len() {
         return Err(io::Error::new(
@@ -4723,7 +5371,11 @@ fn parser_action_templates_from_templates(
             ),
         ));
     }
-    Ok(states.into_iter().zip(templates).collect())
+    Ok(states
+        .into_iter()
+        .zip(templates)
+        .filter_map(|(state, template)| template.map(|template| (state, template)))
+        .collect())
 }
 
 /// Extracts rule-level `@after` target templates keyed by generated rule
@@ -4796,24 +5448,26 @@ fn parser_init_action_templates(
 
 /// Finds grammar action templates in the same order as ANTLR serializes action
 /// transitions, while ignoring semantic predicates that are control-flow guards.
-fn extract_supported_action_templates(grammar_source: &str) -> io::Result<Vec<ActionTemplate>> {
+#[cfg(test)]
+fn extract_supported_action_templates(grammar_source: &str) -> Vec<ActionTemplate> {
     extract_supported_action_templates_filtered(grammar_source, None)
 }
 
-/// Extracts only action templates owned by rules present in the active `.interp`
-/// metadata, which keeps combined grammars from feeding parser actions to lexer
-/// generation and vice versa.
-fn extract_supported_rule_action_templates(
-    grammar_source: &str,
-    rule_names: &[String],
-) -> io::Result<Vec<ActionTemplate>> {
-    extract_supported_action_templates_filtered(grammar_source, Some(rule_names))
-}
-
+#[cfg(test)]
 fn extract_supported_action_templates_filtered(
     grammar_source: &str,
     rule_names: Option<&[String]>,
-) -> io::Result<Vec<ActionTemplate>> {
+) -> Vec<ActionTemplate> {
+    extract_action_template_slots_filtered(grammar_source, rule_names)
+        .into_iter()
+        .flatten()
+        .collect()
+}
+
+fn extract_action_template_slots_filtered(
+    grammar_source: &str,
+    rule_names: Option<&[String]>,
+) -> Vec<Option<ActionTemplate>> {
     let mut templates = Vec::new();
     let mut offset = 0;
     loop {
@@ -4828,13 +5482,7 @@ fn extract_supported_action_templates_filtered(
                 if !rule_action_included(grammar_source, signature.open_angle, rule_names) {
                     continue;
                 }
-                let Some(template) = parse_action_template(signature.body) else {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!("unsupported signature target template <{}>", signature.body),
-                    ));
-                };
-                templates.push(template);
+                templates.push(parse_action_template(signature.body));
             }
             (Some(block), _) => {
                 offset = block.after_brace;
@@ -4850,34 +5498,20 @@ fn extract_supported_action_templates_filtered(
                 {
                     continue;
                 }
-                let Some(template) = parse_action_block_template(block.body) else {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!("unsupported target action template <{}>", block.body),
-                    ));
-                };
-                templates.push(resolve_action_template_labels(
-                    template,
-                    grammar_source,
-                    block.open_brace,
-                ));
+                templates.push(parse_action_block_template(block.body).map(|template| {
+                    resolve_action_template_labels(template, grammar_source, block.open_brace)
+                }));
             }
             (None, Some(signature)) => {
                 offset = signature.after_template;
                 if !rule_action_included(grammar_source, signature.open_angle, rule_names) {
                     continue;
                 }
-                let Some(template) = parse_action_template(signature.body) else {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!("unsupported signature target template <{}>", signature.body),
-                    ));
-                };
-                templates.push(template);
+                templates.push(parse_action_template(signature.body));
             }
         }
     }
-    Ok(templates)
+    templates
 }
 
 /// Applies an optional rule-name filter to an action or signature position.
@@ -5140,12 +5774,10 @@ fn last_rule_header_colon(source: &str, position: usize) -> Option<usize> {
         match ch {
             // Embedded action bodies may contain colons (Rust paths, ternary
             // templates); skip the balanced block instead of scanning it.
-            '{' => cursor.seek(
-                matching_action_brace(source, index + 1)
-                    .map_or_else(|| index + ch.len_utf8(), |close| {
-                        close.saturating_add(1).min(position)
-                    }),
-            ),
+            '{' => cursor.seek(matching_action_brace(source, index + 1).map_or_else(
+                || index + ch.len_utf8(),
+                |close| close.saturating_add(1).min(position),
+            )),
             ':' => last = Some(index),
             _ => {}
         }
@@ -6733,9 +7365,10 @@ fn render_parser_action_method(
     actions: &[(usize, ActionTemplate)],
     init_actions: &[Option<ActionTemplate>],
     members: &[IntMemberTemplate],
+    has_action_states: bool,
 ) -> io::Result<String> {
     let has_init_actions = init_actions.iter().any(Option::is_some);
-    if actions.is_empty() && !has_init_actions {
+    if !has_action_states && !has_init_actions {
         return Ok(
             "    fn run_action(&mut self, _action: antlr4_runtime::ParserAction, _tree: &antlr4_runtime::ParseTree) {}\n"
                 .to_owned(),
@@ -6762,7 +7395,13 @@ fn render_parser_action_method(
         writeln!(arms, "            {state} => {{ {statement} }}")
             .expect("writing to a string cannot fail");
     }
-    arms.push_str("            _ => {}\n");
+    if has_action_states {
+        arms.push_str(
+            "            _ => { let _ = self.base.parser_action_hook(action, _tree); }\n",
+        );
+    } else {
+        arms.push_str("            _ => {}\n");
+    }
     let init_dispatch = if has_init_actions {
         format!(
             "        if action.is_rule_init() {{\n            match action.rule_index() {{\n{init_arms}            }}\n            return;\n        }}\n"
@@ -7889,9 +8528,9 @@ fn render_parser_return_action_array(
 /// Renders the generated parser base construction and member initialization.
 fn render_parser_base_initialization(members: &[IntMemberTemplate]) -> String {
     let mut out = if members.is_empty() {
-        "        let base = BaseParser::new(input, data);".to_owned()
+        "        let base = BaseParser::with_semantic_hooks(input, data, hooks);".to_owned()
     } else {
-        "        let mut base = BaseParser::new(input, data);".to_owned()
+        "        let mut base = BaseParser::with_semantic_hooks(input, data, hooks);".to_owned()
     };
     let initializers = members
         .iter()
@@ -8120,7 +8759,7 @@ atn:
             "/// Likely parser entry-rule methods (not called by other rules):\n/// - `s()`"
         ));
         assert!(rendered.contains(
-            "/// All parser rule methods:\n/// - `s()`\n#[derive(Debug)]\npub struct DemoParser<S>"
+            "/// All parser rule methods:\n/// - `s()`\n#[derive(Debug)]\npub struct DemoParser<S, H = antlr4_runtime::NoSemanticHooks>"
         ));
     }
 
@@ -8146,8 +8785,14 @@ atn:
 
     #[test]
     fn generated_modules_start_with_file_level_header() {
-        let lexer = render_lexer("TLexer", &minimal_parser_data(), None, false)
-            .expect("lexer module should render");
+        let lexer = render_lexer(
+            "TLexer",
+            &minimal_parser_data(),
+            None,
+            false,
+            SemUnknownPolicy::default(),
+        )
+        .expect("lexer module should render");
         let parser =
             render_parser("TParser", &minimal_parser_data(), None).expect("parser should render");
 
@@ -9160,6 +9805,7 @@ atn:
             false,
             false,
             false,
+            None,
         )
         .expect("fallback should render");
 
@@ -9168,6 +9814,15 @@ atn:
         ));
         assert!(fallback.contains("for action in actions { self.run_action(action, &tree); }"));
         assert!(fallback.contains("Ok(tree)"));
+    }
+
+    #[test]
+    fn parser_action_dispatch_falls_back_to_semantic_hook() {
+        let method = render_parser_action_method(&[], &[], &[], true)
+            .expect("parser action method should render");
+
+        assert!(method.contains("fn run_action"));
+        assert!(method.contains("self.base.parser_action_hook(action, _tree)"));
     }
 
     #[test]
@@ -9189,6 +9844,7 @@ atn:
             false,
             false,
             true,
+            None,
         )
         .expect("buffered fallback should render");
 
@@ -9310,6 +9966,9 @@ s : ;
             rendered.contains("parse_with_parser(input, lexer, entry).map(|output| output.result)")
         );
         assert!(rendered.contains("pub fn new(input: CommonTokenStream<S>) -> Self"));
+        assert!(
+            rendered.contains("pub fn with_hooks(input: CommonTokenStream<S>, hooks: H) -> Self")
+        );
     }
 
     #[test]
@@ -10131,8 +10790,7 @@ fragment ID2 : { <Column()> >= 2 }? [a-zA-Z];"#,
         let templates = extract_supported_action_templates(
             r#"root : {<write("$text")>} continue ;
 continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#,
-        )
-        .expect("supported templates should extract");
+        );
 
         assert_eq!(templates.len(), 3);
         assert!(matches!(templates[0], ActionTemplate::Text { .. }));
@@ -10772,5 +11430,253 @@ ID: [a-z]+ { customJava(); };
                 0, // decisions
             ],
         }
+    }
+
+    /// Parser `.interp` fixture whose ATN carries one semantic-predicate
+    /// transition at coordinate `(rule 0, pred 0)`: `s : {…}? A ;`.
+    fn predicate_parser_data() -> InterpData {
+        InterpData {
+            literal_names: vec![None, Some("'a'".to_owned())],
+            symbolic_names: vec![None, Some("A".to_owned())],
+            rule_names: vec!["s".to_owned()],
+            channel_names: vec!["DEFAULT_TOKEN_CHANNEL".to_owned()],
+            mode_names: vec!["DEFAULT_MODE".to_owned()],
+            atn: vec![
+                4, 1, 1, // version, parser grammar, max token type
+                4, // states
+                2, 0, // state 0: rule start
+                1, 0, // state 1: basic
+                1, 0, // state 2: basic
+                7, 0, // state 3: rule stop
+                0, // non-greedy states
+                0, // precedence states
+                1, // rules
+                0, // rule 0 start
+                0, // modes
+                0, // sets
+                3, // transitions
+                0, 1, 4, 0, 0, 0, // predicate rule 0 pred 0
+                1, 2, 5, 1, 0, 0, // atom A
+                2, 3, 1, 0, 0, 0, // epsilon
+                0, // decisions
+            ],
+        }
+    }
+
+    const PREDICATE_GRAMMAR: &str = "parser grammar S;\ns : {isTypeName()}? A ;\n";
+
+    #[test]
+    fn sem_unknown_flag_values_parse() {
+        assert_eq!(
+            SemUnknownPolicy::parse_flag("error").expect("error parses"),
+            SemUnknownPolicy::Error
+        );
+        assert_eq!(
+            SemUnknownPolicy::parse_flag("assume-true").expect("assume-true parses"),
+            SemUnknownPolicy::AssumeTrue
+        );
+        assert_eq!(
+            SemUnknownPolicy::parse_flag("assume-false").expect("assume-false parses"),
+            SemUnknownPolicy::AssumeFalse
+        );
+        assert!(SemUnknownPolicy::parse_flag("bogus").is_err());
+    }
+
+    #[test]
+    fn collect_parser_semantics_inventories_untranslated_predicates() {
+        let entries = collect_parser_semantics(
+            &predicate_parser_data(),
+            Some(PREDICATE_GRAMMAR),
+            SemUnknownPolicy::AssumeTrue,
+        )
+        .expect("collection should succeed");
+
+        assert_eq!(entries.len(), 1);
+        let entry = &entries[0];
+        assert_eq!(entry.kind, SemanticsKind::ParserPredicate);
+        assert_eq!(entry.disposition, SemanticsDisposition::AssumeTrue);
+        assert_eq!(entry.rule_name.as_deref(), Some("s"));
+        assert_eq!(entry.rule_index, Some(0));
+        assert_eq!(entry.index, Some(0));
+        assert_eq!(entry.body.as_deref(), Some("isTypeName()"));
+        assert_eq!(entry.line, Some(2));
+        assert!(entry.template.is_none());
+    }
+
+    #[test]
+    fn collect_parser_semantics_marks_supported_predicates_translated() {
+        let entries = collect_parser_semantics(
+            &predicate_parser_data(),
+            Some("parser grammar S;\ns : {true}? A ;\n"),
+            SemUnknownPolicy::AssumeTrue,
+        )
+        .expect("collection should succeed");
+
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].disposition, SemanticsDisposition::Translated);
+        assert_eq!(entries[0].template.as_deref(), Some("True"));
+    }
+
+    #[test]
+    fn collect_parser_semantics_without_grammar_source_keeps_coordinates() {
+        let entries = collect_parser_semantics(
+            &predicate_parser_data(),
+            None,
+            SemUnknownPolicy::AssumeFalse,
+        )
+        .expect("collection should succeed");
+
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].disposition, SemanticsDisposition::AssumeFalse);
+        assert!(entries[0].body.is_none());
+        assert!(entries[0].line.is_none());
+    }
+
+    #[test]
+    fn enforce_sem_unknown_error_lists_untranslated_coordinates() {
+        let entries = collect_parser_semantics(
+            &predicate_parser_data(),
+            Some(PREDICATE_GRAMMAR),
+            SemUnknownPolicy::Error,
+        )
+        .expect("collection should succeed");
+
+        let error = enforce_sem_unknown(SemUnknownPolicy::Error, &entries)
+            .expect_err("untranslated predicate must fail generation");
+        let message = error.to_string();
+        assert!(
+            message.contains("unsupported semantic predicate"),
+            "message should name the failure class: {message}"
+        );
+        assert!(message.contains("rule=s(0)"), "message: {message}");
+        assert!(message.contains("pred_index=0"), "message: {message}");
+        assert!(message.contains("at 2:4"), "message: {message}");
+        assert!(message.contains("{isTypeName()}"), "message: {message}");
+        assert!(
+            message.contains("--sem-unknown=error"),
+            "message: {message}"
+        );
+    }
+
+    #[test]
+    fn enforce_sem_unknown_error_accepts_fully_translated_grammars() {
+        let entries = collect_parser_semantics(
+            &predicate_parser_data(),
+            Some("parser grammar S;\ns : {true}? A ;\n"),
+            SemUnknownPolicy::Error,
+        )
+        .expect("collection should succeed");
+
+        enforce_sem_unknown(SemUnknownPolicy::Error, &entries)
+            .expect("fully translated grammar passes strict mode");
+    }
+
+    #[test]
+    fn enforce_sem_unknown_is_lenient_under_default_policy() {
+        let entries = collect_parser_semantics(
+            &predicate_parser_data(),
+            Some(PREDICATE_GRAMMAR),
+            SemUnknownPolicy::AssumeTrue,
+        )
+        .expect("collection should succeed");
+
+        enforce_sem_unknown(SemUnknownPolicy::AssumeTrue, &entries)
+            .expect("assume-true keeps the historical lenient behavior");
+    }
+
+    #[test]
+    fn semantics_manifest_renders_coordinates_and_policy() {
+        let entries = collect_parser_semantics(
+            &predicate_parser_data(),
+            Some(PREDICATE_GRAMMAR),
+            SemUnknownPolicy::AssumeTrue,
+        )
+        .expect("collection should succeed");
+        let manifest = render_semantics_manifest(
+            SemUnknownPolicy::AssumeTrue,
+            &[("parser", "SParser".to_owned(), entries)],
+        );
+
+        assert!(manifest.contains("\"version\": 1"));
+        assert!(manifest.contains("\"policy\": \"assume-true\""));
+        assert!(manifest.contains("\"kind\": \"parser\""));
+        assert!(manifest.contains("\"name\": \"SParser\""));
+        assert!(manifest.contains("\"kind\": \"parser-predicate\""));
+        assert!(manifest.contains("\"rule\": \"s\""));
+        assert!(manifest.contains("\"disposition\": \"assume-true\""));
+        assert!(manifest.contains("\"body\": \"isTypeName()\""));
+        assert!(manifest.contains("\"line\": 2"));
+    }
+
+    #[test]
+    fn semantics_manifest_renders_empty_inventory() {
+        let manifest = render_semantics_manifest(
+            SemUnknownPolicy::AssumeTrue,
+            &[("parser", "SParser".to_owned(), Vec::new())],
+        );
+
+        assert!(manifest.contains("\"coordinates\": []"));
+    }
+
+    #[test]
+    fn assume_false_policy_reaches_generated_runtime_options() {
+        let module = render_parser_with_options(
+            "SParser",
+            &predicate_parser_data(),
+            Some(PREDICATE_GRAMMAR),
+            ParserRenderOptions {
+                require_generated_parser: false,
+                sem_unknown: SemUnknownPolicy::AssumeFalse,
+            },
+        )
+        .expect("parser should render");
+
+        assert!(module.contains(
+            "unknown_predicate_policy: antlr4_runtime::UnknownSemanticPolicy::AssumeFalse"
+        ));
+    }
+
+    #[test]
+    fn default_policy_emits_assume_true_options_field() {
+        let module = render_parser_with_options(
+            "SParser",
+            &predicate_parser_data(),
+            Some("parser grammar S;\ns : {true}? A ;\n"),
+            ParserRenderOptions::default(),
+        )
+        .expect("parser should render");
+
+        assert!(module.contains(
+            "unknown_predicate_policy: antlr4_runtime::UnknownSemanticPolicy::AssumeTrue"
+        ));
+    }
+
+    #[test]
+    fn lexer_assume_false_policy_renders_failing_predicate_hook() {
+        let module = render_lexer(
+            "SLexer",
+            &predicate_parser_data(),
+            None,
+            false,
+            SemUnknownPolicy::AssumeFalse,
+        )
+        .expect("lexer should render");
+
+        assert!(module.contains("next_token_compiled_with_hooks"));
+        assert!(module.contains("|_, _| false"));
+    }
+
+    #[test]
+    fn lexer_default_policy_keeps_compiled_token_path() {
+        let module = render_lexer(
+            "SLexer",
+            &predicate_parser_data(),
+            None,
+            false,
+            SemUnknownPolicy::AssumeTrue,
+        )
+        .expect("lexer should render");
+
+        assert!(module.contains("next_token_compiled(&mut self.base, atn(), lexer_dfa())"));
     }
 }
