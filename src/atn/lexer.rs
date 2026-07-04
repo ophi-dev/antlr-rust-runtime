@@ -1,6 +1,7 @@
 use std::collections::{BTreeSet, HashSet};
 use std::hash::BuildHasherDefault;
 
+use crate::atn::lexer_dfa::{CompiledLexerAccept, CompiledLexerDfa, DEAD_STATE, ESCAPE_STATE};
 use crate::atn::{Atn, AtnStateKind, LexerAction, Transition};
 use crate::char_stream::{CharStream, TextInterval};
 use crate::int_stream::EOF;
@@ -18,33 +19,33 @@ const MIN_CHAR_VALUE: i32 = 0;
 const MAX_CHAR_VALUE: i32 = 0x0010_FFFF;
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-struct LexerConfig {
-    state: usize,
-    position: usize,
-    consumed_eof: bool,
-    alt_rule_index: Option<usize>,
-    passed_non_greedy: bool,
-    stack: Vec<usize>,
-    actions: Vec<LexerActionTrace>,
+pub(super) struct LexerConfig {
+    pub(super) state: usize,
+    pub(super) position: usize,
+    pub(super) consumed_eof: bool,
+    pub(super) alt_rule_index: Option<usize>,
+    pub(super) passed_non_greedy: bool,
+    pub(super) stack: Vec<usize>,
+    pub(super) actions: Vec<LexerActionTrace>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-struct LexerActionTrace {
-    action_index: usize,
-    position: usize,
+pub(super) struct LexerActionTrace {
+    pub(super) action_index: usize,
+    pub(super) position: usize,
     /// Lexer rule that the action transition belonged to. ANTLR suppresses
     /// commands of nested non-fragment rule references, so the dispatcher
     /// must compare this against the accepted rule before applying side
     /// effects like `pushMode` / `popMode`.
-    rule_index: usize,
+    pub(super) rule_index: usize,
 }
 
 #[derive(Clone, Debug)]
-struct AcceptState {
-    position: usize,
-    rule_index: usize,
-    consumed_eof: bool,
-    actions: Vec<LexerActionTrace>,
+pub(super) struct AcceptState {
+    pub(super) position: usize,
+    pub(super) rule_index: usize,
+    pub(super) consumed_eof: bool,
+    pub(super) actions: Vec<LexerActionTrace>,
 }
 
 #[derive(Clone, Debug)]
@@ -54,9 +55,9 @@ enum MatchResult {
 }
 
 #[derive(Clone, Debug)]
-struct ClosureResult {
-    configs: Vec<LexerConfig>,
-    has_semantic_context: bool,
+pub(super) struct ClosureResult {
+    pub(super) configs: Vec<LexerConfig>,
+    pub(super) has_semantic_context: bool,
 }
 
 /// Mutable emission state produced by executing lexer actions for one token.
@@ -215,7 +216,70 @@ where
         &mut custom_action,
         &mut semantic_predicate,
         &mut accept_adjuster,
-        false,
+        LexerMatchStrategy {
+            compiled: None,
+            use_cache: false,
+        },
+    )
+}
+
+/// Runs one lexer-token match against an ahead-of-time compiled lexer DFA.
+///
+/// Tokens starting in a compiled mode are matched by walking static tables;
+/// modes the compiler left dynamic fall back to cached ATN interpretation per
+/// token, so behavior always matches [`next_token`].
+pub fn next_token_compiled<I, F>(
+    lexer: &mut BaseLexer<I, F>,
+    atn: &Atn,
+    dfa: &CompiledLexerDfa,
+) -> CommonToken
+where
+    I: CharStream,
+    F: TokenFactory,
+{
+    next_token_with_hooks_impl(
+        lexer,
+        atn,
+        &mut |_, _| {},
+        &mut |_, _| true,
+        &mut |_, _, _| {},
+        LexerMatchStrategy {
+            compiled: Some(dfa),
+            use_cache: true,
+        },
+    )
+}
+
+/// Runs one compiled-DFA lexer-token match with all generated extension hooks.
+///
+/// Compiled modes never contain semantic predicates, so hook grammars still
+/// take the table walk for their static modes; predicate-bearing modes re-run
+/// the ATN interpreter exactly like [`next_token_with_hooks`].
+pub fn next_token_compiled_with_hooks<I, F, A, P, E>(
+    lexer: &mut BaseLexer<I, F>,
+    atn: &Atn,
+    dfa: &CompiledLexerDfa,
+    mut custom_action: A,
+    mut semantic_predicate: P,
+    mut accept_adjuster: E,
+) -> CommonToken
+where
+    I: CharStream,
+    F: TokenFactory,
+    A: FnMut(&mut BaseLexer<I, F>, LexerCustomAction),
+    P: FnMut(&BaseLexer<I, F>, LexerPredicate) -> bool,
+    E: FnMut(&mut BaseLexer<I, F>, i32, usize),
+{
+    next_token_with_hooks_impl(
+        lexer,
+        atn,
+        &mut custom_action,
+        &mut semantic_predicate,
+        &mut accept_adjuster,
+        LexerMatchStrategy {
+            compiled: Some(dfa),
+            use_cache: false,
+        },
     )
 }
 
@@ -239,8 +303,50 @@ where
         &mut custom_action,
         &mut semantic_predicate,
         &mut accept_adjuster,
-        true,
+        LexerMatchStrategy {
+            compiled: None,
+            use_cache: true,
+        },
     )
+}
+
+/// Token-matching backend chosen by a lexer entry point: an optional
+/// ahead-of-time compiled DFA, and whether ATN interpretation (used directly
+/// or as the compiled path's per-mode fallback) may replay the learned-DFA
+/// cache. Hook entry points disable the cache, matching their interpreted
+/// counterparts.
+#[derive(Clone, Copy)]
+struct LexerMatchStrategy<'a> {
+    compiled: Option<&'a CompiledLexerDfa>,
+    use_cache: bool,
+}
+
+/// Dispatches one token match to the strategy's backend.
+fn match_token_with_strategy<I, F, P>(
+    lexer: &mut BaseLexer<I, F>,
+    atn: &Atn,
+    mode: i32,
+    start: usize,
+    semantic_predicate: &mut P,
+    strategy: LexerMatchStrategy<'_>,
+) -> MatchResult
+where
+    I: CharStream,
+    F: TokenFactory,
+    P: FnMut(&BaseLexer<I, F>, LexerPredicate) -> bool,
+{
+    if let Some(dfa) = strategy.compiled
+        && !lexer.force_interpreted()
+        && let Some(start_state) = dfa.mode_start(mode)
+        && let Some(result) = match_token_compiled(lexer, dfa, start_state, start)
+    {
+        return result;
+    }
+    if strategy.use_cache {
+        match_token_cached(lexer, atn, mode, start, semantic_predicate)
+    } else {
+        match_token(lexer, atn, mode, start, semantic_predicate)
+    }
 }
 
 fn next_token_with_hooks_impl<I, F, A, P, E>(
@@ -249,7 +355,7 @@ fn next_token_with_hooks_impl<I, F, A, P, E>(
     custom_action: &mut A,
     semantic_predicate: &mut P,
     accept_adjuster: &mut E,
-    use_cache: bool,
+    strategy: LexerMatchStrategy<'_>,
 ) -> CommonToken
 where
     I: CharStream,
@@ -269,11 +375,8 @@ where
         }
         let mode = lexer.mode();
         let start = lexer.input().index();
-        let token_match = if use_cache {
-            match_token_cached(lexer, atn, mode, start, semantic_predicate)
-        } else {
-            match_token(lexer, atn, mode, start, semantic_predicate)
-        };
+        let token_match =
+            match_token_with_strategy(lexer, atn, mode, start, semantic_predicate, strategy);
         let accept = match token_match {
             MatchResult::Accept(accept) => accept,
             MatchResult::NoViableAlt { stop } => {
@@ -353,7 +456,11 @@ where
 /// text, but its embedded action does not run unless that rule itself accepts
 /// the token. Fragment-rule actions remain eligible because fragments have no
 /// token type of their own.
-fn lexer_action_belongs_to_accept(atn: &Atn, accept_rule: usize, action_rule: usize) -> bool {
+pub(super) fn lexer_action_belongs_to_accept(
+    atn: &Atn,
+    accept_rule: usize,
+    action_rule: usize,
+) -> bool {
     action_rule == accept_rule
         || atn
             .rule_to_token_type()
@@ -389,7 +496,6 @@ where
         return MatchResult::NoViableAlt { stop: start };
     };
     let start_closure = epsilon_closure(
-        lexer,
         atn,
         [LexerConfig {
             state: start_state,
@@ -400,7 +506,7 @@ where
             stack: Vec::new(),
             actions: Vec::new(),
         }],
-        semantic_predicate,
+        &mut |predicate| semantic_predicate(lexer, predicate),
     );
     let mut active = prune_after_accepts(atn, start_closure.configs);
     let mut dfa_state = lexer.lexer_dfa_state(
@@ -440,7 +546,9 @@ where
             }
         }
 
-        let closure = epsilon_closure(lexer, atn, next, semantic_predicate);
+        let closure = epsilon_closure(atn, next, &mut |predicate| {
+            semantic_predicate(lexer, predicate)
+        });
         let target_has_semantic_context = closure.has_semantic_context;
         let suppress_edge = source_has_semantic_context || target_has_semantic_context;
         active = prune_after_accepts(atn, closure.configs);
@@ -556,7 +664,9 @@ where
             }
         }
 
-        let closure = epsilon_closure(lexer, atn, next, semantic_predicate);
+        let closure = epsilon_closure(atn, next, &mut |predicate| {
+            semantic_predicate(lexer, predicate)
+        });
         let target_has_semantic_context = closure.has_semantic_context;
         if target_has_semantic_context {
             return match_token(lexer, atn, mode, start, semantic_predicate);
@@ -597,6 +707,97 @@ where
     )
 }
 
+/// Bounds EOF-edge traversals in the compiled walk. EOF transitions do not
+/// advance the cursor, so a longer chain could only come from a grammar that
+/// also loops the ATN interpreter forever.
+const MAX_COMPILED_EOF_EDGES: u32 = 8;
+
+/// Matches one token by walking the ahead-of-time compiled lexer DFA.
+///
+/// The walk reproduces the interpreter's longest-match selection: remember
+/// the best accept seen so far, advance until the table has no transition,
+/// then return the remembered accept — or a recognition error spanning every
+/// character the walk looked at, exactly like `match_token`. Reaching an
+/// escape edge (semantic predicate, recursive lexer rule, state budget)
+/// returns `None`, and the caller re-matches the token with the interpreter.
+fn match_token_compiled<I, F>(
+    lexer: &mut BaseLexer<I, F>,
+    dfa: &CompiledLexerDfa,
+    start_state: u16,
+    start: usize,
+) -> Option<MatchResult>
+where
+    I: CharStream,
+    F: TokenFactory,
+{
+    let mut state = start_state;
+    let mut position = start;
+    let mut best: Option<AcceptState> = None;
+    let mut error_stop = start;
+    let mut eof_edges = 0_u32;
+    loop {
+        if let Some(accept) = dfa.accept(state) {
+            record_compiled_accept(accept, position, &mut best);
+        }
+        let symbol = symbol_at(lexer, position);
+        let target = if symbol == EOF {
+            eof_edges += 1;
+            if eof_edges > MAX_COMPILED_EOF_EDGES {
+                break;
+            }
+            dfa.eof_target(state)
+        } else {
+            error_stop = error_stop.max(position.saturating_add(1));
+            dfa.char_target(state, symbol)
+        };
+        if target == DEAD_STATE {
+            break;
+        }
+        if target == ESCAPE_STATE {
+            return None;
+        }
+        if symbol != EOF {
+            position += 1;
+        }
+        state = target;
+    }
+    Some(best.map_or(
+        MatchResult::NoViableAlt { stop: error_stop },
+        MatchResult::Accept,
+    ))
+}
+
+/// Applies the interpreter's longest-match / lowest-rule preference to one
+/// compiled accept state, materializing its action traces at absolute input
+/// positions.
+fn record_compiled_accept(
+    accept: &CompiledLexerAccept,
+    position: usize,
+    best: &mut Option<AcceptState>,
+) {
+    let replaces = best.as_ref().is_none_or(|current| {
+        position > current.position
+            || (position == current.position && accept.rule_index < current.rule_index)
+    });
+    if !replaces {
+        return;
+    }
+    *best = Some(AcceptState {
+        position,
+        rule_index: accept.rule_index,
+        consumed_eof: accept.consumed_eof,
+        actions: accept
+            .actions
+            .iter()
+            .map(|trace| LexerActionTrace {
+                action_index: trace.action_index,
+                position: position.saturating_sub(trace.behind),
+                rule_index: trace.rule_index,
+            })
+            .collect(),
+    });
+}
+
 fn cached_mode_start_state<I, F, P>(
     lexer: &BaseLexer<I, F>,
     atn: &Atn,
@@ -616,7 +817,6 @@ where
     let mode_index = usize::try_from(mode).ok()?;
     let start_state = atn.mode_to_start_state().get(mode_index).copied()?;
     let start_closure = epsilon_closure(
-        lexer,
         atn,
         [LexerConfig {
             state: start_state,
@@ -627,7 +827,7 @@ where
             stack: Vec::new(),
             actions: Vec::new(),
         }],
-        semantic_predicate,
+        &mut |predicate| semantic_predicate(lexer, predicate),
     );
     let active = prune_after_accepts(atn, start_closure.configs);
     let state = cache_dfa_state(
@@ -717,16 +917,13 @@ fn cached_accept_state(
 /// Lexer rule calls use an explicit return-state stack in `LexerConfig` because
 /// fragment rules and nested lexer constructs compile to rule transitions in the
 /// serialized ATN.
-fn epsilon_closure<I, F, P>(
-    lexer: &BaseLexer<I, F>,
+pub(super) fn epsilon_closure<P>(
     atn: &Atn,
     configs: impl IntoIterator<Item = LexerConfig>,
     semantic_predicate: &mut P,
 ) -> ClosureResult
 where
-    I: CharStream,
-    F: TokenFactory,
-    P: FnMut(&BaseLexer<I, F>, LexerPredicate) -> bool,
+    P: FnMut(LexerPredicate) -> bool,
 {
     let mut state = ClosureState {
         seen: FxHashSet::default(),
@@ -735,7 +932,7 @@ where
     };
 
     for config in configs {
-        close_config(lexer, atn, config, &mut state, semantic_predicate);
+        close_config(atn, config, &mut state, semantic_predicate);
     }
 
     ClosureResult {
@@ -750,16 +947,13 @@ where
 /// Ordered DFS matters for lexer greediness: greedy loop entries serialize the
 /// loop path before the exit path, while non-greedy entries serialize the exit
 /// path first. The later accept-pruning step relies on this order.
-fn close_config<I, F, P>(
-    lexer: &BaseLexer<I, F>,
+fn close_config<P>(
     atn: &Atn,
     config: LexerConfig,
     closure: &mut ClosureState,
     semantic_predicate: &mut P,
 ) where
-    I: CharStream,
-    F: TokenFactory,
-    P: FnMut(&BaseLexer<I, F>, LexerPredicate) -> bool,
+    P: FnMut(LexerPredicate) -> bool,
 {
     if !closure.seen.insert(config.clone()) {
         return;
@@ -774,7 +968,7 @@ fn close_config<I, F, P>(
             let mut returned = config.clone();
             set_config_state(atn, &mut returned, follow_state);
             returned.stack = rest.to_vec();
-            close_config(lexer, atn, returned, closure, semantic_predicate);
+            close_config(atn, returned, closure, semantic_predicate);
         }
         closure.closed.push(config);
         return;
@@ -786,7 +980,7 @@ fn close_config<I, F, P>(
                 let mut next = config.clone();
                 set_config_state(atn, &mut next, *target);
                 next.passed_non_greedy |= state.non_greedy;
-                close_config(lexer, atn, next, closure, semantic_predicate);
+                close_config(atn, next, closure, semantic_predicate);
             }
             Transition::Rule {
                 target,
@@ -797,7 +991,7 @@ fn close_config<I, F, P>(
                 set_config_state(atn, &mut next, *target);
                 next.passed_non_greedy |= state.non_greedy;
                 next.stack.push(*follow_state);
-                close_config(lexer, atn, next, closure, semantic_predicate);
+                close_config(atn, next, closure, semantic_predicate);
             }
             Transition::Predicate {
                 target,
@@ -806,21 +1000,22 @@ fn close_config<I, F, P>(
                 ..
             } => {
                 closure.has_semantic_context = true;
-                if semantic_predicate(
-                    lexer,
-                    LexerPredicate::new(*rule_index, *pred_index, config.position),
-                ) {
+                if semantic_predicate(LexerPredicate::new(
+                    *rule_index,
+                    *pred_index,
+                    config.position,
+                )) {
                     let mut next = config.clone();
                     set_config_state(atn, &mut next, *target);
                     next.passed_non_greedy |= state.non_greedy;
-                    close_config(lexer, atn, next, closure, semantic_predicate);
+                    close_config(atn, next, closure, semantic_predicate);
                 }
             }
             Transition::Precedence { target, .. } => {
                 let mut next = config.clone();
                 set_config_state(atn, &mut next, *target);
                 next.passed_non_greedy |= state.non_greedy;
-                close_config(lexer, atn, next, closure, semantic_predicate);
+                close_config(atn, next, closure, semantic_predicate);
             }
             Transition::Action {
                 target,
@@ -838,7 +1033,7 @@ fn close_config<I, F, P>(
                         rule_index: *rule_index,
                     });
                 }
-                close_config(lexer, atn, next, closure, semantic_predicate);
+                close_config(atn, next, closure, semantic_predicate);
             }
             Transition::Atom { .. }
             | Transition::Range { .. }
@@ -864,7 +1059,7 @@ fn close_config<I, F, P>(
 /// Once such a path reaches the rule stop state, later same-rule configs should
 /// not continue to grow into a longer token. Greedy decisions still need all
 /// paths to remain available so longest-match selection can win.
-fn prune_after_accepts(atn: &Atn, configs: Vec<LexerConfig>) -> Vec<LexerConfig> {
+pub(super) fn prune_after_accepts(atn: &Atn, configs: Vec<LexerConfig>) -> Vec<LexerConfig> {
     let mut accepted_rules = BTreeSet::new();
     let mut pruned = Vec::with_capacity(configs.len());
     for config in configs {
@@ -892,7 +1087,7 @@ fn prune_after_accepts(atn: &Atn, configs: Vec<LexerConfig>) -> Vec<LexerConfig>
 /// ANTLR lexer priority is encoded by rule order. `match_token` already handles
 /// longest-match selection across input positions; within a single position the
 /// lower rule index wins.
-fn best_accept(atn: &Atn, configs: &[LexerConfig]) -> Option<AcceptState> {
+pub(super) fn best_accept(atn: &Atn, configs: &[LexerConfig]) -> Option<AcceptState> {
     configs
         .iter()
         .filter_map(|config| {
@@ -992,7 +1187,7 @@ fn cached_configs_to_configs(
 
 /// Moves a lexer config to `state_number` and records the top-level lexer rule
 /// once the config leaves a mode start state.
-fn set_config_state(atn: &Atn, config: &mut LexerConfig, state_number: usize) {
+pub(super) fn set_config_state(atn: &Atn, config: &mut LexerConfig, state_number: usize) {
     config.state = state_number;
     if config.alt_rule_index.is_none() {
         config.alt_rule_index = atn.state(state_number).and_then(|state| state.rule_index);

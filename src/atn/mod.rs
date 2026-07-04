@@ -6,6 +6,7 @@
 //! these compact Rust structures for simulation.
 
 pub mod lexer;
+pub mod lexer_dfa;
 pub mod parser;
 pub mod serialized;
 

@@ -6,6 +6,7 @@ use std::io;
 use std::ops::AddAssign;
 use std::path::{Path, PathBuf};
 
+use antlr4_runtime::atn::lexer_dfa::CompiledLexerDfa;
 use antlr4_runtime::atn::serialized::{AtnDeserializer, SerializedAtn};
 use antlr4_runtime::atn::{Atn, AtnStateKind, LexerAction, Transition};
 
@@ -304,6 +305,7 @@ fn render_lexer(
         |source| lexer_predicate_templates(data, source),
     )?;
     let adjusts_accept_position = grammar_source.is_some_and(uses_position_adjusting_lexer);
+    let lexer_dfa_data = compiled_lexer_dfa_words(data);
     let has_action_dispatch = lexer_actions_need_dispatch(&actions);
     let action_method = render_lexer_action_method(&actions);
     let predicate_method = render_lexer_predicate_method(&predicates);
@@ -312,42 +314,29 @@ fn render_lexer(
     } else {
         String::new()
     };
-    let next_token_call = match (
-        !has_action_dispatch,
-        predicates.is_empty(),
-        adjusts_accept_position,
-    ) {
-        (true, true, false) => {
-            "antlr4_runtime::atn::lexer::next_token(&mut self.base, atn())".to_owned()
-        }
-        (false, true, false) => {
-            "antlr4_runtime::atn::lexer::next_token_with_actions(&mut self.base, atn(), Self::run_action)"
-                .to_owned()
-        }
-        (true, false, false) => {
-            "antlr4_runtime::atn::lexer::next_token_with_actions_and_predicates(&mut self.base, atn(), |_, _| {}, Self::run_predicate)"
-                .to_owned()
-        }
-        (false, false, false) => {
-            "antlr4_runtime::atn::lexer::next_token_with_actions_and_predicates(&mut self.base, atn(), Self::run_action, Self::run_predicate)"
-                .to_owned()
-        }
-        (true, true, true) => {
-            "antlr4_runtime::atn::lexer::next_token_with_accept_adjuster(&mut self.base, atn(), Self::adjust_accept_position)"
-                .to_owned()
-        }
-        (false, true, true) => {
-            "antlr4_runtime::atn::lexer::next_token_with_hooks(&mut self.base, atn(), Self::run_action, |_, _| true, Self::adjust_accept_position)"
-                .to_owned()
-        }
-        (true, false, true) => {
-            "antlr4_runtime::atn::lexer::next_token_with_hooks(&mut self.base, atn(), |_, _| {}, Self::run_predicate, Self::adjust_accept_position)"
-                .to_owned()
-        }
-        (false, false, true) => {
-            "antlr4_runtime::atn::lexer::next_token_with_hooks(&mut self.base, atn(), Self::run_action, Self::run_predicate, Self::adjust_accept_position)"
-                .to_owned()
-        }
+    let next_token_call = if !has_action_dispatch && predicates.is_empty() && !adjusts_accept_position
+    {
+        "antlr4_runtime::atn::lexer::next_token_compiled(&mut self.base, atn(), lexer_dfa())"
+            .to_owned()
+    } else {
+        let action = if has_action_dispatch {
+            "Self::run_action"
+        } else {
+            "|_, _| {}"
+        };
+        let predicate = if predicates.is_empty() {
+            "|_, _| true"
+        } else {
+            "Self::run_predicate"
+        };
+        let adjuster = if adjusts_accept_position {
+            "Self::adjust_accept_position"
+        } else {
+            "|_, _, _| {}"
+        };
+        format!(
+            "antlr4_runtime::atn::lexer::next_token_compiled_with_hooks(&mut self.base, atn(), lexer_dfa(), {action}, {predicate}, {adjuster})"
+        )
     };
     let generated_header = GENERATED_MODULE_HEADER;
     let generated_footer = GENERATED_MODULE_FOOTER;
@@ -357,6 +346,7 @@ fn render_lexer(
 use antlr4_runtime::recognizer::RecognizerData;
 use antlr4_runtime::token::{{CommonToken, TokenSource}};
 use antlr4_runtime::atn::Atn;
+use antlr4_runtime::atn::lexer_dfa::CompiledLexerDfa;
 use antlr4_runtime::atn::serialized::AtnDeserializer;
 use antlr4_runtime::{{BaseLexer, GeneratedLexer, GrammarMetadata, Lexer, Recognizer}};
 use std::sync::OnceLock;
@@ -373,6 +363,20 @@ fn atn() -> &'static Atn {{
         AtnDeserializer::new(&serialized)
             .deserialize()
             .expect("generated lexer contains a valid ANTLR serialized ATN")
+    }})
+}}
+
+static LEXER_DFA_DATA: &[u32] = &[{lexer_dfa_data}];
+
+static LEXER_DFA_CELL: OnceLock<CompiledLexerDfa> = OnceLock::new();
+
+/// Ahead-of-time lexer DFA tables compiled by antlr4-rust-gen, embedded so
+/// runtime startup only deserializes them. Rebuilt from the ATN instead when
+/// the embedded stream comes from a different runtime version.
+fn lexer_dfa() -> &'static CompiledLexerDfa {{
+    LEXER_DFA_CELL.get_or_init(|| {{
+        CompiledLexerDfa::from_serialized(LEXER_DFA_DATA)
+            .unwrap_or_else(|| CompiledLexerDfa::compile(atn()))
     }})
 }}
 
@@ -402,6 +406,13 @@ where
 
     pub fn metadata() -> &'static GrammarMetadata {{
         metadata()
+    }}
+
+    /// Routes every token through ATN interpretation instead of the compiled
+    /// lexer DFA, so the learned-DFA trace (`lexer_dfa_string`) observes each
+    /// match.
+    pub fn set_force_interpreted(&mut self, force_interpreted: bool) {{
+        self.base.set_force_interpreted(force_interpreted);
     }}
 
 {action_method}
@@ -461,6 +472,23 @@ where
 }}
 {generated_footer}"#
     ))
+}
+
+/// Compiles the lexer DFA at generation time and flattens it for embedding.
+///
+/// An empty stream makes the generated lexer fall back to compiling the DFA
+/// from its ATN at first use, so generation never fails on this step.
+fn compiled_lexer_dfa_words(data: &InterpData) -> String {
+    if data.atn.is_empty() {
+        return String::new();
+    }
+    let serialized = SerializedAtn::from_i32(&data.atn);
+    let Ok(atn) = AtnDeserializer::new(&serialized).deserialize() else {
+        return String::new();
+    };
+    let words = CompiledLexerDfa::compile(&atn).serialize();
+    let rendered: Vec<String> = words.iter().map(u32::to_string).collect();
+    rendered.join(",")
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

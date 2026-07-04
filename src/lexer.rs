@@ -113,6 +113,7 @@ pub struct BaseLexer<I, F = CommonTokenFactory> {
     line: usize,
     column: usize,
     hit_eof: bool,
+    force_interpreted: bool,
     errors: Vec<TokenSourceError>,
     dfa_cache: Rc<RefCell<LexerDfaCache>>,
 }
@@ -273,6 +274,7 @@ where
             line: 1,
             column: 0,
             hit_eof: false,
+            force_interpreted: false,
             errors: Vec::new(),
             dfa_cache: Rc::new(RefCell::new(LexerDfaCache::default())),
         }
@@ -584,6 +586,22 @@ where
 
     pub const fn set_hit_eof(&mut self, hit_eof: bool) {
         self.hit_eof = hit_eof;
+    }
+
+    /// Routes every token through ATN interpretation even when the generated
+    /// lexer carries an ahead-of-time compiled DFA.
+    ///
+    /// Interpretation is what learns the replayable DFA that
+    /// [`Self::lexer_dfa_string`] reports, so harnesses asserting on the
+    /// observed-DFA trace (ANTLR's `showDFA` descriptors) enable this before
+    /// lexing.
+    pub const fn set_force_interpreted(&mut self, force_interpreted: bool) {
+        self.force_interpreted = force_interpreted;
+    }
+
+    /// Whether compiled-DFA entry points must fall back to interpretation.
+    pub const fn force_interpreted(&self) -> bool {
+        self.force_interpreted
     }
 
     /// Buffers a lexer diagnostic until the token stream consumer is ready to
