@@ -315,12 +315,18 @@ impl CompiledLexerDfa {
                     && (state.accept == u32::MAX || (state.accept as usize) < self.accepts.len())
             })
             && self.ascii_rows.iter().all(|row| row.iter().all(|&target| state_ok(target)))
-            && self
-                .wide_rows
-                .iter()
-                .flat_map(|row| row.iter())
-                .all(|range| state_ok(range.target))
+            && self.wide_rows.iter().all(|row| {
+                wide_row_is_searchable(row) && row.iter().all(|range| state_ok(range.target))
+            })
     }
+}
+
+/// Wide rows must hold well-formed, sorted, disjoint ranges for
+/// [`CompiledLexerDfa::char_target`]'s binary search; anything else would
+/// silently misroute transitions instead of degrading to recompilation.
+fn wide_row_is_searchable(row: &[WideRange]) -> bool {
+    row.iter().all(|range| range.low <= range.high)
+        && row.windows(2).all(|pair| pair[0].high < pair[1].low)
 }
 
 /// Version tag guarding embedded tables against serialization format drift.
@@ -1084,6 +1090,22 @@ mod tests {
         let mut wrong_tag = stream;
         wrong_tag[0] ^= 1;
         assert!(CompiledLexerDfa::from_serialized(&wrong_tag).is_none());
+    }
+
+    #[test]
+    fn malformed_wide_rows_are_rejected() {
+        let atn = wide_range_atn();
+        let stream = CompiledLexerDfa::compile(&atn).serialize();
+
+        // Invert the [0x100, 0x200] range's bounds in place; a broken wide
+        // row must fail validation, not silently misroute binary searches.
+        let position = stream
+            .windows(2)
+            .position(|pair| pair == [0x100, 0x200])
+            .expect("wide-range test grammar serializes its range bounds");
+        let mut inverted = stream;
+        inverted.swap(position, position + 1);
+        assert!(CompiledLexerDfa::from_serialized(&inverted).is_none());
     }
 
     #[test]
