@@ -1501,18 +1501,25 @@ fn smoke_main(descriptor: &Descriptor) -> String {
     }
     let module_name = module_name(&descriptor.grammar_name);
     let type_name = rust_type_name(&descriptor.grammar_name);
-    let dfa_dump = if descriptor.flags.trim() == "showDFA" {
+    let show_dfa = descriptor.flags.trim() == "showDFA";
+    let dfa_dump = if show_dfa {
         "    print!(\"{}\", tokens.token_source().lexer_dfa_string());\n"
     } else {
         ""
     };
-    let token_source_import = if descriptor.flags.trim() == "showDFA" {
-        ", TokenSource"
+    let token_source_import = if show_dfa { ", TokenSource" } else { "" };
+    // The learned-DFA trace only exists when tokens go through ATN
+    // interpretation, so showDFA cases opt out of the compiled lexer DFA.
+    let (lexer_binding, force_interpreted) = if show_dfa {
+        (
+            "let mut lexer",
+            "    lexer.set_force_interpreted(true);\n",
+        )
     } else {
-        ""
+        ("let lexer", "")
     };
     format!(
-        "pub mod generated {{\n    pub mod {module_name};\n}}\n\nuse antlr4_runtime::{{CommonTokenStream, InputStream{token_source_import}}};\nuse generated::{module_name}::{type_name};\n\nfn main() {{\n    let lexer = {type_name}::new(InputStream::new(\"{}\"));\n    let mut tokens = CommonTokenStream::new(lexer);\n    tokens.fill();\n    for error in tokens.drain_source_errors() {{\n        eprintln!(\"line {{}}:{{}} {{}}\", error.line, error.column, error.message);\n    }}\n    for token in tokens.tokens() {{\n        println!(\"{{token}}\");\n    }}\n{dfa_dump}}}\n",
+        "pub mod generated {{\n    pub mod {module_name};\n}}\n\nuse antlr4_runtime::{{CommonTokenStream, InputStream{token_source_import}}};\nuse generated::{module_name}::{type_name};\n\nfn main() {{\n    {lexer_binding} = {type_name}::new(InputStream::new(\"{}\"));\n{force_interpreted}    let mut tokens = CommonTokenStream::new(lexer);\n    tokens.fill();\n    for error in tokens.drain_source_errors() {{\n        eprintln!(\"line {{}}:{{}} {{}}\", error.line, error.column, error.message);\n    }}\n    for token in tokens.tokens() {{\n        println!(\"{{token}}\");\n    }}\n{dfa_dump}}}\n",
         rust_string(&descriptor.input)
     )
 }

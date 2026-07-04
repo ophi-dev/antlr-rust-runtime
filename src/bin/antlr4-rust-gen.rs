@@ -6,6 +6,7 @@ use std::io;
 use std::ops::AddAssign;
 use std::path::{Path, PathBuf};
 
+use antlr4_runtime::atn::lexer_dfa::CompiledLexerDfa;
 use antlr4_runtime::atn::serialized::{AtnDeserializer, SerializedAtn};
 use antlr4_runtime::atn::{Atn, AtnStateKind, LexerAction, Transition};
 
@@ -304,6 +305,7 @@ fn render_lexer(
         |source| lexer_predicate_templates(data, source),
     )?;
     let adjusts_accept_position = grammar_source.is_some_and(uses_position_adjusting_lexer);
+    let lexer_dfa_data = compiled_lexer_dfa_words(data);
     let has_action_dispatch = lexer_actions_need_dispatch(&actions);
     let action_method = render_lexer_action_method(&actions);
     let predicate_method = render_lexer_predicate_method(&predicates);
@@ -312,42 +314,29 @@ fn render_lexer(
     } else {
         String::new()
     };
-    let next_token_call = match (
-        !has_action_dispatch,
-        predicates.is_empty(),
-        adjusts_accept_position,
-    ) {
-        (true, true, false) => {
-            "antlr4_runtime::atn::lexer::next_token(&mut self.base, atn())".to_owned()
-        }
-        (false, true, false) => {
-            "antlr4_runtime::atn::lexer::next_token_with_actions(&mut self.base, atn(), Self::run_action)"
-                .to_owned()
-        }
-        (true, false, false) => {
-            "antlr4_runtime::atn::lexer::next_token_with_actions_and_predicates(&mut self.base, atn(), |_, _| {}, Self::run_predicate)"
-                .to_owned()
-        }
-        (false, false, false) => {
-            "antlr4_runtime::atn::lexer::next_token_with_actions_and_predicates(&mut self.base, atn(), Self::run_action, Self::run_predicate)"
-                .to_owned()
-        }
-        (true, true, true) => {
-            "antlr4_runtime::atn::lexer::next_token_with_accept_adjuster(&mut self.base, atn(), Self::adjust_accept_position)"
-                .to_owned()
-        }
-        (false, true, true) => {
-            "antlr4_runtime::atn::lexer::next_token_with_hooks(&mut self.base, atn(), Self::run_action, |_, _| true, Self::adjust_accept_position)"
-                .to_owned()
-        }
-        (true, false, true) => {
-            "antlr4_runtime::atn::lexer::next_token_with_hooks(&mut self.base, atn(), |_, _| {}, Self::run_predicate, Self::adjust_accept_position)"
-                .to_owned()
-        }
-        (false, false, true) => {
-            "antlr4_runtime::atn::lexer::next_token_with_hooks(&mut self.base, atn(), Self::run_action, Self::run_predicate, Self::adjust_accept_position)"
-                .to_owned()
-        }
+    let next_token_call = if !has_action_dispatch && predicates.is_empty() && !adjusts_accept_position
+    {
+        "antlr4_runtime::atn::lexer::next_token_compiled(&mut self.base, atn(), lexer_dfa())"
+            .to_owned()
+    } else {
+        let action = if has_action_dispatch {
+            "Self::run_action"
+        } else {
+            "|_, _| {}"
+        };
+        let predicate = if predicates.is_empty() {
+            "|_, _| true"
+        } else {
+            "Self::run_predicate"
+        };
+        let adjuster = if adjusts_accept_position {
+            "Self::adjust_accept_position"
+        } else {
+            "|_, _, _| {}"
+        };
+        format!(
+            "antlr4_runtime::atn::lexer::next_token_compiled_with_hooks(&mut self.base, atn(), lexer_dfa(), {action}, {predicate}, {adjuster})"
+        )
     };
     let generated_header = GENERATED_MODULE_HEADER;
     let generated_footer = GENERATED_MODULE_FOOTER;
@@ -357,6 +346,7 @@ fn render_lexer(
 use antlr4_runtime::recognizer::RecognizerData;
 use antlr4_runtime::token::{{CommonToken, TokenSource}};
 use antlr4_runtime::atn::Atn;
+use antlr4_runtime::atn::lexer_dfa::CompiledLexerDfa;
 use antlr4_runtime::atn::serialized::AtnDeserializer;
 use antlr4_runtime::{{BaseLexer, GeneratedLexer, GrammarMetadata, Lexer, Recognizer}};
 use std::sync::OnceLock;
@@ -373,6 +363,20 @@ fn atn() -> &'static Atn {{
         AtnDeserializer::new(&serialized)
             .deserialize()
             .expect("generated lexer contains a valid ANTLR serialized ATN")
+    }})
+}}
+
+static LEXER_DFA_DATA: &[u32] = &[{lexer_dfa_data}];
+
+static LEXER_DFA_CELL: OnceLock<CompiledLexerDfa> = OnceLock::new();
+
+/// Ahead-of-time lexer DFA tables compiled by antlr4-rust-gen, embedded so
+/// runtime startup only deserializes them. Rebuilt from the ATN instead when
+/// the embedded stream comes from a different runtime version.
+fn lexer_dfa() -> &'static CompiledLexerDfa {{
+    LEXER_DFA_CELL.get_or_init(|| {{
+        CompiledLexerDfa::from_serialized(LEXER_DFA_DATA)
+            .unwrap_or_else(|| CompiledLexerDfa::compile(atn()))
     }})
 }}
 
@@ -402,6 +406,13 @@ where
 
     pub fn metadata() -> &'static GrammarMetadata {{
         metadata()
+    }}
+
+    /// Routes every token through ATN interpretation instead of the compiled
+    /// lexer DFA, so the learned-DFA trace (`lexer_dfa_string`) observes each
+    /// match.
+    pub fn set_force_interpreted(&mut self, force_interpreted: bool) {{
+        self.base.set_force_interpreted(force_interpreted);
     }}
 
 {action_method}
@@ -461,6 +472,23 @@ where
 }}
 {generated_footer}"#
     ))
+}
+
+/// Compiles the lexer DFA at generation time and flattens it for embedding.
+///
+/// An empty stream makes the generated lexer fall back to compiling the DFA
+/// from its ATN at first use, so generation never fails on this step.
+fn compiled_lexer_dfa_words(data: &InterpData) -> String {
+    if data.atn.is_empty() {
+        return String::new();
+    }
+    let serialized = SerializedAtn::from_i32(&data.atn);
+    let Ok(atn) = AtnDeserializer::new(&serialized).deserialize() else {
+        return String::new();
+    };
+    let words = CompiledLexerDfa::compile(&atn).serialize();
+    let rendered: Vec<String> = words.iter().map(u32::to_string).collect();
+    rendered.join(",")
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -4874,88 +4902,143 @@ fn next_action_block(source: &str, offset: usize) -> Option<templates::TemplateB
 }
 
 fn find_action_open_brace(source: &str, offset: usize) -> Option<usize> {
-    let mut index = offset;
-    let mut single_quoted = false;
-    let mut double_quoted = false;
-    let mut escaped = false;
-    let mut line_comment = false;
-    let mut block_comment = false;
-    let mut char_set = false;
-    while let Some(ch) = source[index..].chars().next() {
-        let size = ch.len_utf8();
-        if line_comment {
-            line_comment = ch != '\n';
-            index += size;
-            continue;
-        }
-        if block_comment {
-            if source.as_bytes().get(index..index + 2) == Some(b"*/") {
-                block_comment = false;
-                index += 2;
-            } else {
-                index += size;
-            }
-            continue;
-        }
-        if char_set {
-            match ch {
-                _ if escaped => escaped = false,
-                '\\' => escaped = true,
-                ']' => char_set = false,
-                _ => {}
-            }
-            index += size;
-            continue;
-        }
-        if escaped {
-            escaped = false;
-            index += size;
-            continue;
-        }
-        if single_quoted {
-            match ch {
-                '\\' => escaped = true,
-                '\'' => single_quoted = false,
-                _ => {}
-            }
-            index += size;
-            continue;
-        }
-        if double_quoted {
-            match ch {
-                '\\' => escaped = true,
-                '"' => double_quoted = false,
-                _ => {}
-            }
-            index += size;
-            continue;
-        }
-        match ch {
-            '/' if source.as_bytes().get(index..index + 2) == Some(b"//") => {
-                line_comment = true;
-                index += 2;
-            }
-            '/' if source.as_bytes().get(index..index + 2) == Some(b"/*") => {
-                block_comment = true;
-                index += 2;
-            }
-            '\'' => {
-                single_quoted = true;
-                index += size;
-            }
-            '"' => {
-                double_quoted = true;
-                index += size;
-            }
-            '[' => {
-                char_set = true;
-                index += size;
-            }
-            '{' => return Some(index),
-            _ => index += size,
+    let mut cursor = GrammarSourceCursor::new(source, offset);
+    while let Some((index, ch)) = cursor.next_significant() {
+        if ch == '{' {
+            return Some(index);
         }
     }
     None
+}
+
+/// Lexical cursor over ANTLR grammar source that skips line and block
+/// comments, string literals, and `[...]` character sets, yielding only
+/// characters that are significant to grammar structure.
+///
+/// Action extraction and rule-header scanning need the same skip rules;
+/// sharing one state machine keeps them from drifting apart.
+struct GrammarSourceCursor<'a> {
+    source: &'a str,
+    index: usize,
+    single_quoted: bool,
+    double_quoted: bool,
+    escaped: bool,
+    line_comment: bool,
+    block_comment: bool,
+    char_set: bool,
+}
+
+impl<'a> GrammarSourceCursor<'a> {
+    const fn new(source: &'a str, offset: usize) -> Self {
+        Self {
+            source,
+            index: offset,
+            single_quoted: false,
+            double_quoted: false,
+            escaped: false,
+            line_comment: false,
+            block_comment: false,
+            char_set: false,
+        }
+    }
+
+    /// Moves the cursor to `index`, which must be a char boundary outside any
+    /// comment, string literal, or character set.
+    const fn seek(&mut self, index: usize) {
+        self.index = index;
+    }
+
+    /// Returns the next structurally significant character with its byte
+    /// offset, consuming it.
+    fn next_significant(&mut self) -> Option<(usize, char)> {
+        while let Some(ch) = self.source[self.index..].chars().next() {
+            let index = self.index;
+            let size = ch.len_utf8();
+            if self.consume_skipped(ch, size) {
+                continue;
+            }
+            match ch {
+                '/' if self.source.as_bytes().get(index..index + 2) == Some(b"//") => {
+                    self.line_comment = true;
+                    self.index += 2;
+                }
+                '/' if self.source.as_bytes().get(index..index + 2) == Some(b"/*") => {
+                    self.block_comment = true;
+                    self.index += 2;
+                }
+                '\'' => {
+                    self.single_quoted = true;
+                    self.index += size;
+                }
+                '"' => {
+                    self.double_quoted = true;
+                    self.index += size;
+                }
+                '[' => {
+                    self.char_set = true;
+                    self.index += size;
+                }
+                _ => {
+                    self.index += size;
+                    return Some((index, ch));
+                }
+            }
+        }
+        None
+    }
+
+    /// Consumes one character belonging to an active comment, string, or
+    /// character-set region; false when the cursor is at top level.
+    fn consume_skipped(&mut self, ch: char, size: usize) -> bool {
+        if self.line_comment {
+            self.line_comment = ch != '\n';
+            self.index += size;
+            return true;
+        }
+        if self.block_comment {
+            if self.source.as_bytes().get(self.index..self.index + 2) == Some(b"*/") {
+                self.block_comment = false;
+                self.index += 2;
+            } else {
+                self.index += size;
+            }
+            return true;
+        }
+        if self.char_set {
+            match ch {
+                _ if self.escaped => self.escaped = false,
+                '\\' => self.escaped = true,
+                ']' => self.char_set = false,
+                _ => {}
+            }
+            self.index += size;
+            return true;
+        }
+        if self.escaped {
+            self.escaped = false;
+            self.index += size;
+            return true;
+        }
+        if self.single_quoted {
+            match ch {
+                '\\' => self.escaped = true,
+                '\'' => self.single_quoted = false,
+                _ => {}
+            }
+            self.index += size;
+            return true;
+        }
+        if self.double_quoted {
+            match ch {
+                '\\' => self.escaped = true,
+                '"' => self.double_quoted = false,
+                _ => {}
+            }
+            self.index += size;
+            return true;
+        }
+        false
+    }
 }
 
 /// Finds grammar predicate templates in the same order as ANTLR serializes
@@ -5049,93 +5132,22 @@ fn statement_rule_header(source: &str, position: usize) -> Option<RuleHeader<'_>
 
 fn last_rule_header_colon(source: &str, position: usize) -> Option<usize> {
     let mut last = None;
-    let mut index = 0;
-    let mut single_quoted = false;
-    let mut double_quoted = false;
-    let mut escaped = false;
-    let mut line_comment = false;
-    let mut block_comment = false;
-    let mut char_set = false;
-    while index < position {
-        let ch = source[index..].chars().next()?;
-        let size = ch.len_utf8();
-        if line_comment {
-            line_comment = ch != '\n';
-            index += size;
-            continue;
-        }
-        if block_comment {
-            if source.as_bytes().get(index..index + 2) == Some(b"*/") {
-                block_comment = false;
-                index += 2;
-            } else {
-                index += size;
-            }
-            continue;
-        }
-        if char_set {
-            match ch {
-                _ if escaped => escaped = false,
-                '\\' => escaped = true,
-                ']' => char_set = false,
-                _ => {}
-            }
-            index += size;
-            continue;
-        }
-        if escaped {
-            escaped = false;
-            index += size;
-            continue;
-        }
-        if single_quoted {
-            match ch {
-                '\\' => escaped = true,
-                '\'' => single_quoted = false,
-                _ => {}
-            }
-            index += size;
-            continue;
-        }
-        if double_quoted {
-            match ch {
-                '\\' => escaped = true,
-                '"' => double_quoted = false,
-                _ => {}
-            }
-            index += size;
-            continue;
+    let mut cursor = GrammarSourceCursor::new(source, 0);
+    while let Some((index, ch)) = cursor.next_significant() {
+        if index >= position {
+            break;
         }
         match ch {
-            '/' if source.as_bytes().get(index..index + 2) == Some(b"//") => {
-                line_comment = true;
-                index += 2;
-            }
-            '/' if source.as_bytes().get(index..index + 2) == Some(b"/*") => {
-                block_comment = true;
-                index += 2;
-            }
-            '\'' => {
-                single_quoted = true;
-                index += size;
-            }
-            '"' => {
-                double_quoted = true;
-                index += size;
-            }
-            '[' => {
-                char_set = true;
-                index += size;
-            }
-            '{' => {
-                index = matching_action_brace(source, index + 1)
-                    .map_or(index + size, |close| close.saturating_add(1).min(position));
-            }
-            ':' => {
-                last = Some(index);
-                index += size;
-            }
-            _ => index += size,
+            // Embedded action bodies may contain colons (Rust paths, ternary
+            // templates); skip the balanced block instead of scanning it.
+            '{' => cursor.seek(
+                matching_action_brace(source, index + 1)
+                    .map_or_else(|| index + ch.len_utf8(), |close| {
+                        close.saturating_add(1).min(position)
+                    }),
+            ),
+            ':' => last = Some(index),
+            _ => {}
         }
     }
     last

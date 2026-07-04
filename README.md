@@ -38,7 +38,9 @@ cargo install antlr-rust-runtime
 ```
 
 This installs `antlr4-rust-gen`, which turns ANTLR `.interp` metadata into Rust
-lexer and parser modules.
+lexer and parser modules. During generation it also compiles the lexer's DFA
+ahead of time and embeds the tables in the generated lexer, so tokenization
+runs at full speed from the first character with no per-process warmup.
 
 ### 3. Generate your parser
 
@@ -212,6 +214,10 @@ The runtime contains:
 - ANTLR v4 serialized ATN deserialization
 - lexer ATN recognition with longest-match/rule-priority behavior and lexer
   actions
+- ahead-of-time compiled lexer DFA tables, built by `antlr4-rust-gen` and
+  embedded in generated lexers, with per-token escape to ATN interpretation
+  for constructs a finite DFA cannot represent (semantic predicates,
+  recursive lexer rules)
 - parser ATN rule recognition with backtracking over token stream indices
 - `antlr4-rust-gen`, a Rust generator that consumes ANTLR `.interp` metadata and
   emits Rust modules
@@ -280,11 +286,13 @@ group (**> 1.0** means Rust is faster than Go; **< 1.0** means slower):
 
 Rust is faster than Go on every fixture in all four language groups, with
 Kotlin leading dramatically (expression-ladder memoization in the generated
-walker). Learned lexer and parser DFAs are shared across recognizer
-instances, so repeated parses of the same grammar — the common case for a
-CLI tool or language server — skip relearning entirely. Numbers are
-warm-parse minimums on an Apple M3 Pro and are indicative — re-run the
-benchmark on your own hardware for authoritative figures.
+walker). Lexer DFAs are compiled at generation time and embedded in the
+generated lexer, so tokenization needs no warmup at all; learned parser
+decision DFAs are shared across parser instances, so repeated parses of the
+same grammar — the common case for a CLI tool or language server — skip
+relearning entirely. Numbers are warm-parse minimums on an Apple M3 Pro and
+are indicative — re-run the benchmark on your own hardware for authoritative
+figures.
 
 ## Useful Information
 

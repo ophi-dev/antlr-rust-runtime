@@ -600,12 +600,28 @@ SPECS = {{
 SINK = None
 
 
-def parse_once(parser, src: bytes):
+def parse_once(parser, src):
     global SINK
     tree = parser.parse(src)
-    if tree.root_node.has_error:
+    # tree-sitter-language-pack ships py-tree-sitter bindings on some
+    # platforms (attributes) and its own Rust binding on others (methods);
+    # support both so the runner works on every wheel of the pinned version.
+    root = tree.root_node() if callable(tree.root_node) else tree.root_node
+    has_error = root.has_error() if callable(root.has_error) else root.has_error
+    if has_error:
         raise RuntimeError("tree-sitter parse produced ERROR nodes")
     SINK = tree
+
+
+def probe_source(parser, raw: bytes):
+    try:
+        parse_once(parser, raw)
+        return raw
+    except TypeError:
+        # The Rust-binding wheels accept str input, not bytes.
+        src = raw.decode("utf-8")
+        parse_once(parser, src)
+        return src
 
 
 def main() -> int:
@@ -618,7 +634,7 @@ def main() -> int:
     if args.iters <= 0:
         raise SystemExit("--iters must be greater than 0")
     parser = get_parser(SPECS[args.language])
-    src = Path(args.input).read_bytes()
+    src = probe_source(parser, Path(args.input).read_bytes())
     for _ in range(args.warmups):
         parse_once(parser, src)
     elapsed = []
