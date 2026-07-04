@@ -53,13 +53,21 @@ jobs:
         run: |
           TAG="${{ github.event.release.tag_name }}"
           VERSION="${TAG#v}"
+          MAJOR_MINOR="$(echo "$VERSION" | cut -d. -f1,2)"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Release version: $VERSION"
+          echo "major_minor=$MAJOR_MINOR" >> $GITHUB_OUTPUT
+          echo "Release version: $VERSION (README requirement: $MAJOR_MINOR)"
 
-      - name: Update Cargo.toml and Cargo.lock
+      - name: Update Cargo.toml, Cargo.lock, and README
         run: |
           cargo set-version ${{ steps.version.outputs.version }}
-          git diff Cargo.toml Cargo.lock
+          MAJOR_MINOR="${{ steps.version.outputs.major_minor }}"
+          sed -i -E "s/^antlr-rust-runtime = \".*\"/antlr-rust-runtime = \"${MAJOR_MINOR}\"/" README.md
+          if ! grep -q "^antlr-rust-runtime = \"${MAJOR_MINOR}\"" README.md; then
+            echo "::error::README.md dependency line not updated to \"${MAJOR_MINOR}\" — the expected 'antlr-rust-runtime = \"...\"' line was not found. Update the sed pattern in publish.yml." >&2
+            exit 1
+          fi
+          git diff Cargo.toml Cargo.lock README.md
 
       - name: Commit and push version updates
         env:
@@ -67,7 +75,7 @@ jobs:
         run: |
           git config user.name "ophiarch[bot]"
           git config user.email "ophiarch[bot]@users.noreply.github.com"
-          git add Cargo.toml Cargo.lock
+          git add Cargo.toml Cargo.lock README.md
           git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
           git push origin HEAD:${{ github.event.release.target_commitish }}
 
