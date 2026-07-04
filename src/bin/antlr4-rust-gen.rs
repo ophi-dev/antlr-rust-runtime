@@ -4902,88 +4902,143 @@ fn next_action_block(source: &str, offset: usize) -> Option<templates::TemplateB
 }
 
 fn find_action_open_brace(source: &str, offset: usize) -> Option<usize> {
-    let mut index = offset;
-    let mut single_quoted = false;
-    let mut double_quoted = false;
-    let mut escaped = false;
-    let mut line_comment = false;
-    let mut block_comment = false;
-    let mut char_set = false;
-    while let Some(ch) = source[index..].chars().next() {
-        let size = ch.len_utf8();
-        if line_comment {
-            line_comment = ch != '\n';
-            index += size;
-            continue;
-        }
-        if block_comment {
-            if source.as_bytes().get(index..index + 2) == Some(b"*/") {
-                block_comment = false;
-                index += 2;
-            } else {
-                index += size;
-            }
-            continue;
-        }
-        if char_set {
-            match ch {
-                _ if escaped => escaped = false,
-                '\\' => escaped = true,
-                ']' => char_set = false,
-                _ => {}
-            }
-            index += size;
-            continue;
-        }
-        if escaped {
-            escaped = false;
-            index += size;
-            continue;
-        }
-        if single_quoted {
-            match ch {
-                '\\' => escaped = true,
-                '\'' => single_quoted = false,
-                _ => {}
-            }
-            index += size;
-            continue;
-        }
-        if double_quoted {
-            match ch {
-                '\\' => escaped = true,
-                '"' => double_quoted = false,
-                _ => {}
-            }
-            index += size;
-            continue;
-        }
-        match ch {
-            '/' if source.as_bytes().get(index..index + 2) == Some(b"//") => {
-                line_comment = true;
-                index += 2;
-            }
-            '/' if source.as_bytes().get(index..index + 2) == Some(b"/*") => {
-                block_comment = true;
-                index += 2;
-            }
-            '\'' => {
-                single_quoted = true;
-                index += size;
-            }
-            '"' => {
-                double_quoted = true;
-                index += size;
-            }
-            '[' => {
-                char_set = true;
-                index += size;
-            }
-            '{' => return Some(index),
-            _ => index += size,
+    let mut cursor = GrammarSourceCursor::new(source, offset);
+    while let Some((index, ch)) = cursor.next_significant() {
+        if ch == '{' {
+            return Some(index);
         }
     }
     None
+}
+
+/// Lexical cursor over ANTLR grammar source that skips line and block
+/// comments, string literals, and `[...]` character sets, yielding only
+/// characters that are significant to grammar structure.
+///
+/// Action extraction and rule-header scanning need the same skip rules;
+/// sharing one state machine keeps them from drifting apart.
+struct GrammarSourceCursor<'a> {
+    source: &'a str,
+    index: usize,
+    single_quoted: bool,
+    double_quoted: bool,
+    escaped: bool,
+    line_comment: bool,
+    block_comment: bool,
+    char_set: bool,
+}
+
+impl<'a> GrammarSourceCursor<'a> {
+    const fn new(source: &'a str, offset: usize) -> Self {
+        Self {
+            source,
+            index: offset,
+            single_quoted: false,
+            double_quoted: false,
+            escaped: false,
+            line_comment: false,
+            block_comment: false,
+            char_set: false,
+        }
+    }
+
+    /// Moves the cursor to `index`, which must be a char boundary outside any
+    /// comment, string literal, or character set.
+    const fn seek(&mut self, index: usize) {
+        self.index = index;
+    }
+
+    /// Returns the next structurally significant character with its byte
+    /// offset, consuming it.
+    fn next_significant(&mut self) -> Option<(usize, char)> {
+        while let Some(ch) = self.source[self.index..].chars().next() {
+            let index = self.index;
+            let size = ch.len_utf8();
+            if self.consume_skipped(ch, size) {
+                continue;
+            }
+            match ch {
+                '/' if self.source.as_bytes().get(index..index + 2) == Some(b"//") => {
+                    self.line_comment = true;
+                    self.index += 2;
+                }
+                '/' if self.source.as_bytes().get(index..index + 2) == Some(b"/*") => {
+                    self.block_comment = true;
+                    self.index += 2;
+                }
+                '\'' => {
+                    self.single_quoted = true;
+                    self.index += size;
+                }
+                '"' => {
+                    self.double_quoted = true;
+                    self.index += size;
+                }
+                '[' => {
+                    self.char_set = true;
+                    self.index += size;
+                }
+                _ => {
+                    self.index += size;
+                    return Some((index, ch));
+                }
+            }
+        }
+        None
+    }
+
+    /// Consumes one character belonging to an active comment, string, or
+    /// character-set region; false when the cursor is at top level.
+    fn consume_skipped(&mut self, ch: char, size: usize) -> bool {
+        if self.line_comment {
+            self.line_comment = ch != '\n';
+            self.index += size;
+            return true;
+        }
+        if self.block_comment {
+            if self.source.as_bytes().get(self.index..self.index + 2) == Some(b"*/") {
+                self.block_comment = false;
+                self.index += 2;
+            } else {
+                self.index += size;
+            }
+            return true;
+        }
+        if self.char_set {
+            match ch {
+                _ if self.escaped => self.escaped = false,
+                '\\' => self.escaped = true,
+                ']' => self.char_set = false,
+                _ => {}
+            }
+            self.index += size;
+            return true;
+        }
+        if self.escaped {
+            self.escaped = false;
+            self.index += size;
+            return true;
+        }
+        if self.single_quoted {
+            match ch {
+                '\\' => self.escaped = true,
+                '\'' => self.single_quoted = false,
+                _ => {}
+            }
+            self.index += size;
+            return true;
+        }
+        if self.double_quoted {
+            match ch {
+                '\\' => self.escaped = true,
+                '"' => self.double_quoted = false,
+                _ => {}
+            }
+            self.index += size;
+            return true;
+        }
+        false
+    }
 }
 
 /// Finds grammar predicate templates in the same order as ANTLR serializes
@@ -5077,93 +5132,22 @@ fn statement_rule_header(source: &str, position: usize) -> Option<RuleHeader<'_>
 
 fn last_rule_header_colon(source: &str, position: usize) -> Option<usize> {
     let mut last = None;
-    let mut index = 0;
-    let mut single_quoted = false;
-    let mut double_quoted = false;
-    let mut escaped = false;
-    let mut line_comment = false;
-    let mut block_comment = false;
-    let mut char_set = false;
-    while index < position {
-        let ch = source[index..].chars().next()?;
-        let size = ch.len_utf8();
-        if line_comment {
-            line_comment = ch != '\n';
-            index += size;
-            continue;
-        }
-        if block_comment {
-            if source.as_bytes().get(index..index + 2) == Some(b"*/") {
-                block_comment = false;
-                index += 2;
-            } else {
-                index += size;
-            }
-            continue;
-        }
-        if char_set {
-            match ch {
-                _ if escaped => escaped = false,
-                '\\' => escaped = true,
-                ']' => char_set = false,
-                _ => {}
-            }
-            index += size;
-            continue;
-        }
-        if escaped {
-            escaped = false;
-            index += size;
-            continue;
-        }
-        if single_quoted {
-            match ch {
-                '\\' => escaped = true,
-                '\'' => single_quoted = false,
-                _ => {}
-            }
-            index += size;
-            continue;
-        }
-        if double_quoted {
-            match ch {
-                '\\' => escaped = true,
-                '"' => double_quoted = false,
-                _ => {}
-            }
-            index += size;
-            continue;
+    let mut cursor = GrammarSourceCursor::new(source, 0);
+    while let Some((index, ch)) = cursor.next_significant() {
+        if index >= position {
+            break;
         }
         match ch {
-            '/' if source.as_bytes().get(index..index + 2) == Some(b"//") => {
-                line_comment = true;
-                index += 2;
-            }
-            '/' if source.as_bytes().get(index..index + 2) == Some(b"/*") => {
-                block_comment = true;
-                index += 2;
-            }
-            '\'' => {
-                single_quoted = true;
-                index += size;
-            }
-            '"' => {
-                double_quoted = true;
-                index += size;
-            }
-            '[' => {
-                char_set = true;
-                index += size;
-            }
-            '{' => {
-                index = matching_action_brace(source, index + 1)
-                    .map_or(index + size, |close| close.saturating_add(1).min(position));
-            }
-            ':' => {
-                last = Some(index);
-                index += size;
-            }
-            _ => index += size,
+            // Embedded action bodies may contain colons (Rust paths, ternary
+            // templates); skip the balanced block instead of scanning it.
+            '{' => cursor.seek(
+                matching_action_brace(source, index + 1)
+                    .map_or_else(|| index + ch.len_utf8(), |close| {
+                        close.saturating_add(1).min(position)
+                    }),
+            ),
+            ':' => last = Some(index),
+            _ => {}
         }
     }
     last
