@@ -204,7 +204,24 @@ impl CompiledLexerDfa {
     /// rejects streams from other versions so generated lexers can fall back
     /// to [`Self::compile`].
     pub fn serialize(&self) -> Vec<u32> {
-        let mut out = vec![SERIALIZED_TAG];
+        // Exact word count: the tag, five section-length words, and each
+        // section's payload (states are 4 words; ASCII rows pack 2 targets
+        // per word; wide ranges and action traces are 3 words each behind
+        // their per-row/per-accept length words).
+        let wide_words: usize = self.wide_rows.iter().map(|row| 1 + row.len() * 3).sum();
+        let accept_words: usize = self
+            .accepts
+            .iter()
+            .map(|accept| 3 + accept.actions.len() * 3)
+            .sum();
+        let capacity = 6
+            + self.mode_starts.len()
+            + self.states.len() * 4
+            + self.ascii_rows.len() * (ASCII_EDGE_SYMBOLS / 2)
+            + wide_words
+            + accept_words;
+        let mut out = Vec::with_capacity(capacity);
+        out.push(SERIALIZED_TAG);
         out.push(self.mode_starts.len() as u32);
         for start in &self.mode_starts {
             out.push(start.map_or(u32::MAX, u32::from));
@@ -242,6 +259,7 @@ impl CompiledLexerDfa {
                 out.push(action.behind as u32);
             }
         }
+        debug_assert_eq!(out.len(), capacity, "serialized stream fills its capacity exactly");
         out
     }
 

@@ -708,8 +708,9 @@ where
 }
 
 /// Bounds EOF-edge traversals in the compiled walk. EOF transitions do not
-/// advance the cursor, so a longer chain could only come from a grammar that
-/// also loops the ATN interpreter forever.
+/// advance the cursor, so past this bound the walk stops guessing and escapes
+/// to the ATN interpreter, which owns the semantics of longer EOF chains
+/// (including grammars whose chains never terminate).
 const MAX_COMPILED_EOF_EDGES: u32 = 8;
 
 /// Matches one token by walking the ahead-of-time compiled lexer DFA.
@@ -743,7 +744,7 @@ where
         let target = if symbol == EOF {
             eof_edges += 1;
             if eof_edges > MAX_COMPILED_EOF_EDGES {
-                break;
+                return None;
             }
             dfa.eof_target(state)
         } else {
