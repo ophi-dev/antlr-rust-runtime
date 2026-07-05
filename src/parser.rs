@@ -2721,6 +2721,14 @@ struct ParserSemanticHookRequest<'a> {
     member_values: &'a BTreeMap<usize, i64>,
 }
 
+/// Predicate-evaluation context over the recognizer's speculative state.
+///
+/// This sits in the prediction hot loop, so everything is borrowed: member
+/// state read-only from the current speculative path and the rule name
+/// straight from recognizer metadata. Predicates are pure by construction
+/// ([`semir::PExpr`] has no mutating node); statement execution uses
+/// [`ParserTableSemCtx`] (speculative member/return replay) and
+/// [`BaseParser::parser_action_hook`] (committed action hooks) instead.
 struct ParserSemIrCtx<'a, S, H>
 where
     S: TokenSource,
@@ -2730,14 +2738,11 @@ where
     semantic_hooks: &'a mut H,
     rule_index: usize,
     coordinate_index: usize,
-    rule_name: Option<String>,
+    rule_name: Option<&'a str>,
     context: Option<&'a ParserRuleContext>,
-    tree: Option<&'a ParseTree>,
     local_int_arg: Option<(usize, i64)>,
-    member_values: &'a mut BTreeMap<usize, i64>,
-    return_values: Option<&'a mut BTreeMap<String, i64>>,
-    action: Option<ParserAction>,
-    invoked_predicates: Option<&'a mut Vec<(usize, usize)>>,
+    member_values: &'a BTreeMap<usize, i64>,
+    invoked_predicates: &'a mut Vec<(usize, usize)>,
 }
 
 impl<S, H> semir::PredContext for ParserSemIrCtx<'_, S, H>
@@ -2799,12 +2804,12 @@ where
             input: &mut *self.input,
             rule_index: self.rule_index,
             coordinate_index: self.coordinate_index,
-            rule_name: self.rule_name.clone(),
+            rule_name: self.rule_name.map(str::to_owned),
             context: self.context,
-            tree: self.tree,
+            tree: None,
             local_int_arg: self.local_int_arg,
-            member_values: &*self.member_values,
-            action: self.action,
+            member_values: self.member_values,
+            action: None,
         };
         self.semantic_hooks
             .sempred(&mut ctx, self.rule_index, self.coordinate_index)
@@ -2812,51 +2817,14 @@ where
     }
 
     fn trace_bool(&mut self, value: bool) -> bool {
-        let Some(invoked) = &mut self.invoked_predicates else {
-            return value;
-        };
         let key = (self.rule_index, self.coordinate_index);
-        if !invoked.contains(&key) {
-            invoked.push(key);
+        if !self.invoked_predicates.contains(&key) {
+            self.invoked_predicates.push(key);
             use std::io::Write as _;
             let mut stdout = std::io::stdout().lock();
             let _ = writeln!(stdout, "eval={value}");
         }
         value
-    }
-}
-
-impl<S, H> semir::ActContext for ParserSemIrCtx<'_, S, H>
-where
-    S: TokenSource,
-    H: SemanticHooks,
-{
-    fn set_member(&mut self, member: usize, value: i64) {
-        self.member_values.insert(member, value);
-    }
-
-    fn set_return(&mut self, name: &str, value: i64) {
-        if let Some(return_values) = &mut self.return_values {
-            return_values.insert(name.to_owned(), value);
-        }
-    }
-
-    fn action_hook(&mut self, _hook: HookId) {
-        let Some(action) = self.action else {
-            return;
-        };
-        let mut ctx = ParserSemCtx {
-            input: &mut *self.input,
-            rule_index: self.rule_index,
-            coordinate_index: self.coordinate_index,
-            rule_name: self.rule_name.clone(),
-            context: self.context,
-            tree: self.tree,
-            local_int_arg: self.local_int_arg,
-            member_values: &*self.member_values,
-            action: Some(action),
-        };
-        let _ = self.semantic_hooks.action(&mut ctx, action);
     }
 }
 
@@ -7837,6 +7805,13 @@ where
         Some(AntlrError::Unsupported(message))
     }
 
+    /// Evaluates one lowered predicate expression at the requested input
+    /// position.
+    ///
+    /// This sits in the prediction hot loop, so the context borrows the
+    /// speculative member state read-only and the rule name by reference —
+    /// no per-evaluation allocation. Only the hook escape path materializes
+    /// owned copies, and only when a hook is actually consulted.
     fn parser_semir_predicate_matches(
         &mut self,
         semantics: &ParserSemantics,
@@ -7844,25 +7819,21 @@ where
         request: ParserSemanticHookRequest<'_>,
     ) -> bool {
         self.input.seek(request.index);
-        let mut member_values = request.member_values.clone();
-        let mut return_values = BTreeMap::new();
-        let rule_name = self.rule_names().get(request.rule_index).cloned();
-        let input = &mut self.input;
-        let semantic_hooks = &mut self.semantic_hooks;
-        let invoked_predicates = &mut self.invoked_predicates;
+        let rule_name = self
+            .data
+            .rule_names()
+            .get(request.rule_index)
+            .map(String::as_str);
         let mut ctx = ParserSemIrCtx {
-            input,
-            semantic_hooks,
+            input: &mut self.input,
+            semantic_hooks: &mut self.semantic_hooks,
             rule_index: request.rule_index,
             coordinate_index: request.pred_index,
             rule_name,
             context: request.context,
-            tree: None,
             local_int_arg: request.local_int_arg,
-            member_values: &mut member_values,
-            return_values: Some(&mut return_values),
-            action: None,
-            invoked_predicates: Some(invoked_predicates),
+            member_values: request.member_values,
+            invoked_predicates: &mut self.invoked_predicates,
         };
         semir::eval_pred(&semantics.ir, predicate.expr, &mut ctx)
     }

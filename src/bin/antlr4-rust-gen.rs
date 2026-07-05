@@ -560,6 +560,21 @@ fn enforce_require_full_semantics(require: bool, entries: &[SemanticsEntry]) -> 
 /// Inventories every custom-action and predicate coordinate in a lexer
 /// `.interp`, mirroring the pairing rules `render_lexer` uses so manifest
 /// dispositions match what the generated module will do.
+/// Manifest disposition for a predicate coordinate given its covering
+/// template: hook-routed coordinates report `hooked` (the user trait owns
+/// them), any other template is a real translation, and uncovered
+/// coordinates fall back to the unknown policy.
+const fn predicate_template_disposition(
+    template: Option<&PredicateTemplate>,
+    policy: SemUnknownPolicy,
+) -> SemanticsDisposition {
+    match template {
+        Some(PredicateTemplate::Hook) => SemanticsDisposition::Hooked,
+        Some(_) => SemanticsDisposition::Translated,
+        None => policy.unknown_predicate_disposition(),
+    }
+}
+
 fn collect_lexer_semantics(
     data: &InterpData,
     grammar_source: Option<&str>,
@@ -646,11 +661,7 @@ fn collect_lexer_semantics(
                         Some(*pred_index),
                         None,
                     )
-                    .unwrap_or_else(|| if template.is_some() {
-                        SemanticsDisposition::Translated
-                    } else {
-                        policy.unknown_predicate_disposition()
-                    }),
+                    .unwrap_or_else(|| predicate_template_disposition(template, policy)),
                 template: template.map(|template| format!("{template:?}")),
             });
         }
@@ -701,11 +712,7 @@ fn collect_parser_semantics(
                         Some(pred_index),
                         None,
                     )
-                    .unwrap_or_else(|| if template.is_some() {
-                        SemanticsDisposition::Translated
-                    } else {
-                        policy.unknown_predicate_disposition()
-                    }),
+                    .unwrap_or_else(|| predicate_template_disposition(template, policy)),
                 template: template.map(|template| format!("{template:?}")),
             });
         }
@@ -5746,6 +5753,21 @@ fn lexer_predicate_templates(
             ),
         ));
     }
+    // Generated lexers have no semantic-hooks plumbing yet: their predicate
+    // dispatch is a static `run_predicate` method, so a hook-routed lexer
+    // predicate has nowhere to land. Reject it instead of panicking in the
+    // renderer; callers can drive `next_token_with_semantic_hooks` manually.
+    if templates
+        .iter()
+        .any(|template| matches!(template, PredicateTemplate::Hook))
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "hook-routed lexer predicates are not supported by generated lexers yet; \
+             remove the lexer helper/coordinate hook mapping or drive \
+             antlr4_runtime::atn::lexer::next_token_with_semantic_hooks manually",
+        ));
+    }
     Ok(predicates.into_iter().zip(templates).collect())
 }
 
@@ -6030,143 +6052,7 @@ fn next_action_block(source: &str, offset: usize) -> Option<templates::TemplateB
 }
 
 fn find_action_open_brace(source: &str, offset: usize) -> Option<usize> {
-    let mut cursor = GrammarSourceCursor::new(source, offset);
-    while let Some((index, ch)) = cursor.next_significant() {
-        if ch == '{' {
-            return Some(index);
-        }
-    }
-    None
-}
-
-/// Lexical cursor over ANTLR grammar source that skips line and block
-/// comments, string literals, and `[...]` character sets, yielding only
-/// characters that are significant to grammar structure.
-///
-/// Action extraction and rule-header scanning need the same skip rules;
-/// sharing one state machine keeps them from drifting apart.
-struct GrammarSourceCursor<'a> {
-    source: &'a str,
-    index: usize,
-    single_quoted: bool,
-    double_quoted: bool,
-    escaped: bool,
-    line_comment: bool,
-    block_comment: bool,
-    char_set: bool,
-}
-
-impl<'a> GrammarSourceCursor<'a> {
-    const fn new(source: &'a str, offset: usize) -> Self {
-        Self {
-            source,
-            index: offset,
-            single_quoted: false,
-            double_quoted: false,
-            escaped: false,
-            line_comment: false,
-            block_comment: false,
-            char_set: false,
-        }
-    }
-
-    /// Moves the cursor to `index`, which must be a char boundary outside any
-    /// comment, string literal, or character set.
-    const fn seek(&mut self, index: usize) {
-        self.index = index;
-    }
-
-    /// Returns the next structurally significant character with its byte
-    /// offset, consuming it.
-    fn next_significant(&mut self) -> Option<(usize, char)> {
-        while let Some(ch) = self.source[self.index..].chars().next() {
-            let index = self.index;
-            let size = ch.len_utf8();
-            if self.consume_skipped(ch, size) {
-                continue;
-            }
-            match ch {
-                '/' if self.source.as_bytes().get(index..index + 2) == Some(b"//") => {
-                    self.line_comment = true;
-                    self.index += 2;
-                }
-                '/' if self.source.as_bytes().get(index..index + 2) == Some(b"/*") => {
-                    self.block_comment = true;
-                    self.index += 2;
-                }
-                '\'' => {
-                    self.single_quoted = true;
-                    self.index += size;
-                }
-                '"' => {
-                    self.double_quoted = true;
-                    self.index += size;
-                }
-                '[' => {
-                    self.char_set = true;
-                    self.index += size;
-                }
-                _ => {
-                    self.index += size;
-                    return Some((index, ch));
-                }
-            }
-        }
-        None
-    }
-
-    /// Consumes one character belonging to an active comment, string, or
-    /// character-set region; false when the cursor is at top level.
-    fn consume_skipped(&mut self, ch: char, size: usize) -> bool {
-        if self.line_comment {
-            self.line_comment = ch != '\n';
-            self.index += size;
-            return true;
-        }
-        if self.block_comment {
-            if self.source.as_bytes().get(self.index..self.index + 2) == Some(b"*/") {
-                self.block_comment = false;
-                self.index += 2;
-            } else {
-                self.index += size;
-            }
-            return true;
-        }
-        if self.char_set {
-            match ch {
-                _ if self.escaped => self.escaped = false,
-                '\\' => self.escaped = true,
-                ']' => self.char_set = false,
-                _ => {}
-            }
-            self.index += size;
-            return true;
-        }
-        if self.escaped {
-            self.escaped = false;
-            self.index += size;
-            return true;
-        }
-        if self.single_quoted {
-            match ch {
-                '\\' => self.escaped = true,
-                '\'' => self.single_quoted = false,
-                _ => {}
-            }
-            self.index += size;
-            return true;
-        }
-        if self.double_quoted {
-            match ch {
-                '\\' => self.escaped = true,
-                '"' => self.double_quoted = false,
-                _ => {}
-            }
-            self.index += size;
-            return true;
-        }
-        false
-    }
+    templates::find_significant_open_brace(source, offset)
 }
 
 /// Finds grammar predicate templates in the same order as ANTLR serializes
@@ -6261,7 +6147,7 @@ fn statement_rule_header(source: &str, position: usize) -> Option<RuleHeader<'_>
 
 fn last_rule_header_colon(source: &str, position: usize) -> Option<usize> {
     let mut last = None;
-    let mut cursor = GrammarSourceCursor::new(source, 0);
+    let mut cursor = templates::GrammarSourceCursor::new(source, 0);
     while let Some((index, ch)) = cursor.next_significant() {
         if index >= position {
             break;
@@ -12414,6 +12300,29 @@ dispose = "hook"
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].disposition, SemanticsDisposition::Translated);
         assert_eq!(entries[0].template.as_deref(), Some("True"));
+    }
+
+    #[test]
+    fn collect_parser_semantics_marks_helper_hooked_predicates_hooked() {
+        let patterns = parse_sem_patterns(
+            "version = 1\n\n[[helper]]\nname = \"isTypeName\"\nreturns = \"bool\"\nlower = \"hook\"\n",
+        )
+        .expect("pattern file should parse");
+        let entries = collect_parser_semantics(
+            &predicate_parser_data(),
+            Some(PREDICATE_GRAMMAR),
+            SemUnknownPolicy::Error,
+            &patterns,
+        )
+        .expect("collection should succeed");
+
+        assert_eq!(entries.len(), 1);
+        // A helper routed to the hook trait is accounted for, but it is NOT a
+        // translation: the manifest must say `hooked` so users know the
+        // coordinate needs a runtime hook implementation.
+        assert_eq!(entries[0].disposition, SemanticsDisposition::Hooked);
+        enforce_sem_unknown(SemUnknownPolicy::Error, &entries)
+            .expect("hooked coordinates satisfy strict mode");
     }
 
     #[test]

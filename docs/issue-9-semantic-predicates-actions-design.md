@@ -463,20 +463,36 @@ Implemented follow-up:
 - The public legacy enum/table surface remains as a deprecated compatibility
   adapter for older generated modules.
 
-### Phase 4 — Heuristic translator (L, ~3 PRs) — ✅ implemented 2026-07-05
+### Phase 4 — Heuristic translator (L, ~3 PRs) — ◐ partially implemented 2026-07-05
 - Built-in recognizers now lower through SemIR instead of remaining a parallel
   parser enum execution path.
 - TOML pattern/helper/coordinate file loading via `--sem-patterns`; exact
-  predicate rewrites and helper-call rewrites lower into SemIR or hooks.
+  predicate rewrites and bare helper-call rewrites lower into SemIR or hooks.
 - Ambiguity detection for matching user patterns and `--require-full-semantics`
   to fail CI on policy fallbacks.
+- Grammar-source block scanning skips quoted literals/comments/charsets
+  (`find_significant_open_brace`), so span/hook pairing survives real grammars
+  whose rules reference brace tokens (`'{' statementList? '}'`).
+- Still open: the §5.1 normalizer (tokenizer + Pratt parser over canonical
+  surface syntax) and argument-capturing patterns. Today's matching is
+  exact-body and bare no-arg helper calls, so idioms like JavaScript's
+  `this.n("static")` (next-token-text-equals with an argument) cannot be
+  mapped yet.
 
-### Phase 5 — Typed hooks + real-grammar proof (M) — ✅ implemented 2026-07-05
+### Phase 5 — Typed hooks + real-grammar proof (M) — ◐ partially implemented 2026-07-05
 - Typed trait generation + blanket adapter (`MyParserHooks` and
   `MyParserTypedHooks<T>`) for bare helper-call predicates.
 - Grammar-family pattern file added at `patterns/javascript.toml` for common
   JavaScript helper predicates, routing them to hooks without adding
-  JavaScript-specific logic to the generator.
+  JavaScript-specific logic to the generator. Verified against grammars-v4
+  `JavaScriptParser.g4`: 11 of 16 predicate coordinates route to the typed
+  hook trait; the remaining 5 are the argument-taking `n("...")` helpers
+  (see Phase 4 gap).
+- Lexer-side hooks: `next_token_with_semantic_hooks` exists as a manual
+  facade, but generated lexers have no hook plumbing — a hook-routed lexer
+  predicate is a codegen error, not a panic.
+- Still open: a JavaScript parity fixture (trees vs `antlr4-python3-runtime`
+  with hooks implemented in Rust) wired into CI.
 
 ### Phase 6 — (separate milestone, out of scope) Rust target
 - A real ANTLR `RustTarget` emitting native predicate/action code. SemIR and
