@@ -39,11 +39,13 @@ Both the kotlin-parity dumper and the parse-bench runner are examples.
 
 Every run also writes a `semantics.json` manifest into `--out-dir` listing each
 semantic predicate/action coordinate and its disposition. `--sem-unknown
-error|assume-true|assume-false` controls untranslated coordinates (default
+error|hook|assume-true|assume-false`, `--sem-patterns`, and
+`--require-full-semantics` control untranslated coordinates (default
 `assume-true`, deprecated; see the README "Semantic Predicates and Actions"
 section and issue #9).
-Generated parsers also expose `with_hooks(tokens, hooks)` for parser-side
-`SemanticHooks` handling of unrecognized predicates/actions.
+Generated parsers emit SemIR tables, `with_hooks(tokens, hooks)`, and typed
+hook adapters for bare helper predicates; lexer callers can route closure hooks
+through `LexerSemCtx` and the shared `SemanticHooks` trait.
 
 ## Kotlin parser parity perf benchmark
 

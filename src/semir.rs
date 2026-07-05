@@ -45,13 +45,55 @@ use std::fmt::Debug;
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ExprId(u32);
 
+impl ExprId {
+    /// Builds an expression id from a producer-assigned arena index.
+    #[must_use]
+    pub const fn new(index: u32) -> Self {
+        Self(index)
+    }
+
+    /// Returns this id's arena index.
+    #[must_use]
+    pub const fn index(self) -> usize {
+        self.0 as usize
+    }
+}
+
 /// Index of a statement node inside a [`SemIr`] arena.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct StmtId(u32);
 
+impl StmtId {
+    /// Builds a statement id from a producer-assigned arena index.
+    #[must_use]
+    pub const fn new(index: u32) -> Self {
+        Self(index)
+    }
+
+    /// Returns this id's arena index.
+    #[must_use]
+    pub const fn index(self) -> usize {
+        self.0 as usize
+    }
+}
+
 /// Index of an interned string inside a [`SemIr`] arena.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct StrId(u32);
+
+impl StrId {
+    /// Builds an interned-string id from a producer-assigned pool index.
+    #[must_use]
+    pub const fn new(index: u32) -> Self {
+        Self(index)
+    }
+
+    /// Returns this id's string-pool index.
+    #[must_use]
+    pub const fn index(self) -> usize {
+        self.0 as usize
+    }
+}
 
 /// Opaque identifier of an externally implemented hook.
 ///
@@ -63,6 +105,12 @@ pub struct StrId(u32);
 pub struct HookId(u32);
 
 impl HookId {
+    /// Builds a hook id from a producer-assigned side-table index.
+    #[must_use]
+    pub const fn new(index: u32) -> Self {
+        Self(index)
+    }
+
     /// Position of this hook in the producer's hook side table.
     #[must_use]
     pub const fn index(self) -> usize {
@@ -142,6 +190,11 @@ pub enum PExpr {
     Arith(ArithOp, ExprId, ExprId),
     /// Defer to the context's hook table.
     Hook(HookId),
+    /// Return a boolean while letting the recognizer report the evaluation.
+    ///
+    /// This keeps ANTLR runtime-testsuite `Invoke_pred` templates data-driven
+    /// without making ordinary predicates effectful.
+    EvalTrace(bool),
 }
 
 /// Effectful action statement node.
@@ -212,6 +265,10 @@ pub trait PredContext {
     fn token_text_so_far(&self) -> Option<String>;
     /// Evaluates an externally implemented predicate hook.
     fn hook(&mut self, hook: HookId) -> bool;
+    /// Reports an observable predicate-evaluation template and returns `value`.
+    fn trace_bool(&mut self, value: bool) -> bool {
+        value
+    }
 }
 
 /// Mutations the action evaluator needs, on top of predicate queries.
@@ -353,6 +410,7 @@ fn eval_value<C: PredContext>(ir: &SemIr, expr: ExprId, ctx: &mut C) -> Value {
         PExpr::Cmp(op, lhs, rhs) => eval_cmp(ir, *op, *lhs, *rhs, ctx),
         PExpr::Arith(op, lhs, rhs) => eval_arith(ir, *op, *lhs, *rhs, ctx),
         PExpr::Hook(hook) => Value::Bool(ctx.hook(*hook)),
+        PExpr::EvalTrace(value) => Value::Bool(ctx.trace_bool(*value)),
     }
 }
 

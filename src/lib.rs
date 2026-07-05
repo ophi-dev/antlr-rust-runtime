@@ -24,11 +24,11 @@ pub use dfa::{Dfa, DfaState};
 pub use errors::{AntlrError, ConsoleErrorListener, ErrorListener};
 pub use generated::{GeneratedLexer, GeneratedParser, GrammarMetadata};
 pub use int_stream::{EOF, IntStream, UNKNOWN_SOURCE_NAME};
-pub use lexer::{BaseLexer, Lexer, LexerCustomAction, LexerMode, LexerPredicate};
+pub use lexer::{BaseLexer, Lexer, LexerCustomAction, LexerMode, LexerPredicate, LexerSemCtx};
 pub use parser::{
     BaseParser, NoSemanticHooks, Parser, ParserAction, ParserMemberAction, ParserPredicate,
-    ParserReturnAction, ParserRuleArg, ParserRuntimeOptions, ParserSemCtx, PredictionMode,
-    SemanticHooks, UnknownSemanticPolicy,
+    ParserReturnAction, ParserRuleArg, ParserRuntimeOptions, ParserSemCtx, ParserSemanticAction,
+    ParserSemanticPredicate, ParserSemantics, PredictionMode, SemanticHooks, UnknownSemanticPolicy,
 };
 #[cfg(feature = "perf-counters")]
 pub use perf::{dump as dump_prediction_perf_counters, reset as reset_prediction_perf_counters};

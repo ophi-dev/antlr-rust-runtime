@@ -75,11 +75,16 @@ use crate::atn::parser::{
     ParserAtnPrediction, ParserAtnPredictionDiagnosticKind, ParserAtnSimulator,
 };
 use crate::atn::{Atn, AtnState, AtnStateKind, Transition};
+use crate::char_stream::CharStream;
 use crate::errors::AntlrError;
 use crate::int_stream::IntStream;
+use crate::lexer::{LexerCustomAction, LexerSemCtx};
 use crate::prediction::{EMPTY_RETURN_STATE, PredictionContext};
 use crate::recognizer::{Recognizer, RecognizerData};
-use crate::token::{CommonToken, TOKEN_EOF, Token, TokenRef, TokenSource, TokenSourceError};
+use crate::semir::{self, AStmt, ArithOp, CmpOp, ExprId, HookId, PExpr, SemIr, StmtId};
+use crate::token::{
+    CommonToken, TOKEN_EOF, Token, TokenFactory, TokenRef, TokenSource, TokenSourceError,
+};
 use crate::token_stream::CommonTokenStream;
 use crate::tree::{ErrorNode, ParseTree, ParserRuleContext, RuleNode, TerminalNode};
 use crate::vocabulary::Vocabulary;
@@ -471,6 +476,33 @@ pub trait SemanticHooks {
         let _ = (ctx, action);
         false
     }
+
+    fn lexer_sempred<I, F>(
+        &mut self,
+        ctx: &mut LexerSemCtx<'_, I, F>,
+        rule_index: usize,
+        pred_index: usize,
+    ) -> Option<bool>
+    where
+        I: CharStream,
+        F: TokenFactory,
+    {
+        let _ = (ctx, rule_index, pred_index);
+        None
+    }
+
+    fn lexer_action<I, F>(
+        &mut self,
+        ctx: &mut LexerSemCtx<'_, I, F>,
+        action: LexerCustomAction,
+    ) -> bool
+    where
+        I: CharStream,
+        F: TokenFactory,
+    {
+        let _ = (ctx, action);
+        false
+    }
 }
 
 /// Default hook object used by parsers that do not need user-supplied
@@ -541,6 +573,99 @@ pub enum ParserPredicate {
         value: i64,
         equals: bool,
     },
+}
+
+impl ParserPredicate {
+    /// Lowers the legacy predicate metadata variant into `SemIR`.
+    ///
+    /// This is the compatibility adapter for generated parsers produced while
+    /// the runtime still emitted closed enum tables. Newer generated parsers
+    /// emit `SemIR` directly.
+    pub fn lower_into_semir(self, ir: &mut SemIr) -> ExprId {
+        match self {
+            Self::True => ir.expr(PExpr::Bool(true)),
+            Self::False | Self::FalseWithMessage { .. } => ir.expr(PExpr::Bool(false)),
+            Self::Invoke { value } => ir.expr(PExpr::EvalTrace(value)),
+            Self::LookaheadTextEquals { offset, text } => {
+                let token = ir.expr(PExpr::TokenText(offset));
+                let text = ir.intern(text);
+                let text = ir.expr(PExpr::Str(text));
+                ir.expr(PExpr::Cmp(CmpOp::Eq, token, text))
+            }
+            Self::LookaheadNotEquals { offset, token_type } => {
+                let actual = ir.expr(PExpr::La(offset));
+                let expected = ir.expr(PExpr::Int(i64::from(token_type)));
+                ir.expr(PExpr::Cmp(CmpOp::Ne, actual, expected))
+            }
+            Self::TokenPairAdjacent => ir.expr(PExpr::TokenIndexAdjacent),
+            Self::ContextChildRuleTextNotEquals { rule_index, text } => {
+                let actual = ir.expr(PExpr::CtxRuleText(rule_index));
+                let expected = ir.intern(text);
+                let expected = ir.expr(PExpr::Str(expected));
+                ir.expr(PExpr::Cmp(CmpOp::Ne, actual, expected))
+            }
+            Self::LocalIntEquals { value } => local_arg_comparison(ir, CmpOp::Eq, value),
+            Self::LocalIntLessOrEqual { value } => local_arg_comparison(ir, CmpOp::Le, value),
+            Self::MemberModuloEquals {
+                member,
+                modulus,
+                value,
+                equals,
+            } => {
+                if modulus == 0 {
+                    return ir.expr(PExpr::Bool(false));
+                }
+                let member = ir.expr(PExpr::Member(member));
+                let modulus = ir.expr(PExpr::Int(modulus));
+                let actual = ir.expr(PExpr::Arith(ArithOp::Mod, member, modulus));
+                let expected = ir.expr(PExpr::Int(value));
+                ir.expr(PExpr::Cmp(
+                    if equals { CmpOp::Eq } else { CmpOp::Ne },
+                    actual,
+                    expected,
+                ))
+            }
+            Self::MemberEquals {
+                member,
+                value,
+                equals,
+            } => {
+                let actual = ir.expr(PExpr::Member(member));
+                let expected = ir.expr(PExpr::Int(value));
+                ir.expr(PExpr::Cmp(
+                    if equals { CmpOp::Eq } else { CmpOp::Ne },
+                    actual,
+                    expected,
+                ))
+            }
+        }
+    }
+
+    #[must_use]
+    pub const fn failure_message(self) -> Option<&'static str> {
+        match self {
+            Self::FalseWithMessage { message } => Some(message),
+            Self::True
+            | Self::False
+            | Self::Invoke { .. }
+            | Self::LookaheadTextEquals { .. }
+            | Self::LookaheadNotEquals { .. }
+            | Self::TokenPairAdjacent
+            | Self::ContextChildRuleTextNotEquals { .. }
+            | Self::LocalIntEquals { .. }
+            | Self::LocalIntLessOrEqual { .. }
+            | Self::MemberModuloEquals { .. }
+            | Self::MemberEquals { .. } => None,
+        }
+    }
+}
+
+fn local_arg_comparison(ir: &mut SemIr, op: CmpOp, value: i64) -> ExprId {
+    let local = ir.expr(PExpr::LocalArg);
+    let absent = ir.expr(PExpr::IsNull(local));
+    let expected = ir.expr(PExpr::Int(value));
+    let comparison = ir.expr(PExpr::Cmp(op, local, expected));
+    ir.expr(PExpr::Or([absent, comparison].into()))
 }
 
 /// Policy for semantic predicate coordinates that have no runtime
@@ -626,6 +751,72 @@ pub struct ParserReturnAction {
     pub value: i64,
 }
 
+impl ParserMemberAction {
+    /// Lowers this speculative member mutation into a `SemIR` action.
+    pub fn lower_into_semir(self, ir: &mut SemIr) -> ParserSemanticAction {
+        let delta = ir.expr(PExpr::Int(self.delta));
+        ParserSemanticAction {
+            source_state: self.source_state,
+            rule_index: usize::MAX,
+            stmt: ir.stmt(AStmt::AddMember(self.member, delta)),
+            speculative: true,
+        }
+    }
+}
+
+impl ParserReturnAction {
+    /// Lowers this committed return-value assignment into a `SemIR` action.
+    pub fn lower_into_semir(self, ir: &mut SemIr) -> ParserSemanticAction {
+        let name = ir.intern(self.name);
+        let value = ir.expr(PExpr::Int(self.value));
+        ParserSemanticAction {
+            source_state: self.source_state,
+            rule_index: self.rule_index,
+            stmt: ir.stmt(AStmt::SetReturn(name, value)),
+            speculative: false,
+        }
+    }
+}
+
+/// Parser predicate coordinate lowered into [`SemIr`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ParserSemanticPredicate {
+    /// Serialized rule index that owns this predicate.
+    pub rule_index: usize,
+    /// Predicate index inside the owning rule.
+    pub pred_index: usize,
+    /// Root expression in the associated [`ParserSemantics::ir`] arena.
+    pub expr: ExprId,
+    /// ANTLR `<fail='...'>` message for predicates that intentionally fail.
+    pub failure_message: Option<&'static str>,
+}
+
+/// Parser action coordinate lowered into [`SemIr`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ParserSemanticAction {
+    /// ATN state containing the action transition.
+    pub source_state: usize,
+    /// Serialized rule index recorded by the action transition.
+    pub rule_index: usize,
+    /// Root statement in the associated [`ParserSemantics::ir`] arena.
+    pub stmt: StmtId,
+    /// Whether this action may run on speculative recognition paths.
+    pub speculative: bool,
+}
+
+/// Data-driven semantic tables emitted by generated parsers.
+///
+/// This is the runtime representation for issue #9's `SemIR` path. Existing
+/// `ParserPredicate`, `ParserMemberAction`, and `ParserReturnAction` tables
+/// remain accepted as deprecated adapters for generated code produced before
+/// this table existed.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ParserSemantics {
+    pub ir: SemIr,
+    pub predicates: Vec<ParserSemanticPredicate>,
+    pub actions: Vec<ParserSemanticAction>,
+}
+
 /// Optional generated-runtime metadata for metadata-driven parser execution.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ParserRuntimeOptions<'a> {
@@ -635,6 +826,8 @@ pub struct ParserRuntimeOptions<'a> {
     pub track_alt_numbers: bool,
     /// Semantic predicate table keyed by serialized `(rule_index, pred_index)`.
     pub predicates: &'a [(usize, usize, ParserPredicate)],
+    /// `SemIR` predicate/action table emitted by newer generated parsers.
+    pub semantics: Option<&'a ParserSemantics>,
     /// Rule-call integer argument table keyed by ATN source state.
     pub rule_args: &'a [ParserRuleArg],
     /// Integer member mutations keyed by ATN action source state.
@@ -2120,10 +2313,70 @@ where
     parser.intern_recovery_symbols(combined)
 }
 
+struct ParserTableSemCtx<'a> {
+    member_values: &'a mut BTreeMap<usize, i64>,
+    return_values: &'a mut BTreeMap<String, i64>,
+}
+
+impl semir::PredContext for ParserTableSemCtx<'_> {
+    fn la(&mut self, _offset: isize) -> i64 {
+        i64::from(TOKEN_EOF)
+    }
+
+    fn token_text(&mut self, _offset: isize) -> Option<&str> {
+        None
+    }
+
+    fn token_index_adjacent(&mut self) -> bool {
+        false
+    }
+
+    fn ctx_rule_text(&self, _rule_index: usize) -> Option<String> {
+        None
+    }
+
+    fn member(&self, member: usize) -> Option<i64> {
+        Some(self.member_values.get(&member).copied().unwrap_or_default())
+    }
+
+    fn local_arg(&self) -> Option<i64> {
+        None
+    }
+
+    fn column(&self) -> Option<i64> {
+        None
+    }
+
+    fn token_start_column(&self) -> Option<i64> {
+        None
+    }
+
+    fn token_text_so_far(&self) -> Option<String> {
+        None
+    }
+
+    fn hook(&mut self, _hook: HookId) -> bool {
+        false
+    }
+}
+
+impl semir::ActContext for ParserTableSemCtx<'_> {
+    fn set_member(&mut self, member: usize, value: i64) {
+        self.member_values.insert(member, value);
+    }
+
+    fn set_return(&mut self, name: &str, value: i64) {
+        self.return_values.insert(name.to_owned(), value);
+    }
+
+    fn action_hook(&mut self, _hook: HookId) {}
+}
+
 /// Applies generated integer-member side effects to one speculative path.
 fn apply_member_actions(
     source_state: usize,
     actions: &[ParserMemberAction],
+    semantics: Option<&ParserSemantics>,
     values: &mut BTreeMap<usize, i64>,
 ) {
     for action in actions
@@ -2132,16 +2385,32 @@ fn apply_member_actions(
     {
         *values.entry(action.member).or_default() += action.delta;
     }
+    let Some(semantics) = semantics else {
+        return;
+    };
+    let mut return_values = BTreeMap::new();
+    let mut ctx = ParserTableSemCtx {
+        member_values: values,
+        return_values: &mut return_values,
+    };
+    for action in semantics
+        .actions
+        .iter()
+        .filter(|action| action.source_state == source_state && action.speculative)
+    {
+        semir::exec_stmt(&semantics.ir, action.stmt, &mut ctx);
+    }
 }
 
 /// Returns the speculative member state after replaying one ATN action state.
 fn member_values_after_action(
     source_state: usize,
     actions: &[ParserMemberAction],
+    semantics: Option<&ParserSemantics>,
     values: &BTreeMap<usize, i64>,
 ) -> BTreeMap<usize, i64> {
     let mut values = values.clone();
-    apply_member_actions(source_state, actions, &mut values);
+    apply_member_actions(source_state, actions, semantics, &mut values);
     values
 }
 
@@ -2150,6 +2419,7 @@ fn return_values_after_action(
     source_state: usize,
     rule_index: usize,
     actions: &[ParserReturnAction],
+    semantics: Option<&ParserSemantics>,
     values: &BTreeMap<String, i64>,
 ) -> BTreeMap<String, i64> {
     let mut values = values.clone();
@@ -2158,6 +2428,20 @@ fn return_values_after_action(
         .filter(|action| action.source_state == source_state && action.rule_index == rule_index)
     {
         values.insert(action.name.to_owned(), action.value);
+    }
+    if let Some(semantics) = semantics {
+        let mut member_values = BTreeMap::new();
+        let mut ctx = ParserTableSemCtx {
+            member_values: &mut member_values,
+            return_values: &mut values,
+        };
+        for action in semantics.actions.iter().filter(|action| {
+            action.source_state == source_state
+                && action.rule_index == rule_index
+                && !action.speculative
+        }) {
+            semir::exec_stmt(&semantics.ir, action.stmt, &mut ctx);
+        }
     }
     values
 }
@@ -2213,6 +2497,7 @@ struct RecognizeRequest<'a> {
     decision_start_index: Option<usize>,
     init_action_rules: &'a BTreeSet<usize>,
     predicates: &'a [(usize, usize, ParserPredicate)],
+    semantics: Option<&'a ParserSemantics>,
     rule_args: &'a [ParserRuleArg],
     member_actions: &'a [ParserMemberAction],
     return_actions: &'a [ParserReturnAction],
@@ -2420,6 +2705,7 @@ struct PredicateEval<'a> {
     rule_index: usize,
     pred_index: usize,
     predicates: &'a [(usize, usize, ParserPredicate)],
+    semantics: Option<&'a ParserSemantics>,
     context: Option<&'a ParserRuleContext>,
     local_int_arg: Option<(usize, i64)>,
     member_values: &'a BTreeMap<usize, i64>,
@@ -2433,6 +2719,145 @@ struct ParserSemanticHookRequest<'a> {
     context: Option<&'a ParserRuleContext>,
     local_int_arg: Option<(usize, i64)>,
     member_values: &'a BTreeMap<usize, i64>,
+}
+
+struct ParserSemIrCtx<'a, S, H>
+where
+    S: TokenSource,
+    H: SemanticHooks,
+{
+    input: &'a mut CommonTokenStream<S>,
+    semantic_hooks: &'a mut H,
+    rule_index: usize,
+    coordinate_index: usize,
+    rule_name: Option<String>,
+    context: Option<&'a ParserRuleContext>,
+    tree: Option<&'a ParseTree>,
+    local_int_arg: Option<(usize, i64)>,
+    member_values: &'a mut BTreeMap<usize, i64>,
+    return_values: Option<&'a mut BTreeMap<String, i64>>,
+    action: Option<ParserAction>,
+    invoked_predicates: Option<&'a mut Vec<(usize, usize)>>,
+}
+
+impl<S, H> semir::PredContext for ParserSemIrCtx<'_, S, H>
+where
+    S: TokenSource,
+    H: SemanticHooks,
+{
+    fn la(&mut self, offset: isize) -> i64 {
+        i64::from(self.input.la(offset))
+    }
+
+    fn token_text(&mut self, offset: isize) -> Option<&str> {
+        self.input.lt(offset).and_then(Token::text)
+    }
+
+    fn token_index_adjacent(&mut self) -> bool {
+        let Some(first) = self.input.lt(-2).map(Token::token_index) else {
+            return false;
+        };
+        let Some(second) = self.input.lt(-1).map(Token::token_index) else {
+            return false;
+        };
+        first + 1 == second
+    }
+
+    fn ctx_rule_text(&self, rule_index: usize) -> Option<String> {
+        self.context.and_then(|context| {
+            context.children().iter().find_map(|child| match child {
+                ParseTree::Rule(rule) if rule.context().rule_index() == rule_index => {
+                    Some(child.text())
+                }
+                ParseTree::Rule(_) | ParseTree::Terminal(_) | ParseTree::Error(_) => None,
+            })
+        })
+    }
+
+    fn member(&self, member: usize) -> Option<i64> {
+        Some(self.member_values.get(&member).copied().unwrap_or_default())
+    }
+
+    fn local_arg(&self) -> Option<i64> {
+        self.local_int_arg.map(|(_, value)| value)
+    }
+
+    fn column(&self) -> Option<i64> {
+        None
+    }
+
+    fn token_start_column(&self) -> Option<i64> {
+        None
+    }
+
+    fn token_text_so_far(&self) -> Option<String> {
+        None
+    }
+
+    fn hook(&mut self, _hook: HookId) -> bool {
+        let mut ctx = ParserSemCtx {
+            input: &mut *self.input,
+            rule_index: self.rule_index,
+            coordinate_index: self.coordinate_index,
+            rule_name: self.rule_name.clone(),
+            context: self.context,
+            tree: self.tree,
+            local_int_arg: self.local_int_arg,
+            member_values: &*self.member_values,
+            action: self.action,
+        };
+        self.semantic_hooks
+            .sempred(&mut ctx, self.rule_index, self.coordinate_index)
+            .unwrap_or(false)
+    }
+
+    fn trace_bool(&mut self, value: bool) -> bool {
+        let Some(invoked) = &mut self.invoked_predicates else {
+            return value;
+        };
+        let key = (self.rule_index, self.coordinate_index);
+        if !invoked.contains(&key) {
+            invoked.push(key);
+            use std::io::Write as _;
+            let mut stdout = std::io::stdout().lock();
+            let _ = writeln!(stdout, "eval={value}");
+        }
+        value
+    }
+}
+
+impl<S, H> semir::ActContext for ParserSemIrCtx<'_, S, H>
+where
+    S: TokenSource,
+    H: SemanticHooks,
+{
+    fn set_member(&mut self, member: usize, value: i64) {
+        self.member_values.insert(member, value);
+    }
+
+    fn set_return(&mut self, name: &str, value: i64) {
+        if let Some(return_values) = &mut self.return_values {
+            return_values.insert(name.to_owned(), value);
+        }
+    }
+
+    fn action_hook(&mut self, _hook: HookId) {
+        let Some(action) = self.action else {
+            return;
+        };
+        let mut ctx = ParserSemCtx {
+            input: &mut *self.input,
+            rule_index: self.rule_index,
+            coordinate_index: self.coordinate_index,
+            rule_name: self.rule_name.clone(),
+            context: self.context,
+            tree: self.tree,
+            local_int_arg: self.local_int_arg,
+            member_values: &*self.member_values,
+            action: Some(action),
+        };
+        let _ = self.semantic_hooks.action(&mut ctx, action);
+    }
 }
 
 /// Captures predicate-failure recovery metadata for fail-option predicates.
@@ -3448,6 +3873,7 @@ where
             rule_index,
             pred_index,
             predicates,
+            semantics: None,
             context: None,
             local_int_arg,
             member_values: &member_values,
@@ -3471,6 +3897,31 @@ where
             rule_index,
             pred_index,
             predicates,
+            semantics: None,
+            context: Some(context),
+            local_int_arg: Some((rule_index, i64::from(local_int_arg))),
+            member_values: &member_values,
+        })
+    }
+
+    /// Evaluates a generated `SemIR` parser predicate with access to the current
+    /// generated rule context.
+    pub fn parser_semantic_ir_predicate_matches_with_context_and_local(
+        &mut self,
+        semantics: &ParserSemantics,
+        rule_index: usize,
+        pred_index: usize,
+        context: &ParserRuleContext,
+        local_int_arg: i32,
+    ) -> bool {
+        let index = self.input.index();
+        let member_values = self.int_members.clone();
+        self.parser_predicate_matches(PredicateEval {
+            index,
+            rule_index,
+            pred_index,
+            predicates: &[],
+            semantics: Some(semantics),
             context: Some(context),
             local_int_arg: Some((rule_index, i64::from(local_int_arg))),
             member_values: &member_values,
@@ -4493,6 +4944,7 @@ where
             init_action_rules,
             track_alt_numbers,
             predicates,
+            semantics,
             rule_args,
             member_actions,
             return_actions,
@@ -4539,6 +4991,7 @@ where
                 decision_start_index: None,
                 init_action_rules: &init_action_rules,
                 predicates,
+                semantics,
                 rule_args,
                 member_actions,
                 return_actions,
@@ -5921,6 +6374,7 @@ where
             decision_start_index,
             init_action_rules,
             predicates,
+            semantics,
             rule_args,
             member_actions,
             return_actions,
@@ -5950,6 +6404,7 @@ where
                 decision_start_index,
                 init_action_rules,
                 predicates,
+                semantics,
                 rule_args,
                 member_actions,
                 return_actions,
@@ -6074,6 +6529,7 @@ where
                 decision_start_index,
                 init_action_rules: request.init_action_rules,
                 predicates: request.predicates,
+                semantics: request.semantics,
                 rule_args: request.rule_args,
                 member_actions: request.member_actions,
                 return_actions: request.return_actions,
@@ -6153,6 +6609,7 @@ where
             decision_start_index,
             init_action_rules,
             predicates,
+            semantics,
             rule_args,
             member_actions,
             return_actions,
@@ -6186,6 +6643,7 @@ where
                 decision_start_index,
                 init_action_rules,
                 predicates,
+                semantics,
                 rule_args,
                 member_actions,
                 return_actions,
@@ -6240,6 +6698,7 @@ where
             decision_start_index,
             init_action_rules,
             predicates,
+            semantics,
             rule_args,
             member_actions,
             return_actions,
@@ -6345,6 +6804,7 @@ where
                         rule_index: *rule_index,
                         pred_index: *pred_index,
                         predicates,
+                        semantics,
                         context: None,
                         local_int_arg,
                         member_values: &member_values,
@@ -6362,6 +6822,7 @@ where
                                     decision_start_index: next_decision_start_index,
                                     init_action_rules,
                                     predicates,
+                                    semantics,
                                     rule_args,
                                     member_actions,
                                     return_actions,
@@ -6392,8 +6853,21 @@ where
                                 outcome
                             }),
                         );
-                    } else if let Some(message) =
-                        self.parser_predicate_failure_message(*rule_index, *pred_index, predicates)
+                    } else if let Some(message) = semantics
+                        .and_then(|semantics| {
+                            self.parser_semantic_ir_predicate_failure_message(
+                                *rule_index,
+                                *pred_index,
+                                semantics,
+                            )
+                        })
+                        .or_else(|| {
+                            self.parser_predicate_failure_message(
+                                *rule_index,
+                                *pred_index,
+                                predicates,
+                            )
+                        })
                     {
                         outcomes.push(self.predicate_failure_recovery(PredicateFailureRecovery {
                             rule_index: *rule_index,
@@ -6423,6 +6897,7 @@ where
                                     decision_start_index: next_decision_start_index,
                                     init_action_rules,
                                     predicates,
+                                    semantics,
                                     rule_args,
                                     member_actions,
                                     return_actions,
@@ -6473,6 +6948,7 @@ where
                             decision_start_index: None,
                             init_action_rules,
                             predicates,
+                            semantics,
                             rule_args,
                             member_actions,
                             return_actions,
@@ -6534,6 +7010,7 @@ where
                                     decision_start_index: next_decision_start_index,
                                     init_action_rules,
                                     predicates,
+                                    semantics,
                                     rule_args,
                                     member_actions,
                                     return_actions,
@@ -6600,6 +7077,7 @@ where
                                     decision_start_index: next_decision_start_index,
                                     init_action_rules,
                                     predicates,
+                                    semantics,
                                     rule_args,
                                     member_actions,
                                     return_actions,
@@ -6742,6 +7220,7 @@ where
             member_values_after_action(
                 step.source_state,
                 request.member_actions,
+                request.semantics,
                 &request.member_values,
             )
         } else {
@@ -6754,6 +7233,7 @@ where
                     step.source_state,
                     action.rule_index(),
                     request.return_actions,
+                    request.semantics,
                     &request.return_values,
                 )
             },
@@ -6769,6 +7249,7 @@ where
                 decision_start_index: step.decision_start_index,
                 init_action_rules: request.init_action_rules,
                 predicates: request.predicates,
+                semantics: request.semantics,
                 rule_args: request.rule_args,
                 member_actions: request.member_actions,
                 return_actions: request.return_actions,
@@ -7356,16 +7837,69 @@ where
         Some(AntlrError::Unsupported(message))
     }
 
+    fn parser_semir_predicate_matches(
+        &mut self,
+        semantics: &ParserSemantics,
+        predicate: &ParserSemanticPredicate,
+        request: ParserSemanticHookRequest<'_>,
+    ) -> bool {
+        self.input.seek(request.index);
+        let mut member_values = request.member_values.clone();
+        let mut return_values = BTreeMap::new();
+        let rule_name = self.rule_names().get(request.rule_index).cloned();
+        let input = &mut self.input;
+        let semantic_hooks = &mut self.semantic_hooks;
+        let invoked_predicates = &mut self.invoked_predicates;
+        let mut ctx = ParserSemIrCtx {
+            input,
+            semantic_hooks,
+            rule_index: request.rule_index,
+            coordinate_index: request.pred_index,
+            rule_name,
+            context: request.context,
+            tree: None,
+            local_int_arg: request.local_int_arg,
+            member_values: &mut member_values,
+            return_values: Some(&mut return_values),
+            action: None,
+            invoked_predicates: Some(invoked_predicates),
+        };
+        semir::eval_pred(&semantics.ir, predicate.expr, &mut ctx)
+    }
+
     fn parser_predicate_matches(&mut self, eval: PredicateEval<'_>) -> bool {
         let PredicateEval {
             index,
             rule_index,
             pred_index,
             predicates,
+            semantics,
             context,
             local_int_arg,
             member_values,
         } = eval;
+        if let Some((semantics, predicate)) = semantics.and_then(|semantics| {
+            semantics
+                .predicates
+                .iter()
+                .find(|predicate| {
+                    predicate.rule_index == rule_index && predicate.pred_index == pred_index
+                })
+                .map(|predicate| (semantics, predicate))
+        }) {
+            return self.parser_semir_predicate_matches(
+                semantics,
+                predicate,
+                ParserSemanticHookRequest {
+                    index,
+                    rule_index,
+                    pred_index,
+                    context,
+                    local_int_arg,
+                    member_values,
+                },
+            );
+        }
         let Some((_, _, predicate)) = predicates
             .iter()
             .find(|(rule, pred, _)| *rule == rule_index && *pred == pred_index)
@@ -7468,6 +8002,23 @@ where
                 }
                 _ => None,
             })
+    }
+
+    /// Returns a generated fail-option message for a `SemIR` predicate
+    /// coordinate.
+    pub fn parser_semantic_ir_predicate_failure_message(
+        &self,
+        rule_index: usize,
+        pred_index: usize,
+        semantics: &ParserSemantics,
+    ) -> Option<&'static str> {
+        semantics
+            .predicates
+            .iter()
+            .find(|predicate| {
+                predicate.rule_index == rule_index && predicate.pred_index == pred_index
+            })
+            .and_then(|predicate| predicate.failure_message)
     }
 
     /// Returns the token-stream index after consuming `symbol` at `index`.

@@ -93,6 +93,87 @@ impl LexerPredicate {
     }
 }
 
+/// Runtime view passed to lexer semantic hooks.
+#[derive(Debug)]
+pub struct LexerSemCtx<'a, I, F = CommonTokenFactory>
+where
+    I: CharStream,
+    F: TokenFactory,
+{
+    lexer: &'a BaseLexer<I, F>,
+    rule_index: usize,
+    coordinate_index: usize,
+    position: usize,
+}
+
+impl<'a, I, F> LexerSemCtx<'a, I, F>
+where
+    I: CharStream,
+    F: TokenFactory,
+{
+    pub(crate) const fn new(
+        lexer: &'a BaseLexer<I, F>,
+        rule_index: usize,
+        coordinate_index: usize,
+        position: usize,
+    ) -> Self {
+        Self {
+            lexer,
+            rule_index,
+            coordinate_index,
+            position,
+        }
+    }
+
+    /// Lexer rule index that owns the predicate/action coordinate.
+    #[must_use]
+    pub const fn rule_index(&self) -> usize {
+        self.rule_index
+    }
+
+    /// Predicate/action index inside the owning lexer rule.
+    #[must_use]
+    pub const fn coordinate_index(&self) -> usize {
+        self.coordinate_index
+    }
+
+    /// Absolute input position where the predicate/action transition fired.
+    #[must_use]
+    pub const fn position(&self) -> usize {
+        self.position
+    }
+
+    /// Lexer mode at this coordinate.
+    #[must_use]
+    pub fn mode(&self) -> i32 {
+        self.lexer.mode()
+    }
+
+    /// Current source column.
+    #[must_use]
+    pub const fn column(&self) -> usize {
+        self.lexer.column()
+    }
+
+    /// Source column at [`Self::position`].
+    #[must_use]
+    pub fn position_column(&self) -> usize {
+        self.lexer.column_at(self.position)
+    }
+
+    /// Column captured at the current token start.
+    #[must_use]
+    pub const fn token_start_column(&self) -> usize {
+        self.lexer.token_start_column()
+    }
+
+    /// Text matched from token start to this coordinate.
+    #[must_use]
+    pub fn text_so_far(&self) -> String {
+        self.lexer.token_text_until(self.position)
+    }
+}
+
 pub trait Lexer: Recognizer {
     fn mode(&self) -> i32;
     fn set_mode(&mut self, mode: i32);
@@ -293,9 +374,8 @@ where
     pub fn with_shared_dfa(mut self, atn: &'static Atn) -> Self {
         let ptr: *const Atn = atn;
         let key = ptr as usize;
-        self.dfa_cache = SHARED_LEXER_DFA_CACHES.with(|caches| {
-            Rc::clone(caches.borrow_mut().entry(key).or_insert_with(Rc::default))
-        });
+        self.dfa_cache = SHARED_LEXER_DFA_CACHES
+            .with(|caches| Rc::clone(caches.borrow_mut().entry(key).or_insert_with(Rc::default)));
         self
     }
 
@@ -676,7 +756,10 @@ where
             }
             return;
         }
-        cache.sparse_edges.entry((state, symbol)).or_insert(transition);
+        cache
+            .sparse_edges
+            .entry((state, symbol))
+            .or_insert(transition);
     }
 
     pub(crate) fn cached_lexer_dfa_state(&self, state: usize) -> Option<Rc<LexerDfaCachedState>> {
@@ -688,11 +771,7 @@ where
             .flatten()
     }
 
-    pub(crate) fn cache_lexer_dfa_state(
-        &self,
-        state: usize,
-        cached_state: LexerDfaCachedState,
-    ) {
+    pub(crate) fn cache_lexer_dfa_state(&self, state: usize, cached_state: LexerDfaCachedState) {
         let mut cache = self.dfa_cache.borrow_mut();
         if cache.cached_states.len() <= state {
             cache.cached_states.resize_with(state + 1, || None);

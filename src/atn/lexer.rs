@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::{BTreeSet, HashSet};
 use std::hash::BuildHasherDefault;
 
@@ -8,7 +9,9 @@ use crate::int_stream::EOF;
 use crate::lexer::{
     BaseLexer, Lexer, LexerCustomAction, LexerDfaActionKey, LexerDfaCachedAccept,
     LexerDfaCachedState, LexerDfaCachedTransition, LexerDfaConfigKey, LexerDfaKey, LexerPredicate,
+    LexerSemCtx,
 };
+use crate::parser::SemanticHooks;
 use crate::prediction::PredictionFxHasher;
 use crate::token::{CommonToken, DEFAULT_CHANNEL, INVALID_TOKEN_TYPE, TokenFactory};
 
@@ -223,6 +226,52 @@ where
     )
 }
 
+/// Runs one lexer-token match with a shared [`SemanticHooks`] object.
+///
+/// This is the trait-based facade over the historical lexer closure hooks.
+/// Unknown lexer predicates default to `true` when the hook returns `None`,
+/// matching the existing closure default; callers that need fail-loud behavior
+/// can implement the hook to record and reject coordinates explicitly.
+pub fn next_token_with_semantic_hooks<I, F, H>(
+    lexer: &mut BaseLexer<I, F>,
+    atn: &Atn,
+    hooks: &mut H,
+) -> CommonToken
+where
+    I: CharStream,
+    F: TokenFactory,
+    H: SemanticHooks,
+{
+    let hooks = RefCell::new(hooks);
+    next_token_with_hooks(
+        lexer,
+        atn,
+        |lexer, action| {
+            let Ok(rule_index) = usize::try_from(action.rule_index()) else {
+                return;
+            };
+            let Ok(action_index) = usize::try_from(action.action_index()) else {
+                return;
+            };
+            let mut ctx = LexerSemCtx::new(lexer, rule_index, action_index, action.position());
+            let _ = hooks.borrow_mut().lexer_action(&mut ctx, action);
+        },
+        |lexer, predicate| {
+            let mut ctx = LexerSemCtx::new(
+                lexer,
+                predicate.rule_index(),
+                predicate.pred_index(),
+                predicate.position(),
+            );
+            hooks
+                .borrow_mut()
+                .lexer_sempred(&mut ctx, predicate.rule_index(), predicate.pred_index())
+                .unwrap_or(true)
+        },
+        |_, _, _| {},
+    )
+}
+
 /// Runs one lexer-token match against an ahead-of-time compiled lexer DFA.
 ///
 /// Tokens starting in a compiled mode are matched by walking static tables;
@@ -280,6 +329,50 @@ where
             compiled: Some(dfa),
             use_cache: false,
         },
+    )
+}
+
+/// Runs one compiled-DFA lexer-token match with a shared [`SemanticHooks`]
+/// object for dynamic predicate/action modes.
+pub fn next_token_compiled_with_semantic_hooks<I, F, H>(
+    lexer: &mut BaseLexer<I, F>,
+    atn: &Atn,
+    dfa: &CompiledLexerDfa,
+    hooks: &mut H,
+) -> CommonToken
+where
+    I: CharStream,
+    F: TokenFactory,
+    H: SemanticHooks,
+{
+    let hooks = RefCell::new(hooks);
+    next_token_compiled_with_hooks(
+        lexer,
+        atn,
+        dfa,
+        |lexer, action| {
+            let Ok(rule_index) = usize::try_from(action.rule_index()) else {
+                return;
+            };
+            let Ok(action_index) = usize::try_from(action.action_index()) else {
+                return;
+            };
+            let mut ctx = LexerSemCtx::new(lexer, rule_index, action_index, action.position());
+            let _ = hooks.borrow_mut().lexer_action(&mut ctx, action);
+        },
+        |lexer, predicate| {
+            let mut ctx = LexerSemCtx::new(
+                lexer,
+                predicate.rule_index(),
+                predicate.pred_index(),
+                predicate.position(),
+            );
+            hooks
+                .borrow_mut()
+                .lexer_sempred(&mut ctx, predicate.rule_index(), predicate.pred_index())
+                .unwrap_or(true)
+        },
+        |_, _, _| {},
     )
 }
 

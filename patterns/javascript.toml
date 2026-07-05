@@ -1,0 +1,21 @@
+version = 1
+
+[[helper]]
+name = "notLineTerminator"
+returns = "bool"
+lower = "hook"
+
+[[helper]]
+name = "notOpenBraceAndNotFunction"
+returns = "bool"
+lower = "hook"
+
+[[helper]]
+name = "closeBrace"
+returns = "bool"
+lower = "hook"
+
+[[helper]]
+name = "isRegexPossible"
+returns = "bool"
+lower = "hook"

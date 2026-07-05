@@ -241,12 +241,17 @@ arbitrary grammar-embedded snippets. The boundary is:
 - **Recognized predicate/action shapes** — a library of common idioms
   (constant predicates, lookahead text/type checks, integer member counters,
   column predicates, and the upstream testsuite's action templates) — are
-  translated into runtime metadata by `antlr4-rust-gen` when the grammar
-  source is passed via `--grammar`.
+  translated into SemIR by `antlr4-rust-gen` when the grammar source is
+  passed via `--grammar`.
+- **User pattern files** — `--sem-patterns file.toml` can add exact predicate
+  rewrites, helper-call rewrites, and per-coordinate `hook` /
+  `assume-true` / `assume-false` / `error` dispositions without changing the
+  generator.
 - **Everything else is not silently guessed.** Each generator run writes a
   `semantics.json` manifest next to the generated modules listing every
   predicate/action coordinate with its grammar source span, body, and
-  disposition (`translated`, `assume-true`, `assume-false`, or `ignored`).
+  disposition (`translated`, `hooked`, `assume-true`, `assume-false`,
+  `ignored`, or `error`).
 
 Unknown coordinates are governed by `--sem-unknown`:
 
@@ -258,6 +263,8 @@ antlr4-rust-gen --lexer L.interp --parser P.interp --grammar G.g4 \
 - `assume-true` (current default, deprecated): unknown predicates pass,
   unknown actions are no-ops — the historical behavior. A future minor
   release changes the default to `error`.
+- `hook`: unknown parser predicates are routed to `SemanticHooks` and fail if
+  the hook does not handle them.
 - `assume-false`: unknown predicates fail, removing the guarded alternatives.
 - `error`: generation fails, naming each coordinate:
 
@@ -279,6 +286,16 @@ Generated parsers also expose a parser-side hook escape hatch:
 parser action events are offered to `SemanticHooks::action` after the committed
 parse path is selected. Predicate hooks may run speculatively during
 prediction, so they must be replay-safe.
+
+For bare helper-call predicates, generated parsers also emit a typed hook
+adapter (`MyParserHooks` plus `MyParserTypedHooks<T>`) that maps stable
+manifest coordinates to named Rust methods. Lexer callers can use
+`LexerSemCtx` with `atn::lexer::next_token_with_semantic_hooks` or the
+compiled-DFA variant to route lexer predicates/actions through the same
+`SemanticHooks` trait.
+
+Use `--require-full-semantics` in CI when every coordinate must be either
+translated or explicitly hooked; policy fallbacks fail generation.
 
 ## Runtime Testsuite
 

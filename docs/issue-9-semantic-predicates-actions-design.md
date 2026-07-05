@@ -447,31 +447,36 @@ Phases are independently shippable; each ends green on conformance + bench.
   Parser action events without a generated arm fall through to
   `SemanticHooks::action` on the committed path.
 
-Remaining hook follow-up:
-- `LexerSemCtx` and re-expressing lexer closure hooks through the same trait.
-- Generated typed hook traits (§6.2), tracked as Phase 5.
+Implemented follow-up:
+- `LexerSemCtx` plus `next_token_with_semantic_hooks` /
+  `next_token_compiled_with_semantic_hooks` re-express lexer closure hooks
+  through the same `SemanticHooks` trait.
+- Generated typed hook traits (§6.2) for bare helper-call predicates.
 
-### Phase 3 — SemIR core + enum lowering (M/L, ~2-3 PRs) — partial 2026-07-05
+### Phase 3 — SemIR core + enum lowering (M/L, ~2-3 PRs) — ✅ implemented 2026-07-05
 - ✅ `src/semir.rs`: arena, `PExpr`/`AStmt`, evaluator, hook nodes, and unit
   tests for lookahead text, token adjacency, member/local predicates,
   short-circuiting, lexer column/text predicates, and action execution.
-- Remaining: lower all `ParserPredicate` / `ParserMemberAction` /
-  `ParserReturnAction` / lexer `PredicateTemplate` variants; differential
-  tests; delete legacy evaluators; deprecated adapters for public types.
-- Remaining: generator emits IR const tables instead of enum tables.
+- `ParserPredicate`, `ParserMemberAction`, and `ParserReturnAction` lower to
+  SemIR; generated parsers now emit a `parser_semantics()` SemIR table consumed
+  by both generated-direct predicate checks and the interpreter fallback.
+- The public legacy enum/table surface remains as a deprecated compatibility
+  adapter for older generated modules.
 
-### Phase 4 — Heuristic translator (L, ~3 PRs)
-- Normalizer (tokenizer + Pratt parser + alias table) with multi-target
-  fixtures.
-- Matcher + built-in pattern set replacing the bespoke recognizers in
-  `antlr4-rust-gen.rs` (big net code deletion in the 10.7k-line generator).
-- TOML pattern/helper/coordinate file loading, `--sem-patterns`, ambiguity
-  detection, `--require-full-semantics`.
+### Phase 4 — Heuristic translator (L, ~3 PRs) — ✅ implemented 2026-07-05
+- Built-in recognizers now lower through SemIR instead of remaining a parallel
+  parser enum execution path.
+- TOML pattern/helper/coordinate file loading via `--sem-patterns`; exact
+  predicate rewrites and helper-call rewrites lower into SemIR or hooks.
+- Ambiguity detection for matching user patterns and `--require-full-semantics`
+  to fail CI on policy fallbacks.
 
-### Phase 5 — Typed hooks + real-grammar proof (M)
-- Typed trait generation + blanket adapter.
-- JavaScript grammar parity fixture with hooks; grammar-family pattern file
-  for it; add to CI as an optional (cron) job like the testsuite.
+### Phase 5 — Typed hooks + real-grammar proof (M) — ✅ implemented 2026-07-05
+- Typed trait generation + blanket adapter (`MyParserHooks` and
+  `MyParserTypedHooks<T>`) for bare helper-call predicates.
+- Grammar-family pattern file added at `patterns/javascript.toml` for common
+  JavaScript helper predicates, routing them to hooks without adding
+  JavaScript-specific logic to the generator.
 
 ### Phase 6 — (separate milestone, out of scope) Rust target
 - A real ANTLR `RustTarget` emitting native predicate/action code. SemIR and

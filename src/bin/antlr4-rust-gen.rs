@@ -64,14 +64,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             grammar_source.as_deref(),
             args.allow_unsupported_lexer_actions,
             args.sem_unknown,
+            &args.sem_patterns,
         )?;
         enforce_sem_unknown(args.sem_unknown, &entries)?;
+        enforce_require_full_semantics(args.require_full_semantics, &entries)?;
         let module = render_lexer(
             &grammar_name,
             &data,
             grammar_source.as_deref(),
             args.allow_unsupported_lexer_actions,
             args.sem_unknown,
+            &args.sem_patterns,
         )?;
         fs::write(
             args.out_dir
@@ -87,8 +90,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .parser_name
             .clone()
             .unwrap_or_else(|| grammar_name_from_path(&parser));
-        let entries = collect_parser_semantics(&data, grammar_source.as_deref(), args.sem_unknown)?;
+        let entries = collect_parser_semantics(
+            &data,
+            grammar_source.as_deref(),
+            args.sem_unknown,
+            &args.sem_patterns,
+        )?;
         enforce_sem_unknown(args.sem_unknown, &entries)?;
+        enforce_require_full_semantics(args.require_full_semantics, &entries)?;
         let module = render_parser_with_options(
             &grammar_name,
             &data,
@@ -96,6 +105,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             ParserRenderOptions {
                 require_generated_parser: args.require_generated_parser,
                 sem_unknown: args.sem_unknown,
+                patterns: Some(&args.sem_patterns),
             },
         )?;
         fs::write(
@@ -127,6 +137,8 @@ enum SemUnknownPolicy {
     /// Unknown predicates fail unconditionally; unknown actions remain
     /// no-ops.
     AssumeFalse,
+    /// Unknown coordinates are intentionally delegated to runtime hooks.
+    Hook,
     /// Fail code generation when any semantic coordinate has no Rust
     /// implementation.
     Error,
@@ -136,10 +148,11 @@ impl SemUnknownPolicy {
     fn parse_flag(value: &str) -> Result<Self, String> {
         match value {
             "error" => Ok(Self::Error),
+            "hook" => Ok(Self::Hook),
             "assume-true" => Ok(Self::AssumeTrue),
             "assume-false" => Ok(Self::AssumeFalse),
             other => Err(format!(
-                "--sem-unknown accepts error, assume-true, or assume-false; got {other}\n\n{}",
+                "--sem-unknown accepts error, hook, assume-true, or assume-false; got {other}\n\n{}",
                 usage()
             )),
         }
@@ -149,6 +162,7 @@ impl SemUnknownPolicy {
         match self {
             Self::AssumeTrue => "assume-true",
             Self::AssumeFalse => "assume-false",
+            Self::Hook => "hook",
             Self::Error => "error",
         }
     }
@@ -161,6 +175,14 @@ impl SemUnknownPolicy {
         match self {
             Self::AssumeTrue | Self::Error => SemanticsDisposition::AssumeTrue,
             Self::AssumeFalse => SemanticsDisposition::AssumeFalse,
+            Self::Hook => SemanticsDisposition::Hooked,
+        }
+    }
+
+    const fn unknown_action_disposition(self) -> SemanticsDisposition {
+        match self {
+            Self::Hook => SemanticsDisposition::Hooked,
+            Self::AssumeTrue | Self::AssumeFalse | Self::Error => SemanticsDisposition::Ignored,
         }
     }
 }
@@ -203,6 +225,10 @@ enum SemanticsDisposition {
     AssumeTrue,
     /// No implementation exists; recognition treats the predicate as failing.
     AssumeFalse,
+    /// No generated implementation exists; runtime hooks own the coordinate.
+    Hooked,
+    /// The coordinate is intentionally rejected by policy.
+    Error,
     /// No implementation exists; the action is a no-op at recognition time.
     Ignored,
 }
@@ -213,9 +239,206 @@ impl SemanticsDisposition {
             Self::Translated => "translated",
             Self::AssumeTrue => "assume-true",
             Self::AssumeFalse => "assume-false",
+            Self::Hooked => "hooked",
+            Self::Error => "error",
             Self::Ignored => "ignored",
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CoordinateDispose {
+    Hook,
+    AssumeTrue,
+    AssumeFalse,
+    Error,
+}
+
+impl CoordinateDispose {
+    fn parse(value: &str) -> io::Result<Self> {
+        match value {
+            "hook" => Ok(Self::Hook),
+            "assume-true" => Ok(Self::AssumeTrue),
+            "assume-false" => Ok(Self::AssumeFalse),
+            "error" => Ok(Self::Error),
+            other => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("unknown coordinate dispose {other}"),
+            )),
+        }
+    }
+
+    const fn disposition(self) -> SemanticsDisposition {
+        match self {
+            Self::Hook => SemanticsDisposition::Hooked,
+            Self::AssumeTrue => SemanticsDisposition::AssumeTrue,
+            Self::AssumeFalse => SemanticsDisposition::AssumeFalse,
+            Self::Error => SemanticsDisposition::Error,
+        }
+    }
+
+    const fn predicate_template(self) -> Option<PredicateTemplate> {
+        match self {
+            Self::Hook => Some(PredicateTemplate::Hook),
+            Self::AssumeTrue => Some(PredicateTemplate::True),
+            Self::AssumeFalse => Some(PredicateTemplate::False),
+            Self::Error => None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct SemPatternFile {
+    patterns: Vec<SemPatternRule>,
+    helpers: Vec<SemHelperRule>,
+    coordinates: Vec<SemCoordinateOverride>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct SemPatternRule {
+    id: String,
+    match_body: String,
+    lower: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct SemHelperRule {
+    name: String,
+    lower: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct SemCoordinateOverride {
+    kind: SemanticsKind,
+    rule: Option<String>,
+    index: Option<usize>,
+    atn_state: Option<usize>,
+    dispose: CoordinateDispose,
+}
+
+impl SemPatternFile {
+    fn predicate_template(&self, body: &str) -> io::Result<Option<PredicateTemplate>> {
+        let body = body.trim();
+        let mut matches = Vec::new();
+        matches.extend(
+            self.patterns
+                .iter()
+                .filter(|pattern| pattern.match_body.trim() == body)
+                .map(|pattern| (pattern.id.as_str(), pattern.lower.as_str())),
+        );
+        matches.extend(
+            self.helpers
+                .iter()
+                .filter(|helper| helper_call_matches(body, &helper.name))
+                .map(|helper| (helper.name.as_str(), helper.lower.as_str())),
+        );
+        if matches.len() > 1 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "ambiguous semantic patterns for {body:?}: {}",
+                    matches
+                        .iter()
+                        .map(|(id, _)| *id)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            ));
+        }
+        matches
+            .first()
+            .map(|(_, lower)| parse_pattern_lower(lower))
+            .transpose()
+    }
+
+    fn coordinate_disposition(
+        &self,
+        kind: SemanticsKind,
+        rule: Option<&str>,
+        index: Option<usize>,
+        atn_state: Option<usize>,
+    ) -> Option<SemanticsDisposition> {
+        self.coordinate_override(kind, rule, index, atn_state)
+            .map(|override_| override_.dispose.disposition())
+    }
+
+    #[allow(clippy::option_option)]
+    fn coordinate_predicate_template(
+        &self,
+        kind: SemanticsKind,
+        rule: Option<&str>,
+        index: Option<usize>,
+    ) -> Option<Option<PredicateTemplate>> {
+        self.coordinate_override(kind, rule, index, None)
+            .map(|override_| override_.dispose.predicate_template())
+    }
+
+    fn coordinate_override(
+        &self,
+        kind: SemanticsKind,
+        rule: Option<&str>,
+        index: Option<usize>,
+        atn_state: Option<usize>,
+    ) -> Option<&SemCoordinateOverride> {
+        self.coordinates.iter().find(|override_| {
+            override_.kind == kind
+                && override_
+                    .rule
+                    .as_deref()
+                    .is_none_or(|expected| rule == Some(expected))
+                && override_
+                    .index
+                    .is_none_or(|expected| index == Some(expected))
+                && override_
+                    .atn_state
+                    .is_none_or(|expected| atn_state == Some(expected))
+        })
+    }
+}
+
+fn helper_call_matches(body: &str, helper: &str) -> bool {
+    let body = body.trim();
+    body == format!("{helper}()")
+        || body == format!("this.{helper}()")
+        || body == format!("self.{helper}()")
+}
+
+fn parse_pattern_lower(lower: &str) -> io::Result<PredicateTemplate> {
+    let lower = lower.trim();
+    match lower {
+        "true" | "bool(true)" => return Ok(PredicateTemplate::True),
+        "false" | "bool(false)" => return Ok(PredicateTemplate::False),
+        "hook" => return Ok(PredicateTemplate::Hook),
+        _ => {}
+    }
+    parse_pattern_lt_text(lower)
+        .or_else(|| parse_pattern_la_not_equals(lower))
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("unsupported semantic pattern lower expression {lower:?}"),
+            )
+        })
+}
+
+fn parse_pattern_lt_text(lower: &str) -> Option<PredicateTemplate> {
+    let body = lower.strip_prefix("cmp(eq, token_text(")?;
+    let (offset, rest) = body.split_once("), str(\"")?;
+    let text = rest.strip_suffix("\"))")?;
+    Some(PredicateTemplate::LookaheadTextEquals {
+        offset: offset.trim().parse().ok()?,
+        text: text.to_owned(),
+    })
+}
+
+fn parse_pattern_la_not_equals(lower: &str) -> Option<PredicateTemplate> {
+    let body = lower.strip_prefix("cmp(ne, la(")?;
+    let (offset, rest) = body.split_once("), token(")?;
+    let token_name = rest.strip_suffix("))")?;
+    Some(PredicateTemplate::LookaheadNotEquals {
+        offset: offset.trim().parse().ok()?,
+        token_name: token_name.trim().to_owned(),
+    })
 }
 
 /// One semantic predicate/action coordinate inventoried for the manifest.
@@ -280,7 +503,12 @@ fn enforce_sem_unknown(policy: SemUnknownPolicy, entries: &[SemanticsEntry]) -> 
     }
     let unsupported = entries
         .iter()
-        .filter(|entry| entry.disposition != SemanticsDisposition::Translated)
+        .filter(|entry| {
+            !matches!(
+                entry.disposition,
+                SemanticsDisposition::Translated | SemanticsDisposition::Hooked
+            )
+        })
         .collect::<Vec<_>>();
     if unsupported.is_empty() {
         return Ok(());
@@ -300,6 +528,35 @@ fn enforce_sem_unknown(policy: SemUnknownPolicy, entries: &[SemanticsEntry]) -> 
     Err(io::Error::new(io::ErrorKind::InvalidData, message))
 }
 
+fn enforce_require_full_semantics(require: bool, entries: &[SemanticsEntry]) -> io::Result<()> {
+    if !require {
+        return Ok(());
+    }
+    let fallback = entries
+        .iter()
+        .filter(|entry| {
+            !matches!(
+                entry.disposition,
+                SemanticsDisposition::Translated | SemanticsDisposition::Hooked
+            )
+        })
+        .collect::<Vec<_>>();
+    if fallback.is_empty() {
+        return Ok(());
+    }
+    let mut message = String::new();
+    for entry in &fallback {
+        message.push_str(&entry.describe_unsupported());
+        message.push('\n');
+    }
+    let _ = write!(
+        message,
+        "--require-full-semantics: {} semantic coordinate(s) use policy fallback dispositions",
+        fallback.len()
+    );
+    Err(io::Error::new(io::ErrorKind::InvalidData, message))
+}
+
 /// Inventories every custom-action and predicate coordinate in a lexer
 /// `.interp`, mirroring the pairing rules `render_lexer` uses so manifest
 /// dispositions match what the generated module will do.
@@ -308,6 +565,7 @@ fn collect_lexer_semantics(
     grammar_source: Option<&str>,
     allow_unsupported_lexer_actions: bool,
     policy: SemUnknownPolicy,
+    patterns: &SemPatternFile,
 ) -> io::Result<Vec<SemanticsEntry>> {
     let mut entries = Vec::new();
 
@@ -338,11 +596,18 @@ fn collect_lexer_semantics(
                 line: block.map(|(line, _, _)| *line),
                 column: block.map(|(_, column, _)| *column),
                 body: block.map(|(_, _, body)| body.clone()),
-                disposition: if translated {
-                    SemanticsDisposition::Translated
-                } else {
-                    SemanticsDisposition::Ignored
-                },
+                disposition: patterns
+                    .coordinate_disposition(
+                        SemanticsKind::LexerAction,
+                        rule_index.and_then(|rule| data.rule_names.get(rule).map(String::as_str)),
+                        usize::try_from(*action_index).ok(),
+                        None,
+                    )
+                    .unwrap_or_else(|| if translated {
+                        SemanticsDisposition::Translated
+                    } else {
+                        policy.unknown_action_disposition()
+                    }),
                 template: template
                     .filter(|_| translated)
                     .map(|template| format!("{template:?}")),
@@ -353,7 +618,7 @@ fn collect_lexer_semantics(
     let predicate_coordinates = lexer_predicate_transitions(data)?;
     if !predicate_coordinates.is_empty() {
         let templates = grammar_source
-            .map(|source| lexer_predicate_templates(data, source))
+            .map(|source| lexer_predicate_templates(data, source, patterns))
             .transpose()?
             .unwrap_or_default();
         let blocks = grammar_source
@@ -374,11 +639,18 @@ fn collect_lexer_semantics(
                 line: block.map(|(line, _, _)| *line),
                 column: block.map(|(_, column, _)| *column),
                 body: block.map(|(_, _, body)| body.clone()),
-                disposition: if template.is_some() {
-                    SemanticsDisposition::Translated
-                } else {
-                    policy.unknown_predicate_disposition()
-                },
+                disposition: patterns
+                    .coordinate_disposition(
+                        SemanticsKind::LexerPredicate,
+                        data.rule_names.get(*rule_index).map(String::as_str),
+                        Some(*pred_index),
+                        None,
+                    )
+                    .unwrap_or_else(|| if template.is_some() {
+                        SemanticsDisposition::Translated
+                    } else {
+                        policy.unknown_predicate_disposition()
+                    }),
                 template: template.map(|template| format!("{template:?}")),
             });
         }
@@ -393,13 +665,14 @@ fn collect_parser_semantics(
     data: &InterpData,
     grammar_source: Option<&str>,
     policy: SemUnknownPolicy,
+    patterns: &SemPatternFile,
 ) -> io::Result<Vec<SemanticsEntry>> {
     let mut entries = Vec::new();
 
     let predicate_coordinates = lexer_predicate_transitions(data)?;
     if !predicate_coordinates.is_empty() {
         let templates = grammar_source
-            .map(|source| parser_predicate_templates(data, source))
+            .map(|source| parser_predicate_templates(data, source, patterns))
             .transpose()?
             .unwrap_or_default();
         let blocks = grammar_source
@@ -421,11 +694,18 @@ fn collect_parser_semantics(
                 line: block.map(|(line, _, _)| *line),
                 column: block.map(|(_, column, _)| *column),
                 body: block.map(|(_, _, body)| body.clone()),
-                disposition: if template.is_some() {
-                    SemanticsDisposition::Translated
-                } else {
-                    policy.unknown_predicate_disposition()
-                },
+                disposition: patterns
+                    .coordinate_disposition(
+                        SemanticsKind::ParserPredicate,
+                        data.rule_names.get(rule_index).map(String::as_str),
+                        Some(pred_index),
+                        None,
+                    )
+                    .unwrap_or_else(|| if template.is_some() {
+                        SemanticsDisposition::Translated
+                    } else {
+                        policy.unknown_predicate_disposition()
+                    }),
                 template: template.map(|template| format!("{template:?}")),
             });
         }
@@ -457,11 +737,18 @@ fn collect_parser_semantics(
                 line: block.map(|(line, _, _)| *line),
                 column: block.map(|(_, column, _)| *column),
                 body: block.map(|(_, _, body)| body.clone()),
-                disposition: if template.is_some() {
-                    SemanticsDisposition::Translated
-                } else {
-                    SemanticsDisposition::Ignored
-                },
+                disposition: patterns
+                    .coordinate_disposition(
+                        SemanticsKind::ParserAction,
+                        rule_index.and_then(|rule| data.rule_names.get(rule).map(String::as_str)),
+                        None,
+                        Some(*state),
+                    )
+                    .unwrap_or_else(|| if template.is_some() {
+                        SemanticsDisposition::Translated
+                    } else {
+                        policy.unknown_action_disposition()
+                    }),
                 template: template.map(|template| format!("{template:?}")),
             });
         }
@@ -665,6 +952,173 @@ fn json_string(value: &str) -> String {
     out
 }
 
+fn load_sem_patterns(path: &Path) -> io::Result<SemPatternFile> {
+    parse_sem_patterns(&fs::read_to_string(path)?)
+}
+
+fn parse_sem_patterns(input: &str) -> io::Result<SemPatternFile> {
+    let mut file = SemPatternFile::default();
+    let mut section: Option<PatternSection> = None;
+    let mut fields = BTreeMap::<String, String>::new();
+    for raw_line in input.lines().chain(std::iter::once("")) {
+        let line = raw_line
+            .split_once('#')
+            .map_or(raw_line, |(line, _)| line)
+            .trim();
+        if line.is_empty() {
+            continue;
+        }
+        if let Some(next_section) = parse_pattern_section(line) {
+            flush_pattern_section(&mut file, section.take(), &mut fields)?;
+            section = Some(next_section);
+            continue;
+        }
+        let (key, value) = line.split_once('=').ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("invalid semantic pattern line {line:?}"),
+            )
+        })?;
+        fields.insert(key.trim().to_owned(), parse_toml_scalar(value.trim()));
+    }
+    flush_pattern_section(&mut file, section, &mut fields)?;
+    Ok(file)
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PatternSection {
+    Pattern,
+    Helper,
+    Coordinate,
+}
+
+fn parse_pattern_section(line: &str) -> Option<PatternSection> {
+    match line {
+        "[[pattern]]" => Some(PatternSection::Pattern),
+        "[[helper]]" => Some(PatternSection::Helper),
+        "[[coordinate]]" => Some(PatternSection::Coordinate),
+        _ => None,
+    }
+}
+
+fn flush_pattern_section(
+    file: &mut SemPatternFile,
+    section: Option<PatternSection>,
+    fields: &mut BTreeMap<String, String>,
+) -> io::Result<()> {
+    let Some(section) = section else {
+        return Ok(());
+    };
+    match section {
+        PatternSection::Pattern => {
+            let match_body = take_required_field(fields, "match")?;
+            let lower = take_required_field(fields, "lower")?;
+            let id = fields
+                .remove("id")
+                .unwrap_or_else(|| format!("pattern:{}", file.patterns.len()));
+            file.patterns.push(SemPatternRule {
+                id,
+                match_body,
+                lower,
+            });
+        }
+        PatternSection::Helper => {
+            file.helpers.push(SemHelperRule {
+                name: take_required_field(fields, "name")?,
+                lower: take_required_field(fields, "lower")?,
+            });
+        }
+        PatternSection::Coordinate => {
+            file.coordinates.push(SemCoordinateOverride {
+                kind: parse_coordinate_kind(&take_required_field(fields, "kind")?)?,
+                rule: fields.remove("rule"),
+                index: fields
+                    .remove("index")
+                    .map(|value| parse_usize_field("index", &value))
+                    .transpose()?,
+                atn_state: fields
+                    .remove("atn_state")
+                    .map(|value| parse_usize_field("atn_state", &value))
+                    .transpose()?,
+                dispose: CoordinateDispose::parse(&take_required_field(fields, "dispose")?)?,
+            });
+        }
+    }
+    fields.clear();
+    Ok(())
+}
+
+fn take_required_field(fields: &mut BTreeMap<String, String>, name: &str) -> io::Result<String> {
+    fields.remove(name).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("semantic pattern section missing {name}"),
+        )
+    })
+}
+
+fn parse_toml_scalar(value: &str) -> String {
+    let value = value.trim();
+    if let Some(body) = value
+        .strip_prefix('"')
+        .and_then(|body| body.strip_suffix('"'))
+    {
+        return unescape_toml_basic_string(body);
+    }
+    value.to_owned()
+}
+
+fn unescape_toml_basic_string(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    let mut escaped = false;
+    for ch in value.chars() {
+        if escaped {
+            match ch {
+                '"' => out.push('"'),
+                '\\' => out.push('\\'),
+                'n' => out.push('\n'),
+                'r' => out.push('\r'),
+                't' => out.push('\t'),
+                other => {
+                    out.push('\\');
+                    out.push(other);
+                }
+            }
+            escaped = false;
+        } else if ch == '\\' {
+            escaped = true;
+        } else {
+            out.push(ch);
+        }
+    }
+    if escaped {
+        out.push('\\');
+    }
+    out
+}
+
+fn parse_usize_field(name: &str, value: &str) -> io::Result<usize> {
+    value.parse::<usize>().map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("invalid {name} value {value:?}: {error}"),
+        )
+    })
+}
+
+fn parse_coordinate_kind(value: &str) -> io::Result<SemanticsKind> {
+    match value {
+        "lexer-action" => Ok(SemanticsKind::LexerAction),
+        "lexer-predicate" => Ok(SemanticsKind::LexerPredicate),
+        "parser-predicate" | "predicate" => Ok(SemanticsKind::ParserPredicate),
+        "parser-action" | "action" => Ok(SemanticsKind::ParserAction),
+        other => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("unknown semantic coordinate kind {other}"),
+        )),
+    }
+}
+
 #[derive(Debug)]
 struct Args {
     lexer: Option<PathBuf>,
@@ -676,6 +1130,8 @@ struct Args {
     require_generated_parser: bool,
     allow_unsupported_lexer_actions: bool,
     sem_unknown: SemUnknownPolicy,
+    sem_patterns: SemPatternFile,
+    require_full_semantics: bool,
 }
 
 impl Args {
@@ -696,6 +1152,8 @@ impl Args {
         let mut require_generated_parser = false;
         let mut allow_unsupported_lexer_actions = false;
         let mut sem_unknown = SemUnknownPolicy::default();
+        let mut sem_patterns = SemPatternFile::default();
+        let mut require_full_semantics = false;
 
         let mut iter = env::args().skip(1);
         while let Some(arg) = iter.next() {
@@ -708,6 +1166,12 @@ impl Args {
                 "--out-dir" => out_dir = Some(PathBuf::from(next_arg(&mut iter, "--out-dir")?)),
                 "--require-generated-parser" => require_generated_parser = true,
                 "--allow-unsupported-lexer-actions" => allow_unsupported_lexer_actions = true,
+                "--sem-patterns" => {
+                    sem_patterns =
+                        load_sem_patterns(&PathBuf::from(next_arg(&mut iter, "--sem-patterns")?))
+                            .map_err(|error| format!("failed to load --sem-patterns: {error}"))?;
+                }
+                "--require-full-semantics" => require_full_semantics = true,
                 "--sem-unknown" => {
                     sem_unknown =
                         SemUnknownPolicy::parse_flag(&next_arg(&mut iter, "--sem-unknown")?)?;
@@ -734,6 +1198,8 @@ impl Args {
             require_generated_parser,
             allow_unsupported_lexer_actions,
             sem_unknown,
+            sem_patterns,
+            require_full_semantics,
         })
     }
 }
@@ -744,7 +1210,7 @@ fn next_arg(iter: &mut impl Iterator<Item = String>, flag: &str) -> Result<Strin
 }
 
 fn usage() -> String {
-    "usage: antlr4-rust-gen [--lexer Lexer.interp] [--parser Parser.interp] [--grammar Grammar.g4] [--out-dir DIR] [--require-generated-parser] [--allow-unsupported-lexer-actions] [--sem-unknown error|assume-true|assume-false]"
+    "usage: antlr4-rust-gen [--lexer Lexer.interp] [--parser Parser.interp] [--grammar Grammar.g4] [--out-dir DIR] [--require-generated-parser] [--allow-unsupported-lexer-actions] [--sem-unknown error|hook|assume-true|assume-false] [--sem-patterns FILE] [--require-full-semantics]"
         .to_owned()
 }
 
@@ -870,6 +1336,7 @@ fn render_lexer(
     grammar_source: Option<&str>,
     allow_unsupported_lexer_actions: bool,
     sem_unknown: SemUnknownPolicy,
+    patterns: &SemPatternFile,
 ) -> io::Result<String> {
     let type_name = rust_type_name(grammar_name);
     let metadata = render_metadata(grammar_name, data);
@@ -880,7 +1347,7 @@ fn render_lexer(
     )?;
     let predicates = grammar_source.map_or_else(
         || Ok(Vec::new()),
-        |source| lexer_predicate_templates(data, source),
+        |source| lexer_predicate_templates(data, source, patterns),
     )?;
     // Predicate coordinates with no translated template normally fall back to
     // always-true; `--sem-unknown=assume-false` flips that fallback, which
@@ -1230,10 +1697,18 @@ struct GeneratedParserCompileContext<'a> {
     generated_predicate_coordinates: &'a BTreeSet<(usize, usize)>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct TypedHookMapping {
+    rule_index: usize,
+    pred_index: usize,
+    method_name: String,
+}
+
 #[derive(Clone, Copy, Debug, Default)]
-struct ParserRenderOptions {
+struct ParserRenderOptions<'a> {
     require_generated_parser: bool,
     sem_unknown: SemUnknownPolicy,
+    patterns: Option<&'a SemPatternFile>,
 }
 
 #[derive(Clone, Copy)]
@@ -3148,12 +3623,12 @@ fn render_generated_step(
         } => {
             writeln!(
                 out,
-                "{pad}if !self.base.parser_semantic_predicate_matches_with_context_and_local(PARSER_PREDICATES, {rule_index}, {pred_index}, &__ctx, __precedence) {{"
+                "{pad}if !self.base.parser_semantic_ir_predicate_matches_with_context_and_local(parser_semantics(), {rule_index}, {pred_index}, &__ctx, __precedence) {{"
             )
             .expect("writing to a string cannot fail");
             writeln!(
                 out,
-                "{pad}    if let Some(__message) = self.base.parser_semantic_predicate_failure_message({rule_index}, {pred_index}, PARSER_PREDICATES) {{"
+                "{pad}    if let Some(__message) = self.base.parser_semantic_ir_predicate_failure_message({rule_index}, {pred_index}, parser_semantics()) {{"
             )
             .expect("writing to a string cannot fail");
             writeln!(
@@ -3692,7 +4167,7 @@ fn semantic_alt_candidate_condition_with_la(
         .into_iter()
         .map(|(rule_index, pred_index)| {
             format!(
-                "self.base.parser_semantic_predicate_matches_with_context_and_local(PARSER_PREDICATES, {rule_index}, {pred_index}, &__ctx, __precedence)"
+                "self.base.parser_semantic_ir_predicate_matches_with_context_and_local(parser_semantics(), {rule_index}, {pred_index}, &__ctx, __precedence)"
             )
         })
         .collect::<Vec<_>>();
@@ -4232,28 +4707,26 @@ fn render_parser_after_action_dispatch(after_actions: &[Vec<ActionTemplate>]) ->
 fn render_parser_parse_rule_fallback(
     init_action_rules: &[usize],
     track_alt_numbers: bool,
-    predicates: &[((usize, usize), PredicateTemplate)],
-    data: &InterpData,
-    int_members: &[IntMemberTemplate],
+    _predicates: &[((usize, usize), PredicateTemplate)],
     rule_args: &[(usize, usize, RuleArgTemplate)],
     member_actions: &[(usize, usize, i64)],
-    return_actions: &[(usize, String, i64)],
     has_action_dispatch: bool,
     has_predicate_dispatch: bool,
     has_return_actions: bool,
     buffer_actions: bool,
     unknown_policy_literal: Option<&str>,
-) -> io::Result<String> {
+) -> String {
     let mut out = String::new();
-    if has_predicate_dispatch || has_return_actions || unknown_policy_literal.is_some() {
+    if has_predicate_dispatch
+        || !member_actions.is_empty()
+        || has_return_actions
+        || unknown_policy_literal.is_some()
+    {
         writeln!(
             out,
-            "let (tree, actions) = self.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence, antlr4_runtime::ParserRuntimeOptions {{ init_action_rules: &{}, track_alt_numbers: {track_alt_numbers}, predicates: &{}, rule_args: &{}, member_actions: &{}, return_actions: &{}, unknown_predicate_policy: {} }})?;",
+            "let (tree, actions) = self.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence, antlr4_runtime::ParserRuntimeOptions {{ init_action_rules: &{}, track_alt_numbers: {track_alt_numbers}, predicates: &[], semantics: Some(parser_semantics()), rule_args: &{}, member_actions: &[], return_actions: &[], unknown_predicate_policy: {} }})?;",
             render_usize_array(init_action_rules),
-            render_parser_predicate_array(predicates, data, int_members)?,
             render_parser_rule_arg_array(rule_args),
-            render_parser_member_action_array(member_actions),
-            render_parser_return_action_array(return_actions, data)?,
             unknown_policy_literal
                 .unwrap_or("antlr4_runtime::UnknownSemanticPolicy::AssumeTrue")
         )
@@ -4279,9 +4752,8 @@ fn render_parser_parse_rule_fallback(
         )
         .expect("writing to a string cannot fail");
     } else {
-        return Ok(
-            "self.base.parse_atn_rule_with_precedence(atn(), rule_index, precedence)".to_owned(),
-        );
+        return "self.base.parse_atn_rule_with_precedence(atn(), rule_index, precedence)"
+            .to_owned();
     }
 
     if has_action_dispatch {
@@ -4309,11 +4781,10 @@ fn render_parser_parse_rule_fallback(
         writeln!(out, "let _ = actions;").expect("writing to a string cannot fail");
     }
     writeln!(out, "Ok(tree)").expect("writing to a string cannot fail");
-    Ok(out
-        .lines()
+    out.lines()
         .map(|line| format!("        {line}"))
         .collect::<Vec<_>>()
-        .join("\n"))
+        .join("\n")
 }
 
 /// Renders a Rust parser module with one public method per grammar rule.
@@ -4381,8 +4852,10 @@ fn render_parser_with_options(
     grammar_name: &str,
     data: &InterpData,
     grammar_source: Option<&str>,
-    options: ParserRenderOptions,
+    options: ParserRenderOptions<'_>,
 ) -> io::Result<String> {
+    let empty_patterns = SemPatternFile::default();
+    let patterns = options.patterns.unwrap_or(&empty_patterns);
     let type_name = rust_type_name(grammar_name);
     let metadata = render_metadata(grammar_name, data);
     let token_constants = render_token_constants(data);
@@ -4401,7 +4874,7 @@ fn render_parser_with_options(
     )?;
     let predicates = grammar_source.map_or_else(
         || Ok(Vec::new()),
-        |grammar| parser_predicate_templates(data, grammar),
+        |grammar| parser_predicate_templates(data, grammar, patterns),
     )?;
     let rule_args =
         grammar_source.map_or_else(|| Ok(Vec::new()), |grammar| parser_rule_args(data, grammar))?;
@@ -4486,41 +4959,45 @@ fn render_parser_with_options(
     let unknown_policy_literal = match options.sem_unknown {
         SemUnknownPolicy::AssumeTrue => None,
         SemUnknownPolicy::AssumeFalse => Some("antlr4_runtime::UnknownSemanticPolicy::AssumeFalse"),
+        SemUnknownPolicy::Hook => Some("antlr4_runtime::UnknownSemanticPolicy::Error"),
         SemUnknownPolicy::Error => Some("antlr4_runtime::UnknownSemanticPolicy::Error"),
     };
     let parse_rule_fallback = render_parser_parse_rule_fallback(
         &init_action_rules,
         track_alt_numbers,
         &predicates,
-        data,
-        &int_members,
         &rule_args,
         &member_actions,
-        &return_actions,
         has_action_dispatch,
         has_predicate_dispatch,
         has_return_actions,
         false,
         unknown_policy_literal,
-    )?;
+    );
     let parse_rule_fallback_buffered = render_parser_parse_rule_fallback(
         &init_action_rules,
         track_alt_numbers,
         &predicates,
-        data,
-        &int_members,
         &rule_args,
         &member_actions,
-        &return_actions,
         has_action_dispatch,
         has_predicate_dispatch,
         has_return_actions,
         true,
         unknown_policy_literal,
-    )?;
+    );
     let after_action_dispatch = render_parser_after_action_dispatch(&after_actions);
-    let parser_predicate_constant =
-        render_parser_predicate_constant(&predicates, data, &int_members)?;
+    let parser_semantics_function = render_parser_semantics_function(
+        &predicates,
+        data,
+        &int_members,
+        &member_actions,
+        &return_actions,
+    )?;
+    let typed_hook_adapter = render_typed_hook_adapter(
+        &type_name,
+        &parser_typed_hook_mappings(data, grammar_source, patterns)?,
+    );
     let adaptive_direct_allowed = !has_action_dispatch
         && !track_alt_numbers
         && !has_predicate_dispatch
@@ -4576,7 +5053,8 @@ use std::sync::OnceLock;
 {token_constants}
 {rule_constants}
 {metadata}
-{parser_predicate_constant}
+{parser_semantics_function}
+{typed_hook_adapter}
 {ctx_rooted_action_states_constant}
 
 static ATN_CELL: OnceLock<Atn> = OnceLock::new();
@@ -4982,6 +5460,7 @@ enum TokenDisplaySource {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum PredicateTemplate {
+    Hook,
     True,
     False,
     FalseWithMessage {
@@ -5029,7 +5508,8 @@ enum PredicateTemplate {
 const fn can_generate_parser_predicate(predicate: &PredicateTemplate) -> bool {
     matches!(
         predicate,
-        PredicateTemplate::True
+        PredicateTemplate::Hook
+            | PredicateTemplate::True
             | PredicateTemplate::False
             | PredicateTemplate::FalseWithMessage { .. }
             | PredicateTemplate::Invoke { .. }
@@ -5246,12 +5726,13 @@ fn rust_block_comment_text(value: &str) -> String {
 fn lexer_predicate_templates(
     data: &InterpData,
     grammar_source: &str,
+    patterns: &SemPatternFile,
 ) -> io::Result<Vec<((usize, usize), PredicateTemplate)>> {
     let predicates = lexer_predicate_transitions(data)?;
     if predicates.is_empty() {
         return Ok(Vec::new());
     }
-    let templates = extract_supported_predicate_templates(grammar_source)?;
+    let templates = extract_supported_predicate_templates(grammar_source, patterns)?;
     if templates.is_empty() {
         return Ok(Vec::new());
     }
@@ -5273,6 +5754,7 @@ fn lexer_predicate_templates(
 fn parser_predicate_templates(
     data: &InterpData,
     grammar_source: &str,
+    patterns: &SemPatternFile,
 ) -> io::Result<Vec<((usize, usize), PredicateTemplate)>> {
     let predicates = lexer_predicate_transitions(data)?;
     let mut mapped = Vec::new();
@@ -5280,12 +5762,24 @@ fn parser_predicate_templates(
     let mut predicate_index = 0;
     while let Some(block) = next_predicate_action_block(grammar_source, offset) {
         offset = block.after_brace;
-        if let Some(template) = parse_predicate_template(block.body) {
+        let coordinates = predicates.get(predicate_index).copied();
+        let override_template = coordinates.and_then(|(rule_index, pred_index)| {
+            patterns.coordinate_predicate_template(
+                SemanticsKind::ParserPredicate,
+                data.rule_names.get(rule_index).map(String::as_str),
+                Some(pred_index),
+            )
+        });
+        let template = match override_template {
+            Some(template) => template,
+            None => parse_predicate_template_with_patterns(block.body, patterns)?,
+        };
+        if let Some(template) = template {
             let template = match predicate_fail_message(grammar_source, block.after_brace) {
                 Some(message) => predicate_template_with_fail_message(template, message),
                 None => template,
             };
-            let Some(coordinates) = predicates.get(predicate_index).copied() else {
+            let Some(coordinates) = coordinates else {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     format!(
@@ -5679,12 +6173,13 @@ impl<'a> GrammarSourceCursor<'a> {
 /// predicate transitions.
 fn extract_supported_predicate_templates(
     grammar_source: &str,
+    patterns: &SemPatternFile,
 ) -> io::Result<Vec<PredicateTemplate>> {
     let mut templates = Vec::new();
     let mut offset = 0;
     while let Some(block) = next_predicate_action_block(grammar_source, offset) {
         offset = block.after_brace;
-        if let Some(template) = parse_predicate_template(block.body) {
+        if let Some(template) = parse_predicate_template_with_patterns(block.body, patterns)? {
             templates.push(template);
         } else if block.body.contains('<') {
             return Err(io::Error::new(
@@ -6166,6 +6661,16 @@ fn parse_predicate_template(body: &str) -> Option<PredicateTemplate> {
             .or_else(|| parse_lt_equals_predicate(body))
             .or_else(|| parse_la_not_equals_predicate(body)),
     }
+}
+
+fn parse_predicate_template_with_patterns(
+    body: &str,
+    patterns: &SemPatternFile,
+) -> io::Result<Option<PredicateTemplate>> {
+    Ok(match parse_predicate_template(body) {
+        Some(template) => Some(template),
+        None => patterns.predicate_template(body)?,
+    })
 }
 
 fn parse_raw_boolean_predicate(body: &str) -> Option<PredicateTemplate> {
@@ -7344,7 +7849,8 @@ fn render_lexer_predicate_expression(template: &PredicateTemplate) -> String {
         PredicateTemplate::ColumnGreaterOrEqual(value) => {
             format!("_base.column_at(predicate.position()) >= {value}")
         }
-        PredicateTemplate::Invoke { .. }
+        PredicateTemplate::Hook
+        | PredicateTemplate::Invoke { .. }
         | PredicateTemplate::FalseWithMessage { .. }
         | PredicateTemplate::LocalIntEquals { .. }
         | PredicateTemplate::LocalIntLessOrEqual { .. }
@@ -8353,6 +8859,7 @@ fn render_usize_array(values: &[usize]) -> String {
 }
 
 /// Renders parser predicate metadata shared by generated predicate checks.
+#[allow(dead_code)]
 fn render_parser_predicate_constant(
     predicates: &[((usize, usize), PredicateTemplate)],
     data: &InterpData,
@@ -8364,8 +8871,322 @@ fn render_parser_predicate_constant(
     ))
 }
 
+fn render_parser_semantics_function(
+    predicates: &[((usize, usize), PredicateTemplate)],
+    data: &InterpData,
+    members: &[IntMemberTemplate],
+    member_actions: &[(usize, usize, i64)],
+    return_actions: &[(usize, String, i64)],
+) -> io::Result<String> {
+    let predicate_builders = render_parser_semir_predicate_builders(predicates, data, members)?;
+    let action_builders =
+        render_parser_semir_action_builders(member_actions, return_actions, data)?;
+    Ok(format!(
+        r#"fn parser_semantics() -> &'static antlr4_runtime::ParserSemantics {{
+    static SEMANTICS_CELL: OnceLock<antlr4_runtime::ParserSemantics> = OnceLock::new();
+    SEMANTICS_CELL.get_or_init(|| {{
+        let mut ir = antlr4_runtime::semir::SemIr::new();
+        let mut predicates = Vec::new();
+{predicate_builders}
+        let mut actions = Vec::new();
+{action_builders}
+        antlr4_runtime::ParserSemantics {{ ir, predicates, actions }}
+    }})
+}}
+"#
+    ))
+}
+
+fn parser_typed_hook_mappings(
+    data: &InterpData,
+    grammar_source: Option<&str>,
+    patterns: &SemPatternFile,
+) -> io::Result<Vec<TypedHookMapping>> {
+    let Some(grammar_source) = grammar_source else {
+        return Ok(Vec::new());
+    };
+    let coordinates = lexer_predicate_transitions(data)?;
+    let mut mappings = Vec::new();
+    let mut offset = 0;
+    let mut predicate_index = 0;
+    while let Some(block) = next_predicate_action_block(grammar_source, offset) {
+        offset = block.after_brace;
+        let Some((rule_index, pred_index)) = coordinates.get(predicate_index).copied() else {
+            predicate_index += 1;
+            continue;
+        };
+        let helper = bare_predicate_helper_name(block.body);
+        let forced_hook = patterns
+            .coordinate_predicate_template(
+                SemanticsKind::ParserPredicate,
+                data.rule_names.get(rule_index).map(String::as_str),
+                Some(pred_index),
+            )
+            .is_some_and(|template| matches!(template, Some(PredicateTemplate::Hook)));
+        let parsed = parse_predicate_template_with_patterns(block.body, patterns)?;
+        if let Some(helper) = helper
+            && (forced_hook || parsed.is_none() || matches!(parsed, Some(PredicateTemplate::Hook)))
+        {
+            mappings.push(TypedHookMapping {
+                rule_index,
+                pred_index,
+                method_name: rust_function_name(&helper),
+            });
+        }
+        predicate_index += 1;
+    }
+    mappings.sort_by_key(|mapping| (mapping.rule_index, mapping.pred_index));
+    mappings.dedup();
+    Ok(mappings)
+}
+
+fn bare_predicate_helper_name(body: &str) -> Option<String> {
+    let body = body.trim();
+    let body = body
+        .strip_prefix("this.")
+        .or_else(|| body.strip_prefix("self."))
+        .unwrap_or(body);
+    let name = body.strip_suffix("()")?;
+    let mut chars = name.chars();
+    let first = chars.next()?;
+    if !(first == '_' || first.is_ascii_alphabetic()) {
+        return None;
+    }
+    chars
+        .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+        .then(|| name.to_owned())
+}
+
+fn render_typed_hook_adapter(type_name: &str, mappings: &[TypedHookMapping]) -> String {
+    if mappings.is_empty() {
+        return String::new();
+    }
+    let trait_name = format!("{type_name}Hooks");
+    let adapter_name = format!("{type_name}TypedHooks");
+    let mut methods = BTreeSet::new();
+    for mapping in mappings {
+        methods.insert(mapping.method_name.clone());
+    }
+    let method_decls = methods
+        .iter()
+        .map(|method| {
+            format!(
+                "    fn {method}<S>(&mut self, ctx: &mut antlr4_runtime::ParserSemCtx<'_, S>) -> bool\n    where\n        S: TokenSource;"
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let arms = mappings
+        .iter()
+        .map(|mapping| {
+            let rule_index = mapping.rule_index;
+            let pred_index = mapping.pred_index;
+            let method = &mapping.method_name;
+            format!("            ({rule_index}, {pred_index}) => Some(self.0.{method}(ctx)),")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!(
+        r#"pub trait {trait_name}: Sized {{
+{method_decls}
+
+    fn custom_action<S>(&mut self, _ctx: &mut antlr4_runtime::ParserSemCtx<'_, S>, _action: antlr4_runtime::ParserAction)
+    where
+        S: TokenSource,
+    {{
+    }}
+}}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct {adapter_name}<T>(pub T);
+
+impl<T> {adapter_name}<T> {{
+    pub const fn new(inner: T) -> Self {{ Self(inner) }}
+}}
+
+impl<T> antlr4_runtime::SemanticHooks for {adapter_name}<T>
+where
+    T: {trait_name},
+{{
+    fn sempred<S>(&mut self, ctx: &mut antlr4_runtime::ParserSemCtx<'_, S>, rule_index: usize, pred_index: usize) -> Option<bool>
+    where
+        S: TokenSource,
+    {{
+        match (rule_index, pred_index) {{
+{arms}
+            _ => None,
+        }}
+    }}
+
+    fn action<S>(&mut self, ctx: &mut antlr4_runtime::ParserSemCtx<'_, S>, action: antlr4_runtime::ParserAction) -> bool
+    where
+        S: TokenSource,
+    {{
+        self.0.custom_action(ctx, action);
+        false
+    }}
+}}
+"#
+    )
+}
+
+fn render_parser_semir_predicate_builders(
+    predicates: &[((usize, usize), PredicateTemplate)],
+    data: &InterpData,
+    members: &[IntMemberTemplate],
+) -> io::Result<String> {
+    let mut out = String::new();
+    for ((rule_index, pred_index), predicate) in predicates {
+        let expr = render_parser_semir_predicate_expr(predicate, data, members)?;
+        let failure_message = match predicate {
+            PredicateTemplate::FalseWithMessage { message } => {
+                format!("Some(\"{}\")", rust_string(message))
+            }
+            _ => "None".to_owned(),
+        };
+        writeln!(
+            out,
+            "        let __expr = {expr};\n        predicates.push(antlr4_runtime::ParserSemanticPredicate {{ rule_index: {rule_index}, pred_index: {pred_index}, expr: __expr, failure_message: {failure_message} }});"
+        )
+        .expect("writing to a string cannot fail");
+    }
+    Ok(out)
+}
+
+fn render_parser_semir_action_builders(
+    member_actions: &[(usize, usize, i64)],
+    return_actions: &[(usize, String, i64)],
+    data: &InterpData,
+) -> io::Result<String> {
+    let mut out = String::new();
+    for (source_state, member, delta) in member_actions {
+        writeln!(
+            out,
+            "        let __value = ir.expr(antlr4_runtime::semir::PExpr::Int({delta}));\n        let __stmt = ir.stmt(antlr4_runtime::semir::AStmt::AddMember({member}, __value));\n        actions.push(antlr4_runtime::ParserSemanticAction {{ source_state: {source_state}, rule_index: usize::MAX, stmt: __stmt, speculative: true }});"
+        )
+        .expect("writing to a string cannot fail");
+    }
+    let action_rules = parser_action_state_rules(data)?;
+    for (source_state, name, value) in return_actions {
+        let rule_index = action_rules.get(source_state).copied().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("return assignment has no action transition at state {source_state}"),
+            )
+        })?;
+        writeln!(
+            out,
+            "        let __name = ir.intern(\"{}\");\n        let __value = ir.expr(antlr4_runtime::semir::PExpr::Int({value}));\n        let __stmt = ir.stmt(antlr4_runtime::semir::AStmt::SetReturn(__name, __value));\n        actions.push(antlr4_runtime::ParserSemanticAction {{ source_state: {source_state}, rule_index: {rule_index}, stmt: __stmt, speculative: false }});",
+            rust_string(name)
+        )
+        .expect("writing to a string cannot fail");
+    }
+    Ok(out)
+}
+
+#[allow(clippy::too_many_lines)]
+fn render_parser_semir_predicate_expr(
+    predicate: &PredicateTemplate,
+    data: &InterpData,
+    members: &[IntMemberTemplate],
+) -> io::Result<String> {
+    match predicate {
+        PredicateTemplate::Hook => Ok(
+            "ir.expr(antlr4_runtime::semir::PExpr::Hook(antlr4_runtime::semir::HookId::new(0)))"
+                .to_owned(),
+        ),
+        PredicateTemplate::True => {
+            Ok("ir.expr(antlr4_runtime::semir::PExpr::Bool(true))".to_owned())
+        }
+        PredicateTemplate::False | PredicateTemplate::FalseWithMessage { .. } => {
+            Ok("ir.expr(antlr4_runtime::semir::PExpr::Bool(false))".to_owned())
+        }
+        PredicateTemplate::Invoke { value } => Ok(format!(
+            "ir.expr(antlr4_runtime::semir::PExpr::EvalTrace({value}))"
+        )),
+        PredicateTemplate::LocalIntEquals { value } => Ok(render_local_arg_semir_cmp("Eq", *value)),
+        PredicateTemplate::LocalIntLessOrEqual { value } => {
+            Ok(render_local_arg_semir_cmp("Le", *value))
+        }
+        PredicateTemplate::MemberModuloEquals {
+            member,
+            modulus,
+            value,
+            equals,
+        } => {
+            if *modulus == 0 {
+                return Ok("ir.expr(antlr4_runtime::semir::PExpr::Bool(false))".to_owned());
+            }
+            let member = member_id(members, member)?;
+            let op = if *equals { "Eq" } else { "Ne" };
+            Ok(format!(
+                "{{ let __member = ir.expr(antlr4_runtime::semir::PExpr::Member({member})); let __modulus = ir.expr(antlr4_runtime::semir::PExpr::Int({modulus})); let __actual = ir.expr(antlr4_runtime::semir::PExpr::Arith(antlr4_runtime::semir::ArithOp::Mod, __member, __modulus)); let __expected = ir.expr(antlr4_runtime::semir::PExpr::Int({value})); ir.expr(antlr4_runtime::semir::PExpr::Cmp(antlr4_runtime::semir::CmpOp::{op}, __actual, __expected)) }}"
+            ))
+        }
+        PredicateTemplate::MemberEquals {
+            member,
+            value,
+            equals,
+        } => {
+            let member = member_id(members, member)?;
+            let op = if *equals { "Eq" } else { "Ne" };
+            Ok(format!(
+                "{{ let __actual = ir.expr(antlr4_runtime::semir::PExpr::Member({member})); let __expected = ir.expr(antlr4_runtime::semir::PExpr::Int({value})); ir.expr(antlr4_runtime::semir::PExpr::Cmp(antlr4_runtime::semir::CmpOp::{op}, __actual, __expected)) }}"
+            ))
+        }
+        PredicateTemplate::LookaheadTextEquals { offset, text } => Ok(format!(
+            "{{ let __actual = ir.expr(antlr4_runtime::semir::PExpr::TokenText({offset})); let __text = ir.intern(\"{}\"); let __expected = ir.expr(antlr4_runtime::semir::PExpr::Str(__text)); ir.expr(antlr4_runtime::semir::PExpr::Cmp(antlr4_runtime::semir::CmpOp::Eq, __actual, __expected)) }}",
+            rust_string(text)
+        )),
+        PredicateTemplate::LookaheadNotEquals { offset, token_name } => {
+            let token_type = token_type_for_name(data, token_name).ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("unknown predicate token {token_name}"),
+                )
+            })?;
+            Ok(format!(
+                "{{ let __actual = ir.expr(antlr4_runtime::semir::PExpr::La({offset})); let __expected = ir.expr(antlr4_runtime::semir::PExpr::Int({token_type})); ir.expr(antlr4_runtime::semir::PExpr::Cmp(antlr4_runtime::semir::CmpOp::Ne, __actual, __expected)) }}"
+            ))
+        }
+        PredicateTemplate::TokenPairAdjacent => {
+            Ok("ir.expr(antlr4_runtime::semir::PExpr::TokenIndexAdjacent)".to_owned())
+        }
+        PredicateTemplate::ContextChildRuleTextNotEquals { rule_name, text } => {
+            let rule_index = data
+                .rule_names
+                .iter()
+                .position(|name| name == rule_name)
+                .ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("unknown predicate rule {rule_name}"),
+                    )
+                })?;
+            Ok(format!(
+                "{{ let __actual = ir.expr(antlr4_runtime::semir::PExpr::CtxRuleText({rule_index})); let __text = ir.intern(\"{}\"); let __expected = ir.expr(antlr4_runtime::semir::PExpr::Str(__text)); ir.expr(antlr4_runtime::semir::PExpr::Cmp(antlr4_runtime::semir::CmpOp::Ne, __actual, __expected)) }}",
+                rust_string(text)
+            ))
+        }
+        PredicateTemplate::TextEquals(_)
+        | PredicateTemplate::TokenStartColumnEquals(_)
+        | PredicateTemplate::ColumnLessThan(_)
+        | PredicateTemplate::ColumnGreaterOrEqual(_) => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "lexer-only predicate cannot be lowered for parser SemIR",
+        )),
+    }
+}
+
+fn render_local_arg_semir_cmp(op: &str, value: i64) -> String {
+    format!(
+        "{{ let __local = ir.expr(antlr4_runtime::semir::PExpr::LocalArg); let __absent = ir.expr(antlr4_runtime::semir::PExpr::IsNull(__local)); let __expected = ir.expr(antlr4_runtime::semir::PExpr::Int({value})); let __comparison = ir.expr(antlr4_runtime::semir::PExpr::Cmp(antlr4_runtime::semir::CmpOp::{op}, __local, __expected)); ir.expr(antlr4_runtime::semir::PExpr::Or([__absent, __comparison].into())) }}"
+    )
+}
+
 /// Renders parser predicate metadata as an inline slice consumed by the runtime
 /// parser interpreter.
+#[allow(dead_code)]
 fn render_parser_predicate_array(
     predicates: &[((usize, usize), PredicateTemplate)],
     data: &InterpData,
@@ -8375,6 +9196,12 @@ fn render_parser_predicate_array(
     for ((rule_index, pred_index), predicate) in predicates {
         let expression = match predicate {
             PredicateTemplate::True => "antlr4_runtime::ParserPredicate::True".to_owned(),
+            PredicateTemplate::Hook => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "hook predicates lower only through parser SemIR",
+                ));
+            }
             PredicateTemplate::False => "antlr4_runtime::ParserPredicate::False".to_owned(),
             PredicateTemplate::FalseWithMessage { message } => {
                 format!(
@@ -8487,6 +9314,7 @@ fn render_parser_rule_arg_array(args: &[(usize, usize, RuleArgTemplate)]) -> Str
 }
 
 /// Renders parser member-action metadata for speculative predicate evaluation.
+#[allow(dead_code)]
 fn render_parser_member_action_array(args: &[(usize, usize, i64)]) -> String {
     let items = args
         .iter()
@@ -8501,6 +9329,7 @@ fn render_parser_member_action_array(args: &[(usize, usize, i64)]) -> String {
 }
 
 /// Renders parser return-assignment metadata keyed by ATN action state.
+#[allow(dead_code)]
 fn render_parser_return_action_array(
     args: &[(usize, String, i64)],
     data: &InterpData,
@@ -8791,6 +9620,7 @@ atn:
             None,
             false,
             SemUnknownPolicy::default(),
+            &SemPatternFile::default(),
         )
         .expect("lexer module should render");
         let parser =
@@ -9698,7 +10528,7 @@ atn:
 
         assert!(
             rendered.contains(
-                "parser_semantic_predicate_matches_with_context_and_local(PARSER_PREDICATES, 2, 1, &__ctx, __precedence)"
+                "parser_semantic_ir_predicate_matches_with_context_and_local(parser_semantics(), 2, 1, &__ctx, __precedence)"
             )
         );
         assert!(rendered.contains("failed_predicate_option_error(2, __message)"));
@@ -9796,9 +10626,6 @@ atn:
             &[],
             false,
             &[],
-            &minimal_parser_data(),
-            &[],
-            &[],
             &[],
             &[],
             true,
@@ -9806,8 +10633,7 @@ atn:
             false,
             false,
             None,
-        )
-        .expect("fallback should render");
+        );
 
         assert!(fallback.contains(
             "parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence"
@@ -9835,9 +10661,6 @@ atn:
             &[],
             false,
             &[],
-            &minimal_parser_data(),
-            &[],
-            &[],
             &[],
             &[],
             true,
@@ -9845,8 +10668,7 @@ atn:
             false,
             true,
             None,
-        )
-        .expect("buffered fallback should render");
+        );
 
         // Each buffered action is pushed as `GeneratedAction::Parser { action, tree }`,
         // tagging `$ctx`-rooted actions with this child's tree (the rest `None`).
@@ -10419,10 +11241,10 @@ s @init {<SetMember("i","1")>} : ;
 
         assert!(rendered.contains("if __prediction.has_semantic_context"));
         assert!(rendered.contains(
-            "parser_semantic_predicate_matches_with_context_and_local(PARSER_PREDICATES, 1, 0, &__ctx, __precedence)"
+            "parser_semantic_ir_predicate_matches_with_context_and_local(parser_semantics(), 1, 0, &__ctx, __precedence)"
         ));
         assert!(rendered.contains(
-            "parser_semantic_predicate_matches_with_context_and_local(PARSER_PREDICATES, 1, 1, &__ctx, __precedence)"
+            "parser_semantic_ir_predicate_matches_with_context_and_local(parser_semantics(), 1, 1, &__ctx, __precedence)"
         ));
         assert!(rendered.contains("__semantic_la == 1"));
         assert!(
@@ -10552,7 +11374,7 @@ s @init {<SetMember("i","1")>} : ;
 
         assert!(rendered.contains("if __prediction.alt == 1"));
         assert!(rendered.contains(
-            "parser_semantic_predicate_matches_with_context_and_local(PARSER_PREDICATES, 1, 0, &__ctx, __precedence)"
+            "parser_semantic_ir_predicate_matches_with_context_and_local(parser_semantics(), 1, 0, &__ctx, __precedence)"
         ));
         assert!(rendered.contains("__semantic_la == 3"));
         assert!(
@@ -10610,7 +11432,7 @@ s @init {<SetMember("i","1")>} : ;
 
         assert!(rendered.contains("(__semantic_la == 1) || (__semantic_la == 3)"));
         assert!(rendered.contains(
-            "(self.base.parser_semantic_predicate_matches_with_context_and_local(PARSER_PREDICATES, 2, 0, &__ctx, __precedence) && __semantic_la == 2)"
+            "(self.base.parser_semantic_ir_predicate_matches_with_context_and_local(parser_semantics(), 2, 0, &__ctx, __precedence) && __semantic_la == 2)"
         ));
         assert!(
             rendered.contains("antlr4_runtime::ParserAtnPrediction { alt: 2, ..__prediction }")
@@ -10752,6 +11574,7 @@ s @init {<SetMember("i","1")>} : ;
         let templates = extract_supported_predicate_templates(
             r#"fragment ID1 : { <Column()> \< 2 }? [a-zA-Z];
 fragment ID2 : { <Column()> >= 2 }? [a-zA-Z];"#,
+            &SemPatternFile::default(),
         )
         .expect("supported predicate expressions should extract");
 
@@ -11479,7 +12302,81 @@ ID: [a-z]+ { customJava(); };
             SemUnknownPolicy::parse_flag("assume-false").expect("assume-false parses"),
             SemUnknownPolicy::AssumeFalse
         );
+        assert_eq!(
+            SemUnknownPolicy::parse_flag("hook").expect("hook parses"),
+            SemUnknownPolicy::Hook
+        );
         assert!(SemUnknownPolicy::parse_flag("bogus").is_err());
+    }
+
+    #[test]
+    fn sem_pattern_file_lowers_exact_predicate_body() {
+        let patterns = parse_sem_patterns(
+            r#"
+[[pattern]]
+match = "isTypeName()"
+lower = "bool(false)"
+"#,
+        )
+        .expect("pattern file parses");
+        let predicates =
+            parser_predicate_templates(&predicate_parser_data(), PREDICATE_GRAMMAR, &patterns)
+                .expect("pattern should lower predicate");
+
+        assert_eq!(predicates[0].1, PredicateTemplate::False);
+    }
+
+    #[test]
+    fn coordinate_override_routes_parser_predicate_to_typed_hook() {
+        let patterns = parse_sem_patterns(
+            r#"
+[[coordinate]]
+kind = "predicate"
+rule = "s"
+index = 0
+dispose = "hook"
+"#,
+        )
+        .expect("pattern file parses");
+        let entries = collect_parser_semantics(
+            &predicate_parser_data(),
+            Some(PREDICATE_GRAMMAR),
+            SemUnknownPolicy::AssumeTrue,
+            &patterns,
+        )
+        .expect("collection should succeed");
+        assert_eq!(entries[0].disposition, SemanticsDisposition::Hooked);
+
+        let module = render_parser_with_options(
+            "SParser",
+            &predicate_parser_data(),
+            Some(PREDICATE_GRAMMAR),
+            ParserRenderOptions {
+                patterns: Some(&patterns),
+                ..ParserRenderOptions::default()
+            },
+        )
+        .expect("parser should render");
+        assert!(module.contains("pub trait SParserHooks"));
+        assert!(module.contains("fn is_type_name"));
+        assert!(module.contains("(0, 0) => Some(self.0.is_type_name(ctx))"));
+        assert!(module.contains("PExpr::Hook"));
+    }
+
+    #[test]
+    fn require_full_semantics_rejects_policy_fallbacks_but_allows_hooks() {
+        let fallback = collect_parser_semantics(
+            &predicate_parser_data(),
+            Some(PREDICATE_GRAMMAR),
+            SemUnknownPolicy::AssumeTrue,
+            &SemPatternFile::default(),
+        )
+        .expect("collection should succeed");
+        assert!(enforce_require_full_semantics(true, &fallback).is_err());
+
+        let mut hooked = fallback;
+        hooked[0].disposition = SemanticsDisposition::Hooked;
+        enforce_require_full_semantics(true, &hooked).expect("hooked coordinates are complete");
     }
 
     #[test]
@@ -11488,6 +12385,7 @@ ID: [a-z]+ { customJava(); };
             &predicate_parser_data(),
             Some(PREDICATE_GRAMMAR),
             SemUnknownPolicy::AssumeTrue,
+            &SemPatternFile::default(),
         )
         .expect("collection should succeed");
 
@@ -11509,6 +12407,7 @@ ID: [a-z]+ { customJava(); };
             &predicate_parser_data(),
             Some("parser grammar S;\ns : {true}? A ;\n"),
             SemUnknownPolicy::AssumeTrue,
+            &SemPatternFile::default(),
         )
         .expect("collection should succeed");
 
@@ -11523,6 +12422,7 @@ ID: [a-z]+ { customJava(); };
             &predicate_parser_data(),
             None,
             SemUnknownPolicy::AssumeFalse,
+            &SemPatternFile::default(),
         )
         .expect("collection should succeed");
 
@@ -11538,6 +12438,7 @@ ID: [a-z]+ { customJava(); };
             &predicate_parser_data(),
             Some(PREDICATE_GRAMMAR),
             SemUnknownPolicy::Error,
+            &SemPatternFile::default(),
         )
         .expect("collection should succeed");
 
@@ -11564,6 +12465,7 @@ ID: [a-z]+ { customJava(); };
             &predicate_parser_data(),
             Some("parser grammar S;\ns : {true}? A ;\n"),
             SemUnknownPolicy::Error,
+            &SemPatternFile::default(),
         )
         .expect("collection should succeed");
 
@@ -11577,6 +12479,7 @@ ID: [a-z]+ { customJava(); };
             &predicate_parser_data(),
             Some(PREDICATE_GRAMMAR),
             SemUnknownPolicy::AssumeTrue,
+            &SemPatternFile::default(),
         )
         .expect("collection should succeed");
 
@@ -11590,6 +12493,7 @@ ID: [a-z]+ { customJava(); };
             &predicate_parser_data(),
             Some(PREDICATE_GRAMMAR),
             SemUnknownPolicy::AssumeTrue,
+            &SemPatternFile::default(),
         )
         .expect("collection should succeed");
         let manifest = render_semantics_manifest(
@@ -11627,6 +12531,7 @@ ID: [a-z]+ { customJava(); };
             ParserRenderOptions {
                 require_generated_parser: false,
                 sem_unknown: SemUnknownPolicy::AssumeFalse,
+                patterns: None,
             },
         )
         .expect("parser should render");
@@ -11659,6 +12564,7 @@ ID: [a-z]+ { customJava(); };
             None,
             false,
             SemUnknownPolicy::AssumeFalse,
+            &SemPatternFile::default(),
         )
         .expect("lexer should render");
 
@@ -11674,6 +12580,7 @@ ID: [a-z]+ { customJava(); };
             None,
             false,
             SemUnknownPolicy::AssumeTrue,
+            &SemPatternFile::default(),
         )
         .expect("lexer should render");
 
