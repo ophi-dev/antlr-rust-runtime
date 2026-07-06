@@ -1428,10 +1428,34 @@ fn render_lexer(
         || Ok(Vec::new()),
         |source| lexer_action_templates(data, source, allow_unsupported_lexer_actions),
     )?;
-    let predicates = grammar_source.map_or_else(
+    let mut predicates = grammar_source.map_or_else(
         || Ok(Vec::new()),
         |source| lexer_predicate_templates(data, source, patterns),
     )?;
+    // A per-coordinate `[[coordinate]] dispose = "assume-false"` override on an
+    // uncovered lexer predicate resolves by ATN coordinate, so honor it as an
+    // explicit `false` predicate arm even when the global policy is not
+    // assume-false. Without this the coordinate would hit `run_predicate`'s
+    // default-true catch-all (or the compiled path), so the manifest's
+    // assume-false disposition would have no runtime effect.
+    for coordinate in lexer_predicate_transitions(data)? {
+        let (rule_index, pred_index) = coordinate;
+        let already_covered = predicates.iter().any(|(covered, _)| *covered == coordinate);
+        if already_covered {
+            continue;
+        }
+        let is_assume_false = patterns
+            .coordinate_override(
+                SemanticsKind::LexerPredicate,
+                data.rule_names.get(rule_index).map(String::as_str),
+                Some(pred_index),
+                None,
+            )
+            .is_some_and(|override_| override_.dispose == CoordinateDispose::AssumeFalse);
+        if is_assume_false {
+            predicates.push((coordinate, PredicateTemplate::False));
+        }
+    }
     // Lexer predicate transitions whose coordinate no translated template
     // covers. Generated lexers have no hook dispatch and no runtime
     // coordinate-recording, so these fall through `run_predicate`'s catch-all.
@@ -6016,18 +6040,26 @@ fn predicate_template_with_fail_message(
 }
 
 /// Pairs supported target-template actions with parser ATN action source states.
+///
+/// The rule-name-filtered walk runs first so a combined grammar's lexer-rule
+/// action templates are not mis-paired with parser ATN action states when the
+/// unfiltered counts happen to align. The unfiltered walk is the fallback for
+/// grammars where header resolution drops a real parser action (e.g. a `;`
+/// inside a comment defeats the scraper) — there the filtered count won't match
+/// the ATN states, so `parser_action_templates_from_template_slots` errors and
+/// we retry unfiltered.
 fn parser_action_templates(
     data: &InterpData,
     grammar_source: &str,
 ) -> io::Result<Vec<(usize, ActionTemplate)>> {
-    let templates = extract_action_template_slots_filtered(grammar_source, None);
-    match parser_action_templates_from_template_slots(data, templates) {
+    let filtered =
+        extract_action_template_slots_filtered(grammar_source, Some(&data.rule_names));
+    match parser_action_templates_from_template_slots(data, filtered) {
         Ok(actions) => Ok(actions),
-        Err(unfiltered_error) => {
-            let templates =
-                extract_action_template_slots_filtered(grammar_source, Some(&data.rule_names));
-            parser_action_templates_from_template_slots(data, templates)
-                .map_err(|_| unfiltered_error)
+        Err(filtered_error) => {
+            let unfiltered = extract_action_template_slots_filtered(grammar_source, None);
+            parser_action_templates_from_template_slots(data, unfiltered)
+                .map_err(|_| filtered_error)
         }
     }
 }
@@ -11917,6 +11949,40 @@ continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#,
     }
 
     #[test]
+    fn action_template_scan_filters_lexer_rule_actions() {
+        // In a combined grammar, the rule-name-filtered action scan must drop a
+        // lexer-rule action so it is not mis-paired with a parser ATN action
+        // state. `parser_action_templates` runs the filtered scan first for this
+        // reason — an unfiltered lexer-rule action occupies a slot position
+        // (even when its body is an unrecognized `None` template) and would
+        // shift state pairing.
+        let combined = concat!(
+            "grammar T;\n",
+            "s : {<write(\"$text\")>} A ;\n",
+            "ID : {<setType(\"X\")>} [a-z]+ ;\n",
+        );
+        let parser_rules = ["s".to_owned()];
+
+        // Filtered: only the parser rule `s`'s action slot survives.
+        let filtered_slots = extract_action_template_slots_filtered(combined, Some(&parser_rules));
+        assert_eq!(
+            filtered_slots.len(),
+            1,
+            "only the parser-rule action slot survives the filter: {filtered_slots:?}"
+        );
+        assert!(matches!(filtered_slots[0], Some(ActionTemplate::Text { .. })));
+
+        // Unfiltered: the lexer-rule action adds a second slot, which would
+        // drift state pairing — the reason the filtered pass runs first.
+        let unfiltered_slots = extract_action_template_slots_filtered(combined, None);
+        assert_eq!(
+            unfiltered_slots.len(),
+            2,
+            "unfiltered walk keeps the lexer-rule action slot too: {unfiltered_slots:?}"
+        );
+    }
+
+    #[test]
     fn action_source_block_slots_align_with_template_slots() {
         // A grammar mixing a `{...}` action block, a `returns [<...>]` signature
         // template, and another `{...}` block must produce span slots in exact
@@ -13140,6 +13206,34 @@ dispose = "hook"
                 "dispose {dispose}: {error}"
             );
         }
+    }
+
+    #[test]
+    fn lexer_per_coordinate_assume_false_override_renders_failing_arm() {
+        // A per-coordinate `dispose = "assume-false"` on an uncovered lexer
+        // predicate must render an explicit failing `run_predicate` arm and take
+        // the hook-taking token path even under the default global policy, so
+        // the override recorded in the manifest actually removes the guarded
+        // alternative at runtime.
+        let patterns = parse_sem_patterns(
+            "version = 1\n[[coordinate]]\nkind = \"lexer-predicate\"\nindex = 0\ndispose = \"assume-false\"\n",
+        )
+        .expect("pattern file parses");
+        let module = render_lexer(
+            "SLexer",
+            &predicate_parser_data(),
+            None,
+            false,
+            SemUnknownPolicy::AssumeTrue,
+            &patterns,
+        )
+        .expect("lexer should render");
+
+        // The uncovered coordinate now has an explicit `false` predicate arm and
+        // the lexer takes the hook-carrying token path (not next_token_compiled).
+        assert!(module.contains("=> { false }"), "override renders a failing arm");
+        assert!(module.contains("run_predicate"));
+        assert!(!module.contains("next_token_compiled(&mut self.base, atn(), lexer_dfa())"));
     }
 
     #[test]
