@@ -5375,22 +5375,27 @@ where
                 self.run_after_actions(rule_index, &__tree, start_index, stop_index);
             }}
         }}
+        // Surface unknown-predicate coordinates recorded under the Error policy
+        // at the top-level entry, BEFORE replaying buffered actions. Generated
+        // predicate steps evaluate on the committed path and are recovered as
+        // rule errors, so a parse that consulted an unimplemented hook predicate
+        // must fail with `AntlrError::Unsupported` instead of returning a
+        // recovered `Ok` tree — and it must not leak the buffered side effects
+        // (prints, member writes, user action hooks, `@after`) of a parse that
+        // is about to fail loud.
+        if allow_generated_fallback {{
+            if let Some(error) = self.base.take_unknown_semantic_error() {{
+                self.generated_actions.truncate(__generated_action_marker);
+                self.base.restore_int_members(__generated_member_checkpoint);
+                return Err(error);
+            }}
+        }}
         if __from_generated && allow_generated_fallback {{
             self.base.report_generated_parser_diagnostics();
             let __generated_actions = self.generated_actions.split_off(__generated_action_marker);
             self.base.restore_int_members(__generated_member_checkpoint);
             for __action in __generated_actions {{
                 self.run_generated_action(__action, &__tree);
-            }}
-        }}
-        // Surface unknown-predicate coordinates recorded under the Error policy
-        // at the top-level entry. Generated predicate steps evaluate on the
-        // committed path and are recovered as rule errors, so without this a
-        // parse that consulted an unimplemented hook predicate could return a
-        // recovered `Ok` tree instead of the documented `AntlrError::Unsupported`.
-        if allow_generated_fallback {{
-            if let Some(error) = self.base.take_unknown_semantic_error() {{
-                return Err(error);
             }}
         }}
         Ok(__tree)
@@ -12855,12 +12860,20 @@ dispose = "hook"
             },
         )
         .expect("parser should render");
-        assert!(
-            module.contains("if let Some(error) = self.base.take_unknown_semantic_error()"),
-            "generated top-level entry must surface recorded unknown-semantic coordinates"
-        );
+        let surface_at = module
+            .find("if let Some(error) = self.base.take_unknown_semantic_error()")
+            .expect("generated top-level entry must surface recorded unknown-semantic coordinates");
         // Guarded by the public entry only, not the nested (from-generated) path.
         assert!(module.contains("if allow_generated_fallback {"));
+        // The fail-loud check must run BEFORE buffered actions replay, so a
+        // parse that is about to fail does not leak action side effects.
+        let replay_at = module
+            .find("self.run_generated_action(__action, &__tree)")
+            .expect("generated entry replays buffered actions");
+        assert!(
+            surface_at < replay_at,
+            "the unknown-semantic error must be surfaced before replaying buffered actions"
+        );
     }
 
     #[test]
