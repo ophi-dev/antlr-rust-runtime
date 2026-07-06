@@ -5125,11 +5125,26 @@ fn render_parser_with_options(
         .collect::<Vec<_>>();
     // A non-default policy must reach the interpreter through the emitted
     // runtime options, so its literal forces the options-carrying call shape.
+    //
+    // A `hook`-disposed predicate coordinate (per-coordinate override or a
+    // helper lowered to `hook`) is a promise that a user hook owns it, so an
+    // *unimplemented* hook (default `NoSemanticHooks`, or a hook returning
+    // `None`) must fail loud rather than degrade to `AssumeTrue`. Escalate the
+    // emitted policy to `Error` whenever any predicate resolves to a hook, even
+    // under the default global policy — otherwise a `hooked` manifest entry that
+    // `--require-full-semantics` accepts would silently pass at runtime.
+    let has_hook_predicate = predicates
+        .iter()
+        .any(|(_, template)| matches!(template, PredicateTemplate::Hook));
     let unknown_policy_literal = match options.sem_unknown {
+        SemUnknownPolicy::AssumeTrue if has_hook_predicate => {
+            Some("antlr4_runtime::UnknownSemanticPolicy::Error")
+        }
         SemUnknownPolicy::AssumeTrue => None,
         SemUnknownPolicy::AssumeFalse => Some("antlr4_runtime::UnknownSemanticPolicy::AssumeFalse"),
-        SemUnknownPolicy::Hook => Some("antlr4_runtime::UnknownSemanticPolicy::Error"),
-        SemUnknownPolicy::Error => Some("antlr4_runtime::UnknownSemanticPolicy::Error"),
+        SemUnknownPolicy::Hook | SemUnknownPolicy::Error => {
+            Some("antlr4_runtime::UnknownSemanticPolicy::Error")
+        }
     };
     let parse_rule_fallback = render_parser_parse_rule_fallback(
         &init_action_rules,
@@ -13136,6 +13151,37 @@ dispose = "hook"
             surface_at < replay_at,
             "the unknown-semantic error must be surfaced before replaying buffered actions"
         );
+    }
+
+    #[test]
+    fn hook_predicate_escalates_policy_to_error_under_default() {
+        // A per-coordinate `dispose = "hook"` predicate under the default global
+        // policy must emit the Error policy, so an unimplemented hook
+        // (NoSemanticHooks / a hook returning None) fails loud instead of
+        // silently assuming true.
+        let patterns = parse_sem_patterns(
+            "version = 1\n[[coordinate]]\nkind = \"predicate\"\nrule = \"s\"\nindex = 0\ndispose = \"hook\"\n",
+        )
+        .expect("pattern file parses");
+        let module = render_parser_with_options(
+            "SParser",
+            &predicate_parser_data(),
+            Some(PREDICATE_GRAMMAR),
+            ParserRenderOptions {
+                require_generated_parser: false,
+                sem_unknown: SemUnknownPolicy::AssumeTrue,
+                patterns: Some(&patterns),
+            },
+        )
+        .expect("parser should render");
+
+        assert!(
+            module.contains("base.set_unknown_predicate_policy(antlr4_runtime::UnknownSemanticPolicy::Error)"),
+            "a hook predicate must escalate the installed policy to Error under the default"
+        );
+        assert!(module.contains(
+            "unknown_predicate_policy: antlr4_runtime::UnknownSemanticPolicy::Error"
+        ));
     }
 
     #[test]
