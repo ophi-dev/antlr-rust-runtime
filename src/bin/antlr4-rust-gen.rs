@@ -1435,30 +1435,48 @@ fn render_lexer(
     // Lexer predicate transitions whose coordinate no translated template
     // covers. Generated lexers have no hook dispatch and no runtime
     // coordinate-recording, so these fall through `run_predicate`'s catch-all.
-    let uncovered_lexer_predicates = lexer_predicate_transitions(data)?
+    // An uncovered coordinate that resolves to `hook`/`error` — whether from the
+    // global `--sem-unknown` policy or a per-coordinate `[[coordinate]]`
+    // override — cannot be honored: there is no lexer hook plumbing (a
+    // `hook`-lowered lexer predicate is already a codegen error) and no fail-loud
+    // runtime recording. Marking it `hooked`/passing in the manifest while the
+    // generated lexer silently keeps it viable would be a lie, so reject
+    // generation here — mirroring the explicit-hook rejection in
+    // `lexer_predicate_templates`.
+    let unhonorable_lexer_predicates = lexer_predicate_transitions(data)?
         .into_iter()
         .filter(|coordinate| {
             !predicates
                 .iter()
                 .any(|(covered, _)| covered == coordinate)
         })
+        .filter(|(rule_index, pred_index)| {
+            patterns
+                .coordinate_override(
+                    SemanticsKind::LexerPredicate,
+                    data.rule_names.get(*rule_index).map(String::as_str),
+                    Some(*pred_index),
+                    None,
+                )
+                .map_or_else(
+                    || matches!(sem_unknown, SemUnknownPolicy::Hook | SemUnknownPolicy::Error),
+                    |override_| {
+                        matches!(
+                            override_.dispose,
+                            CoordinateDispose::Hook | CoordinateDispose::Error
+                        )
+                    },
+                )
+        })
         .count();
-    // Under `--sem-unknown=hook`/`error`, an uncovered lexer predicate cannot be
-    // honored: there is no lexer hook plumbing (a `hook`-lowered lexer predicate
-    // is already a codegen error) and no fail-loud runtime recording. Marking it
-    // `hooked`/passing in the manifest while the generated lexer silently keeps
-    // it viable would be a lie, so reject generation here instead — mirroring
-    // the explicit-hook rejection in `lexer_predicate_templates`.
-    if uncovered_lexer_predicates > 0
-        && matches!(sem_unknown, SemUnknownPolicy::Hook | SemUnknownPolicy::Error)
-    {
+    if unhonorable_lexer_predicates > 0 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!(
-                "--sem-unknown={} leaves {uncovered_lexer_predicates} lexer predicate(s) with no Rust implementation; \
-                 generated lexers cannot route unknown predicates to hooks. Translate them via --grammar/--sem-patterns \
-                 or accept a documented fallback with --sem-unknown=assume-true / assume-false",
-                sem_unknown.manifest_name()
+                "{unhonorable_lexer_predicates} lexer predicate(s) resolve to hook/error with no Rust \
+                 implementation; generated lexers cannot route unknown predicates to hooks. Translate \
+                 them via --grammar/--sem-patterns or accept a documented fallback with \
+                 assume-true / assume-false",
             ),
         ));
     }
@@ -4986,7 +5004,11 @@ fn render_parser_with_options(
         |grammar| parser_init_action_templates(data, grammar),
     )?;
     let predicates = grammar_source.map_or_else(
-        || Ok(Vec::new()),
+        // Without grammar source, per-coordinate `--sem-patterns` overrides still
+        // resolve by ATN coordinate, so honor them here too — otherwise a
+        // documented `.interp`-only override the manifest reports as active would
+        // have no runtime effect.
+        || parser_predicate_templates_from_overrides(data, patterns),
         |grammar| parser_predicate_templates(data, grammar, patterns),
     )?;
     let rule_args =
@@ -5903,6 +5925,31 @@ fn lexer_predicate_templates(
 
 /// Pairs supported parser semantic predicates with serialized predicate
 /// coordinates from the parser ATN.
+/// Builds parser predicate templates purely from `--sem-patterns`
+/// per-coordinate overrides, keyed by ATN predicate coordinate.
+///
+/// Used when no grammar source is available: coordinate overrides resolve by
+/// `(rule, index)` alone, so a `dispose = "hook" | "assume-true" |
+/// "assume-false"` override still takes effect in the generated parser. (An
+/// `error` override lowers to no template and is surfaced by
+/// `enforce_sem_unknown` at codegen instead.)
+fn parser_predicate_templates_from_overrides(
+    data: &InterpData,
+    patterns: &SemPatternFile,
+) -> io::Result<Vec<((usize, usize), PredicateTemplate)>> {
+    let mut mapped = Vec::new();
+    for (rule_index, pred_index) in lexer_predicate_transitions(data)? {
+        if let Some(Some(template)) = patterns.coordinate_predicate_template(
+            SemanticsKind::ParserPredicate,
+            data.rule_names.get(rule_index).map(String::as_str),
+            Some(pred_index),
+        ) {
+            mapped.push(((rule_index, pred_index), template));
+        }
+    }
+    Ok(mapped)
+}
+
 fn parser_predicate_templates(
     data: &InterpData,
     grammar_source: &str,
@@ -13066,6 +13113,65 @@ dispose = "hook"
 
         assert!(module.contains("next_token_compiled_with_hooks"));
         assert!(module.contains("|_, _| false"));
+    }
+
+    #[test]
+    fn lexer_per_coordinate_hook_override_is_rejected_under_default_policy() {
+        // A per-coordinate `dispose = "hook"` (or "error") override on a lexer
+        // predicate must fail codegen even under the default global policy:
+        // generated lexers have no hook plumbing, so the manifest must not claim
+        // the coordinate is hooked while the lexer silently keeps it viable.
+        for dispose in ["hook", "error"] {
+            let patterns = parse_sem_patterns(&format!(
+                "version = 1\n[[coordinate]]\nkind = \"lexer-predicate\"\nindex = 0\ndispose = \"{dispose}\"\n"
+            ))
+            .expect("pattern file parses");
+            let error = render_lexer(
+                "SLexer",
+                &predicate_parser_data(),
+                None,
+                false,
+                SemUnknownPolicy::AssumeTrue,
+                &patterns,
+            )
+            .expect_err("per-coordinate hook/error lexer override must fail codegen");
+            assert!(
+                error.to_string().contains("lexer predicate"),
+                "dispose {dispose}: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn coordinate_override_applies_without_grammar_source() {
+        // A `--sem-patterns` coordinate override resolves by ATN coordinate, so
+        // it must take effect in the generated parser even without --grammar,
+        // rather than being reported active in the manifest yet silently
+        // dropped in generated code.
+        let patterns = parse_sem_patterns(
+            "version = 1\n[[coordinate]]\nkind = \"predicate\"\nrule = \"s\"\nindex = 0\ndispose = \"assume-false\"\n",
+        )
+        .expect("pattern file parses");
+        let templates = parser_predicate_templates_from_overrides(&predicate_parser_data(), &patterns)
+            .expect("override synthesis should succeed");
+        assert_eq!(templates, [((0, 0), PredicateTemplate::False)]);
+
+        // And the rendered parser without grammar source carries the SemIR
+        // predicate for that coordinate.
+        let module = render_parser_with_options(
+            "SParser",
+            &predicate_parser_data(),
+            None,
+            ParserRenderOptions {
+                patterns: Some(&patterns),
+                ..ParserRenderOptions::default()
+            },
+        )
+        .expect("parser should render");
+        assert!(
+            module.contains("rule_index: 0, pred_index: 0"),
+            "override-derived predicate must reach parser_semantics() without --grammar"
+        );
     }
 
     #[test]
