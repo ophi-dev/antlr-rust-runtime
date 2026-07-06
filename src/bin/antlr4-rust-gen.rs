@@ -5833,7 +5833,8 @@ fn lexer_predicate_templates(
     if predicates.is_empty() {
         return Ok(Vec::new());
     }
-    let templates = extract_supported_predicate_templates(grammar_source, patterns)?;
+    let templates =
+        extract_supported_predicate_templates_filtered(grammar_source, patterns, Some(&data.rule_names))?;
     if templates.is_empty() {
         return Ok(Vec::new());
     }
@@ -5878,6 +5879,14 @@ fn parser_predicate_templates(
     let mut predicate_index = 0;
     while let Some(block) = next_predicate_action_block(grammar_source, offset) {
         offset = block.after_brace;
+        // In a combined grammar the scan also sees lexer-rule predicates, which
+        // have no parser ATN transition. Skip them without consuming a parser
+        // predicate index, mirroring the action collectors' rule-name filter, so
+        // later parser predicates stay paired with the right coordinate instead
+        // of drifting (or erroring with "no parser ATN predicate transition").
+        if !rule_action_included(grammar_source, block.open_brace, Some(&data.rule_names)) {
+            continue;
+        }
         let coordinates = predicates.get(predicate_index).copied();
         let override_template = coordinates.and_then(|(rule_index, pred_index)| {
             patterns.coordinate_predicate_template(
@@ -6186,14 +6195,30 @@ fn find_action_open_brace(source: &str, offset: usize) -> Option<usize> {
 
 /// Finds grammar predicate templates in the same order as ANTLR serializes
 /// predicate transitions.
+#[cfg(test)]
 fn extract_supported_predicate_templates(
     grammar_source: &str,
     patterns: &SemPatternFile,
+) -> io::Result<Vec<PredicateTemplate>> {
+    extract_supported_predicate_templates_filtered(grammar_source, patterns, None)
+}
+
+fn extract_supported_predicate_templates_filtered(
+    grammar_source: &str,
+    patterns: &SemPatternFile,
+    rule_names: Option<&[String]>,
 ) -> io::Result<Vec<PredicateTemplate>> {
     let mut templates = Vec::new();
     let mut offset = 0;
     while let Some(block) = next_predicate_action_block(grammar_source, offset) {
         offset = block.after_brace;
+        // In a combined grammar, skip predicate blocks that belong to a
+        // different rule set (e.g. parser-rule predicates while scanning the
+        // lexer), so positional pairing with this ATN's predicate transitions
+        // does not drift. Matches the action collectors' rule-name filter.
+        if !rule_action_included(grammar_source, block.open_brace, rule_names) {
+            continue;
+        }
         if let Some(template) = parse_predicate_template_with_patterns(block.body, patterns)? {
             templates.push(template);
         } else if block.body.contains('<') {
@@ -11626,6 +11651,54 @@ fragment ID2 : { <Column()> >= 2 }? [a-zA-Z];"#,
                 PredicateTemplate::ColumnGreaterOrEqual(2)
             ]
         );
+    }
+
+    #[test]
+    fn parser_predicate_scan_skips_lexer_rule_predicates() {
+        // Combined grammar with a *translatable* lexer-rule predicate preceding
+        // the parser rule. The parser ATN (predicate_parser_data) has a single
+        // predicate transition on rule `s`. Without rule-name filtering the
+        // lexer predicate's template would be paired against `s`'s coordinate
+        // (mis-mapping) and the leftover would error with "no parser ATN
+        // predicate transition". The filter must skip the lexer-rule predicate
+        // so only `s`'s coordinate is considered.
+        let combined =
+            "grammar S;\nID : { <Column()> >= 2 }? [a-z]+ ;\ns : {isTypeName()}? A ;\n";
+        let templates = parser_predicate_templates(
+            &predicate_parser_data(),
+            combined,
+            &SemPatternFile::default(),
+        )
+        .expect("the lexer-rule predicate must be skipped, not mis-paired or errored");
+
+        // `s`'s predicate body (`isTypeName()`) has no built-in template, so
+        // nothing maps — crucially, the translatable lexer predicate did NOT
+        // get mapped onto `s`'s coordinate.
+        assert!(
+            templates.is_empty(),
+            "lexer-rule predicate must not map onto a parser coordinate: {templates:?}"
+        );
+    }
+
+    #[test]
+    fn parser_predicate_scan_maps_parser_rule_after_lexer_predicate() {
+        // Same combined shape, but the parser predicate is translatable via a
+        // coordinate override. Only the parser-rule predicate (rule `s`, pred 0)
+        // should map, proving the lexer predicate is filtered rather than
+        // shifting the parser predicate onto the wrong coordinate.
+        let combined =
+            "grammar S;\nID : { <Column()> >= 2 }? [a-z]+ ;\ns : {isTypeName()}? A ;\n";
+        let patterns = parse_sem_patterns(
+            "version = 1\n[[coordinate]]\nkind = \"predicate\"\nrule = \"s\"\nindex = 0\ndispose = \"hook\"\n",
+        )
+        .expect("pattern file parses");
+        let templates =
+            parser_predicate_templates(&predicate_parser_data(), combined, &patterns)
+                .expect("combined grammar maps only the parser-rule predicate");
+
+        assert_eq!(templates.len(), 1, "only the parser-rule predicate maps");
+        assert_eq!(templates[0].0, (0, 0), "mapped to rule `s` pred 0");
+        assert_eq!(templates[0].1, PredicateTemplate::Hook);
     }
 
     #[test]
