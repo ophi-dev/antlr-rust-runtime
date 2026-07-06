@@ -4995,7 +4995,13 @@ where
             unknown_predicate_policy,
         } = options;
         self.unknown_predicate_policy = unknown_predicate_policy;
-        self.unknown_predicate_hits.clear();
+        // A generated parent may have already recorded unknown-predicate
+        // coordinates before descending into this (interpreted) child. Clearing
+        // unconditionally would drop them before the parent's public entry
+        // surfaces them, so stash and restore around this call: recognition sees
+        // only the hits it records itself (so the fail-loud check below reflects
+        // this rule), and the parent's prior hits are merged back afterward.
+        let prior_unknown_predicate_hits = std::mem::take(&mut self.unknown_predicate_hits);
         let start_state = atn
             .rule_to_start_state()
             .get(rule_index)
@@ -5058,6 +5064,9 @@ where
             report_token_source_errors(&self.input.drain_source_errors());
             return Err(error);
         }
+        // Recognition recorded no unresolved coordinate of its own; merge the
+        // parent's prior hits back so its public entry can still surface them.
+        self.restore_prior_unknown_predicate_hits(prior_unknown_predicate_hits);
         let Some(outcome) = select_best_outcome(outcomes.into_iter(), self.prediction_mode) else {
             let error = self.recognition_error(rule_index, start_index, &expected);
             self.record_syntax_errors(1);
@@ -7832,6 +7841,23 @@ where
             action: None,
         };
         semantic_hooks.sempred(&mut ctx, rule_index, pred_index)
+    }
+
+    /// Re-inserts unknown-predicate coordinates recorded before a nested
+    /// interpreted recognition, preserving order and skipping any the nested
+    /// call already recorded, so a generated parent's fail-loud coordinates
+    /// survive descending into an interpreted child.
+    fn restore_prior_unknown_predicate_hits(&mut self, prior: Vec<(usize, usize)>) {
+        if prior.is_empty() {
+            return;
+        }
+        let mut merged = prior;
+        for coordinate in std::mem::take(&mut self.unknown_predicate_hits) {
+            if !merged.contains(&coordinate) {
+                merged.push(coordinate);
+            }
+        }
+        self.unknown_predicate_hits = merged;
     }
 
     /// Applies the active [`UnknownSemanticPolicy`] to a predicate coordinate
@@ -10840,6 +10866,35 @@ mod tests {
 
         assert_eq!(tree.text(), "xy");
         assert_eq!(parser.number_of_syntax_errors(), 0);
+    }
+
+    #[test]
+    fn nested_interpreted_parse_preserves_prior_unknown_predicate_hits() {
+        // A generated parent may record an unknown-predicate coordinate, then
+        // descend into an interpreted child. The child's interpreter entry must
+        // not wipe the parent's recorded hit before the top-level surfaces it.
+        let atn = token_then_eof_atn();
+        let mut parser = mini_parser(vec![
+            CommonToken::new(1).with_text("x"),
+            CommonToken::eof("parser-test", 1, 1, 1),
+        ]);
+
+        // Simulate the parent having recorded a fail-loud coordinate.
+        parser.unknown_predicate_hits.push((7, 3));
+
+        // Run an interpreted child parse that records no coordinate of its own.
+        parser
+            .parse_atn_rule_with_runtime_options(&atn, 0, ParserRuntimeOptions::default())
+            .expect("child rule parses");
+
+        // The parent's coordinate must still be present for the top-level entry.
+        let error = parser
+            .take_unknown_semantic_error()
+            .expect("parent's recorded coordinate must survive the nested interpreted parse");
+        let AntlrError::Unsupported(message) = error else {
+            panic!("expected AntlrError::Unsupported, got {error:?}");
+        };
+        assert!(message.contains("pred_index=3"), "message: {message}");
     }
 
     #[test]
