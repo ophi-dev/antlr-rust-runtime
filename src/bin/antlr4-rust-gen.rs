@@ -6273,14 +6273,14 @@ fn extract_action_template_slots_filtered(
             (None, None) => break,
             (Some(block), Some(signature)) if signature.open_angle < block.open_brace => {
                 offset = signature.after_template;
-                if !rule_action_included(grammar_source, signature.open_angle, rule_names) {
+                if !action_block_included(grammar_source, signature.open_angle, rule_names) {
                     continue;
                 }
                 templates.push(parse_action_template(signature.body));
             }
             (Some(block), _) => {
                 offset = block.after_brace;
-                if !rule_action_included(grammar_source, block.open_brace, rule_names) {
+                if !action_block_included(grammar_source, block.open_brace, rule_names) {
                     continue;
                 }
                 if block.predicate
@@ -6298,7 +6298,7 @@ fn extract_action_template_slots_filtered(
             }
             (None, Some(signature)) => {
                 offset = signature.after_template;
-                if !rule_action_included(grammar_source, signature.open_angle, rule_names) {
+                if !action_block_included(grammar_source, signature.open_angle, rule_names) {
                     continue;
                 }
                 templates.push(parse_action_template(signature.body));
@@ -6329,6 +6329,32 @@ fn rule_action_included(source: &str, position: usize, rule_names: Option<&[Stri
 fn predicate_block_included(source: &str, position: usize, rule_names: &[String]) -> bool {
     statement_rule_header(source, position)
         .is_none_or(|header| rule_names.iter().any(|name| name == header.name))
+}
+
+/// Reports whether an action/signature block at `position` should be kept when
+/// filtering to `rule_names`, tolerating headers this scraper cannot resolve.
+///
+/// Conservative counterpart to [`rule_action_included`] for the action-template
+/// slot walk. With a filter active, a block is excluded when its owning rule
+/// name positively resolves and is either absent from `rule_names` (a
+/// combined-grammar lexer-rule action) or already defined earlier in the source
+/// (a composite grammar's delegate rule overridden by the delegator, whose
+/// action has no transition in the delegator parser ATN — the
+/// `has_prior_rule_definition` check `rule_action_included` also applies).
+///
+/// When the header cannot be resolved at all — e.g. the rule name is separated
+/// from its `:` by an `@init {...}` block (`prog\n@init {...}\n : ... {action}`)
+/// — the block is kept, so a real parser action is not silently dropped (which
+/// would leave its `run_action` arm out and route the action to the no-op hook).
+fn action_block_included(source: &str, position: usize, rule_names: Option<&[String]>) -> bool {
+    let Some(names) = rule_names else {
+        return true;
+    };
+    let Some(header) = statement_rule_header(source, position) else {
+        return true;
+    };
+    names.iter().any(|name| name == header.name)
+        && !has_prior_rule_definition(source, header.name, header.start)
 }
 
 fn next_action_block(source: &str, offset: usize) -> Option<templates::TemplateBlock<'_>> {
@@ -12022,6 +12048,33 @@ continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#,
             2,
             "unfiltered walk keeps the lexer-rule action slot too: {unfiltered_slots:?}"
         );
+    }
+
+    #[test]
+    fn action_scan_keeps_parser_action_when_header_unresolvable() {
+        // The rule name is separated from its `:` by an `@init {...}` block, so
+        // `statement_rule_header` cannot resolve `prog`. The filtered action scan
+        // must KEEP the parser action rather than drop it — regression for
+        // FullContextParsing/AmbiguityNoLoop, where dropping the `writeln` left
+        // an empty `run_action` and the "alt 1" output vanished.
+        let grammar = concat!(
+            "grammar T;\n",
+            "prog\n",
+            "@init {<LL_EXACT_AMBIG_DETECTION()>}\n",
+            "   : expr expr {<writeln(\"\\\"alt 1\\\"\")>}\n",
+            "   | expr\n",
+            "   ;\n",
+            "expr: '@' | ID '@' | ID ;\n",
+            "ID  : [a-z]+ ;\n",
+        );
+        let parser_rules = ["prog".to_owned(), "expr".to_owned()];
+        let filtered = extract_supported_action_templates_filtered(grammar, Some(&parser_rules));
+        assert_eq!(
+            filtered.len(),
+            1,
+            "the parser action must survive the filter despite the @init-separated header: {filtered:?}"
+        );
+        assert!(matches!(filtered[0], ActionTemplate::Literal { .. }));
     }
 
     #[test]
