@@ -647,7 +647,7 @@ fn collect_lexer_semantics(
             .transpose()?
             .unwrap_or_default();
         let blocks = grammar_source
-            .map(predicate_source_blocks)
+            .map(|source| predicate_source_blocks(source, &data.rule_names))
             .unwrap_or_default();
         for (position, (rule_index, pred_index)) in predicate_coordinates.iter().enumerate() {
             let template = templates
@@ -697,7 +697,7 @@ fn collect_parser_semantics(
             .transpose()?
             .unwrap_or_default();
         let blocks = grammar_source
-            .map(predicate_source_blocks)
+            .map(|source| predicate_source_blocks(source, &data.rule_names))
             .unwrap_or_default();
         for (position, coordinate) in predicate_coordinates.iter().enumerate() {
             let template = templates
@@ -795,13 +795,23 @@ fn collect_parser_semantics(
     Ok(entries)
 }
 
-/// Collects `(line, column, body)` for every semantic-predicate block in
-/// grammar source order, the same order ANTLR assigns predicate indexes.
-fn predicate_source_blocks(source: &str) -> Vec<(usize, usize, String)> {
+/// Collects `(line, column, body)` for every semantic-predicate block that
+/// belongs to `rule_names`, in grammar source order (the order ANTLR assigns
+/// predicate indexes).
+///
+/// The manifest pairs these spans positionally with the recognizer's predicate
+/// transitions, so a combined grammar must skip the other rule set's predicates
+/// (the same `predicate_block_included` filter the template scan uses) — else a
+/// lexer predicate's line/body would be attached to a parser coordinate in
+/// `semantics.json` and the `--sem-unknown=error` diagnostics.
+fn predicate_source_blocks(source: &str, rule_names: &[String]) -> Vec<(usize, usize, String)> {
     let mut blocks = Vec::new();
     let mut offset = 0;
     while let Some(block) = next_predicate_action_block(source, offset) {
         offset = block.after_brace;
+        if !predicate_block_included(source, block.open_brace, rule_names) {
+            continue;
+        }
         let (line, column) = line_column(source, block.open_brace);
         blocks.push((line, column, one_line_action_body(block.body)));
     }
@@ -6264,7 +6274,13 @@ fn extract_supported_predicate_templates_filtered(
         }
         if let Some(template) = parse_predicate_template_with_patterns(block.body, patterns)? {
             templates.push(template);
-        } else if block.body.contains('<') {
+        } else if is_unsupported_string_template_body(block.body) {
+            // An untranslated ANTLR `<...>` StringTemplate predicate is a
+            // codegen error (we can't render it). A native target-language
+            // comparison like `{this.level < 2}?` merely *contains* `<`; it is
+            // not a template and must fall through to the unknown-predicate
+            // policy (inventoried by `collect_parser_semantics`) instead of
+            // aborting generation under the documented fallbacks.
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("unsupported target predicate template <{}>", block.body),
@@ -6272,6 +6288,14 @@ fn extract_supported_predicate_templates_filtered(
         }
     }
     Ok(templates)
+}
+
+/// Reports whether a predicate body is an untranslated ANTLR `<...>`
+/// `StringTemplate` (a single template wrapper or a sequence of them), as
+/// opposed to a native target-language predicate that merely contains a `<`
+/// operator.
+fn is_unsupported_string_template_body(body: &str) -> bool {
+    single_template_body(body).is_some() || template_sequence_bodies(body).is_some()
 }
 
 /// Finds the next supported return-value target template that ANTLR lowers into
@@ -11704,6 +11728,31 @@ fragment ID2 : { <Column()> >= 2 }? [a-zA-Z];"#,
     }
 
     #[test]
+    fn native_comparison_predicate_falls_through_instead_of_aborting() {
+        // A native target-language comparison predicate merely contains a `<`
+        // operator; it is not an ANTLR `<...>` StringTemplate, so it must fall
+        // through to the unknown-predicate policy (no template) rather than
+        // aborting codegen with "unsupported target predicate template".
+        let templates = extract_supported_predicate_templates(
+            "grammar T;\nr : {this.level < 2}? ID ;\n",
+            &SemPatternFile::default(),
+        )
+        .expect("native comparison predicate must not abort generation");
+        assert!(
+            templates.is_empty(),
+            "native `<` comparison yields no template, deferring to policy: {templates:?}"
+        );
+
+        // A genuine untranslated `<...>` StringTemplate still errors.
+        let error = extract_supported_predicate_templates(
+            "grammar T;\nr : {<UnknownTemplate()>}? ID ;\n",
+            &SemPatternFile::default(),
+        )
+        .expect_err("an untranslated <...> StringTemplate predicate must still abort");
+        assert!(error.to_string().contains("unsupported target predicate template"));
+    }
+
+    #[test]
     fn parser_predicate_scan_skips_lexer_rule_predicates() {
         // Combined grammar with a *translatable* lexer-rule predicate preceding
         // the parser rule. The parser ATN (predicate_parser_data) has a single
@@ -12614,6 +12663,37 @@ dispose = "hook"
         assert_eq!(mappings.len(), 1, "only the parser-rule helper maps: {mappings:?}");
         assert_eq!((mappings[0].rule_index, mappings[0].pred_index), (0, 0));
         assert_eq!(mappings[0].method_name, "is_type_name");
+    }
+
+    #[test]
+    fn manifest_predicate_provenance_skips_lexer_rule_block() {
+        // A combined grammar with a lexer-rule predicate before the parser-rule
+        // predicate: the manifest must attach the *parser* predicate's body/line
+        // to the parser coordinate, not the lexer predicate's (which would drift
+        // provenance under positional pairing).
+        let combined = concat!(
+            "grammar S;\n",
+            "ID : {aheadIsDigit()}? [a-z]+ ;\n",
+            "s : {isTypeName()}? A ;\n",
+        );
+        let entries = collect_parser_semantics(
+            &predicate_parser_data(),
+            Some(combined),
+            SemUnknownPolicy::AssumeTrue,
+            &SemPatternFile::default(),
+        )
+        .expect("collection should succeed");
+
+        let predicate = entries
+            .iter()
+            .find(|entry| entry.kind == SemanticsKind::ParserPredicate)
+            .expect("parser predicate coordinate present");
+        assert_eq!(predicate.rule_name.as_deref(), Some("s"));
+        assert_eq!(
+            predicate.body.as_deref(),
+            Some("isTypeName()"),
+            "provenance must be the parser predicate body, not the lexer-rule aheadIsDigit()"
+        );
     }
 
     #[test]
