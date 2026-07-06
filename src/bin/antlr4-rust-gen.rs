@@ -5881,10 +5881,11 @@ fn parser_predicate_templates(
         offset = block.after_brace;
         // In a combined grammar the scan also sees lexer-rule predicates, which
         // have no parser ATN transition. Skip them without consuming a parser
-        // predicate index, mirroring the action collectors' rule-name filter, so
-        // later parser predicates stay paired with the right coordinate instead
-        // of drifting (or erroring with "no parser ATN predicate transition").
-        if !rule_action_included(grammar_source, block.open_brace, Some(&data.rule_names)) {
+        // predicate index, so later parser predicates stay paired with the right
+        // coordinate instead of drifting (or erroring with "no parser ATN
+        // predicate transition"). Only skip blocks that positively resolve to a
+        // non-parser rule; an unresolvable header keeps the block.
+        if !predicate_block_included(grammar_source, block.open_brace, &data.rule_names) {
             continue;
         }
         let coordinates = predicates.get(predicate_index).copied();
@@ -6177,6 +6178,20 @@ fn rule_action_included(source: &str, position: usize, rule_names: Option<&[Stri
         && !has_prior_rule_definition(source, header.name, header.start)
 }
 
+/// Reports whether a predicate block at `position` belongs to a rule this ATN
+/// covers, tolerating headers this scraper cannot resolve.
+///
+/// Unlike [`rule_action_included`], a predicate block is *excluded only when its
+/// owning rule name positively resolves and is absent from `rule_names`* — i.e.
+/// it demonstrably belongs to the other rule set of a combined grammar. When
+/// the header cannot be resolved (the brace-counting scraper is defeated by,
+/// e.g., a `;` inside a comment above the rule) the block is kept, preserving
+/// the pre-filter behavior rather than dropping a real predicate coordinate.
+fn predicate_block_included(source: &str, position: usize, rule_names: &[String]) -> bool {
+    statement_rule_header(source, position)
+        .is_none_or(|header| rule_names.iter().any(|name| name == header.name))
+}
+
 fn next_action_block(source: &str, offset: usize) -> Option<templates::TemplateBlock<'_>> {
     let open_brace = find_action_open_brace(source, offset)?;
     let close_brace = matching_action_brace(source, open_brace + 1)?;
@@ -6215,8 +6230,11 @@ fn extract_supported_predicate_templates_filtered(
         // In a combined grammar, skip predicate blocks that belong to a
         // different rule set (e.g. parser-rule predicates while scanning the
         // lexer), so positional pairing with this ATN's predicate transitions
-        // does not drift. Matches the action collectors' rule-name filter.
-        if !rule_action_included(grammar_source, block.open_brace, rule_names) {
+        // does not drift. Only skip blocks that positively resolve to a
+        // non-target rule; unresolvable headers keep the block.
+        let excluded = rule_names
+            .is_some_and(|names| !predicate_block_included(grammar_source, block.open_brace, names));
+        if excluded {
             continue;
         }
         if let Some(template) = parse_predicate_template_with_patterns(block.body, patterns)? {
@@ -11700,6 +11718,41 @@ fragment ID2 : { <Column()> >= 2 }? [a-zA-Z];"#,
         assert_eq!(templates[0].0, (0, 0), "mapped to rule `s` pred 0");
         assert_eq!(templates[0].1, PredicateTemplate::Hook);
     }
+
+    #[test]
+    fn parser_predicate_scan_keeps_predicate_when_header_unresolvable() {
+        // A `;` inside a comment above the rule defeats the brace-counting
+        // header scraper (`statement_rule_header` returns None). The predicate
+        // filter must KEEP such a block rather than drop a real parser
+        // predicate — regression for SemPredEvalParser/ValidateInDFA, whose
+        // comment `// ';' helps ...` made rule `a`'s predicates vanish.
+        let grammar = concat!(
+            "grammar T;\n",
+            "s : a ';' a;\n",
+            "// ';' helps us resynchronize without consuming\n",
+            "a : {<False()>}? ID\n",
+            "  | {<True()>}?  INT\n",
+            "  ;\n",
+            "ID : 'a'..'z'+ ;\n",
+        );
+        // rule_names carries only parser rules `s`, `a` (as a parser .interp would).
+        let rule_names = ["s".to_owned(), "a".to_owned()];
+
+        let mut offset = 0;
+        let mut kept = Vec::new();
+        while let Some(block) = next_predicate_action_block(grammar, offset) {
+            offset = block.after_brace;
+            if predicate_block_included(grammar, block.open_brace, &rule_names) {
+                kept.push(block.body.to_owned());
+            }
+        }
+        assert_eq!(
+            kept,
+            ["<False()>".to_owned(), "<True()>".to_owned()],
+            "both rule-`a` predicates must survive the comment-with-semicolon header"
+        );
+    }
+
 
     #[test]
     fn parses_predicate_fail_option_message() {
