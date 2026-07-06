@@ -495,19 +495,28 @@ impl SemanticsEntry {
     }
 }
 
-/// Fails generation under `--sem-unknown=error` when any coordinate lacks a
-/// Rust implementation, listing each one with its grammar source span.
+/// Fails generation when coordinates must be rejected at codegen: either the
+/// global `--sem-unknown=error` policy is active (every unimplemented
+/// coordinate), or a per-coordinate `dispose = "error"` override rejects a
+/// specific coordinate regardless of the global policy.
+///
+/// A per-coordinate error override otherwise lowers to no `SemIR` entry and
+/// does not escalate the runtime policy, so without this it would silently fall
+/// back to the global default (e.g. `AssumeTrue`) instead of failing.
 fn enforce_sem_unknown(policy: SemUnknownPolicy, entries: &[SemanticsEntry]) -> io::Result<()> {
-    if policy != SemUnknownPolicy::Error {
-        return Ok(());
-    }
     let unsupported = entries
         .iter()
         .filter(|entry| {
-            !matches!(
-                entry.disposition,
-                SemanticsDisposition::Translated | SemanticsDisposition::Hooked
-            )
+            // A per-coordinate `dispose = "error"` override is always fatal.
+            if entry.disposition == SemanticsDisposition::Error {
+                return true;
+            }
+            // Under the global Error policy, any unimplemented coordinate is fatal.
+            policy == SemUnknownPolicy::Error
+                && !matches!(
+                    entry.disposition,
+                    SemanticsDisposition::Translated | SemanticsDisposition::Hooked
+                )
         })
         .collect::<Vec<_>>();
     if unsupported.is_empty() {
@@ -520,9 +529,10 @@ fn enforce_sem_unknown(policy: SemUnknownPolicy, entries: &[SemanticsEntry]) -> 
     }
     let _ = write!(
         message,
-        "--sem-unknown=error: {} semantic coordinate(s) have no Rust implementation; \
-         pass --grammar so supported templates can be translated, or accept a \
-         documented fallback with --sem-unknown=assume-true / assume-false",
+        "--sem-unknown=error: {} semantic coordinate(s) have no Rust implementation and are \
+         configured to fail; pass --grammar so supported templates can be translated, adjust a \
+         coordinate's `dispose`, or accept a documented fallback with \
+         --sem-unknown=assume-true / assume-false",
         unsupported.len()
     );
     Err(io::Error::new(io::ErrorKind::InvalidData, message))
@@ -5373,6 +5383,16 @@ where
                 self.run_generated_action(__action, &__tree);
             }}
         }}
+        // Surface unknown-predicate coordinates recorded under the Error policy
+        // at the top-level entry. Generated predicate steps evaluate on the
+        // committed path and are recovered as rule errors, so without this a
+        // parse that consulted an unimplemented hook predicate could return a
+        // recovered `Ok` tree instead of the documented `AntlrError::Unsupported`.
+        if allow_generated_fallback {{
+            if let Some(error) = self.base.take_unknown_semantic_error() {{
+                return Err(error);
+            }}
+        }}
         Ok(__tree)
     }}
 
@@ -8982,6 +9002,13 @@ fn parser_typed_hook_mappings(
     let mut predicate_index = 0;
     while let Some(block) = next_predicate_action_block(grammar_source, offset) {
         offset = block.after_brace;
+        // Skip predicate blocks belonging to a different rule set (e.g. a
+        // lexer-rule predicate in a combined grammar), so the typed-hook mapping
+        // does not consume a parser coordinate for a non-parser block and wire
+        // the adapter to the wrong method. Matches `parser_predicate_templates`.
+        if !predicate_block_included(grammar_source, block.open_brace, &data.rule_names) {
+            continue;
+        }
         let Some((rule_index, pred_index)) = coordinates.get(predicate_index).copied() else {
             predicate_index += 1;
             continue;
@@ -12563,6 +12590,28 @@ dispose = "hook"
     }
 
     #[test]
+    fn typed_hook_mapping_skips_lexer_rule_predicates() {
+        // Combined grammar: a lexer-rule helper predicate precedes the
+        // parser-rule helper predicate. The typed-hook scan must skip the
+        // lexer-rule block so it does not consume the parser predicate
+        // coordinate and wire the adapter to the wrong method.
+        let combined = concat!(
+            "grammar S;\n",
+            "ID : {aheadIsDigit()}? [a-z]+ ;\n",
+            "s : {isTypeName()}? A ;\n",
+        );
+        let mappings =
+            parser_typed_hook_mappings(&predicate_parser_data(), Some(combined), &SemPatternFile::default())
+                .expect("typed hook mapping should succeed");
+
+        // Only the parser-rule helper (`isTypeName` on rule `s`, pred 0) maps;
+        // the lexer-rule `aheadIsDigit` helper is not wired to a parser hook.
+        assert_eq!(mappings.len(), 1, "only the parser-rule helper maps: {mappings:?}");
+        assert_eq!((mappings[0].rule_index, mappings[0].pred_index), (0, 0));
+        assert_eq!(mappings[0].method_name, "is_type_name");
+    }
+
+    #[test]
     fn require_full_semantics_rejects_policy_fallbacks_but_allows_hooks() {
         let fallback = collect_parser_semantics(
             &predicate_parser_data(),
@@ -12710,6 +12759,32 @@ dispose = "hook"
     }
 
     #[test]
+    fn enforce_sem_unknown_fails_per_coordinate_error_under_default_policy() {
+        // A per-coordinate `dispose = "error"` override must fail codegen even
+        // when the global policy is the lenient default; otherwise the
+        // coordinate lowers to no SemIR entry and silently falls back to
+        // AssumeTrue at runtime.
+        let patterns = parse_sem_patterns(
+            "version = 1\n[[coordinate]]\nkind = \"predicate\"\nrule = \"s\"\nindex = 0\ndispose = \"error\"\n",
+        )
+        .expect("pattern file parses");
+        let entries = collect_parser_semantics(
+            &predicate_parser_data(),
+            Some(PREDICATE_GRAMMAR),
+            SemUnknownPolicy::AssumeTrue,
+            &patterns,
+        )
+        .expect("collection should succeed");
+
+        let error = enforce_sem_unknown(SemUnknownPolicy::AssumeTrue, &entries)
+            .expect_err("per-coordinate error override must fail even under assume-true");
+        assert!(
+            error.to_string().contains("pred_index=0"),
+            "message should name the rejected coordinate: {error}"
+        );
+    }
+
+    #[test]
     fn semantics_manifest_renders_coordinates_and_policy() {
         let entries = collect_parser_semantics(
             &predicate_parser_data(),
@@ -12761,6 +12836,31 @@ dispose = "hook"
         assert!(module.contains(
             "unknown_predicate_policy: antlr4_runtime::UnknownSemanticPolicy::AssumeFalse"
         ));
+    }
+
+    #[test]
+    fn generated_top_level_entry_surfaces_unknown_semantic_error() {
+        // The public generated entry must surface Error-policy coordinates the
+        // generated-direct predicate path recorded, or a parse that consulted an
+        // unimplemented hook predicate returns a recovered Ok tree instead of
+        // AntlrError::Unsupported.
+        let module = render_parser_with_options(
+            "SParser",
+            &predicate_parser_data(),
+            Some(PREDICATE_GRAMMAR),
+            ParserRenderOptions {
+                require_generated_parser: false,
+                sem_unknown: SemUnknownPolicy::AssumeFalse,
+                patterns: None,
+            },
+        )
+        .expect("parser should render");
+        assert!(
+            module.contains("if let Some(error) = self.base.take_unknown_semantic_error()"),
+            "generated top-level entry must surface recorded unknown-semantic coordinates"
+        );
+        // Guarded by the public entry only, not the nested (from-generated) path.
+        assert!(module.contains("if allow_generated_fallback {"));
     }
 
     #[test]
