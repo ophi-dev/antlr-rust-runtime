@@ -1412,6 +1412,36 @@ fn render_lexer(
         || Ok(Vec::new()),
         |source| lexer_predicate_templates(data, source, patterns),
     )?;
+    // Lexer predicate transitions whose coordinate no translated template
+    // covers. Generated lexers have no hook dispatch and no runtime
+    // coordinate-recording, so these fall through `run_predicate`'s catch-all.
+    let uncovered_lexer_predicates = lexer_predicate_transitions(data)?
+        .into_iter()
+        .filter(|coordinate| {
+            !predicates
+                .iter()
+                .any(|(covered, _)| covered == coordinate)
+        })
+        .count();
+    // Under `--sem-unknown=hook`/`error`, an uncovered lexer predicate cannot be
+    // honored: there is no lexer hook plumbing (a `hook`-lowered lexer predicate
+    // is already a codegen error) and no fail-loud runtime recording. Marking it
+    // `hooked`/passing in the manifest while the generated lexer silently keeps
+    // it viable would be a lie, so reject generation here instead — mirroring
+    // the explicit-hook rejection in `lexer_predicate_templates`.
+    if uncovered_lexer_predicates > 0
+        && matches!(sem_unknown, SemUnknownPolicy::Hook | SemUnknownPolicy::Error)
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "--sem-unknown={} leaves {uncovered_lexer_predicates} lexer predicate(s) with no Rust implementation; \
+                 generated lexers cannot route unknown predicates to hooks. Translate them via --grammar/--sem-patterns \
+                 or accept a documented fallback with --sem-unknown=assume-true / assume-false",
+                sem_unknown.manifest_name()
+            ),
+        ));
+    }
     // Predicate coordinates with no translated template normally fall back to
     // always-true; `--sem-unknown=assume-false` flips that fallback, which
     // requires the hook-taking token path even when no dispatch is generated.
@@ -5093,7 +5123,8 @@ fn render_parser_with_options(
         render_usize_array(&ctx_rooted_action_states.iter().copied().collect::<Vec<_>>())
     );
     let parse_convenience = render_parser_parse_convenience(&type_name);
-    let base_initialization = render_parser_base_initialization(&int_members);
+    let base_initialization =
+        render_parser_base_initialization(&int_members, unknown_policy_literal);
     let public_rule_method_names = parser_public_rule_method_names(&data.rule_names);
     let entry_rule_indices = likely_parser_entry_rule_indices(data)?;
     let parser_rustdoc = render_parser_rustdoc(&public_rule_method_names, &entry_rule_indices);
@@ -9352,12 +9383,25 @@ fn render_parser_return_action_array(
 }
 
 /// Renders the generated parser base construction and member initialization.
-fn render_parser_base_initialization(members: &[IntMemberTemplate]) -> String {
-    let mut out = if members.is_empty() {
-        "        let base = BaseParser::with_semantic_hooks(input, data, hooks);".to_owned()
-    } else {
+///
+/// When a non-default unknown-predicate policy is configured, the constructor
+/// installs it on the `BaseParser` so the generated recursive-descent path
+/// (which evaluates predicates without going through `ParserRuntimeOptions`)
+/// honors `--sem-unknown` too, rather than leaving the field at `AssumeTrue`.
+fn render_parser_base_initialization(
+    members: &[IntMemberTemplate],
+    unknown_policy_literal: Option<&str>,
+) -> String {
+    let needs_mut = !members.is_empty() || unknown_policy_literal.is_some();
+    let mut out = if needs_mut {
         "        let mut base = BaseParser::with_semantic_hooks(input, data, hooks);".to_owned()
+    } else {
+        "        let base = BaseParser::with_semantic_hooks(input, data, hooks);".to_owned()
     };
+    if let Some(policy) = unknown_policy_literal {
+        write!(out, "\n        base.set_unknown_predicate_policy({policy});")
+            .expect("writing to a string cannot fail");
+    }
     let initializers = members
         .iter()
         .enumerate()
@@ -12594,6 +12638,51 @@ dispose = "hook"
     }
 
     #[test]
+    fn non_default_policy_installs_on_generated_parser_constructor() {
+        // The generated-direct predicate path reads BaseParser's
+        // `unknown_predicate_policy`, which the interpreter options never set on
+        // that path. The constructor must install a non-default policy so a
+        // generated rule's hook predicate honors --sem-unknown instead of the
+        // AssumeTrue default.
+        for (policy, literal) in [
+            (
+                SemUnknownPolicy::AssumeFalse,
+                "antlr4_runtime::UnknownSemanticPolicy::AssumeFalse",
+            ),
+            (
+                SemUnknownPolicy::Error,
+                "antlr4_runtime::UnknownSemanticPolicy::Error",
+            ),
+        ] {
+            let module = render_parser_with_options(
+                "SParser",
+                &predicate_parser_data(),
+                Some(PREDICATE_GRAMMAR),
+                ParserRenderOptions {
+                    require_generated_parser: false,
+                    sem_unknown: policy,
+                    patterns: None,
+                },
+            )
+            .expect("parser should render");
+            assert!(
+                module.contains(&format!("base.set_unknown_predicate_policy({literal});")),
+                "policy {policy:?} must be installed on the generated constructor"
+            );
+        }
+
+        // The default policy leaves the constructor untouched (no needless call).
+        let default_module = render_parser_with_options(
+            "SParser",
+            &predicate_parser_data(),
+            Some(PREDICATE_GRAMMAR),
+            ParserRenderOptions::default(),
+        )
+        .expect("parser should render");
+        assert!(!default_module.contains("set_unknown_predicate_policy"));
+    }
+
+    #[test]
     fn default_policy_emits_assume_true_options_field() {
         let module = render_parser_with_options(
             "SParser",
@@ -12658,6 +12747,30 @@ dispose = "hook"
 
         assert!(module.contains("next_token_compiled_with_hooks"));
         assert!(module.contains("|_, _| false"));
+    }
+
+    #[test]
+    fn lexer_hook_and_error_policies_reject_uncovered_predicates() {
+        // Generated lexers have no hook plumbing and no runtime coordinate
+        // recording, so an uncovered lexer predicate under hook/error must fail
+        // codegen rather than be silently marked hooked / kept viable.
+        for policy in [SemUnknownPolicy::Hook, SemUnknownPolicy::Error] {
+            let error = render_lexer(
+                "SLexer",
+                &predicate_parser_data(),
+                None,
+                false,
+                policy,
+                &SemPatternFile::default(),
+            )
+            .expect_err("uncovered lexer predicate must fail under hook/error policy");
+            assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+            let message = error.to_string();
+            assert!(
+                message.contains("lexer predicate") && message.contains("no Rust implementation"),
+                "policy {policy:?} message should explain the uncovered predicate: {message}"
+            );
+        }
     }
 
     #[test]

@@ -3028,6 +3028,32 @@ where
         &mut self.input
     }
 
+    /// Installs the policy for predicate coordinates that no translated table
+    /// entry or user hook resolves.
+    ///
+    /// The interpreter fallback sets this per parse from [`ParserRuntimeOptions`],
+    /// but generated recursive-descent rules evaluate predicates directly
+    /// (`parser_semantic_ir_predicate_matches_with_context_and_local`) without
+    /// going through those options. Generated parser constructors call this so
+    /// the generated-direct path honors `--sem-unknown` too, instead of leaving
+    /// the field at its `AssumeTrue` default and silently accepting an
+    /// unimplemented hook predicate.
+    pub const fn set_unknown_predicate_policy(&mut self, policy: UnknownSemanticPolicy) {
+        self.unknown_predicate_policy = policy;
+    }
+
+    /// Reports any unknown predicate coordinate the generated-direct path
+    /// recorded under [`UnknownSemanticPolicy::Error`], as an
+    /// [`AntlrError::Unsupported`]. Generated parser entry points call this
+    /// after a rule completes so the fail-loud policy surfaces on the
+    /// generated path the same way the interpreter entry surfaces it.
+    #[must_use]
+    pub fn take_unknown_semantic_error(&mut self) -> Option<AntlrError> {
+        let error = self.unknown_semantic_error();
+        self.unknown_predicate_hits.clear();
+        error
+    }
+
     /// Returns the token stream owned by this parser.
     #[must_use]
     pub const fn token_stream(&self) -> &CommonTokenStream<S> {
@@ -11099,6 +11125,44 @@ mod tests {
             message.contains("unsupported semantic predicate") && message.contains("pred_index=0"),
             "message should name the unresolved coordinate: {message}"
         );
+    }
+
+    #[test]
+    fn generated_direct_predicate_honors_installed_policy() {
+        // The generated recursive-descent path calls
+        // `parser_semantic_ir_predicate_matches_with_context_and_local` without
+        // going through `ParserRuntimeOptions`, so the policy must be installed
+        // via `set_unknown_predicate_policy` (as the generated constructor now
+        // does). A declining hook must then honor it rather than the default.
+        let semantics = hook_predicate_semantics();
+        let context = ParserRuleContext::new(0, -1);
+
+        let mut assume_true =
+            mini_parser_with_hooks(vec![CommonToken::eof("t", 0, 1, 0)], DecliningHooks);
+        assert!(
+            assume_true.parser_semantic_ir_predicate_matches_with_context_and_local(
+                &semantics, 0, 0, &context, 0
+            ),
+            "default AssumeTrue accepts a declined hook"
+        );
+        assert!(assume_true.take_unknown_semantic_error().is_none());
+
+        let mut error_policy =
+            mini_parser_with_hooks(vec![CommonToken::eof("t", 0, 1, 0)], DecliningHooks);
+        error_policy.set_unknown_predicate_policy(UnknownSemanticPolicy::Error);
+        assert!(
+            !error_policy.parser_semantic_ir_predicate_matches_with_context_and_local(
+                &semantics, 0, 0, &context, 0
+            ),
+            "Error policy rejects a declined hook on the generated-direct path"
+        );
+        let error = error_policy
+            .take_unknown_semantic_error()
+            .expect("Error policy records the unresolved coordinate for the generated path");
+        let AntlrError::Unsupported(message) = error else {
+            panic!("expected AntlrError::Unsupported, got {error:?}");
+        };
+        assert!(message.contains("pred_index=0"), "message: {message}");
     }
 
     #[test]
