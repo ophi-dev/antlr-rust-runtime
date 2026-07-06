@@ -1407,6 +1407,21 @@ fn parse_atn_values(value: &str) -> Result<Vec<i32>, io::Error> {
         .collect()
 }
 
+/// Sets the rendered template for a lexer predicate coordinate, replacing any
+/// existing (translated) entry so a per-coordinate override wins over a
+/// built-in translation, or appending a new entry for an uncovered coordinate.
+fn set_lexer_predicate_template(
+    predicates: &mut Vec<((usize, usize), PredicateTemplate)>,
+    coordinate: (usize, usize),
+    template: PredicateTemplate,
+) {
+    if let Some(entry) = predicates.iter_mut().find(|(pred, _)| *pred == coordinate) {
+        entry.1 = template;
+    } else {
+        predicates.push((coordinate, template));
+    }
+}
+
 /// Renders a Rust lexer module that delegates token recognition to the shared
 /// ATN interpreter.
 ///
@@ -1432,67 +1447,50 @@ fn render_lexer(
         || Ok(Vec::new()),
         |source| lexer_predicate_templates(data, source, patterns),
     )?;
-    // A per-coordinate `[[coordinate]] dispose = "assume-false"` override on an
-    // uncovered lexer predicate resolves by ATN coordinate, so honor it as an
-    // explicit `false` predicate arm even when the global policy is not
-    // assume-false. Without this the coordinate would hit `run_predicate`'s
-    // default-true catch-all (or the compiled path), so the manifest's
-    // assume-false disposition would have no runtime effect.
+    // Apply per-coordinate `[[coordinate]]` overrides to every lexer predicate
+    // transition, so the generated lexer matches the disposition
+    // `collect_lexer_semantics` records in the manifest (the override wins there
+    // too). An override resolves by ATN coordinate, independent of `--grammar`:
+    //   * hook / error  -> reject codegen. Generated lexers have no hook plumbing
+    //     and no fail-loud runtime recording, so a `hooked`/errored manifest
+    //     entry the lexer can't honor would be a lie (mirrors the explicit-hook
+    //     rejection in `lexer_predicate_templates`). Also covers an *uncovered*
+    //     coordinate under the global `--sem-unknown=hook|error` policy.
+    //   * assume-false  -> force an explicit failing `run_predicate` arm.
+    //   * assume-true   -> force an always-true arm.
+    // A coordinate with no override keeps its translated template (or, if
+    // uncovered, the global policy via the catch-all).
+    let mut unhonorable_lexer_predicates = 0_usize;
     for coordinate in lexer_predicate_transitions(data)? {
         let (rule_index, pred_index) = coordinate;
-        let already_covered = predicates.iter().any(|(covered, _)| *covered == coordinate);
-        if already_covered {
-            continue;
-        }
-        let is_assume_false = patterns
+        let dispose = patterns
             .coordinate_override(
                 SemanticsKind::LexerPredicate,
                 data.rule_names.get(rule_index).map(String::as_str),
                 Some(pred_index),
                 None,
             )
-            .is_some_and(|override_| override_.dispose == CoordinateDispose::AssumeFalse);
-        if is_assume_false {
-            predicates.push((coordinate, PredicateTemplate::False));
+            .map(|override_| override_.dispose);
+        let covered = predicates.iter().any(|(pred, _)| *pred == coordinate);
+        match dispose {
+            Some(CoordinateDispose::Hook | CoordinateDispose::Error) => {
+                unhonorable_lexer_predicates += 1;
+            }
+            Some(CoordinateDispose::AssumeFalse) => {
+                set_lexer_predicate_template(&mut predicates, coordinate, PredicateTemplate::False);
+            }
+            Some(CoordinateDispose::AssumeTrue) => {
+                set_lexer_predicate_template(&mut predicates, coordinate, PredicateTemplate::True);
+            }
+            None => {
+                // No override: an uncovered coordinate under the global
+                // hook/error policy is equally unhonorable by a generated lexer.
+                if !covered && matches!(sem_unknown, SemUnknownPolicy::Hook | SemUnknownPolicy::Error) {
+                    unhonorable_lexer_predicates += 1;
+                }
+            }
         }
     }
-    // Lexer predicate transitions whose coordinate no translated template
-    // covers. Generated lexers have no hook dispatch and no runtime
-    // coordinate-recording, so these fall through `run_predicate`'s catch-all.
-    // An uncovered coordinate that resolves to `hook`/`error` — whether from the
-    // global `--sem-unknown` policy or a per-coordinate `[[coordinate]]`
-    // override — cannot be honored: there is no lexer hook plumbing (a
-    // `hook`-lowered lexer predicate is already a codegen error) and no fail-loud
-    // runtime recording. Marking it `hooked`/passing in the manifest while the
-    // generated lexer silently keeps it viable would be a lie, so reject
-    // generation here — mirroring the explicit-hook rejection in
-    // `lexer_predicate_templates`.
-    let unhonorable_lexer_predicates = lexer_predicate_transitions(data)?
-        .into_iter()
-        .filter(|coordinate| {
-            !predicates
-                .iter()
-                .any(|(covered, _)| covered == coordinate)
-        })
-        .filter(|(rule_index, pred_index)| {
-            patterns
-                .coordinate_override(
-                    SemanticsKind::LexerPredicate,
-                    data.rule_names.get(*rule_index).map(String::as_str),
-                    Some(*pred_index),
-                    None,
-                )
-                .map_or_else(
-                    || matches!(sem_unknown, SemUnknownPolicy::Hook | SemUnknownPolicy::Error),
-                    |override_| {
-                        matches!(
-                            override_.dispose,
-                            CoordinateDispose::Hook | CoordinateDispose::Error
-                        )
-                    },
-                )
-        })
-        .count();
     if unhonorable_lexer_predicates > 0 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -5015,10 +5013,22 @@ fn render_parser_with_options(
     let metadata = render_metadata(grammar_name, data);
     let token_constants = render_token_constants(data);
     let rule_constants = render_rule_constants(data);
-    let actions = grammar_source.map_or_else(
+    let mut actions = grammar_source.map_or_else(
         || Ok(Vec::new()),
         |grammar| parser_action_templates(data, grammar),
     )?;
+    // A per-coordinate `dispose = "hook"` override on a parser action coordinate
+    // must route that action to the user hook, not run its translated template.
+    // `collect_parser_semantics` already reports such a coordinate as `hooked`,
+    // so drop its concrete arm here; the action then falls through to the
+    // `_ => parser_action_hook(...)` dispatch, keeping generated behavior aligned
+    // with the manifest.
+    if !actions.is_empty() {
+        let action_state_rules = parser_action_state_rules(data)?;
+        actions.retain(|(state, _)| {
+            !parser_action_hook_overridden(patterns, data, &action_state_rules, *state)
+        });
+    }
     let after_actions = grammar_source.map_or_else(
         || Ok(vec![Vec::new(); data.rule_names.len()]),
         |grammar| parser_after_action_templates(data, grammar),
@@ -8066,6 +8076,23 @@ fn render_lexer_predicate_expression(template: &PredicateTemplate) -> String {
 
 /// Emits the generated parser action dispatcher for the grammar-specific action
 /// source states discovered from the serialized ATN.
+/// Reports whether a parser action source state carries a per-coordinate
+/// `dispose = "hook"` override, so its translated template should be dropped and
+/// the action routed to `parser_action_hook` instead.
+fn parser_action_hook_overridden(
+    patterns: &SemPatternFile,
+    data: &InterpData,
+    action_state_rules: &BTreeMap<usize, usize>,
+    state: usize,
+) -> bool {
+    let rule_name = action_state_rules
+        .get(&state)
+        .and_then(|rule| data.rule_names.get(*rule).map(String::as_str));
+    patterns
+        .coordinate_override(SemanticsKind::ParserAction, rule_name, None, Some(state))
+        .is_some_and(|override_| override_.dispose == CoordinateDispose::Hook)
+}
+
 fn render_parser_action_method(
     actions: &[(usize, ActionTemplate)],
     init_actions: &[Option<ActionTemplate>],
@@ -12700,6 +12727,48 @@ ID: [a-z]+ { customJava(); };
             SemUnknownPolicy::Hook
         );
         assert!(SemUnknownPolicy::parse_flag("bogus").is_err());
+    }
+
+    #[test]
+    fn set_lexer_predicate_template_replaces_or_appends() {
+        // A per-coordinate override must WIN over a built-in translation, so
+        // setting a covered coordinate replaces its template rather than adding
+        // a duplicate arm; an uncovered coordinate is appended.
+        let mut predicates = vec![((0, 0), PredicateTemplate::True)];
+        set_lexer_predicate_template(&mut predicates, (0, 0), PredicateTemplate::False);
+        assert_eq!(predicates, [((0, 0), PredicateTemplate::False)], "replaces covered");
+
+        set_lexer_predicate_template(&mut predicates, (1, 2), PredicateTemplate::True);
+        assert_eq!(
+            predicates,
+            [((0, 0), PredicateTemplate::False), ((1, 2), PredicateTemplate::True)],
+            "appends uncovered"
+        );
+    }
+
+    #[test]
+    fn parser_action_hook_override_drops_translated_arm() {
+        // A `dispose = "hook"` override on a parser action coordinate routes it
+        // to the user hook: `parser_action_hook_overridden` reports true so the
+        // concrete arm is dropped and the action falls through to
+        // `parser_action_hook`.
+        let data = predicate_parser_data(); // rule 0 = "s"
+        let mut action_state_rules = BTreeMap::new();
+        action_state_rules.insert(4_usize, 0_usize); // action state 4 belongs to rule `s`
+
+        let patterns = parse_sem_patterns(
+            "version = 1\n[[coordinate]]\nkind = \"action\"\nrule = \"s\"\ndispose = \"hook\"\n",
+        )
+        .expect("pattern file parses");
+
+        assert!(
+            parser_action_hook_overridden(&patterns, &data, &action_state_rules, 4),
+            "an action state in rule `s` is hook-overridden"
+        );
+        assert!(
+            !parser_action_hook_overridden(&SemPatternFile::default(), &data, &action_state_rules, 4),
+            "no override -> concrete arm is kept"
+        );
     }
 
     #[test]
