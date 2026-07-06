@@ -426,6 +426,12 @@ where
     }
 
     /// Text covered by a parser action event.
+    ///
+    /// Mirrors [`BaseParser::text_interval`] / `$text`: when the stop token is
+    /// EOF the interval ends at the previous *visible* token, so trailing hidden
+    /// tokens (and the EOF marker) are excluded rather than blindly subtracting
+    /// one, which could point at hidden whitespace. `CommonTokenStream::text`
+    /// itself guards `start > stop`, so an empty interval yields `""`.
     pub fn action_text(&mut self) -> String {
         let Some(action) = self.action else {
             return String::new();
@@ -438,7 +444,7 @@ where
             .get(stop)
             .is_some_and(|token| token.token_type() == TOKEN_EOF)
         {
-            let Some(previous) = stop.checked_sub(1) else {
+            let Some(previous) = self.input.previous_visible_token_index(stop) else {
                 return String::new();
             };
             previous
@@ -690,6 +696,33 @@ pub enum UnknownSemanticPolicy {
     /// Fail the parse with [`AntlrError::Unsupported`] naming every unknown
     /// coordinate that recognition evaluated.
     Error,
+}
+
+/// Resolves a predicate coordinate that neither a translated table entry nor a
+/// user hook could answer, applying the active [`UnknownSemanticPolicy`].
+///
+/// Under [`UnknownSemanticPolicy::Error`] the coordinate is recorded in `hits`
+/// so the parse entry can surface every unresolved coordinate afterwards. Both
+/// the legacy [`ParserPredicate`] path and the [`semir::PExpr::Hook`] path
+/// funnel through here so a missing implementation is never silently coerced
+/// to a boolean (design goal G1: never silently mis-parse).
+fn apply_unknown_predicate_policy(
+    policy: UnknownSemanticPolicy,
+    rule_index: usize,
+    pred_index: usize,
+    hits: &mut Vec<(usize, usize)>,
+) -> bool {
+    match policy {
+        UnknownSemanticPolicy::AssumeTrue => true,
+        UnknownSemanticPolicy::AssumeFalse => false,
+        UnknownSemanticPolicy::Error => {
+            let coordinate = (rule_index, pred_index);
+            if !hits.contains(&coordinate) {
+                hits.push(coordinate);
+            }
+            false
+        }
+    }
 }
 
 /// Prediction strategy requested by generated parser harnesses.
@@ -2743,6 +2776,11 @@ where
     local_int_arg: Option<(usize, i64)>,
     member_values: &'a BTreeMap<usize, i64>,
     invoked_predicates: &'a mut Vec<(usize, usize)>,
+    /// Policy applied when a [`semir::PExpr::Hook`] node's user hook declines
+    /// (`None`); keeps the fail-loud fallback chain identical to the legacy
+    /// table path instead of coercing the miss to `false`.
+    unknown_predicate_policy: UnknownSemanticPolicy,
+    unknown_predicate_hits: &'a mut Vec<(usize, usize)>,
 }
 
 impl<S, H> semir::PredContext for ParserSemIrCtx<'_, S, H>
@@ -2811,9 +2849,21 @@ where
             member_values: self.member_values,
             action: None,
         };
-        self.semantic_hooks
+        match self
+            .semantic_hooks
             .sempred(&mut ctx, self.rule_index, self.coordinate_index)
-            .unwrap_or(false)
+        {
+            Some(result) => result,
+            // No hook answered this coordinate: fall through to the configured
+            // policy instead of silently rejecting the alternative, matching the
+            // legacy table path's dispatch chain (hook → policy).
+            None => apply_unknown_predicate_policy(
+                self.unknown_predicate_policy,
+                self.rule_index,
+                self.coordinate_index,
+                self.unknown_predicate_hits,
+            ),
+        }
     }
 
     fn trace_bool(&mut self, value: bool) -> bool {
@@ -7767,17 +7817,12 @@ where
     /// because a parse that consulted an unknown predicate is unreliable no
     /// matter which paths were ultimately selected.
     fn unknown_predicate_result(&mut self, rule_index: usize, pred_index: usize) -> bool {
-        match self.unknown_predicate_policy {
-            UnknownSemanticPolicy::AssumeTrue => true,
-            UnknownSemanticPolicy::AssumeFalse => false,
-            UnknownSemanticPolicy::Error => {
-                let coordinate = (rule_index, pred_index);
-                if !self.unknown_predicate_hits.contains(&coordinate) {
-                    self.unknown_predicate_hits.push(coordinate);
-                }
-                false
-            }
-        }
+        apply_unknown_predicate_policy(
+            self.unknown_predicate_policy,
+            rule_index,
+            pred_index,
+            &mut self.unknown_predicate_hits,
+        )
     }
 
     /// Builds the fail-loud error for unknown predicate coordinates recorded
@@ -7824,6 +7869,7 @@ where
             .rule_names()
             .get(request.rule_index)
             .map(String::as_str);
+        let unknown_predicate_policy = self.unknown_predicate_policy;
         let mut ctx = ParserSemIrCtx {
             input: &mut self.input,
             semantic_hooks: &mut self.semantic_hooks,
@@ -7834,6 +7880,8 @@ where
             local_int_arg: request.local_int_arg,
             member_values: request.member_values,
             invoked_predicates: &mut self.invoked_predicates,
+            unknown_predicate_policy,
+            unknown_predicate_hits: &mut self.unknown_predicate_hits,
         };
         semir::eval_pred(&semantics.ir, predicate.expr, &mut ctx)
     }
@@ -10936,6 +10984,121 @@ mod tests {
             .expect("a predicate covered by the table is not an unknown coordinate");
 
         assert_eq!(tree.text(), "xy");
+    }
+
+    /// Hooks that decline (`None`) must fall through to the configured policy
+    /// even when the coordinate carries a [`semir`] `Hook` node, matching the
+    /// legacy table path. Regression for the `unwrap_or(false)` that silently
+    /// rejected declined hook nodes and bypassed [`UnknownSemanticPolicy`].
+    fn hook_predicate_semantics() -> ParserSemantics {
+        let mut ir = SemIr::new();
+        let expr = ir.expr(PExpr::Hook(HookId::new(0)));
+        ParserSemantics {
+            ir,
+            predicates: vec![ParserSemanticPredicate {
+                rule_index: 0,
+                pred_index: 0,
+                expr,
+                failure_message: None,
+            }],
+            actions: Vec::new(),
+        }
+    }
+
+    #[derive(Debug, Default)]
+    struct DecliningHooks;
+
+    impl SemanticHooks for DecliningHooks {}
+
+    #[test]
+    fn semir_hook_none_falls_through_to_assume_true() {
+        let atn = predicate_after_token_atn();
+        let semantics = hook_predicate_semantics();
+        let mut parser = mini_parser_with_hooks(
+            vec![
+                CommonToken::new(1).with_text("x"),
+                CommonToken::new(2).with_text("y"),
+                CommonToken::eof("parser-test", 2, 1, 2),
+            ],
+            DecliningHooks,
+        );
+
+        let (tree, _) = parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    semantics: Some(&semantics),
+                    unknown_predicate_policy: UnknownSemanticPolicy::AssumeTrue,
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect("a declined SemIR hook must pass under assume-true");
+
+        assert_eq!(tree.text(), "xy");
+    }
+
+    #[test]
+    fn semir_hook_none_falls_through_to_assume_false() {
+        let atn = predicate_after_token_atn();
+        let semantics = hook_predicate_semantics();
+        let mut parser = mini_parser_with_hooks(
+            vec![
+                CommonToken::new(1).with_text("x"),
+                CommonToken::new(2).with_text("y"),
+                CommonToken::eof("parser-test", 2, 1, 2),
+            ],
+            DecliningHooks,
+        );
+
+        let result = parser.parse_atn_rule_with_runtime_options(
+            &atn,
+            0,
+            ParserRuntimeOptions {
+                semantics: Some(&semantics),
+                unknown_predicate_policy: UnknownSemanticPolicy::AssumeFalse,
+                ..ParserRuntimeOptions::default()
+            },
+        );
+
+        assert!(
+            result.is_err(),
+            "a declined SemIR hook must fail the only guarded path under assume-false"
+        );
+    }
+
+    #[test]
+    fn semir_hook_none_records_coordinate_under_error_policy() {
+        let atn = predicate_after_token_atn();
+        let semantics = hook_predicate_semantics();
+        let mut parser = mini_parser_with_hooks(
+            vec![
+                CommonToken::new(1).with_text("x"),
+                CommonToken::new(2).with_text("y"),
+                CommonToken::eof("parser-test", 2, 1, 2),
+            ],
+            DecliningHooks,
+        );
+
+        let error = parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    semantics: Some(&semantics),
+                    unknown_predicate_policy: UnknownSemanticPolicy::Error,
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect_err("a declined SemIR hook under Error policy must fail the parse");
+
+        let AntlrError::Unsupported(message) = error else {
+            panic!("expected AntlrError::Unsupported, got {error:?}");
+        };
+        assert!(
+            message.contains("unsupported semantic predicate") && message.contains("pred_index=0"),
+            "message should name the unresolved coordinate: {message}"
+        );
     }
 
     #[test]

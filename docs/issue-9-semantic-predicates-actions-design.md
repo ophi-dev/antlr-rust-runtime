@@ -427,6 +427,7 @@ for users; the numeric trait remains for the general case.
 Phases are independently shippable; each ends green on conformance + bench.
 
 ### Phase 1 — Accountability (S, ~1 PR) — ✅ implemented 2026-07-05
+
 - Manifest emission (coordinates, spans, raw bodies, disposition) from data
   the scraper already has. → `semantics.json` written on every generator run.
 - `UnknownSemanticPolicy` in `ParserRuntimeOptions` + lexer default-closure
@@ -439,6 +440,7 @@ Phases are independently shippable; each ends green on conformance + bench.
 - Docs: compatibility-boundary section in README (issue acceptance criterion).
 
 ### Phase 2 — Parser hooks (M, ~1 PR) — ✅ implemented 2026-07-05
+
 - `ParserSemCtx` view for user hooks; it exposes lookahead, local integer
   args, member snapshots, committed action text, and the completed action tree.
 - `SemanticHooks` trait, `hooks: H = NoSemanticHooks` generic on `BaseParser`,
@@ -454,6 +456,7 @@ Implemented follow-up:
 - Generated typed hook traits (§6.2) for bare helper-call predicates.
 
 ### Phase 3 — SemIR core + enum lowering (M/L, ~2-3 PRs) — ✅ implemented 2026-07-05
+
 - ✅ `src/semir.rs`: arena, `PExpr`/`AStmt`, evaluator, hook nodes, and unit
   tests for lookahead text, token adjacency, member/local predicates,
   short-circuiting, lexer column/text predicates, and action execution.
@@ -464,6 +467,7 @@ Implemented follow-up:
   adapter for older generated modules.
 
 ### Phase 4 — Heuristic translator (L, ~3 PRs) — ◐ partially implemented 2026-07-05
+
 - Built-in recognizers now lower through SemIR instead of remaining a parallel
   parser enum execution path.
 - TOML pattern/helper/coordinate file loading via `--sem-patterns`; exact
@@ -480,6 +484,7 @@ Implemented follow-up:
   mapped yet.
 
 ### Phase 5 — Typed hooks + real-grammar proof (M) — ◐ partially implemented 2026-07-05
+
 - Typed trait generation + blanket adapter (`MyParserHooks` and
   `MyParserTypedHooks<T>`) for bare helper-call predicates.
 - Grammar-family pattern file added at `patterns/javascript.toml` for common
@@ -495,6 +500,7 @@ Implemented follow-up:
   with hooks implemented in Rust) wired into CI.
 
 ### Phase 6 — (separate milestone, out of scope) Rust target
+
 - A real ANTLR `RustTarget` emitting native predicate/action code. SemIR and
   the hook traits are its compatibility layer: grammars generated the
   metadata-first way and the target way share runtime semantics. Tracked

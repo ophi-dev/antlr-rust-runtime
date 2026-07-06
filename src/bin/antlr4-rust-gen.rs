@@ -725,16 +725,37 @@ fn collect_parser_semantics(
             .transpose()?
             .unwrap_or_default();
         let state_rules = parser_action_state_rules(data)?;
-        let blocks = grammar_source
-            .map(|source| parser_action_source_blocks(source, &data.rule_names))
+        // Pair each block source-span with the same ATN action state the
+        // template it accompanies is assigned to, so span/body provenance in the
+        // manifest stays keyed by state rather than by raw block position (which
+        // drifts once signature templates share the rule with `{...}` blocks).
+        // The span walk and this template walk both use the rule-name filter, so
+        // they share slot positions and the `RuleValue` offset.
+        let block_spans = grammar_source
+            .map(|source| {
+                let has_rule_value =
+                    extract_action_template_slots_filtered(source, Some(&data.rule_names))
+                        .iter()
+                        .flatten()
+                        .any(|template| matches!(template, ActionTemplate::RuleValue { .. }));
+                assign_states_to_action_slots(
+                    data,
+                    parser_action_source_block_slots(source, &data.rule_names),
+                    has_rule_value,
+                )
+            })
+            .transpose()?
             .unwrap_or_default();
-        for (position, state) in action_states.iter().enumerate() {
+        for state in &action_states {
             let template = templates
                 .iter()
                 .find(|(covered, _)| covered == state)
                 .map(|(_, template)| template);
             let rule_index = state_rules.get(state).copied();
-            let block = blocks.get(position);
+            let block = block_spans
+                .iter()
+                .find(|(covered, _)| covered == state)
+                .map(|(_, span)| span);
             entries.push(SemanticsEntry {
                 kind: SemanticsKind::ParserAction,
                 rule_index,
@@ -794,30 +815,65 @@ fn lexer_action_source_blocks(source: &str, rule_names: &[String]) -> Vec<(usize
     blocks
 }
 
-/// Collects `(line, column, body)` for parser action blocks in the same
-/// source order used to pair action-transition states. Unsupported bodies are
-/// still returned so the manifest can document hook/policy fallbacks.
-fn parser_action_source_blocks(source: &str, rule_names: &[String]) -> Vec<(usize, usize, String)> {
-    let mut blocks = Vec::new();
+/// Collects one `(line, column, body)` source-span slot per action template
+/// slot produced by [`extract_action_template_slots_filtered`], in lockstep.
+///
+/// The manifest pairs each slot with an ATN action state through the same
+/// state-assignment used for the templates themselves, so the two must walk the
+/// grammar identically: every position that yields a template slot — a `{...}`
+/// action block *or* a `returns [<...>]` signature template — yields a span slot
+/// here too. Signature templates have no brace body, so their span slot is
+/// `None`; that keeps block `i` and template slot `i` describing the same
+/// coordinate instead of drifting after the first signature template. Walking
+/// only `{...}` blocks (the previous behavior) dropped the signature positions
+/// and mis-paired every later block's span/body in the manifest.
+fn parser_action_source_block_slots(
+    source: &str,
+    rule_names: &[String],
+) -> Vec<Option<(usize, usize, String)>> {
+    let mut slots = Vec::new();
     let mut offset = 0;
-    while let Some(block) = next_parser_action_block(source, offset, |body| {
-        parse_int_return_assignment(body).is_some()
-    }) {
-        offset = block.after_brace;
-        if !rule_action_included(source, block.open_brace, Some(rule_names))
-            || block.predicate
-            || is_after_action(source, block.open_brace)
-            || is_init_action(source, block.open_brace)
-            || is_definitions_action(source, block.open_brace)
-            || is_members_action(source, block.open_brace)
-            || is_options_block(source, block.open_brace)
-        {
-            continue;
+    loop {
+        let block = next_parser_action_block(source, offset, |body| {
+            parse_int_return_assignment(body).is_some()
+        });
+        let signature = next_signature_template(source, offset);
+        match (block, signature) {
+            (None, None) => break,
+            (Some(block), Some(signature)) if signature.open_angle < block.open_brace => {
+                offset = signature.after_template;
+                if !rule_action_included(source, signature.open_angle, Some(rule_names)) {
+                    continue;
+                }
+                slots.push(None);
+            }
+            (Some(block), _) => {
+                offset = block.after_brace;
+                if !rule_action_included(source, block.open_brace, Some(rule_names)) {
+                    continue;
+                }
+                if block.predicate
+                    || is_after_action(source, block.open_brace)
+                    || is_init_action(source, block.open_brace)
+                    || is_definitions_action(source, block.open_brace)
+                    || is_members_action(source, block.open_brace)
+                    || is_options_block(source, block.open_brace)
+                {
+                    continue;
+                }
+                let (line, column) = line_column(source, block.open_brace);
+                slots.push(Some((line, column, one_line_action_body(block.body))));
+            }
+            (None, Some(signature)) => {
+                offset = signature.after_template;
+                if !rule_action_included(source, signature.open_angle, Some(rule_names)) {
+                    continue;
+                }
+                slots.push(None);
+            }
         }
-        let (line, column) = line_column(source, block.open_brace);
-        blocks.push((line, column, one_line_action_body(block.body)));
     }
-    blocks
+    slots
 }
 
 /// Converts a byte offset into a 1-based line and 0-based column, matching
@@ -1366,7 +1422,7 @@ fn render_lexer(
     let lexer_dfa_data = compiled_lexer_dfa_words(data);
     let has_action_dispatch = lexer_actions_need_dispatch(&actions);
     let action_method = render_lexer_action_method(&actions);
-    let predicate_method = render_lexer_predicate_method(&predicates);
+    let predicate_method = render_lexer_predicate_method(&predicates, sem_unknown);
     let accept_adjust_method = if adjusts_accept_position {
         render_position_adjusting_lexer_methods()
     } else {
@@ -5005,10 +5061,17 @@ fn render_parser_with_options(
         &type_name,
         &parser_typed_hook_mappings(data, grammar_source, patterns)?,
     );
+    // The adaptive-direct path runs `parse_atn_rule_adaptive_or_fallback`, which
+    // falls back through `parse_atn_rule` without the `ParserRuntimeOptions`
+    // emitted below. A non-default unknown-predicate policy only reaches the
+    // interpreter through those options, so it must not take that shortcut, or
+    // an untranslated predicate would silently pass instead of applying the
+    // configured fail/assume-false behavior.
     let adaptive_direct_allowed = !has_action_dispatch
         && !track_alt_numbers
         && !has_predicate_dispatch
-        && !has_return_actions;
+        && !has_return_actions
+        && unknown_policy_literal.is_none();
     let action_method = render_parser_action_method(
         &actions,
         &init_actions,
@@ -5846,6 +5909,39 @@ fn parser_action_templates(
     }
 }
 
+/// Computes the position→state offset ANTLR's action ordering implies.
+///
+/// Action-slot walks (templates and their source spans) and the serialized ATN
+/// action states can differ in count: return-value print helpers add a state
+/// without a matching translated slot. This resolves the single offset that
+/// aligns walked slot `i` with `states[offset + i]`, so every producer that
+/// pairs a slot to a state uses the same reconciliation and cannot drift.
+fn action_slot_state_offset(
+    states_len: usize,
+    slot_len: usize,
+    has_rule_value: bool,
+) -> io::Result<usize> {
+    if states_len > slot_len {
+        // Return-value print helpers appear before raw return-assignment
+        // actions in these descriptors, so source-order pairing selects the
+        // user-visible print action instead of a later raw assignment action.
+        return Ok(if has_rule_value {
+            0
+        } else {
+            states_len - slot_len
+        });
+    }
+    if states_len != slot_len {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "grammar has {slot_len} supported action template(s), but parser ATN has {states_len} action transition(s)"
+            ),
+        ));
+    }
+    Ok(0)
+}
+
 fn parser_action_templates_from_template_slots(
     data: &InterpData,
     templates: Vec<Option<ActionTemplate>>,
@@ -5854,43 +5950,45 @@ fn parser_action_templates_from_template_slots(
         return Ok(Vec::new());
     }
     let states = parser_action_states(data)?;
-    if states.len() > templates.len() {
-        // Return-value print helpers appear before raw return-assignment
-        // actions in these descriptors, so source-order pairing selects the
-        // user-visible print action instead of a later raw assignment action.
-        if templates
-            .iter()
-            .flatten()
-            .any(|template| matches!(template, ActionTemplate::RuleValue { .. }))
-        {
-            return Ok(states
-                .into_iter()
-                .zip(templates)
-                .filter_map(|(state, template)| template.map(|template| (state, template)))
-                .collect());
-        }
-        let skip = states.len() - templates.len();
-        return Ok(states
-            .into_iter()
-            .skip(skip)
-            .zip(templates)
-            .filter_map(|(state, template)| template.map(|template| (state, template)))
-            .collect());
-    }
-    if states.len() != templates.len() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!(
-                "grammar has {} supported action template(s), but parser ATN has {} action transition(s)",
-                templates.len(),
-                states.len()
-            ),
-        ));
-    }
-    Ok(states
+    let has_rule_value = templates
+        .iter()
+        .flatten()
+        .any(|template| matches!(template, ActionTemplate::RuleValue { .. }));
+    let offset = action_slot_state_offset(states.len(), templates.len(), has_rule_value)?;
+    Ok(templates
         .into_iter()
-        .zip(templates)
-        .filter_map(|(state, template)| template.map(|template| (state, template)))
+        .enumerate()
+        .filter_map(|(index, template)| {
+            let state = *states.get(offset + index)?;
+            template.map(|template| (state, template))
+        })
+        .collect())
+}
+
+/// Pairs action-block source spans with ATN action states using the same
+/// offset as [`parser_action_templates_from_template_slots`], so the manifest's
+/// span/body provenance stays state-keyed and consistent with the disposition.
+///
+/// `has_rule_value` comes from the templates the caller already resolved: the
+/// span walk mirrors the template walk arm-for-arm, so a `RuleValue` print
+/// helper occupies the same slot in both and the offset must match.
+fn assign_states_to_action_slots(
+    data: &InterpData,
+    spans: Vec<Option<(usize, usize, String)>>,
+    has_rule_value: bool,
+) -> io::Result<Vec<(usize, (usize, usize, String))>> {
+    if spans.is_empty() {
+        return Ok(Vec::new());
+    }
+    let states = parser_action_states(data)?;
+    let offset = action_slot_state_offset(states.len(), spans.len(), has_rule_value)?;
+    Ok(spans
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, span)| {
+            let state = *states.get(offset + index)?;
+            span.map(|span| (state, span))
+        })
         .collect())
 }
 
@@ -7699,7 +7797,10 @@ fn render_unsupported_lexer_action_comment(rule_name: &str, body: &str) -> Strin
 
 /// Emits the generated lexer predicate dispatcher for grammar-specific
 /// predicate coordinates discovered from the serialized ATN.
-fn render_lexer_predicate_method(predicates: &[((usize, usize), PredicateTemplate)]) -> String {
+fn render_lexer_predicate_method(
+    predicates: &[((usize, usize), PredicateTemplate)],
+    sem_unknown: SemUnknownPolicy,
+) -> String {
     if predicates.is_empty() {
         return String::new();
     }
@@ -7712,7 +7813,17 @@ fn render_lexer_predicate_method(predicates: &[((usize, usize), PredicateTemplat
         )
         .expect("writing to a string cannot fail");
     }
-    arms.push_str("            _ => true,\n");
+    // The catch-all arm is the unknown-lexer-predicate handler for any
+    // coordinate this grammar left untranslated. `--sem-unknown=assume-false`
+    // must flip it to `false` here too; otherwise a mixed lexer (one translated
+    // predicate plus an uncovered coordinate) keeps the uncovered guard viable
+    // even though the manifest promised assume-false.
+    let default_arm = if sem_unknown == SemUnknownPolicy::AssumeFalse {
+        "            _ => false,\n"
+    } else {
+        "            _ => true,\n"
+    };
+    arms.push_str(default_arm);
     format!(
         "    fn run_predicate(_base: &BaseLexer<I>, predicate: antlr4_runtime::LexerPredicate) -> bool {{\n        match (predicate.rule_index(), predicate.pred_index()) {{\n{arms}        }}\n    }}\n"
     )
@@ -11508,6 +11619,38 @@ continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#,
     }
 
     #[test]
+    fn action_source_block_slots_align_with_template_slots() {
+        // A grammar mixing a `{...}` action block, a `returns [<...>]` signature
+        // template, and another `{...}` block must produce span slots in exact
+        // 1:1 correspondence with the template slots, or the manifest pairs the
+        // wrong source span/body with each action state.
+        let rule_names = vec!["root".to_owned(), "continue".to_owned()];
+        let grammar = r#"root : {<write("$text")>} continue ;
+continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#;
+
+        let templates = extract_action_template_slots_filtered(grammar, Some(&rule_names));
+        let spans = parser_action_source_block_slots(grammar, &rule_names);
+
+        assert_eq!(
+            spans.len(),
+            templates.len(),
+            "span slots must line up 1:1 with template slots"
+        );
+        // Block, signature (no brace span), block.
+        assert!(spans[0].is_some());
+        assert!(
+            spans[1].is_none(),
+            "the signature-template position carries no brace body"
+        );
+        assert!(spans[2].is_some());
+        assert_eq!(spans[0].as_ref().map(|(_, _, body)| body.as_str()), Some(r#"<write("$text")>"#));
+        assert_eq!(
+            spans[2].as_ref().map(|(_, _, body)| body.as_str()),
+            Some(r#"<AssignLocal("$return","0")>"#)
+        );
+    }
+
+    #[test]
     fn parses_rule_value_print_template() {
         let template = parse_action_template(r#"writeln("$e.result")"#)
             .expect("rule value print helper should parse");
@@ -12466,6 +12609,42 @@ dispose = "hook"
     }
 
     #[test]
+    fn non_default_policy_disables_adaptive_direct_gate() {
+        // A grammar with no predicates/actions would normally allow the
+        // adaptive-direct shortcut, but that path drops the emitted
+        // ParserRuntimeOptions (and thus the policy). The gate must be disabled
+        // so a non-default policy always reaches the options-carrying call.
+        let default_module =
+            render_parser_with_options("TParser", &minimal_parser_data(), None, {
+                ParserRenderOptions::default()
+            })
+            .expect("parser should render under default policy");
+        assert!(
+            default_module.contains("&& true && std::env::var_os(\"ANTLR4_RUST_ADAPTIVE_DIRECT\")"),
+            "the predicate-free fixture must allow adaptive-direct by default, or this test proves nothing"
+        );
+
+        for policy in [SemUnknownPolicy::AssumeFalse, SemUnknownPolicy::Error] {
+            let module = render_parser_with_options(
+                "TParser",
+                &minimal_parser_data(),
+                None,
+                ParserRenderOptions {
+                    require_generated_parser: false,
+                    sem_unknown: policy,
+                    patterns: None,
+                },
+            )
+            .expect("parser should render under a non-default policy");
+            assert!(
+                module
+                    .contains("&& false && std::env::var_os(\"ANTLR4_RUST_ADAPTIVE_DIRECT\")"),
+                "policy {policy:?} must disable the adaptive-direct gate"
+            );
+        }
+    }
+
+    #[test]
     fn lexer_assume_false_policy_renders_failing_predicate_hook() {
         let module = render_lexer(
             "SLexer",
@@ -12494,5 +12673,27 @@ dispose = "hook"
         .expect("lexer should render");
 
         assert!(module.contains("next_token_compiled(&mut self.base, atn(), lexer_dfa())"));
+    }
+
+    #[test]
+    fn lexer_run_predicate_default_arm_follows_policy() {
+        // A mixed lexer (one covered coordinate plus an uncovered one that
+        // lands on the catch-all arm) must honor `--sem-unknown`: assume-false
+        // rejects the uncovered predicate instead of leaving it viable.
+        let predicates = [((0_usize, 0_usize), PredicateTemplate::True)];
+
+        let assume_true = render_lexer_predicate_method(&predicates, SemUnknownPolicy::AssumeTrue);
+        assert!(assume_true.contains("_ => true,"));
+        assert!(!assume_true.contains("_ => false,"));
+
+        let assume_false = render_lexer_predicate_method(&predicates, SemUnknownPolicy::AssumeFalse);
+        assert!(assume_false.contains("_ => false,"));
+        assert!(!assume_false.contains("_ => true,"));
+
+        // `error`/`hook` keep the conservative assume-true lexer default that
+        // matches historical behavior (lexer fail-loud is a codegen-time error,
+        // not a runtime catch-all).
+        let error = render_lexer_predicate_method(&predicates, SemUnknownPolicy::Error);
+        assert!(error.contains("_ => true,"));
     }
 }

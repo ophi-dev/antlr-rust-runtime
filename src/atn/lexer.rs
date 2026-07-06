@@ -226,6 +226,55 @@ where
     )
 }
 
+/// Dispatches one lexer custom action to a shared [`SemanticHooks`] object.
+///
+/// Both `next_token_*_with_semantic_hooks` entry points wire the interpreter's
+/// action callback to this, so the `RefCell` borrow + [`LexerSemCtx`] plumbing
+/// lives in one place instead of being copied per entry point.
+fn dispatch_lexer_action_hook<I, F, H>(
+    hooks: &RefCell<&mut H>,
+    lexer: &BaseLexer<I, F>,
+    action: LexerCustomAction,
+) where
+    I: CharStream,
+    F: TokenFactory,
+    H: SemanticHooks,
+{
+    let Ok(rule_index) = usize::try_from(action.rule_index()) else {
+        return;
+    };
+    let Ok(action_index) = usize::try_from(action.action_index()) else {
+        return;
+    };
+    let mut ctx = LexerSemCtx::new(lexer, rule_index, action_index, action.position());
+    let _ = hooks.borrow_mut().lexer_action(&mut ctx, action);
+}
+
+/// Dispatches one lexer semantic predicate to a shared [`SemanticHooks`]
+/// object, defaulting unknown coordinates to `true` (the historical closure
+/// default) when the hook declines with `None`.
+fn dispatch_lexer_predicate_hook<I, F, H>(
+    hooks: &RefCell<&mut H>,
+    lexer: &BaseLexer<I, F>,
+    predicate: LexerPredicate,
+) -> bool
+where
+    I: CharStream,
+    F: TokenFactory,
+    H: SemanticHooks,
+{
+    let mut ctx = LexerSemCtx::new(
+        lexer,
+        predicate.rule_index(),
+        predicate.pred_index(),
+        predicate.position(),
+    );
+    hooks
+        .borrow_mut()
+        .lexer_sempred(&mut ctx, predicate.rule_index(), predicate.pred_index())
+        .unwrap_or(true)
+}
+
 /// Runs one lexer-token match with a shared [`SemanticHooks`] object.
 ///
 /// This is the trait-based facade over the historical lexer closure hooks.
@@ -246,28 +295,8 @@ where
     next_token_with_hooks(
         lexer,
         atn,
-        |lexer, action| {
-            let Ok(rule_index) = usize::try_from(action.rule_index()) else {
-                return;
-            };
-            let Ok(action_index) = usize::try_from(action.action_index()) else {
-                return;
-            };
-            let mut ctx = LexerSemCtx::new(lexer, rule_index, action_index, action.position());
-            let _ = hooks.borrow_mut().lexer_action(&mut ctx, action);
-        },
-        |lexer, predicate| {
-            let mut ctx = LexerSemCtx::new(
-                lexer,
-                predicate.rule_index(),
-                predicate.pred_index(),
-                predicate.position(),
-            );
-            hooks
-                .borrow_mut()
-                .lexer_sempred(&mut ctx, predicate.rule_index(), predicate.pred_index())
-                .unwrap_or(true)
-        },
+        |lexer, action| dispatch_lexer_action_hook(&hooks, lexer, action),
+        |lexer, predicate| dispatch_lexer_predicate_hook(&hooks, lexer, predicate),
         |_, _, _| {},
     )
 }
@@ -350,28 +379,8 @@ where
         lexer,
         atn,
         dfa,
-        |lexer, action| {
-            let Ok(rule_index) = usize::try_from(action.rule_index()) else {
-                return;
-            };
-            let Ok(action_index) = usize::try_from(action.action_index()) else {
-                return;
-            };
-            let mut ctx = LexerSemCtx::new(lexer, rule_index, action_index, action.position());
-            let _ = hooks.borrow_mut().lexer_action(&mut ctx, action);
-        },
-        |lexer, predicate| {
-            let mut ctx = LexerSemCtx::new(
-                lexer,
-                predicate.rule_index(),
-                predicate.pred_index(),
-                predicate.position(),
-            );
-            hooks
-                .borrow_mut()
-                .lexer_sempred(&mut ctx, predicate.rule_index(), predicate.pred_index())
-                .unwrap_or(true)
-        },
+        |lexer, action| dispatch_lexer_action_hook(&hooks, lexer, action),
+        |lexer, predicate| dispatch_lexer_predicate_hook(&hooks, lexer, predicate),
         |_, _, _| {},
     )
 }
