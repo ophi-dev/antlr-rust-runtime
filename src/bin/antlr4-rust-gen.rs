@@ -187,6 +187,22 @@ impl SemUnknownPolicy {
     }
 }
 
+/// Adjusts an action disposition for a lexer coordinate.
+///
+/// Generated lexers have no action-hook plumbing — `run_action` only dispatches
+/// translated templates and otherwise no-ops — so a lexer action can never be
+/// truthfully `Hooked`. Coerce a `Hooked` disposition (from `--sem-unknown=hook`
+/// or a per-coordinate `dispose = "hook"` override) to `Ignored`, the honest
+/// disposition since the action is dropped at runtime. That also lets
+/// `--require-full-semantics` reject it (it accepts only `Translated`/`Hooked`)
+/// instead of silently accepting a manifest the lexer cannot honor.
+const fn lexer_action_disposition(disposition: SemanticsDisposition) -> SemanticsDisposition {
+    match disposition {
+        SemanticsDisposition::Hooked => SemanticsDisposition::Ignored,
+        other => other,
+    }
+}
+
 /// Coordinate kinds tracked by the `semantics.json` manifest.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum SemanticsKind {
@@ -621,18 +637,21 @@ fn collect_lexer_semantics(
                 line: block.map(|(line, _, _)| *line),
                 column: block.map(|(_, column, _)| *column),
                 body: block.map(|(_, _, body)| body.clone()),
-                disposition: patterns
-                    .coordinate_disposition(
-                        SemanticsKind::LexerAction,
-                        rule_index.and_then(|rule| data.rule_names.get(rule).map(String::as_str)),
-                        usize::try_from(*action_index).ok(),
-                        None,
-                    )
-                    .unwrap_or_else(|| if translated {
-                        SemanticsDisposition::Translated
-                    } else {
-                        policy.unknown_action_disposition()
-                    }),
+                disposition: lexer_action_disposition(
+                    patterns
+                        .coordinate_disposition(
+                            SemanticsKind::LexerAction,
+                            rule_index
+                                .and_then(|rule| data.rule_names.get(rule).map(String::as_str)),
+                            usize::try_from(*action_index).ok(),
+                            None,
+                        )
+                        .unwrap_or_else(|| if translated {
+                            SemanticsDisposition::Translated
+                        } else {
+                            policy.unknown_action_disposition()
+                        }),
+                ),
                 template: template
                     .filter(|_| translated)
                     .map(|template| format!("{template:?}")),
@@ -13457,6 +13476,28 @@ dispose = "hook"
                 message.contains("lexer predicate") && message.contains("no Rust implementation"),
                 "policy {policy:?} message should explain the uncovered predicate: {message}"
             );
+        }
+    }
+
+    #[test]
+    fn lexer_action_is_never_reported_hooked() {
+        // Generated lexers have no action-hook plumbing, so a lexer action's
+        // disposition must never be `Hooked` (which `--require-full-semantics`
+        // would accept as complete). `hook` degrades to `Ignored`, so strict mode
+        // rejects it instead of silently accepting a dropped action.
+        assert_eq!(
+            lexer_action_disposition(SemanticsDisposition::Hooked),
+            SemanticsDisposition::Ignored
+        );
+        // Every other disposition is preserved unchanged.
+        for disposition in [
+            SemanticsDisposition::Translated,
+            SemanticsDisposition::AssumeTrue,
+            SemanticsDisposition::AssumeFalse,
+            SemanticsDisposition::Error,
+            SemanticsDisposition::Ignored,
+        ] {
+            assert_eq!(lexer_action_disposition(disposition), disposition);
         }
     }
 
