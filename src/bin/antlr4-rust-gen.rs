@@ -5162,29 +5162,14 @@ fn render_parser_with_options(
     // A non-default policy must reach the interpreter through the emitted
     // runtime options, so its literal forces the options-carrying call shape.
     //
-    // A `hook`-disposed predicate coordinate (per-coordinate override or a
-    // helper lowered to `hook`) is a promise that a user hook owns it, so an
-    // *unimplemented* hook (default `NoSemanticHooks`, or a hook returning
-    // `None`) must fail loud rather than degrade to `AssumeTrue`. Escalate the
-    // emitted policy to `Error` whenever any predicate resolves to a hook, even
-    // under the default global policy — otherwise a `hooked` manifest entry that
-    // `--require-full-semantics` accepts would silently pass at runtime.
-    let has_hook_predicate = predicates
-        .iter()
-        .any(|(_, template)| matches!(template, PredicateTemplate::Hook));
-    // A `hook`-disposed parser action (per-coordinate override) is routed to
-    // `parser_action_hook`; an unimplemented action hook must likewise fail loud
-    // rather than be silently dropped, so it escalates the policy too.
-    let has_hook_action = {
-        let action_state_rules = parser_action_state_rules(data)?;
-        parser_action_states(data)?.iter().any(|state| {
-            parser_action_hook_overridden(patterns, data, &action_state_rules, *state)
-        })
-    };
+    // A `hook`-disposed coordinate falls through to the configured policy when
+    // its hook is unimplemented (the documented `SemIR → hook → policy` chain),
+    // so it does NOT escalate the global policy: doing so would flip unrelated
+    // `assume-true` coordinates in the same grammar to fail-loud. Users select
+    // fail-loud for missing hooks with `--sem-unknown=error` /
+    // `--require-full-semantics`; under the default policy a declined hook keeps
+    // historical pass-through, per coordinate.
     let unknown_policy_literal = match options.sem_unknown {
-        SemUnknownPolicy::AssumeTrue if has_hook_predicate || has_hook_action => {
-            Some("antlr4_runtime::UnknownSemanticPolicy::Error")
-        }
         SemUnknownPolicy::AssumeTrue => None,
         SemUnknownPolicy::AssumeFalse => Some("antlr4_runtime::UnknownSemanticPolicy::AssumeFalse"),
         SemUnknownPolicy::Hook | SemUnknownPolicy::Error => {
@@ -13252,11 +13237,12 @@ dispose = "hook"
     }
 
     #[test]
-    fn hook_predicate_escalates_policy_to_error_under_default() {
+    fn hook_predicate_does_not_escalate_default_policy() {
         // A per-coordinate `dispose = "hook"` predicate under the default global
-        // policy must emit the Error policy, so an unimplemented hook
-        // (NoSemanticHooks / a hook returning None) fails loud instead of
-        // silently assuming true.
+        // policy must NOT flip the whole parser to Error — that would turn
+        // unrelated `assume-true` coordinates into fail-loud. The hook falls
+        // through to the configured (default) policy per coordinate; users opt
+        // into fail-loud with --sem-unknown=error.
         let patterns = parse_sem_patterns(
             "version = 1\n[[coordinate]]\nkind = \"predicate\"\nrule = \"s\"\nindex = 0\ndispose = \"hook\"\n",
         )
@@ -13274,12 +13260,9 @@ dispose = "hook"
         .expect("parser should render");
 
         assert!(
-            module.contains("base.set_unknown_predicate_policy(antlr4_runtime::UnknownSemanticPolicy::Error)"),
-            "a hook predicate must escalate the installed policy to Error under the default"
+            !module.contains("UnknownSemanticPolicy::Error"),
+            "a hook predicate must not escalate the default policy to Error"
         );
-        assert!(module.contains(
-            "unknown_predicate_policy: antlr4_runtime::UnknownSemanticPolicy::Error"
-        ));
     }
 
     #[test]

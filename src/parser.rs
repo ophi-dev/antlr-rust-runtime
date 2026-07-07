@@ -5083,6 +5083,11 @@ where
         );
         if let Some(error) = self.unknown_semantic_error() {
             report_token_source_errors(&self.input.drain_source_errors());
+            // Consume the recorded coordinates so a caller that handles this
+            // error and reuses the parser for another top-level parse does not
+            // carry stale coordinates into the next `take_unknown_semantic_error`.
+            self.unknown_predicate_hits.clear();
+            self.unhandled_action_hits.clear();
             return Err(error);
         }
         // Recognition recorded no unresolved coordinate of its own; merge the
@@ -10988,6 +10993,37 @@ mod tests {
         assert!(
             message.contains("pred_index=0"),
             "message should carry the coordinate: {message}"
+        );
+    }
+
+    #[test]
+    fn fail_loud_error_consumes_recorded_hits() {
+        // The interpreter Error-policy return must consume the recorded
+        // coordinates, so a caller that handles the error and reuses the parser
+        // does not carry them into the next `take_unknown_semantic_error`.
+        let atn = predicate_after_token_atn();
+        let mut parser = mini_parser(vec![
+            CommonToken::new(1).with_text("x"),
+            CommonToken::new(2).with_text("y"),
+            CommonToken::eof("parser-test", 2, 1, 2),
+        ]);
+
+        parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    unknown_predicate_policy: UnknownSemanticPolicy::Error,
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect_err("parse fails loud under the Error policy");
+
+        // The failing parse already surfaced the coordinate in its returned
+        // error, so no stale coordinate remains to leak into a reused parser.
+        assert!(
+            parser.take_unknown_semantic_error().is_none(),
+            "fail-loud return left stale unknown-predicate coordinates behind"
         );
     }
 
