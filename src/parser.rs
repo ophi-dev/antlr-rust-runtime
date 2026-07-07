@@ -3061,6 +3061,17 @@ where
         error
     }
 
+    /// Drops any fail-loud semantic coordinates recorded by a previous parse.
+    ///
+    /// Generated parsers call this at the true top-level entry so a parser
+    /// reused after a fail-loud (or recovered) parse starts clean, without
+    /// clearing hits mid-parse where a generated parent still needs a child's
+    /// recorded coordinate to survive to the top-level boundary.
+    pub fn reset_unknown_semantic_hits(&mut self) {
+        self.unknown_predicate_hits.clear();
+        self.unhandled_action_hits.clear();
+    }
+
     /// Returns the token stream owned by this parser.
     #[must_use]
     pub const fn token_stream(&self) -> &CommonTokenStream<S> {
@@ -5083,11 +5094,12 @@ where
         );
         if let Some(error) = self.unknown_semantic_error() {
             report_token_source_errors(&self.input.drain_source_errors());
-            // Consume the recorded coordinates so a caller that handles this
-            // error and reuses the parser for another top-level parse does not
-            // carry stale coordinates into the next `take_unknown_semantic_error`.
-            self.unknown_predicate_hits.clear();
-            self.unhandled_action_hits.clear();
+            // Keep the recorded coordinates: when this interpreted rule is a
+            // child of a generated parent, the parent's catch block recovers an
+            // ordinary `AntlrError` into a partial subtree, so the fail-loud
+            // coordinate must survive on the parser for the top-level entry's
+            // `take_unknown_semantic_error` to surface it. Cross-parse staleness
+            // is handled by clearing at the top-level generated entry instead.
             return Err(error);
         }
         // Recognition recorded no unresolved coordinate of its own; merge the
@@ -10997,10 +11009,12 @@ mod tests {
     }
 
     #[test]
-    fn fail_loud_error_consumes_recorded_hits() {
-        // The interpreter Error-policy return must consume the recorded
-        // coordinates, so a caller that handles the error and reuses the parser
-        // does not carry them into the next `take_unknown_semantic_error`.
+    fn fail_loud_hits_do_not_leak_into_a_reused_interpreter_parse() {
+        // A parser reused after a fail-loud parse must not carry the old
+        // coordinates into a later parse. The fail-loud return keeps the hits
+        // (so a generated parent can surface a recovered child's coordinate),
+        // and the next parse's entry stashes/replaces them, so a subsequent
+        // clean parse surfaces no stale error.
         let atn = predicate_after_token_atn();
         let mut parser = mini_parser(vec![
             CommonToken::new(1).with_text("x"),
@@ -11017,13 +11031,16 @@ mod tests {
                     ..ParserRuntimeOptions::default()
                 },
             )
-            .expect_err("parse fails loud under the Error policy");
+            .expect_err("first parse fails loud under the Error policy");
 
-        // The failing parse already surfaced the coordinate in its returned
-        // error, so no stale coordinate remains to leak into a reused parser.
+        // The failed parse kept its coordinate on the parser (so a generated
+        // parent could surface a recovered child). A top-level reuse resets the
+        // hits — generated parsers call `reset_unknown_semantic_hits` at their
+        // public entry; direct interpreter-API callers do the same.
+        parser.reset_unknown_semantic_hits();
         assert!(
             parser.take_unknown_semantic_error().is_none(),
-            "fail-loud return left stale unknown-predicate coordinates behind"
+            "reset must drop stale unknown-predicate coordinates before a reused parse"
         );
     }
 

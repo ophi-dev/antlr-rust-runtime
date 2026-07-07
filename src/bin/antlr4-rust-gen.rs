@@ -5437,6 +5437,13 @@ where
 
     #[allow(dead_code)]
     fn parse_rule_precedence_inner(&mut self, rule_index: usize, precedence: i32, allow_generated_fallback: bool) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{
+        if allow_generated_fallback {{
+            // True top-level entry: drop any fail-loud coordinates left by a
+            // previous parse so a reused parser starts clean. Mid-parse the hits
+            // are preserved so a generated parent can surface a recovered child's
+            // fail-loud coordinate at this boundary.
+            self.base.reset_unknown_semantic_hits();
+        }}
         let __rule_start = antlr4_runtime::IntStream::index(self.base.input());
         let __generated_action_marker = self.generated_actions.len();
         let __generated_member_checkpoint = self.base.int_members_checkpoint();
