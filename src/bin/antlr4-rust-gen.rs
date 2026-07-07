@@ -1458,10 +1458,27 @@ fn render_lexer(
     let type_name = rust_type_name(grammar_name);
     let metadata = render_metadata(grammar_name, data);
     let token_constants = render_token_constants(data);
-    let actions = grammar_source.map_or_else(
+    let mut actions = grammar_source.map_or_else(
         || Ok(Vec::new()),
         |source| lexer_action_templates(data, source, allow_unsupported_lexer_actions),
     )?;
+    // A per-coordinate `dispose = "hook"` override on a lexer action is coerced
+    // to `Ignored` in the manifest (generated lexers cannot route actions to
+    // hooks). Drop its `run_action` arm too, or the lexer would still execute
+    // the translated action while `semantics.json` reports it ignored.
+    actions.retain(|((rule_index, action_index), _)| {
+        let rule_name = usize::try_from(*rule_index)
+            .ok()
+            .and_then(|rule| data.rule_names.get(rule).map(String::as_str));
+        !patterns
+            .coordinate_override(
+                SemanticsKind::LexerAction,
+                rule_name,
+                usize::try_from(*action_index).ok(),
+                None,
+            )
+            .is_some_and(|override_| override_.dispose == CoordinateDispose::Hook)
+    });
     let mut predicates = grammar_source.map_or_else(
         || Ok(Vec::new()),
         |source| lexer_predicate_templates(data, source, patterns),
@@ -5155,8 +5172,17 @@ fn render_parser_with_options(
     let has_hook_predicate = predicates
         .iter()
         .any(|(_, template)| matches!(template, PredicateTemplate::Hook));
+    // A `hook`-disposed parser action (per-coordinate override) is routed to
+    // `parser_action_hook`; an unimplemented action hook must likewise fail loud
+    // rather than be silently dropped, so it escalates the policy too.
+    let has_hook_action = {
+        let action_state_rules = parser_action_state_rules(data)?;
+        parser_action_states(data)?.iter().any(|state| {
+            parser_action_hook_overridden(patterns, data, &action_state_rules, *state)
+        })
+    };
     let unknown_policy_literal = match options.sem_unknown {
-        SemUnknownPolicy::AssumeTrue if has_hook_predicate => {
+        SemUnknownPolicy::AssumeTrue if has_hook_predicate || has_hook_action => {
             Some("antlr4_runtime::UnknownSemanticPolicy::Error")
         }
         SemUnknownPolicy::AssumeTrue => None,

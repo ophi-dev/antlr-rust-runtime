@@ -941,6 +941,11 @@ pub struct BaseParser<S, H = NoSemanticHooks> {
     /// Unknown predicate coordinates evaluated by the current parse, recorded
     /// so [`UnknownSemanticPolicy::Error`] can report them after recognition.
     unknown_predicate_hits: Vec<(usize, usize)>,
+    /// Committed parser action coordinates offered to [`SemanticHooks::action`]
+    /// that no hook handled, recorded so a generated `hook`/error-disposed
+    /// action fails loud instead of being silently dropped. Keyed by
+    /// `(rule_index, source_state)`.
+    unhandled_action_hits: Vec<(usize, usize)>,
     /// Per-parse rule FIRST-set cache keyed by rule start state. This keeps
     /// hot rule-transition checks to a vector lookup after the first visit
     /// while the thread-local shared ATN cache still owns the cross-parse
@@ -3005,6 +3010,7 @@ where
             invoked_predicates: Vec::new(),
             unknown_predicate_policy: UnknownSemanticPolicy::default(),
             unknown_predicate_hits: Vec::new(),
+            unhandled_action_hits: Vec::new(),
             rule_first_set_cache: Vec::new(),
             state_expected_cache: FxHashMap::default(),
             state_expected_token_cache: FxHashMap::default(),
@@ -3051,6 +3057,7 @@ where
     pub fn take_unknown_semantic_error(&mut self) -> Option<AntlrError> {
         let error = self.unknown_semantic_error();
         self.unknown_predicate_hits.clear();
+        self.unhandled_action_hits.clear();
         error
     }
 
@@ -4396,7 +4403,21 @@ where
             member_values,
             action: Some(action),
         };
-        semantic_hooks.action(&mut ctx, action)
+        let handled = semantic_hooks.action(&mut ctx, action);
+        // This action reached the hook because it had no translated arm. If no
+        // hook handled it either (`SemanticHooks::action` returns `false`), the
+        // committed action is silently dropped — record it so the parse entry
+        // can fail loud under the fail-loud boundary, mirroring unknown
+        // predicates. `assume-*` policies opt out of the fail-loud recording.
+        if !handled
+            && matches!(self.unknown_predicate_policy, UnknownSemanticPolicy::Error)
+        {
+            let coordinate = (rule_index, action.source_state());
+            if !self.unhandled_action_hits.contains(&coordinate) {
+                self.unhandled_action_hits.push(coordinate);
+            }
+        }
+        handled
     }
 
     /// Attempts to execute a whole generated rule by committing simulator
@@ -7881,10 +7902,11 @@ where
     /// by the current parse, if any.
     fn unknown_semantic_error(&self) -> Option<AntlrError> {
         use std::fmt::Write as _;
-        let mut hits = self.unknown_predicate_hits.iter();
-        let first = hits.next()?;
+        if self.unknown_predicate_hits.is_empty() && self.unhandled_action_hits.is_empty() {
+            return None;
+        }
         let mut message = String::new();
-        for (rule_index, pred_index) in std::iter::once(first).chain(hits) {
+        for (rule_index, pred_index) in &self.unknown_predicate_hits {
             if !message.is_empty() {
                 message.push_str("; ");
             }
@@ -7896,6 +7918,21 @@ where
                 None => write!(
                     message,
                     "unsupported semantic predicate: rule_index={rule_index} pred_index={pred_index}"
+                ),
+            };
+        }
+        for (rule_index, source_state) in &self.unhandled_action_hits {
+            if !message.is_empty() {
+                message.push_str("; ");
+            }
+            let _ = match self.rule_names().get(*rule_index) {
+                Some(rule_name) => write!(
+                    message,
+                    "unhandled semantic action: rule={rule_name}({rule_index}) state={source_state}"
+                ),
+                None => write!(
+                    message,
+                    "unhandled semantic action: rule_index={rule_index} state={source_state}"
                 ),
             };
         }
@@ -11041,6 +11078,38 @@ mod tests {
             parser.semantic_hooks.actions,
             vec![(42, "x".to_owned(), Some("s".to_owned()))]
         );
+    }
+
+    #[test]
+    fn unhandled_committed_action_fails_loud_under_error_policy() {
+        // An action offered to the hook that no hook handles (returns false)
+        // must be recorded and surfaced as `AntlrError::Unsupported` under the
+        // Error policy, so a `hook`-disposed action is not silently dropped.
+        let mut parser =
+            mini_parser_with_hooks(vec![CommonToken::eof("t", 0, 1, 0)], DecliningHooks);
+        parser.set_unknown_predicate_policy(UnknownSemanticPolicy::Error);
+        let tree = ParseTree::Rule(RuleNode::new(ParserRuleContext::new(0, -1)));
+
+        // DecliningHooks::action returns false (unhandled).
+        assert!(!parser.parser_action_hook(ParserAction::new(42, 0, 0, Some(0)), &tree));
+
+        let error = parser
+            .take_unknown_semantic_error()
+            .expect("an unhandled committed action under Error policy must fail loud");
+        let AntlrError::Unsupported(message) = error else {
+            panic!("expected AntlrError::Unsupported, got {error:?}");
+        };
+        assert!(
+            message.contains("unhandled semantic action") && message.contains("state=42"),
+            "message should name the dropped action coordinate: {message}"
+        );
+
+        // Under the default (assume-true) policy the same miss is not recorded.
+        let mut lenient =
+            mini_parser_with_hooks(vec![CommonToken::eof("t", 0, 1, 0)], DecliningHooks);
+        let tree = ParseTree::Rule(RuleNode::new(ParserRuleContext::new(0, -1)));
+        assert!(!lenient.parser_action_hook(ParserAction::new(42, 0, 0, Some(0)), &tree));
+        assert!(lenient.take_unknown_semantic_error().is_none());
     }
 
     #[test]
