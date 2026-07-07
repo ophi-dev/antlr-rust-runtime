@@ -1462,22 +1462,24 @@ fn render_lexer(
         || Ok(Vec::new()),
         |source| lexer_action_templates(data, source, allow_unsupported_lexer_actions),
     )?;
-    // A per-coordinate `dispose = "hook"` override on a lexer action is coerced
-    // to `Ignored` in the manifest (generated lexers cannot route actions to
-    // hooks). Drop its `run_action` arm too, or the lexer would still execute
-    // the translated action while `semantics.json` reports it ignored.
+    // Any per-coordinate override on a lexer action makes `collect_lexer_semantics`
+    // report a non-`Translated` disposition (`hook`→Ignored, assume-*→that
+    // fallback). Generated lexers can't route actions to hooks and an action has
+    // no truth value, so an overridden action must not run its translated
+    // `run_action` arm — drop it, or the lexer would execute a side effect (e.g.
+    // a mode change) the manifest says is a fallback.
     actions.retain(|((rule_index, action_index), _)| {
         let rule_name = usize::try_from(*rule_index)
             .ok()
             .and_then(|rule| data.rule_names.get(rule).map(String::as_str));
-        !patterns
+        patterns
             .coordinate_override(
                 SemanticsKind::LexerAction,
                 rule_name,
                 usize::try_from(*action_index).ok(),
                 None,
             )
-            .is_some_and(|override_| override_.dispose == CoordinateDispose::Hook)
+            .is_none()
     });
     let mut predicates = grammar_source.map_or_else(
         || Ok(Vec::new()),
@@ -5053,16 +5055,26 @@ fn render_parser_with_options(
         || Ok(Vec::new()),
         |grammar| parser_action_templates(data, grammar),
     )?;
-    // A per-coordinate `dispose = "hook"` override on a parser action coordinate
-    // must route that action to the user hook, not run its translated template.
-    // `collect_parser_semantics` already reports such a coordinate as `hooked`,
-    // so drop its concrete arm here; the action then falls through to the
-    // `_ => parser_action_hook(...)` dispatch, keeping generated behavior aligned
-    // with the manifest.
+    // Capture the `$ctx`-rooted action source states from the FULL action set,
+    // before dropping overridden arms below. The child-tree tag applies to any
+    // action replayed at that state — including one routed to
+    // `parser_action_hook` — so the hook receives the child tree (and thus a
+    // correct `ParserSemCtx::context()`), not the parent's.
+    let ctx_rooted_action_states = actions
+        .iter()
+        .filter(|(_, action)| action_is_ctx_rooted(action))
+        .map(|(state, _)| *state)
+        .collect::<BTreeSet<usize>>();
+    // A per-coordinate override on a parser action coordinate must drop its
+    // translated template: a `hook` override routes the action to the user hook
+    // (`_ => parser_action_hook(...)`), and an `assume-*` override is a
+    // documented no-op fallback. Either way `collect_parser_semantics` reports a
+    // non-`Translated` disposition, so the concrete `run_action` arm must not run
+    // the side effect.
     if !actions.is_empty() {
         let action_state_rules = parser_action_state_rules(data)?;
         actions.retain(|(state, _)| {
-            !parser_action_hook_overridden(patterns, data, &action_state_rules, *state)
+            !parser_action_overridden(patterns, data, &action_state_rules, *state)
         });
     }
     let after_actions = grammar_source.map_or_else(
@@ -5229,16 +5241,10 @@ fn render_parser_with_options(
         &int_members,
         !action_states.is_empty(),
     )?;
-    // ATN action source-states whose action is `$ctx`-rooted (renders the current
-    // rule's own tree). A nested child's buffered action at one of these states is
-    // re-tagged with the child tree at the call site so it renders the child
-    // subtree, not the parent's, on replay. Source-states are globally unique, so a
-    // flat sorted set suffices.
-    let ctx_rooted_action_states = actions
-        .iter()
-        .filter(|(_, action)| action_is_ctx_rooted(action))
-        .map(|(state, _)| *state)
-        .collect::<BTreeSet<usize>>();
+    // `ctx_rooted_action_states` was captured above from the full action set
+    // (before overridden arms were dropped), so a hook-routed `$ctx`-rooted
+    // action still carries the child-tree tag on replay. Source-states are
+    // globally unique, so a flat sorted set suffices.
     let ctx_rooted_action_states_constant = format!(
         "#[allow(dead_code)]\nconst CTX_ROOTED_ACTION_STATES: &[usize] = &{};\n",
         render_usize_array(&ctx_rooted_action_states.iter().copied().collect::<Vec<_>>())
@@ -5456,6 +5462,19 @@ where
                     self.generated_actions.truncate(__generated_action_marker);
                     self.base.restore_int_members(__generated_member_checkpoint);
                     antlr4_runtime::IntStream::seek(self.base.input(), __rule_start);
+                    // A generated predicate that consulted an unimplemented hook
+                    // (returning None under the Error policy) fails the alternative
+                    // and surfaces here as a generic failed-predicate/rule error.
+                    // The documented contract is to fail loud with
+                    // `AntlrError::Unsupported`, so prefer a recorded semantic error
+                    // over the generic one — but only at the top-level entry, mirroring
+                    // the post-parse check below: a nested child keeps its hits so the
+                    // generated parent surfaces them at that boundary instead.
+                    if allow_generated_fallback {{
+                        if let Some(semantic_error) = self.base.take_unknown_semantic_error() {{
+                            return Err(semantic_error);
+                        }}
+                    }}
                     return Err(error.into_error());
                 }}
             }}
@@ -8196,10 +8215,13 @@ fn render_lexer_predicate_expression(template: &PredicateTemplate) -> String {
 
 /// Emits the generated parser action dispatcher for the grammar-specific action
 /// source states discovered from the serialized ATN.
-/// Reports whether a parser action source state carries a per-coordinate
-/// `dispose = "hook"` override, so its translated template should be dropped and
-/// the action routed to `parser_action_hook` instead.
-fn parser_action_hook_overridden(
+/// Reports whether a parser action source state carries any per-coordinate
+/// override, so its translated template should be dropped: a `hook` override
+/// routes the action to `parser_action_hook`, and an `assume-*` override is a
+/// documented no-op fallback. Either way the manifest reports a non-`Translated`
+/// disposition, so the concrete `run_action` arm must not execute the side
+/// effect.
+fn parser_action_overridden(
     patterns: &SemPatternFile,
     data: &InterpData,
     action_state_rules: &BTreeMap<usize, usize>,
@@ -8210,7 +8232,7 @@ fn parser_action_hook_overridden(
         .and_then(|rule| data.rule_names.get(*rule).map(String::as_str));
     patterns
         .coordinate_override(SemanticsKind::ParserAction, rule_name, None, Some(state))
-        .is_some_and(|override_| override_.dispose == CoordinateDispose::Hook)
+        .is_some()
 }
 
 fn render_parser_action_method(
@@ -12916,26 +12938,27 @@ ID: [a-z]+ { customJava(); };
     }
 
     #[test]
-    fn parser_action_hook_override_drops_translated_arm() {
-        // A `dispose = "hook"` override on a parser action coordinate routes it
-        // to the user hook: `parser_action_hook_overridden` reports true so the
-        // concrete arm is dropped and the action falls through to
-        // `parser_action_hook`.
+    fn parser_action_override_drops_translated_arm() {
+        // Any per-coordinate override on a parser action drops its translated
+        // arm: a `hook` override routes to `parser_action_hook`, an `assume-*`
+        // override is a no-op fallback. `parser_action_overridden` reports true
+        // for each, and false when there is no override.
         let data = predicate_parser_data(); // rule 0 = "s"
         let mut action_state_rules = BTreeMap::new();
         action_state_rules.insert(4_usize, 0_usize); // action state 4 belongs to rule `s`
 
-        let patterns = parse_sem_patterns(
-            "version = 1\n[[coordinate]]\nkind = \"action\"\nrule = \"s\"\ndispose = \"hook\"\n",
-        )
-        .expect("pattern file parses");
-
+        for dispose in ["hook", "assume-true", "assume-false"] {
+            let patterns = parse_sem_patterns(&format!(
+                "version = 1\n[[coordinate]]\nkind = \"action\"\nrule = \"s\"\ndispose = \"{dispose}\"\n"
+            ))
+            .expect("pattern file parses");
+            assert!(
+                parser_action_overridden(&patterns, &data, &action_state_rules, 4),
+                "dispose {dispose}: an action state in rule `s` is overridden"
+            );
+        }
         assert!(
-            parser_action_hook_overridden(&patterns, &data, &action_state_rules, 4),
-            "an action state in rule `s` is hook-overridden"
-        );
-        assert!(
-            !parser_action_hook_overridden(&SemPatternFile::default(), &data, &action_state_rules, 4),
+            !parser_action_overridden(&SemPatternFile::default(), &data, &action_state_rules, 4),
             "no override -> concrete arm is kept"
         );
     }
@@ -13317,6 +13340,102 @@ dispose = "hook"
         assert!(
             surface_at < replay_at,
             "the unknown-semantic error must be surfaced before replaying buffered actions"
+        );
+    }
+
+    #[test]
+    fn generated_rule_error_prefers_recorded_semantic_error() {
+        // When a generated-direct predicate consulted an unimplemented hook
+        // (returning None under the Error policy), the alternative fails and
+        // `parse_generated_rule` returns a generic `failed_predicate_error`. The
+        // top-level `Err` arm must first drain any recorded fail-loud coordinate
+        // and return that `AntlrError::Unsupported`, otherwise the documented
+        // fail-loud error is shadowed by the generic rule error. The check is
+        // gated on `allow_generated_fallback` so a nested child keeps its hits for
+        // the generated parent to surface at its own boundary.
+        let module = render_parser_with_options(
+            "SParser",
+            &predicate_parser_data(),
+            Some(PREDICATE_GRAMMAR),
+            ParserRenderOptions {
+                require_generated_parser: false,
+                sem_unknown: SemUnknownPolicy::Hook,
+                patterns: None,
+            },
+        )
+        .expect("parser should render");
+
+        // Locate the generated-rule `Err` arm's generic return.
+        let generic_return_at = module
+            .find("return Err(error.into_error());")
+            .expect("generated-rule Err arm returns the generic rule error");
+        // The fail-loud drain must appear inside that arm, before the generic
+        // return, under the top-level gate.
+        let arm_start = module[..generic_return_at]
+            .rfind("Err(error) => {")
+            .expect("generic return lives in the Err arm");
+        let arm = &module[arm_start..generic_return_at];
+        assert!(
+            arm.contains("if allow_generated_fallback {")
+                && arm.contains(
+                    "if let Some(semantic_error) = self.base.take_unknown_semantic_error()"
+                ),
+            "the Err arm must drain a recorded semantic error before the generic return"
+        );
+    }
+
+    #[test]
+    fn interpreted_fallback_action_miss_is_surfaced_at_public_entry() {
+        // A public entry that falls back to the interpreted ATN path runs the
+        // non-buffered `run_action` loop immediately (an untranslated action
+        // routed to `parser_action_hook` records an `unhandled_action_hit` under
+        // the Error policy). The top-level surfacing check that drains those hits
+        // is gated on the SAME `allow_generated_fallback` condition as the branch
+        // that runs the interpreted fallback, so the miss cannot escape as `Ok`.
+        // (Verified end-to-end: parsing an untranslated action through the
+        // interpreted path under `--sem-unknown=hook` with a declining hook
+        // returns `AntlrError::Unsupported("unhandled semantic action: ...")`.)
+        //
+        // Emitting a *separate* check inside `parse_interpreted_rule_precedence`
+        // would be both dead (the outer check already drains the hits) and
+        // unsafe: an early `return Err` there would bypass the caller's
+        // `restore_int_members` / `generated_actions.truncate` cleanup, leaking a
+        // failed parse's member writes into a reused parser.
+        let module = render_parser_with_options(
+            "SParser",
+            &predicate_parser_data(),
+            Some(PREDICATE_GRAMMAR),
+            ParserRenderOptions {
+                require_generated_parser: false,
+                sem_unknown: SemUnknownPolicy::Hook,
+                patterns: None,
+            },
+        )
+        .expect("parser should render");
+
+        // The interpreted call site in the top-level entry and the surfacing check
+        // share the `allow_generated_fallback` gate, so the surfacing check follows
+        // the interpreted call and drains any action-hook miss (or predicate miss)
+        // the fallback recorded.
+        let interpreted_call_at = module
+            .find("self.parse_interpreted_rule_precedence(rule_index, precedence)?")
+            .expect("top-level entry runs the interpreted fallback under allow_generated_fallback");
+        let surface_at = module[interpreted_call_at..]
+            .find("if let Some(error) = self.base.take_unknown_semantic_error()")
+            .map(|offset| interpreted_call_at + offset)
+            .expect("the public entry must drain recorded semantic misses after the fallback");
+        // Between the interpreted fallback call and the surfacing check the entry
+        // must not return `Ok`, or an action-hook miss recorded by the immediate
+        // `run_action` loop would escape as a recovered success.
+        assert!(
+            !module[interpreted_call_at..surface_at].contains("Ok(__tree)"),
+            "the entry must not return Ok between the interpreted fallback and the surfacing check"
+        );
+        // Both are under the same gate: the branch that runs the fallback and the
+        // check that drains its misses share `if allow_generated_fallback {`.
+        assert!(
+            module[..interpreted_call_at].contains("} else if allow_generated_fallback {"),
+            "the interpreted fallback runs only at the top-level (allow_generated_fallback) entry"
         );
     }
 
