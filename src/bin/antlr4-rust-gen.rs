@@ -5508,6 +5508,15 @@ where
             for __action in __generated_actions {{
                 self.run_generated_action(__action, &__tree);
             }}
+            // Replaying committed actions is the first point `run_action` can
+            // reach `parser_action_hook` and record an unhandled hook-disposed
+            // action. Re-check so that miss fails *this* parse rather than
+            // surfacing on a later one. (Actions before the unhandled one have
+            // already replayed; a fail-loud parse still aborts, which is the
+            // intended outcome.)
+            if let Some(error) = self.base.take_unknown_semantic_error() {{
+                return Err(error);
+            }}
         }}
         Ok(__tree)
     }}
@@ -9294,10 +9303,15 @@ fn render_typed_hook_adapter(type_name: &str, mappings: &[TypedHookMapping]) -> 
         r#"pub trait {trait_name}: Sized {{
 {method_decls}
 
-    fn custom_action<S>(&mut self, _ctx: &mut antlr4_runtime::ParserSemCtx<'_, S>, _action: antlr4_runtime::ParserAction)
+    /// Handles a committed parser action routed to the typed hook. Return
+    /// `true` when the action is handled so it satisfies a `hook`/`error`
+    /// unknown-semantic policy; the default no-op returns `false` (unhandled),
+    /// which fails loud under those policies.
+    fn custom_action<S>(&mut self, _ctx: &mut antlr4_runtime::ParserSemCtx<'_, S>, _action: antlr4_runtime::ParserAction) -> bool
     where
         S: TokenSource,
     {{
+        false
     }}
 }}
 
@@ -9326,8 +9340,7 @@ where
     where
         S: TokenSource,
     {{
-        self.0.custom_action(ctx, action);
-        false
+        self.0.custom_action(ctx, action)
     }}
 }}
 "#
@@ -12921,6 +12934,19 @@ dispose = "hook"
         assert!(module.contains("fn is_type_name"));
         assert!(module.contains("(0, 0) => Some(self.0.is_type_name(ctx))"));
         assert!(module.contains("PExpr::Hook"));
+        // The typed action escape hatch must report handled actions: the trait's
+        // `custom_action` returns `bool` and the adapter propagates it (so a
+        // typed action hook satisfies a hook/error policy instead of being
+        // treated as unhandled and failing loud).
+        assert!(
+            module.contains("_action: antlr4_runtime::ParserAction) -> bool"),
+            "custom_action must return a handled-bool"
+        );
+        assert!(
+            module.contains("self.0.custom_action(ctx, action)")
+                && !module.contains("self.0.custom_action(ctx, action);"),
+            "the adapter must return custom_action's result, not discard it"
+        );
     }
 
     #[test]
