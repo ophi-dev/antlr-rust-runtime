@@ -5985,17 +5985,22 @@ fn lexer_predicate_templates(
     if predicates.is_empty() {
         return Ok(Vec::new());
     }
-    let templates =
-        extract_supported_predicate_templates_filtered(grammar_source, patterns, Some(&data.rule_names))?;
-    if templates.is_empty() {
+    let slots =
+        extract_predicate_template_slots_filtered(grammar_source, patterns, Some(&data.rule_names))?;
+    if slots.iter().all(Option::is_none) {
         return Ok(Vec::new());
     }
-    if predicates.len() != templates.len() {
+    // Each in-scope predicate block is one slot, aligned 1:1 with the lexer
+    // ATN's predicate transitions in source order. A mismatch means the scraper
+    // desynchronized from the ATN — a hard error. But a *translated* slot count
+    // below the transition count is fine: the untranslated coordinates simply
+    // stay uncovered and hit `run_predicate`'s policy catch-all.
+    if slots.len() != predicates.len() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!(
-                "grammar has {} supported predicate template(s), but lexer ATN has {} predicate transition(s)",
-                templates.len(),
+                "grammar has {} predicate block(s), but lexer ATN has {} predicate transition(s)",
+                slots.len(),
                 predicates.len()
             ),
         ));
@@ -6004,9 +6009,9 @@ fn lexer_predicate_templates(
     // dispatch is a static `run_predicate` method, so a hook-routed lexer
     // predicate has nowhere to land. Reject it instead of panicking in the
     // renderer; callers can drive `next_token_with_semantic_hooks` manually.
-    if templates
+    if slots
         .iter()
-        .any(|template| matches!(template, PredicateTemplate::Hook))
+        .any(|slot| matches!(slot, Some(PredicateTemplate::Hook)))
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -6015,7 +6020,14 @@ fn lexer_predicate_templates(
              antlr4_runtime::atn::lexer::next_token_with_semantic_hooks manually",
         ));
     }
-    Ok(predicates.into_iter().zip(templates).collect())
+    // Pair only the translated slots with their coordinate; leave untranslated
+    // ones (None) uncovered so `render_lexer_predicate_method`'s catch-all
+    // applies the documented fallback for mixed lexers.
+    Ok(predicates
+        .into_iter()
+        .zip(slots)
+        .filter_map(|(coordinate, slot)| slot.map(|template| (coordinate, template)))
+        .collect())
 }
 
 /// Pairs supported parser semantic predicates with serialized predicate
@@ -6429,12 +6441,28 @@ fn extract_supported_predicate_templates(
     extract_supported_predicate_templates_filtered(grammar_source, patterns, None)
 }
 
+#[cfg(test)]
 fn extract_supported_predicate_templates_filtered(
     grammar_source: &str,
     patterns: &SemPatternFile,
     rule_names: Option<&[String]>,
 ) -> io::Result<Vec<PredicateTemplate>> {
-    let mut templates = Vec::new();
+    Ok(extract_predicate_template_slots_filtered(grammar_source, patterns, rule_names)?
+        .into_iter()
+        .flatten()
+        .collect())
+}
+
+/// Extracts one slot per in-scope predicate block, preserving position: a
+/// translated block yields `Some(template)`, an untranslated (native) block
+/// yields `None` (its coordinate falls through to the policy / catch-all). An
+/// untranslated ANTLR `<...>` `StringTemplate` is still a hard codegen error.
+fn extract_predicate_template_slots_filtered(
+    grammar_source: &str,
+    patterns: &SemPatternFile,
+    rule_names: Option<&[String]>,
+) -> io::Result<Vec<Option<PredicateTemplate>>> {
+    let mut slots = Vec::new();
     let mut offset = 0;
     while let Some(block) = next_predicate_action_block(grammar_source, offset) {
         offset = block.after_brace;
@@ -6449,7 +6477,7 @@ fn extract_supported_predicate_templates_filtered(
             continue;
         }
         if let Some(template) = parse_predicate_template_with_patterns(block.body, patterns)? {
-            templates.push(template);
+            slots.push(Some(template));
         } else if is_unsupported_string_template_body(block.body) {
             // An untranslated ANTLR `<...>` StringTemplate predicate is a
             // codegen error (we can't render it). A native target-language
@@ -6461,9 +6489,14 @@ fn extract_supported_predicate_templates_filtered(
                 io::ErrorKind::InvalidData,
                 format!("unsupported target predicate template <{}>", block.body),
             ));
+        } else {
+            // Native predicate the translator does not cover: keep the slot so
+            // positional pairing with ATN transitions holds; the coordinate
+            // stays uncovered and the `run_predicate` catch-all / policy applies.
+            slots.push(None);
         }
     }
-    Ok(templates)
+    Ok(slots)
 }
 
 /// Reports whether a predicate body is an untranslated ANTLR `<...>`
@@ -11947,6 +11980,24 @@ fragment ID2 : { <Column()> >= 2 }? [a-zA-Z];"#,
         )
         .expect_err("an untranslated <...> StringTemplate predicate must still abort");
         assert!(error.to_string().contains("unsupported target predicate template"));
+    }
+
+    #[test]
+    fn predicate_slots_preserve_position_for_mixed_lexers() {
+        // A translated column predicate followed by a native (untranslated) one
+        // must yield [Some, None] — the slot walk keeps position so the lexer
+        // pairs the translated one with its ATN transition and leaves the other
+        // to the `run_predicate` catch-all, instead of a length-mismatch abort.
+        let slots = extract_predicate_template_slots_filtered(
+            "lexer grammar L;\nA : { <Column()> >= 2 }? [a-z]+ ;\nB : {aheadIsDigit()}? [0-9]+ ;\n",
+            &SemPatternFile::default(),
+            None,
+        )
+        .expect("slot extraction succeeds");
+
+        assert_eq!(slots.len(), 2, "one slot per predicate block: {slots:?}");
+        assert_eq!(slots[0], Some(PredicateTemplate::ColumnGreaterOrEqual(2)));
+        assert_eq!(slots[1], None, "the native predicate stays uncovered");
     }
 
     #[test]
