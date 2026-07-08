@@ -93,6 +93,33 @@ impl LexerPredicate {
     }
 }
 
+/// Lexer reference held by [`LexerSemCtx`]. A semantic *predicate* is evaluated
+/// speculatively and gets a shared borrow; a *custom action* runs on the
+/// committed path and gets a mutable borrow so a hook can change lexer state
+/// (mode stack), matching the closure-based `custom_action` API.
+#[derive(Debug)]
+enum LexerRef<'a, I, F>
+where
+    I: CharStream,
+    F: TokenFactory,
+{
+    Shared(&'a BaseLexer<I, F>),
+    Mut(&'a mut BaseLexer<I, F>),
+}
+
+impl<I, F> LexerRef<'_, I, F>
+where
+    I: CharStream,
+    F: TokenFactory,
+{
+    const fn get(&self) -> &BaseLexer<I, F> {
+        match self {
+            LexerRef::Shared(lexer) => lexer,
+            LexerRef::Mut(lexer) => lexer,
+        }
+    }
+}
+
 /// Runtime view passed to lexer semantic hooks.
 #[derive(Debug)]
 pub struct LexerSemCtx<'a, I, F = CommonTokenFactory>
@@ -100,7 +127,7 @@ where
     I: CharStream,
     F: TokenFactory,
 {
-    lexer: &'a BaseLexer<I, F>,
+    lexer: LexerRef<'a, I, F>,
     rule_index: usize,
     coordinate_index: usize,
     position: usize,
@@ -118,7 +145,23 @@ where
         position: usize,
     ) -> Self {
         Self {
-            lexer,
+            lexer: LexerRef::Shared(lexer),
+            rule_index,
+            coordinate_index,
+            position,
+        }
+    }
+
+    /// Builds a context with a mutable lexer borrow, for a custom-action hook
+    /// that may change lexer state (mode stack). See [`Self::push_mode`] etc.
+    pub(crate) const fn new_mut(
+        lexer: &'a mut BaseLexer<I, F>,
+        rule_index: usize,
+        coordinate_index: usize,
+        position: usize,
+    ) -> Self {
+        Self {
+            lexer: LexerRef::Mut(lexer),
             rule_index,
             coordinate_index,
             position,
@@ -146,31 +189,69 @@ where
     /// Lexer mode at this coordinate.
     #[must_use]
     pub fn mode(&self) -> i32 {
-        self.lexer.mode()
+        self.lexer.get().mode()
     }
 
     /// Current source column.
     #[must_use]
     pub const fn column(&self) -> usize {
-        self.lexer.column()
+        self.lexer.get().column()
     }
 
     /// Source column at [`Self::position`].
     #[must_use]
     pub fn position_column(&self) -> usize {
-        self.lexer.column_at(self.position)
+        self.lexer.get().column_at(self.position)
     }
 
     /// Column captured at the current token start.
     #[must_use]
     pub const fn token_start_column(&self) -> usize {
-        self.lexer.token_start_column()
+        self.lexer.get().token_start_column()
     }
 
     /// Text matched from token start to this coordinate.
     #[must_use]
     pub fn text_so_far(&self) -> String {
-        self.lexer.token_text_until(self.position)
+        self.lexer.get().token_text_until(self.position)
+    }
+
+    /// Sets the current lexer mode. Available only from a custom-action hook
+    /// (the mutable-borrow context); a no-op with a warning path for the
+    /// speculative predicate context, where mutating lexer state is invalid.
+    ///
+    /// Returns `true` if the mutation was applied (action context), `false` if
+    /// it was ignored (predicate context).
+    pub fn set_mode(&mut self, mode: i32) -> bool {
+        match &mut self.lexer {
+            LexerRef::Mut(lexer) => {
+                lexer.set_mode(mode);
+                true
+            }
+            LexerRef::Shared(_) => false,
+        }
+    }
+
+    /// Pushes the current mode and switches to `mode`. Action context only; see
+    /// [`Self::set_mode`] for the return value.
+    pub fn push_mode(&mut self, mode: i32) -> bool {
+        match &mut self.lexer {
+            LexerRef::Mut(lexer) => {
+                lexer.push_mode(mode);
+                true
+            }
+            LexerRef::Shared(_) => false,
+        }
+    }
+
+    /// Pops the mode stack, restoring the previous mode. Action context only;
+    /// returns the popped mode (`None` if the stack was empty or this is a
+    /// predicate context).
+    pub fn pop_mode(&mut self) -> Option<i32> {
+        match &mut self.lexer {
+            LexerRef::Mut(lexer) => lexer.pop_mode(),
+            LexerRef::Shared(_) => None,
+        }
     }
 }
 

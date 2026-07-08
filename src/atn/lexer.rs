@@ -233,7 +233,7 @@ where
 /// lives in one place instead of being copied per entry point.
 fn dispatch_lexer_action_hook<I, F, H>(
     hooks: &RefCell<&mut H>,
-    lexer: &BaseLexer<I, F>,
+    lexer: &mut BaseLexer<I, F>,
     action: LexerCustomAction,
 ) where
     I: CharStream,
@@ -246,7 +246,11 @@ fn dispatch_lexer_action_hook<I, F, H>(
     let Ok(action_index) = usize::try_from(action.action_index()) else {
         return;
     };
-    let mut ctx = LexerSemCtx::new(lexer, rule_index, action_index, action.position());
+    // A custom action runs on the committed path, so it gets a mutable lexer
+    // borrow: a `lexer_action` hook can change the mode stack
+    // (`push_mode`/`pop_mode`/`set_mode`), matching the closure-based
+    // `custom_action` API that also receives `&mut BaseLexer`.
+    let mut ctx = LexerSemCtx::new_mut(lexer, rule_index, action_index, action.position());
     let _ = hooks.borrow_mut().lexer_action(&mut ctx, action);
 }
 
@@ -1363,6 +1367,41 @@ mod tests {
         let plain_state = cache_dfa_state(&lexer, &atn, &[], false, 0, 0);
         assert_eq!(predicate_state, plain_state);
         assert!(lexer.cached_lexer_dfa_state(plain_state).is_some());
+    }
+
+    #[test]
+    fn lexer_action_hook_context_can_change_mode() {
+        // A custom-action hook receives a mutable lexer borrow, so it can push /
+        // pop / set the lexer mode (matching the closure `custom_action` API). A
+        // speculative predicate context receives a shared borrow, so the same
+        // mutators are inert there.
+        let data = RecognizerData::new(
+            "T",
+            Vocabulary::new([None, Some("T")], [None, Some("T")], [None::<&str>, None]),
+        );
+        let mut lexer = BaseLexer::new(InputStream::new(""), data);
+
+        // Action (mutable) context: mode mutations apply.
+        {
+            let mut ctx = LexerSemCtx::new_mut(&mut lexer, 0, 0, 0);
+            assert_eq!(ctx.mode(), 0);
+            assert!(ctx.push_mode(2), "action context applies push_mode");
+            assert_eq!(ctx.mode(), 2);
+            assert!(ctx.set_mode(3), "action context applies set_mode");
+            assert_eq!(ctx.mode(), 3);
+            assert_eq!(ctx.pop_mode(), Some(0), "pop restores the pushed-from mode");
+            assert_eq!(ctx.mode(), 0);
+        }
+        assert_eq!(lexer.mode(), 0, "mutations went through to the lexer");
+
+        // Predicate (shared) context: mutators are inert and report not-applied.
+        {
+            let mut ctx = LexerSemCtx::new(&lexer, 0, 0, 0);
+            assert!(!ctx.push_mode(2), "predicate context does not mutate");
+            assert!(!ctx.set_mode(3), "predicate context does not mutate");
+            assert_eq!(ctx.pop_mode(), None, "predicate context does not mutate");
+        }
+        assert_eq!(lexer.mode(), 0, "shared-context calls left the lexer unchanged");
     }
 
     #[test]
