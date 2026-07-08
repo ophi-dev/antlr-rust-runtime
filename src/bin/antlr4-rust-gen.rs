@@ -4353,18 +4353,25 @@ fn semantic_alt_candidate_condition_with_la(
     steps: &[GeneratedParserStep],
     la_symbol: &str,
 ) -> String {
-    let predicates = leading_predicates(steps);
-    let mut conditions = predicates
-        .into_iter()
-        .map(|(rule_index, pred_index)| {
-            format!(
-                "self.base.parser_semantic_ir_predicate_matches_with_context_and_local(parser_semantics(), {rule_index}, {pred_index}, &__ctx, __precedence)"
-            )
-        })
-        .collect::<Vec<_>>();
+    // Order matters: the lookahead guard comes FIRST so `&&` short-circuits on it
+    // before any predicate hook runs. Otherwise, searching alternatives in a
+    // semantic decision would evaluate an alternative's leading hook/unknown
+    // predicate even when its first token cannot match the current lookahead —
+    // recording a spurious fail-loud `Unsupported` hit under
+    // `--sem-unknown=hook`/`error` and rejecting a later syntactically viable
+    // alternative. This also matches ANTLR, which only evaluates a predicate for
+    // a lookahead-viable alternative.
+    let mut conditions = Vec::new();
     if let Some(lookahead) = leading_lookahead_condition(steps, la_symbol) {
         conditions.push(lookahead);
     }
+    conditions.extend(leading_predicates(steps).into_iter().map(
+        |(rule_index, pred_index)| {
+            format!(
+                "self.base.parser_semantic_ir_predicate_matches_with_context_and_local(parser_semantics(), {rule_index}, {pred_index}, &__ctx, __precedence)"
+            )
+        },
+    ));
     if conditions.is_empty() {
         "true".to_owned()
     } else {
@@ -11823,11 +11830,47 @@ s @init {<SetMember("i","1")>} : ;
         );
 
         assert!(rendered.contains("(__semantic_la == 1) || (__semantic_la == 3)"));
+        // The lookahead guard comes first so `&&` short-circuits on it before the
+        // predicate hook runs; a non-matching lookahead must not trigger a
+        // fail-loud hit for an unknown/hook predicate on a non-candidate alt.
         assert!(rendered.contains(
-            "(self.base.parser_semantic_ir_predicate_matches_with_context_and_local(parser_semantics(), 2, 0, &__ctx, __precedence) && __semantic_la == 2)"
+            "(__semantic_la == 2 && self.base.parser_semantic_ir_predicate_matches_with_context_and_local(parser_semantics(), 2, 0, &__ctx, __precedence))"
         ));
         assert!(
             rendered.contains("antlr4_runtime::ParserAtnPrediction { alt: 2, ..__prediction }")
+        );
+    }
+
+    #[test]
+    fn semantic_candidate_condition_guards_predicate_behind_lookahead() {
+        // A leading predicate followed by a token match must render as
+        // `lookahead && predicate`, so `&&` short-circuits on the side-effect-free
+        // lookahead before invoking the predicate hook. Otherwise an alternative
+        // whose first token cannot match the current lookahead would still
+        // evaluate its hook/unknown predicate, recording a spurious fail-loud
+        // `Unsupported` hit under `--sem-unknown=hook`/`error` and rejecting a
+        // later syntactically viable alternative.
+        let steps = vec![
+            GeneratedParserStep::Predicate {
+                rule_index: 2,
+                pred_index: 0,
+            },
+            mt(7, 4),
+        ];
+        let condition = semantic_alt_candidate_condition(&steps);
+        let la_at = condition
+            .find("__semantic_la == 7")
+            .expect("condition includes the leading lookahead guard");
+        let pred_at = condition
+            .find("parser_semantic_ir_predicate_matches_with_context_and_local")
+            .expect("condition includes the leading predicate");
+        assert!(
+            la_at < pred_at,
+            "lookahead must be evaluated before the predicate hook: {condition}"
+        );
+        assert!(
+            condition.starts_with("__semantic_la == 7 &&"),
+            "the lookahead guard must be the first `&&` operand: {condition}"
         );
     }
 
