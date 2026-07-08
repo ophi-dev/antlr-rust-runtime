@@ -4340,27 +4340,46 @@ fn render_semantic_alt_search(
     alt_conditions: &[String],
     alts: &[Vec<GeneratedParserStep>],
 ) {
-    // The predicted alt's predicate failed; pick the first *other* alt whose
-    // candidate condition holds. An alt with no locally-checkable guard (no
-    // predicate and no computable lookahead, first consuming step a rule
-    // call/decision/loop) has condition `"true"`, so it would shadow a later
-    // alt that has a concrete matching lookahead. Force such an unresolved alt
-    // to `false` here so the search skips it rather than selecting a
-    // syntactically non-viable alternative (e.g. `{p()}? 'a' | x | 'a'`
-    // choosing rule-call alt `x` on input `a`). This is scoped to the fallback
-    // search only; the shared `semantic_alt_candidate_condition` is unchanged,
-    // so left-recursion loop-entry and diagnostic paths keep their behavior.
+    // The predicted alt's predicate failed; pick another alt whose candidate
+    // condition holds. This runs in TWO passes so an alt whose viability is not
+    // locally checkable (no predicate and no computable lookahead — its first
+    // consuming step is a rule call/decision/loop, giving condition `"true"`)
+    // neither shadows a concretely-guarded alt nor becomes unreachable:
+    //
+    //   Pass 1 — alts with a resolved guard (predicate and/or lookahead), in
+    //     order. A later token-led alt is reachable even if an earlier
+    //     unresolved rule-call alt exists (`{p()}? 'a' | x | 'a'` on input `a`
+    //     picks the `'a'` alt, not rule-call `x`).
+    //   Pass 2 — the remaining unresolved alts, in order, as a last resort. So
+    //     an unresolved alt is still tried when no resolved alt matched
+    //     (`{p()}? 'a' | x` on input in FIRST(x) selects `x` instead of
+    //     reporting NoViableAlt).
+    //
+    // Scoped to the fallback search only; the shared
+    // `semantic_alt_candidate_condition` is unchanged, so left-recursion
+    // loop-entry and diagnostic paths keep their behavior.
+    let unresolved = alts
+        .iter()
+        .map(|steps| semantic_alt_guard_is_unresolved(steps))
+        .collect::<Vec<_>>();
     for (index, condition) in alt_conditions.iter().enumerate() {
+        if unresolved.get(index).copied().unwrap_or(false) {
+            continue;
+        }
         let alt = index + 1;
-        let search_condition = if alts
-            .get(index)
-            .is_some_and(|steps| semantic_alt_guard_is_unresolved(steps))
-        {
-            "false"
-        } else {
-            condition
-        };
-        writeln!(out, "{pad}            if {search_condition} {{")
+        writeln!(out, "{pad}            if {condition} {{")
+            .expect("writing to a string cannot fail");
+        writeln!(out, "{pad}                Some({alt})").expect("writing to a string cannot fail");
+        writeln!(out, "{pad}            }} else").expect("writing to a string cannot fail");
+    }
+    // Last-resort pass: unresolved alts keep their real condition (typically
+    // `true`), so they are tried only after every resolved alt missed.
+    for (index, condition) in alt_conditions.iter().enumerate() {
+        if !unresolved.get(index).copied().unwrap_or(false) {
+            continue;
+        }
+        let alt = index + 1;
+        writeln!(out, "{pad}            if {condition} {{")
             .expect("writing to a string cannot fail");
         writeln!(out, "{pad}                Some({alt})").expect("writing to a string cannot fail");
         writeln!(out, "{pad}            }} else").expect("writing to a string cannot fail");
@@ -12160,11 +12179,11 @@ s @init {<SetMember("i","1")>} : ;
     }
 
     #[test]
-    fn semantic_alt_search_skips_unresolved_rule_call_alt() {
-        // `{p()}? 'a' | x | 'a'` (x is a rule call): when alt 1's predicate fails
-        // the fallback search must skip the rule-call alt (its FIRST set isn't
-        // checkable locally, so it must not shadow the later viable `'a'` alt) and
-        // reach alt 3. The rule-call alt renders as `if false` in the search.
+    fn semantic_alt_search_orders_unresolved_alts_last() {
+        // `{p()}? 'a' | x | 'a'` (alt 2 = rule call `x`): when alt 1's predicate
+        // fails, the two-pass search tries resolved-guard alts first (alt 3's
+        // concrete lookahead), then the unresolved rule-call alt as a last
+        // resort. So alt 3 is NOT shadowed by alt 2, AND alt 2 stays reachable.
         let alts = vec![
             vec![
                 GeneratedParserStep::Predicate {
@@ -12187,15 +12206,61 @@ s @init {<SetMember("i","1")>} : ;
         let mut rendered = String::new();
         render_semantic_alt_search(&mut rendered, "", &alt_conditions, &alts);
 
-        // Alt 2 (rule call) is forced to `false` so the search skips it.
+        // The resolved token alt 3 is emitted before the unresolved rule-call
+        // alt 2 (which keeps its real `true` condition as a last-resort branch),
+        // so alt 3 wins on a matching lookahead but alt 2 is still reachable.
+        let alt3_at = rendered
+            .find("Some(3)")
+            .expect("resolved token alt 3 is present");
+        let alt2_at = rendered
+            .find("Some(2)")
+            .expect("unresolved rule-call alt 2 is still present (last resort)");
         assert!(
-            rendered.contains("if false {\n                Some(2)"),
-            "unresolved rule-call alt must render as `if false`: {rendered}"
+            alt3_at < alt2_at,
+            "resolved alt 3 must be tried before the unresolved rule-call alt 2: {rendered}"
         );
-        // Alt 3 (token) keeps its concrete lookahead guard and remains reachable.
+        // Alt 2 is NOT disabled (`if false`); it keeps a reachable branch.
+        assert!(
+            !rendered.contains("if false {"),
+            "unresolved alt must be a last-resort branch, not disabled: {rendered}"
+        );
         assert!(
             rendered.contains("if __semantic_la == 1 {\n                Some(3)"),
-            "the later token alt must keep its lookahead guard: {rendered}"
+            "the token alt keeps its concrete lookahead guard: {rendered}"
+        );
+    }
+
+    #[test]
+    fn semantic_alt_search_keeps_lone_unresolved_alt_reachable() {
+        // `{p()}? 'a' | x` (alt 2 = rule call `x`, the only non-predicated alt):
+        // when alt 1's predicate fails and no resolved alt matches, the search
+        // must still try the unresolved alt rather than emitting nothing (which
+        // would be a spurious NoViableAlt). Codex's counter-example.
+        let alts = vec![
+            vec![
+                GeneratedParserStep::Predicate {
+                    rule_index: 0,
+                    pred_index: 0,
+                },
+                mt(1, 4),
+            ],
+            vec![GeneratedParserStep::CallRule {
+                source_state: 5,
+                rule_index: 1,
+                precedence: GeneratedRuleCallPrecedence::Literal(0),
+            }],
+        ];
+        let alt_conditions = alts
+            .iter()
+            .map(|steps| semantic_alt_candidate_condition(steps))
+            .collect::<Vec<_>>();
+        let mut rendered = String::new();
+        render_semantic_alt_search(&mut rendered, "", &alt_conditions, &alts);
+
+        // The lone unresolved alt is reachable via its real condition, not disabled.
+        assert!(
+            rendered.contains("Some(2)") && !rendered.contains("if false {"),
+            "a lone unresolved alt must remain reachable as a last resort: {rendered}"
         );
     }
 
