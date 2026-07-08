@@ -4307,7 +4307,7 @@ fn render_generated_semantic_prediction_filter(
         writeln!(out, "{pad}        {alt} if {condition} => Some({alt}),")
             .expect("writing to a string cannot fail");
         writeln!(out, "{pad}        {alt} => {{").expect("writing to a string cannot fail");
-        render_semantic_alt_search(out, pad, &alt_conditions);
+        render_semantic_alt_search(out, pad, &alt_conditions, alts);
         writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
     }
     writeln!(out, "{pad}        _ => Some(__prediction.alt),")
@@ -4334,10 +4334,33 @@ fn render_generated_semantic_prediction_filter(
     writeln!(out, "{pad}}};").expect("writing to a string cannot fail");
 }
 
-fn render_semantic_alt_search(out: &mut String, pad: &str, alt_conditions: &[String]) {
+fn render_semantic_alt_search(
+    out: &mut String,
+    pad: &str,
+    alt_conditions: &[String],
+    alts: &[Vec<GeneratedParserStep>],
+) {
+    // The predicted alt's predicate failed; pick the first *other* alt whose
+    // candidate condition holds. An alt with no locally-checkable guard (no
+    // predicate and no computable lookahead, first consuming step a rule
+    // call/decision/loop) has condition `"true"`, so it would shadow a later
+    // alt that has a concrete matching lookahead. Force such an unresolved alt
+    // to `false` here so the search skips it rather than selecting a
+    // syntactically non-viable alternative (e.g. `{p()}? 'a' | x | 'a'`
+    // choosing rule-call alt `x` on input `a`). This is scoped to the fallback
+    // search only; the shared `semantic_alt_candidate_condition` is unchanged,
+    // so left-recursion loop-entry and diagnostic paths keep their behavior.
     for (index, condition) in alt_conditions.iter().enumerate() {
         let alt = index + 1;
-        writeln!(out, "{pad}            if {condition} {{")
+        let search_condition = if alts
+            .get(index)
+            .is_some_and(|steps| semantic_alt_guard_is_unresolved(steps))
+        {
+            "false"
+        } else {
+            condition
+        };
+        writeln!(out, "{pad}            if {search_condition} {{")
             .expect("writing to a string cannot fail");
         writeln!(out, "{pad}                Some({alt})").expect("writing to a string cannot fail");
         writeln!(out, "{pad}            }} else").expect("writing to a string cannot fail");
@@ -4377,6 +4400,34 @@ fn semantic_alt_candidate_condition_with_la(
     } else {
         conditions.join(" && ")
     }
+}
+
+/// Whether an alternative has no locally-checkable viability guard: no leading
+/// predicate and no computable lookahead (its first consuming step is a
+/// `CallRule` / nested decision / loop whose FIRST set is not computed here).
+/// Such an alt's [`semantic_alt_candidate_condition`] is `"true"`, so in the
+/// ordered semantic-alt fallback search it would shadow a later alt with a
+/// concrete matching lookahead. The search treats these as last-resort
+/// candidates instead. A genuine epsilon alt (no consuming step at all) is NOT
+/// unguarded in this sense — it legitimately matches anything.
+fn semantic_alt_guard_is_unresolved(steps: &[GeneratedParserStep]) -> bool {
+    if !leading_predicates(steps).is_empty() {
+        return false;
+    }
+    if leading_lookahead_condition(steps, "__semantic_la").is_some() {
+        return false;
+    }
+    // No predicate and no computable lookahead: unresolved only if a consuming
+    // step exists (rule call / decision / loop). Pure epsilon stays resolved.
+    steps.iter().any(|step| {
+        matches!(
+            step,
+            GeneratedParserStep::CallRule { .. }
+                | GeneratedParserStep::Decision { .. }
+                | GeneratedParserStep::StarLoop { .. }
+                | GeneratedParserStep::LeftRecursiveLoop { .. }
+        )
+    })
 }
 
 fn leading_predicates(steps: &[GeneratedParserStep]) -> Vec<(usize, usize)> {
@@ -12082,6 +12133,69 @@ s @init {<SetMember("i","1")>} : ;
         assert!(
             condition.starts_with("__semantic_la == 7 &&"),
             "the lookahead guard must be the first `&&` operand: {condition}"
+        );
+    }
+
+    #[test]
+    fn semantic_alt_guard_classifies_unresolved_rule_call_alt() {
+        // An alt whose first consuming step is a rule call, with no leading
+        // predicate or lookahead, is "unresolved" (FIRST set not computed here).
+        let rule_call = vec![GeneratedParserStep::CallRule {
+            source_state: 5,
+            rule_index: 1,
+            precedence: GeneratedRuleCallPrecedence::Literal(0),
+        }];
+        assert!(semantic_alt_guard_is_unresolved(&rule_call));
+        // A token-led alt is resolved (concrete lookahead), so NOT unresolved.
+        assert!(!semantic_alt_guard_is_unresolved(&[mt(7, 4)]));
+        // A predicate-led alt is resolved (guarded by the predicate).
+        assert!(!semantic_alt_guard_is_unresolved(&[
+            GeneratedParserStep::Predicate {
+                rule_index: 2,
+                pred_index: 0,
+            },
+        ]));
+        // A pure epsilon alt (no consuming step) legitimately matches; not unresolved.
+        assert!(!semantic_alt_guard_is_unresolved(&[]));
+    }
+
+    #[test]
+    fn semantic_alt_search_skips_unresolved_rule_call_alt() {
+        // `{p()}? 'a' | x | 'a'` (x is a rule call): when alt 1's predicate fails
+        // the fallback search must skip the rule-call alt (its FIRST set isn't
+        // checkable locally, so it must not shadow the later viable `'a'` alt) and
+        // reach alt 3. The rule-call alt renders as `if false` in the search.
+        let alts = vec![
+            vec![
+                GeneratedParserStep::Predicate {
+                    rule_index: 0,
+                    pred_index: 0,
+                },
+                mt(1, 4),
+            ],
+            vec![GeneratedParserStep::CallRule {
+                source_state: 5,
+                rule_index: 1,
+                precedence: GeneratedRuleCallPrecedence::Literal(0),
+            }],
+            vec![mt(1, 4)],
+        ];
+        let alt_conditions = alts
+            .iter()
+            .map(|steps| semantic_alt_candidate_condition(steps))
+            .collect::<Vec<_>>();
+        let mut rendered = String::new();
+        render_semantic_alt_search(&mut rendered, "", &alt_conditions, &alts);
+
+        // Alt 2 (rule call) is forced to `false` so the search skips it.
+        assert!(
+            rendered.contains("if false {\n                Some(2)"),
+            "unresolved rule-call alt must render as `if false`: {rendered}"
+        );
+        // Alt 3 (token) keeps its concrete lookahead guard and remains reachable.
+        assert!(
+            rendered.contains("if __semantic_la == 1 {\n                Some(3)"),
+            "the later token alt must keep its lookahead guard: {rendered}"
         );
     }
 
