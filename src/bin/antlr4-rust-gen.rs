@@ -9592,7 +9592,7 @@ fn parser_typed_hook_mappings(
             mappings.push(TypedHookMapping {
                 rule_index,
                 pred_index,
-                method_name: rust_function_name(&helper),
+                method_name: typed_hook_predicate_method_name(&helper),
             });
         }
         predicate_index += 1;
@@ -9600,6 +9600,24 @@ fn parser_typed_hook_mappings(
     mappings.sort_by_key(|mapping| (mapping.rule_index, mapping.pred_index));
     mappings.dedup();
     Ok(mappings)
+}
+
+/// Reserved name of the fixed action-hook method emitted on the typed-hook
+/// trait. A predicate-helper method must not normalize to this, or the trait
+/// would declare two `custom_action` methods (Rust has no arity overloading).
+const TYPED_HOOK_ACTION_METHOD: &str = "custom_action";
+
+/// The typed-hook trait method name for a bare predicate helper, disambiguated
+/// so it never collides with the fixed [`TYPED_HOOK_ACTION_METHOD`]. A grammar
+/// helper literally named `customAction()` / `custom_action()` normalizes to
+/// `custom_action`; suffix it with `_pred` so the generated trait compiles.
+fn typed_hook_predicate_method_name(helper: &str) -> String {
+    let name = rust_function_name(helper);
+    if name == TYPED_HOOK_ACTION_METHOD {
+        format!("{name}_pred")
+    } else {
+        name
+    }
 }
 
 fn bare_predicate_helper_name(body: &str) -> Option<String> {
@@ -13688,6 +13706,38 @@ dispose = "hook"
         assert_eq!(mappings.len(), 1, "only the parser-rule helper maps: {mappings:?}");
         assert_eq!((mappings[0].rule_index, mappings[0].pred_index), (0, 0));
         assert_eq!(mappings[0].method_name, "is_type_name");
+    }
+
+    #[test]
+    fn typed_hook_predicate_method_name_avoids_action_hook_collision() {
+        // A grammar helper that normalizes to the reserved action-hook method
+        // name must be disambiguated, or the generated trait would declare two
+        // `custom_action` methods (Rust has no arity overloading).
+        assert_eq!(typed_hook_predicate_method_name("customAction"), "custom_action_pred");
+        assert_eq!(typed_hook_predicate_method_name("custom_action"), "custom_action_pred");
+        // An unrelated helper keeps its normalized name.
+        assert_eq!(typed_hook_predicate_method_name("isTypeName"), "is_type_name");
+    }
+
+    #[test]
+    fn typed_hook_adapter_disambiguates_custom_action_helper() {
+        // End-to-end: a bare `customAction()` predicate helper must not collide
+        // with the fixed `custom_action` action-hook method on the trait.
+        let grammar = "grammar S;\ns : {customAction()}? A ;\n";
+        let mappings =
+            parser_typed_hook_mappings(&predicate_parser_data(), Some(grammar), &SemPatternFile::default())
+                .expect("typed hook mapping should succeed");
+        assert_eq!(mappings.len(), 1);
+        assert_eq!(mappings[0].method_name, "custom_action_pred");
+
+        let adapter = render_typed_hook_adapter("SParser", &mappings);
+        // The predicate method is the disambiguated name; the action hook keeps
+        // the reserved name — two distinct methods, so the trait compiles.
+        assert!(adapter.contains("fn custom_action_pred<S>"));
+        assert!(adapter.contains(
+            "fn custom_action<S>(&mut self, _ctx: &mut antlr4_runtime::ParserSemCtx<'_, S>, _action: antlr4_runtime::ParserAction) -> bool"
+        ));
+        assert!(adapter.contains("Some(self.0.custom_action_pred(ctx))"));
     }
 
     #[test]
