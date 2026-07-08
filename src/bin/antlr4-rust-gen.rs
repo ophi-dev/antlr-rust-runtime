@@ -1063,15 +1063,40 @@ fn load_sem_patterns(path: &Path) -> io::Result<SemPatternFile> {
     parse_sem_patterns(&fs::read_to_string(path)?)
 }
 
+/// Removes a trailing `#` comment from one TOML line, ignoring a `#` that
+/// appears inside a quoted string (basic `"..."` or literal `'...'`). A naive
+/// `split_once('#')` would corrupt valid pattern lines such as
+/// `match = "text == '#'"` or a `str("#")` lower expression. Basic-string escape
+/// handling means a `\"` inside `"..."` does not close the string.
+fn strip_toml_comment(line: &str) -> &str {
+    let bytes = line.as_bytes();
+    let mut index = 0;
+    let mut quote: Option<u8> = None;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        match quote {
+            // Inside a basic string, a backslash escapes the next byte.
+            Some(b'"') if byte == b'\\' => {
+                index += 2;
+                continue;
+            }
+            Some(q) if byte == q => quote = None,
+            Some(_) => {}
+            None if byte == b'"' || byte == b'\'' => quote = Some(byte),
+            None if byte == b'#' => return &line[..index],
+            None => {}
+        }
+        index += 1;
+    }
+    line
+}
+
 fn parse_sem_patterns(input: &str) -> io::Result<SemPatternFile> {
     let mut file = SemPatternFile::default();
     let mut section: Option<PatternSection> = None;
     let mut fields = BTreeMap::<String, String>::new();
     for raw_line in input.lines().chain(std::iter::once("")) {
-        let line = raw_line
-            .split_once('#')
-            .map_or(raw_line, |(line, _)| line)
-            .trim();
+        let line = strip_toml_comment(raw_line).trim();
         if line.is_empty() {
             continue;
         }
@@ -13549,6 +13574,48 @@ lower = "bool(false)"
                 .expect("pattern should lower predicate");
 
         assert_eq!(predicates[0].1, PredicateTemplate::False);
+    }
+
+    #[test]
+    fn strip_toml_comment_respects_quoted_strings() {
+        // A `#` outside quotes starts a comment.
+        assert_eq!(strip_toml_comment("key = 1 # trailing"), "key = 1 ");
+        assert_eq!(strip_toml_comment("# whole line"), "");
+        // A `#` inside a basic or literal string is NOT a comment.
+        assert_eq!(
+            strip_toml_comment(r#"match = "text == '#'""#),
+            r#"match = "text == '#'""#
+        );
+        assert_eq!(
+            strip_toml_comment(r##"lower = 'str("#")'"##),
+            r##"lower = 'str("#")'"##
+        );
+        // A `#` after a closed string is still a comment.
+        assert_eq!(
+            strip_toml_comment(r#"match = "a" # note"#),
+            r#"match = "a" "#
+        );
+        // A `\"` escape inside a basic string does not close it, so a later `#`
+        // stays inside the string.
+        assert_eq!(
+            strip_toml_comment(r##"match = "a\"#b""##),
+            r##"match = "a\"#b""##
+        );
+    }
+
+    #[test]
+    fn sem_patterns_keep_hash_inside_quoted_match() {
+        // A `#` inside the quoted `match` body must survive parsing, not be
+        // truncated as a comment (which would silently change the pattern).
+        let patterns = parse_sem_patterns(
+            "[[pattern]]\nmatch = \"col == '#'\"  # a real comment\nlower = \"bool(false)\"\n",
+        )
+        .expect("pattern file parses");
+        let template = patterns
+            .predicate_template("col == '#'")
+            .expect("pattern lookup should not fail")
+            .expect("the '#'-bearing match body must be retained");
+        assert_eq!(template, PredicateTemplate::False);
     }
 
     #[test]
