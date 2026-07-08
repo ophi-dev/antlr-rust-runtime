@@ -6740,16 +6740,70 @@ fn init_action_rule_name(source: &str, open_brace: usize) -> Option<&str> {
 fn named_action_rule_name<'a>(source: &'a str, open_brace: usize, marker: &str) -> Option<&'a str> {
     let prefix = &source[..open_brace];
     let statement_start = prefix.rfind(';').map_or(0, |index| index + 1);
-    let rule_preamble = prefix[statement_start..]
-        .split(marker)
-        .next()?
-        .split('@')
-        .next()?;
-    rule_preamble
-        .lines()
-        .filter(|line| !line.trim_start().starts_with('<'))
-        .flat_map(|line| line.split(|ch: char| !(ch == '_' || ch.is_ascii_alphanumeric())))
-        .rfind(|name| !name.is_empty())
+    // Rule header text between the previous statement terminator and this
+    // `@init`/`@after` marker (e.g. `\n@parser::members {...}\nname `). The rule
+    // name is the last bare identifier once any preceding named-action *blocks*
+    // (`@members {...}`, `@parser::members {...}`) are skipped with their brace
+    // bodies. Truncating at the first `@` (the previous behavior) discarded the
+    // rule name whenever a members block sat between the last `;` and the rule.
+    let header = prefix[statement_start..].split(marker).next()?;
+    last_rule_header_identifier(header)
+}
+
+/// Returns the last bare identifier in a rule header, skipping `@name {...}` /
+/// `@name::sub {...}` named-action blocks (with their brace bodies) and `<...>`
+/// template lines. That trailing identifier is the rule the `@init`/`@after`
+/// action belongs to.
+fn last_rule_header_identifier(header: &str) -> Option<&str> {
+    let bytes = header.as_bytes();
+    let mut index = 0;
+    let mut last: Option<(usize, usize)> = None;
+    while index < bytes.len() {
+        match bytes[index] {
+            // Skip a `@name {...}` block, including its (possibly brace-nested)
+            // body, so its internal identifiers are not mistaken for the rule.
+            b'@' => {
+                let mut cursor = index + 1;
+                while cursor < bytes.len()
+                    && !matches!(bytes[cursor], b'{' | b';' | b'\n')
+                {
+                    cursor += 1;
+                }
+                if cursor < bytes.len() && bytes[cursor] == b'{' {
+                    let mut depth = 1_usize;
+                    cursor += 1;
+                    while cursor < bytes.len() && depth > 0 {
+                        match bytes[cursor] {
+                            b'{' => depth += 1,
+                            b'}' => depth -= 1,
+                            _ => {}
+                        }
+                        cursor += 1;
+                    }
+                }
+                index = cursor;
+            }
+            // Skip a `<...>` template (a listener/member directive line), which is
+            // not a rule name.
+            b'<' => {
+                while index < bytes.len() && bytes[index] != b'>' {
+                    index += 1;
+                }
+                index += usize::from(index < bytes.len());
+            }
+            byte if byte == b'_' || byte.is_ascii_alphanumeric() => {
+                let start = index;
+                while index < bytes.len()
+                    && (bytes[index] == b'_' || bytes[index].is_ascii_alphanumeric())
+                {
+                    index += 1;
+                }
+                last = Some((start, index));
+            }
+            _ => index += 1,
+        }
+    }
+    last.map(|(start, end)| &header[start..end])
 }
 
 /// Resolves `$label.ctx` in a rule-level `@after` action to the referenced
@@ -7856,20 +7910,27 @@ fn init_parser_action_statements(
     Ok(statements)
 }
 
-/// Whether an `@init` template only mutates parser members (`SetMember` /
-/// `AddMember`, possibly nested in a `Sequence`). Only such actions are run
-/// eagerly on rule entry: their effect is idempotent under the
-/// checkpoint/restore + replay cycle (the value is recomputed from the restored
-/// baseline) and same-rule predicates/actions must observe it. Side-effecting
-/// actions (printing, diagnostics) stay on the buffered exit-replay path so
-/// their ordering matches ANTLR; running them eagerly would duplicate output.
-fn init_action_mutates_members_only(action: &ActionTemplate) -> bool {
+/// Collects the member-mutating subactions of an `@init` template, flattening
+/// nested sequences and preserving order. Used to run just the `SetMember` /
+/// `AddMember` writes on rule ENTRY even when the `@init` also contains a
+/// side-effecting action (e.g. `SetMember(x,1); writeln(...)`): ANTLR runs the
+/// whole `@init` before the body, so a same-rule predicate/action must observe
+/// the member write, while the side effect stays on the buffered exit-replay
+/// path so its ordering matches ANTLR and it is not duplicated. The member
+/// writes are idempotent under the checkpoint/restore + replay cycle (recomputed
+/// from the restored baseline).
+fn init_action_member_writes<'a>(
+    action: &'a ActionTemplate,
+    out: &mut Vec<&'a ActionTemplate>,
+) {
     match action {
-        ActionTemplate::SetMember { .. } | ActionTemplate::AddMember { .. } => true,
+        ActionTemplate::SetMember { .. } | ActionTemplate::AddMember { .. } => out.push(action),
         ActionTemplate::Sequence(actions) => {
-            !actions.is_empty() && actions.iter().all(init_action_mutates_members_only)
+            for subaction in actions {
+                init_action_member_writes(subaction, out);
+            }
         }
-        _ => false,
+        _ => {}
     }
 }
 
@@ -7895,23 +7956,41 @@ fn action_is_ctx_rooted(action: &ActionTemplate) -> bool {
     }
 }
 
-/// Statements for `@init` actions that should run on rule ENTRY — restricted to
-/// member writes the rule body may read. Side-effecting `@init` actions are
-/// excluded here and remain on the buffered exit-replay path
-/// (`init_parser_action_statements`).
+/// Statements for `@init` member writes that should run on rule ENTRY — the
+/// `SetMember` / `AddMember` subactions a same-rule predicate/action may read.
+/// Extracted from the full `@init` template (even a mixed sequence such as
+/// `SetMember(x,1); writeln(...)`) so the member write takes effect before the
+/// body, matching ANTLR's "init before body" order. The side-effecting
+/// subactions are NOT rendered here — the full `@init` stays on the buffered
+/// exit-replay path (`init_parser_action_statements`), so its output is not
+/// duplicated and its ordering matches ANTLR.
 fn init_entry_action_statements(
     init_actions: &[Option<ActionTemplate>],
     members: &[IntMemberTemplate],
 ) -> io::Result<BTreeMap<usize, String>> {
     let mut statements = BTreeMap::new();
     for (rule_index, action) in init_actions.iter().enumerate() {
-        let Some(action) = action
-            .as_ref()
-            .filter(|a| init_action_mutates_members_only(a))
-        else {
+        let Some(action) = action.as_ref() else {
             continue;
         };
-        statements.insert(rule_index, render_action_statement(action, members)?);
+        let mut writes = Vec::new();
+        init_action_member_writes(action, &mut writes);
+        if writes.is_empty() {
+            continue;
+        }
+        let mut rendered = String::new();
+        for write in writes {
+            let statement = render_action_statement(write, members)?;
+            if !statement.is_empty() {
+                if !rendered.is_empty() {
+                    rendered.push(' ');
+                }
+                rendered.push_str(&statement);
+            }
+        }
+        if !rendered.is_empty() {
+            statements.insert(rule_index, rendered);
+        }
     }
     Ok(statements)
 }
@@ -11355,6 +11434,58 @@ s @init {<GetExpectedTokenNames():writeln()>} : ;
     }
 
     #[test]
+    fn init_action_rule_name_resolves_past_a_members_block() {
+        // A `@members` / `@parser::members` block between the previous `;` and a
+        // rule's `@init` must not hide the rule name: the name follows the block.
+        // (Previously the resolver truncated at the first `@` after the last `;`,
+        // returning None, so the rule's `@init` was silently dropped.)
+        let source = "grammar P;\n@parser::members {<InitIntMember(\"i\",\"0\")>}\ns @init {<SetMember(\"i\",\"1\")>} : ID EOF ;\n";
+        let open_brace = source
+            .find("@init {")
+            .map(|at| at + "@init ".len())
+            .expect("grammar contains an @init block");
+        assert_eq!(
+            init_action_rule_name(source, open_brace),
+            Some("s"),
+            "rule name after a members block must resolve"
+        );
+        // A `{...}` brace inside the members-block body (from a nested `<...>`
+        // template) must not confuse the block-skip.
+        let nested = "grammar P;\n@members { int x = f({1}); }\nrule_a @init {<SetMember(\"i\",\"1\")>} : ID ;\n";
+        let brace = nested
+            .find("@init {")
+            .map(|at| at + "@init ".len())
+            .expect("nested grammar contains an @init block");
+        assert_eq!(init_action_rule_name(nested, brace), Some("rule_a"));
+    }
+
+    #[test]
+    fn init_member_write_after_members_block_runs_at_entry() {
+        // End-to-end: with a `@parser::members` block preceding the rule, the
+        // rule's `@init` member write is now recognized and emitted at rule ENTRY
+        // (before the body), so a same-rule predicate observes it.
+        let rendered = render_parser(
+            "TParser",
+            &minimal_parser_data(),
+            Some(
+                "parser grammar T;\n@parser::members {<InitIntMember(\"i\",\"0\")>}\ns @init {<SetMember(\"i\",\"1\")>} : ;\n",
+            ),
+        )
+        .expect("parser should render");
+
+        let entry_at = rendered
+            .find("self.base.set_int_member(0, 1);")
+            .expect("@init member write must be emitted");
+        let body_start = rendered
+            .find("let __result = (|| -> Result<(), antlr4_runtime::AntlrError>")
+            .expect("rule body present");
+        assert!(
+            entry_at < body_start,
+            "the @init member write must run at rule entry, before the body"
+        );
+    }
+
+    #[test]
     fn generated_rule_recovers_own_sync_failure_unless_top_level() {
         // A rule's own sync failure (`__sync_error`) is fatal only at the top-level
         // public entry (`allow_fallback`); a nested child recovers it locally and
@@ -12052,6 +12183,40 @@ s @init {<SetMember("i","1")>} : ;
         .expect("statement");
 
         assert_eq!(statement, "self.base.set_int_member(0, 3);");
+    }
+
+    #[test]
+    fn init_entry_extracts_member_writes_from_mixed_sequence() {
+        // A mixed `@init` sequence (member write + side effect) must still run its
+        // member write on rule ENTRY, so a same-rule predicate/action observes it
+        // (ANTLR runs the whole `@init` before the body). Only the member write is
+        // hoisted; the side effect stays on the buffered exit-replay path.
+        let members = vec![IntMemberTemplate {
+            name: "i".to_owned(),
+            initial_value: 0,
+        }];
+        let init_actions = vec![Some(ActionTemplate::Sequence(vec![
+            ActionTemplate::SetMember {
+                member: "i".to_owned(),
+                value: 1,
+            },
+            ActionTemplate::Text { newline: true },
+        ]))];
+        let entry = init_entry_action_statements(&init_actions, &members)
+            .expect("entry statements render");
+        let statement = entry
+            .get(&0)
+            .expect("mixed @init still contributes its member write at entry");
+        assert!(
+            statement.contains("self.base.set_int_member(0, 1);"),
+            "entry statement must include the member write: {statement}"
+        );
+        // The side-effecting subaction must NOT be hoisted to entry (it stays on
+        // the buffered replay path, so its output is not duplicated).
+        assert!(
+            !statement.contains("println!"),
+            "the side effect must not run eagerly at entry: {statement}"
+        );
     }
 
     #[test]
