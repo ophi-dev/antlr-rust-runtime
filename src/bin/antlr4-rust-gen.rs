@@ -595,6 +595,11 @@ const fn predicate_template_disposition(
     policy: SemUnknownPolicy,
 ) -> SemanticsDisposition {
     match template {
+        // Unwrap a `<fail=...>` wrapper: disposition follows the inner template
+        // (a wrapped hook is still `Hooked`, not `Translated`).
+        Some(PredicateTemplate::WithFailMessage { inner, .. }) => {
+            predicate_template_disposition(Some(inner), policy)
+        }
         Some(PredicateTemplate::Hook) => SemanticsDisposition::Hooked,
         Some(_) => SemanticsDisposition::Translated,
         None => policy.unknown_predicate_disposition(),
@@ -5833,6 +5838,13 @@ enum PredicateTemplate {
     FalseWithMessage {
         message: String,
     },
+    /// A non-constant-false predicate carrying an ANTLR `<fail=...>` message.
+    /// Transparent to evaluation — `inner` provides the truth value and codegen;
+    /// the message is surfaced only when `inner` returns false at runtime.
+    WithFailMessage {
+        inner: Box<Self>,
+        message: String,
+    },
     Invoke {
         value: bool,
     },
@@ -5872,9 +5884,10 @@ enum PredicateTemplate {
     },
 }
 
-const fn can_generate_parser_predicate(predicate: &PredicateTemplate) -> bool {
+fn can_generate_parser_predicate(predicate: &PredicateTemplate) -> bool {
+    // A `<fail=...>` wrapper is transparent: generatability follows the inner.
     matches!(
-        predicate,
+        predicate_effective_template(predicate),
         PredicateTemplate::Hook
             | PredicateTemplate::True
             | PredicateTemplate::False
@@ -6224,15 +6237,51 @@ fn parser_predicate_templates(
     Ok(mapped)
 }
 
-/// Attaches ANTLR's fail option to predicates whose false result is modeled by
-/// the metadata runtime.
+/// Attaches ANTLR's `<fail=...>` option to a predicate template so the runtime
+/// can surface the grammar-supplied message when the predicate fails at runtime.
+///
+/// A constant-false predicate folds into `FalseWithMessage` (its own dedicated
+/// variant). Any *other* template — a hook, lookahead, member, or local-int
+/// predicate that can also return false at runtime — is wrapped in
+/// `WithFailMessage` so the message is preserved rather than discarded; the
+/// wrapper is transparent to evaluation (see `predicate_effective_template`) and
+/// only contributes the failure message.
 fn predicate_template_with_fail_message(
     template: PredicateTemplate,
     message: String,
 ) -> PredicateTemplate {
     match template {
         PredicateTemplate::False => PredicateTemplate::FalseWithMessage { message },
-        _ => template,
+        // Already message-carrying: replace the message (a later `<fail=...>`
+        // wins) rather than nesting wrappers.
+        PredicateTemplate::FalseWithMessage { .. } => PredicateTemplate::FalseWithMessage { message },
+        PredicateTemplate::WithFailMessage { inner, .. } => PredicateTemplate::WithFailMessage {
+            inner,
+            message,
+        },
+        other => PredicateTemplate::WithFailMessage {
+            inner: Box::new(other),
+            message,
+        },
+    }
+}
+
+/// The evaluation-relevant template, unwrapping a `WithFailMessage` wrapper.
+/// The wrapper only carries a failure message; its runtime truth value and
+/// codegen come from the inner template.
+fn predicate_effective_template(template: &PredicateTemplate) -> &PredicateTemplate {
+    match template {
+        PredicateTemplate::WithFailMessage { inner, .. } => inner,
+        other => other,
+    }
+}
+
+/// The grammar-supplied `<fail=...>` message a template carries, if any.
+fn predicate_template_fail_message(template: &PredicateTemplate) -> Option<&str> {
+    match template {
+        PredicateTemplate::FalseWithMessage { message }
+        | PredicateTemplate::WithFailMessage { message, .. } => Some(message),
+        _ => None,
     }
 }
 
@@ -8356,6 +8405,10 @@ fn render_lexer_predicate_method(
 
 fn render_lexer_predicate_expression(template: &PredicateTemplate) -> String {
     match template {
+        // A `<fail=...>` wrapper is transparent to evaluation; render its inner.
+        PredicateTemplate::WithFailMessage { inner, .. } => {
+            render_lexer_predicate_expression(inner)
+        }
         PredicateTemplate::True => "true".to_owned(),
         PredicateTemplate::False => "false".to_owned(),
         PredicateTemplate::TextEquals(value) => format!(
@@ -9626,12 +9679,13 @@ fn render_parser_semir_predicate_builders(
     let mut out = String::new();
     for ((rule_index, pred_index), predicate) in predicates {
         let expr = render_parser_semir_predicate_expr(predicate, data, members)?;
-        let failure_message = match predicate {
-            PredicateTemplate::FalseWithMessage { message } => {
-                format!("Some(\"{}\")", rust_string(message))
-            }
-            _ => "None".to_owned(),
-        };
+        // Carry the `<fail=...>` message for ANY predicate that supplies one, not
+        // only a constant-false one — a hook/lookahead/member predicate that
+        // returns false at runtime should surface the grammar's fail text too.
+        let failure_message = predicate_template_fail_message(predicate).map_or_else(
+            || "None".to_owned(),
+            |message| format!("Some(\"{}\")", rust_string(message)),
+        );
         writeln!(
             out,
             "        let __expr = {expr};\n        predicates.push(antlr4_runtime::ParserSemanticPredicate {{ rule_index: {rule_index}, pred_index: {pred_index}, expr: __expr, failure_message: {failure_message} }});"
@@ -9679,6 +9733,10 @@ fn render_parser_semir_predicate_expr(
     members: &[IntMemberTemplate],
 ) -> io::Result<String> {
     match predicate {
+        // A `<fail=...>` wrapper is transparent to evaluation; lower its inner.
+        PredicateTemplate::WithFailMessage { inner, .. } => {
+            render_parser_semir_predicate_expr(inner, data, members)
+        }
         PredicateTemplate::Hook => Ok(
             "ir.expr(antlr4_runtime::semir::PExpr::Hook(antlr4_runtime::semir::HookId::new(0)))"
                 .to_owned(),
@@ -9782,6 +9840,11 @@ fn render_parser_predicate_array(
 ) -> io::Result<String> {
     let mut items = Vec::new();
     for ((rule_index, pred_index), predicate) in predicates {
+        // The deprecated `ParserPredicate` table (SemIR is the active path). A
+        // `<fail=...>` wrapper on a non-constant-false predicate has no encoding
+        // in this legacy enum, so render the transparent inner template; the
+        // SemIR predicate builder carries the message on the active path.
+        let predicate = predicate_effective_template(predicate);
         let expression = match predicate {
             PredicateTemplate::True => "antlr4_runtime::ParserPredicate::True".to_owned(),
             PredicateTemplate::Hook => {
@@ -9877,6 +9940,11 @@ fn render_parser_predicate_array(
                     rust_string(text)
                 )
             }
+            // `predicate_effective_template` above already unwrapped any wrapper;
+            // the constructor never nests, so this is unreachable.
+            PredicateTemplate::WithFailMessage { .. } => unreachable!(
+                "predicate_effective_template unwraps the fail-message wrapper"
+            ),
         };
         items.push(format!("({rule_index}, {pred_index}, {expression})"));
     }
@@ -12589,6 +12657,42 @@ fragment ID2 : { <Column()> >= 2 }? [a-zA-Z];"#,
             ),
             PredicateTemplate::FalseWithMessage {
                 message: "custom message".to_owned()
+            }
+        );
+        // A non-constant-false predicate (hook, member, lookahead, …) preserves
+        // its `<fail=...>` message via the transparent `WithFailMessage` wrapper
+        // rather than discarding it.
+        let wrapped = predicate_template_with_fail_message(
+            PredicateTemplate::Hook,
+            "hook failed".to_owned(),
+        );
+        assert_eq!(
+            wrapped,
+            PredicateTemplate::WithFailMessage {
+                inner: Box::new(PredicateTemplate::Hook),
+                message: "hook failed".to_owned(),
+            }
+        );
+        // The wrapper is transparent to evaluation and generatability, and it
+        // exposes the message.
+        assert_eq!(
+            predicate_effective_template(&wrapped),
+            &PredicateTemplate::Hook
+        );
+        assert!(can_generate_parser_predicate(&wrapped));
+        assert_eq!(predicate_template_fail_message(&wrapped), Some("hook failed"));
+        // Disposition follows the inner: a wrapped hook is still `Hooked`.
+        assert_eq!(
+            predicate_template_disposition(Some(&wrapped), SemUnknownPolicy::AssumeTrue),
+            SemanticsDisposition::Hooked
+        );
+        // A later `<fail=...>` replaces the message rather than nesting wrappers.
+        let rewrapped = predicate_template_with_fail_message(wrapped, "again".to_owned());
+        assert_eq!(
+            rewrapped,
+            PredicateTemplate::WithFailMessage {
+                inner: Box::new(PredicateTemplate::Hook),
+                message: "again".to_owned(),
             }
         );
     }
