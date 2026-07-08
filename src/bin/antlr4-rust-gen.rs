@@ -5078,8 +5078,25 @@ fn render_parser_with_options(
     // documented no-op fallback. Either way `collect_parser_semantics` reports a
     // non-`Translated` disposition, so the concrete `run_action` arm must not run
     // the side effect.
-    if !actions.is_empty() {
+    //
+    // The two dispositions need different fallbacks, though: a `hook`/`error`
+    // override falls through to the `parser_action_hook` catch-all, but an
+    // `assume-*` override is a SILENT no-op — routing it to the hook would fail
+    // loud under the Error policy (or run a user side effect) for a coordinate
+    // the manifest reports as a fallback. Collect the assume-* states so
+    // `render_parser_action_method` gives each an explicit empty arm.
+    //
+    // Scan ALL ATN action states, not just the translated `actions`: an
+    // untranslatable action (never in `actions`) with an `assume-*` override
+    // would otherwise still reach the hook catch-all and fail loud.
+    let mut assume_noop_action_states = BTreeSet::new();
+    {
         let action_state_rules = parser_action_state_rules(data)?;
+        for state in action_state_rules.keys() {
+            if parser_action_assume_overridden(patterns, data, &action_state_rules, *state) {
+                assume_noop_action_states.insert(*state);
+            }
+        }
         actions.retain(|(state, _)| {
             !parser_action_overridden(patterns, data, &action_state_rules, *state)
         });
@@ -5247,6 +5264,7 @@ fn render_parser_with_options(
         &init_actions,
         &int_members,
         !action_states.is_empty(),
+        &assume_noop_action_states,
     )?;
     // `ctx_rooted_action_states` was captured above from the full action set
     // (before overridden arms were dropped), so a hook-routed `$ctx`-rooted
@@ -8242,11 +8260,37 @@ fn parser_action_overridden(
         .is_some()
 }
 
+/// Reports whether a parser action source state carries an `assume-true` /
+/// `assume-false` override. Such a coordinate is a documented silent no-op:
+/// its translated arm is dropped, but it must NOT fall through to the
+/// `parser_action_hook` catch-all (which fails loud under the Error policy or
+/// runs a user side effect). It gets an explicit empty arm instead. A `hook`
+/// (or `error`) override is excluded here so it still routes to the hook.
+fn parser_action_assume_overridden(
+    patterns: &SemPatternFile,
+    data: &InterpData,
+    action_state_rules: &BTreeMap<usize, usize>,
+    state: usize,
+) -> bool {
+    let rule_name = action_state_rules
+        .get(&state)
+        .and_then(|rule| data.rule_names.get(*rule).map(String::as_str));
+    patterns
+        .coordinate_override(SemanticsKind::ParserAction, rule_name, None, Some(state))
+        .is_some_and(|override_| {
+            matches!(
+                override_.dispose,
+                CoordinateDispose::AssumeTrue | CoordinateDispose::AssumeFalse
+            )
+        })
+}
+
 fn render_parser_action_method(
     actions: &[(usize, ActionTemplate)],
     init_actions: &[Option<ActionTemplate>],
     members: &[IntMemberTemplate],
     has_action_states: bool,
+    assume_noop_states: &BTreeSet<usize>,
 ) -> io::Result<String> {
     let has_init_actions = init_actions.iter().any(Option::is_some);
     if !has_action_states && !has_init_actions {
@@ -8275,6 +8319,15 @@ fn render_parser_action_method(
         let statement = render_action_statement(template, members)?;
         writeln!(arms, "            {state} => {{ {statement} }}")
             .expect("writing to a string cannot fail");
+    }
+    // An `assume-true` / `assume-false` action override had its translated arm
+    // dropped and must be a silent no-op: give it an explicit empty arm so it
+    // does NOT fall through to the `parser_action_hook` catch-all below (which
+    // would fail loud under the Error policy or run a user side effect the
+    // manifest reports as a fallback). A `hook`/`error` override keeps falling
+    // through to the hook.
+    for state in assume_noop_states {
+        writeln!(arms, "            {state} => {{}}").expect("writing to a string cannot fail");
     }
     if has_action_states {
         arms.push_str(
@@ -11043,11 +11096,38 @@ atn:
 
     #[test]
     fn parser_action_dispatch_falls_back_to_semantic_hook() {
-        let method = render_parser_action_method(&[], &[], &[], true)
+        let method = render_parser_action_method(&[], &[], &[], true, &BTreeSet::new())
             .expect("parser action method should render");
 
         assert!(method.contains("fn run_action"));
         assert!(method.contains("self.base.parser_action_hook(action, _tree)"));
+    }
+
+    #[test]
+    fn parser_action_assume_override_gets_explicit_noop_arm() {
+        // An `assume-*` action override drops its translated arm, but must NOT
+        // fall through to the `parser_action_hook` catch-all — that would fail
+        // loud under the Error policy (NoSemanticHooks) or run a user side
+        // effect for a coordinate the manifest reports as a no-op fallback. It
+        // gets an explicit empty arm instead. A `hook`/`error` override is not
+        // in this set, so it still falls through to the hook.
+        let mut assume_noop = BTreeSet::new();
+        assume_noop.insert(7_usize);
+        let method =
+            render_parser_action_method(&[], &[], &[], true, &assume_noop)
+                .expect("parser action method should render");
+
+        // The assume-* state has its own empty arm, placed before the catch-all.
+        let noop_at = method
+            .find("7 => {}")
+            .expect("assume-* action state gets an explicit no-op arm");
+        let hook_at = method
+            .find("self.base.parser_action_hook(action, _tree)")
+            .expect("the hook catch-all is still emitted for hook/unknown states");
+        assert!(
+            noop_at < hook_at,
+            "the assume-* no-op arm must precede the hook catch-all"
+        );
     }
 
     #[test]
