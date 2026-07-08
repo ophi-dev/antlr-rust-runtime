@@ -1197,6 +1197,17 @@ fn parse_toml_scalar(value: &str) -> String {
     {
         return unescape_toml_basic_string(body);
     }
+    // TOML literal strings are single-quoted with no escape processing; the body
+    // is taken verbatim. `strip_toml_comment` already treats `'...'` as a quoted
+    // string, so a value like `dispose = 'assume-false'` must have its quotes
+    // stripped here too, or the quotes would leak into the disposition/match and
+    // it would be rejected or fail to match. Require length >= 2 so a lone `'`
+    // is not mistaken for an empty literal.
+    if value.len() >= 2 {
+        if let Some(body) = value.strip_prefix('\'').and_then(|body| body.strip_suffix('\'')) {
+            return body.to_owned();
+        }
+    }
     value.to_owned()
 }
 
@@ -6157,10 +6168,28 @@ fn lexer_predicate_templates(
             ),
         ));
     }
+    // Apply per-coordinate `--sem-patterns` overrides before deciding a slot is
+    // unhonorable, mirroring the parser path: a `dispose = "assume-false"` /
+    // `"assume-true"` override on a lexer predicate coordinate replaces the
+    // body-derived slot (e.g. a helper that lowered to `Hook`) with the
+    // documented fallback, so the manifest's disposition is honored instead of
+    // failing generation. Slots are position-aligned 1:1 with `predicates`.
+    let mut slots = slots;
+    for (slot, (rule_index, pred_index)) in slots.iter_mut().zip(predicates.iter().copied()) {
+        if let Some(override_template) = patterns.coordinate_predicate_template(
+            SemanticsKind::LexerPredicate,
+            data.rule_names.get(rule_index).map(String::as_str),
+            Some(pred_index),
+        ) {
+            *slot = override_template;
+        }
+    }
     // Generated lexers have no semantic-hooks plumbing yet: their predicate
     // dispatch is a static `run_predicate` method, so a hook-routed lexer
     // predicate has nowhere to land. Reject it instead of panicking in the
-    // renderer; callers can drive `next_token_with_semantic_hooks` manually.
+    // renderer; callers can drive `next_token_with_semantic_hooks` manually. A
+    // coordinate override above can turn such a `Hook` slot into an honorable
+    // fallback (`assume-false`/`assume-true`) so it is not rejected here.
     if slots
         .iter()
         .any(|slot| matches!(slot, Some(PredicateTemplate::Hook)))
@@ -13634,6 +13663,41 @@ lower = "bool(false)"
             .expect("pattern lookup should not fail")
             .expect("the '#'-bearing match body must be retained");
         assert_eq!(template, PredicateTemplate::False);
+    }
+
+    #[test]
+    fn parse_toml_scalar_strips_single_quoted_literals() {
+        // TOML literal strings are single-quoted with no escape processing.
+        // `strip_toml_comment` already treats `'...'` as a string, so the scalar
+        // parser must strip those quotes too (verbatim body).
+        assert_eq!(parse_toml_scalar("'assume-false'"), "assume-false");
+        assert_eq!(parse_toml_scalar("  'hook'  "), "hook");
+        // A literal string is verbatim: a backslash is not an escape.
+        assert_eq!(parse_toml_scalar(r"'a\nb'"), r"a\nb");
+        // Double-quoted basic strings still unescape.
+        assert_eq!(parse_toml_scalar(r#""a\nb""#), "a\nb");
+        // A bare scalar and a lone quote are unchanged.
+        assert_eq!(parse_toml_scalar("42"), "42");
+        assert_eq!(parse_toml_scalar("'"), "'");
+    }
+
+    #[test]
+    fn sem_patterns_accept_single_quoted_dispose() {
+        // A single-quoted (TOML literal) `dispose` must resolve to the disposition,
+        // not keep its quotes (which would fail to match / be rejected).
+        let patterns = parse_sem_patterns(
+            "[[coordinate]]\nkind = 'predicate'\nrule = 's'\nindex = 0\ndispose = 'assume-false'\n",
+        )
+        .expect("pattern file parses");
+        assert_eq!(
+            patterns.coordinate_predicate_template(
+                SemanticsKind::ParserPredicate,
+                Some("s"),
+                Some(0),
+            ),
+            Some(Some(PredicateTemplate::False)),
+            "single-quoted dispose must resolve to assume-false"
+        );
     }
 
     #[test]
