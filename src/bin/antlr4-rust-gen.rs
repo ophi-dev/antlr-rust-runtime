@@ -7025,6 +7025,27 @@ fn rule_header_identifier(header: &str, first: bool) -> Option<&str> {
                 {
                     index += 1;
                 }
+                // A grammar-level declaration block (`tokens { ... }`,
+                // `options { ... }`, `channels { ... }`) is a bareword directly
+                // followed by `{`. It precedes the first rule and is not the rule
+                // name, so skip the keyword and its block and keep scanning for
+                // the actual name. (A rule name is followed by `:`, `returns`,
+                // `@`, `[`, etc. — never directly by `{`.)
+                let after_word = templates::skip_ascii_whitespace(header, index);
+                if first && header.as_bytes().get(after_word) == Some(&b'{') {
+                    let mut depth = 1_usize;
+                    let mut cursor = after_word + 1;
+                    while cursor < bytes.len() && depth > 0 {
+                        match bytes[cursor] {
+                            b'{' => depth += 1,
+                            b'}' => depth -= 1,
+                            _ => {}
+                        }
+                        cursor += 1;
+                    }
+                    index = cursor;
+                    continue;
+                }
                 found = Some((start, index));
                 if first {
                     break;
@@ -13235,6 +13256,43 @@ ID: [a-z]+ ;\n";
         assert_eq!(rule_header_start_identifier("/* doc */ RCURL"), Some("RCURL"));
         // `fragment` lexer rules keep their name.
         assert_eq!(rule_header_start_identifier("fragment DIGIT"), Some("DIGIT"));
+        // A grammar-level `tokens { ... }` / `options { ... }` declaration
+        // precedes the first rule with no terminating `;`; it must be skipped so
+        // the following rule name resolves (composite/imported grammars).
+        assert_eq!(
+            rule_header_start_identifier("tokens { A, B, C }\nx"),
+            Some("x")
+        );
+        assert_eq!(
+            rule_header_start_identifier("options { k = v; }\nexpr"),
+            Some("expr")
+        );
+    }
+
+    #[test]
+    fn action_attribution_across_imported_grammar_with_tokens_block() {
+        // Combined/imported grammar source (delegator + slave concatenated, as
+        // the runtime-testsuite builds it): the slave rule `x`'s translatable
+        // action must attribute to `x` — a `tokens { ... }` block before it (no
+        // `;`) previously derailed the rule-name scan and dropped the action, so
+        // under `--sem-unknown=error` a translatable action was reported unknown.
+        let grammar = "grammar M;\n\
+import S;\n\
+s : x INT;\n\
+parser grammar S;\n\
+tokens { A, B, C }\n\
+x : 'x' INT {<writeln(\"S.x\")>};\n\
+INT : '0'..'9'+ ;\n";
+        let rule_names = vec!["s".to_owned(), "x".to_owned()];
+        let templates = extract_action_template_slots_filtered(grammar, Some(&rule_names));
+        assert_eq!(
+            templates,
+            [Some(ActionTemplate::Literal {
+                value: "S.x".to_owned(),
+                newline: true
+            })],
+            "the imported rule's writeln action must translate, not be dropped"
+        );
     }
 
     #[test]
