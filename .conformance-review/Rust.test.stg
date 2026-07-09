@@ -1,0 +1,409 @@
+/*
+ * Rust.test.stg — idealized reference `.test.stg` for an ANTLR4 Rust target.
+ *
+ * AUTHORED BLIND. This file was written without reading any concrete Rust
+ * ANTLR runtime or code-generator in this (or any) repository. It is a
+ * *specification / reference artifact*: for each of ANTLR's 70 neutral test
+ * helpers it renders the Rust action code that an *ideal, idiomatic* Rust
+ * target would emit into a grammar `{...}` action or `{...}?` predicate. It is
+ * modeled on the other targets' `.test.stg` files (Java is canonical; Go is
+ * the reference for a target with distinct naming/getter conventions) plus
+ * idiomatic Rust — not on any real implementation.
+ *
+ * Signatures (template names + argument names/arity) match Java.test.stg
+ * exactly, because the runtime-testsuite harness invokes them positionally and
+ * by name. Only the *bodies* are Rust.
+ *
+ * Design summary (full rationale + assumed runtime API surface in the
+ * companion file Rust.test.stg.design-notes.md):
+ *
+ *   - Output goes through `self.output()`, a handle the generated recognizer
+ *     exposes over a `&mut dyn std::io::Write` sink the test harness captures;
+ *     `writeln!`/`write!` against it never surface a `io::Result` into
+ *     action/predicate position (the handle swallows/records it).
+ *   - Generated contexts are typed structs. Child accessors follow Rust
+ *     snake_case for rule refs (`ctx.e(0)`, list `ctx.e_all()`) and keep
+ *     ANTLR's uppercase for token refs (`ctx.INT(0)`, list `ctx.INT_all()`),
+ *     mirroring Go's `E(0)`/`AllE()` split but in Rust casing.
+ *   - Rule return attributes are public fields on the returns/context value,
+ *     so `Result(r)`/`Production(p)` pass through as `<r>`/`<p>` (no getter
+ *     wrapper — the ideal Rust target exposes them directly, unlike Go).
+ *   - Parser "members" are injected as an `impl` block on the generated parser
+ *     via `@parser::members`; helpers are called `self.foo()` / `self.pred(v)`.
+ *   - The generated listener trait is `TListener` with snake_case
+ *     `enter_x`/`exit_x` and a defaulted `visit_terminal`; a test listener is a
+ *     unit struct implementing it, walked by `ParseTreeWalker::walk`.
+ *   - Downcasting a base `ParserRuleContext` to a labeled-alt / concrete
+ *     context uses `.downcast_ref::<TContext>().unwrap()`.
+ */
+
+writeln(s) ::= <<writeln!(self.output(), "{}", <s>);>>
+
+write(s) ::= <<write!(self.output(), "{}", <s>);>>
+
+writeList(s) ::= <<writeln!(self.output(), "{}", <s; separator=" + ">);>>
+
+False() ::= "false"
+
+True() ::= "true"
+
+Not(v) ::= "!<v>"
+
+Assert(s) ::= <<assert!(<s>);>>
+
+Cast(t,v) ::= "(<v>).downcast_ref::\<<t>>().unwrap()"
+
+Append(a,b) ::= "<a> + &(<b>).to_string()"
+
+AppendStr(a,b) ::= <%<a> + <b>%>
+
+Concat(a,b) ::= "<a><b>"
+
+AssertIsList(v) ::= "let __ttt__: &[_] = &<v>;" // just use the static type system
+
+AssignLocal(s,v) ::= "<s> = <v>;"
+
+InitIntMember(n,v) ::= <%let mut <n>: i32 = <v>; let _ = <n>;%>
+
+InitBooleanMember(n,v) ::= <%let mut <n>: bool = <v>; let _ = <n>;%>
+
+InitIntVar(n,v) ::= <%<InitIntMember(n,v)>%>
+
+IntArg(n) ::= "<n>: i32"
+
+VarRef(n) ::= "<n>"
+
+GetMember(n) ::= <%self.<n>%>
+
+SetMember(n,v) ::= <%self.<n> = <v>;%>
+
+AddMember(n,v) ::= <%self.<n> += <v>;%>
+
+MemberEquals(n,v) ::= <%self.<n> == <v>%>
+
+ModMemberEquals(n,m,v) ::= <%self.<n> % <m> == <v>%>
+
+ModMemberNotEquals(n,m,v) ::= <%self.<n> % <m> != <v>%>
+
+DumpDFA() ::= "self.dump_dfa();"
+
+Pass() ::= ""
+
+StringList() ::= "Vec\<String>"
+
+BuildParseTrees() ::= "self.set_build_parse_trees(true);"
+
+BailErrorStrategy() ::= <%self.set_error_handler(BailErrorStrategy::new());%>
+
+ToStringTree(s) ::= <%<s>.to_string_tree(Some(self))%>
+
+Column() ::= "self.char_position_in_line()"
+
+Text() ::= "self.text()"
+
+ValEquals(a,b) ::= <%<a> == <b>%>
+
+TextEquals(a) ::= <%self.text() == "<a>"%>
+
+PlusText(a) ::= <%"<a>".to_string() + &self.text()%>
+
+InputText() ::= "self.input().text()"
+
+LTEquals(i, v) ::= <%self.input().lt(<i>).text() == <v>%>
+
+LANotEquals(i, v) ::= <%self.input().la(<i>) != <v>%>
+
+TokenStartColumnEquals(i) ::= <%self.token_start_char_position_in_line() == <i>%>
+
+ImportListener(X) ::= ""
+
+GetExpectedTokenNames() ::= "self.expected_tokens().to_token_string(self.vocabulary())"
+
+ImportRuleInvocationStack() ::= ""
+
+RuleInvocationStack() ::= "format!(\"{:?}\", self.rule_invocation_stack())"
+
+LL_EXACT_AMBIG_DETECTION() ::= <<self.interpreter().set_prediction_mode(PredictionMode::LlExactAmbigDetection);>>
+
+ParserToken(parser, token) ::= <%<parser>::<token>%>
+
+Production(p) ::= <%<p>%>
+
+Result(r) ::= <%<r>%>
+
+ParserPropertyMember() ::= <<
+@members {
+fn property(&self) -> bool {
+    true
+}
+}
+>>
+
+ParserPropertyCall(p, call) ::= "<p>.<call>"
+
+PositionAdjustingLexerDef() ::= <<
+struct PositionAdjustingLexerATNSimulator {
+    base: LexerATNSimulator,
+}
+
+impl PositionAdjustingLexerATNSimulator {
+    fn new(
+        atn: Arc\<ATN>,
+        decision_to_dfa: Arc\<Vec\<DFA>>,
+        shared_context_cache: Arc\<PredictionContextCache>,
+    ) -> Self {
+        Self {
+            base: LexerATNSimulator::new(atn, decision_to_dfa, shared_context_cache),
+        }
+    }
+
+    fn reset_accept_position(
+        &mut self,
+        input: &mut dyn CharStream,
+        index: isize,
+        line: isize,
+        char_position_in_line: isize,
+    ) {
+        input.seek(index);
+        self.base.set_line(line);
+        self.base.set_char_position_in_line(char_position_in_line);
+        self.base.consume(input);
+    }
+}
+>>
+
+PositionAdjustingLexer() ::= <<
+
+fn next_token(&mut self) -> Box\<dyn Token> {
+    if !self.interpreter().is::\<PositionAdjustingLexerATNSimulator>() {
+        let sim = PositionAdjustingLexerATNSimulator::new(
+            self.atn(),
+            self.decision_to_dfa(),
+            self.shared_context_cache(),
+        );
+        self.set_interpreter(Box::new(sim));
+    }
+    self.base_next_token()
+}
+
+fn emit(&mut self) -> Box\<dyn Token> {
+    match self.token_type() {
+        Self::TOKENS => {
+            self.handle_accept_position_for_keyword("tokens");
+        }
+        Self::LABEL => {
+            self.handle_accept_position_for_identifier();
+        }
+        _ => {}
+    }
+    self.base_emit()
+}
+
+fn handle_accept_position_for_identifier(&mut self) -> bool {
+    let token_text = self.text();
+    let mut identifier_length = 0usize;
+    let chars: Vec\<char> = token_text.chars().collect();
+    while identifier_length \< chars.len() && Self::is_identifier_char(chars[identifier_length]) {
+        identifier_length += 1;
+    }
+
+    let identifier_length = identifier_length as isize;
+    if self.input().index() > self.token_start_char_index() + identifier_length {
+        let offset = identifier_length - 1;
+        let (input, index, line, column) = (
+            self.input_mut(),
+            self.token_start_char_index() + offset,
+            self.token_start_line(),
+            self.token_start_char_position_in_line() + offset,
+        );
+        self.interpreter_as::\<PositionAdjustingLexerATNSimulator>()
+            .reset_accept_position(input, index, line, column);
+        return true;
+    }
+    false
+}
+
+fn handle_accept_position_for_keyword(&mut self, keyword: &str) -> bool {
+    let keyword_len = keyword.chars().count() as isize;
+    if self.input().index() > self.token_start_char_index() + keyword_len {
+        let offset = keyword_len - 1;
+        let (input, index, line, column) = (
+            self.input_mut(),
+            self.token_start_char_index() + offset,
+            self.token_start_line(),
+            self.token_start_char_position_in_line() + offset,
+        );
+        self.interpreter_as::\<PositionAdjustingLexerATNSimulator>()
+            .reset_accept_position(input, index, line, column);
+        return true;
+    }
+    false
+}
+
+fn is_identifier_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
+}
+
+>>
+
+BasicListener(X) ::= <<
+@parser::members {
+#[derive(Default)]
+struct LeafListener;
+
+impl TListener for LeafListener {
+    fn visit_terminal(&mut self, node: &TerminalNode) {
+        writeln!(self.output(), "{}", node.symbol().text());
+    }
+}
+}
+>>
+
+WalkListener(s) ::= <<
+let mut listener = LeafListener::default();
+ParseTreeWalker::walk(&mut listener, <s>);
+>>
+
+TreeNodeWithAltNumField(X) ::= <<
+@parser::members {
+struct MyRuleNode {
+    base: BaseParserRuleContext,
+    alt_num: isize,
+}
+
+impl MyRuleNode {
+    fn new(parent: Option\<ParserRuleContextRef>, invoking_state_number: isize) -> Self {
+        Self {
+            base: BaseParserRuleContext::new(parent, invoking_state_number),
+            alt_num: 0,
+        }
+    }
+}
+
+impl ParserRuleContext for MyRuleNode {
+    fn alt_number(&self) -> isize {
+        self.alt_num
+    }
+
+    fn set_alt_number(&mut self, alt_num: isize) {
+        self.alt_num = alt_num;
+    }
+}
+}
+>>
+
+TokenGetterListener(X) ::= <<
+@parser::members {
+#[derive(Default)]
+struct LeafListener;
+
+impl TListener for LeafListener {
+    fn exit_a(&mut self, ctx: &AContext) {
+        if ctx.child_count() == 2 {
+            writeln!(
+                self.output(),
+                "{} {} {:?}",
+                ctx.INT(0).symbol().text(),
+                ctx.INT(1).symbol().text(),
+                ctx.INT_all()
+            );
+        } else {
+            writeln!(self.output(), "{}", ctx.ID().symbol());
+        }
+    }
+}
+}
+>>
+
+RuleGetterListener(X) ::= <<
+@parser::members {
+#[derive(Default)]
+struct LeafListener;
+
+impl TListener for LeafListener {
+    fn exit_a(&mut self, ctx: &AContext) {
+        if ctx.child_count() == 2 {
+            writeln!(
+                self.output(),
+                "{} {} {}",
+                ctx.b(0).start().text(),
+                ctx.b(1).start().text(),
+                ctx.b_all()[0].start().text()
+            );
+        } else {
+            writeln!(self.output(), "{}", ctx.b(0).start().text());
+        }
+    }
+}
+}
+>>
+
+
+LRListener(X) ::= <<
+@parser::members {
+#[derive(Default)]
+struct LeafListener;
+
+impl TListener for LeafListener {
+    fn exit_e(&mut self, ctx: &EContext) {
+        if ctx.child_count() == 3 {
+            writeln!(
+                self.output(),
+                "{} {} {}",
+                ctx.e(0).start().text(),
+                ctx.e(1).start().text(),
+                ctx.e_all()[0].start().text()
+            );
+        } else {
+            writeln!(self.output(), "{}", ctx.INT().symbol().text());
+        }
+    }
+}
+}
+>>
+
+LRWithLabelsListener(X) ::= <<
+@parser::members {
+#[derive(Default)]
+struct LeafListener;
+
+impl TListener for LeafListener {
+    fn exit_call(&mut self, ctx: &CallContext) {
+        writeln!(self.output(), "{} {:?}", ctx.e().start().text(), ctx.e_list());
+    }
+    fn exit_int(&mut self, ctx: &IntContext) {
+        writeln!(self.output(), "{}", ctx.INT().symbol().text());
+    }
+}
+}
+>>
+
+DeclareContextListGettersFunction() ::= <<
+fn foo() {
+    let s: Option\<Rc\<SContext>> = None;
+    let _a: Vec\<Rc\<AContext>> = s.as_ref().unwrap().a_all();
+    let _b: Vec\<Rc\<BContext>> = s.as_ref().unwrap().b_all();
+}
+>>
+
+Declare_foo() ::= <<
+fn foo(&mut self) { writeln!(self.output(), "foo"); }
+>>
+
+Invoke_foo() ::= "self.foo();"
+
+Declare_pred() ::= <<fn pred(&mut self, v: bool) -> bool {
+    writeln!(self.output(), "eval={}", v);
+    v
+}
+>>
+
+Invoke_pred(v) ::= <<self.pred(<v>)>>
+
+ParserTokenType(t) ::= "Parser::<t>"
+ContextRuleFunction(ctx, rule) ::= "<ctx>.<rule>"
+ContextListFunction(ctx, rule) ::= "<ctx>.<rule>_all()"
+StringType() ::= "String"
+ContextMember(ctx, member) ::= "<ctx>.<member>"
+SubContextLocal(ctx, subctx, local) ::= "<ctx>.<subctx>.<local>"
+SubContextMember(ctx, subctx, member) ::= "<ctx>.<subctx>.<member>"
