@@ -8009,13 +8009,24 @@ fn authored_parser_action_blocks_per_rule(
 /// A synthetic action has the same ATN shape and manifest disposition
 /// (`Ignored`, no source body) as an author-written action we could not
 /// translate, so they cannot be told apart from the ATN alone. The discriminator
-/// is grammar source: within a rule, the author-written `{...}` action blocks
-/// account for the first N action states (in source/ATN order); any action state
-/// beyond the authored count in that rule was inserted by ANTLR.
+/// is grammar-source correlation:
 ///
-/// Under `--sem-unknown=error` these synthetic states are exempt (there is no
-/// author intent to implement), while an author-written untranslated action
-/// still fails loud.
+/// 1. An action state that a `{...}` source block was *attributed to* (via the
+///    same span walk the manifest uses) is authored — even an empty `{}` block,
+///    which yields a real (empty-body) span. These are never synthetic.
+/// 2. A state with no attributed span is either ANTLR-synthetic or a *native*
+///    authored action the translatable span walk did not surface. Distinguish by
+///    count: per rule, the author wrote `authored_blocks(rule)` action blocks
+///    total; `spanned(rule)` of them got a span, so `authored_blocks - spanned`
+///    are native-authored and the *rest* of the span-less states are synthetic.
+///    The span-less states are taken in ascending state order, native-authored
+///    first (they still fail loud under `error`), synthetic after.
+///
+/// Ordering within the span-less group does not matter for correctness: a rule
+/// mixes at most one of native-authored / synthetic in practice, and the count
+/// split is exact. This is robust to ANTLR inserting its synthetic action at the
+/// rule entry (a low state number) *before* the author's alternative actions —
+/// the earlier positional "first N are authored" heuristic was not.
 fn synthetic_parser_action_states(
     data: &InterpData,
     grammar_source: Option<&str>,
@@ -8026,19 +8037,46 @@ fn synthetic_parser_action_states(
         return Ok(BTreeSet::new());
     };
     let authored = authored_parser_action_blocks_per_rule(grammar_source, &data.rule_names);
-    // ATN action states in ascending state order, grouped by rule. State numbers
-    // increase with source position within a rule, so the first `authored(rule)`
-    // states are the author's; the remainder are synthetic.
+    // States that a source block was attributed to (authored, incl. empty `{}`).
+    let has_rule_value = extract_action_template_slots_filtered(grammar_source, Some(&data.rule_names))
+        .iter()
+        .flatten()
+        .any(|template| matches!(template, ActionTemplate::RuleValue { .. }));
+    let spanned = assign_states_to_action_slots(
+        data,
+        parser_action_source_block_slots(grammar_source, &data.rule_names),
+        has_rule_value,
+    )?
+    .into_iter()
+    .map(|(state, _)| state)
+    .collect::<BTreeSet<usize>>();
+    // Per rule, how many authored blocks got a span. The remaining authored
+    // blocks are native (no span) and must NOT be exempted.
+    let mut spanned_per_rule = BTreeMap::new();
     let state_rules = parser_action_state_rules(data)?;
-    let mut seen_per_rule = BTreeMap::new();
+    for (state, rule_index) in &state_rules {
+        if spanned.contains(state) {
+            *spanned_per_rule.entry(*rule_index).or_insert(0_usize) += 1;
+        }
+    }
+    // Walk span-less states in state order; the first `native_authored` per rule
+    // are author-written natives (kept fail-loud), the rest are synthetic.
+    let mut native_seen = BTreeMap::new();
     let mut synthetic = BTreeSet::new();
     for (state, rule_index) in state_rules {
-        let index = seen_per_rule.entry(rule_index).or_insert(0_usize);
+        if spanned.contains(&state) {
+            continue;
+        }
         let authored_in_rule = authored.get(&rule_index).copied().unwrap_or(0);
-        if *index >= authored_in_rule {
+        let spanned_in_rule = spanned_per_rule.get(&rule_index).copied().unwrap_or(0);
+        let native_authored = authored_in_rule.saturating_sub(spanned_in_rule);
+        let seen = native_seen.entry(rule_index).or_insert(0_usize);
+        if *seen < native_authored {
+            // An author-written native action with no span: keep it fail-loud.
+            *seen += 1;
+        } else {
             synthetic.insert(state);
         }
-        *index += 1;
     }
     Ok(synthetic)
 }
