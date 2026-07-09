@@ -6856,6 +6856,17 @@ fn trim_leading_non_rule_lines(mut header: &str) -> &str {
             header = &header[newline + 1..];
             continue;
         }
+        // A `/* ... */` block comment can sit between the previous rule's `;`
+        // and this rule header (e.g. a doc comment above a lexer rule). Skip it
+        // so the rule name that follows is still resolved; otherwise the action
+        // is mis-attributed and the ATN/grammar action counts diverge.
+        if header.starts_with("/*") {
+            let Some(close) = header.find("*/") else {
+                return "";
+            };
+            header = &header[close + 2..];
+            continue;
+        }
         if header.starts_with('<') {
             let Some(close) = header.find('>') else {
                 return header;
@@ -13048,6 +13059,48 @@ RCURL: '}' { popMode(); };
         let actions = extract_lexer_action_templates(grammar, &rule_names);
 
         assert_eq!(actions, [ActionTemplate::LexerPopMode]);
+    }
+
+    #[test]
+    fn lexer_action_scan_resolves_rule_after_block_comment() {
+        // A `/* ... */` block comment between the previous rule's `;` and a rule
+        // that carries a custom action (the shape of Kotlin's `RCURL`) must not
+        // hide the rule name. Before the fix the action was mis-attributed and
+        // dropped, so the grammar yielded zero action templates while the lexer
+        // ATN had one — a hard count-mismatch abort.
+        let grammar = "lexer grammar L;\n\
+LCURL: '{' -> pushMode(DEFAULT_MODE);\n\
+/*\n\
+ * doc comment sitting above the action rule\n\
+ */\n\
+RCURL: '}' { if (!_modeStack.isEmpty()) { popMode(); } };\n\
+ID: [a-z]+ ;\n";
+        let rule_names = vec!["LCURL".to_owned(), "RCURL".to_owned(), "ID".to_owned()];
+
+        let actions = extract_lexer_action_templates(grammar, &rule_names);
+
+        // Both the pushMode command and the guarded-popMode idiom resolve; the
+        // action is attributed to `RCURL`, not skipped.
+        assert_eq!(actions, [ActionTemplate::LexerPopMode]);
+    }
+
+    #[test]
+    fn trim_leading_non_rule_lines_skips_block_comments() {
+        // Directly exercise the header trimmer: a leading block comment (even
+        // multi-line) is skipped so the trailing rule name resolves.
+        assert_eq!(
+            leading_rule_name("/* one-line */ RCURL"),
+            Some("RCURL")
+        );
+        assert_eq!(
+            leading_rule_name("/*\n * multi\n * line\n */\nRCURL"),
+            Some("RCURL")
+        );
+        // A block comment mixed with a line comment.
+        assert_eq!(
+            leading_rule_name("// line\n/* block */\nname_x"),
+            Some("name_x")
+        );
     }
 
     #[test]
