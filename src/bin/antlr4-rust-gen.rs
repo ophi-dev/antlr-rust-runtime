@@ -5223,18 +5223,24 @@ fn render_parser_with_options(
     // Scan ALL ATN action states, not just the translated `actions`: an
     // untranslatable action (never in `actions`) with an `assume-*` override
     // would otherwise still reach the hook catch-all and fail loud.
-    let mut assume_noop_action_states = BTreeSet::new();
+    let mut noop_action_states = BTreeSet::new();
     {
         let action_state_rules = parser_action_state_rules(data)?;
         for state in action_state_rules.keys() {
             if parser_action_assume_overridden(patterns, data, &action_state_rules, *state) {
-                assume_noop_action_states.insert(*state);
+                noop_action_states.insert(*state);
             }
         }
         actions.retain(|(state, _)| {
             !parser_action_overridden(patterns, data, &action_state_rules, *state)
         });
     }
+    // ANTLR-synthesized action states (left-recursion elimination, etc.) are
+    // no-ops with no author intent. They must NOT reach `parser_action_hook`
+    // either, or they would fail loud at runtime under the Error policy — the
+    // same treatment `enforce_sem_unknown` gives them at codegen time. Give each
+    // an explicit empty `run_action` arm.
+    noop_action_states.extend(synthetic_parser_action_states(data, grammar_source)?);
     let after_actions = grammar_source.map_or_else(
         || Ok(vec![Vec::new(); data.rule_names.len()]),
         |grammar| parser_after_action_templates(data, grammar),
@@ -5398,7 +5404,7 @@ fn render_parser_with_options(
         &init_actions,
         &int_members,
         !action_states.is_empty(),
-        &assume_noop_action_states,
+        &noop_action_states,
     )?;
     // `ctx_rooted_action_states` was captured above from the full action set
     // (before overridden arms were dropped), so a hook-routed `$ctx`-rooted
@@ -8699,7 +8705,7 @@ fn render_parser_action_method(
     init_actions: &[Option<ActionTemplate>],
     members: &[IntMemberTemplate],
     has_action_states: bool,
-    assume_noop_states: &BTreeSet<usize>,
+    noop_states: &BTreeSet<usize>,
 ) -> io::Result<String> {
     let has_init_actions = init_actions.iter().any(Option::is_some);
     if !has_action_states && !has_init_actions {
@@ -8729,13 +8735,13 @@ fn render_parser_action_method(
         writeln!(arms, "            {state} => {{ {statement} }}")
             .expect("writing to a string cannot fail");
     }
-    // An `assume-true` / `assume-false` action override had its translated arm
-    // dropped and must be a silent no-op: give it an explicit empty arm so it
-    // does NOT fall through to the `parser_action_hook` catch-all below (which
-    // would fail loud under the Error policy or run a user side effect the
-    // manifest reports as a fallback). A `hook`/`error` override keeps falling
-    // through to the hook.
-    for state in assume_noop_states {
+    // Silent no-op action states: an `assume-*` override (its translated arm was
+    // dropped) or an ANTLR-synthesized action (left-recursion elimination, etc.).
+    // Give each an explicit empty arm so it does NOT fall through to the
+    // `parser_action_hook` catch-all below — which would fail loud under the
+    // Error policy (or run a user side effect) for an action that carries no
+    // author intent. A `hook`/`error` override keeps falling through to the hook.
+    for state in noop_states {
         writeln!(arms, "            {state} => {{}}").expect("writing to a string cannot fail");
     }
     if has_action_states {
