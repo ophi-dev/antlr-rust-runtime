@@ -49,13 +49,20 @@ True() ::= "true"
 
 Not(v) ::= "!<v>"
 
-Assert(s) ::= <<assert!(<s>);>>
+// Rendered empty, following the Go/Python/Swift precedent: descriptors splice
+// raw Java fragments into Assert (e.g. `Concat(" != null"):Assert()` in the
+// LeftRecursion/MultipleAlternativesWithCommonLabel family), so any non-Java
+// target that renders a real assertion receives uncompilable Java syntax.
+Assert(s) ::= ""
 
 Cast(t,v) ::= "(<v>).downcast_ref::\<<t>>().unwrap()"
 
-Append(a,b) ::= "<a> + &(<b>).to_string()"
+// Rust has no `&str + &str` operator, and descriptors chain Append/AppendStr
+// with bare string literals on the left (`"(" + $ID.text + …` in Java terms),
+// so the only concatenation form that always compiles is `format!`.
+Append(a,b) ::= <%format!("{}{}", <a>, <b>)%>
 
-AppendStr(a,b) ::= <%<a> + <b>%>
+AppendStr(a,b) ::= <%format!("{}{}", <a>, <b>)%>
 
 Concat(a,b) ::= "<a><b>"
 
@@ -63,11 +70,19 @@ AssertIsList(v) ::= "let __ttt__: &[_] = &<v>;" // just use the static type syst
 
 AssignLocal(s,v) ::= "<s> = <v>;"
 
-InitIntMember(n,v) ::= <%let mut <n>: i32 = <v>; let _ = <n>;%>
+// Members are field declarations in the generated recognizer's struct body.
+// Rust separates struct fields from impl items, so — like TypeScript's
+// `<n> : number = <v>;` class-field rendering — the Rust target defines a
+// field-with-initializer declaration form that its code generator lowers to a
+// struct field plus constructor initialization.
+InitIntMember(n,v) ::= <%<n>: i32 = <v>;%>
 
-InitBooleanMember(n,v) ::= <%let mut <n>: bool = <v>; let _ = <n>;%>
+InitBooleanMember(n,v) ::= <%<n>: bool = <v>;%>
 
-InitIntVar(n,v) ::= <%<InitIntMember(n,v)>%>
+// Rule-local variable (`@init`/locals scope): a real `let` statement. The
+// trailing `let _` keeps an otherwise-unread local from tripping
+// `unused_variables` under `-D warnings`.
+InitIntVar(n,v) ::= <%let mut <n>: i32 = <v>; let _ = <n>;%>
 
 IntArg(n) ::= "<n>: i32"
 
@@ -121,7 +136,10 @@ GetExpectedTokenNames() ::= "self.expected_tokens().to_token_string(self.vocabul
 
 ImportRuleInvocationStack() ::= ""
 
-RuleInvocationStack() ::= "format!(\"{:?}\", self.rule_invocation_stack())"
+// Java prints List.toString ("[a, b]"); Rust's Vec Debug quotes elements, so —
+// like Go's antlr.PrintArrayJavaStyle and Python's str_list — the runtime
+// provides a Java-style list formatter the generated module has in scope.
+RuleInvocationStack() ::= "java_style_list(&self.rule_invocation_stack())"
 
 LL_EXACT_AMBIG_DETECTION() ::= <<self.interpreter().set_prediction_mode(PredictionMode::LlExactAmbigDetection);>>
 
@@ -133,7 +151,8 @@ Result(r) ::= <%<r>%>
 
 ParserPropertyMember() ::= <<
 @members {
-fn property(&self) -> bool {
+#[allow(non_snake_case)]
+fn Property(&self) -> bool {
     true
 }
 }
@@ -149,7 +168,7 @@ struct PositionAdjustingLexerATNSimulator {
 impl PositionAdjustingLexerATNSimulator {
     fn new(
         atn: Arc\<ATN>,
-        decision_to_dfa: Arc\<Vec\<DFA>>,
+        decision_to_dfa: Arc\<Vec\<DFA>\>,
         shared_context_cache: Arc\<PredictionContextCache>,
     ) -> Self {
         Self {
@@ -302,13 +321,13 @@ impl TListener for LeafListener {
         if ctx.child_count() == 2 {
             writeln!(
                 self.output(),
-                "{} {} {:?}",
+                "{} {} {}",
                 ctx.INT(0).symbol().text(),
                 ctx.INT(1).symbol().text(),
-                ctx.INT_all()
+                java_style_list(&ctx.INT_all())
             );
         } else {
-            writeln!(self.output(), "{}", ctx.ID().symbol());
+            writeln!(self.output(), "{}", ctx.ID(0).symbol());
         }
     }
 }
@@ -355,7 +374,7 @@ impl TListener for LeafListener {
                 ctx.e_all()[0].start().text()
             );
         } else {
-            writeln!(self.output(), "{}", ctx.INT().symbol().text());
+            writeln!(self.output(), "{}", ctx.INT(0).symbol().text());
         }
     }
 }
@@ -369,10 +388,10 @@ struct LeafListener;
 
 impl TListener for LeafListener {
     fn exit_call(&mut self, ctx: &CallContext) {
-        writeln!(self.output(), "{} {:?}", ctx.e().start().text(), ctx.e_list());
+        writeln!(self.output(), "{} {}", ctx.e(0).start().text(), ctx.e_list(0));
     }
     fn exit_int(&mut self, ctx: &IntContext) {
-        writeln!(self.output(), "{}", ctx.INT().symbol().text());
+        writeln!(self.output(), "{}", ctx.INT(0).symbol().text());
     }
 }
 }
@@ -380,9 +399,9 @@ impl TListener for LeafListener {
 
 DeclareContextListGettersFunction() ::= <<
 fn foo() {
-    let s: Option\<Rc\<SContext>> = None;
-    let _a: Vec\<Rc\<AContext>> = s.as_ref().unwrap().a_all();
-    let _b: Vec\<Rc\<BContext>> = s.as_ref().unwrap().b_all();
+    let s: Option\<Rc\<SContext>\> = None;
+    let _a: Vec\<Rc\<AContext>\> = s.as_ref().unwrap().a_all();
+    let _b: Vec\<Rc\<BContext>\> = s.as_ref().unwrap().b_all();
 }
 >>
 

@@ -1,5 +1,46 @@
 # `Rust.test.stg` — design notes
 
+## Reference corrections (post-validation)
+
+The blind-authored reference was validated by loading it through the real
+StringTemplate 4 engine (bundled in the ANTLR tool jar) and rendering all 357
+upstream descriptors through it. That surfaced defects that had to be corrected
+for the reference to be *usable at all* — each is a validity/portability fix
+with cross-target precedent, **not** an adaptation to this repository's
+runtime:
+
+1. **ST syntax: literal `>>` terminates a `<<…>>` big-string.** Rust generics
+   such as `Arc<Vec<DFA>>` were truncating the group file at line 153, silently
+   dropping every later template. Fixed with ST's `\>` escape (`DFA>\>`). Pure
+   StringTemplate syntax, no semantic change.
+2. **`InitIntMember`/`InitBooleanMember` were incoherent with `GetMember`.**
+   They rendered `let mut i: i32 = 0;` (statement syntax) into
+   `@parser::members`, while `GetMember`/`SetMember` render `self.i`. Every
+   target renders members as *declarations in its class-body idiom* (Java
+   `int i = 0;`, TypeScript `i : number = 0;`). Rust separates struct fields
+   from `impl` items, so the target defines a field-with-initializer form
+   `i: i32 = 0;` that its code generator lowers to a struct field plus
+   constructor initialization. `InitIntVar` (rule-local scope) keeps the `let`
+   statement.
+3. **`Assert` renders empty**, following Go/Python/Swift: descriptors splice
+   raw Java into it (`Concat(" != null"):Assert()` in
+   LeftRecursion/MultipleAlternativesWithCommonLabel), so a non-Java target
+   rendering a real assertion receives uncompilable Java syntax.
+4. **`Append`/`AppendStr` render `format!("{}{}", a, b)`.** Descriptors chain
+   them with bare string literals on the left (`"(" + $ID.text + …`); Rust has
+   no `&str + &str`, so operator concatenation cannot compile in general.
+5. **`ParserPropertyMember` defines `Property()` (capital P).** The descriptor
+   invokes `ParserPropertyCall(p, "Property()")` with the *Java method name*
+   verbatim; the member definition must match it (`#[allow(non_snake_case)]`).
+6. **`RuleInvocationStack` calls `java_style_list(…)`** — the bespoke
+   Java-`List.toString` formatter every target needed (Go
+   `PrintArrayJavaStyle`, Python `str_list`), exactly as the "least certain"
+   section predicted. Same for `TokenGetterListener`'s list print.
+7. **`LRWithLabelsListener`'s `ctx.eList()` is a rule-child accessor** (rule
+   `eList`), not a list getter: rendered `ctx.e_list(0)`. Listener accessors
+   were aligned to the positional convention (`ctx.INT(0)`, `ctx.e(0)`)
+   declared in the header comment.
+
 Companion to `Rust.test.stg`. This file explains the non-trivial renderings and,
 critically, enumerates the **generated-code / runtime API surface** the templates
 presuppose so a reader can later diff each assumption against a real Rust runtime
