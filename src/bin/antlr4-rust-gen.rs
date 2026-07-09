@@ -247,6 +247,11 @@ enum SemanticsDisposition {
     Error,
     /// No implementation exists; the action is a no-op at recognition time.
     Ignored,
+    /// An action ANTLR synthesized (e.g. during left-recursion elimination),
+    /// not written by the grammar author. It is a no-op at recognition time
+    /// like [`Self::Ignored`], but carries no author intent, so it is exempt
+    /// from the `--sem-unknown=error` gate.
+    Synthetic,
 }
 
 impl SemanticsDisposition {
@@ -258,6 +263,7 @@ impl SemanticsDisposition {
             Self::Hooked => "hooked",
             Self::Error => "error",
             Self::Ignored => "ignored",
+            Self::Synthetic => "synthetic",
         }
     }
 }
@@ -527,11 +533,15 @@ fn enforce_sem_unknown(policy: SemUnknownPolicy, entries: &[SemanticsEntry]) -> 
             if entry.disposition == SemanticsDisposition::Error {
                 return true;
             }
-            // Under the global Error policy, any unimplemented coordinate is fatal.
+            // Under the global Error policy, any unimplemented coordinate is
+            // fatal — except a `Synthetic` action ANTLR inserted itself (no
+            // author intent to implement).
             policy == SemUnknownPolicy::Error
                 && !matches!(
                     entry.disposition,
-                    SemanticsDisposition::Translated | SemanticsDisposition::Hooked
+                    SemanticsDisposition::Translated
+                        | SemanticsDisposition::Hooked
+                        | SemanticsDisposition::Synthetic
                 )
         })
         .collect::<Vec<_>>();
@@ -561,9 +571,13 @@ fn enforce_require_full_semantics(require: bool, entries: &[SemanticsEntry]) -> 
     let fallback = entries
         .iter()
         .filter(|entry| {
+            // A `Synthetic` action is an ANTLR internal, not a missing author
+            // semantic, so it does not count as an unimplemented fallback.
             !matches!(
                 entry.disposition,
-                SemanticsDisposition::Translated | SemanticsDisposition::Hooked
+                SemanticsDisposition::Translated
+                    | SemanticsDisposition::Hooked
+                    | SemanticsDisposition::Synthetic
             )
         })
         .collect::<Vec<_>>();
@@ -759,6 +773,11 @@ fn collect_parser_semantics(
             .transpose()?
             .unwrap_or_default();
         let state_rules = parser_action_state_rules(data)?;
+        // Action states ANTLR synthesized (e.g. left-recursion elimination) as
+        // opposed to author-written `{...}` blocks. A synthetic untranslated
+        // action carries no author intent, so it is exempt from the
+        // `--sem-unknown=error` gate; an authored untranslated action is not.
+        let synthetic_states = synthetic_parser_action_states(data, grammar_source)?;
         // Pair each block source-span with the same ATN action state the
         // template it accompanies is assigned to, so span/body provenance in the
         // manifest stays keyed by state rather than by raw block position (which
@@ -808,6 +827,10 @@ fn collect_parser_semantics(
                     )
                     .unwrap_or_else(|| if template.is_some() {
                         SemanticsDisposition::Translated
+                    } else if synthetic_states.contains(state) {
+                        // ANTLR-synthesized action with no author intent to
+                        // implement: a no-op, exempt from the error gate.
+                        SemanticsDisposition::Synthetic
                     } else {
                         policy.unknown_action_disposition()
                     }),
@@ -6784,12 +6807,46 @@ struct RuleHeader<'a> {
 fn statement_rule_header(source: &str, position: usize) -> Option<RuleHeader<'_>> {
     source.get(..position)?;
     let colon = last_rule_header_colon(source, position)?;
-    let start = source[..colon]
-        .rfind([';', '}'])
-        .map_or(0, |index| index + 1);
+    let start = rule_statement_start(source, colon);
     let header = &source[start..colon];
-    let name = leading_rule_name(header)?;
+    // The rule name is the first identifier in the header, after skipping
+    // leading comments, `<...>` templates, and grammar-level `@name {...}`
+    // blocks. Taking the *first* identifier keeps `continue returns [int x] :`
+    // resolving to `continue` (not the `returns` keyword or a `[...]` type),
+    // while the skips handle a preceding `@members {...}` / doc comment.
+    let name = rule_header_start_identifier(header)?;
     Some(RuleHeader { name, start })
+}
+
+/// The byte offset just after the previous statement terminator (`;`) before
+/// `colon`, i.e. the start of the current rule header.
+///
+/// Only a **top-level** `;` terminates the previous statement. A `;` inside a
+/// braced action body (`@members { int x; }`, `{ native(); }`) or a `}` closing
+/// such a block must not be treated as a boundary — otherwise the header start
+/// lands mid-action and the rule name is lost. The scan skips balanced `{...}`
+/// regions (and, via the grammar cursor, comments and string literals).
+/// Grammar-level `@name {...}` blocks that precede the rule are elided later by
+/// `last_rule_header_identifier` when it reads the name.
+fn rule_statement_start(source: &str, colon: usize) -> usize {
+    let mut cursor = templates::GrammarSourceCursor::new(source, 0);
+    let mut start = 0;
+    while let Some((index, ch)) = cursor.next_significant() {
+        if index >= colon {
+            break;
+        }
+        match ch {
+            '{' => {
+                // Skip the balanced action body so its inner `;`/`}` are ignored.
+                let resume = matching_action_brace(source, index + 1)
+                    .map_or(colon, |close| close.saturating_add(1).min(colon));
+                cursor.seek(resume);
+            }
+            ';' => start = index + 1,
+            _ => {}
+        }
+    }
+    start
 }
 
 fn last_rule_header_colon(source: &str, position: usize) -> Option<usize> {
@@ -6818,70 +6875,13 @@ fn last_rule_header_colon(source: &str, position: usize) -> Option<usize> {
 fn has_prior_rule_definition(source: &str, name: &str, before: usize) -> bool {
     let mut offset = 0;
     while let Some(colon) = source[offset..before].find(':').map(|index| offset + index) {
-        let header_start = source[..colon]
-            .rfind([';', '}'])
-            .map_or(0, |index| index + 1);
-        if leading_rule_name(&source[header_start..colon]) == Some(name) {
+        let header_start = rule_statement_start(source, colon);
+        if rule_header_start_identifier(&source[header_start..colon]) == Some(name) {
             return true;
         }
         offset = colon + 1;
     }
     false
-}
-
-/// Reads the first ANTLR identifier from a rule header, allowing the optional
-/// `fragment` prefix used by lexer rules.
-fn leading_rule_name(header: &str) -> Option<&str> {
-    let header = trim_leading_non_rule_lines(header);
-    let header = header
-        .strip_prefix("fragment")
-        .map_or(header, str::trim_start);
-    let end = header
-        .char_indices()
-        .find_map(|(index, ch)| (!(ch == '_' || ch.is_ascii_alphanumeric())).then_some(index))
-        .unwrap_or(header.len());
-    let name = &header[..end];
-    (!name.is_empty()).then_some(name)
-}
-
-/// Drops standalone comment and preamble-template lines that can sit between
-/// grammar-level metadata and the next rule header.
-fn trim_leading_non_rule_lines(mut header: &str) -> &str {
-    loop {
-        header = header.trim_start();
-        if header.starts_with("//") {
-            let Some(newline) = header.find('\n') else {
-                return "";
-            };
-            header = &header[newline + 1..];
-            continue;
-        }
-        // A `/* ... */` block comment can sit between the previous rule's `;`
-        // and this rule header (e.g. a doc comment above a lexer rule). Skip it
-        // so the rule name that follows is still resolved; otherwise the action
-        // is mis-attributed and the ATN/grammar action counts diverge.
-        if header.starts_with("/*") {
-            let Some(close) = header.find("*/") else {
-                return "";
-            };
-            header = &header[close + 2..];
-            continue;
-        }
-        if header.starts_with('<') {
-            let Some(close) = header.find('>') else {
-                return header;
-            };
-            if header[close + 1..]
-                .chars()
-                .next()
-                .is_none_or(|ch| ch == '\r' || ch == '\n')
-            {
-                header = &header[close + 1..];
-                continue;
-            }
-        }
-        return header;
-    }
 }
 
 fn uses_alt_number_contexts(source: &str) -> bool {
@@ -6939,10 +6939,53 @@ fn named_action_rule_name<'a>(source: &'a str, open_brace: usize, marker: &str) 
 /// template lines. That trailing identifier is the rule the `@init`/`@after`
 /// action belongs to.
 fn last_rule_header_identifier(header: &str) -> Option<&str> {
+    rule_header_identifier(header, false)
+}
+
+/// Reads the rule name at the *start* of a rule header, i.e. the first
+/// identifier after skipping leading `@name {...}` clauses, comments, and
+/// `<...>` templates, and an optional `fragment` keyword. Stops before rule
+/// option keywords (`returns`/`locals`/`throws`/`options`) and their `[...]` /
+/// `{...}` payloads, so `continue returns [int x] :` still resolves to
+/// `continue`.
+fn rule_header_start_identifier(header: &str) -> Option<&str> {
+    let name = rule_header_identifier(header, true)?;
+    // A lexer rule may be introduced by `fragment`; the real name follows it.
+    if name == "fragment" {
+        let rest = &header[header.find("fragment")? + "fragment".len()..];
+        return rule_header_identifier(rest, true);
+    }
+    Some(name)
+}
+
+/// Shared rule-header identifier scan. With `first`, returns the first bareword
+/// identifier (the rule name at a statement start); otherwise the last (used
+/// when the caller has already sliced off everything after the rule name, e.g.
+/// the text before an `@init`/`@after` marker). Skips comments, `@name {...}`
+/// clauses, and `<...>` templates in both modes.
+fn rule_header_identifier(header: &str, first: bool) -> Option<&str> {
     let bytes = header.as_bytes();
     let mut index = 0;
-    let mut last: Option<(usize, usize)> = None;
+    let mut found: Option<(usize, usize)> = None;
     while index < bytes.len() {
+        // Skip comments so their words are not mistaken for the rule name.
+        if bytes[index] == b'/' && bytes.get(index + 1) == Some(&b'/') {
+            index += 2;
+            while index < bytes.len() && bytes[index] != b'\n' {
+                index += 1;
+            }
+            continue;
+        }
+        if bytes[index] == b'/' && bytes.get(index + 1) == Some(&b'*') {
+            index += 2;
+            while index < bytes.len()
+                && !(bytes[index] == b'*' && bytes.get(index + 1) == Some(&b'/'))
+            {
+                index += 1;
+            }
+            index = (index + 2).min(bytes.len());
+            continue;
+        }
         match bytes[index] {
             // Skip a `@name {...}` block, including its (possibly brace-nested)
             // body, so its internal identifiers are not mistaken for the rule.
@@ -6982,12 +7025,15 @@ fn last_rule_header_identifier(header: &str) -> Option<&str> {
                 {
                     index += 1;
                 }
-                last = Some((start, index));
+                found = Some((start, index));
+                if first {
+                    break;
+                }
             }
             _ => index += 1,
         }
     }
-    last.map(|(start, end)| &header[start..end])
+    found.map(|(start, end)| &header[start..end])
 }
 
 /// Resolves `$label.ctx` in a rule-level `@after` action to the referenced
@@ -7893,6 +7939,81 @@ fn parser_action_state_rules(data: &InterpData) -> io::Result<BTreeMap<usize, us
         }
     }
     Ok(states)
+}
+
+/// Counts the author-written action `{...}` blocks per parser rule index.
+///
+/// Uses the general block walk (which surfaces *native*/untranslated blocks too,
+/// unlike the translation-oriented `parser_action_source_block_slots`), so it
+/// counts every action the grammar author actually wrote — including code we do
+/// not translate. Predicates, `@init`/`@after`/members/definitions/options
+/// blocks, and blocks in non-parser rules are excluded, matching what ANTLR
+/// turns into a numbered rule-body action transition.
+fn authored_parser_action_blocks_per_rule(
+    grammar_source: &str,
+    rule_names: &[String],
+) -> BTreeMap<usize, usize> {
+    let mut counts = BTreeMap::new();
+    let mut offset = 0;
+    while let Some(block) = next_action_block(grammar_source, offset) {
+        offset = block.after_brace;
+        if block.predicate
+            || is_after_action(grammar_source, block.open_brace)
+            || is_init_action(grammar_source, block.open_brace)
+            || is_definitions_action(grammar_source, block.open_brace)
+            || is_members_action(grammar_source, block.open_brace)
+            || is_options_block(grammar_source, block.open_brace)
+        {
+            continue;
+        }
+        let Some(header) = statement_rule_header(grammar_source, block.open_brace) else {
+            continue;
+        };
+        if let Some(rule_index) = rule_names.iter().position(|name| name == header.name) {
+            *counts.entry(rule_index).or_insert(0) += 1;
+        }
+    }
+    counts
+}
+
+/// The parser ATN action states that ANTLR *synthesized* (during left-recursion
+/// elimination and similar rewrites) rather than the author writing them.
+///
+/// A synthetic action has the same ATN shape and manifest disposition
+/// (`Ignored`, no source body) as an author-written action we could not
+/// translate, so they cannot be told apart from the ATN alone. The discriminator
+/// is grammar source: within a rule, the author-written `{...}` action blocks
+/// account for the first N action states (in source/ATN order); any action state
+/// beyond the authored count in that rule was inserted by ANTLR.
+///
+/// Under `--sem-unknown=error` these synthetic states are exempt (there is no
+/// author intent to implement), while an author-written untranslated action
+/// still fails loud.
+fn synthetic_parser_action_states(
+    data: &InterpData,
+    grammar_source: Option<&str>,
+) -> io::Result<BTreeSet<usize>> {
+    let Some(grammar_source) = grammar_source else {
+        // Without grammar source we cannot correlate; treat nothing as synthetic
+        // so the manifest-only path keeps its existing (conservative) behavior.
+        return Ok(BTreeSet::new());
+    };
+    let authored = authored_parser_action_blocks_per_rule(grammar_source, &data.rule_names);
+    // ATN action states in ascending state order, grouped by rule. State numbers
+    // increase with source position within a rule, so the first `authored(rule)`
+    // states are the author's; the remainder are synthetic.
+    let state_rules = parser_action_state_rules(data)?;
+    let mut seen_per_rule = BTreeMap::new();
+    let mut synthetic = BTreeSet::new();
+    for (state, rule_index) in state_rules {
+        let index = seen_per_rule.entry(rule_index).or_insert(0_usize);
+        let authored_in_rule = authored.get(&rule_index).copied().unwrap_or(0);
+        if *index >= authored_in_rule {
+            synthetic.insert(state);
+        }
+        *index += 1;
+    }
+    Ok(synthetic)
 }
 
 /// Pairs supported rule-call arguments from grammar source with the ATN
@@ -13085,22 +13206,35 @@ ID: [a-z]+ ;\n";
     }
 
     #[test]
-    fn trim_leading_non_rule_lines_skips_block_comments() {
-        // Directly exercise the header trimmer: a leading block comment (even
-        // multi-line) is skipped so the trailing rule name resolves.
+    fn rule_header_identifier_skips_comments() {
+        // The rule-name reader skips leading `//` and `/* */` comments so the
+        // rule name that follows resolves (the header for an action after a
+        // doc-commented rule).
+        assert_eq!(last_rule_header_identifier("/* one-line */ RCURL"), Some("RCURL"));
         assert_eq!(
-            leading_rule_name("/* one-line */ RCURL"),
+            last_rule_header_identifier("/*\n * multi\n * line\n */\nRCURL"),
             Some("RCURL")
         );
         assert_eq!(
-            leading_rule_name("/*\n * multi\n * line\n */\nRCURL"),
-            Some("RCURL")
-        );
-        // A block comment mixed with a line comment.
-        assert_eq!(
-            leading_rule_name("// line\n/* block */\nname_x"),
+            last_rule_header_identifier("// line\n/* block */\nname_x"),
             Some("name_x")
         );
+        // A rule-level `@init {...}` clause between the name and `:` is skipped,
+        // so the name still resolves.
+        assert_eq!(last_rule_header_identifier("s @init { init(); }"), Some("s"));
+
+        // The statement-start reader takes the FIRST identifier, so a rule with a
+        // `returns [...]` / `locals [...]` clause resolves to the rule name, not
+        // the option keyword or a `[...]` type. (Regression: taking the last
+        // identifier resolved `continue returns [int x]` to `returns`/`x`.)
+        assert_eq!(
+            rule_header_start_identifier("continue returns [int x]"),
+            Some("continue")
+        );
+        assert_eq!(rule_header_start_identifier("s @init { init(); }"), Some("s"));
+        assert_eq!(rule_header_start_identifier("/* doc */ RCURL"), Some("RCURL"));
+        // `fragment` lexer rules keep their name.
+        assert_eq!(rule_header_start_identifier("fragment DIGIT"), Some("DIGIT"));
     }
 
     #[test]
@@ -14019,6 +14153,51 @@ dispose = "hook"
 
         enforce_sem_unknown(SemUnknownPolicy::Error, &entries)
             .expect("fully translated grammar passes strict mode");
+    }
+
+    #[test]
+    fn authored_action_block_counter_counts_only_authored_parser_blocks() {
+        // Counts author-written action `{...}` blocks per parser rule, including
+        // native/untranslated ones, but excludes predicates, `@init`/`@after`,
+        // and members/options blocks.
+        let grammar = "grammar T;\n\
+@members { int shared; }\n\
+s @init { init(); } : ID { native(); } { <writeln(\"x\")> } EOF ;\n\
+t : {pred()}? ID ;\n\
+ID : [a-z]+ ;\n";
+        let rule_names = vec!["s".to_owned(), "t".to_owned()];
+        let counts = authored_parser_action_blocks_per_rule(grammar, &rule_names);
+        // Rule s: two body actions ({native()} + {<writeln>}). The @init and
+        // @members blocks are excluded; the predicate on t is excluded.
+        assert_eq!(counts.get(&0).copied(), Some(2), "counts: {counts:?}");
+        assert_eq!(counts.get(&1).copied(), None, "rule t has no action block: {counts:?}");
+    }
+
+    #[test]
+    fn enforce_sem_unknown_error_exempts_synthetic_actions() {
+        // A `Synthetic` action (ANTLR-inserted, e.g. LR elimination) must NOT
+        // fail under the Error policy: there is no author intent to implement.
+        let synthetic = SemanticsEntry {
+            kind: SemanticsKind::ParserAction,
+            rule_index: Some(1),
+            rule_name: Some("declarator".to_owned()),
+            index: None,
+            atn_state: Some(9),
+            line: None,
+            column: None,
+            body: None,
+            disposition: SemanticsDisposition::Synthetic,
+            template: None,
+        };
+        enforce_sem_unknown(SemUnknownPolicy::Error, std::slice::from_ref(&synthetic))
+            .expect("a synthetic action is exempt from the error gate");
+        // ...but an authored untranslated action (Ignored) at the same shape must fail.
+        let authored = SemanticsEntry {
+            disposition: SemanticsDisposition::Ignored,
+            ..synthetic
+        };
+        enforce_sem_unknown(SemUnknownPolicy::Error, std::slice::from_ref(&authored))
+            .expect_err("an authored untranslated action must fail loud under error");
     }
 
     #[test]
