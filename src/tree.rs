@@ -1,4 +1,7 @@
 use crate::errors::AntlrError;
+use crate::recognizer::Recognizer;
+use std::any::Any;
+use std::fmt;
 use std::rc::Rc;
 
 use crate::token::{CommonToken, Token, TokenRef};
@@ -20,12 +23,22 @@ impl ParseTree {
         }
     }
 
-    pub fn to_string_tree<S: AsRef<str>>(&self, rule_names: &[S]) -> String {
+    pub fn to_string_tree_with_names<S: AsRef<str>>(&self, rule_names: &[S]) -> String {
         match self {
-            Self::Rule(rule) => rule.to_string_tree(rule_names),
+            Self::Rule(rule) => rule.to_string_tree_with_names(rule_names),
             Self::Terminal(node) => escape_tree_text(&node.text()),
             Self::Error(node) => escape_tree_text(&node.text()),
         }
+    }
+
+    /// Renders the LISP-style tree using rule names resolved through a
+    /// recognizer, matching ANTLR's `toStringTree(parser)` shape used by
+    /// generated test actions (`<tree>.to_string_tree(Some(self))`).
+    pub fn to_string_tree<R: Recognizer>(&self, recognizer: Option<&R>) -> String {
+        recognizer.map_or_else(
+            || self.to_string_tree_with_names::<&str>(&[]),
+            |recognizer| self.to_string_tree_with_names(recognizer.data().rule_names()),
+        )
     }
 
     /// Finds the first rule node with `rule_index` in a depth-first walk.
@@ -72,6 +85,17 @@ impl ParseTree {
             .children()
             .iter()
             .find_map(|child| child.first_rule_int_return(rule_index, name))
+    }
+
+    /// Reads the typed attribute snapshot from this tree's root rule node.
+    ///
+    /// Generated parsers use this for `$label.attr` / `$rule.attr` reads on a
+    /// child subtree returned by a rule call.
+    pub fn rule_attrs<T: Any>(&self) -> Option<&T> {
+        let Self::Rule(rule) = self else {
+            return None;
+        };
+        rule.context().generated_attrs::<T>()
     }
 
     /// Finds the first recovery error token in a depth-first walk.
@@ -167,8 +191,8 @@ impl RuleNode {
         self.context.text()
     }
 
-    pub fn to_string_tree<S: AsRef<str>>(&self, rule_names: &[S]) -> String {
-        self.context.to_string_tree(rule_names)
+    pub fn to_string_tree_with_names<S: AsRef<str>>(&self, rule_names: &[S]) -> String {
+        self.context.to_string_tree_with_names(rule_names)
     }
 }
 
@@ -191,10 +215,48 @@ pub struct ParserRuleContext {
     // keeping it behind a pointer keeps `ParserRuleContext` (and thus the
     // `ParseTree::Rule` variant) compact.
     exception: Option<Box<AntlrError>>,
+    /// Typed generated-rule attribute snapshot (see [`GeneratedAttrs`]).
+    attrs: Option<GeneratedAttrs>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 struct IntReturns(BTreeMap<String, i64>);
+
+/// Typed rule-attribute storage attached to a [`ParserRuleContext`].
+///
+/// Generated parsers keep each rule's `returns`/`locals`/argument attributes
+/// in a generated per-rule struct and seal a shared snapshot onto the finished
+/// context, so a parent rule (or a listener) can read `$child.attr` /
+/// `ctx.attr` with its real Rust type — the analog of ANTLR's attribute
+/// fields on generated context classes.
+#[derive(Clone)]
+pub struct GeneratedAttrs(Rc<dyn Any>);
+
+impl GeneratedAttrs {
+    pub fn new<T: Any>(attrs: T) -> Self {
+        Self(Rc::new(attrs))
+    }
+
+    pub fn downcast_ref<T: Any>(&self) -> Option<&T> {
+        self.0.downcast_ref::<T>()
+    }
+}
+
+impl fmt::Debug for GeneratedAttrs {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("GeneratedAttrs(..)")
+    }
+}
+
+// Attribute snapshots are sealed once per finished rule; two contexts are the
+// same context (and thus equal) exactly when they share the same snapshot.
+impl PartialEq for GeneratedAttrs {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for GeneratedAttrs {}
 
 impl ParserRuleContext {
     pub const fn new(rule_index: usize, invoking_state: isize) -> Self {
@@ -208,6 +270,7 @@ impl ParserRuleContext {
             children: Vec::new(),
             matched_child: false,
             exception: None,
+            attrs: None,
         }
     }
 
@@ -226,6 +289,7 @@ impl ParserRuleContext {
             children: Vec::with_capacity(capacity),
             matched_child: false,
             exception: None,
+            attrs: None,
         }
     }
 
@@ -286,6 +350,16 @@ impl ParserRuleContext {
         self.int_returns
             .as_ref()
             .and_then(|values| values.0.get(name).copied())
+    }
+
+    /// Seals the generated rule-attribute snapshot on this context.
+    pub fn set_generated_attrs(&mut self, attrs: GeneratedAttrs) {
+        self.attrs = Some(attrs);
+    }
+
+    /// Reads the typed generated rule-attribute snapshot, if sealed.
+    pub fn generated_attrs<T: Any>(&self) -> Option<&T> {
+        self.attrs.as_ref().and_then(GeneratedAttrs::downcast_ref)
     }
 
     pub fn exception(&self) -> Option<&AntlrError> {
@@ -361,7 +435,7 @@ impl ParserRuleContext {
         self.children.iter().map(ParseTree::text).collect()
     }
 
-    pub fn to_string_tree<S: AsRef<str>>(&self, rule_names: &[S]) -> String {
+    pub fn to_string_tree_with_names<S: AsRef<str>>(&self, rule_names: &[S]) -> String {
         let name = rule_names
             .get(self.rule_index)
             .map_or("<unknown>", |name| name.as_ref());
@@ -376,10 +450,20 @@ impl ParserRuleContext {
         let children = self
             .children
             .iter()
-            .map(|child| child.to_string_tree(rule_names))
+            .map(|child| child.to_string_tree_with_names(rule_names))
             .collect::<Vec<_>>()
             .join(" ");
         format!("({display_name} {children})")
+    }
+
+    /// Renders the LISP-style tree using rule names resolved through a
+    /// recognizer, matching ANTLR's `toStringTree(parser)` shape used by
+    /// generated test actions on a mid-rule `$ctx`.
+    pub fn to_string_tree<R: Recognizer>(&self, recognizer: Option<&R>) -> String {
+        recognizer.map_or_else(
+            || self.to_string_tree_with_names::<&str>(&[]),
+            |recognizer| self.to_string_tree_with_names(recognizer.data().rule_names()),
+        )
     }
 }
 
@@ -493,7 +577,7 @@ mod tests {
             CommonToken::new(1).with_text("x"),
         )));
         let tree = ParseTree::Rule(RuleNode::new(ctx));
-        assert_eq!(tree.to_string_tree(&["expr"]), "(expr x)");
+        assert_eq!(tree.to_string_tree_with_names(&["expr"]), "(expr x)");
     }
 
     #[test]
@@ -509,7 +593,7 @@ mod tests {
 
         let rule = tree.first_rule(1).expect("nested rule should be found");
         assert_eq!(
-            rule.to_string_tree(&["root".to_owned(), "child".to_owned()]),
+            rule.to_string_tree_with_names(&["root".to_owned(), "child".to_owned()]),
             "(child x)"
         );
         assert!(tree.first_rule(2).is_none());

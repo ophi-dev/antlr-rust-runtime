@@ -734,6 +734,36 @@ fn apply_unknown_predicate_policy(
     }
 }
 
+/// Interval-set of expected token types, displayable through a vocabulary —
+/// the shape ANTLR's `getExpectedTokens().toString(vocabulary)` exposes to
+/// generated test actions.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ExpectedTokenSet {
+    symbols: BTreeSet<i32>,
+}
+
+impl ExpectedTokenSet {
+    /// Formats the set using ANTLR token display names, e.g. `{'a', 'b'}`.
+    #[must_use]
+    pub fn to_token_string(&self, vocabulary: &Vocabulary) -> String {
+        expected_symbols_display(&self.symbols, vocabulary)
+    }
+}
+
+/// Marker error strategy matching ANTLR's `BailErrorStrategy`.
+///
+/// The first syntax error aborts the parse instead of recovering. Generated
+/// recognizers accept it through `set_error_handler(BailErrorStrategy::new())`.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct BailErrorStrategy;
+
+impl BailErrorStrategy {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self
+    }
+}
+
 /// Prediction strategy requested by generated parser harnesses.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PredictionMode {
@@ -944,6 +974,10 @@ pub struct BaseParser<S, H = NoSemanticHooks> {
     /// speculative recognition may revisit the same coordinate, so replay it
     /// once per parser instance.
     invoked_predicates: Vec<(usize, usize)>,
+    /// Bail error strategy: the first syntax error aborts the parse instead of
+    /// recovering (ANTLR's `BailErrorStrategy`). Generated recognizers set it
+    /// through `set_error_handler(BailErrorStrategy::new())`.
+    bail_on_error: bool,
     /// How to evaluate predicate coordinates missing from the active
     /// predicate table. Set from [`ParserRuntimeOptions`] at each parse entry.
     unknown_predicate_policy: UnknownSemanticPolicy,
@@ -3017,6 +3051,7 @@ where
             pending_invoking_states: Vec::new(),
             precedence_stack: vec![0],
             invoked_predicates: Vec::new(),
+            bail_on_error: false,
             unknown_predicate_policy: UnknownSemanticPolicy::default(),
             unknown_predicate_hits: Vec::new(),
             unhandled_action_hits: Vec::new(),
@@ -3451,6 +3486,16 @@ where
         matches: impl Fn(i32) -> bool,
     ) -> Result<GeneratedMatch, AntlrError> {
         let expected_display = self.expected_symbols_display(expected_symbols);
+        if self.bail_on_error {
+            return Err(AntlrError::ParserError {
+                line: current.line(),
+                column: current.column(),
+                message: format!(
+                    "mismatched input {} expecting {expected_display}",
+                    token_input_display(&current)
+                ),
+            });
+        }
         if current.token_type() != TOKEN_EOF
             && let Some(next) = self.input.lt(2).cloned()
             && matches(next.token_type())
@@ -8379,6 +8424,45 @@ where
         )
     }
 
+    /// Expected-token set at the parser's current ATN state — ANTLR's
+    /// `getExpectedTokens()`. Generated recognizers expose this as
+    /// `self.expected_tokens()` for embedded test actions
+    /// (`self.expected_tokens().to_token_string(self.vocabulary())`).
+    pub fn expected_tokens_current(&self, atn: &Atn) -> ExpectedTokenSet {
+        let state = usize::try_from(self.data().state()).unwrap_or(0);
+        ExpectedTokenSet {
+            symbols: state_expected_symbols(atn, state),
+        }
+    }
+
+    /// Enables the bail error strategy: the first syntax error aborts the
+    /// parse instead of recovering.
+    pub const fn set_bail_on_error(&mut self, bail: bool) {
+        self.bail_on_error = bail;
+    }
+
+    /// Whether the bail error strategy is active.
+    #[must_use]
+    pub const fn bail_on_error(&self) -> bool {
+        self.bail_on_error
+    }
+
+    /// Names of the rules on the live invocation stack, current rule first —
+    /// ANTLR's `getRuleInvocationStack()`.
+    pub fn rule_invocation_stack(&self) -> Vec<String> {
+        self.rule_context_stack
+            .iter()
+            .rev()
+            .map(|frame| {
+                self.data()
+                    .rule_names()
+                    .get(frame.rule_index)
+                    .cloned()
+                    .unwrap_or_else(|| format!("<{}>", frame.rule_index))
+            })
+            .collect()
+    }
+
     /// Formats a buffered token in ANTLR's diagnostic token display form.
     pub fn token_display_at(&mut self, index: usize) -> Option<String> {
         self.token_at(index).map(|token| format!("{token}"))
@@ -10616,7 +10700,7 @@ mod tests {
         let tree = parser.finish_rule(child, false);
 
         assert_eq!(parser.la(1), TOKEN_EOF);
-        assert_eq!(tree.to_string_tree(&["s", "a"]), "(a z)");
+        assert_eq!(tree.to_string_tree_with_names(&["s", "a"]), "(a z)");
         assert_eq!(parser.number_of_syntax_errors(), 1);
         assert_eq!(
             parser.generated_parser_diagnostics,

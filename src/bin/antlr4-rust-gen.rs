@@ -9047,15 +9047,15 @@ fn render_string_tree_write(write: &str, tree_expr: &str, target: &StringTreeTar
     let rule_names = "METADATA.rule_names()";
     match target {
         StringTreeTarget::Current => {
-            format!("{write}(\"{{}}\", {tree_expr}.to_string_tree({rule_names}));")
+            format!("{write}(\"{{}}\", {tree_expr}.to_string_tree_with_names({rule_names}));")
         }
         StringTreeTarget::Rule(rule_index) => format!(
-            "let text = {tree_expr}.first_rule({rule_index}).map_or_else(String::new, |node| node.to_string_tree({rule_names})); {write}(\"{{}}\", text);"
+            "let text = {tree_expr}.first_rule({rule_index}).map_or_else(String::new, |node| node.to_string_tree_with_names({rule_names})); {write}(\"{{}}\", text);"
         ),
         StringTreeTarget::Label(label) => {
             let label = rust_string(label);
             format!(
-                "let text = METADATA.rule_names().iter().position(|name| *name == \"{label}\").and_then(|rule_index| {tree_expr}.first_rule(rule_index)).map_or_else(String::new, |node| node.to_string_tree({rule_names})); {write}(\"{{}}\", text);"
+                "let text = METADATA.rule_names().iter().position(|name| *name == \"{label}\").and_then(|rule_index| {tree_expr}.first_rule(rule_index)).map_or_else(String::new, |node| node.to_string_tree_with_names({rule_names})); {write}(\"{{}}\", text);"
             )
         }
     }
