@@ -251,7 +251,10 @@ arbitrary grammar-embedded snippets. The boundary is:
   `semantics.json` manifest next to the generated modules listing every
   predicate/action coordinate with its grammar source span, body, and
   disposition (`translated`, `hooked`, `assume-true`, `assume-false`,
-  `ignored`, or `error`).
+  `ignored`, `synthetic`, or `error`). A `synthetic` action is one ANTLR
+  inserts itself (e.g. during left-recursion elimination); it has no
+  grammar-author source, is a runtime no-op, and is exempt from the `error`
+  gate — only actions the author actually wrote in the grammar can fail it.
 
 Unknown coordinates are governed by `--sem-unknown`:
 
@@ -296,6 +299,56 @@ compiled-DFA variant to route lexer predicates/actions through the same
 
 Use `--require-full-semantics` in CI when every coordinate must be either
 translated or explicitly hooked; policy fallbacks fail generation.
+
+#### Embedded target-language actions are not portable — including in official ANTLR
+
+A grammar that embeds a **target-language** action (a `{ ... }` block of
+Java/C#/etc. code, rather than a portable lexer command) is only usable with
+the language it was written for. This is a limitation of ANTLR itself, not of
+this runtime: **the official ANTLR tool does not translate embedded actions
+between targets — it copies the source text verbatim into the generated code.**
+
+For example, the official
+[Kotlin/kotlin-spec](https://github.com/Kotlin/kotlin-spec) `KotlinLexer.g4`
+contains a Java-only action:
+
+```antlr
+RCURL: '}' { if (!_modeStack.isEmpty()) { popMode(); } };
+```
+
+Generating a **Go** parser from it with the official tool
+(`antlr4 -Dlanguage=Go KotlinLexer.g4`) emits the Java verbatim:
+
+```go
+func (l *KotlinLexer) RCURL_Action(localctx antlr.RuleContext, actionIndex int) {
+	switch actionIndex {
+	case 0:
+		if !_modeStack.isEmpty() { // undefined in Go — does not compile
+			popMode()              // undefined in Go — does not compile
+		}
+	}
+}
+```
+
+The generated Go **fails to compile** (`undefined: _modeStack`, `undefined:
+popMode`), and ANTLR offers no supported way to fix it beyond hand-editing the
+grammar — the grammar even carries a comment telling non-Java users to replace
+the snippet manually. Every non-Java ANTLR target has this gap.
+
+This runtime does better in two ways:
+
+1. It recognizes a **library of common embedded idioms** (e.g. the guarded
+   `popMode()` above) and maps them to the equivalent portable operation, so
+   many real grammars generate as-is.
+2. For anything it does not recognize, `--sem-unknown=error` fails **loudly**
+   at generation time, naming the coordinate, instead of silently emitting
+   uncompilable or no-op code. The fix is to express the action as a portable
+   lexer command (`-> popMode`, `-> pushMode(X)`, `-> type(X)`,
+   `-> channel(HIDDEN)`), add a `--sem-patterns` rewrite, or route it through a
+   `SemanticHooks` implementation.
+
+Portable lexer commands and the recognized idioms are the target-agnostic
+subset; prefer them when authoring grammars intended for multiple runtimes.
 
 ## Runtime Testsuite
 
