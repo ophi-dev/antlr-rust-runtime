@@ -783,18 +783,12 @@ fn collect_parser_semantics(
         // manifest stays keyed by state rather than by raw block position (which
         // drifts once signature templates share the rule with `{...}` blocks).
         // The span walk and this template walk both use the rule-name filter, so
-        // they share slot positions and the `RuleValue` offset.
+        // they share slot positions and the same leading-state offset.
         let block_spans = grammar_source
             .map(|source| {
-                let has_rule_value =
-                    extract_action_template_slots_filtered(source, Some(&data.rule_names))
-                        .iter()
-                        .flatten()
-                        .any(|template| matches!(template, ActionTemplate::RuleValue { .. }));
                 assign_states_to_action_slots(
                     data,
                     parser_action_source_block_slots(source, &data.rule_names),
-                    has_rule_value,
                 )
             })
             .transpose()?
@@ -5815,11 +5809,6 @@ enum ActionTemplate {
         target: StringTreeTarget,
         kind: ListenerKind,
     },
-    RuleValue {
-        rule_name: String,
-        kind: RuleValueKind,
-        newline: bool,
-    },
     RuleReturnValue {
         rule_name: String,
         value_name: String,
@@ -5983,12 +5972,6 @@ enum ListenerKind {
     RuleGetter,
     LeftRecursive,
     LeftRecursiveWithLabels,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum RuleValueKind {
-    Int,
-    String,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -6400,20 +6383,13 @@ fn parser_action_templates(
 /// without a matching translated slot. This resolves the single offset that
 /// aligns walked slot `i` with `states[offset + i]`, so every producer that
 /// pairs a slot to a state uses the same reconciliation and cannot drift.
-fn action_slot_state_offset(
-    states_len: usize,
-    slot_len: usize,
-    has_rule_value: bool,
-) -> io::Result<usize> {
+fn action_slot_state_offset(states_len: usize, slot_len: usize) -> io::Result<usize> {
     if states_len > slot_len {
-        // Return-value print helpers appear before raw return-assignment
-        // actions in these descriptors, so source-order pairing selects the
-        // user-visible print action instead of a later raw assignment action.
-        return Ok(if has_rule_value {
-            0
-        } else {
-            states_len - slot_len
-        });
+        // More ATN action states than resolved source slots: the extra states
+        // are synthetic actions ANTLR inserted at the rule head (before the
+        // author's), so skip that many leading states to align source slot `i`
+        // with the author action it describes.
+        return Ok(states_len - slot_len);
     }
     if states_len != slot_len {
         return Err(io::Error::new(
@@ -6434,11 +6410,7 @@ fn parser_action_templates_from_template_slots(
         return Ok(Vec::new());
     }
     let states = parser_action_states(data)?;
-    let has_rule_value = templates
-        .iter()
-        .flatten()
-        .any(|template| matches!(template, ActionTemplate::RuleValue { .. }));
-    let offset = action_slot_state_offset(states.len(), templates.len(), has_rule_value)?;
+    let offset = action_slot_state_offset(states.len(), templates.len())?;
     Ok(templates
         .into_iter()
         .enumerate()
@@ -6452,20 +6424,15 @@ fn parser_action_templates_from_template_slots(
 /// Pairs action-block source spans with ATN action states using the same
 /// offset as [`parser_action_templates_from_template_slots`], so the manifest's
 /// span/body provenance stays state-keyed and consistent with the disposition.
-///
-/// `has_rule_value` comes from the templates the caller already resolved: the
-/// span walk mirrors the template walk arm-for-arm, so a `RuleValue` print
-/// helper occupies the same slot in both and the offset must match.
 fn assign_states_to_action_slots(
     data: &InterpData,
     spans: Vec<Option<(usize, usize, String)>>,
-    has_rule_value: bool,
 ) -> io::Result<Vec<(usize, (usize, usize, String))>> {
     if spans.is_empty() {
         return Ok(Vec::new());
     }
     let states = parser_action_states(data)?;
-    let offset = action_slot_state_offset(states.len(), spans.len(), has_rule_value)?;
+    let offset = action_slot_state_offset(states.len(), spans.len())?;
     Ok(spans
         .into_iter()
         .enumerate()
@@ -7737,17 +7704,16 @@ fn parse_rule_value(body: &str) -> Option<ActionTemplate> {
         return None;
     }
     match value_name {
-        "v" => Some(ActionTemplate::RuleValue {
-            rule_name: rule_name.to_owned(),
-            kind: RuleValueKind::Int,
-            newline,
-        }),
-        "result" => Some(ActionTemplate::RuleValue {
-            rule_name: rule_name.to_owned(),
-            kind: RuleValueKind::String,
-            newline,
-        }),
+        // `$rule.text` is handled by the token-text path, not here.
         "text" => None,
+        // Every `$rule.<name>` reference — including `v` and `result` — reads a
+        // return value the runtime captured while recognizing the rule. If the
+        // grammar's action that sets that value (`{$v = $a.v + $b.v;}`) was not
+        // translated, the slot is unset and the read yields empty: the honest
+        // result of not executing the action. (We used to special-case `v` /
+        // `result` and re-derive them by re-parsing the matched text with
+        // hardwired arithmetic — that faked the upstream expression-grammar
+        // output instead of implementing the feature; removed.)
         _ => Some(ActionTemplate::RuleReturnValue {
             rule_name: rule_name.to_owned(),
             value_name: value_name.to_owned(),
@@ -8038,14 +8004,9 @@ fn synthetic_parser_action_states(
     };
     let authored = authored_parser_action_blocks_per_rule(grammar_source, &data.rule_names);
     // States that a source block was attributed to (authored, incl. empty `{}`).
-    let has_rule_value = extract_action_template_slots_filtered(grammar_source, Some(&data.rule_names))
-        .iter()
-        .flatten()
-        .any(|template| matches!(template, ActionTemplate::RuleValue { .. }));
     let spanned = assign_states_to_action_slots(
         data,
         parser_action_source_block_slots(grammar_source, &data.rule_names),
-        has_rule_value,
     )?
     .into_iter()
     .map(|(state, _)| state)
@@ -8252,7 +8213,6 @@ fn render_inline_parser_action_statement(
         | ActionTemplate::StringTree { .. }
         | ActionTemplate::RuleInvocationStack { .. }
         | ActionTemplate::ListenerWalk { .. }
-        | ActionTemplate::RuleValue { .. }
         | ActionTemplate::RuleReturnValue { .. }
         | ActionTemplate::SetIntReturn { .. }
         | ActionTemplate::TokenText { .. }
@@ -8386,7 +8346,6 @@ fn collect_return_actions(
         | ActionTemplate::StringTree { .. }
         | ActionTemplate::RuleInvocationStack { .. }
         | ActionTemplate::ListenerWalk { .. }
-        | ActionTemplate::RuleValue { .. }
         | ActionTemplate::RuleReturnValue { .. }
         | ActionTemplate::TokenText { .. }
         | ActionTemplate::TokenTextWithPrefix { .. }
@@ -8437,7 +8396,6 @@ fn collect_member_actions(
         | ActionTemplate::StringTree { .. }
         | ActionTemplate::RuleInvocationStack { .. }
         | ActionTemplate::ListenerWalk { .. }
-        | ActionTemplate::RuleValue { .. }
         | ActionTemplate::RuleReturnValue { .. }
         | ActionTemplate::SetIntReturn { .. }
         | ActionTemplate::TokenText { .. }
@@ -8590,7 +8548,6 @@ fn render_lexer_action_statement(template: &ActionTemplate) -> String {
         ActionTemplate::StringTree { .. } => String::new(),
         ActionTemplate::RuleInvocationStack { .. } => String::new(),
         ActionTemplate::ListenerWalk { .. } => String::new(),
-        ActionTemplate::RuleValue { .. } => String::new(),
         ActionTemplate::RuleReturnValue { .. } => String::new(),
         ActionTemplate::SetIntReturn { .. } => String::new(),
         ActionTemplate::SetMember { .. } => String::new(),
@@ -8885,14 +8842,6 @@ fn render_action_statement(
             ))
         }
         ActionTemplate::ListenerWalk { .. } => Ok(String::new()),
-        ActionTemplate::RuleValue {
-            rule_name,
-            kind,
-            newline,
-        } => {
-            let write = if *newline { "println!" } else { "print!" };
-            Ok(render_rule_value_write(write, "_tree", rule_name, *kind))
-        }
         ActionTemplate::RuleReturnValue {
             rule_name,
             value_name,
@@ -9009,14 +8958,6 @@ fn render_parser_after_action_statement(template: &ActionTemplate, rule_index: u
             render_rule_invocation_stack_write(write, "tree", &rule_index)
         }
         ActionTemplate::ListenerWalk { target, kind } => render_listener_walk(target, *kind),
-        ActionTemplate::RuleValue {
-            rule_name,
-            kind,
-            newline,
-        } => {
-            let write = if *newline { "println!" } else { "print!" };
-            render_rule_value_write(write, "tree", rule_name, *kind)
-        }
         ActionTemplate::RuleReturnValue {
             rule_name,
             value_name,
@@ -9142,121 +9083,6 @@ fn render_rule_return_value_write(
     let value_name = rust_string(value_name);
     format!(
         "let text = METADATA.rule_names().iter().position(|name| *name == \"{rule_name}\").and_then(|rule_index| {tree_expr}.first_rule_int_return(rule_index, \"{value_name}\")).map_or_else(String::new, |value| value.to_string()); {write}(\"{{}}\", text);"
-    )
-}
-
-/// Emits a return-value print helper for the left-recursion descriptors by
-/// evaluating the selected rule's token text from the generated parse tree.
-fn render_rule_value_write(
-    write: &str,
-    tree_expr: &str,
-    rule_name: &str,
-    kind: RuleValueKind,
-) -> String {
-    let rule_name = rust_string(rule_name);
-    let evaluator = match kind {
-        RuleValueKind::Int => {
-            r#"
-fn parse_primary(chars: &[char], index: &mut usize) -> i64 {
-    if chars.get(*index) == Some(&'(') {
-        *index += 1;
-        let value = parse_sum(chars, index);
-        if chars.get(*index) == Some(&')') {
-            *index += 1;
-        }
-        return value;
-    }
-    if chars.get(*index).is_some_and(|ch| ch.is_ascii_alphabetic()) {
-        while chars.get(*index).is_some_and(|ch| ch.is_ascii_alphabetic()) {
-            *index += 1;
-        }
-        let mut value = 3;
-        while *index + 1 < chars.len() && chars[*index] == '+' && chars[*index + 1] == '+' {
-            *index += 2;
-            value += 1;
-        }
-        while *index + 1 < chars.len() && chars[*index] == '-' && chars[*index + 1] == '-' {
-            *index += 2;
-            value -= 1;
-        }
-        return value;
-    }
-    let start = *index;
-    while chars.get(*index).is_some_and(|ch| ch.is_ascii_digit()) {
-        *index += 1;
-    }
-    chars[start..*index]
-        .iter()
-        .collect::<String>()
-        .parse::<i64>()
-        .unwrap_or_default()
-}
-fn parse_product(chars: &[char], index: &mut usize) -> i64 {
-    let mut value = parse_primary(chars, index);
-    while chars.get(*index) == Some(&'*') {
-        *index += 1;
-        value *= parse_primary(chars, index);
-    }
-    value
-}
-fn parse_sum(chars: &[char], index: &mut usize) -> i64 {
-    let mut value = parse_product(chars, index);
-    while chars.get(*index) == Some(&'+') {
-        *index += 1;
-        value += parse_product(chars, index);
-    }
-    value
-}
-fn eval_rule_value(text: &str) -> String {
-    let chars = text.chars().collect::<Vec<_>>();
-    let mut index = 0;
-    parse_sum(&chars, &mut index).to_string()
-}
-"#
-        }
-        RuleValueKind::String => {
-            r#"
-fn find_top_level_plus(chars: &[char]) -> Option<usize> {
-    let mut depth = 0_usize;
-    for (index, ch) in chars.iter().enumerate().rev() {
-        match ch {
-            ')' => depth += 1,
-            '(' => depth = depth.saturating_sub(1),
-            '+' if depth == 0 => return Some(index),
-            _ => {}
-        }
-    }
-    None
-}
-fn eval_string_value(text: &str) -> String {
-    let chars = text.chars().collect::<Vec<_>>();
-    if let Some(index) = find_top_level_plus(&chars) {
-        let left = eval_string_value(&text[..index]);
-        let right = eval_string_value(&text[index + 1..]);
-        return format!("({left}+{right})");
-    }
-    if let Some(index) = text.find('=') {
-        let left = &text[..index];
-        let right = eval_string_value(&text[index + 1..]);
-        return format!("({left}={right})");
-    }
-    text.to_owned()
-}
-fn eval_rule_value(text: &str) -> String {
-    eval_string_value(text)
-}
-"#
-        }
-    };
-    format!(
-        "{evaluator}
-let text = METADATA
-    .rule_names()
-    .iter()
-    .position(|name| *name == \"{rule_name}\")
-    .and_then(|rule_index| {tree_expr}.first_rule(rule_index))
-    .map_or_else(|| eval_rule_value(&{tree_expr}.text()), |node| eval_rule_value(&node.text()));
-{write}(\"{{}}\", text);"
     )
 }
 
@@ -13073,18 +12899,26 @@ continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#;
     }
 
     #[test]
-    fn parses_rule_value_print_template() {
-        let template = parse_action_template(r#"writeln("$e.result")"#)
-            .expect("rule value print helper should parse");
-
-        assert!(matches!(
-            template,
-            ActionTemplate::RuleValue {
-                rule_name,
-                kind: RuleValueKind::String,
-                newline: true,
-            } if rule_name == "e"
-        ));
+    fn rule_value_reads_captured_return_not_reevaluated_text() {
+        // Regression: `$e.v` / `$e.result` must read a captured return slot
+        // (`RuleReturnValue`), NOT the removed `RuleValue` re-evaluator that
+        // re-parsed the matched rule text with hardwired arithmetic/string
+        // semantics (fixture-fitting that faked the upstream expression grammar).
+        for (body, attr) in [
+            (r#"writeln("$e.v")"#, "v"),
+            (r#"writeln("$e.result")"#, "result"),
+        ] {
+            let template =
+                parse_action_template(body).expect("rule-return print helper should parse");
+            assert!(
+                matches!(
+                    &template,
+                    ActionTemplate::RuleReturnValue { rule_name, value_name, newline: true }
+                        if rule_name == "e" && value_name == attr
+                ),
+                "{body} must parse as RuleReturnValue(e.{attr}), got {template:?}"
+            );
+        }
     }
 
     #[test]
