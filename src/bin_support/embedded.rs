@@ -36,9 +36,12 @@ pub(crate) struct AttrDecl {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct ElementRef {
     pub(crate) label: Option<String>,
-    /// Referenced rule or token name; empty for a labeled `(...)` block.
+    /// Referenced rule or token name; empty for a labeled `(...)` block,
+    /// `~set`, or string literal.
     pub(crate) target: String,
     pub(crate) is_block: bool,
+    /// `label+=ref` list label.
+    pub(crate) is_list: bool,
 }
 
 /// One top-level alternative of a parser rule.
@@ -258,6 +261,18 @@ fn rule_definitions(source: &str) -> Vec<(String, usize, usize, usize)> {
     let mut first_identifier: Option<(usize, usize)> = None;
     while let Some((index, ch)) = cursor.next_significant() {
         match ch {
+            '@' => {
+                // A named action (`@parser::members {...}` at grammar level,
+                // `@init`/`@after` inside a rule header): skip its brace
+                // block wholesale so its `::`, `;` and `:` never reach the
+                // statement scan. Rule-header state is preserved, so a rule's
+                // own `@init` keeps the pending rule identifier.
+                if let Some(brace) = source[index..].find('{').map(|found| index + found) {
+                    if let Some(close) = matching_action_brace(source, brace + 1) {
+                        cursor.seek(close + 1);
+                    }
+                }
+            }
             '{' | '[' => {
                 // Skip named-action bodies / arg clauses wholesale so `;` and
                 // `:` inside them cannot desynchronize the statement scan.
@@ -268,6 +283,16 @@ fn rule_definitions(source: &str) -> Vec<(String, usize, usize, usize)> {
                 };
                 if let Some(close) = close {
                     cursor.seek(close + 1);
+                }
+                // A grammar-level `options {...}` / `tokens {...}` statement
+                // ends with its block; clear it so the next rule's name is
+                // not mistaken for a continuation of this statement.
+                if matches!(
+                    first_identifier.map(|(start, end)| &source[start..end]),
+                    Some("options" | "tokens")
+                ) {
+                    statement_start = None;
+                    first_identifier = None;
                 }
             }
             ':' if first_identifier.is_some() => {
@@ -475,6 +500,7 @@ fn parse_alt(source: &str, start: usize, end: usize) -> AltModel {
     let mut refs = Vec::new();
     let mut label: Option<String> = None;
     let mut pending_label: Option<String> = None;
+    let mut pending_list = false;
     let mut cursor = GrammarSourceCursor::new(source, start);
     while let Some((index, ch)) = cursor.next_significant() {
         if index >= end {
@@ -510,12 +536,13 @@ fn parse_alt(source: &str, start: usize, end: usize) -> AltModel {
                 // Nothing after the label matters for refs.
                 break;
             }
-            '(' => {
+            '(' | '~' => {
                 if let Some(block_label) = pending_label.take() {
                     refs.push(ElementRef {
                         label: Some(block_label),
                         target: String::new(),
                         is_block: true,
+                        is_list: std::mem::take(&mut pending_list),
                     });
                 }
             }
@@ -540,7 +567,19 @@ fn parse_alt(source: &str, start: usize, end: usize) -> AltModel {
                 };
                 if is_label {
                     pending_label = Some(word.to_owned());
-                    let skip = if bytes.get(after) == Some(&b'+') { 2 } else { 1 };
+                    pending_list = bytes.get(after) == Some(&b'+');
+                    let skip = if pending_list { 2 } else { 1 };
+                    let value_start = skip_ascii_whitespace(source, after + skip);
+                    // A label directly on a string literal (`label='y'`): the
+                    // cursor skips quoted text, so record the ref here.
+                    if bytes.get(value_start) == Some(&b'\'') {
+                        refs.push(ElementRef {
+                            label: pending_label.take(),
+                            target: String::new(),
+                            is_block: true,
+                            is_list: std::mem::take(&mut pending_list),
+                        });
+                    }
                     cursor.seek(after + skip);
                 } else if word == "EOF" {
                     pending_label = None;
@@ -549,6 +588,7 @@ fn parse_alt(source: &str, start: usize, end: usize) -> AltModel {
                         label: pending_label.take(),
                         target: word.to_owned(),
                         is_block: false,
+                        is_list: std::mem::take(&mut pending_list),
                     });
                 }
             }
@@ -773,10 +813,22 @@ pub(crate) fn translate_body(body: &str, ctx: &TranslationCtx<'_>) -> io::Result
             if suffix_len > 0 {
                 // Only treat it as an attribute suffix when it is not a
                 // method call — `$ctx.to_string_tree(...)` keeps its call.
-                let is_call = suffix_text[suffix_len..].trim_start().starts_with('(');
+                let after_suffix = suffix_text[suffix_len..].trim_start();
+                let is_call = after_suffix.starts_with('(');
                 if !is_call {
                     suffix = Some(&suffix_text[..suffix_len]);
                     consumed = name_len + 1 + suffix_len;
+                } else if name == "ctx"
+                    && suffix_text[..suffix_len].ends_with("_all")
+                    && after_suffix.starts_with("()")
+                {
+                    // `$ctx.<rule>_all()` — a generated list accessor call;
+                    // consume the empty parens along with the suffix.
+                    suffix = Some(&suffix_text[..suffix_len]);
+                    let call_end = suffix_text[suffix_len..]
+                        .find(')')
+                        .map_or(suffix_len, |close| suffix_len + close + 1);
+                    consumed = name_len + 1 + call_end;
                 }
             }
         }
@@ -840,6 +892,7 @@ fn translate_reference(
             label: None,
             target: name.to_owned(),
             is_block: false,
+            is_list: false,
         };
         let _ = target_rule;
         return translate_element_read(&element, usize::MAX, suffix, ctx, body);
@@ -849,6 +902,7 @@ fn translate_reference(
             label: None,
             target: name.to_owned(),
             is_block: false,
+            is_list: false,
         };
         return translate_element_read(&element, usize::MAX, suffix, ctx, body);
     }
@@ -910,6 +964,25 @@ fn translate_element_read(
     ctx: &TranslationCtx<'_>,
     body: &str,
 ) -> io::Result<String> {
+    if element.is_list {
+        // `label+=x`: the label denotes the list of every `x` child.
+        if let Some(rule_index) = ctx.rule_index_by_name(&element.target) {
+            return match suffix {
+                None | Some("ctx") => Ok(format!(
+                    "__ctx.child_rule_trees({rule_index}).collect::<Vec<_>>()"
+                )),
+                Some(other) => Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("unsupported list-label read .{other} in embedded action: {body}"),
+                )),
+            };
+        }
+        if let Some(token_type) = ctx.token_types.get(&element.target) {
+            return Ok(format!(
+                "__ctx.child_tokens({token_type}).collect::<Vec<_>>()"
+            ));
+        }
+    }
     if element.is_block {
         // A labeled `(...)` block over tokens: `$myset.stop` / `$myset.text`
         // read the token the block matched — the most recent terminal child.

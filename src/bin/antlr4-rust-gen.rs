@@ -1950,6 +1950,8 @@ struct EmbeddedStepRender<'a> {
     predicates: &'a BTreeMap<(usize, usize), (String, Option<String>)>,
     rule_has_attrs: &'a [bool],
     after: &'a BTreeMap<usize, String>,
+    call_args: &'a BTreeMap<usize, String>,
+    rule_arg0: &'a [Option<String>],
 }
 
 #[derive(Clone, Copy)]
@@ -3450,6 +3452,17 @@ fn render_embedded_attrs_local(
         "        #[allow(unused_mut)]\n        let mut __attrs = {attrs_struct}::default();"
     )
     .expect("writing to a string cannot fail");
+    if let Some(arg0) = embedded
+        .rule_arg0
+        .get(rule_index)
+        .and_then(Option::as_deref)
+    {
+        writeln!(
+            out,
+            "        if let Some(__arg) = self.__embedded_pending_arg.take() {{ __attrs.{arg0} = __arg as _; }}"
+        )
+        .expect("writing to a string cannot fail");
+    }
 }
 
 /// Runs the embedded `@after` body (committed path only — ANTLR's caught-error
@@ -4028,6 +4041,15 @@ fn render_generated_step(
                 "{pad}let __invoking_marker = self.base.push_invoking_state({source_state}isize);"
             )
             .expect("writing to a string cannot fail");
+            if let Some(embedded) = render_context.embedded {
+                if let Some(expression) = embedded.call_args.get(source_state) {
+                    writeln!(
+                        out,
+                        "{pad}self.__embedded_pending_arg = Some(i64::from({expression}));"
+                    )
+                    .expect("writing to a string cannot fail");
+                }
+            }
             let precedence = match precedence {
                 GeneratedRuleCallPrecedence::Literal(value) => value.to_string(),
                 GeneratedRuleCallPrecedence::InheritLocal => "__precedence".to_owned(),
@@ -5362,6 +5384,10 @@ struct EmbeddedParserData {
     after: BTreeMap<usize, String>,
     /// rule -> whether the rule declares args/returns/locals.
     rule_has_attrs: Vec<bool>,
+    /// Rule-transition source state -> translated caller arg expression.
+    call_args: BTreeMap<usize, String>,
+    /// rule -> escaped name of its first declared arg, if any.
+    rule_arg0: Vec<Option<String>>,
     /// Rendered `__RuleAttrsN` struct definitions.
     attrs_structs: String,
     /// Member fields lowered onto the parser struct.
@@ -5421,32 +5447,63 @@ fn build_embedded_parser_data(
         }
         slots.push((block.open_brace, block.body.to_owned()));
     }
-    let states = parser_action_states(data)?;
-    let state_offset = action_slot_state_offset(states.len(), slots.len())?;
-    for (index, (block_offset, body)) in slots.into_iter().enumerate() {
-        let Some(state) = states.get(state_offset + index).copied() else {
-            continue;
-        };
-        if body.trim().is_empty() {
-            out.inline_actions.insert(state, String::new());
-            continue;
-        }
-        let rule_index = action_state_rules.get(&state).copied().ok_or_else(|| {
-            io::Error::new(
+    // Pair action blocks with ATN action states PER RULE: ANTLR can
+    // synthesize extra action states (left-recursion rewrites, implicit
+    // initializers), and a global offset would shift an author action into a
+    // neighboring rule. Both sides know their rule — blocks through the
+    // model's rule body spans, states through the serialized ATN.
+    let mut slots_by_rule: BTreeMap<usize, Vec<(usize, String)>> = BTreeMap::new();
+    for (block_offset, body) in slots {
+        let Some(rule_index) = model
+            .rules
+            .iter()
+            .position(|rule| rule.body_span.0 <= block_offset && block_offset < rule.body_span.1)
+        else {
+            return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("no rule for parser action state {state}"),
-            )
-        })?;
-        let ctx = embedded::TranslationCtx {
-            model: &model,
-            rule_index,
-            body_offset: Some(block_offset),
-            site: embedded::ActionSite::Body,
-            token_types: &token_types,
+                format!("embedded action at offset {block_offset} is outside every parser rule"),
+            ));
         };
-        let translated = embedded::translate_body(&body, &ctx)?;
-        out.inline_actions
-            .insert(state, finish_body(&body, translated));
+        slots_by_rule
+            .entry(rule_index)
+            .or_default()
+            .push((block_offset, body));
+    }
+    let mut states_by_rule: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+    for state in parser_action_states(data)? {
+        let Some(rule_index) = action_state_rules.get(&state).copied() else {
+            continue;
+        };
+        states_by_rule.entry(rule_index).or_default().push(state);
+    }
+    for (rule_index, rule_slots) in slots_by_rule {
+        let states = states_by_rule.remove(&rule_index).unwrap_or_default();
+        let state_offset = action_slot_state_offset(states.len(), rule_slots.len())
+            .map_err(|error| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("rule {rule_index}: {error}"),
+                )
+            })?;
+        for (index, (block_offset, body)) in rule_slots.into_iter().enumerate() {
+            let Some(state) = states.get(state_offset + index).copied() else {
+                continue;
+            };
+            if body.trim().is_empty() {
+                out.inline_actions.insert(state, String::new());
+                continue;
+            }
+            let ctx = embedded::TranslationCtx {
+                model: &model,
+                rule_index,
+                body_offset: Some(block_offset),
+                site: embedded::ActionSite::Body,
+                token_types: &token_types,
+            };
+            let translated = embedded::translate_body(&body, &ctx)?;
+            out.inline_actions
+                .insert(state, finish_body(&body, translated));
+        }
     }
 
     // Predicates: same source walk/coordinate pairing as the legacy path.
@@ -5532,6 +5589,10 @@ fn build_embedded_parser_data(
     }
 
     // Members: fields, impl items, module items.
+    out.struct_fields
+        .push_str("    __embedded_pending_arg: Option<i64>,\n");
+    out.field_inits
+        .push_str("            __embedded_pending_arg: None,\n");
     for field in &model.parser_members.fields {
         let _ = writeln!(out.struct_fields, "    {}: {},", field.name, field.ty);
         let _ = writeln!(out.field_inits, "            {}: {},", field.name, field.init);
@@ -5545,10 +5606,112 @@ fn build_embedded_parser_data(
         let _ = writeln!(out.module_items, "{item}\n");
     }
 
+    // Rule-call argument expressions, correlated to rule transitions the
+    // same way parser_rule_args does (source order per callee rule).
+    out.call_args = embedded_rule_call_args(data, source, &model)?;
+    out.rule_arg0 = model
+        .rules
+        .iter()
+        .map(|rule| {
+            rule.arg_names
+                .first()
+                .map(|name| embedded::escape_keyword(name))
+        })
+        .collect();
+
+    // Associated token constants: rendered bodies reference tokens as
+    // `TParser::NL` (post-processed to `Self::NL`).
+    for (name, token_type) in &token_types {
+        let _ = writeln!(
+            out.impl_items,
+            "    #[allow(dead_code)]\n    pub const {name}: i32 = {token_type};"
+        );
+    }
+    out.impl_items.push('\n');
+
     // Recognizer-surface facades the rendered bodies call.
     out.impl_items.push_str(&embedded_parser_facades());
     out.module_items.push_str(EMBEDDED_INPUT_FACADE);
     Ok(out)
+}
+
+
+/// Scans `rule[expr]` call sites in the rendered grammar and pairs each with
+/// its ATN rule-transition source state (source order per callee rule, the
+/// same correlation as `parser_rule_args`). Supports integer literals and
+/// single identifiers (translated to the caller's `__attrs` field).
+fn embedded_rule_call_args(
+    data: &InterpData,
+    source: &str,
+    model: &embedded::EmbeddedModel,
+) -> io::Result<BTreeMap<usize, String>> {
+    let mut calls: Vec<(usize, usize, String)> = Vec::new();
+    for (rule_index, rule_name) in data.rule_names.iter().enumerate() {
+        let pattern = format!("{rule_name}[");
+        let mut offset = 0;
+        while let Some(start) = source[offset..].find(&pattern).map(|index| offset + index) {
+            let value_start = start + pattern.len();
+            let Some(value_stop) = source[value_start..]
+                .find(']')
+                .map(|index| value_start + index)
+            else {
+                break;
+            };
+            offset = value_stop + 1;
+            if start != 0
+                && source[..start]
+                    .chars()
+                    .next_back()
+                    .is_some_and(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+            {
+                continue;
+            }
+            let value = source[value_start..value_stop].trim();
+            let expression = if value.parse::<i64>().is_ok() {
+                Some(value.to_owned())
+            } else if value.chars().all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+                && value
+                    .chars()
+                    .next()
+                    .is_some_and(|ch| ch == '_' || ch.is_ascii_alphabetic())
+            {
+                // A bare identifier is a caller attribute (arg/local/return).
+                Some(format!("__attrs.{}", embedded::escape_keyword(value)))
+            } else {
+                None
+            };
+            if let Some(expression) = expression {
+                calls.push((start, rule_index, expression));
+            }
+        }
+    }
+    let _ = model;
+    calls.sort_by_key(|(start, _, _)| *start);
+
+    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
+        .deserialize()
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    let mut rule_transitions = Vec::new();
+    for state in atn.states() {
+        for transition in &state.transitions {
+            if let Transition::Rule { rule_index, .. } = transition {
+                rule_transitions.push((state.state_number, *rule_index));
+            }
+        }
+    }
+    let mut used = vec![false; rule_transitions.len()];
+    let mut args = BTreeMap::new();
+    for (_, rule_index, expression) in calls {
+        if let Some((index, (source_state, _))) = rule_transitions
+            .iter()
+            .enumerate()
+            .find(|(index, (_, transition_rule))| !used[*index] && *transition_rule == rule_index)
+        {
+            used[index] = true;
+            args.insert(*source_state, expression);
+        }
+    }
+    Ok(args)
 }
 
 /// Post-translation cleanups shared by all embedded bodies: `TParser::NL`
@@ -5669,6 +5832,8 @@ fn render_parser_with_options(
         predicates: &embedded.predicates,
         rule_has_attrs: &embedded.rule_has_attrs,
         after: &embedded.after,
+        call_args: &embedded.call_args,
+        rule_arg0: &embedded.rule_arg0,
     });
     let template_grammar_source = if options.embedded {
         None

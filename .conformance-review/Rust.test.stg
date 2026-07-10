@@ -283,33 +283,13 @@ let mut listener = LeafListener::default();
 ParseTreeWalker::walk(&mut listener, <s>);
 >>
 
-TreeNodeWithAltNumField(X) ::= <<
-@parser::members {
-struct MyRuleNode {
-    base: BaseParserRuleContext,
-    alt_num: isize,
-}
-
-impl MyRuleNode {
-    fn new(parent: Option\<ParserRuleContextRef>, invoking_state_number: isize) -> Self {
-        Self {
-            base: BaseParserRuleContext::new(parent, invoking_state_number),
-            alt_num: 0,
-        }
-    }
-}
-
-impl ParserRuleContext for MyRuleNode {
-    fn alt_number(&self) -> isize {
-        self.alt_num
-    }
-
-    fn set_alt_number(&mut self, alt_num: isize) {
-        self.alt_num = alt_num;
-    }
-}
-}
->>
+// Java needs a custom context superclass because its default RuleContext does
+// not store the outer alternative number. The Rust target's ParserRuleContext
+// records the alternative number natively (and renders it in string trees),
+// so the customization point this template exists to inject is built in and
+// the template renders nothing. The grammar's `contextSuperClass=MyRuleNode`
+// option is grammar metadata the Rust code generator does not consume.
+TreeNodeWithAltNumField(X) ::= ""
 
 TokenGetterListener(X) ::= <<
 @parser::members {
