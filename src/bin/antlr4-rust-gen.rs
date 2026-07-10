@@ -1995,6 +1995,10 @@ struct LeftRecursiveLoopRender<'a> {
 /// predicate expressions, per-rule attrs presence, and `@after` bodies.
 #[derive(Clone, Copy)]
 struct EmbeddedStepRender<'a> {
+    /// The grammar dumps the learned DFA; keep every decision on the
+    /// adaptive simulator (no LL(1)/fast-path shortcuts) so the learned
+    /// states match Java's.
+    force_adaptive: bool,
     predicates: &'a BTreeMap<(usize, usize), (String, Option<String>)>,
     rule_has_attrs: &'a [bool],
     after: &'a BTreeMap<usize, String>,
@@ -4381,7 +4385,13 @@ fn render_generated_decision(
         alts,
     } = decision_info;
     let pad = "    ".repeat(indent);
-    if let Some(fast_path) = fast_path.filter(|_| !allow_semantic_context && !force_context) {
+    if let Some(fast_path) = fast_path.filter(|_| {
+        !allow_semantic_context
+            && !force_context
+            && !render_context
+                .embedded
+                .is_some_and(|embedded| embedded.force_adaptive)
+    }) {
         writeln!(
             out,
             "{pad}let mut __decision_start = antlr4_runtime::IntStream::index(self.base.input());"
@@ -4417,7 +4427,10 @@ fn render_generated_decision(
             "{pad}let __decision_start = antlr4_runtime::IntStream::index(self.base.input());"
         )
         .expect("writing to a string cannot fail");
-        if allow_semantic_context || force_context {
+        let force_adaptive = render_context
+            .embedded
+            .is_some_and(|embedded| embedded.force_adaptive);
+        if allow_semantic_context || force_context || force_adaptive {
             render_generated_adaptive_prediction(out, &pad, decision);
         } else {
             render_generated_ll1_then_adaptive_prediction(out, &pad, state, decision, true);
@@ -4962,7 +4975,13 @@ fn render_generated_star_loop(
         .expect("writing to a string cannot fail");
     writeln!(out, "{pad}loop {{").expect("writing to a string cannot fail");
     let inner_pad = format!("{pad}    ");
-    if let Some(fast_path) = fast_path.filter(|_| !allow_semantic_context && !force_context) {
+    if let Some(fast_path) = fast_path.filter(|_| {
+        !allow_semantic_context
+            && !force_context
+            && !render_context
+                .embedded
+                .is_some_and(|embedded| embedded.force_adaptive)
+    }) {
         writeln!(
             out,
             "{pad}    let mut __decision_start = antlr4_runtime::IntStream::index(self.base.input());"
@@ -4994,7 +5013,10 @@ fn render_generated_star_loop(
             "{pad}    let __decision_start = antlr4_runtime::IntStream::index(self.base.input());"
         )
         .expect("writing to a string cannot fail");
-        if allow_semantic_context || force_context {
+        let force_adaptive = render_context
+            .embedded
+            .is_some_and(|embedded| embedded.force_adaptive);
+        if allow_semantic_context || force_context || force_adaptive {
             render_generated_adaptive_prediction(out, &inner_pad, decision);
         } else {
             render_generated_ll1_then_adaptive_prediction(out, &inner_pad, state, decision, true);
@@ -5491,6 +5513,12 @@ fn build_embedded_parser_data(
             || is_definitions_action(source, block.open_brace)
             || is_members_action(source, block.open_brace)
             || is_options_block(source, block.open_brace)
+            // `tokens { A, B }` / `channels { ... }` blocks are grammar
+            // metadata; the legacy walk never matched them because their
+            // bodies are not templates, but the embedded walk accepts any
+            // body and must exclude them explicitly.
+            || source[..block.open_brace].trim_end().ends_with("tokens")
+            || source[..block.open_brace].trim_end().ends_with("channels")
         {
             continue;
         }
@@ -5898,13 +5926,13 @@ fn render_embedded_context_types(
     let mut exit_arms = String::new();
     for (rule_index, rule) in model.rules.iter().enumerate() {
         let mut names: Vec<(String, String)> = vec![(
-            rust_function_name(&rule.name),
+            rule.name.clone(),
             format!("{}Context", rust_type_name(&rule.name)),
         )];
         for alt in &rule.alts {
             if let Some(label) = &alt.label {
                 let pair = (
-                    rust_function_name(label),
+                    label.clone(),
                     format!("{}Context", rust_type_name(label)),
                 );
                 if !names.contains(&pair) {
@@ -5945,20 +5973,20 @@ fn render_embedded_context_types(
             }
             let mut out = String::new();
             let op = op_labels.first().filter(|_| {
-                op_labels.iter().collect::<std::collections::BTreeSet<_>>().len() == 1
+                op_labels.iter().collect::<BTreeSet<_>>().len() == 1
             });
             let primary = primary_labels.first().filter(|_| {
                 primary_labels
                     .iter()
-                    .collect::<std::collections::BTreeSet<_>>()
+                    .collect::<BTreeSet<_>>()
                     .len()
                     == 1
             });
             match (op, primary) {
                 (Some(op), Some(primary)) => {
-                    let op_method = rust_function_name(op);
+                    let op_method = op.clone();
                     let op_view = format!("{}Context", rust_type_name(op));
-                    let primary_method = rust_function_name(primary);
+                    let primary_method = primary.clone();
                     let primary_view = format!("{}Context", rust_type_name(primary));
                     let _ = writeln!(
                         out,
@@ -6074,8 +6102,9 @@ fn embedded_parser_facades() -> String {
 
     #[allow(dead_code)]
     fn dump_dfa(&mut self) {
-        // Parser DFA dumping is not implemented yet; descriptors that
-        // require it fail their output comparison honestly.
+        if let Some(simulator) = self.simulator.as_ref() {
+            print!("{}", simulator.dump_dfa_java_style(self.base.vocabulary()));
+        }
     }
 
 "#
@@ -6149,6 +6178,7 @@ fn render_parser_with_options(
         None
     };
     let embedded_step_render = embedded_data.as_ref().map(|embedded| EmbeddedStepRender {
+        force_adaptive: false, // Adaptive-everywhere learns more DFA states than Java, whose tool inlines simple decisions like our LL(1) shortcut does.
         predicates: &embedded.predicates,
         rule_has_attrs: &embedded.rule_has_attrs,
         after: &embedded.after,

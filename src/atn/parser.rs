@@ -335,6 +335,41 @@ impl<'a> ParserAtnSimulator<'a> {
     /// of a small parse. A second simulator created for the same ATN while one
     /// is alive finds the slot empty and starts cold; the drop-time check-in
     /// then keeps whichever tables learned more.
+    /// Renders every non-empty learned decision DFA in the format of Java's
+    /// `Parser.dumpDFA()` / `DFASerializer` — `Decision N:` headers followed
+    /// by `s0-'else'->:s1^=>1` edge lines — which the runtime testsuite's
+    /// `showDFA` descriptors byte-compare.
+    pub fn dump_dfa_java_style(&self, vocabulary: &crate::vocabulary::Vocabulary) -> String {
+        use std::fmt::Write as _;
+        let mut out = String::new();
+        let mut seen_one = false;
+        for dfa in &self.decision_to_dfa {
+            if dfa.states().is_empty() {
+                continue;
+            }
+            if seen_one {
+                out.push('\n');
+            }
+            seen_one = true;
+            let _ = writeln!(out, "Decision {}:", dfa.decision());
+            for state in dfa.states() {
+                let source = dfa_state_display(state);
+                for (index, target) in state.edges.iter().enumerate() {
+                    let Some(target) = target else {
+                        continue;
+                    };
+                    let Some(target_state) = dfa.state(*target) else {
+                        continue;
+                    };
+                    let symbol = i32::try_from(index).unwrap_or_default() - 1;
+                    let label = vocabulary.display_name(symbol);
+                    let _ = writeln!(out, "{source}-{label}->{}", dfa_state_display(target_state));
+                }
+            }
+        }
+        out
+    }
+
     pub fn new_shared(atn: &'static Atn) -> Self {
         let ptr: *const Atn = atn;
         let key = ptr as usize;
@@ -1426,6 +1461,30 @@ pub enum ParserAtnSimulatorError {
     NoViableAlt { symbol: i32, index: usize },
     PredictionRequiresMoreLookahead,
     UnknownDecision(usize),
+}
+
+
+/// Java `DFASerializer.getStateString`: `:sN^=>alt` for accept states.
+fn dfa_state_display(state: &DfaState) -> String {
+    let mut out = String::new();
+    if state.is_accept_state {
+        out.push(':');
+    }
+    out.push('s');
+    out.push_str(&state.state_number.to_string());
+    if state.requires_full_context {
+        out.push('^');
+    }
+    if state.is_accept_state {
+        out.push_str("=>");
+        out.push_str(
+            &state
+                .prediction
+                .map(|prediction| prediction.to_string())
+                .unwrap_or_default(),
+        );
+    }
+    out
 }
 
 #[cfg(test)]

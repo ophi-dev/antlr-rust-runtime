@@ -69,22 +69,40 @@ The harness reads `antlr4-upstream/runtime-testsuite` and the same ANTLR jar fet
 ### Run the full sweep
 
 ```bash
+# Rendered/embedded pipeline (the ANTLR way — see below):
+cargo run --release --quiet --bin antlr4-runtime-testsuite -- --embedded
+
+# Legacy template-recognition pipeline:
 cargo run --release --quiet --bin antlr4-runtime-testsuite
 ```
 
-Defaults to `ANTLR4_JAR=/tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar` and `ANTLR4_RUNTIME_TESTSUITE=/tmp/antlr-cleanroom/antlr4-upstream/runtime-testsuite`. Override with `--antlr-jar`/`--descriptors` or env vars. Expected outcome: `summary: 357 passed, 0 failed, 0 skipped, 357 run`. Wall-clock ≈ 10–15 minutes on Apple Silicon, ≈ 30 minutes on the GitHub Linux runner.
+Defaults to `ANTLR4_JAR=/tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar` and `ANTLR4_RUNTIME_TESTSUITE=/tmp/antlr-cleanroom/antlr4-upstream/runtime-testsuite`. Override with `--antlr-jar`/`--descriptors` or env vars. Wall-clock ≈ 10–15 minutes on Apple Silicon, ≈ 30 minutes on the GitHub Linux runner.
+
+### The `--embedded` (rendered) pipeline
+
+`--embedded` runs descriptors the way every official ANTLR target does:
+each descriptor grammar is rendered through
+`.conformance-review/Rust.test.stg` with the real StringTemplate engine
+(`tools/stg-render/RenderGrammar.java`, executed via the ANTLR jar and the
+Java single-file source launcher), so its actions/predicates become real
+Rust code. The rendered grammar feeds both the ANTLR tool and
+`antlr4-rust-gen --actions embedded`, which splices the bodies verbatim
+after `$`-attribute translation (`src/bin_support/embedded.rs`) and
+generates typed context views, per-rule attrs structs, members
+fields/methods, listener traits, and recognizer facades. `--stg PATH`
+overrides the template group.
 
 ### Run a subset while iterating
 
 ```bash
 # One descriptor:
-cargo run --release --quiet --bin antlr4-runtime-testsuite -- --case LexerExec/KeywordID
+cargo run --release --quiet --bin antlr4-runtime-testsuite -- --embedded --case LexerExec/KeywordID
 
 # One group (e.g. while debugging left-recursion):
-cargo run --release --quiet --bin antlr4-runtime-testsuite -- --group LeftRecursion --limit 20
+cargo run --release --quiet --bin antlr4-runtime-testsuite -- --embedded --group LeftRecursion --limit 20
 
 # Keep the per-case temp crates for inspection:
-cargo run --release --quiet --bin antlr4-runtime-testsuite -- --case ParserErrors/SingleSetInsertion --keep
+cargo run --release --quiet --bin antlr4-runtime-testsuite -- --embedded --case ParserErrors/SingleSetInsertion --keep
 ```
 
 Per-case scratch crates land under `target/antlr-runtime-testsuite/<case>/`. Stale dirs from a killed run can fail a re-run with `Os { code: 66, ... DirectoryNotEmpty }` — `rm -rf target/antlr-runtime-testsuite/*` to recover.

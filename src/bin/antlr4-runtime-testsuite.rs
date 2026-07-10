@@ -1293,7 +1293,6 @@ fn run_descriptor(args: &Args, descriptor: &Descriptor) -> io::Result<RunResult>
         // and the embedded-actions Rust generator.
         let rendered = render_grammar_through_stg(args, &case_dir, "main", &descriptor.grammar_template)?;
         fs::write(&grammar_path, &rendered)?;
-        let mut combined_rendered = Vec::new();
         let mut rendered_slaves = Vec::new();
         for (index, slave) in descriptor.slave_grammar_templates.iter().enumerate() {
             let rendered_slave =
@@ -1302,8 +1301,22 @@ fn run_descriptor(args: &Args, descriptor: &Descriptor) -> io::Result<RunResult>
             fs::write(&slave_path, &rendered_slave)?;
             rendered_slaves.push(rendered_slave);
         }
-        combined_rendered.push(rendered);
-        combined_rendered.extend(rendered_slaves);
+        // Delegates must follow the delegator's `import` clause order so an
+        // overridden rule keeps the same first definition ANTLR keeps.
+        let mut combined_rendered = vec![rendered.clone()];
+        let mut remaining: Vec<Option<String>> = rendered_slaves.into_iter().map(Some).collect();
+        for import in imported_grammar_names(&rendered) {
+            for slot in &mut remaining {
+                if slot
+                    .as_deref()
+                    .and_then(|slave| grammar_name(slave).ok())
+                    .is_some_and(|name| name == import)
+                {
+                    combined_rendered.extend(slot.take());
+                }
+            }
+        }
+        combined_rendered.extend(remaining.into_iter().flatten());
         fs::write(
             &source_grammar_path,
             combined_rendered_grammar_source(&combined_rendered),
@@ -1565,7 +1578,7 @@ fn create_smoke_crate(
         smoke_dir.join("Cargo.toml"),
         smoke_cargo_toml(&args.runtime_crate),
     )?;
-    fs::write(smoke_dir.join("src/main.rs"), smoke_main(descriptor))?;
+    fs::write(smoke_dir.join("src/main.rs"), smoke_main(descriptor, args.embedded))?;
     Ok(())
 }
 
@@ -1590,9 +1603,9 @@ fn smoke_cargo_toml(runtime_crate: &Path) -> String {
 ///
 /// Lexer descriptors print every buffered token. Parser descriptors invoke the
 /// start rule and print parser diagnostics in ANTLR's console-listener shape.
-fn smoke_main(descriptor: &Descriptor) -> String {
+fn smoke_main(descriptor: &Descriptor, embedded: bool) -> String {
     if descriptor.is_parser() {
-        return parser_smoke_main(descriptor);
+        return parser_smoke_main(descriptor, embedded);
     }
     let module_name = module_name(&descriptor.grammar_name);
     let type_name = rust_type_name(&descriptor.grammar_name);
@@ -1619,7 +1632,7 @@ fn smoke_main(descriptor: &Descriptor) -> String {
     )
 }
 
-fn parser_smoke_main(descriptor: &Descriptor) -> String {
+fn parser_smoke_main(descriptor: &Descriptor, embedded: bool) -> String {
     let lexer_grammar_name = format!("{}Lexer", descriptor.grammar_name);
     let parser_grammar_name = format!("{}Parser", descriptor.grammar_name);
     let lexer_module = module_name(&lexer_grammar_name);
@@ -1632,7 +1645,10 @@ fn parser_smoke_main(descriptor: &Descriptor) -> String {
     } else {
         "true"
     };
-    let replay_full_context_diagnostics = descriptor.group == "FullContextParsing"
+    // The embedded pipeline never replays canned diagnostics: descriptors
+    // must earn their output. The legacy path keeps the historical replay.
+    let replay_full_context_diagnostics = !embedded
+        && descriptor.group == "FullContextParsing"
         && descriptor.flags.trim() == "showDiagnosticErrors";
     let report_diagnostic_errors =
         descriptor.flags.trim() == "showDiagnosticErrors" && !replay_full_context_diagnostics;

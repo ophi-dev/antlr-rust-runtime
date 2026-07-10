@@ -1,5 +1,23 @@
 # `Rust.test.stg` — honest reference & runtime-gap analysis
 
+> **Migration status (July 2026): the render-then-compile pipeline is
+> implemented.** `antlr4-runtime-testsuite --embedded` renders each
+> descriptor grammar through `Rust.test.stg` with the real StringTemplate
+> engine (`tools/stg-render/RenderGrammar.java` via the ANTLR jar) and
+> generates with `antlr4-rust-gen --actions embedded`, which splices the
+> rendered Rust action/predicate bodies verbatim after `$`-attribute
+> translation (`src/bin_support/embedded.rs` — the Rust analog of ANTLR's
+> `ActionTranslator`). The four capability axes below are now generated:
+> an output sink (`self.output()`), typed context views with positional
+> accessors and public attribute fields (`FromRuleContext` downcast),
+> typed attrs snapshots replacing the int-only `int_return` map, and
+> `@members` as real struct fields / impl items. Listener traits and a
+> typed walker bridge cover the listener suite. Validating the reference
+> against the real ST engine also surfaced blind-authoring defects; each
+> correction is documented in `Rust.test.stg.design-notes.md` under
+> "Reference corrections". The historical analysis below is preserved
+> as-written.
+
 Companion to `Rust.test.stg` and `Rust.test.stg.design-notes.md` in this
 directory. This document records **how** the reference `.stg` was produced and
 **what diffing it against our actual runtime reveals**.

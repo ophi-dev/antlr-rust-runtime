@@ -317,7 +317,7 @@ impl CommonToken {
 
 impl fmt::Display for CommonToken {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let text = CommonToken::text(self);
+        let text = Self::text(self);
         let channel = if self.channel() == DEFAULT_CHANNEL {
             String::new()
         } else {

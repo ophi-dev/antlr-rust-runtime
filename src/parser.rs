@@ -3290,6 +3290,14 @@ where
         let result_token = self.token_at(diagnostic.ll_stop_index);
         let message = match diagnostic.kind {
             ParserAtnPredictionDiagnosticKind::Ambiguity => {
+                // Java's default LL prediction stops at the first full-context
+                // conflict without exact-ambiguity detection, so
+                // `reportAmbiguity` fires with `exact == false` there and the
+                // `DiagnosticErrorListener` (exactOnly by default) suppresses
+                // it. Only LL_EXACT_AMBIG_DETECTION produces exact ambiguities.
+                if self.prediction_mode != PredictionMode::LlExactAmbigDetection {
+                    return;
+                }
                 format!(
                     "reportAmbiguity d={decision} ({rule_name}): ambigAlts={{{alts}}}, input='{result_input}'"
                 )
@@ -10547,6 +10555,10 @@ mod tests {
                 }),
             },
         );
+        // Ambiguities from the default LL prediction mode are non-exact, so —
+        // matching Java's exactOnly DiagnosticErrorListener — only the
+        // attempting-full-context line is reported. Exact-ambiguity mode
+        // reports the ambiguity itself.
         parser.record_generated_prediction_diagnostic(
             &atn,
             1,
@@ -10581,11 +10593,6 @@ mod tests {
                     line: 1,
                     column: 2,
                     message: "reportAttemptingFullContext d=0 (s), input='xy'".to_owned(),
-                },
-                ParserDiagnostic {
-                    line: 1,
-                    column: 2,
-                    message: "reportAmbiguity d=0 (s): ambigAlts={1, 2}, input='xy'".to_owned(),
                 },
             ]
         );
