@@ -375,6 +375,13 @@ impl Args {
             "ANTLR runtime-testsuite descriptors",
         )?;
 
+        // The smoke `cargo run` is executed from inside the nested case
+        // crate, where a relative CARGO_TARGET_DIR stripe would silently
+        // recreate a per-case target dir and a relative `path = ...` runtime
+        // dependency would not resolve — pin both roots to absolute paths.
+        let current_dir = env::current_dir().map_err(|error| error.to_string())?;
+        let runtime_crate = absolutize(&current_dir, runtime_crate);
+        let work_dir = absolutize(&current_dir, work_dir);
         let stg = stg.unwrap_or_else(|| runtime_crate.join(".conformance-review/Rust.test.stg"));
         // Every worker drives a JVM and rustc of its own; past ~8 the extra
         // workers mostly fight each other for cores.
@@ -429,6 +436,14 @@ fn resolve_path_argument(
 fn next_arg(iter: &mut impl Iterator<Item = String>, flag: &str) -> Result<String, String> {
     iter.next()
         .ok_or_else(|| format!("{flag} requires a value\n\n{}", usage()))
+}
+
+fn absolutize(base: &Path, path: PathBuf) -> PathBuf {
+    if path.is_absolute() {
+        path
+    } else {
+        base.join(path)
+    }
 }
 
 fn usage() -> String {
