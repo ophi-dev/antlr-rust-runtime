@@ -1539,6 +1539,7 @@ fn set_lexer_predicate_template(
 /// The emitted lexer owns only generated metadata and a `BaseLexer`. Keeping
 /// recognition in the runtime avoids emitting thousands of lines of
 /// grammar-specific Rust control flow for the first target implementation.
+#[allow(clippy::too_many_arguments)]
 fn render_lexer(
     grammar_name: &str,
     data: &InterpData,
@@ -5296,6 +5297,36 @@ fn render_parser_after_action_dispatch(after_actions: &[Vec<ActionTemplate>]) ->
     out
 }
 
+/// Renders the direct and buffered variants of the interpreter fallback.
+#[allow(clippy::fn_params_excessive_bools, clippy::too_many_arguments)]
+fn render_parser_parse_rule_fallback_pair(
+    init_action_rules: &[usize],
+    track_alt_numbers: bool,
+    predicates: &[((usize, usize), PredicateTemplate)],
+    rule_args: &[(usize, usize, RuleArgTemplate)],
+    member_actions: &[(usize, usize, i64)],
+    has_action_dispatch: bool,
+    has_predicate_dispatch: bool,
+    has_return_actions: bool,
+    unknown_policy_literal: Option<&str>,
+) -> (String, String) {
+    let render = |buffer_actions| {
+        render_parser_parse_rule_fallback(
+            init_action_rules,
+            track_alt_numbers,
+            predicates,
+            rule_args,
+            member_actions,
+            has_action_dispatch,
+            has_predicate_dispatch,
+            has_return_actions,
+            buffer_actions,
+            unknown_policy_literal,
+        )
+    };
+    (render(false), render(true))
+}
+
 #[allow(clippy::fn_params_excessive_bools, clippy::too_many_arguments)]
 fn render_parser_parse_rule_fallback(
     init_action_rules: &[usize],
@@ -5490,7 +5521,7 @@ fn build_embedded_parser_data(
         })
         .collect();
     let finish_body =
-        |body: &str, translated: String| -> String { post_process_embedded(body, translated, type_name) };
+        |body: &str, translated: &str| -> String { post_process_embedded(body, translated, type_name) };
 
     let mut out = EmbeddedParserData {
         rule_has_attrs: model.rules.iter().map(embedded::RuleModel::has_attrs).collect(),
@@ -5603,7 +5634,7 @@ fn build_embedded_parser_data(
             };
             let translated = embedded::translate_body(&body, &ctx)?;
             out.inline_actions
-                .insert(state, finish_body(&body, translated));
+                .insert(state, finish_body(&body, &translated));
         }
     }
 
@@ -5637,7 +5668,7 @@ fn build_embedded_parser_data(
         let message = predicate_fail_message(source, block.after_brace);
         out.predicates.insert(
             (rule_index, pred_index),
-            (finish_body(block.body, translated), message),
+            (finish_body(block.body, &translated), message),
         );
     }
 
@@ -5653,7 +5684,7 @@ fn build_embedded_parser_data(
             };
             let translated = embedded::translate_body(body, &ctx)?;
             out.init_entry
-                .insert(rule_index, finish_body(body, translated));
+                .insert(rule_index, finish_body(body, &translated));
         }
         if let Some(body) = &rule.after_body {
             let ctx = embedded::TranslationCtx {
@@ -5664,7 +5695,7 @@ fn build_embedded_parser_data(
                 token_types: &token_types,
             };
             let translated = embedded::translate_body(body, &ctx)?;
-            out.after.insert(rule_index, finish_body(body, translated));
+            out.after.insert(rule_index, finish_body(body, &translated));
         }
     }
 
@@ -5697,11 +5728,18 @@ fn build_embedded_parser_data(
         let _ = writeln!(out.field_inits, "            {}: {},", field.name, field.init);
     }
     for item in &model.parser_members.impl_items {
-        let item = post_process_embedded(item, item.clone(), type_name);
-        let _ = writeln!(out.impl_items, "    {}\n", item.replace('\n', "\n    "));
+        let item = post_process_embedded(item, item, type_name);
+        let mut indented = String::with_capacity(item.len());
+        for (line_index, line) in item.lines().enumerate() {
+            if line_index > 0 {
+                indented.push_str("\n    ");
+            }
+            indented.push_str(line);
+        }
+        let _ = writeln!(out.impl_items, "    {indented}\n");
     }
     for item in &model.parser_members.module_items {
-        let item = post_process_embedded(item, item.clone(), type_name);
+        let item = post_process_embedded(item, item, type_name);
         let _ = writeln!(out.module_items, "{item}\n");
     }
 
@@ -5960,7 +5998,7 @@ fn render_embedded_context_types(
         let primary_labels: Vec<String> = rule
             .alts
             .iter()
-            .filter(|alt| !alt.refs.first().is_some_and(|first| first.target == rule.name))
+            .filter(|alt| alt.refs.first().is_none_or(|first| first.target != rule.name))
             .filter_map(|alt| alt.label.clone())
             .collect();
         let has_labels = names.len() > 1;
@@ -6064,8 +6102,21 @@ impl ParseTreeWalker {{
 
 /// Post-translation cleanups shared by all embedded bodies: `TParser::NL`
 /// becomes `Self::NL` so token constants resolve inside the generic impl.
-fn post_process_embedded(_original: &str, translated: String, type_name: &str) -> String {
-    translated.replace(&format!("{type_name}::"), "Self::")
+fn post_process_embedded(_original: &str, translated: &str, type_name: &str) -> String {
+    replace_all(translated, &format!("{type_name}::"), "Self::")
+}
+
+/// Plain substring replacement (`str::replace` is a disallowed method here).
+fn replace_all(text: &str, needle: &str, replacement: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(index) = rest.find(needle) {
+        out.push_str(&rest[..index]);
+        out.push_str(replacement);
+        rest = &rest[index + needle.len()..];
+    }
+    out.push_str(rest);
+    out
 }
 
 /// Generated-recognizer surface used by rendered test actions.
@@ -6151,6 +6202,115 @@ impl __GeneratedTokenView {
 }
 "#;
 
+
+
+
+/// Inline / buffered-init / entry-init statement maps: taken from the
+/// embedded translation when active, from the template machinery otherwise.
+#[allow(clippy::type_complexity)]
+fn parser_statement_maps(
+    embedded_data: Option<&EmbeddedParserData>,
+    actions: &[(usize, ActionTemplate)],
+    init_actions: &[Option<ActionTemplate>],
+    int_members: &[IntMemberTemplate],
+) -> io::Result<(
+    BTreeMap<usize, String>,
+    BTreeMap<usize, String>,
+    BTreeMap<usize, String>,
+)> {
+    match embedded_data {
+        Some(embedded) => Ok((
+            embedded.inline_actions.clone(),
+            BTreeMap::new(),
+            embedded.init_entry.clone(),
+        )),
+        None => Ok((
+            inline_parser_action_statements(actions, int_members)?,
+            init_parser_action_statements(init_actions, int_members)?,
+            init_entry_action_statements(init_actions, int_members)?,
+        )),
+    }
+}
+
+/// Collects `assume-*`-overridden action states (explicit empty arms) and
+/// drops overridden translated arms, as `render_parser_with_options` requires.
+fn collect_noop_action_states(
+    data: &InterpData,
+    patterns: &SemPatternFile,
+    actions: &mut Vec<(usize, ActionTemplate)>,
+) -> io::Result<BTreeSet<usize>> {
+    let mut noop_action_states = BTreeSet::new();
+    let action_state_rules = parser_action_state_rules(data)?;
+    for state in action_state_rules.keys() {
+        if parser_action_assume_overridden(patterns, data, &action_state_rules, *state) {
+            noop_action_states.insert(*state);
+        }
+    }
+    actions.retain(|(state, _)| {
+        !parser_action_overridden(patterns, data, &action_state_rules, *state)
+    });
+    Ok(noop_action_states)
+}
+
+
+/// Public per-rule entry methods (`pub fn s(&mut self) -> …`).
+fn render_public_rule_methods(public_rule_method_names: &[String]) -> String {
+    let mut rule_methods = String::new();
+    for (index, rule_method_name) in public_rule_method_names.iter().enumerate() {
+        writeln!(
+            rule_methods,
+            "    pub fn {rule_method_name}(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{"
+        )
+        .expect("writing to a string cannot fail");
+        writeln!(rule_methods, "        self.parse_rule({index})")
+            .expect("writing to a string cannot fail");
+        writeln!(rule_methods, "    }}").expect("writing to a string cannot fail");
+    }
+    rule_methods
+}
+
+/// Step-render view over the embedded data.
+///
+/// `force_adaptive` stays off: adaptive-everywhere learns more DFA states
+/// than Java, whose tool inlines simple decisions like our LL(1) shortcut.
+fn embedded_step_render(embedded: &EmbeddedParserData) -> EmbeddedStepRender<'_> {
+    EmbeddedStepRender {
+        force_adaptive: false,
+        predicates: &embedded.predicates,
+        rule_has_attrs: &embedded.rule_has_attrs,
+        after: &embedded.after,
+        call_args: &embedded.call_args,
+        rule_arg0: &embedded.rule_arg0,
+    }
+}
+
+/// The module/struct/impl text an [`EmbeddedParserData`] contributes to the
+/// rendered parser, empty in template mode.
+fn embedded_render_slots(
+    embedded_data: Option<&EmbeddedParserData>,
+) -> (String, String, String, String, String) {
+    embedded_data.map_or_else(
+        || {
+            (
+                String::new(),
+                String::new(),
+                String::new(),
+                String::new(),
+                String::new(),
+            )
+        },
+        |embedded| {
+            (
+                embedded.attrs_structs.clone(),
+                embedded.module_items.clone(),
+                embedded.struct_fields.clone(),
+                embedded.field_inits.clone(),
+                embedded.impl_items.clone(),
+            )
+        },
+    )
+}
+
 fn render_parser_with_options(
     grammar_name: &str,
     data: &InterpData,
@@ -6177,14 +6337,7 @@ fn render_parser_with_options(
     } else {
         None
     };
-    let embedded_step_render = embedded_data.as_ref().map(|embedded| EmbeddedStepRender {
-        force_adaptive: false, // Adaptive-everywhere learns more DFA states than Java, whose tool inlines simple decisions like our LL(1) shortcut does.
-        predicates: &embedded.predicates,
-        rule_has_attrs: &embedded.rule_has_attrs,
-        after: &embedded.after,
-        call_args: &embedded.call_args,
-        rule_arg0: &embedded.rule_arg0,
-    });
+    let embedded_step_render = embedded_data.as_ref().map(embedded_step_render);
     let template_grammar_source = if options.embedded {
         None
     } else {
@@ -6221,18 +6374,8 @@ fn render_parser_with_options(
     // Scan ALL ATN action states, not just the translated `actions`: an
     // untranslatable action (never in `actions`) with an `assume-*` override
     // would otherwise still reach the hook catch-all and fail loud.
-    let mut noop_action_states = BTreeSet::new();
-    {
-        let action_state_rules = parser_action_state_rules(data)?;
-        for state in action_state_rules.keys() {
-            if parser_action_assume_overridden(patterns, data, &action_state_rules, *state) {
-                noop_action_states.insert(*state);
-            }
-        }
-        actions.retain(|(state, _)| {
-            !parser_action_overridden(patterns, data, &action_state_rules, *state)
-        });
-    }
+    let mut noop_action_states =
+        collect_noop_action_states(data, patterns, &mut actions)?;
     // ANTLR-synthesized action states (left-recursion elimination, etc.) are
     // no-ops with no author intent. They must NOT reach `parser_action_hook`
     // either, or they would fail loud at runtime under the Error policy — the
@@ -6260,18 +6403,8 @@ fn render_parser_with_options(
     let int_members = template_grammar_source.map_or_else(Vec::new, parser_int_members);
     let member_actions = parser_member_actions(&actions, &int_members)?;
     let return_actions = parser_return_actions(&actions);
-    let inline_action_statements = match &embedded_data {
-        Some(embedded) => embedded.inline_actions.clone(),
-        None => inline_parser_action_statements(&actions, &int_members)?,
-    };
-    let init_action_statements = match &embedded_data {
-        Some(_) => BTreeMap::new(),
-        None => init_parser_action_statements(&init_actions, &int_members)?,
-    };
-    let init_entry_action_statements = match &embedded_data {
-        Some(embedded) => embedded.init_entry.clone(),
-        None => init_entry_action_statements(&init_actions, &int_members)?,
-    };
+    let (inline_action_statements, init_action_statements, init_entry_action_statements) =
+        parser_statement_maps(embedded_data.as_ref(), &actions, &init_actions, &int_members)?;
     let inline_action_states = inline_action_statements
         .keys()
         .copied()
@@ -6367,30 +6500,18 @@ fn render_parser_with_options(
             Some("antlr4_runtime::UnknownSemanticPolicy::Error")
         }
     };
-    let parse_rule_fallback = render_parser_parse_rule_fallback(
-        &init_action_rules,
-        track_alt_numbers,
-        &predicates,
-        &rule_args,
-        &member_actions,
-        has_action_dispatch,
-        has_predicate_dispatch,
-        has_return_actions,
-        false,
-        unknown_policy_literal,
-    );
-    let parse_rule_fallback_buffered = render_parser_parse_rule_fallback(
-        &init_action_rules,
-        track_alt_numbers,
-        &predicates,
-        &rule_args,
-        &member_actions,
-        has_action_dispatch,
-        has_predicate_dispatch,
-        has_return_actions,
-        true,
-        unknown_policy_literal,
-    );
+    let (parse_rule_fallback, parse_rule_fallback_buffered) =
+        render_parser_parse_rule_fallback_pair(
+            &init_action_rules,
+            track_alt_numbers,
+            &predicates,
+            &rule_args,
+            &member_actions,
+            has_action_dispatch,
+            has_predicate_dispatch,
+            has_return_actions,
+            unknown_policy_literal,
+        );
     let after_action_dispatch = render_parser_after_action_dispatch(&after_actions);
     let parser_semantics_function = render_parser_semantics_function(
         &predicates,
@@ -6440,35 +6561,14 @@ fn render_parser_with_options(
     let public_rule_method_names = parser_public_rule_method_names(&data.rule_names);
     let entry_rule_indices = likely_parser_entry_rule_indices(data)?;
     let parser_rustdoc = render_parser_rustdoc(&public_rule_method_names, &entry_rule_indices);
-    let mut rule_methods = String::new();
-    for (index, rule_method_name) in public_rule_method_names.iter().enumerate() {
-        writeln!(
-            rule_methods,
-            "    pub fn {rule_method_name}(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError> {{"
-        )
-        .expect("writing to a string cannot fail");
-        writeln!(rule_methods, "        self.parse_rule({index})")
-            .expect("writing to a string cannot fail");
-        writeln!(rule_methods, "    }}").expect("writing to a string cannot fail");
-    }
+    let rule_methods = render_public_rule_methods(&public_rule_method_names);
     let (
         embedded_attrs_structs,
         embedded_module_items,
         embedded_struct_fields,
         embedded_field_inits,
         embedded_impl_items,
-    ) = embedded_data.as_ref().map_or_else(
-        || (String::new(), String::new(), String::new(), String::new(), String::new()),
-        |embedded| {
-            (
-                embedded.attrs_structs.clone(),
-                embedded.module_items.clone(),
-                embedded.struct_fields.clone(),
-                embedded.field_inits.clone(),
-                embedded.impl_items.clone(),
-            )
-        },
-    );
+    ) = embedded_render_slots(embedded_data.as_ref());
     let generated_header = GENERATED_MODULE_HEADER;
     let generated_footer = GENERATED_MODULE_FOOTER;
 
@@ -7044,17 +7144,19 @@ struct IntMemberTemplate {
 /// the `BaseLexer` hooks: `self.text()` / column accessors become position
 /// -aware `_base` calls, `self.output()` becomes stdout.
 fn translate_embedded_lexer_body(body: &str, position_expr: &str) -> io::Result<String> {
-    let mut out = body.trim().to_owned();
-    out = out.replace("self.output()", "std::io::stdout()");
-    out = out.replace(
+    let mut out = replace_all(body.trim(), "self.output()", "std::io::stdout()");
+    out = replace_all(
+        &out,
         "self.text()",
         &format!("_base.token_text_until({position_expr})"),
     );
-    out = out.replace(
+    out = replace_all(
+        &out,
         "self.char_position_in_line()",
         &format!("_base.column_at({position_expr})"),
     );
-    out = out.replace(
+    out = replace_all(
+        &out,
         "self.token_start_char_position_in_line()",
         "_base.token_start_column()",
     );

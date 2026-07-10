@@ -72,7 +72,7 @@ pub(crate) struct RuleModel {
 }
 
 impl RuleModel {
-    pub(crate) fn has_attrs(&self) -> bool {
+    pub(crate) const fn has_attrs(&self) -> bool {
         !self.attrs.is_empty()
     }
 
@@ -759,10 +759,10 @@ impl TranslationCtx<'_> {
     /// Resolves a label to `(ref, occurrence-among-same-target-in-alt)`.
     fn resolve_label(&self, label: &str) -> Option<(ElementRef, usize)> {
         let rule = self.rule();
-        let alts: Vec<&AltModel> = match self.body_offset.and_then(|offset| rule.alt_at(offset)) {
-            Some(alt) => vec![alt],
-            None => rule.alts.iter().collect(),
-        };
+        let alts: Vec<&AltModel> = self
+            .body_offset
+            .and_then(|offset| rule.alt_at(offset))
+            .map_or_else(|| rule.alts.iter().collect(), |alt| vec![alt]);
         for alt in alts {
             let mut occurrence_by_target: BTreeMap<&str, usize> = BTreeMap::new();
             for element in &alt.refs {

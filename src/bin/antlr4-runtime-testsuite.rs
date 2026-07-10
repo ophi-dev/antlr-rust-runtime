@@ -102,8 +102,9 @@ struct Args {
     case_name: Option<String>,
     limit: Option<usize>,
     keep: bool,
-    /// Render descriptor grammars through Rust.test.stg (real StringTemplate
-    /// via the ANTLR jar) and generate with `--actions embedded`.
+    /// Render descriptor grammars through `Rust.test.stg` (real
+    /// `StringTemplate` via the ANTLR jar) and generate with
+    /// `--actions embedded`.
     embedded: bool,
     /// Template group used for the embedded render step.
     stg: PathBuf,
@@ -1239,7 +1240,7 @@ fn context_member_label(arguments: &str) -> Option<String> {
 
 
 /// Renders one grammar template through the target `.test.stg` group using
-/// the StringTemplate engine bundled in the ANTLR jar (via the Java
+/// the `StringTemplate` engine bundled in the ANTLR jar (via the Java
 /// single-file source launcher), mirroring upstream `RuntimeTests`.
 fn render_grammar_through_stg(
     args: &Args,
