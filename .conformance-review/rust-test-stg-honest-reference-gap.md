@@ -1,10 +1,13 @@
 # `Rust.test.stg` — honest reference & runtime-gap analysis
 
 > **Migration status (July 2026): the render-then-compile pipeline is
-> implemented.** `antlr4-runtime-testsuite --embedded` renders each
-> descriptor grammar through `Rust.test.stg` with the real StringTemplate
-> engine (`tools/stg-render/RenderGrammar.java` via the ANTLR jar) and
-> generates with `antlr4-rust-gen --actions embedded`, which splices the
+> implemented and is the harness's only pipeline — the legacy
+> template-recognition path (pattern-matching descriptor markup and
+> simulating its output) has been deleted.** `antlr4-runtime-testsuite`
+> renders each descriptor grammar through `Rust.test.stg` with the real
+> StringTemplate engine (`tools/stg-render/RenderGrammar.java` via the
+> ANTLR jar) and generates with `antlr4-rust-gen --actions embedded`,
+> which splices the
 > rendered Rust action/predicate bodies verbatim after `$`-attribute
 > translation (`src/bin_support/embedded.rs` — the Rust analog of ANTLR's
 > `ActionTranslator`). The four capability axes below are now generated:
