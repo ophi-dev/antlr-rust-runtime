@@ -5944,18 +5944,18 @@ fn render_embedded_context_types(
     let mut enter_arms = String::new();
     let mut exit_arms = String::new();
     for (rule_index, rule) in model.rules.iter().enumerate() {
+        // Listener methods take Rust snake_case names (`# Call` fires
+        // `exit_call`), mirroring how rule accessors are named; the view
+        // type keeps the label's camel case.
         let mut names: Vec<(String, String)> = vec![(
-            rule.name.clone(),
+            rust_function_name(&rule.name),
             format!("{}Context", rust_type_name(&rule.name)),
         )];
         for alt in &rule.alts {
             if let Some(label) = &alt.label {
-                let pair = (
-                    label.clone(),
-                    format!("{}Context", rust_type_name(label)),
-                );
-                if !names.contains(&pair) {
-                    names.push(pair);
+                let method = rust_function_name(label);
+                if !names.iter().any(|(existing, _)| *existing == method) {
+                    names.push((method, format!("{}Context", rust_type_name(label))));
                 }
             }
         }
@@ -6003,9 +6003,9 @@ fn render_embedded_context_types(
             });
             match (op, primary) {
                 (Some(op), Some(primary)) => {
-                    let op_method = op.clone();
+                    let op_method = rust_function_name(op);
                     let op_view = format!("{}Context", rust_type_name(op));
-                    let primary_method = primary.clone();
+                    let primary_method = rust_function_name(primary);
                     let primary_view = format!("{}Context", rust_type_name(primary));
                     let _ = writeln!(
                         out,
