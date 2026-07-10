@@ -363,18 +363,15 @@ On the maintainer checkout, where the ANTLR jar and upstream runtime-testsuite
 live under `/tmp/antlr-cleanroom`, run the full sweep with:
 
 ```bash
-cargo run --release --quiet --bin antlr4-runtime-testsuite -- --embedded
+cargo run --release --quiet --bin antlr4-runtime-testsuite
 ```
 
-`--embedded` runs descriptors the way every official ANTLR target does: each
+The harness runs descriptors the way every official ANTLR target does: each
 descriptor grammar is rendered through `.conformance-review/Rust.test.stg`
 with the real StringTemplate engine, so its actions and predicates become real
-Rust code that is compiled and executed inline. Omitting `--embedded` runs the
-legacy template-recognition pipeline instead:
-
-```bash
-cargo run --quiet --bin antlr4-runtime-testsuite
-```
+Rust code that is compiled and executed inline. (An earlier
+template-recognition pipeline that simulated action output instead of
+executing it has been retired; `--embedded` is accepted as a no-op.)
 
 Run a specific descriptor:
 
