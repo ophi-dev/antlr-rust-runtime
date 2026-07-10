@@ -204,14 +204,73 @@ fn prebuild_generator(args: &Args) -> io::Result<PathBuf> {
     let stdout = String::from_utf8_lossy(&output.stdout);
     stdout
         .lines()
-        .filter(|line| line.contains("antlr4-rust-gen"))
-        .filter_map(|line| {
-            let start = line.find("\"executable\":\"")? + "\"executable\":\"".len();
-            let end = line[start..].find('"')? + start;
-            Some(PathBuf::from(&line[start..end]))
-        })
+        .filter(|line| line.contains("\"reason\":\"compiler-artifact\""))
+        .filter(|line| json_string_value(line, "name").as_deref() == Some("antlr4-rust-gen"))
+        .filter_map(|line| json_string_value(line, "executable"))
+        .map(PathBuf::from)
         .next_back()
         .ok_or_else(|| io::Error::other("cargo did not report the antlr4-rust-gen executable"))
+}
+
+/// Decodes the JSON string value of `key` from one cargo message line.
+///
+/// A raw byte slice between quotes would keep JSON escapes — Windows path
+/// separators arrive as `\\` — so the value is properly unescaped here. A
+/// hand-rolled decoder is deliberate: bins share the library's dependency
+/// set, and the runtime crate stays dependency-light rather than carrying
+/// `serde_json` for one build message.
+fn json_string_value(line: &str, key: &str) -> Option<String> {
+    let marker = format!("\"{key}\":\"");
+    let start = line.find(&marker)? + marker.len();
+    let mut value = String::new();
+    let mut chars = line[start..].chars();
+    while let Some(ch) = chars.next() {
+        match ch {
+            '"' => return Some(value),
+            '\\' => match chars.next()? {
+                'u' => {
+                    let code: String = (&mut chars).take(4).collect();
+                    value.push(char::from_u32(u32::from_str_radix(&code, 16).ok()?)?);
+                }
+                'n' => value.push('\n'),
+                't' => value.push('\t'),
+                'r' => value.push('\r'),
+                'b' => value.push('\u{0008}'),
+                'f' => value.push('\u{000C}'),
+                other => value.push(other),
+            },
+            other => value.push(other),
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::json_string_value;
+
+    #[test]
+    fn json_string_value_unescapes_windows_paths() {
+        let line = r#"{"reason":"compiler-artifact","target":{"name":"antlr4-rust-gen"},"executable":"C:\\target\\debug\\antlr4-rust-gen.exe"}"#;
+        assert_eq!(
+            json_string_value(line, "executable").as_deref(),
+            Some(r"C:\target\debug\antlr4-rust-gen.exe")
+        );
+        assert_eq!(
+            json_string_value(line, "name").as_deref(),
+            Some("antlr4-rust-gen")
+        );
+    }
+
+    #[test]
+    fn json_string_value_decodes_escapes_and_rejects_unterminated() {
+        assert_eq!(
+            json_string_value(r#"{"executable":"a\"b c"}"#, "executable").as_deref(),
+            Some("a\"b c")
+        );
+        assert_eq!(json_string_value(r#"{"executable":"broken"#, "executable"), None);
+        assert_eq!(json_string_value("{}", "executable"), None);
+    }
 }
 
 #[derive(Debug)]
