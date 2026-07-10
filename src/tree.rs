@@ -399,13 +399,49 @@ impl ParserRuleContext {
     /// Includes recovery error nodes, which ANTLR treats as terminal nodes for
     /// token-getter helpers.
     pub fn child_token(&self, token_type: i32) -> Option<&TerminalNode> {
-        self.children.iter().find_map(|child| match child {
+        self.child_tokens(token_type).next()
+    }
+
+    /// Iterates over direct child subtrees whose root rule has `rule_index`.
+    ///
+    /// Like [`Self::child_rules`] but yielding the full [`ParseTree`] child,
+    /// for generated `$label.ctx` reads and listener walks over a labeled
+    /// subtree.
+    pub fn child_rule_trees(&self, rule_index: usize) -> impl Iterator<Item = &ParseTree> + '_ {
+        self.children.iter().filter(move |child| match child {
+            ParseTree::Rule(rule) => rule.context().rule_index() == rule_index,
+            ParseTree::Terminal(_) | ParseTree::Error(_) => false,
+        })
+    }
+
+    /// Iterates over direct token children with `token_type`, including
+    /// recovery error nodes (ANTLR treats those as terminals for getters).
+    pub fn child_tokens(&self, token_type: i32) -> impl Iterator<Item = &TerminalNode> + '_ {
+        self.children.iter().filter_map(move |child| match child {
             ParseTree::Terminal(node) if node.symbol().token_type() == token_type => Some(node),
             ParseTree::Error(node) if node.symbol().token_type() == token_type => {
                 Some(node.terminal())
             }
             _ => None,
         })
+    }
+
+    /// Iterates over all direct terminal children regardless of token type.
+    pub fn terminal_children(&self) -> impl Iterator<Item = &TerminalNode> + '_ {
+        self.children.iter().filter_map(|child| match child {
+            ParseTree::Terminal(node) => Some(node),
+            ParseTree::Error(node) => Some(node.terminal()),
+            ParseTree::Rule(_) => None,
+        })
+    }
+
+    /// Downcast-style conversion to a generated typed context view.
+    ///
+    /// Generated parsers implement [`FromRuleContext`] for each context type;
+    /// this mirrors ANTLR's `((BinaryContext) $ctx)` cast in test actions
+    /// (`$ctx.downcast_ref::<BinaryContext>()`).
+    pub fn downcast_ref<T: FromRuleContext>(&self) -> Option<T> {
+        T::from_rule_context(self)
     }
 
     /// Returns whether this context has a direct token child with `token_type`.
@@ -521,6 +557,16 @@ impl ErrorNode {
     pub fn text(&self) -> String {
         self.terminal.text()
     }
+}
+
+/// Conversion from a dynamic [`ParserRuleContext`] into a generated typed
+/// context view.
+///
+/// Implemented by generated per-rule / per-labeled-alternative context types
+/// so `ctx.downcast_ref::<XContext>()` can check the rule shape and
+/// materialize the typed view, mirroring ANTLR's context-class casts.
+pub trait FromRuleContext: Sized {
+    fn from_rule_context(context: &ParserRuleContext) -> Option<Self>;
 }
 
 pub trait ParseTreeListener {

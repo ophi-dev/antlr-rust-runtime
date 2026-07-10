@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir_all(&args.work_dir)?;
 
     for descriptor in descriptors {
-        if let Some(reason) = unsupported_reason(&descriptor) {
+        if let Some(reason) = unsupported_reason(&descriptor, args.embedded) {
             summary.skipped += 1;
             println!("skip {}: {reason}", descriptor.id());
             continue;
@@ -102,6 +102,11 @@ struct Args {
     case_name: Option<String>,
     limit: Option<usize>,
     keep: bool,
+    /// Render descriptor grammars through Rust.test.stg (real StringTemplate
+    /// via the ANTLR jar) and generate with `--actions embedded`.
+    embedded: bool,
+    /// Template group used for the embedded render step.
+    stg: PathBuf,
 }
 
 impl Args {
@@ -114,6 +119,8 @@ impl Args {
         let mut case_name = None;
         let mut limit = None;
         let mut keep = false;
+        let mut embedded = false;
+        let mut stg = None;
 
         let mut iter = env::args().skip(1);
         while let Some(arg) = iter.next() {
@@ -148,6 +155,8 @@ impl Args {
                     );
                 }
                 "--keep" => keep = true,
+                "--embedded" => embedded = true,
+                "--stg" => stg = Some(PathBuf::from(next_arg(&mut iter, "--stg")?)),
                 "--help" | "-h" => return Err(usage()),
                 other => return Err(format!("unknown argument {other}\n\n{}", usage())),
             }
@@ -176,6 +185,7 @@ impl Args {
             "ANTLR runtime-testsuite descriptors",
         )?;
 
+        let stg = stg.unwrap_or_else(|| runtime_crate.join(".conformance-review/Rust.test.stg"));
         Ok(Self {
             antlr_jar,
             descriptors,
@@ -185,6 +195,8 @@ impl Args {
             case_name,
             limit,
             keep,
+            embedded,
+            stg,
         })
     }
 }
@@ -243,12 +255,15 @@ struct Descriptor {
     test_type: String,
     grammar_name: String,
     grammar: String,
+    /// Raw grammar section text (ST escapes intact) for the template render.
+    grammar_template: String,
     start_rule: String,
     input: String,
     output: String,
     errors: String,
     flags: String,
     slave_grammars: Vec<String>,
+    slave_grammar_templates: Vec<String>,
 }
 
 impl Descriptor {
@@ -378,12 +393,14 @@ fn parse_descriptor(group: String, name: String, text: &str) -> io::Result<Descr
         test_type: "Lexer".to_owned(),
         grammar_name: String::new(),
         grammar: String::new(),
+        grammar_template: String::new(),
         start_rule: String::new(),
         input: String::new(),
         output: String::new(),
         errors: String::new(),
         flags: String::new(),
         slave_grammars: Vec::new(),
+        slave_grammar_templates: Vec::new(),
     };
 
     for (section, value) in sections {
@@ -391,13 +408,17 @@ fn parse_descriptor(group: String, name: String, text: &str) -> io::Result<Descr
         match section.as_str() {
             "type" => descriptor.test_type = value,
             "grammar" => {
+                descriptor.grammar_template = value.clone();
                 let value = render_st_backslash_escapes(&value);
                 descriptor.grammar_name = grammar_name(&value)?;
                 descriptor.grammar = value;
             }
-            "slaveGrammar" => descriptor
-                .slave_grammars
-                .push(render_st_backslash_escapes(&value)),
+            "slaveGrammar" => {
+                descriptor.slave_grammar_templates.push(value.clone());
+                descriptor
+                    .slave_grammars
+                    .push(render_st_backslash_escapes(&value));
+            }
             "input" => descriptor.input = value,
             "output" => descriptor.output = value,
             "errors" => descriptor.errors = value,
@@ -498,7 +519,7 @@ fn grammar_name(grammar: &str) -> io::Result<String> {
 
 /// Classifies descriptors that the current metadata-first harness cannot run
 /// yet while keeping them visible in summaries.
-fn unsupported_reason(descriptor: &Descriptor) -> Option<&'static str> {
+fn unsupported_reason(descriptor: &Descriptor, embedded: bool) -> Option<&'static str> {
     if !descriptor.slave_grammars.is_empty() && !descriptor.is_composite() {
         return Some("composite grammars are not wired into the metadata harness yet");
     }
@@ -507,6 +528,15 @@ fn unsupported_reason(descriptor: &Descriptor) -> Option<&'static str> {
     }
     if !descriptor.flags.is_empty() && !runtime_flags_supported(descriptor) {
         return Some("diagnostic/profile/DFA flags are not implemented in the Rust harness yet");
+    }
+    if embedded {
+        // The rendered `.stg` pipeline compiles action/predicate bodies
+        // directly; template-support gating below only applies to the legacy
+        // markup-recognition path.
+        if descriptor.is_parser() || descriptor.is_lexer() {
+            return None;
+        }
+        return Some("descriptor type is not supported by the metadata harness yet");
     }
     let grammar = combined_grammar_source(descriptor);
     if has_target_template(&grammar) && !target_templates_supported(descriptor, &grammar) {
@@ -1207,6 +1237,44 @@ fn context_member_label(arguments: &str) -> Option<String> {
     (parse_template_string(ctx)? == "$ctx").then(|| parse_template_string(label))?
 }
 
+
+/// Renders one grammar template through the target `.test.stg` group using
+/// the StringTemplate engine bundled in the ANTLR jar (via the Java
+/// single-file source launcher), mirroring upstream `RuntimeTests`.
+fn render_grammar_through_stg(
+    args: &Args,
+    case_dir: &Path,
+    tag: &str,
+    grammar_template: &str,
+) -> io::Result<String> {
+    let template_path = case_dir.join(format!("{tag}.template.g4"));
+    let rendered_path = case_dir.join(format!("{tag}.rendered.g4"));
+    fs::write(&template_path, grammar_template)?;
+    let driver = args.runtime_crate.join("tools/stg-render/RenderGrammar.java");
+    run_checked(
+        Command::new("java")
+            .arg("-cp")
+            .arg(&args.antlr_jar)
+            .arg(&driver)
+            .arg(&args.stg)
+            .arg(&template_path)
+            .arg(&rendered_path),
+        "StringTemplate grammar render",
+    )
+    .map_err(|error| io::Error::other(format!("{tag}: {error}")))?;
+    fs::read_to_string(&rendered_path)
+}
+
+/// Concatenates rendered grammars (delegator first) for the generator's
+/// `--grammar` action extraction, mirroring `combined_grammar_source`.
+fn combined_rendered_grammar_source(rendered: &[String]) -> String {
+    let mut out = String::new();
+    for grammar in rendered {
+        push_grammar_source(&mut out, grammar);
+    }
+    out
+}
+
 /// Runs one descriptor through ANTLR metadata generation, Rust code generation,
 /// a temporary Cargo crate, and process output capture.
 fn run_descriptor(args: &Args, descriptor: &Descriptor) -> io::Result<RunResult> {
@@ -1217,13 +1285,37 @@ fn run_descriptor(args: &Args, descriptor: &Descriptor) -> io::Result<RunResult>
     fs::create_dir_all(&case_dir)?;
 
     let source_grammar_path = case_dir.join(format!("{}.source.g4", descriptor.grammar_name));
-    fs::write(&source_grammar_path, combined_grammar_source(descriptor))?;
     let grammar_path = case_dir.join(format!("{}.g4", descriptor.grammar_name));
-    fs::write(
-        &grammar_path,
-        render_target_templates_for_metadata(&descriptor.grammar),
-    )?;
-    write_slave_grammars(&case_dir, descriptor)?;
+    if args.embedded {
+        // Render the descriptor grammar (and slaves) through the target
+        // `.test.stg` with the real StringTemplate engine, exactly like the
+        // upstream harness. The rendered grammar feeds BOTH the ANTLR tool
+        // and the embedded-actions Rust generator.
+        let rendered = render_grammar_through_stg(args, &case_dir, "main", &descriptor.grammar_template)?;
+        fs::write(&grammar_path, &rendered)?;
+        let mut combined_rendered = Vec::new();
+        let mut rendered_slaves = Vec::new();
+        for (index, slave) in descriptor.slave_grammar_templates.iter().enumerate() {
+            let rendered_slave =
+                render_grammar_through_stg(args, &case_dir, &format!("slave{index}"), slave)?;
+            let slave_path = case_dir.join(format!("{}.g4", grammar_name(&rendered_slave)?));
+            fs::write(&slave_path, &rendered_slave)?;
+            rendered_slaves.push(rendered_slave);
+        }
+        combined_rendered.push(rendered);
+        combined_rendered.extend(rendered_slaves);
+        fs::write(
+            &source_grammar_path,
+            combined_rendered_grammar_source(&combined_rendered),
+        )?;
+    } else {
+        fs::write(&source_grammar_path, combined_grammar_source(descriptor))?;
+        fs::write(
+            &grammar_path,
+            render_target_templates_for_metadata(&descriptor.grammar),
+        )?;
+        write_slave_grammars(&case_dir, descriptor)?;
+    }
 
     let java_dir = case_dir.join("antlr");
     fs::create_dir_all(&java_dir)?;
@@ -1423,6 +1515,9 @@ fn generate_rust_modules(
             .arg(source_grammar_path);
     }
     command.arg("--out-dir").arg(&rust_dir);
+    if args.embedded {
+        command.arg("--actions").arg("embedded");
+    }
     run_checked(&mut command, "Rust metadata generator")?;
     Ok(rust_dir)
 }
