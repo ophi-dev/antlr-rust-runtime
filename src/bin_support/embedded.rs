@@ -1053,8 +1053,10 @@ fn translate_element_read(
     if element.is_block {
         // A labeled `(...)` block over tokens: `$myset.stop` / `$myset.text`
         // read the token the block matched — the most recent terminal child.
+        // A bare `$myset` read denotes the Token object itself (Java prints
+        // `Token.toString()`), which is the same rendering as start/stop.
         return match suffix {
-            Some("stop" | "start") => Ok(
+            None | Some("stop" | "start") => Ok(
                 "__ctx.terminal_children().last().map(|__t| __t.symbol().to_string()).unwrap_or_default()"
                     .to_owned(),
             ),

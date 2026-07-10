@@ -5943,8 +5943,20 @@ fn render_embedded_context_types(
         );
         let _ = writeln!(
             accessors,
-            "    pub fn child_count(&self) -> usize {{ self.__node.child_count() }}\n    pub fn start(&self) -> __GeneratedTokenView {{ __GeneratedTokenView {{ text: self.__node.start().map(|token| token.text().to_owned()).unwrap_or_default() }} }}"
+            "    pub fn child_count(&self) -> usize {{ self.__node.child_count() }}"
         );
+        // A grammar rule named `start` claims the accessor name; the built-in
+        // start-token helper yields to it.
+        if !model
+            .rules
+            .iter()
+            .any(|rule| rust_function_name(&rule.name) == "start")
+        {
+            let _ = writeln!(
+                accessors,
+                "    pub fn start(&self) -> __GeneratedTokenView {{ __GeneratedTokenView {{ text: self.__node.start().map(|token| token.text().to_owned()).unwrap_or_default() }} }}"
+            );
+        }
         for (child_index, child) in model.rules.iter().enumerate() {
             let method = rust_function_name(&child.name);
             let child_view = format!("{}Context", rust_type_name(&child.name));
@@ -5971,19 +5983,24 @@ fn render_embedded_context_types(
         );
     }
 
-    // Listener trait with defaulted callbacks.
+    // Listener trait with defaulted callbacks. Method names are snake_case
+    // per the `.test.stg` convention (`exit_call` for `# Call`); the `r#`
+    // keyword escape is dropped because the composed `enter_x`/`exit_x`
+    // identifier is never a keyword.
+    let listener_method =
+        |name: &str| -> String { rust_function_name(name).trim_start_matches("r#").to_owned() };
     let mut trait_methods = String::new();
     let mut enter_arms = String::new();
     let mut exit_arms = String::new();
     for (rule_index, rule) in model.rules.iter().enumerate() {
         let mut names: Vec<(String, String)> = vec![(
-            rule.name.clone(),
+            listener_method(&rule.name),
             format!("{}Context", rust_type_name(&rule.name)),
         )];
         for alt in &rule.alts {
             if let Some(label) = &alt.label {
                 let pair = (
-                    label.clone(),
+                    listener_method(label),
                     format!("{}Context", rust_type_name(label)),
                 );
                 if !names.contains(&pair) {
@@ -6035,9 +6052,9 @@ fn render_embedded_context_types(
             });
             match (op, primary) {
                 (Some(op), Some(primary)) => {
-                    let op_method = op.clone();
+                    let op_method = listener_method(op);
                     let op_view = format!("{}Context", rust_type_name(op));
-                    let primary_method = primary.clone();
+                    let primary_method = listener_method(primary);
                     let primary_view = format!("{}Context", rust_type_name(primary));
                     let _ = writeln!(
                         out,

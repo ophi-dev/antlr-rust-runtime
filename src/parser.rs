@@ -9063,54 +9063,29 @@ fn report_generated_diagnostics(
     parser_diagnostics: &[ParserDiagnostic],
     token_errors: &[TokenSourceError],
 ) {
-    #[derive(Clone, Copy)]
-    enum DiagnosticSource {
-        Token(usize),
-        Parser(usize),
-    }
-
-    let mut ordered = Vec::with_capacity(parser_diagnostics.len() + token_errors.len());
-    ordered.extend(token_errors.iter().enumerate().map(|(index, error)| {
-        (
-            error.line,
-            error.column,
-            0_usize,
-            index,
-            DiagnosticSource::Token(index),
-        )
-    }));
-    ordered.extend(
-        parser_diagnostics
-            .iter()
-            .enumerate()
-            .map(|(index, diagnostic)| {
-                (
-                    diagnostic.line,
-                    diagnostic.column,
-                    1_usize,
-                    index,
-                    DiagnosticSource::Parser(index),
-                )
-            }),
-    );
-    ordered.sort_by_key(|(line, column, source_order, index, _)| {
-        (*line, *column, *source_order, *index)
-    });
-
-    for (_, _, _, _, source) in ordered {
-        match source {
-            DiagnosticSource::Token(index) => {
-                let error = &token_errors[index];
+    // Parser diagnostics keep their event order: Java's console and
+    // DiagnosticErrorListener print reports as prediction produces them, so
+    // `reportAttemptingFullContext` precedes `reportContextSensitivity` even
+    // though the latter's position is earlier. Buffered token-source errors
+    // interleave by source position — ANTLR's lazy token stream surfaces a
+    // lexer error when the parser first fetches that token — and win ties.
+    let mut token_iter = token_errors.iter().peekable();
+    for diagnostic in parser_diagnostics {
+        while let Some(error) = token_iter.peek() {
+            if (error.line, error.column) <= (diagnostic.line, diagnostic.column) {
                 eprintln!("line {}:{} {}", error.line, error.column, error.message);
-            }
-            DiagnosticSource::Parser(index) => {
-                let diagnostic = &parser_diagnostics[index];
-                eprintln!(
-                    "line {}:{} {}",
-                    diagnostic.line, diagnostic.column, diagnostic.message
-                );
+                token_iter.next();
+            } else {
+                break;
             }
         }
+        eprintln!(
+            "line {}:{} {}",
+            diagnostic.line, diagnostic.column, diagnostic.message
+        );
+    }
+    for error in token_iter {
+        eprintln!("line {}:{} {}", error.line, error.column, error.message);
     }
 }
 
