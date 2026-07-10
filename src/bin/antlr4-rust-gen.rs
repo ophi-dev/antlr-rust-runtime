@@ -61,9 +61,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .lexer_name
             .clone()
             .unwrap_or_else(|| grammar_name_from_path(&lexer));
+        // Embedded mode compiles bodies verbatim; the template-recognition
+        // manifest walk does not apply to rendered Rust sources.
+        let manifest_source = if args.embedded_actions {
+            None
+        } else {
+            grammar_source.as_deref()
+        };
         let entries = collect_lexer_semantics(
             &data,
-            grammar_source.as_deref(),
+            manifest_source,
             args.allow_unsupported_lexer_actions,
             args.sem_unknown,
             &args.sem_patterns,
@@ -77,6 +84,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             args.allow_unsupported_lexer_actions,
             args.sem_unknown,
             &args.sem_patterns,
+            args.embedded_actions,
         )?;
         fs::write(
             args.out_dir
@@ -92,9 +100,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .parser_name
             .clone()
             .unwrap_or_else(|| grammar_name_from_path(&parser));
+        let manifest_source = if args.embedded_actions {
+            None
+        } else {
+            grammar_source.as_deref()
+        };
         let entries = collect_parser_semantics(
             &data,
-            grammar_source.as_deref(),
+            manifest_source,
             args.sem_unknown,
             &args.sem_patterns,
         )?;
@@ -1533,11 +1546,27 @@ fn render_lexer(
     allow_unsupported_lexer_actions: bool,
     sem_unknown: SemUnknownPolicy,
     patterns: &SemPatternFile,
+    embedded: bool,
 ) -> io::Result<String> {
     let type_name = rust_type_name(grammar_name);
     let metadata = render_metadata(grammar_name, data);
     let token_constants = render_token_constants(data);
-    let mut actions = grammar_source.map_or_else(
+    // Embedded mode: lexer action/predicate bodies are verbatim Rust from the
+    // rendered grammar; translate the recognizer surface textually and skip
+    // the template machinery entirely.
+    let template_grammar_source = if embedded { None } else { grammar_source };
+    let embedded_lexer_actions = if embedded {
+        grammar_source.map_or_else(|| Ok(Vec::new()), |source| embedded_lexer_actions(data, source))?
+    } else {
+        Vec::new()
+    };
+    let embedded_lexer_predicates = if embedded {
+        grammar_source
+            .map_or_else(|| Ok(Vec::new()), |source| embedded_lexer_predicates(data, source))?
+    } else {
+        Vec::new()
+    };
+    let mut actions = template_grammar_source.map_or_else(
         || Ok(Vec::new()),
         |source| lexer_action_templates(data, source, allow_unsupported_lexer_actions),
     )?;
@@ -1560,7 +1589,7 @@ fn render_lexer(
             )
             .is_none()
     });
-    let mut predicates = grammar_source.map_or_else(
+    let mut predicates = template_grammar_source.map_or_else(
         || Ok(Vec::new()),
         |source| lexer_predicate_templates(data, source, patterns),
     )?;
@@ -1625,18 +1654,37 @@ fn render_lexer(
     let unknown_predicates_assume_false = sem_unknown == SemUnknownPolicy::AssumeFalse
         && predicates.is_empty()
         && !lexer_predicate_transitions(data)?.is_empty();
-    let adjusts_accept_position = grammar_source.is_some_and(uses_position_adjusting_lexer);
+    let adjusts_accept_position = template_grammar_source.is_some_and(uses_position_adjusting_lexer);
     let lexer_dfa_data = compiled_lexer_dfa_words(data);
-    let has_action_dispatch = lexer_actions_need_dispatch(&actions);
-    let action_method = render_lexer_action_method(&actions);
-    let predicate_method = render_lexer_predicate_method(&predicates, sem_unknown);
+    let has_action_dispatch = if embedded {
+        embedded_lexer_actions
+            .iter()
+            .any(|(_, statement)| !statement.trim().is_empty())
+    } else {
+        lexer_actions_need_dispatch(&actions)
+    };
+    let action_method = if embedded {
+        render_embedded_lexer_action_method(&embedded_lexer_actions)
+    } else {
+        render_lexer_action_method(&actions)
+    };
+    let predicate_method = if embedded {
+        render_embedded_lexer_predicate_method(&embedded_lexer_predicates)
+    } else {
+        render_lexer_predicate_method(&predicates, sem_unknown)
+    };
     let accept_adjust_method = if adjusts_accept_position {
         render_position_adjusting_lexer_methods()
     } else {
         String::new()
     };
+    let has_predicate_dispatch = if embedded {
+        !embedded_lexer_predicates.is_empty()
+    } else {
+        !predicates.is_empty()
+    };
     let next_token_call = if !has_action_dispatch
-        && predicates.is_empty()
+        && !has_predicate_dispatch
         && !adjusts_accept_position
         && !unknown_predicates_assume_false
     {
@@ -1648,7 +1696,7 @@ fn render_lexer(
         } else {
             "|_, _| {}"
         };
-        let predicate = if !predicates.is_empty() {
+        let predicate = if has_predicate_dispatch {
             "Self::run_predicate"
         } else if unknown_predicates_assume_false {
             "|_, _| false"
@@ -6687,6 +6735,154 @@ enum RuleArgTemplate {
 struct IntMemberTemplate {
     name: String,
     initial_value: i64,
+}
+
+
+/// Translates the lexer recognizer surface used by rendered test bodies onto
+/// the `BaseLexer` hooks: `self.text()` / column accessors become position
+/// -aware `_base` calls, `self.output()` becomes stdout.
+fn translate_embedded_lexer_body(body: &str, position_expr: &str) -> io::Result<String> {
+    let mut out = body.trim().to_owned();
+    out = out.replace("self.output()", "std::io::stdout()");
+    out = out.replace(
+        "self.text()",
+        &format!("_base.token_text_until({position_expr})"),
+    );
+    out = out.replace(
+        "self.char_position_in_line()",
+        &format!("_base.column_at({position_expr})"),
+    );
+    out = out.replace(
+        "self.token_start_char_position_in_line()",
+        "_base.token_start_column()",
+    );
+    if out.contains("self.") {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("unsupported recognizer surface in embedded lexer body: {body}"),
+        ));
+    }
+    Ok(out)
+}
+
+/// Pairs verbatim lexer action bodies with serialized custom-action
+/// coordinates, mirroring `lexer_action_templates`'s source walk.
+fn embedded_lexer_actions(
+    data: &InterpData,
+    source: &str,
+) -> io::Result<Vec<((i32, i32), String)>> {
+    let coordinates = lexer_custom_actions(data)?;
+    if coordinates.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut bodies = Vec::new();
+    let mut offset = 0;
+    while let Some(block) = next_action_block(source, offset) {
+        offset = block.after_brace;
+        if !is_lexer_custom_action_block(source, &block, &data.rule_names) {
+            continue;
+        }
+        bodies.push(translate_embedded_lexer_body(
+            block.body,
+            "action.position()",
+        )?);
+    }
+    if coordinates.len() != bodies.len() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "lexer ATN has {} custom action(s), but the rendered grammar yielded {} embedded bodies",
+                coordinates.len(),
+                bodies.len()
+            ),
+        ));
+    }
+    Ok(coordinates.into_iter().zip(bodies).collect())
+}
+
+/// Pairs verbatim lexer predicate bodies with serialized predicate
+/// coordinates, mirroring `lexer_predicate_templates`'s source walk.
+fn embedded_lexer_predicates(
+    data: &InterpData,
+    source: &str,
+) -> io::Result<Vec<((usize, usize), String)>> {
+    let coordinates = lexer_predicate_transitions(data)?;
+    if coordinates.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut expressions = Vec::new();
+    let mut offset = 0;
+    while let Some(block) = next_predicate_action_block(source, offset) {
+        offset = block.after_brace;
+        // In a combined grammar, skip parser-rule predicates (they have no
+        // lexer coordinate). Lexer rule names start uppercase.
+        if !predicate_block_included_for_lexer(source, block.open_brace, &data.rule_names) {
+            continue;
+        }
+        expressions.push(translate_embedded_lexer_body(
+            block.body,
+            "predicate.position()",
+        )?);
+    }
+    if coordinates.len() != expressions.len() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "lexer ATN has {} predicate transition(s), but the rendered grammar yielded {} embedded bodies",
+                coordinates.len(),
+                expressions.len()
+            ),
+        ));
+    }
+    Ok(coordinates.into_iter().zip(expressions).collect())
+}
+
+/// `predicate_block_included` against the LEXER rule inventory.
+fn predicate_block_included_for_lexer(
+    source: &str,
+    open_brace: usize,
+    rule_names: &[String],
+) -> bool {
+    predicate_block_included(source, open_brace, rule_names)
+}
+
+fn render_embedded_lexer_action_method(actions: &[((i32, i32), String)]) -> String {
+    if actions
+        .iter()
+        .all(|(_, statement)| statement.trim().is_empty())
+    {
+        return String::new();
+    }
+    let mut arms = String::new();
+    for ((rule_index, action_index), statement) in actions {
+        writeln!(
+            arms,
+            "            ({rule_index}, {action_index}) => {{ {statement} }}"
+        )
+        .expect("writing to a string cannot fail");
+    }
+    arms.push_str("            _ => {}\n");
+    format!(
+        "    fn run_action(_base: &mut BaseLexer<I>, action: antlr4_runtime::LexerCustomAction) {{\n        #[allow(unused_imports)]\n        use std::io::Write as _;\n        match (action.rule_index(), action.action_index()) {{\n{arms}        }}\n    }}\n"
+    )
+}
+
+fn render_embedded_lexer_predicate_method(predicates: &[((usize, usize), String)]) -> String {
+    if predicates.is_empty() {
+        return String::new();
+    }
+    let mut arms = String::new();
+    for ((rule_index, pred_index), expression) in predicates {
+        writeln!(
+            arms,
+            "            ({rule_index}, {pred_index}) => {{ {expression} }}"
+        )
+        .expect("writing to a string cannot fail");
+    }
+    arms.push_str("            _ => true,\n");
+    format!(
+        "    fn run_predicate(_base: &BaseLexer<I>, predicate: antlr4_runtime::LexerPredicate) -> bool {{\n        match (predicate.rule_index(), predicate.pred_index()) {{\n{arms}        }}\n    }}\n"
+    )
 }
 
 /// Pairs supported lexer target-template actions with serialized custom-action
