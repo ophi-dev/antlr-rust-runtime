@@ -6,6 +6,8 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[path = "../bin_support/rust_names.rs"]
 mod rust_names;
@@ -29,43 +31,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     fs::create_dir_all(&args.work_dir)?;
 
+    // Skips are classified up front (in descriptor order) so workers only see
+    // runnable cases; `--limit` counts runnable cases, like the serial loop
+    // it replaces, and stops classification there.
+    let mut runnable = Vec::new();
     for descriptor in descriptors {
         if let Some(reason) = unsupported_reason(&descriptor) {
             summary.skipped += 1;
             println!("skip {}: {reason}", descriptor.id());
             continue;
         }
-
-        summary.ran += 1;
-        match run_descriptor(&args, &descriptor) {
-            Ok(result)
-                if result.output == descriptor.output && result.errors == descriptor.errors =>
-            {
-                summary.passed += 1;
-                println!("pass {}", descriptor.id());
-                remove_descriptor_work_dir(&args, &descriptor)?;
-            }
-            Ok(result) => {
-                summary.failed += 1;
-                eprintln!(
-                    "fail {}\nexpected stdout:\n{}\nactual stdout:\n{}\nexpected stderr:\n{}\nactual stderr:\n{}",
-                    descriptor.id(),
-                    descriptor.output,
-                    result.output,
-                    descriptor.errors,
-                    result.errors
-                );
-            }
-            Err(error) => {
-                summary.failed += 1;
-                eprintln!("fail {}: {error}", descriptor.id());
-            }
-        }
-
-        if args.limit.is_some_and(|limit| summary.ran >= limit) {
+        runnable.push(descriptor);
+        if args.limit.is_some_and(|limit| runnable.len() >= limit) {
             break;
         }
     }
+    summary.ran = runnable.len();
+
+    let context = SweepContext::prepare(&args)?;
+    let (passed, failed) = run_cases(&args, &context, &runnable);
+    summary.passed = passed;
+    summary.failed = failed;
 
     println!(
         "summary: {} passed, {} failed, {} skipped, {} run",
@@ -83,6 +69,151 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
+/// Runs the runnable descriptors on a worker pool. Each worker owns a
+/// `CARGO_TARGET_DIR` stripe, so the runtime crate compiles once per worker
+/// (first case) instead of once per case, and parallel smoke builds never
+/// contend on one cargo build-dir lock.
+fn run_cases(args: &Args, context: &SweepContext<'_>, runnable: &[Descriptor]) -> (usize, usize) {
+    let jobs = args.jobs.clamp(1, runnable.len().max(1));
+    let next = AtomicUsize::new(0);
+    let tally = Mutex::new((0_usize, 0_usize));
+    std::thread::scope(|scope| {
+        for worker in 0..jobs {
+            let next = &next;
+            let tally = &tally;
+            let stripe = args.work_dir.join(format!("cargo-target-{worker}"));
+            scope.spawn(move || {
+                loop {
+                    let index = next.fetch_add(1, Ordering::Relaxed);
+                    let Some(descriptor) = runnable.get(index) else {
+                        break;
+                    };
+                    let passed = run_case(args, context, descriptor, &stripe);
+                    let mut tally = tally.lock().expect("result tally lock");
+                    if passed {
+                        tally.0 += 1;
+                    } else {
+                        tally.1 += 1;
+                    }
+                }
+            });
+        }
+    });
+    let tally = tally.lock().expect("result tally lock");
+    *tally
+}
+
+/// Runs one descriptor and reports its outcome; `println!`/`eprintln!` are
+/// line-atomic, so per-case lines from parallel workers never interleave.
+fn run_case(
+    args: &Args,
+    context: &SweepContext<'_>,
+    descriptor: &Descriptor,
+    stripe_target: &Path,
+) -> bool {
+    match run_descriptor(args, context, descriptor, stripe_target) {
+        Ok(result) if result.output == descriptor.output && result.errors == descriptor.errors => {
+            println!("pass {}", descriptor.id());
+            if let Err(error) = remove_descriptor_work_dir(args, descriptor) {
+                eprintln!(
+                    "warning: could not clean {}: {error}",
+                    descriptor.id()
+                );
+            }
+            true
+        }
+        Ok(result) => {
+            eprintln!(
+                "fail {}\nexpected stdout:\n{}\nactual stdout:\n{}\nexpected stderr:\n{}\nactual stderr:\n{}",
+                descriptor.id(),
+                descriptor.output,
+                result.output,
+                descriptor.errors,
+                result.errors
+            );
+            false
+        }
+        Err(error) => {
+            eprintln!("fail {}: {error}", descriptor.id());
+            false
+        }
+    }
+}
+
+/// Per-sweep artifacts prepared once so per-case work stays minimal: the
+/// precompiled `StringTemplate` render driver (the Java single-file source
+/// launcher would otherwise re-compile `RenderGrammar.java` on every render)
+/// and the prebuilt `antlr4-rust-gen` executable (invoked directly instead of
+/// through a `cargo run` graph check per case).
+struct SweepContext<'a> {
+    args: &'a Args,
+    render_classes: PathBuf,
+    generator: PathBuf,
+}
+
+impl<'a> SweepContext<'a> {
+    fn prepare(args: &'a Args) -> io::Result<Self> {
+        let render_classes = args.work_dir.join("stg-render-classes");
+        fs::create_dir_all(&render_classes)?;
+        run_checked(
+            Command::new("javac")
+                .arg("-cp")
+                .arg(&args.antlr_jar)
+                .arg("-d")
+                .arg(&render_classes)
+                .arg(args.runtime_crate.join("tools/stg-render/RenderGrammar.java")),
+            "StringTemplate render driver compile",
+        )?;
+        let generator = prebuild_generator(args)?;
+        Ok(Self {
+            args,
+            render_classes,
+            generator,
+        })
+    }
+
+    /// `java -cp` separator-joined ANTLR jar + render driver classes.
+    fn render_classpath(&self) -> String {
+        let separator = if cfg!(windows) { ";" } else { ":" };
+        format!(
+            "{}{separator}{}",
+            self.args.antlr_jar.display(),
+            self.render_classes.display()
+        )
+    }
+}
+
+/// Builds `antlr4-rust-gen` once and resolves its executable path from
+/// cargo's JSON messages, honoring any `CARGO_TARGET_DIR` redirection.
+fn prebuild_generator(args: &Args) -> io::Result<PathBuf> {
+    let output = run_output(
+        Command::new("cargo")
+            .arg("build")
+            .arg("--manifest-path")
+            .arg(args.runtime_crate.join("Cargo.toml"))
+            .arg("--bin")
+            .arg("antlr4-rust-gen")
+            .arg("--message-format=json"),
+    )?;
+    if !output.status.success() {
+        return Err(io::Error::other(format!(
+            "antlr4-rust-gen build failed\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        )));
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout
+        .lines()
+        .filter(|line| line.contains("antlr4-rust-gen"))
+        .filter_map(|line| {
+            let start = line.find("\"executable\":\"")? + "\"executable\":\"".len();
+            let end = line[start..].find('"')? + start;
+            Some(PathBuf::from(&line[start..end]))
+        })
+        .next_back()
+        .ok_or_else(|| io::Error::other("cargo did not report the antlr4-rust-gen executable"))
+}
+
 #[derive(Debug)]
 struct Args {
     antlr_jar: PathBuf,
@@ -93,6 +224,8 @@ struct Args {
     case_name: Option<String>,
     limit: Option<usize>,
     keep: bool,
+    /// Parallel case workers, each with its own cargo target-dir stripe.
+    jobs: usize,
     /// Template group used to render descriptor grammars (real
     /// `StringTemplate` via the ANTLR jar) before generation.
     stg: PathBuf,
@@ -108,6 +241,7 @@ impl Args {
         let mut case_name = None;
         let mut limit = None;
         let mut keep = false;
+        let mut jobs = None;
         let mut stg = None;
 
         let mut iter = env::args().skip(1);
@@ -143,6 +277,16 @@ impl Args {
                     );
                 }
                 "--keep" => keep = true,
+                "--jobs" => {
+                    let value = next_arg(&mut iter, "--jobs")?;
+                    jobs = Some(
+                        value
+                            .parse::<usize>()
+                            .ok()
+                            .filter(|jobs| *jobs > 0)
+                            .ok_or_else(|| format!("invalid --jobs {value:?}"))?,
+                    );
+                }
                 "--stg" => stg = Some(PathBuf::from(next_arg(&mut iter, "--stg")?)),
                 "--help" | "-h" => return Err(usage()),
                 other => return Err(format!("unknown argument {other}\n\n{}", usage())),
@@ -173,6 +317,11 @@ impl Args {
         )?;
 
         let stg = stg.unwrap_or_else(|| runtime_crate.join(".conformance-review/Rust.test.stg"));
+        // Every worker drives a JVM and rustc of its own; past ~8 the extra
+        // workers mostly fight each other for cores.
+        let jobs = jobs.unwrap_or_else(|| {
+            std::thread::available_parallelism().map_or(1, |cores| cores.get().min(8))
+        });
         Ok(Self {
             antlr_jar,
             descriptors,
@@ -182,6 +331,7 @@ impl Args {
             case_name,
             limit,
             keep,
+            jobs,
             stg,
         })
     }
@@ -223,7 +373,7 @@ fn next_arg(iter: &mut impl Iterator<Item = String>, flag: &str) -> Result<Strin
 }
 
 fn usage() -> String {
-    "usage: antlr4-runtime-testsuite [--antlr-jar ANTLR.jar] [--descriptors PATH] [--case Group/Name] [--group Group] [--limit N] [--keep] [--stg PATH]\n\nDefaults: ANTLR4_JAR or /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar; ANTLR4_RUNTIME_TESTSUITE or /tmp/antlr-cleanroom/antlr4-upstream/runtime-testsuite; --stg .conformance-review/Rust.test.stg".to_owned()
+    "usage: antlr4-runtime-testsuite [--antlr-jar ANTLR.jar] [--descriptors PATH] [--case Group/Name] [--group Group] [--limit N] [--jobs N] [--keep] [--stg PATH]\n\nDefaults: ANTLR4_JAR or /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar; ANTLR4_RUNTIME_TESTSUITE or /tmp/antlr-cleanroom/antlr4-upstream/runtime-testsuite; --stg .conformance-review/Rust.test.stg; --jobs min(cores, 8)".to_owned()
 }
 
 #[derive(Debug, Default)]
@@ -617,10 +767,10 @@ fn imported_grammar_names(grammar: &str) -> Vec<String> {
 }
 
 /// Renders one grammar template through the target `.test.stg` group using
-/// the `StringTemplate` engine bundled in the ANTLR jar (via the Java
-/// single-file source launcher), mirroring upstream `RuntimeTests`.
+/// the `StringTemplate` engine bundled in the ANTLR jar (driver precompiled
+/// once per sweep), mirroring upstream `RuntimeTests`.
 fn render_grammar_through_stg(
-    args: &Args,
+    context: &SweepContext<'_>,
     case_dir: &Path,
     tag: &str,
     grammar_template: &str,
@@ -628,13 +778,12 @@ fn render_grammar_through_stg(
     let template_path = case_dir.join(format!("{tag}.template.g4"));
     let rendered_path = case_dir.join(format!("{tag}.rendered.g4"));
     fs::write(&template_path, grammar_template)?;
-    let driver = args.runtime_crate.join("tools/stg-render/RenderGrammar.java");
     run_checked(
         Command::new("java")
             .arg("-cp")
-            .arg(&args.antlr_jar)
-            .arg(&driver)
-            .arg(&args.stg)
+            .arg(context.render_classpath())
+            .arg("RenderGrammar")
+            .arg(&context.args.stg)
             .arg(&template_path)
             .arg(&rendered_path),
         "StringTemplate grammar render",
@@ -655,7 +804,12 @@ fn combined_rendered_grammar_source(rendered: &[String]) -> String {
 
 /// Runs one descriptor through ANTLR metadata generation, Rust code generation,
 /// a temporary Cargo crate, and process output capture.
-fn run_descriptor(args: &Args, descriptor: &Descriptor) -> io::Result<RunResult> {
+fn run_descriptor(
+    args: &Args,
+    context: &SweepContext<'_>,
+    descriptor: &Descriptor,
+    stripe_target: &Path,
+) -> io::Result<RunResult> {
     let case_dir = descriptor_work_dir(args, descriptor);
     if case_dir.exists() {
         fs::remove_dir_all(&case_dir)?;
@@ -668,12 +822,13 @@ fn run_descriptor(args: &Args, descriptor: &Descriptor) -> io::Result<RunResult>
     // `.test.stg` with the real StringTemplate engine, exactly like the
     // upstream harness. The rendered grammar feeds BOTH the ANTLR tool
     // and the embedded-actions Rust generator.
-    let rendered = render_grammar_through_stg(args, &case_dir, "main", &descriptor.grammar_template)?;
+    let rendered =
+        render_grammar_through_stg(context, &case_dir, "main", &descriptor.grammar_template)?;
     fs::write(&grammar_path, &rendered)?;
     let mut rendered_slaves = Vec::new();
     for (index, slave) in descriptor.slave_grammar_templates.iter().enumerate() {
         let rendered_slave =
-            render_grammar_through_stg(args, &case_dir, &format!("slave{index}"), slave)?;
+            render_grammar_through_stg(context, &case_dir, &format!("slave{index}"), slave)?;
         let slave_path = case_dir.join(format!("{}.g4", grammar_name(&rendered_slave)?));
         fs::write(&slave_path, &rendered_slave)?;
         rendered_slaves.push(rendered_slave);
@@ -713,14 +868,18 @@ fn run_descriptor(args: &Args, descriptor: &Descriptor) -> io::Result<RunResult>
     )?;
 
     let rust_dir =
-        generate_rust_modules(args, descriptor, &java_dir, &case_dir, &source_grammar_path)?;
+        generate_rust_modules(context, descriptor, &java_dir, &case_dir, &source_grammar_path)?;
 
     let smoke_dir = case_dir.join("rust");
     create_smoke_crate(args, descriptor, &rust_dir, &smoke_dir)?;
+    // The worker's target-dir stripe keeps the runtime crate and every
+    // dependency compiled across cases; only the case's generated module
+    // is compiled and linked here.
     let output = run_output(
         Command::new("cargo")
             .arg("run")
             .arg("--quiet")
+            .env("CARGO_TARGET_DIR", stripe_target)
             .current_dir(&smoke_dir),
     )?;
     Ok(RunResult {
@@ -742,10 +901,10 @@ fn remove_descriptor_work_dir(args: &Args, descriptor: &Descriptor) -> io::Resul
     fs::remove_dir_all(descriptor_work_dir(args, descriptor))
 }
 
-/// Runs `antlr4-rust-gen` for either a lexer descriptor or a combined parser
-/// descriptor.
+/// Runs the prebuilt `antlr4-rust-gen` for either a lexer descriptor or a
+/// combined parser descriptor.
 fn generate_rust_modules(
-    args: &Args,
+    context: &SweepContext<'_>,
     descriptor: &Descriptor,
     java_dir: &Path,
     case_dir: &Path,
@@ -754,15 +913,7 @@ fn generate_rust_modules(
     let rust_dir = case_dir.join("generated");
     fs::create_dir_all(&rust_dir)?;
 
-    let mut command = Command::new("cargo");
-    command
-        .arg("run")
-        .arg("--quiet")
-        .arg("--manifest-path")
-        .arg(args.runtime_crate.join("Cargo.toml"))
-        .arg("--bin")
-        .arg("antlr4-rust-gen")
-        .arg("--");
+    let mut command = Command::new(&context.generator);
     if descriptor.is_parser() {
         command
             .arg("--lexer")

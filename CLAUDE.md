@@ -111,7 +111,7 @@ The harness reads `antlr4-upstream/runtime-testsuite` and the same ANTLR jar fet
 cargo run --release --quiet --bin antlr4-runtime-testsuite
 ```
 
-Defaults to `ANTLR4_JAR=/tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar` and `ANTLR4_RUNTIME_TESTSUITE=/tmp/antlr-cleanroom/antlr4-upstream/runtime-testsuite`. Override with `--antlr-jar`/`--descriptors` or env vars. Wall-clock ≈ 10–15 minutes on Apple Silicon, ≈ 30 minutes on the GitHub Linux runner.
+Defaults to `ANTLR4_JAR=/tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar` and `ANTLR4_RUNTIME_TESTSUITE=/tmp/antlr-cleanroom/antlr4-upstream/runtime-testsuite`. Override with `--antlr-jar`/`--descriptors` or env vars. Cases run on `--jobs` parallel workers (default `min(cores, 8)`), each with its own cargo target-dir stripe; the render driver and `antlr4-rust-gen` are prebuilt once per sweep. Wall-clock ≈ 2 minutes on Apple Silicon.
 
 ### The rendered (embedded-actions) pipeline
 
