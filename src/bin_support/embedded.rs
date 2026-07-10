@@ -52,6 +52,20 @@ pub(crate) struct AltModel {
     /// Byte span of the alternative inside the grammar source.
     pub(crate) span: (usize, usize),
     pub(crate) refs: Vec<ElementRef>,
+    /// Target of the first syntactic element when it is a bare (possibly
+    /// labeled) rule/token reference; `None` for a leading literal, set,
+    /// block, or action. ANTLR's left-recursion transformer only treats an
+    /// alternative as an operator alternative when the recursion is the
+    /// first element, so `'(' e ')'` stays primary even though its first
+    /// *reference* is the rule itself.
+    pub(crate) leading_target: Option<String>,
+}
+
+impl AltModel {
+    /// Whether this is a left-recursive operator alternative of `rule_name`.
+    pub(crate) fn is_lr_operator(&self, rule_name: &str) -> bool {
+        self.leading_target.as_deref() == Some(rule_name)
+    }
 }
 
 /// Parsed model of one parser rule from the rendered grammar source.
@@ -599,6 +613,59 @@ fn parse_alt(source: &str, start: usize, end: usize) -> AltModel {
         label,
         span: (start, end),
         refs,
+        leading_target: leading_element_target(source, start, end),
+    }
+}
+
+/// Scans the raw alternative text for its first syntactic element and
+/// returns the referenced name when that element is a bare identifier,
+/// allowing `label=` / `label+=` prefixes and `<assoc=right>`-style element
+/// options before it. Anything else — a string literal, `(...)` block,
+/// `~set`, or `{action}` — yields `None`.
+fn leading_element_target(source: &str, start: usize, end: usize) -> Option<String> {
+    let bytes = source.as_bytes();
+    let mut index = start;
+    loop {
+        index = skip_ascii_whitespace(source, index);
+        if index >= end {
+            return None;
+        }
+        match bytes[index] {
+            b'<' => {
+                let close = source[index..end].find('>')?;
+                index += close + 1;
+            }
+            b'/' if bytes.get(index + 1) == Some(&b'/') => {
+                let newline = source[index..end].find('\n')?;
+                index += newline + 1;
+            }
+            b'/' if bytes.get(index + 1) == Some(&b'*') => {
+                let close = source[index..end].find("*/")?;
+                index += close + 2;
+            }
+            byte if byte == b'_' || byte.is_ascii_alphabetic() => {
+                let mut word_end = index + 1;
+                while word_end < end
+                    && (bytes[word_end] == b'_' || bytes[word_end].is_ascii_alphanumeric())
+                {
+                    word_end += 1;
+                }
+                let word = &source[index..word_end];
+                let after = skip_ascii_whitespace(source, word_end);
+                let is_label = match bytes.get(after) {
+                    Some(b'=') => bytes.get(after + 1) != Some(&b'='),
+                    Some(b'+') => bytes.get(after + 1) == Some(&b'='),
+                    _ => false,
+                };
+                if is_label {
+                    // The labeled element follows; keep scanning.
+                    index = after + if bytes[after] == b'+' { 2 } else { 1 };
+                    continue;
+                }
+                return Some(word.to_owned());
+            }
+            _ => return None,
+        }
     }
 }
 

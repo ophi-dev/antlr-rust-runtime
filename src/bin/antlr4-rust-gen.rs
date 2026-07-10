@@ -5155,6 +5155,23 @@ fn render_generated_left_recursive_loop(
     .expect("writing to a string cannot fail");
     writeln!(out, "{pad}    match __prediction.alt {{").expect("writing to a string cannot fail");
     writeln!(out, "{pad}        {enter_alt} => {{").expect("writing to a string cannot fail");
+    if render_context.embedded.is_some_and(|embedded| {
+        embedded
+            .rule_has_attrs
+            .get(rule_index)
+            .copied()
+            .unwrap_or(false)
+    }) {
+        // Java's `_prevctx`: the outgoing iteration context becomes the new
+        // context's left child, so it must carry the attrs accumulated so
+        // far — operator-alt actions and typed views read them through the
+        // child context, not the live `__attrs` local.
+        writeln!(
+            out,
+            "{pad}            __ctx.set_generated_attrs(antlr4_runtime::GeneratedAttrs::new(__attrs.clone()));"
+        )
+        .expect("writing to a string cannot fail");
+    }
     writeln!(
         out,
         "{pad}            self.base.push_new_recursion_context_with_previous({entry_state}isize, {rule_index}, &mut __ctx);"
@@ -5592,17 +5609,13 @@ fn build_embedded_parser_data(
         // match: primary-alt actions first, operator-alt actions second,
         // preserving source order within each class.
         let rule = &model.rules[rule_index];
-        let is_left_recursive = rule
-            .alts
-            .iter()
-            .any(|alt| alt.refs.first().is_some_and(|first| first.target == rule.name));
+        let is_left_recursive = rule.alts.iter().any(|alt| alt.is_lr_operator(&rule.name));
         if is_left_recursive {
             let is_op_slot = |offset: usize| {
                 rule.alts
                     .iter()
                     .find(|alt| alt.span.0 <= offset && offset < alt.span.1)
-                    .and_then(|alt| alt.refs.first())
-                    .is_some_and(|first| first.target == rule.name)
+                    .is_some_and(|alt| alt.is_lr_operator(&rule.name))
             };
             let (primary, ops): (Vec<_>, Vec<_>) = rule_slots
                 .into_iter()
@@ -5992,13 +6005,13 @@ fn render_embedded_context_types(
         let op_labels: Vec<String> = rule
             .alts
             .iter()
-            .filter(|alt| alt.refs.first().is_some_and(|first| first.target == rule.name))
+            .filter(|alt| alt.is_lr_operator(&rule.name))
             .filter_map(|alt| alt.label.clone())
             .collect();
         let primary_labels: Vec<String> = rule
             .alts
             .iter()
-            .filter(|alt| alt.refs.first().is_none_or(|first| first.target != rule.name))
+            .filter(|alt| !alt.is_lr_operator(&rule.name))
             .filter_map(|alt| alt.label.clone())
             .collect();
         let has_labels = names.len() > 1;
