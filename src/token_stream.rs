@@ -324,7 +324,7 @@ where
         }
         self.tokens[start..=stop.min(self.tokens.len().saturating_sub(1))]
             .iter()
-            .filter_map(|token| token.text())
+            .map(|token| token.text())
             .collect::<Vec<_>>()
             .join("")
     }
@@ -337,7 +337,7 @@ where
         self.tokens
             .iter()
             .filter(|token| token.token_type() != TOKEN_EOF)
-            .filter_map(|token| token.text())
+            .map(|token| token.text())
             .collect()
     }
 

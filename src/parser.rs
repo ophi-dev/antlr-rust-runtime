@@ -4706,7 +4706,7 @@ where
             .is_some_and(is_caller_follow_boundary_text);
         let is_boundary_gap = token.as_ref().is_some_and(|token| {
             token.channel() != visible_channel
-                || token.text().is_some_and(is_caller_follow_boundary_gap_text)
+                || is_caller_follow_boundary_gap_text(token.text())
         });
         (token_type, is_boundary, is_boundary_gap)
     }
@@ -10914,14 +10914,14 @@ mod tests {
         let source_index_after_parse = stream.token_source().index;
         let buffered = stream.tokens();
         assert_eq!(buffered.len(), 2);
-        assert_eq!(buffered[0].text(), Some("x"));
+        assert_eq!(buffered[0].text(), "x");
         assert_eq!(buffered[0].token_index(), 0);
         assert_eq!(buffered[1].token_type(), TOKEN_EOF);
         assert_eq!(stream.token_source().index, source_index_after_parse);
 
         let stream = parser.into_token_stream();
         assert_eq!(stream.token_source().index, source_index_after_parse);
-        assert_eq!(stream.tokens()[0].text(), Some("x"));
+        assert_eq!(stream.tokens()[0].text(), "x");
         assert_eq!(stream.tokens()[1].token_type(), TOKEN_EOF);
     }
 
@@ -10943,7 +10943,7 @@ mod tests {
             tree.first_error_token()
                 .expect("recovery should embed an error token")
                 .text(),
-            Some("y")
+            "y"
         );
     }
 

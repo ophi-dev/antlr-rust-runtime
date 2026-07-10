@@ -524,7 +524,15 @@ impl TerminalNode {
     }
 
     pub fn text(&self) -> String {
-        self.token.text().unwrap_or("").to_owned()
+        self.token.text().to_owned()
+    }
+}
+
+/// Java's `TerminalNodeImpl.toString()` returns the token text; generated
+/// test listeners print terminal nodes directly (`java_style_list(&ctx.INT_all())`).
+impl fmt::Display for TerminalNode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.token.text())
     }
 }
 

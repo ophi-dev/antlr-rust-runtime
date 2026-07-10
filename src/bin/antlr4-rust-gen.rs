@@ -5453,6 +5453,7 @@ fn build_embedded_parser_data(
     data: &InterpData,
     source: &str,
     type_name: &str,
+    grammar_name: &str,
 ) -> io::Result<EmbeddedParserData> {
     let model = embedded::parse_embedded_model(source, &data.rule_names)?;
     let token_types: BTreeMap<String, i32> = data
@@ -5524,7 +5525,31 @@ fn build_embedded_parser_data(
         };
         states_by_rule.entry(rule_index).or_default().push(state);
     }
-    for (rule_index, rule_slots) in slots_by_rule {
+    for (rule_index, mut rule_slots) in slots_by_rule {
+        // ANTLR's left-recursion rewrite moves operator alternatives (those
+        // whose leftmost element is the rule itself) into the trailing loop,
+        // AFTER the primary alternatives — so the serialized action states
+        // follow that order, not source order. Reorder the source slots to
+        // match: primary-alt actions first, operator-alt actions second,
+        // preserving source order within each class.
+        let rule = &model.rules[rule_index];
+        let is_left_recursive = rule
+            .alts
+            .iter()
+            .any(|alt| alt.refs.first().is_some_and(|first| first.target == rule.name));
+        if is_left_recursive {
+            let is_op_slot = |offset: usize| {
+                rule.alts
+                    .iter()
+                    .find(|alt| alt.span.0 <= offset && offset < alt.span.1)
+                    .and_then(|alt| alt.refs.first())
+                    .is_some_and(|first| first.target == rule.name)
+            };
+            let (primary, ops): (Vec<_>, Vec<_>) = rule_slots
+                .into_iter()
+                .partition(|(offset, _)| !is_op_slot(*offset));
+            rule_slots = primary.into_iter().chain(ops).collect();
+        }
         let states = states_by_rule.remove(&rule_index).unwrap_or_default();
         let state_offset = action_slot_state_offset(states.len(), rule_slots.len())
             .map_err(|error| {
@@ -5615,11 +5640,9 @@ fn build_embedded_parser_data(
         }
     }
 
-    // Per-rule attrs structs.
+    // Per-rule attrs structs — emitted for every rule (context views
+    // reference them uniformly; attr-less rules get an empty struct).
     for (rule_index, rule) in model.rules.iter().enumerate() {
-        if !rule.has_attrs() {
-            continue;
-        }
         let struct_name = embedded::attrs_struct_name(rule_index);
         let mut fields = String::new();
         for attr in &rule.attrs {
@@ -5680,6 +5703,8 @@ fn build_embedded_parser_data(
     // Recognizer-surface facades the rendered bodies call.
     out.impl_items.push_str(&embedded_parser_facades());
     out.module_items.push_str(EMBEDDED_INPUT_FACADE);
+    out.module_items
+        .push_str(&render_embedded_context_types(grammar_name, data, &model));
     Ok(out)
 }
 
@@ -5762,6 +5787,253 @@ fn embedded_rule_call_args(
     Ok(args)
 }
 
+
+/// Generates the typed context views, listener trait, and walker for the
+/// embedded `.test.stg` surface:
+///
+/// * one `<Rule>Context` view per parser rule (plus one per labeled
+///   alternative) with positional child accessors (`ctx.e(0)` /
+///   `ctx.e_all()`, `ctx.INT(0)` / `ctx.INT_all()`), `child_count()`,
+///   `start()`, public attribute fields, and a `FromRuleContext` impl backing
+///   `$ctx.downcast_ref::<XContext>()`;
+/// * the `<Grammar>Listener` trait with defaulted `enter_/exit_<rule>` (and
+///   per-labeled-alternative) callbacks plus `visit_terminal`;
+/// * a module-local `ParseTreeWalker` whose bridge dispatches the runtime
+///   walker onto the typed listener callbacks, threading the invoking-state
+///   chain Java's `RuleContext.toString` renders (`[13 6]`).
+fn render_embedded_context_types(
+    grammar_name: &str,
+    data: &InterpData,
+    model: &embedded::EmbeddedModel,
+) -> String {
+    let mut out = String::new();
+    let listener_trait = format!(
+        "{}Listener",
+        grammar_name.strip_suffix("Parser").unwrap_or(grammar_name)
+    );
+    let token_accessors: Vec<(String, i32)> = data
+        .symbolic_names
+        .iter()
+        .enumerate()
+        .filter_map(|(token_type, name)| {
+            let name = name.as_ref()?;
+            i32::try_from(token_type).ok().map(|ty| (name.clone(), ty))
+        })
+        .collect();
+
+    // (struct name, rule index, alt label) — one per rule plus one per
+    // labeled alternative.
+    let mut views: Vec<(String, usize)> = Vec::new();
+    for (rule_index, rule) in model.rules.iter().enumerate() {
+        views.push((format!("{}Context", rust_type_name(&rule.name)), rule_index));
+        for alt in &rule.alts {
+            if let Some(label) = &alt.label {
+                let view = format!("{}Context", rust_type_name(label));
+                if !views.iter().any(|(existing, _)| *existing == view) {
+                    views.push((view, rule_index));
+                }
+            }
+        }
+    }
+
+    for (view_name, rule_index) in &views {
+        let rule = &model.rules[*rule_index];
+        let attrs_struct = embedded::attrs_struct_name(*rule_index);
+        let mut fields = String::new();
+        let mut field_inits = String::new();
+        for attr in &rule.attrs {
+            let name = embedded::escape_keyword(&attr.name);
+            let _ = writeln!(fields, "    pub {name}: {ty},", ty = attr.ty);
+            let _ = writeln!(
+                field_inits,
+                "            {name}: __attrs.{name}.clone(),"
+            );
+        }
+        let _ = writeln!(
+            out,
+            "#[allow(non_camel_case_types, dead_code)]\n#[derive(Clone)]\npub struct {view_name} {{\n    __node: ParserRuleContext,\n    __chain: Vec<isize>,\n{fields}}}\n"
+        );
+        let _ = writeln!(
+            out,
+            "impl FromRuleContext for {view_name} {{\n    fn from_rule_context(context: &ParserRuleContext) -> Option<Self> {{\n        if context.rule_index() != {rule_index} {{ return None; }}\n        Some(Self::__from_node_with_chain(context, Vec::new()))\n    }}\n}}\n"
+        );
+        let mut accessors = String::new();
+        let _ = writeln!(
+            accessors,
+            "    fn __from_node_with_chain(node: &ParserRuleContext, mut chain: Vec<isize>) -> Self {{\n        chain.insert(0, node.invoking_state());\n        let __default = {attrs_struct}::default();\n        let __attrs = node.generated_attrs::<{attrs_struct}>().unwrap_or(&__default);\n        Self {{\n            __node: node.clone(),\n            __chain: chain,\n{field_inits}        }}\n    }}\n"
+        );
+        let _ = writeln!(
+            accessors,
+            "    pub fn child_count(&self) -> usize {{ self.__node.child_count() }}\n    pub fn start(&self) -> __GeneratedTokenView {{ __GeneratedTokenView {{ text: self.__node.start().map(|token| token.text().to_owned()).unwrap_or_default() }} }}"
+        );
+        for (child_index, child) in model.rules.iter().enumerate() {
+            let method = rust_function_name(&child.name);
+            let child_view = format!("{}Context", rust_type_name(&child.name));
+            let _ = writeln!(
+                accessors,
+                "    pub fn {method}(&self, index: usize) -> Rc<{child_view}> {{ let node = self.__node.child_rules({child_index}).nth(index).expect(\"missing rule child\"); Rc::new({child_view}::__from_node_with_chain(node, self.__chain.clone())) }}\n    pub fn {method}_all(&self) -> Vec<Rc<{child_view}>> {{ self.__node.child_rules({child_index}).map(|node| Rc::new({child_view}::__from_node_with_chain(node, self.__chain.clone()))).collect() }}"
+            );
+        }
+        for (token_name, token_type) in &token_accessors {
+            let _ = writeln!(
+                accessors,
+                "    #[allow(non_snake_case)]\n    pub fn {token_name}(&self, index: usize) -> Rc<TerminalNode> {{ Rc::new(self.__node.child_tokens({token_type}).nth(index).expect(\"missing token child\").clone()) }}\n    #[allow(non_snake_case)]\n    pub fn {token_name}_all(&self) -> Vec<Rc<TerminalNode>> {{ self.__node.child_tokens({token_type}).cloned().map(Rc::new).collect() }}"
+            );
+        }
+        let _ = writeln!(
+            out,
+            "#[allow(dead_code, clippy::all)]\nimpl {view_name} {{\n{accessors}}}\n"
+        );
+        // Java's RuleContext.toString(): bracketed invoking-state chain from
+        // this context to the root, the root's sentinel excluded.
+        let _ = writeln!(
+            out,
+            "impl std::fmt::Display for {view_name} {{\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{\n        let chain: Vec<String> = self.__chain.iter().take(self.__chain.len().saturating_sub(1)).map(|state| state.to_string()).collect();\n        write!(f, \"[{{}}]\", chain.join(\" \"))\n    }}\n}}\n"
+        );
+    }
+
+    // Listener trait with defaulted callbacks.
+    let mut trait_methods = String::new();
+    let mut enter_arms = String::new();
+    let mut exit_arms = String::new();
+    for (rule_index, rule) in model.rules.iter().enumerate() {
+        let mut names: Vec<(String, String)> = vec![(
+            rust_function_name(&rule.name),
+            format!("{}Context", rust_type_name(&rule.name)),
+        )];
+        for alt in &rule.alts {
+            if let Some(label) = &alt.label {
+                let pair = (
+                    rust_function_name(label),
+                    format!("{}Context", rust_type_name(label)),
+                );
+                if !names.contains(&pair) {
+                    names.push(pair);
+                }
+            }
+        }
+        for (method, view) in &names {
+            let _ = writeln!(
+                trait_methods,
+                "    fn enter_{method}(&mut self, _ctx: &{view}) {{}}\n    fn exit_{method}(&mut self, _ctx: &{view}) {{}}"
+            );
+        }
+        // Dispatch: an unlabeled rule fires its plain callbacks; a rule with
+        // labeled alternatives fires the callback of the alternative that
+        // matched. Left-recursive operator alternatives are identified
+        // structurally (their first child is the rule itself), matching
+        // ANTLR's per-alternative context classes.
+        let op_labels: Vec<String> = rule
+            .alts
+            .iter()
+            .filter(|alt| alt.refs.first().is_some_and(|first| first.target == rule.name))
+            .filter_map(|alt| alt.label.clone())
+            .collect();
+        let primary_labels: Vec<String> = rule
+            .alts
+            .iter()
+            .filter(|alt| !alt.refs.first().is_some_and(|first| first.target == rule.name))
+            .filter_map(|alt| alt.label.clone())
+            .collect();
+        let has_labels = names.len() > 1;
+        let dispatch = |phase: &str| -> String {
+            if !has_labels {
+                let (method, view) = &names[0];
+                return format!(
+                    "                self.0.{phase}_{method}(&{view}::__from_node_with_chain(context, self.1.clone()));\n"
+                );
+            }
+            let mut out = String::new();
+            let op = op_labels.first().filter(|_| {
+                op_labels.iter().collect::<std::collections::BTreeSet<_>>().len() == 1
+            });
+            let primary = primary_labels.first().filter(|_| {
+                primary_labels
+                    .iter()
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .len()
+                    == 1
+            });
+            match (op, primary) {
+                (Some(op), Some(primary)) => {
+                    let op_method = rust_function_name(op);
+                    let op_view = format!("{}Context", rust_type_name(op));
+                    let primary_method = rust_function_name(primary);
+                    let primary_view = format!("{}Context", rust_type_name(primary));
+                    let _ = writeln!(
+                        out,
+                        "                if context.child_rule_trees({rule_index}).next().is_some() {{ self.0.{phase}_{op_method}(&{op_view}::__from_node_with_chain(context, self.1.clone())); }} else {{ self.0.{phase}_{primary_method}(&{primary_view}::__from_node_with_chain(context, self.1.clone())); }}"
+                    );
+                }
+                _ => {
+                    // No unambiguous per-alternative identity available; fire
+                    // the rule-level callback only.
+                    let (method, view) = &names[0];
+                    let _ = writeln!(
+                        out,
+                        "                self.0.{phase}_{method}(&{view}::__from_node_with_chain(context, self.1.clone()));"
+                    );
+                }
+            }
+            out
+        };
+        let enter_calls = dispatch("enter");
+        let exit_calls = dispatch("exit");
+        let _ = writeln!(enter_arms, "            {rule_index} => {{\n{enter_calls}            }}");
+        let _ = writeln!(exit_arms, "            {rule_index} => {{\n{exit_calls}            }}");
+    }
+    let _ = writeln!(
+        out,
+        "#[allow(dead_code, unused_variables)]\npub trait {listener_trait} {{\n{trait_methods}    fn visit_terminal(&mut self, _node: &TerminalNode) {{}}\n    fn output(&mut self) -> std::io::Stdout {{ std::io::stdout() }}\n}}\n"
+    );
+
+    // Bridge + module-local walker (shadows the runtime walker so rendered
+    // `ParseTreeWalker::walk(&mut listener, tree)` dispatches typed callbacks).
+    let _ = writeln!(
+        out,
+        r#"#[allow(dead_code)]
+struct __ListenerBridge<'a, T: {listener_trait}>(&'a mut T, Vec<isize>);
+
+impl<T: {listener_trait}> antlr4_runtime::ParseTreeListener for __ListenerBridge<'_, T> {{
+    fn enter_every_rule(&mut self, context: &ParserRuleContext) -> Result<(), antlr4_runtime::AntlrError> {{
+        self.1.insert(0, context.invoking_state());
+        match context.rule_index() {{
+{enter_arms}            _ => {{}}
+        }}
+        Ok(())
+    }}
+
+    fn exit_every_rule(&mut self, context: &ParserRuleContext) -> Result<(), antlr4_runtime::AntlrError> {{
+        match context.rule_index() {{
+{exit_arms}            _ => {{}}
+        }}
+        if !self.1.is_empty() {{
+            self.1.remove(0);
+        }}
+        Ok(())
+    }}
+
+    fn visit_terminal(&mut self, node: &TerminalNode) -> Result<(), antlr4_runtime::AntlrError> {{
+        self.0.visit_terminal(node);
+        Ok(())
+    }}
+}}
+
+#[allow(dead_code)]
+pub struct ParseTreeWalker;
+
+#[allow(dead_code)]
+impl ParseTreeWalker {{
+    pub fn walk<T: {listener_trait}>(listener: &mut T, tree: &antlr4_runtime::ParseTree) {{
+        let mut bridge = __ListenerBridge(listener, Vec::new());
+        let _ = antlr4_runtime::ParseTreeWalker::walk(&mut bridge, tree);
+    }}
+}}
+"#
+    );
+    out
+}
+
 /// Post-translation cleanups shared by all embedded bodies: `TParser::NL`
 /// becomes `Self::NL` so token constants resolve inside the generic impl.
 fn post_process_embedded(_original: &str, translated: String, type_name: &str) -> String {
@@ -5831,7 +6103,7 @@ impl<S: TokenSource> __GeneratedInput<'_, S> {
             text: self
                 .0
                 .lt(offset)
-                .and_then(|token| token.text().map(ToOwned::to_owned))
+                .map(|token| token.text().to_owned())
                 .unwrap_or_default(),
         }
     }
@@ -5872,7 +6144,7 @@ fn render_parser_with_options(
                 "--actions embedded requires --grammar",
             )
         })?;
-        Some(build_embedded_parser_data(data, source, &type_name)?)
+        Some(build_embedded_parser_data(data, source, &type_name, grammar_name)?)
     } else {
         None
     };
@@ -6171,7 +6443,7 @@ fn render_parser_with_options(
     let generated_footer = GENERATED_MODULE_FOOTER;
 
     let embedded_imports = if options.embedded {
-        "#[allow(unused_imports)]\nuse std::io::Write as _;\n#[allow(unused_imports)]\nuse std::rc::Rc;\n#[allow(unused_imports)]\nuse antlr4_runtime::{{java_style_list, ParseTreeWalker, PredictionMode, BailErrorStrategy, TerminalNode, ParserRuleContext, FromRuleContext, Token as _}};\n"
+        "#[allow(unused_imports)]\nuse std::io::Write as _;\n#[allow(unused_imports)]\nuse std::rc::Rc;\n#[allow(unused_imports)]\nuse antlr4_runtime::{{java_style_list, PredictionMode, BailErrorStrategy, TerminalNode, ParserRuleContext, FromRuleContext, Token as _}};\n"
     } else {
         ""
     };
@@ -11284,6 +11556,7 @@ atn:
             false,
             SemUnknownPolicy::default(),
             &SemPatternFile::default(),
+            false,
         )
         .expect("lexer module should render");
         let parser =
@@ -15401,6 +15674,7 @@ ID : [a-z]+ ;\n";
             false,
             SemUnknownPolicy::AssumeFalse,
             &SemPatternFile::default(),
+            false,
         )
         .expect("lexer should render");
 
@@ -15426,6 +15700,7 @@ ID : [a-z]+ ;\n";
                 false,
                 SemUnknownPolicy::AssumeTrue,
                 &patterns,
+                false,
             )
             .expect_err("per-coordinate hook/error lexer override must fail codegen");
             assert!(
@@ -15453,6 +15728,7 @@ ID : [a-z]+ ;\n";
             false,
             SemUnknownPolicy::AssumeTrue,
             &patterns,
+            false,
         )
         .expect("lexer should render");
 
@@ -15508,6 +15784,7 @@ ID : [a-z]+ ;\n";
                 false,
                 policy,
                 &SemPatternFile::default(),
+            false,
             )
             .expect_err("uncovered lexer predicate must fail under hook/error policy");
             assert_eq!(error.kind(), io::ErrorKind::InvalidData);
@@ -15550,6 +15827,7 @@ ID : [a-z]+ ;\n";
             false,
             SemUnknownPolicy::AssumeTrue,
             &SemPatternFile::default(),
+            false,
         )
         .expect("lexer should render");
 

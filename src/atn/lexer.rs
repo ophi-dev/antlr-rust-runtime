@@ -1449,7 +1449,7 @@ mod tests {
 
         let token = next_token(&mut lexer, &atn);
         assert_eq!(token.token_type(), 1);
-        assert_eq!(token.text(), Some("ab"));
+        assert_eq!(token.text(), "ab");
         assert_eq!(next_token(&mut lexer, &atn).token_type(), TOKEN_EOF);
     }
 
@@ -1494,6 +1494,6 @@ mod tests {
         assert_eq!(token.token_type(), 1);
         assert_eq!(token.start(), 0);
         assert_eq!(token.stop(), 1);
-        assert_eq!(token.text(), Some("ab"));
+        assert_eq!(token.text(), "ab");
     }
 }

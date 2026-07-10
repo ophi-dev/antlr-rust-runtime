@@ -302,9 +302,22 @@ impl Token for CommonToken {
     }
 }
 
+impl CommonToken {
+    /// The token's text, empty when unset — ANTLR's `getText()` shape, which
+    /// generated test actions print directly (`token.text()` in `{}`).
+    ///
+    /// This inherent method intentionally shadows the Option-returning
+    /// [`Token::text`] trait method on concrete `CommonToken` values; generic
+    /// code keeps the trait signature.
+    #[must_use]
+    pub fn text(&self) -> &str {
+        self.text.as_ref().map_or("", TokenText::as_str)
+    }
+}
+
 impl fmt::Display for CommonToken {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let text = self.text().unwrap_or("");
+        let text = CommonToken::text(self);
         let channel = if self.channel() == DEFAULT_CHANNEL {
             String::new()
         } else {
@@ -476,7 +489,7 @@ mod tests {
         assert_eq!(token.start_byte(), 2);
         assert_eq!(token.stop_byte(), 4);
         assert_eq!(token.byte_span(), 2..4);
-        assert_eq!(token.text(), Some("β"));
+        assert_eq!(token.text(), "β");
     }
 
     #[test]
@@ -493,7 +506,7 @@ mod tests {
             .with_span(1, 0)
             .with_byte_span(2, 2);
 
-        assert_eq!(token.text(), Some("<EOF>"));
+        assert_eq!(token.text(), "<EOF>");
         assert_eq!(token.byte_span(), 2..2);
     }
 }
