@@ -49,6 +49,16 @@ impl RecognizerData {
         self
     }
 
+    /// Rule names owned by this recognizer's metadata.
+    ///
+    /// Also available through [`Recognizer::rule_names`]; this inherent
+    /// accessor lets callers that already hold a `RecognizerData` field
+    /// borrow rule names without borrowing the whole recognizer.
+    #[must_use]
+    pub fn rule_names(&self) -> &[String] {
+        &self.rule_names
+    }
+
     pub const fn state(&self) -> isize {
         self.state
     }

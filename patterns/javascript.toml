@@ -1,0 +1,36 @@
+version = 1
+
+# Parser-predicate helpers from grammars-v4 javascript/javascript
+# (JavaScriptParser.g4). Each appears as a bare `{this.<helper>()}?` guard, so
+# they route to the generated typed hook trait; implement them once in Rust
+# via `SemanticHooks` / the generated `*Hooks` trait.
+#
+# The lexer side of that grammar (IsRegexPossible, IsStrictMode, mode-state
+# actions such as ProcessOpenBrace) is intentionally NOT mapped here: generated
+# lexers have no hook plumbing yet, so those need
+# `antlr4_runtime::atn::lexer::next_token_with_semantic_hooks` driven manually.
+#
+# Not yet covered: the argument-taking text-lookahead helpers `this.n("...")`
+# and `this.p("...")` (next/previous token text equals). They need
+# argument-capturing pattern support; until then those coordinates follow the
+# --sem-unknown policy and are listed in semantics.json.
+
+[[helper]]
+name = "notLineTerminator"
+returns = "bool"
+lower = "hook"
+
+[[helper]]
+name = "lineTerminatorAhead"
+returns = "bool"
+lower = "hook"
+
+[[helper]]
+name = "notOpenBraceAndNotFunction"
+returns = "bool"
+lower = "hook"
+
+[[helper]]
+name = "closeBrace"
+returns = "bool"
+lower = "hook"

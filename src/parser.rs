@@ -75,11 +75,16 @@ use crate::atn::parser::{
     ParserAtnPrediction, ParserAtnPredictionDiagnosticKind, ParserAtnSimulator,
 };
 use crate::atn::{Atn, AtnState, AtnStateKind, Transition};
+use crate::char_stream::CharStream;
 use crate::errors::AntlrError;
 use crate::int_stream::IntStream;
+use crate::lexer::{LexerCustomAction, LexerSemCtx};
 use crate::prediction::{EMPTY_RETURN_STATE, PredictionContext};
 use crate::recognizer::{Recognizer, RecognizerData};
-use crate::token::{CommonToken, TOKEN_EOF, Token, TokenRef, TokenSource, TokenSourceError};
+use crate::semir::{self, AStmt, ArithOp, CmpOp, ExprId, HookId, PExpr, SemIr, StmtId};
+use crate::token::{
+    CommonToken, TOKEN_EOF, Token, TokenFactory, TokenRef, TokenSource, TokenSourceError,
+};
 use crate::token_stream::CommonTokenStream;
 use crate::tree::{ErrorNode, ParseTree, ParserRuleContext, RuleNode, TerminalNode};
 use crate::vocabulary::Vocabulary;
@@ -302,6 +307,226 @@ impl ParserAction {
     }
 }
 
+/// Runtime view passed to parser semantic hooks.
+///
+/// The context is intentionally read-only with respect to parser structure:
+/// predicates may run speculatively during prediction, and hooks can be called
+/// more than once for paths that are later abandoned. Lookahead methods may
+/// buffer tokens from the underlying token source, matching normal parser
+/// prediction behavior.
+pub struct ParserSemCtx<'a, S>
+where
+    S: TokenSource,
+{
+    input: &'a mut CommonTokenStream<S>,
+    rule_index: usize,
+    coordinate_index: usize,
+    rule_name: Option<String>,
+    context: Option<&'a ParserRuleContext>,
+    tree: Option<&'a ParseTree>,
+    local_int_arg: Option<(usize, i64)>,
+    member_values: &'a BTreeMap<usize, i64>,
+    action: Option<ParserAction>,
+}
+
+impl<S> std::fmt::Debug for ParserSemCtx<'_, S>
+where
+    S: TokenSource,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ParserSemCtx")
+            .field("rule_index", &self.rule_index)
+            .field("coordinate_index", &self.coordinate_index)
+            .field("rule_name", &self.rule_name)
+            .field("context", &self.context)
+            .field("tree", &self.tree)
+            .field("local_int_arg", &self.local_int_arg)
+            .field("member_values", &self.member_values)
+            .field("action", &self.action)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<'a, S> ParserSemCtx<'a, S>
+where
+    S: TokenSource,
+{
+    /// Rule index that owns the predicate/action coordinate.
+    #[must_use]
+    pub const fn rule_index(&self) -> usize {
+        self.rule_index
+    }
+
+    /// Rule name that owns the coordinate, when recognizer metadata has it.
+    #[must_use]
+    pub fn rule_name(&self) -> Option<&str> {
+        self.rule_name.as_deref()
+    }
+
+    /// Predicate/action index inside the owning rule. Parser actions keyed only
+    /// by ATN source state report `usize::MAX` here; use [`Self::action`] for
+    /// the stable action event.
+    #[must_use]
+    pub const fn coordinate_index(&self) -> usize {
+        self.coordinate_index
+    }
+
+    /// Current token-stream index.
+    #[must_use]
+    pub fn input_index(&self) -> usize {
+        self.input.index()
+    }
+
+    /// Token type at one-based lookahead/lookbehind offset.
+    pub fn la(&mut self, offset: isize) -> i32 {
+        self.input.la(offset)
+    }
+
+    /// Token at one-based lookahead/lookbehind offset.
+    pub fn lt(&mut self, offset: isize) -> Option<&CommonToken> {
+        self.input.lt(offset)
+    }
+
+    /// Token text at one-based lookahead/lookbehind offset.
+    pub fn token_text(&mut self, offset: isize) -> Option<&str> {
+        self.lt(offset).and_then(Token::text)
+    }
+
+    /// Current generated rule context, when a generated rule predicate supplied
+    /// one.
+    #[must_use]
+    pub const fn context(&self) -> Option<&'a ParserRuleContext> {
+        self.context
+    }
+
+    /// Completed parse tree passed to an action hook, if the action is being
+    /// replayed after recognition.
+    #[must_use]
+    pub const fn tree(&self) -> Option<&'a ParseTree> {
+        self.tree
+    }
+
+    /// Integer local argument visible to this predicate coordinate.
+    #[must_use]
+    pub fn local_int_arg(&self) -> Option<i64> {
+        self.local_int_arg.map(|(_, value)| value)
+    }
+
+    /// Integer member value observed on the current speculative path.
+    #[must_use]
+    pub fn member_int(&self, member: usize) -> Option<i64> {
+        self.member_values.get(&member).copied()
+    }
+
+    /// Parser action event being replayed, when this context belongs to an
+    /// action hook.
+    #[must_use]
+    pub const fn action(&self) -> Option<ParserAction> {
+        self.action
+    }
+
+    /// Text covered by a parser action event.
+    ///
+    /// Mirrors [`BaseParser::text_interval`] / `$text`: when the stop token is
+    /// EOF the interval ends at the previous *visible* token, so trailing hidden
+    /// tokens (and the EOF marker) are excluded rather than blindly subtracting
+    /// one, which could point at hidden whitespace. `CommonTokenStream::text`
+    /// itself guards `start > stop`, so an empty interval yields `""`.
+    pub fn action_text(&mut self) -> String {
+        let Some(action) = self.action else {
+            return String::new();
+        };
+        let Some(stop) = action.stop_index() else {
+            return String::new();
+        };
+        let stop = if self
+            .input
+            .get(stop)
+            .is_some_and(|token| token.token_type() == TOKEN_EOF)
+        {
+            let Some(previous) = self.input.previous_visible_token_index(stop) else {
+                return String::new();
+            };
+            previous
+        } else {
+            stop
+        };
+        self.input.text(action.start_index(), stop)
+    }
+}
+
+/// User extension point for parser semantic predicates and actions that the
+/// metadata generator did not translate into built-in runtime metadata.
+///
+/// Returning `None`/`false` says "not handled", so the runtime falls through
+/// to the configured [`UnknownSemanticPolicy`]. Predicate hooks may run during
+/// speculative prediction and must be replay-safe.
+pub trait SemanticHooks {
+    fn sempred<S>(
+        &mut self,
+        ctx: &mut ParserSemCtx<'_, S>,
+        rule_index: usize,
+        pred_index: usize,
+    ) -> Option<bool>
+    where
+        S: TokenSource,
+    {
+        let _ = (ctx, rule_index, pred_index);
+        None
+    }
+
+    fn action<S>(&mut self, ctx: &mut ParserSemCtx<'_, S>, action: ParserAction) -> bool
+    where
+        S: TokenSource,
+    {
+        let _ = (ctx, action);
+        false
+    }
+
+    fn lexer_sempred<I, F>(
+        &mut self,
+        ctx: &mut LexerSemCtx<'_, I, F>,
+        rule_index: usize,
+        pred_index: usize,
+    ) -> Option<bool>
+    where
+        I: CharStream,
+        F: TokenFactory,
+    {
+        let _ = (ctx, rule_index, pred_index);
+        None
+    }
+
+    /// Runs a lexer custom action on the committed lexing path. Returns whether
+    /// the hook handled the action.
+    ///
+    /// The action runs post-accept, so `ctx` carries a mutable lexer borrow: a
+    /// hook may change lexer state — [`LexerSemCtx::push_mode`],
+    /// [`LexerSemCtx::pop_mode`], [`LexerSemCtx::set_mode`] — just like the
+    /// closure-based `custom_action` API. (The speculative predicate context in
+    /// [`Self::lexer_sempred`] is a shared borrow, so those mutators are inert
+    /// there.)
+    fn lexer_action<I, F>(
+        &mut self,
+        ctx: &mut LexerSemCtx<'_, I, F>,
+        action: LexerCustomAction,
+    ) -> bool
+    where
+        I: CharStream,
+        F: TokenFactory,
+    {
+        let _ = (ctx, action);
+        false
+    }
+}
+
+/// Default hook object used by parsers that do not need user-supplied
+/// semantics.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoSemanticHooks;
+
+impl SemanticHooks for NoSemanticHooks {}
+
 /// Parser semantic predicate rendered from a supported target template.
 ///
 /// The metadata recognizer evaluates these at the token-stream index where the
@@ -365,6 +590,180 @@ pub enum ParserPredicate {
     },
 }
 
+impl ParserPredicate {
+    /// Lowers the legacy predicate metadata variant into `SemIR`.
+    ///
+    /// This is the compatibility adapter for generated parsers produced while
+    /// the runtime still emitted closed enum tables. Newer generated parsers
+    /// emit `SemIR` directly.
+    pub fn lower_into_semir(self, ir: &mut SemIr) -> ExprId {
+        match self {
+            Self::True => ir.expr(PExpr::Bool(true)),
+            Self::False | Self::FalseWithMessage { .. } => ir.expr(PExpr::Bool(false)),
+            Self::Invoke { value } => ir.expr(PExpr::EvalTrace(value)),
+            Self::LookaheadTextEquals { offset, text } => {
+                let token = ir.expr(PExpr::TokenText(offset));
+                let text = ir.intern(text);
+                let text = ir.expr(PExpr::Str(text));
+                ir.expr(PExpr::Cmp(CmpOp::Eq, token, text))
+            }
+            Self::LookaheadNotEquals { offset, token_type } => {
+                let actual = ir.expr(PExpr::La(offset));
+                let expected = ir.expr(PExpr::Int(i64::from(token_type)));
+                ir.expr(PExpr::Cmp(CmpOp::Ne, actual, expected))
+            }
+            Self::TokenPairAdjacent => ir.expr(PExpr::TokenIndexAdjacent),
+            Self::ContextChildRuleTextNotEquals { rule_index, text } => {
+                let actual = ir.expr(PExpr::CtxRuleText(rule_index));
+                let expected = ir.intern(text);
+                let expected = ir.expr(PExpr::Str(expected));
+                ir.expr(PExpr::Cmp(CmpOp::Ne, actual, expected))
+            }
+            Self::LocalIntEquals { value } => local_arg_comparison(ir, CmpOp::Eq, value),
+            Self::LocalIntLessOrEqual { value } => local_arg_comparison(ir, CmpOp::Le, value),
+            Self::MemberModuloEquals {
+                member,
+                modulus,
+                value,
+                equals,
+            } => {
+                if modulus == 0 {
+                    return ir.expr(PExpr::Bool(false));
+                }
+                let member = ir.expr(PExpr::Member(member));
+                let modulus = ir.expr(PExpr::Int(modulus));
+                let actual = ir.expr(PExpr::Arith(ArithOp::Mod, member, modulus));
+                let expected = ir.expr(PExpr::Int(value));
+                ir.expr(PExpr::Cmp(
+                    if equals { CmpOp::Eq } else { CmpOp::Ne },
+                    actual,
+                    expected,
+                ))
+            }
+            Self::MemberEquals {
+                member,
+                value,
+                equals,
+            } => {
+                let actual = ir.expr(PExpr::Member(member));
+                let expected = ir.expr(PExpr::Int(value));
+                ir.expr(PExpr::Cmp(
+                    if equals { CmpOp::Eq } else { CmpOp::Ne },
+                    actual,
+                    expected,
+                ))
+            }
+        }
+    }
+
+    #[must_use]
+    pub const fn failure_message(self) -> Option<&'static str> {
+        match self {
+            Self::FalseWithMessage { message } => Some(message),
+            Self::True
+            | Self::False
+            | Self::Invoke { .. }
+            | Self::LookaheadTextEquals { .. }
+            | Self::LookaheadNotEquals { .. }
+            | Self::TokenPairAdjacent
+            | Self::ContextChildRuleTextNotEquals { .. }
+            | Self::LocalIntEquals { .. }
+            | Self::LocalIntLessOrEqual { .. }
+            | Self::MemberModuloEquals { .. }
+            | Self::MemberEquals { .. } => None,
+        }
+    }
+}
+
+fn local_arg_comparison(ir: &mut SemIr, op: CmpOp, value: i64) -> ExprId {
+    let local = ir.expr(PExpr::LocalArg);
+    let absent = ir.expr(PExpr::IsNull(local));
+    let expected = ir.expr(PExpr::Int(value));
+    let comparison = ir.expr(PExpr::Cmp(op, local, expected));
+    ir.expr(PExpr::Or([absent, comparison].into()))
+}
+
+/// Policy for semantic predicate coordinates that have no runtime
+/// implementation.
+///
+/// ANTLR grammars may embed target-language predicates that the metadata
+/// generator could not translate into a [`ParserPredicate`] table entry. When
+/// recognition reaches such a coordinate the runtime cannot know the grammar
+/// author's intent, so the caller chooses how to proceed.
+///
+/// The default is [`Self::AssumeTrue`], matching the historical behavior of
+/// this runtime. That default is deprecated and will change to [`Self::Error`]
+/// in a future minor release; grammars relying on unconditional predicates
+/// should opt in explicitly.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum UnknownSemanticPolicy {
+    /// Treat the predicate as passing, as if it were absent from the grammar.
+    #[default]
+    AssumeTrue,
+    /// Treat the predicate as failing, removing the guarded alternative.
+    AssumeFalse,
+    /// Fail the parse with [`AntlrError::Unsupported`] naming every unknown
+    /// coordinate that recognition evaluated.
+    Error,
+}
+
+/// Resolves a predicate coordinate that neither a translated table entry nor a
+/// user hook could answer, applying the active [`UnknownSemanticPolicy`].
+///
+/// Under [`UnknownSemanticPolicy::Error`] the coordinate is recorded in `hits`
+/// so the parse entry can surface every unresolved coordinate afterwards. Both
+/// the legacy [`ParserPredicate`] path and the [`semir::PExpr::Hook`] path
+/// funnel through here so a missing implementation is never silently coerced
+/// to a boolean (design goal G1: never silently mis-parse).
+fn apply_unknown_predicate_policy(
+    policy: UnknownSemanticPolicy,
+    rule_index: usize,
+    pred_index: usize,
+    hits: &mut Vec<(usize, usize)>,
+) -> bool {
+    match policy {
+        UnknownSemanticPolicy::AssumeTrue => true,
+        UnknownSemanticPolicy::AssumeFalse => false,
+        UnknownSemanticPolicy::Error => {
+            let coordinate = (rule_index, pred_index);
+            if !hits.contains(&coordinate) {
+                hits.push(coordinate);
+            }
+            false
+        }
+    }
+}
+
+/// Interval-set of expected token types, displayable through a vocabulary —
+/// the shape ANTLR's `getExpectedTokens().toString(vocabulary)` exposes to
+/// generated test actions.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ExpectedTokenSet {
+    symbols: BTreeSet<i32>,
+}
+
+impl ExpectedTokenSet {
+    /// Formats the set using ANTLR token display names, e.g. `{'a', 'b'}`.
+    #[must_use]
+    pub fn to_token_string(&self, vocabulary: &Vocabulary) -> String {
+        expected_symbols_display(&self.symbols, vocabulary)
+    }
+}
+
+/// Marker error strategy matching ANTLR's `BailErrorStrategy`.
+///
+/// The first syntax error aborts the parse instead of recovering. Generated
+/// recognizers accept it through `set_error_handler(BailErrorStrategy::new())`.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct BailErrorStrategy;
+
+impl BailErrorStrategy {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self
+    }
+}
+
 /// Prediction strategy requested by generated parser harnesses.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PredictionMode {
@@ -424,6 +823,72 @@ pub struct ParserReturnAction {
     pub value: i64,
 }
 
+impl ParserMemberAction {
+    /// Lowers this speculative member mutation into a `SemIR` action.
+    pub fn lower_into_semir(self, ir: &mut SemIr) -> ParserSemanticAction {
+        let delta = ir.expr(PExpr::Int(self.delta));
+        ParserSemanticAction {
+            source_state: self.source_state,
+            rule_index: usize::MAX,
+            stmt: ir.stmt(AStmt::AddMember(self.member, delta)),
+            speculative: true,
+        }
+    }
+}
+
+impl ParserReturnAction {
+    /// Lowers this committed return-value assignment into a `SemIR` action.
+    pub fn lower_into_semir(self, ir: &mut SemIr) -> ParserSemanticAction {
+        let name = ir.intern(self.name);
+        let value = ir.expr(PExpr::Int(self.value));
+        ParserSemanticAction {
+            source_state: self.source_state,
+            rule_index: self.rule_index,
+            stmt: ir.stmt(AStmt::SetReturn(name, value)),
+            speculative: false,
+        }
+    }
+}
+
+/// Parser predicate coordinate lowered into [`SemIr`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ParserSemanticPredicate {
+    /// Serialized rule index that owns this predicate.
+    pub rule_index: usize,
+    /// Predicate index inside the owning rule.
+    pub pred_index: usize,
+    /// Root expression in the associated [`ParserSemantics::ir`] arena.
+    pub expr: ExprId,
+    /// ANTLR `<fail='...'>` message for predicates that intentionally fail.
+    pub failure_message: Option<&'static str>,
+}
+
+/// Parser action coordinate lowered into [`SemIr`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ParserSemanticAction {
+    /// ATN state containing the action transition.
+    pub source_state: usize,
+    /// Serialized rule index recorded by the action transition.
+    pub rule_index: usize,
+    /// Root statement in the associated [`ParserSemantics::ir`] arena.
+    pub stmt: StmtId,
+    /// Whether this action may run on speculative recognition paths.
+    pub speculative: bool,
+}
+
+/// Data-driven semantic tables emitted by generated parsers.
+///
+/// This is the runtime representation for issue #9's `SemIR` path. Existing
+/// `ParserPredicate`, `ParserMemberAction`, and `ParserReturnAction` tables
+/// remain accepted as deprecated adapters for generated code produced before
+/// this table existed.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ParserSemantics {
+    pub ir: SemIr,
+    pub predicates: Vec<ParserSemanticPredicate>,
+    pub actions: Vec<ParserSemanticAction>,
+}
+
 /// Optional generated-runtime metadata for metadata-driven parser execution.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ParserRuntimeOptions<'a> {
@@ -433,12 +898,17 @@ pub struct ParserRuntimeOptions<'a> {
     pub track_alt_numbers: bool,
     /// Semantic predicate table keyed by serialized `(rule_index, pred_index)`.
     pub predicates: &'a [(usize, usize, ParserPredicate)],
+    /// `SemIR` predicate/action table emitted by newer generated parsers.
+    pub semantics: Option<&'a ParserSemantics>,
     /// Rule-call integer argument table keyed by ATN source state.
     pub rule_args: &'a [ParserRuleArg],
     /// Integer member mutations keyed by ATN action source state.
     pub member_actions: &'a [ParserMemberAction],
     /// Integer return assignments keyed by ATN action source state.
     pub return_actions: &'a [ParserReturnAction],
+    /// How to evaluate semantic predicate coordinates absent from
+    /// `predicates`.
+    pub unknown_predicate_policy: UnknownSemanticPolicy,
 }
 
 pub trait Parser: Recognizer {
@@ -482,9 +952,10 @@ struct CachedPredictionContext {
 }
 
 #[derive(Debug)]
-pub struct BaseParser<S> {
+pub struct BaseParser<S, H = NoSemanticHooks> {
     input: CommonTokenStream<S>,
     data: RecognizerData,
+    semantic_hooks: H,
     build_parse_trees: bool,
     syntax_errors: usize,
     report_diagnostic_errors: bool,
@@ -503,6 +974,21 @@ pub struct BaseParser<S> {
     /// speculative recognition may revisit the same coordinate, so replay it
     /// once per parser instance.
     invoked_predicates: Vec<(usize, usize)>,
+    /// Bail error strategy: the first syntax error aborts the parse instead of
+    /// recovering (ANTLR's `BailErrorStrategy`). Generated recognizers set it
+    /// through `set_error_handler(BailErrorStrategy::new())`.
+    bail_on_error: bool,
+    /// How to evaluate predicate coordinates missing from the active
+    /// predicate table. Set from [`ParserRuntimeOptions`] at each parse entry.
+    unknown_predicate_policy: UnknownSemanticPolicy,
+    /// Unknown predicate coordinates evaluated by the current parse, recorded
+    /// so [`UnknownSemanticPolicy::Error`] can report them after recognition.
+    unknown_predicate_hits: Vec<(usize, usize)>,
+    /// Committed parser action coordinates offered to [`SemanticHooks::action`]
+    /// that no hook handled, recorded so a generated `hook`/error-disposed
+    /// action fails loud instead of being silently dropped. Keyed by
+    /// `(rule_index, source_state)`.
+    unhandled_action_hits: Vec<(usize, usize)>,
     /// Per-parse rule FIRST-set cache keyed by rule start state. This keeps
     /// hot rule-transition checks to a vector lookup after the first visit
     /// while the thread-local shared ATN cache still owns the cross-parse
@@ -1848,8 +2334,8 @@ fn recovery_expected_symbols(
 /// Fast-recognizer variant of [`next_recovery_context`] that reuses the
 /// parser's cached state-expected-symbols sets and the inherited `Rc`
 /// without copying when the state cannot widen recovery.
-fn fast_next_recovery_context<S>(
-    parser: &mut BaseParser<S>,
+fn fast_next_recovery_context<S, H>(
+    parser: &mut BaseParser<S, H>,
     atn: &Atn,
     state: &AtnState,
     inherited: &Rc<BTreeSet<i32>>,
@@ -1857,6 +2343,7 @@ fn fast_next_recovery_context<S>(
 ) -> (Rc<BTreeSet<i32>>, Option<usize>)
 where
     S: TokenSource,
+    H: SemanticHooks,
 {
     if state.transitions.len() <= 1 {
         return (Rc::clone(inherited), inherited_state);
@@ -1882,14 +2369,15 @@ where
 /// Fast-recognizer variant of [`recovery_expected_symbols`] that reuses the
 /// cached state-expected-symbols and avoids cloning when no widening is
 /// needed.
-fn fast_recovery_expected_symbols<S>(
-    parser: &mut BaseParser<S>,
+fn fast_recovery_expected_symbols<S, H>(
+    parser: &mut BaseParser<S, H>,
     atn: &Atn,
     state_number: usize,
     inherited: &Rc<BTreeSet<i32>>,
 ) -> Rc<BTreeSet<i32>>
 where
     S: TokenSource,
+    H: SemanticHooks,
 {
     let cached = parser.cached_state_expected_symbols(atn, state_number);
     if inherited.is_empty() {
@@ -1906,10 +2394,70 @@ where
     parser.intern_recovery_symbols(combined)
 }
 
+struct ParserTableSemCtx<'a> {
+    member_values: &'a mut BTreeMap<usize, i64>,
+    return_values: &'a mut BTreeMap<String, i64>,
+}
+
+impl semir::PredContext for ParserTableSemCtx<'_> {
+    fn la(&mut self, _offset: isize) -> i64 {
+        i64::from(TOKEN_EOF)
+    }
+
+    fn token_text(&mut self, _offset: isize) -> Option<&str> {
+        None
+    }
+
+    fn token_index_adjacent(&mut self) -> bool {
+        false
+    }
+
+    fn ctx_rule_text(&self, _rule_index: usize) -> Option<String> {
+        None
+    }
+
+    fn member(&self, member: usize) -> Option<i64> {
+        Some(self.member_values.get(&member).copied().unwrap_or_default())
+    }
+
+    fn local_arg(&self) -> Option<i64> {
+        None
+    }
+
+    fn column(&self) -> Option<i64> {
+        None
+    }
+
+    fn token_start_column(&self) -> Option<i64> {
+        None
+    }
+
+    fn token_text_so_far(&self) -> Option<String> {
+        None
+    }
+
+    fn hook(&mut self, _hook: HookId) -> bool {
+        false
+    }
+}
+
+impl semir::ActContext for ParserTableSemCtx<'_> {
+    fn set_member(&mut self, member: usize, value: i64) {
+        self.member_values.insert(member, value);
+    }
+
+    fn set_return(&mut self, name: &str, value: i64) {
+        self.return_values.insert(name.to_owned(), value);
+    }
+
+    fn action_hook(&mut self, _hook: HookId) {}
+}
+
 /// Applies generated integer-member side effects to one speculative path.
 fn apply_member_actions(
     source_state: usize,
     actions: &[ParserMemberAction],
+    semantics: Option<&ParserSemantics>,
     values: &mut BTreeMap<usize, i64>,
 ) {
     for action in actions
@@ -1918,16 +2466,32 @@ fn apply_member_actions(
     {
         *values.entry(action.member).or_default() += action.delta;
     }
+    let Some(semantics) = semantics else {
+        return;
+    };
+    let mut return_values = BTreeMap::new();
+    let mut ctx = ParserTableSemCtx {
+        member_values: values,
+        return_values: &mut return_values,
+    };
+    for action in semantics
+        .actions
+        .iter()
+        .filter(|action| action.source_state == source_state && action.speculative)
+    {
+        semir::exec_stmt(&semantics.ir, action.stmt, &mut ctx);
+    }
 }
 
 /// Returns the speculative member state after replaying one ATN action state.
 fn member_values_after_action(
     source_state: usize,
     actions: &[ParserMemberAction],
+    semantics: Option<&ParserSemantics>,
     values: &BTreeMap<usize, i64>,
 ) -> BTreeMap<usize, i64> {
     let mut values = values.clone();
-    apply_member_actions(source_state, actions, &mut values);
+    apply_member_actions(source_state, actions, semantics, &mut values);
     values
 }
 
@@ -1936,6 +2500,7 @@ fn return_values_after_action(
     source_state: usize,
     rule_index: usize,
     actions: &[ParserReturnAction],
+    semantics: Option<&ParserSemantics>,
     values: &BTreeMap<String, i64>,
 ) -> BTreeMap<String, i64> {
     let mut values = values.clone();
@@ -1944,6 +2509,20 @@ fn return_values_after_action(
         .filter(|action| action.source_state == source_state && action.rule_index == rule_index)
     {
         values.insert(action.name.to_owned(), action.value);
+    }
+    if let Some(semantics) = semantics {
+        let mut member_values = BTreeMap::new();
+        let mut ctx = ParserTableSemCtx {
+            member_values: &mut member_values,
+            return_values: &mut values,
+        };
+        for action in semantics.actions.iter().filter(|action| {
+            action.source_state == source_state
+                && action.rule_index == rule_index
+                && !action.speculative
+        }) {
+            semir::exec_stmt(&semantics.ir, action.stmt, &mut ctx);
+        }
     }
     values
 }
@@ -1999,6 +2578,7 @@ struct RecognizeRequest<'a> {
     decision_start_index: Option<usize>,
     init_action_rules: &'a BTreeSet<usize>,
     predicates: &'a [(usize, usize, ParserPredicate)],
+    semantics: Option<&'a ParserSemantics>,
     rule_args: &'a [ParserRuleArg],
     member_actions: &'a [ParserMemberAction],
     return_actions: &'a [ParserReturnAction],
@@ -2206,9 +2786,144 @@ struct PredicateEval<'a> {
     rule_index: usize,
     pred_index: usize,
     predicates: &'a [(usize, usize, ParserPredicate)],
+    semantics: Option<&'a ParserSemantics>,
     context: Option<&'a ParserRuleContext>,
     local_int_arg: Option<(usize, i64)>,
     member_values: &'a BTreeMap<usize, i64>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ParserSemanticHookRequest<'a> {
+    index: usize,
+    rule_index: usize,
+    pred_index: usize,
+    context: Option<&'a ParserRuleContext>,
+    local_int_arg: Option<(usize, i64)>,
+    member_values: &'a BTreeMap<usize, i64>,
+}
+
+/// Predicate-evaluation context over the recognizer's speculative state.
+///
+/// This sits in the prediction hot loop, so everything is borrowed: member
+/// state read-only from the current speculative path and the rule name
+/// straight from recognizer metadata. Predicates are pure by construction
+/// ([`semir::PExpr`] has no mutating node); statement execution uses
+/// [`ParserTableSemCtx`] (speculative member/return replay) and
+/// [`BaseParser::parser_action_hook`] (committed action hooks) instead.
+struct ParserSemIrCtx<'a, S, H>
+where
+    S: TokenSource,
+    H: SemanticHooks,
+{
+    input: &'a mut CommonTokenStream<S>,
+    semantic_hooks: &'a mut H,
+    rule_index: usize,
+    coordinate_index: usize,
+    rule_name: Option<&'a str>,
+    context: Option<&'a ParserRuleContext>,
+    local_int_arg: Option<(usize, i64)>,
+    member_values: &'a BTreeMap<usize, i64>,
+    invoked_predicates: &'a mut Vec<(usize, usize)>,
+    /// Policy applied when a [`semir::PExpr::Hook`] node's user hook declines
+    /// (`None`); keeps the fail-loud fallback chain identical to the legacy
+    /// table path instead of coercing the miss to `false`.
+    unknown_predicate_policy: UnknownSemanticPolicy,
+    unknown_predicate_hits: &'a mut Vec<(usize, usize)>,
+}
+
+impl<S, H> semir::PredContext for ParserSemIrCtx<'_, S, H>
+where
+    S: TokenSource,
+    H: SemanticHooks,
+{
+    fn la(&mut self, offset: isize) -> i64 {
+        i64::from(self.input.la(offset))
+    }
+
+    fn token_text(&mut self, offset: isize) -> Option<&str> {
+        self.input.lt(offset).and_then(Token::text)
+    }
+
+    fn token_index_adjacent(&mut self) -> bool {
+        let Some(first) = self.input.lt(-2).map(Token::token_index) else {
+            return false;
+        };
+        let Some(second) = self.input.lt(-1).map(Token::token_index) else {
+            return false;
+        };
+        first + 1 == second
+    }
+
+    fn ctx_rule_text(&self, rule_index: usize) -> Option<String> {
+        self.context.and_then(|context| {
+            context.children().iter().find_map(|child| match child {
+                ParseTree::Rule(rule) if rule.context().rule_index() == rule_index => {
+                    Some(child.text())
+                }
+                ParseTree::Rule(_) | ParseTree::Terminal(_) | ParseTree::Error(_) => None,
+            })
+        })
+    }
+
+    fn member(&self, member: usize) -> Option<i64> {
+        Some(self.member_values.get(&member).copied().unwrap_or_default())
+    }
+
+    fn local_arg(&self) -> Option<i64> {
+        self.local_int_arg.map(|(_, value)| value)
+    }
+
+    fn column(&self) -> Option<i64> {
+        None
+    }
+
+    fn token_start_column(&self) -> Option<i64> {
+        None
+    }
+
+    fn token_text_so_far(&self) -> Option<String> {
+        None
+    }
+
+    fn hook(&mut self, _hook: HookId) -> bool {
+        let mut ctx = ParserSemCtx {
+            input: &mut *self.input,
+            rule_index: self.rule_index,
+            coordinate_index: self.coordinate_index,
+            rule_name: self.rule_name.map(str::to_owned),
+            context: self.context,
+            tree: None,
+            local_int_arg: self.local_int_arg,
+            member_values: self.member_values,
+            action: None,
+        };
+        match self
+            .semantic_hooks
+            .sempred(&mut ctx, self.rule_index, self.coordinate_index)
+        {
+            Some(result) => result,
+            // No hook answered this coordinate: fall through to the configured
+            // policy instead of silently rejecting the alternative, matching the
+            // legacy table path's dispatch chain (hook → policy).
+            None => apply_unknown_predicate_policy(
+                self.unknown_predicate_policy,
+                self.rule_index,
+                self.coordinate_index,
+                self.unknown_predicate_hits,
+            ),
+        }
+    }
+
+    fn trace_bool(&mut self, value: bool) -> bool {
+        let key = (self.rule_index, self.coordinate_index);
+        if !self.invoked_predicates.contains(&key) {
+            self.invoked_predicates.push(key);
+            use std::io::Write as _;
+            let mut stdout = std::io::stdout().lock();
+            let _ = writeln!(stdout, "eval={value}");
+        }
+        value
+    }
 }
 
 /// Captures predicate-failure recovery metadata for fail-option predicates.
@@ -2245,11 +2960,12 @@ enum DirectAdaptiveFallback {
 
 type DirectAdaptiveParseResult<T> = Result<T, DirectAdaptiveParseControl>;
 
-struct DirectAdaptiveParser<'atn, 'sim, S>
+struct DirectAdaptiveParser<'atn, 'sim, S, H = NoSemanticHooks>
 where
     S: TokenSource,
+    H: SemanticHooks,
 {
-    parser: &'sim mut BaseParser<S>,
+    parser: &'sim mut BaseParser<S, H>,
     atn: &'atn Atn,
     simulator: &'sim mut ParserAtnSimulator<'atn>,
     decision_by_state: Vec<Option<usize>>,
@@ -2294,16 +3010,32 @@ impl GeneratedMatch {
     }
 }
 
-impl<S> BaseParser<S>
+impl<S> BaseParser<S, NoSemanticHooks>
 where
     S: TokenSource,
 {
     /// Creates a parser base over a buffered token stream and recognizer
     /// metadata.
     pub fn new(input: CommonTokenStream<S>, data: RecognizerData) -> Self {
+        Self::with_semantic_hooks(input, data, NoSemanticHooks)
+    }
+}
+
+impl<S, H> BaseParser<S, H>
+where
+    S: TokenSource,
+    H: SemanticHooks,
+{
+    /// Creates a parser base with caller-owned semantic hooks.
+    pub fn with_semantic_hooks(
+        input: CommonTokenStream<S>,
+        data: RecognizerData,
+        semantic_hooks: H,
+    ) -> Self {
         Self {
             input,
             data,
+            semantic_hooks,
             build_parse_trees: true,
             syntax_errors: 0,
             report_diagnostic_errors: false,
@@ -2319,6 +3051,10 @@ where
             pending_invoking_states: Vec::new(),
             precedence_stack: vec![0],
             invoked_predicates: Vec::new(),
+            bail_on_error: false,
+            unknown_predicate_policy: UnknownSemanticPolicy::default(),
+            unknown_predicate_hits: Vec::new(),
+            unhandled_action_hits: Vec::new(),
             rule_first_set_cache: Vec::new(),
             state_expected_cache: FxHashMap::default(),
             state_expected_token_cache: FxHashMap::default(),
@@ -2340,6 +3076,44 @@ where
 
     pub const fn input(&mut self) -> &mut CommonTokenStream<S> {
         &mut self.input
+    }
+
+    /// Installs the policy for predicate coordinates that no translated table
+    /// entry or user hook resolves.
+    ///
+    /// The interpreter fallback sets this per parse from [`ParserRuntimeOptions`],
+    /// but generated recursive-descent rules evaluate predicates directly
+    /// (`parser_semantic_ir_predicate_matches_with_context_and_local`) without
+    /// going through those options. Generated parser constructors call this so
+    /// the generated-direct path honors `--sem-unknown` too, instead of leaving
+    /// the field at its `AssumeTrue` default and silently accepting an
+    /// unimplemented hook predicate.
+    pub const fn set_unknown_predicate_policy(&mut self, policy: UnknownSemanticPolicy) {
+        self.unknown_predicate_policy = policy;
+    }
+
+    /// Reports any unknown predicate coordinate the generated-direct path
+    /// recorded under [`UnknownSemanticPolicy::Error`], as an
+    /// [`AntlrError::Unsupported`]. Generated parser entry points call this
+    /// after a rule completes so the fail-loud policy surfaces on the
+    /// generated path the same way the interpreter entry surfaces it.
+    #[must_use]
+    pub fn take_unknown_semantic_error(&mut self) -> Option<AntlrError> {
+        let error = self.unknown_semantic_error();
+        self.unknown_predicate_hits.clear();
+        self.unhandled_action_hits.clear();
+        error
+    }
+
+    /// Drops any fail-loud semantic coordinates recorded by a previous parse.
+    ///
+    /// Generated parsers call this at the true top-level entry so a parser
+    /// reused after a fail-loud (or recovered) parse starts clean, without
+    /// clearing hits mid-parse where a generated parent still needs a child's
+    /// recorded coordinate to survive to the top-level boundary.
+    pub fn reset_unknown_semantic_hits(&mut self) {
+        self.unknown_predicate_hits.clear();
+        self.unhandled_action_hits.clear();
     }
 
     /// Returns the token stream owned by this parser.
@@ -2516,6 +3290,14 @@ where
         let result_token = self.token_at(diagnostic.ll_stop_index);
         let message = match diagnostic.kind {
             ParserAtnPredictionDiagnosticKind::Ambiguity => {
+                // Java's default LL prediction stops at the first full-context
+                // conflict without exact-ambiguity detection, so
+                // `reportAmbiguity` fires with `exact == false` there and the
+                // `DiagnosticErrorListener` (exactOnly by default) suppresses
+                // it. Only LL_EXACT_AMBIG_DETECTION produces exact ambiguities.
+                if self.prediction_mode != PredictionMode::LlExactAmbigDetection {
+                    return;
+                }
                 format!(
                     "reportAmbiguity d={decision} ({rule_name}): ambigAlts={{{alts}}}, input='{result_input}'"
                 )
@@ -2712,6 +3494,16 @@ where
         matches: impl Fn(i32) -> bool,
     ) -> Result<GeneratedMatch, AntlrError> {
         let expected_display = self.expected_symbols_display(expected_symbols);
+        if self.bail_on_error {
+            return Err(AntlrError::ParserError {
+                line: current.line(),
+                column: current.column(),
+                message: format!(
+                    "mismatched input {} expecting {expected_display}",
+                    token_input_display(&current)
+                ),
+            });
+        }
         if current.token_type() != TOKEN_EOF
             && let Some(next) = self.input.lt(2).cloned()
             && matches(next.token_type())
@@ -3205,6 +3997,7 @@ where
             rule_index,
             pred_index,
             predicates,
+            semantics: None,
             context: None,
             local_int_arg,
             member_values: &member_values,
@@ -3228,6 +4021,31 @@ where
             rule_index,
             pred_index,
             predicates,
+            semantics: None,
+            context: Some(context),
+            local_int_arg: Some((rule_index, i64::from(local_int_arg))),
+            member_values: &member_values,
+        })
+    }
+
+    /// Evaluates a generated `SemIR` parser predicate with access to the current
+    /// generated rule context.
+    pub fn parser_semantic_ir_predicate_matches_with_context_and_local(
+        &mut self,
+        semantics: &ParserSemantics,
+        rule_index: usize,
+        pred_index: usize,
+        context: &ParserRuleContext,
+        local_int_arg: i32,
+    ) -> bool {
+        let index = self.input.index();
+        let member_values = self.int_members.clone();
+        self.parser_predicate_matches(PredicateEval {
+            index,
+            rule_index,
+            pred_index,
+            predicates: &[],
+            semantics: Some(semantics),
             context: Some(context),
             local_int_arg: Some((rule_index, i64::from(local_int_arg))),
             member_values: &member_values,
@@ -3631,6 +4449,50 @@ where
         ParserAction::new(source_state, rule_index, start_index, stop_index)
     }
 
+    /// Offers a committed parser action event to the user semantic hook.
+    ///
+    /// Generated parsers call this for action source states that were present
+    /// in the ATN but not translated into a built-in Rust action template.
+    pub fn parser_action_hook(&mut self, action: ParserAction, tree: &ParseTree) -> bool {
+        let rule_index = action.rule_index();
+        let rule_name = self.rule_names().get(rule_index).cloned();
+        let context = match tree {
+            ParseTree::Rule(rule) if rule.context().rule_index() == rule_index => {
+                Some(rule.context())
+            }
+            ParseTree::Rule(_) | ParseTree::Terminal(_) | ParseTree::Error(_) => None,
+        };
+        let input = &mut self.input;
+        let semantic_hooks = &mut self.semantic_hooks;
+        let member_values = &self.int_members;
+        let mut ctx = ParserSemCtx {
+            input,
+            rule_index,
+            coordinate_index: usize::MAX,
+            rule_name,
+            context,
+            tree: Some(tree),
+            local_int_arg: None,
+            member_values,
+            action: Some(action),
+        };
+        let handled = semantic_hooks.action(&mut ctx, action);
+        // This action reached the hook because it had no translated arm. If no
+        // hook handled it either (`SemanticHooks::action` returns `false`), the
+        // committed action is silently dropped — record it so the parse entry
+        // can fail loud under the fail-loud boundary, mirroring unknown
+        // predicates. `assume-*` policies opt out of the fail-loud recording.
+        if !handled
+            && matches!(self.unknown_predicate_policy, UnknownSemanticPolicy::Error)
+        {
+            let coordinate = (rule_index, action.source_state());
+            if !self.unhandled_action_hits.contains(&coordinate) {
+                self.unhandled_action_hits.push(coordinate);
+            }
+        }
+        handled
+    }
+
     /// Attempts to execute a whole generated rule by committing simulator
     /// decisions directly. Unsupported constructs or decisions that need
     /// full-context / predicate evaluation restore the input cursor and fall
@@ -3852,7 +4714,7 @@ where
             .is_some_and(is_caller_follow_boundary_text);
         let is_boundary_gap = token.as_ref().is_some_and(|token| {
             token.channel() != visible_channel
-                || token.text().is_some_and(is_caller_follow_boundary_gap_text)
+                || is_caller_follow_boundary_gap_text(token.text())
         });
         (token_type, is_boundary, is_boundary_gap)
     }
@@ -4220,10 +5082,20 @@ where
             init_action_rules,
             track_alt_numbers,
             predicates,
+            semantics,
             rule_args,
             member_actions,
             return_actions,
+            unknown_predicate_policy,
         } = options;
+        self.unknown_predicate_policy = unknown_predicate_policy;
+        // A generated parent may have already recorded unknown-predicate
+        // coordinates before descending into this (interpreted) child. Clearing
+        // unconditionally would drop them before the parent's public entry
+        // surfaces them, so stash and restore around this call: recognition sees
+        // only the hits it records itself (so the fail-loud check below reflects
+        // this rule), and the parent's prior hits are merged back afterward.
+        let prior_unknown_predicate_hits = std::mem::take(&mut self.unknown_predicate_hits);
         let start_state = atn
             .rule_to_start_state()
             .get(rule_index)
@@ -4263,6 +5135,7 @@ where
                 decision_start_index: None,
                 init_action_rules: &init_action_rules,
                 predicates,
+                semantics,
                 rule_args,
                 member_actions,
                 return_actions,
@@ -4281,6 +5154,19 @@ where
             &mut memo,
             &mut expected,
         );
+        if let Some(error) = self.unknown_semantic_error() {
+            report_token_source_errors(&self.input.drain_source_errors());
+            // Keep the recorded coordinates: when this interpreted rule is a
+            // child of a generated parent, the parent's catch block recovers an
+            // ordinary `AntlrError` into a partial subtree, so the fail-loud
+            // coordinate must survive on the parser for the top-level entry's
+            // `take_unknown_semantic_error` to surface it. Cross-parse staleness
+            // is handled by clearing at the top-level generated entry instead.
+            return Err(error);
+        }
+        // Recognition recorded no unresolved coordinate of its own; merge the
+        // parent's prior hits back so its public entry can still surface them.
+        self.restore_prior_unknown_predicate_hits(prior_unknown_predicate_hits);
         let Some(outcome) = select_best_outcome(outcomes.into_iter(), self.prediction_mode) else {
             let error = self.recognition_error(rule_index, start_index, &expected);
             self.record_syntax_errors(1);
@@ -5641,6 +6527,7 @@ where
             decision_start_index,
             init_action_rules,
             predicates,
+            semantics,
             rule_args,
             member_actions,
             return_actions,
@@ -5670,6 +6557,7 @@ where
                 decision_start_index,
                 init_action_rules,
                 predicates,
+                semantics,
                 rule_args,
                 member_actions,
                 return_actions,
@@ -5794,6 +6682,7 @@ where
                 decision_start_index,
                 init_action_rules: request.init_action_rules,
                 predicates: request.predicates,
+                semantics: request.semantics,
                 rule_args: request.rule_args,
                 member_actions: request.member_actions,
                 return_actions: request.return_actions,
@@ -5873,6 +6762,7 @@ where
             decision_start_index,
             init_action_rules,
             predicates,
+            semantics,
             rule_args,
             member_actions,
             return_actions,
@@ -5906,6 +6796,7 @@ where
                 decision_start_index,
                 init_action_rules,
                 predicates,
+                semantics,
                 rule_args,
                 member_actions,
                 return_actions,
@@ -5960,6 +6851,7 @@ where
             decision_start_index,
             init_action_rules,
             predicates,
+            semantics,
             rule_args,
             member_actions,
             return_actions,
@@ -6065,6 +6957,7 @@ where
                         rule_index: *rule_index,
                         pred_index: *pred_index,
                         predicates,
+                        semantics,
                         context: None,
                         local_int_arg,
                         member_values: &member_values,
@@ -6082,6 +6975,7 @@ where
                                     decision_start_index: next_decision_start_index,
                                     init_action_rules,
                                     predicates,
+                                    semantics,
                                     rule_args,
                                     member_actions,
                                     return_actions,
@@ -6112,8 +7006,21 @@ where
                                 outcome
                             }),
                         );
-                    } else if let Some(message) =
-                        self.parser_predicate_failure_message(*rule_index, *pred_index, predicates)
+                    } else if let Some(message) = semantics
+                        .and_then(|semantics| {
+                            self.parser_semantic_ir_predicate_failure_message(
+                                *rule_index,
+                                *pred_index,
+                                semantics,
+                            )
+                        })
+                        .or_else(|| {
+                            self.parser_predicate_failure_message(
+                                *rule_index,
+                                *pred_index,
+                                predicates,
+                            )
+                        })
                     {
                         outcomes.push(self.predicate_failure_recovery(PredicateFailureRecovery {
                             rule_index: *rule_index,
@@ -6143,6 +7050,7 @@ where
                                     decision_start_index: next_decision_start_index,
                                     init_action_rules,
                                     predicates,
+                                    semantics,
                                     rule_args,
                                     member_actions,
                                     return_actions,
@@ -6193,6 +7101,7 @@ where
                             decision_start_index: None,
                             init_action_rules,
                             predicates,
+                            semantics,
                             rule_args,
                             member_actions,
                             return_actions,
@@ -6254,6 +7163,7 @@ where
                                     decision_start_index: next_decision_start_index,
                                     init_action_rules,
                                     predicates,
+                                    semantics,
                                     rule_args,
                                     member_actions,
                                     return_actions,
@@ -6320,6 +7230,7 @@ where
                                     decision_start_index: next_decision_start_index,
                                     init_action_rules,
                                     predicates,
+                                    semantics,
                                     rule_args,
                                     member_actions,
                                     return_actions,
@@ -6462,6 +7373,7 @@ where
             member_values_after_action(
                 step.source_state,
                 request.member_actions,
+                request.semantics,
                 &request.member_values,
             )
         } else {
@@ -6474,6 +7386,7 @@ where
                     step.source_state,
                     action.rule_index(),
                     request.return_actions,
+                    request.semantics,
                     &request.return_values,
                 )
             },
@@ -6489,6 +7402,7 @@ where
                 decision_start_index: step.decision_start_index,
                 init_action_rules: request.init_action_rules,
                 predicates: request.predicates,
+                semantics: request.semantics,
                 rule_args: request.rule_args,
                 member_actions: request.member_actions,
                 return_actions: request.return_actions,
@@ -6997,27 +7911,197 @@ where
         }
     }
 
-    /// Evaluates a supported parser predicate at a speculative input index.
+    /// Evaluates a user hook for a predicate coordinate that has no generated
+    /// runtime table entry.
+    fn parser_semantic_hook_result(
+        &mut self,
+        request: ParserSemanticHookRequest<'_>,
+    ) -> Option<bool> {
+        let ParserSemanticHookRequest {
+            index,
+            rule_index,
+            pred_index,
+            context,
+            local_int_arg,
+            member_values,
+        } = request;
+        let rule_name = self.rule_names().get(rule_index).cloned();
+        self.input.seek(index);
+        let input = &mut self.input;
+        let semantic_hooks = &mut self.semantic_hooks;
+        let mut ctx = ParserSemCtx {
+            input,
+            rule_index,
+            coordinate_index: pred_index,
+            rule_name,
+            context,
+            tree: None,
+            local_int_arg,
+            member_values,
+            action: None,
+        };
+        semantic_hooks.sempred(&mut ctx, rule_index, pred_index)
+    }
+
+    /// Re-inserts unknown-predicate coordinates recorded before a nested
+    /// interpreted recognition, preserving order and skipping any the nested
+    /// call already recorded, so a generated parent's fail-loud coordinates
+    /// survive descending into an interpreted child.
+    fn restore_prior_unknown_predicate_hits(&mut self, prior: Vec<(usize, usize)>) {
+        if prior.is_empty() {
+            return;
+        }
+        let mut merged = prior;
+        for coordinate in std::mem::take(&mut self.unknown_predicate_hits) {
+            if !merged.contains(&coordinate) {
+                merged.push(coordinate);
+            }
+        }
+        self.unknown_predicate_hits = merged;
+    }
+
+    /// Applies the active [`UnknownSemanticPolicy`] to a predicate coordinate
+    /// that has no entry in the generated predicate table.
     ///
-    /// Parser ATN simulation is index-based, so predicate evaluation seeks to
-    /// the candidate index before applying lookahead. A missing predicate entry
-    /// means the generator did not opt into runtime evaluation for that
-    /// coordinate and the transition remains viable.
+    /// Under [`UnknownSemanticPolicy::Error`] the coordinate is recorded and
+    /// the guarded path is abandoned; the parse entry surfaces the recorded
+    /// coordinates as [`AntlrError::Unsupported`] once recognition finishes,
+    /// because a parse that consulted an unknown predicate is unreliable no
+    /// matter which paths were ultimately selected.
+    fn unknown_predicate_result(&mut self, rule_index: usize, pred_index: usize) -> bool {
+        apply_unknown_predicate_policy(
+            self.unknown_predicate_policy,
+            rule_index,
+            pred_index,
+            &mut self.unknown_predicate_hits,
+        )
+    }
+
+    /// Builds the fail-loud error for unknown predicate coordinates recorded
+    /// by the current parse, if any.
+    fn unknown_semantic_error(&self) -> Option<AntlrError> {
+        use std::fmt::Write as _;
+        if self.unknown_predicate_hits.is_empty() && self.unhandled_action_hits.is_empty() {
+            return None;
+        }
+        let mut message = String::new();
+        for (rule_index, pred_index) in &self.unknown_predicate_hits {
+            if !message.is_empty() {
+                message.push_str("; ");
+            }
+            let _ = match self.rule_names().get(*rule_index) {
+                Some(rule_name) => write!(
+                    message,
+                    "unsupported semantic predicate: rule={rule_name}({rule_index}) pred_index={pred_index}"
+                ),
+                None => write!(
+                    message,
+                    "unsupported semantic predicate: rule_index={rule_index} pred_index={pred_index}"
+                ),
+            };
+        }
+        for (rule_index, source_state) in &self.unhandled_action_hits {
+            if !message.is_empty() {
+                message.push_str("; ");
+            }
+            let _ = match self.rule_names().get(*rule_index) {
+                Some(rule_name) => write!(
+                    message,
+                    "unhandled semantic action: rule={rule_name}({rule_index}) state={source_state}"
+                ),
+                None => write!(
+                    message,
+                    "unhandled semantic action: rule_index={rule_index} state={source_state}"
+                ),
+            };
+        }
+        Some(AntlrError::Unsupported(message))
+    }
+
+    /// Evaluates one lowered predicate expression at the requested input
+    /// position.
+    ///
+    /// This sits in the prediction hot loop, so the context borrows the
+    /// speculative member state read-only and the rule name by reference —
+    /// no per-evaluation allocation. Only the hook escape path materializes
+    /// owned copies, and only when a hook is actually consulted.
+    fn parser_semir_predicate_matches(
+        &mut self,
+        semantics: &ParserSemantics,
+        predicate: &ParserSemanticPredicate,
+        request: ParserSemanticHookRequest<'_>,
+    ) -> bool {
+        self.input.seek(request.index);
+        let rule_name = self
+            .data
+            .rule_names()
+            .get(request.rule_index)
+            .map(String::as_str);
+        let unknown_predicate_policy = self.unknown_predicate_policy;
+        let mut ctx = ParserSemIrCtx {
+            input: &mut self.input,
+            semantic_hooks: &mut self.semantic_hooks,
+            rule_index: request.rule_index,
+            coordinate_index: request.pred_index,
+            rule_name,
+            context: request.context,
+            local_int_arg: request.local_int_arg,
+            member_values: request.member_values,
+            invoked_predicates: &mut self.invoked_predicates,
+            unknown_predicate_policy,
+            unknown_predicate_hits: &mut self.unknown_predicate_hits,
+        };
+        semir::eval_pred(&semantics.ir, predicate.expr, &mut ctx)
+    }
+
     fn parser_predicate_matches(&mut self, eval: PredicateEval<'_>) -> bool {
         let PredicateEval {
             index,
             rule_index,
             pred_index,
             predicates,
+            semantics,
             context,
             local_int_arg,
             member_values,
         } = eval;
+        if let Some((semantics, predicate)) = semantics.and_then(|semantics| {
+            semantics
+                .predicates
+                .iter()
+                .find(|predicate| {
+                    predicate.rule_index == rule_index && predicate.pred_index == pred_index
+                })
+                .map(|predicate| (semantics, predicate))
+        }) {
+            return self.parser_semir_predicate_matches(
+                semantics,
+                predicate,
+                ParserSemanticHookRequest {
+                    index,
+                    rule_index,
+                    pred_index,
+                    context,
+                    local_int_arg,
+                    member_values,
+                },
+            );
+        }
         let Some((_, _, predicate)) = predicates
             .iter()
             .find(|(rule, pred, _)| *rule == rule_index && *pred == pred_index)
         else {
-            return true;
+            if let Some(result) = self.parser_semantic_hook_result(ParserSemanticHookRequest {
+                index,
+                rule_index,
+                pred_index,
+                context,
+                local_int_arg,
+                member_values,
+            }) {
+                return result;
+            }
+            return self.unknown_predicate_result(rule_index, pred_index);
         };
         self.input.seek(index);
         match predicate {
@@ -7105,6 +8189,23 @@ where
                 }
                 _ => None,
             })
+    }
+
+    /// Returns a generated fail-option message for a `SemIR` predicate
+    /// coordinate.
+    pub fn parser_semantic_ir_predicate_failure_message(
+        &self,
+        rule_index: usize,
+        pred_index: usize,
+        semantics: &ParserSemantics,
+    ) -> Option<&'static str> {
+        semantics
+            .predicates
+            .iter()
+            .find(|predicate| {
+                predicate.rule_index == rule_index && predicate.pred_index == pred_index
+            })
+            .and_then(|predicate| predicate.failure_message)
     }
 
     /// Returns the token-stream index after consuming `symbol` at `index`.
@@ -7331,6 +8432,45 @@ where
         )
     }
 
+    /// Expected-token set at the parser's current ATN state — ANTLR's
+    /// `getExpectedTokens()`. Generated recognizers expose this as
+    /// `self.expected_tokens()` for embedded test actions
+    /// (`self.expected_tokens().to_token_string(self.vocabulary())`).
+    pub fn expected_tokens_current(&self, atn: &Atn) -> ExpectedTokenSet {
+        let state = usize::try_from(self.data().state()).unwrap_or(0);
+        ExpectedTokenSet {
+            symbols: state_expected_symbols(atn, state),
+        }
+    }
+
+    /// Enables the bail error strategy: the first syntax error aborts the
+    /// parse instead of recovering.
+    pub const fn set_bail_on_error(&mut self, bail: bool) {
+        self.bail_on_error = bail;
+    }
+
+    /// Whether the bail error strategy is active.
+    #[must_use]
+    pub const fn bail_on_error(&self) -> bool {
+        self.bail_on_error
+    }
+
+    /// Names of the rules on the live invocation stack, current rule first —
+    /// ANTLR's `getRuleInvocationStack()`.
+    pub fn rule_invocation_stack(&self) -> Vec<String> {
+        self.rule_context_stack
+            .iter()
+            .rev()
+            .map(|frame| {
+                self.data()
+                    .rule_names()
+                    .get(frame.rule_index)
+                    .cloned()
+                    .unwrap_or_else(|| format!("<{}>", frame.rule_index))
+            })
+            .collect()
+    }
+
     /// Formats a buffered token in ANTLR's diagnostic token display form.
     pub fn token_display_at(&mut self, index: usize) -> Option<String> {
         self.token_at(index).map(|token| format!("{token}"))
@@ -7414,9 +8554,10 @@ where
     }
 }
 
-impl<S> DirectAdaptiveParser<'_, '_, S>
+impl<S, H> DirectAdaptiveParser<'_, '_, S, H>
 where
     S: TokenSource,
+    H: SemanticHooks,
 {
     fn parse_rule(
         &mut self,
@@ -7922,54 +9063,29 @@ fn report_generated_diagnostics(
     parser_diagnostics: &[ParserDiagnostic],
     token_errors: &[TokenSourceError],
 ) {
-    #[derive(Clone, Copy)]
-    enum DiagnosticSource {
-        Token(usize),
-        Parser(usize),
-    }
-
-    let mut ordered = Vec::with_capacity(parser_diagnostics.len() + token_errors.len());
-    ordered.extend(token_errors.iter().enumerate().map(|(index, error)| {
-        (
-            error.line,
-            error.column,
-            0_usize,
-            index,
-            DiagnosticSource::Token(index),
-        )
-    }));
-    ordered.extend(
-        parser_diagnostics
-            .iter()
-            .enumerate()
-            .map(|(index, diagnostic)| {
-                (
-                    diagnostic.line,
-                    diagnostic.column,
-                    1_usize,
-                    index,
-                    DiagnosticSource::Parser(index),
-                )
-            }),
-    );
-    ordered.sort_by_key(|(line, column, source_order, index, _)| {
-        (*line, *column, *source_order, *index)
-    });
-
-    for (_, _, _, _, source) in ordered {
-        match source {
-            DiagnosticSource::Token(index) => {
-                let error = &token_errors[index];
+    // Parser diagnostics keep their event order: Java's console and
+    // DiagnosticErrorListener print reports as prediction produces them, so
+    // `reportAttemptingFullContext` precedes `reportContextSensitivity` even
+    // though the latter's position is earlier. Buffered token-source errors
+    // interleave by source position — ANTLR's lazy token stream surfaces a
+    // lexer error when the parser first fetches that token — and win ties.
+    let mut token_iter = token_errors.iter().peekable();
+    for diagnostic in parser_diagnostics {
+        while let Some(error) = token_iter.peek() {
+            if (error.line, error.column) <= (diagnostic.line, diagnostic.column) {
                 eprintln!("line {}:{} {}", error.line, error.column, error.message);
-            }
-            DiagnosticSource::Parser(index) => {
-                let diagnostic = &parser_diagnostics[index];
-                eprintln!(
-                    "line {}:{} {}",
-                    diagnostic.line, diagnostic.column, diagnostic.message
-                );
+                token_iter.next();
+            } else {
+                break;
             }
         }
+        eprintln!(
+            "line {}:{} {}",
+            diagnostic.line, diagnostic.column, diagnostic.message
+        );
+    }
+    for error in token_iter {
+        eprintln!("line {}:{} {}", error.line, error.column, error.message);
     }
 }
 
@@ -8497,9 +9613,10 @@ fn dedupe_outcomes(outcomes: &mut Vec<RecognizeOutcome>) {
     outcomes.dedup();
 }
 
-impl<S> Recognizer for BaseParser<S>
+impl<S, H> Recognizer for BaseParser<S, H>
 where
     S: TokenSource,
+    H: SemanticHooks,
 {
     fn data(&self) -> &RecognizerData {
         &self.data
@@ -8510,9 +9627,10 @@ where
     }
 }
 
-impl<S> Parser for BaseParser<S>
+impl<S, H> Parser for BaseParser<S, H>
 where
     S: TokenSource,
+    H: SemanticHooks,
 {
     fn build_parse_trees(&self) -> bool {
         self.build_parse_trees
@@ -8602,12 +9720,28 @@ mod tests {
         }
     }
 
-    fn mini_parser(tokens: Vec<CommonToken>) -> BaseParser<Source> {
-        let data = RecognizerData::new(
+    fn mini_parser_data() -> RecognizerData {
+        RecognizerData::new(
             "Mini.g4",
             Vocabulary::new([None, Some("'x'")], [None, Some("X")], [None::<&str>, None]),
-        );
+        )
+        .with_rule_names(["s"])
+    }
+
+    fn mini_parser(tokens: Vec<CommonToken>) -> BaseParser<Source> {
+        let data = mini_parser_data();
         BaseParser::new(CommonTokenStream::new(Source { tokens, index: 0 }), data)
+    }
+
+    fn mini_parser_with_hooks<H>(tokens: Vec<CommonToken>, hooks: H) -> BaseParser<Source, H>
+    where
+        H: SemanticHooks,
+    {
+        BaseParser::with_semantic_hooks(
+            CommonTokenStream::new(Source { tokens, index: 0 }),
+            mini_parser_data(),
+            hooks,
+        )
     }
 
     fn token_then_eof_atn() -> Atn {
@@ -9396,6 +10530,10 @@ mod tests {
                 }),
             },
         );
+        // Ambiguities from the default LL prediction mode are non-exact, so —
+        // matching Java's exactOnly DiagnosticErrorListener — only the
+        // attempting-full-context line is reported. Exact-ambiguity mode
+        // reports the ambiguity itself.
         parser.record_generated_prediction_diagnostic(
             &atn,
             1,
@@ -9430,11 +10568,6 @@ mod tests {
                     line: 1,
                     column: 2,
                     message: "reportAttemptingFullContext d=0 (s), input='xy'".to_owned(),
-                },
-                ParserDiagnostic {
-                    line: 1,
-                    column: 2,
-                    message: "reportAmbiguity d=0 (s): ambigAlts={1, 2}, input='xy'".to_owned(),
                 },
             ]
         );
@@ -9549,7 +10682,7 @@ mod tests {
         let tree = parser.finish_rule(child, false);
 
         assert_eq!(parser.la(1), TOKEN_EOF);
-        assert_eq!(tree.to_string_tree(&["s", "a"]), "(a z)");
+        assert_eq!(tree.to_string_tree_with_names(&["s", "a"]), "(a z)");
         assert_eq!(parser.number_of_syntax_errors(), 1);
         assert_eq!(
             parser.generated_parser_diagnostics,
@@ -9763,14 +10896,14 @@ mod tests {
         let source_index_after_parse = stream.token_source().index;
         let buffered = stream.tokens();
         assert_eq!(buffered.len(), 2);
-        assert_eq!(buffered[0].text(), Some("x"));
+        assert_eq!(buffered[0].text(), "x");
         assert_eq!(buffered[0].token_index(), 0);
         assert_eq!(buffered[1].token_type(), TOKEN_EOF);
         assert_eq!(stream.token_source().index, source_index_after_parse);
 
         let stream = parser.into_token_stream();
         assert_eq!(stream.token_source().index, source_index_after_parse);
-        assert_eq!(stream.tokens()[0].text(), Some("x"));
+        assert_eq!(stream.tokens()[0].text(), "x");
         assert_eq!(stream.tokens()[1].token_type(), TOKEN_EOF);
     }
 
@@ -9792,7 +10925,7 @@ mod tests {
             tree.first_error_token()
                 .expect("recovery should embed an error token")
                 .text(),
-            Some("y")
+            "y"
         );
     }
 
@@ -9845,6 +10978,443 @@ mod tests {
 
         assert_eq!(tree.text(), "xy");
         assert_eq!(parser.input.index(), 2);
+    }
+
+    #[test]
+    fn unknown_predicate_policy_defaults_to_assume_true() {
+        let atn = predicate_after_token_atn();
+        let mut parser = mini_parser(vec![
+            CommonToken::new(1).with_text("x"),
+            CommonToken::new(2).with_text("y"),
+            CommonToken::eof("parser-test", 2, 1, 2),
+        ]);
+
+        let (tree, _) = parser
+            .parse_atn_rule_with_runtime_options(&atn, 0, ParserRuntimeOptions::default())
+            .expect("unknown predicate should pass under the default policy");
+
+        assert_eq!(tree.text(), "xy");
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+    }
+
+    #[test]
+    fn nested_interpreted_parse_preserves_prior_unknown_predicate_hits() {
+        // A generated parent may record an unknown-predicate coordinate, then
+        // descend into an interpreted child. The child's interpreter entry must
+        // not wipe the parent's recorded hit before the top-level surfaces it.
+        let atn = token_then_eof_atn();
+        let mut parser = mini_parser(vec![
+            CommonToken::new(1).with_text("x"),
+            CommonToken::eof("parser-test", 1, 1, 1),
+        ]);
+
+        // Simulate the parent having recorded a fail-loud coordinate.
+        parser.unknown_predicate_hits.push((7, 3));
+
+        // Run an interpreted child parse that records no coordinate of its own.
+        parser
+            .parse_atn_rule_with_runtime_options(&atn, 0, ParserRuntimeOptions::default())
+            .expect("child rule parses");
+
+        // The parent's coordinate must still be present for the top-level entry.
+        let error = parser
+            .take_unknown_semantic_error()
+            .expect("parent's recorded coordinate must survive the nested interpreted parse");
+        let AntlrError::Unsupported(message) = error else {
+            panic!("expected AntlrError::Unsupported, got {error:?}");
+        };
+        assert!(message.contains("pred_index=3"), "message: {message}");
+    }
+
+    #[test]
+    fn unknown_predicate_policy_assume_false_kills_the_guarded_path() {
+        let atn = predicate_after_token_atn();
+        let mut parser = mini_parser(vec![
+            CommonToken::new(1).with_text("x"),
+            CommonToken::new(2).with_text("y"),
+            CommonToken::eof("parser-test", 2, 1, 2),
+        ]);
+
+        let result = parser.parse_atn_rule_with_runtime_options(
+            &atn,
+            0,
+            ParserRuntimeOptions {
+                unknown_predicate_policy: UnknownSemanticPolicy::AssumeFalse,
+                ..ParserRuntimeOptions::default()
+            },
+        );
+
+        assert!(
+            result.is_err(),
+            "the only path is predicate-guarded, so assume-false must fail the parse"
+        );
+    }
+
+    #[test]
+    fn unknown_predicate_policy_error_names_the_coordinate() {
+        let atn = predicate_after_token_atn();
+        let mut parser = mini_parser(vec![
+            CommonToken::new(1).with_text("x"),
+            CommonToken::new(2).with_text("y"),
+            CommonToken::eof("parser-test", 2, 1, 2),
+        ]);
+
+        let error = parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    unknown_predicate_policy: UnknownSemanticPolicy::Error,
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect_err("evaluating an unknown predicate under Error policy must fail");
+
+        let AntlrError::Unsupported(message) = error else {
+            panic!("expected AntlrError::Unsupported, got {error:?}");
+        };
+        assert!(
+            message.contains("unsupported semantic predicate"),
+            "message should name the failure class: {message}"
+        );
+        assert!(
+            message.contains("pred_index=0"),
+            "message should carry the coordinate: {message}"
+        );
+    }
+
+    #[test]
+    fn fail_loud_hits_do_not_leak_into_a_reused_interpreter_parse() {
+        // A parser reused after a fail-loud parse must not carry the old
+        // coordinates into a later parse. The fail-loud return keeps the hits
+        // (so a generated parent can surface a recovered child's coordinate),
+        // and the next parse's entry stashes/replaces them, so a subsequent
+        // clean parse surfaces no stale error.
+        let atn = predicate_after_token_atn();
+        let mut parser = mini_parser(vec![
+            CommonToken::new(1).with_text("x"),
+            CommonToken::new(2).with_text("y"),
+            CommonToken::eof("parser-test", 2, 1, 2),
+        ]);
+
+        parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    unknown_predicate_policy: UnknownSemanticPolicy::Error,
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect_err("first parse fails loud under the Error policy");
+
+        // The failed parse kept its coordinate on the parser (so a generated
+        // parent could surface a recovered child). A top-level reuse resets the
+        // hits — generated parsers call `reset_unknown_semantic_hits` at their
+        // public entry; direct interpreter-API callers do the same.
+        parser.reset_unknown_semantic_hits();
+        assert!(
+            parser.take_unknown_semantic_error().is_none(),
+            "reset must drop stale unknown-predicate coordinates before a reused parse"
+        );
+    }
+
+    #[derive(Debug, Default)]
+    struct RecordingHooks {
+        predicates: Vec<(usize, usize, usize, Option<String>)>,
+        actions: Vec<(usize, String, Option<String>)>,
+    }
+
+    impl SemanticHooks for RecordingHooks {
+        fn sempred<S>(
+            &mut self,
+            ctx: &mut ParserSemCtx<'_, S>,
+            rule_index: usize,
+            pred_index: usize,
+        ) -> Option<bool>
+        where
+            S: TokenSource,
+        {
+            self.predicates.push((
+                ctx.input_index(),
+                rule_index,
+                pred_index,
+                ctx.token_text(1).map(str::to_owned),
+            ));
+            Some(true)
+        }
+
+        fn action<S>(&mut self, ctx: &mut ParserSemCtx<'_, S>, action: ParserAction) -> bool
+        where
+            S: TokenSource,
+        {
+            self.actions.push((
+                action.source_state(),
+                ctx.action_text(),
+                ctx.rule_name().map(str::to_owned),
+            ));
+            true
+        }
+    }
+
+    #[test]
+    fn semantic_hook_handles_unknown_predicate_before_error_policy() {
+        let atn = predicate_after_token_atn();
+        let mut parser = mini_parser_with_hooks(
+            vec![
+                CommonToken::new(1).with_text("x"),
+                CommonToken::new(2).with_text("y"),
+                CommonToken::eof("parser-test", 2, 1, 2),
+            ],
+            RecordingHooks::default(),
+        );
+
+        let (tree, _) = parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    unknown_predicate_policy: UnknownSemanticPolicy::Error,
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect("hook supplies the missing predicate result");
+
+        assert_eq!(tree.text(), "xy");
+        assert_eq!(
+            parser.semantic_hooks.predicates,
+            vec![(1, 0, 0, Some("y".to_owned()))]
+        );
+    }
+
+    #[test]
+    fn semantic_hook_handles_committed_parser_action() {
+        let atn = token_then_eof_atn();
+        let mut parser = mini_parser_with_hooks(
+            vec![
+                CommonToken::new(1).with_text("x"),
+                CommonToken::eof("parser-test", 1, 1, 1),
+            ],
+            RecordingHooks::default(),
+        );
+        let (tree, _) = parser
+            .parse_atn_rule_with_runtime_options(&atn, 0, ParserRuntimeOptions::default())
+            .expect("rule parses before action hook is tested");
+
+        assert!(parser.parser_action_hook(ParserAction::new(42, 0, 0, Some(0)), &tree));
+        assert_eq!(
+            parser.semantic_hooks.actions,
+            vec![(42, "x".to_owned(), Some("s".to_owned()))]
+        );
+    }
+
+    #[test]
+    fn unhandled_committed_action_fails_loud_under_error_policy() {
+        // An action offered to the hook that no hook handles (returns false)
+        // must be recorded and surfaced as `AntlrError::Unsupported` under the
+        // Error policy, so a `hook`-disposed action is not silently dropped.
+        let mut parser =
+            mini_parser_with_hooks(vec![CommonToken::eof("t", 0, 1, 0)], DecliningHooks);
+        parser.set_unknown_predicate_policy(UnknownSemanticPolicy::Error);
+        let tree = ParseTree::Rule(RuleNode::new(ParserRuleContext::new(0, -1)));
+
+        // DecliningHooks::action returns false (unhandled).
+        assert!(!parser.parser_action_hook(ParserAction::new(42, 0, 0, Some(0)), &tree));
+
+        let error = parser
+            .take_unknown_semantic_error()
+            .expect("an unhandled committed action under Error policy must fail loud");
+        let AntlrError::Unsupported(message) = error else {
+            panic!("expected AntlrError::Unsupported, got {error:?}");
+        };
+        assert!(
+            message.contains("unhandled semantic action") && message.contains("state=42"),
+            "message should name the dropped action coordinate: {message}"
+        );
+
+        // Under the default (assume-true) policy the same miss is not recorded.
+        let mut lenient =
+            mini_parser_with_hooks(vec![CommonToken::eof("t", 0, 1, 0)], DecliningHooks);
+        let tree = ParseTree::Rule(RuleNode::new(ParserRuleContext::new(0, -1)));
+        assert!(!lenient.parser_action_hook(ParserAction::new(42, 0, 0, Some(0)), &tree));
+        assert!(lenient.take_unknown_semantic_error().is_none());
+    }
+
+    #[test]
+    fn translated_predicate_is_unaffected_by_error_policy() {
+        let atn = predicate_after_token_atn();
+        let mut parser = mini_parser(vec![
+            CommonToken::new(1).with_text("x"),
+            CommonToken::new(2).with_text("y"),
+            CommonToken::eof("parser-test", 2, 1, 2),
+        ]);
+
+        let (tree, _) = parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    predicates: &[(0, 0, ParserPredicate::True)],
+                    unknown_predicate_policy: UnknownSemanticPolicy::Error,
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect("a predicate covered by the table is not an unknown coordinate");
+
+        assert_eq!(tree.text(), "xy");
+    }
+
+    /// Hooks that decline (`None`) must fall through to the configured policy
+    /// even when the coordinate carries a [`semir`] `Hook` node, matching the
+    /// legacy table path. Regression for the `unwrap_or(false)` that silently
+    /// rejected declined hook nodes and bypassed [`UnknownSemanticPolicy`].
+    fn hook_predicate_semantics() -> ParserSemantics {
+        let mut ir = SemIr::new();
+        let expr = ir.expr(PExpr::Hook(HookId::new(0)));
+        ParserSemantics {
+            ir,
+            predicates: vec![ParserSemanticPredicate {
+                rule_index: 0,
+                pred_index: 0,
+                expr,
+                failure_message: None,
+            }],
+            actions: Vec::new(),
+        }
+    }
+
+    #[derive(Debug, Default)]
+    struct DecliningHooks;
+
+    impl SemanticHooks for DecliningHooks {}
+
+    #[test]
+    fn semir_hook_none_falls_through_to_assume_true() {
+        let atn = predicate_after_token_atn();
+        let semantics = hook_predicate_semantics();
+        let mut parser = mini_parser_with_hooks(
+            vec![
+                CommonToken::new(1).with_text("x"),
+                CommonToken::new(2).with_text("y"),
+                CommonToken::eof("parser-test", 2, 1, 2),
+            ],
+            DecliningHooks,
+        );
+
+        let (tree, _) = parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    semantics: Some(&semantics),
+                    unknown_predicate_policy: UnknownSemanticPolicy::AssumeTrue,
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect("a declined SemIR hook must pass under assume-true");
+
+        assert_eq!(tree.text(), "xy");
+    }
+
+    #[test]
+    fn semir_hook_none_falls_through_to_assume_false() {
+        let atn = predicate_after_token_atn();
+        let semantics = hook_predicate_semantics();
+        let mut parser = mini_parser_with_hooks(
+            vec![
+                CommonToken::new(1).with_text("x"),
+                CommonToken::new(2).with_text("y"),
+                CommonToken::eof("parser-test", 2, 1, 2),
+            ],
+            DecliningHooks,
+        );
+
+        let result = parser.parse_atn_rule_with_runtime_options(
+            &atn,
+            0,
+            ParserRuntimeOptions {
+                semantics: Some(&semantics),
+                unknown_predicate_policy: UnknownSemanticPolicy::AssumeFalse,
+                ..ParserRuntimeOptions::default()
+            },
+        );
+
+        assert!(
+            result.is_err(),
+            "a declined SemIR hook must fail the only guarded path under assume-false"
+        );
+    }
+
+    #[test]
+    fn semir_hook_none_records_coordinate_under_error_policy() {
+        let atn = predicate_after_token_atn();
+        let semantics = hook_predicate_semantics();
+        let mut parser = mini_parser_with_hooks(
+            vec![
+                CommonToken::new(1).with_text("x"),
+                CommonToken::new(2).with_text("y"),
+                CommonToken::eof("parser-test", 2, 1, 2),
+            ],
+            DecliningHooks,
+        );
+
+        let error = parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    semantics: Some(&semantics),
+                    unknown_predicate_policy: UnknownSemanticPolicy::Error,
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect_err("a declined SemIR hook under Error policy must fail the parse");
+
+        let AntlrError::Unsupported(message) = error else {
+            panic!("expected AntlrError::Unsupported, got {error:?}");
+        };
+        assert!(
+            message.contains("unsupported semantic predicate") && message.contains("pred_index=0"),
+            "message should name the unresolved coordinate: {message}"
+        );
+    }
+
+    #[test]
+    fn generated_direct_predicate_honors_installed_policy() {
+        // The generated recursive-descent path calls
+        // `parser_semantic_ir_predicate_matches_with_context_and_local` without
+        // going through `ParserRuntimeOptions`, so the policy must be installed
+        // via `set_unknown_predicate_policy` (as the generated constructor now
+        // does). A declining hook must then honor it rather than the default.
+        let semantics = hook_predicate_semantics();
+        let context = ParserRuleContext::new(0, -1);
+
+        let mut assume_true =
+            mini_parser_with_hooks(vec![CommonToken::eof("t", 0, 1, 0)], DecliningHooks);
+        assert!(
+            assume_true.parser_semantic_ir_predicate_matches_with_context_and_local(
+                &semantics, 0, 0, &context, 0
+            ),
+            "default AssumeTrue accepts a declined hook"
+        );
+        assert!(assume_true.take_unknown_semantic_error().is_none());
+
+        let mut error_policy =
+            mini_parser_with_hooks(vec![CommonToken::eof("t", 0, 1, 0)], DecliningHooks);
+        error_policy.set_unknown_predicate_policy(UnknownSemanticPolicy::Error);
+        assert!(
+            !error_policy.parser_semantic_ir_predicate_matches_with_context_and_local(
+                &semantics, 0, 0, &context, 0
+            ),
+            "Error policy rejects a declined hook on the generated-direct path"
+        );
+        let error = error_policy
+            .take_unknown_semantic_error()
+            .expect("Error policy records the unresolved coordinate for the generated path");
+        let AntlrError::Unsupported(message) = error else {
+            panic!("expected AntlrError::Unsupported, got {error:?}");
+        };
+        assert!(message.contains("pred_index=0"), "message: {message}");
     }
 
     #[test]

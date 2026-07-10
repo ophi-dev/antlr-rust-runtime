@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::{BTreeSet, HashSet};
 use std::hash::BuildHasherDefault;
 
@@ -8,7 +9,9 @@ use crate::int_stream::EOF;
 use crate::lexer::{
     BaseLexer, Lexer, LexerCustomAction, LexerDfaActionKey, LexerDfaCachedAccept,
     LexerDfaCachedState, LexerDfaCachedTransition, LexerDfaConfigKey, LexerDfaKey, LexerPredicate,
+    LexerSemCtx,
 };
+use crate::parser::SemanticHooks;
 use crate::prediction::PredictionFxHasher;
 use crate::token::{CommonToken, DEFAULT_CHANNEL, INVALID_TOKEN_TYPE, TokenFactory};
 
@@ -223,6 +226,85 @@ where
     )
 }
 
+/// Dispatches one lexer custom action to a shared [`SemanticHooks`] object.
+///
+/// Both `next_token_*_with_semantic_hooks` entry points wire the interpreter's
+/// action callback to this, so the `RefCell` borrow + [`LexerSemCtx`] plumbing
+/// lives in one place instead of being copied per entry point.
+fn dispatch_lexer_action_hook<I, F, H>(
+    hooks: &RefCell<&mut H>,
+    lexer: &mut BaseLexer<I, F>,
+    action: LexerCustomAction,
+) where
+    I: CharStream,
+    F: TokenFactory,
+    H: SemanticHooks,
+{
+    let Ok(rule_index) = usize::try_from(action.rule_index()) else {
+        return;
+    };
+    let Ok(action_index) = usize::try_from(action.action_index()) else {
+        return;
+    };
+    // A custom action runs on the committed path, so it gets a mutable lexer
+    // borrow: a `lexer_action` hook can change the mode stack
+    // (`push_mode`/`pop_mode`/`set_mode`), matching the closure-based
+    // `custom_action` API that also receives `&mut BaseLexer`.
+    let mut ctx = LexerSemCtx::new_mut(lexer, rule_index, action_index, action.position());
+    let _ = hooks.borrow_mut().lexer_action(&mut ctx, action);
+}
+
+/// Dispatches one lexer semantic predicate to a shared [`SemanticHooks`]
+/// object, defaulting unknown coordinates to `true` (the historical closure
+/// default) when the hook declines with `None`.
+fn dispatch_lexer_predicate_hook<I, F, H>(
+    hooks: &RefCell<&mut H>,
+    lexer: &BaseLexer<I, F>,
+    predicate: LexerPredicate,
+) -> bool
+where
+    I: CharStream,
+    F: TokenFactory,
+    H: SemanticHooks,
+{
+    let mut ctx = LexerSemCtx::new(
+        lexer,
+        predicate.rule_index(),
+        predicate.pred_index(),
+        predicate.position(),
+    );
+    hooks
+        .borrow_mut()
+        .lexer_sempred(&mut ctx, predicate.rule_index(), predicate.pred_index())
+        .unwrap_or(true)
+}
+
+/// Runs one lexer-token match with a shared [`SemanticHooks`] object.
+///
+/// This is the trait-based facade over the historical lexer closure hooks.
+/// Unknown lexer predicates default to `true` when the hook returns `None`,
+/// matching the existing closure default; callers that need fail-loud behavior
+/// can implement the hook to record and reject coordinates explicitly.
+pub fn next_token_with_semantic_hooks<I, F, H>(
+    lexer: &mut BaseLexer<I, F>,
+    atn: &Atn,
+    hooks: &mut H,
+) -> CommonToken
+where
+    I: CharStream,
+    F: TokenFactory,
+    H: SemanticHooks,
+{
+    let hooks = RefCell::new(hooks);
+    next_token_with_hooks(
+        lexer,
+        atn,
+        |lexer, action| dispatch_lexer_action_hook(&hooks, lexer, action),
+        |lexer, predicate| dispatch_lexer_predicate_hook(&hooks, lexer, predicate),
+        |_, _, _| {},
+    )
+}
+
 /// Runs one lexer-token match against an ahead-of-time compiled lexer DFA.
 ///
 /// Tokens starting in a compiled mode are matched by walking static tables;
@@ -280,6 +362,30 @@ where
             compiled: Some(dfa),
             use_cache: false,
         },
+    )
+}
+
+/// Runs one compiled-DFA lexer-token match with a shared [`SemanticHooks`]
+/// object for dynamic predicate/action modes.
+pub fn next_token_compiled_with_semantic_hooks<I, F, H>(
+    lexer: &mut BaseLexer<I, F>,
+    atn: &Atn,
+    dfa: &CompiledLexerDfa,
+    hooks: &mut H,
+) -> CommonToken
+where
+    I: CharStream,
+    F: TokenFactory,
+    H: SemanticHooks,
+{
+    let hooks = RefCell::new(hooks);
+    next_token_compiled_with_hooks(
+        lexer,
+        atn,
+        dfa,
+        |lexer, action| dispatch_lexer_action_hook(&hooks, lexer, action),
+        |lexer, predicate| dispatch_lexer_predicate_hook(&hooks, lexer, predicate),
+        |_, _, _| {},
     )
 }
 
@@ -1264,6 +1370,41 @@ mod tests {
     }
 
     #[test]
+    fn lexer_action_hook_context_can_change_mode() {
+        // A custom-action hook receives a mutable lexer borrow, so it can push /
+        // pop / set the lexer mode (matching the closure `custom_action` API). A
+        // speculative predicate context receives a shared borrow, so the same
+        // mutators are inert there.
+        let data = RecognizerData::new(
+            "T",
+            Vocabulary::new([None, Some("T")], [None, Some("T")], [None::<&str>, None]),
+        );
+        let mut lexer = BaseLexer::new(InputStream::new(""), data);
+
+        // Action (mutable) context: mode mutations apply.
+        {
+            let mut ctx = LexerSemCtx::new_mut(&mut lexer, 0, 0, 0);
+            assert_eq!(ctx.mode(), 0);
+            assert!(ctx.push_mode(2), "action context applies push_mode");
+            assert_eq!(ctx.mode(), 2);
+            assert!(ctx.set_mode(3), "action context applies set_mode");
+            assert_eq!(ctx.mode(), 3);
+            assert_eq!(ctx.pop_mode(), Some(0), "pop restores the pushed-from mode");
+            assert_eq!(ctx.mode(), 0);
+        }
+        assert_eq!(lexer.mode(), 0, "mutations went through to the lexer");
+
+        // Predicate (shared) context: mutators are inert and report not-applied.
+        {
+            let mut ctx = LexerSemCtx::new(&lexer, 0, 0, 0);
+            assert!(!ctx.push_mode(2), "predicate context does not mutate");
+            assert!(!ctx.set_mode(3), "predicate context does not mutate");
+            assert_eq!(ctx.pop_mode(), None, "predicate context does not mutate");
+        }
+        assert_eq!(lexer.mode(), 0, "shared-context calls left the lexer unchanged");
+    }
+
+    #[test]
     fn lexer_matches_longest_token_and_skips() {
         let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&[
             4, 0, 2, // version, lexer, max token type
@@ -1308,7 +1449,7 @@ mod tests {
 
         let token = next_token(&mut lexer, &atn);
         assert_eq!(token.token_type(), 1);
-        assert_eq!(token.text(), Some("ab"));
+        assert_eq!(token.text(), "ab");
         assert_eq!(next_token(&mut lexer, &atn).token_type(), TOKEN_EOF);
     }
 
@@ -1353,6 +1494,6 @@ mod tests {
         assert_eq!(token.token_type(), 1);
         assert_eq!(token.start(), 0);
         assert_eq!(token.stop(), 1);
-        assert_eq!(token.text(), Some("ab"));
+        assert_eq!(token.text(), "ab");
     }
 }

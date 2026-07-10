@@ -12,6 +12,7 @@ pub mod parser;
 pub mod perf;
 pub mod prediction;
 pub mod recognizer;
+pub mod semir;
 pub mod token;
 pub mod token_stream;
 pub mod tree;
@@ -23,10 +24,12 @@ pub use dfa::{Dfa, DfaState};
 pub use errors::{AntlrError, ConsoleErrorListener, ErrorListener};
 pub use generated::{GeneratedLexer, GeneratedParser, GrammarMetadata};
 pub use int_stream::{EOF, IntStream, UNKNOWN_SOURCE_NAME};
-pub use lexer::{BaseLexer, Lexer, LexerCustomAction, LexerMode, LexerPredicate};
+pub use lexer::{BaseLexer, Lexer, LexerCustomAction, LexerMode, LexerPredicate, LexerSemCtx};
 pub use parser::{
-    BaseParser, Parser, ParserAction, ParserMemberAction, ParserPredicate, ParserReturnAction,
-    ParserRuleArg, ParserRuntimeOptions, PredictionMode,
+    BailErrorStrategy, BaseParser, ExpectedTokenSet, NoSemanticHooks, Parser, ParserAction,
+    ParserMemberAction, ParserPredicate, ParserReturnAction, ParserRuleArg, ParserRuntimeOptions,
+    ParserSemCtx, ParserSemanticAction, ParserSemanticPredicate, ParserSemantics, PredictionMode,
+    SemanticHooks, UnknownSemanticPolicy,
 };
 #[cfg(feature = "perf-counters")]
 pub use perf::{dump as dump_prediction_perf_counters, reset as reset_prediction_perf_counters};
@@ -40,7 +43,27 @@ pub use token::{
 };
 pub use token_stream::CommonTokenStream;
 pub use tree::{
-    ErrorNode, ParseTree, ParseTreeListener, ParseTreeWalker, ParserRuleContext, RuleNode,
-    TerminalNode,
+    ErrorNode, FromRuleContext, GeneratedAttrs, ParseTree, ParseTreeListener, ParseTreeWalker,
+    ParserRuleContext, RuleNode, TerminalNode,
 };
 pub use vocabulary::Vocabulary;
+
+/// Formats a slice the way Java's `List.toString` does: `[a, b, c]`.
+///
+/// ANTLR's runtime-testsuite descriptors byte-compare output produced by
+/// Java's list rendering (`getRuleInvocationStack()`, token-getter lists).
+/// Rust's `Vec` `Debug` quotes elements, so — like Go's
+/// `antlr.PrintArrayJavaStyle` and Python's `str_list` — the Rust target
+/// exposes a dedicated formatter for generated test actions.
+pub fn java_style_list<T: std::fmt::Display>(items: &[T]) -> String {
+    let mut out = String::from("[");
+    for (index, item) in items.iter().enumerate() {
+        if index > 0 {
+            out.push_str(", ");
+        }
+        use std::fmt::Write;
+        write!(out, "{item}").expect("writing to a string cannot fail");
+    }
+    out.push(']');
+    out
+}

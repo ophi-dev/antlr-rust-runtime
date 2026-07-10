@@ -93,6 +93,168 @@ impl LexerPredicate {
     }
 }
 
+/// Lexer reference held by [`LexerSemCtx`]. A semantic *predicate* is evaluated
+/// speculatively and gets a shared borrow; a *custom action* runs on the
+/// committed path and gets a mutable borrow so a hook can change lexer state
+/// (mode stack), matching the closure-based `custom_action` API.
+#[derive(Debug)]
+enum LexerRef<'a, I, F>
+where
+    I: CharStream,
+    F: TokenFactory,
+{
+    Shared(&'a BaseLexer<I, F>),
+    Mut(&'a mut BaseLexer<I, F>),
+}
+
+impl<I, F> LexerRef<'_, I, F>
+where
+    I: CharStream,
+    F: TokenFactory,
+{
+    const fn get(&self) -> &BaseLexer<I, F> {
+        match self {
+            LexerRef::Shared(lexer) => lexer,
+            LexerRef::Mut(lexer) => lexer,
+        }
+    }
+}
+
+/// Runtime view passed to lexer semantic hooks.
+#[derive(Debug)]
+pub struct LexerSemCtx<'a, I, F = CommonTokenFactory>
+where
+    I: CharStream,
+    F: TokenFactory,
+{
+    lexer: LexerRef<'a, I, F>,
+    rule_index: usize,
+    coordinate_index: usize,
+    position: usize,
+}
+
+impl<'a, I, F> LexerSemCtx<'a, I, F>
+where
+    I: CharStream,
+    F: TokenFactory,
+{
+    pub(crate) const fn new(
+        lexer: &'a BaseLexer<I, F>,
+        rule_index: usize,
+        coordinate_index: usize,
+        position: usize,
+    ) -> Self {
+        Self {
+            lexer: LexerRef::Shared(lexer),
+            rule_index,
+            coordinate_index,
+            position,
+        }
+    }
+
+    /// Builds a context with a mutable lexer borrow, for a custom-action hook
+    /// that may change lexer state (mode stack). See [`Self::push_mode`] etc.
+    pub(crate) const fn new_mut(
+        lexer: &'a mut BaseLexer<I, F>,
+        rule_index: usize,
+        coordinate_index: usize,
+        position: usize,
+    ) -> Self {
+        Self {
+            lexer: LexerRef::Mut(lexer),
+            rule_index,
+            coordinate_index,
+            position,
+        }
+    }
+
+    /// Lexer rule index that owns the predicate/action coordinate.
+    #[must_use]
+    pub const fn rule_index(&self) -> usize {
+        self.rule_index
+    }
+
+    /// Predicate/action index inside the owning lexer rule.
+    #[must_use]
+    pub const fn coordinate_index(&self) -> usize {
+        self.coordinate_index
+    }
+
+    /// Absolute input position where the predicate/action transition fired.
+    #[must_use]
+    pub const fn position(&self) -> usize {
+        self.position
+    }
+
+    /// Lexer mode at this coordinate.
+    #[must_use]
+    pub fn mode(&self) -> i32 {
+        self.lexer.get().mode()
+    }
+
+    /// Current source column.
+    #[must_use]
+    pub const fn column(&self) -> usize {
+        self.lexer.get().column()
+    }
+
+    /// Source column at [`Self::position`].
+    #[must_use]
+    pub fn position_column(&self) -> usize {
+        self.lexer.get().column_at(self.position)
+    }
+
+    /// Column captured at the current token start.
+    #[must_use]
+    pub const fn token_start_column(&self) -> usize {
+        self.lexer.get().token_start_column()
+    }
+
+    /// Text matched from token start to this coordinate.
+    #[must_use]
+    pub fn text_so_far(&self) -> String {
+        self.lexer.get().token_text_until(self.position)
+    }
+
+    /// Sets the current lexer mode. Available only from a custom-action hook
+    /// (the mutable-borrow context); a no-op with a warning path for the
+    /// speculative predicate context, where mutating lexer state is invalid.
+    ///
+    /// Returns `true` if the mutation was applied (action context), `false` if
+    /// it was ignored (predicate context).
+    pub fn set_mode(&mut self, mode: i32) -> bool {
+        match &mut self.lexer {
+            LexerRef::Mut(lexer) => {
+                lexer.set_mode(mode);
+                true
+            }
+            LexerRef::Shared(_) => false,
+        }
+    }
+
+    /// Pushes the current mode and switches to `mode`. Action context only; see
+    /// [`Self::set_mode`] for the return value.
+    pub fn push_mode(&mut self, mode: i32) -> bool {
+        match &mut self.lexer {
+            LexerRef::Mut(lexer) => {
+                lexer.push_mode(mode);
+                true
+            }
+            LexerRef::Shared(_) => false,
+        }
+    }
+
+    /// Pops the mode stack, restoring the previous mode. Action context only;
+    /// returns the popped mode (`None` if the stack was empty or this is a
+    /// predicate context).
+    pub fn pop_mode(&mut self) -> Option<i32> {
+        match &mut self.lexer {
+            LexerRef::Mut(lexer) => lexer.pop_mode(),
+            LexerRef::Shared(_) => None,
+        }
+    }
+}
+
 pub trait Lexer: Recognizer {
     fn mode(&self) -> i32;
     fn set_mode(&mut self, mode: i32);
@@ -293,9 +455,8 @@ where
     pub fn with_shared_dfa(mut self, atn: &'static Atn) -> Self {
         let ptr: *const Atn = atn;
         let key = ptr as usize;
-        self.dfa_cache = SHARED_LEXER_DFA_CACHES.with(|caches| {
-            Rc::clone(caches.borrow_mut().entry(key).or_insert_with(Rc::default))
-        });
+        self.dfa_cache = SHARED_LEXER_DFA_CACHES
+            .with(|caches| Rc::clone(caches.borrow_mut().entry(key).or_insert_with(Rc::default)));
         self
     }
 
@@ -676,7 +837,10 @@ where
             }
             return;
         }
-        cache.sparse_edges.entry((state, symbol)).or_insert(transition);
+        cache
+            .sparse_edges
+            .entry((state, symbol))
+            .or_insert(transition);
     }
 
     pub(crate) fn cached_lexer_dfa_state(&self, state: usize) -> Option<Rc<LexerDfaCachedState>> {
@@ -688,11 +852,7 @@ where
             .flatten()
     }
 
-    pub(crate) fn cache_lexer_dfa_state(
-        &self,
-        state: usize,
-        cached_state: LexerDfaCachedState,
-    ) {
+    pub(crate) fn cache_lexer_dfa_state(&self, state: usize, cached_state: LexerDfaCachedState) {
         let mut cache = self.dfa_cache.borrow_mut();
         if cache.cached_states.len() <= state {
             cache.cached_states.resize_with(state + 1, || None);
@@ -771,7 +931,7 @@ mod tests {
 
         assert_eq!(token.start(), 1);
         assert_eq!(token.stop(), 0);
-        assert_eq!(token.text(), Some("<EOF>"));
+        assert_eq!(token.text(), "<EOF>");
         assert_eq!(token.byte_span(), 2..2);
     }
 
@@ -793,7 +953,7 @@ mod tests {
 
         assert_eq!(token.start(), 1);
         assert_eq!(token.stop(), 0);
-        assert_eq!(token.text(), Some("<EOF>"));
+        assert_eq!(token.text(), "<EOF>");
         assert_eq!(token.byte_span(), 2..2);
     }
 
@@ -815,7 +975,7 @@ mod tests {
 
         assert_eq!(token.start(), 0);
         assert_eq!(token.stop(), 0);
-        assert_eq!(token.text(), Some("β"));
+        assert_eq!(token.text(), "β");
         assert_eq!(token.byte_span(), 0..2);
     }
 }

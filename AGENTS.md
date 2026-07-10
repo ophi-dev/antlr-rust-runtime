@@ -72,7 +72,23 @@ The harness reads `antlr4-upstream/runtime-testsuite` and the same ANTLR jar fet
 cargo run --release --quiet --bin antlr4-runtime-testsuite
 ```
 
-Defaults to `ANTLR4_JAR=/tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar` and `ANTLR4_RUNTIME_TESTSUITE=/tmp/antlr-cleanroom/antlr4-upstream/runtime-testsuite`. Override with `--antlr-jar`/`--descriptors` or env vars. Expected outcome: `summary: 357 passed, 0 failed, 0 skipped, 357 run`. Wall-clock ≈ 10–15 minutes on Apple Silicon, ≈ 30 minutes on the GitHub Linux runner.
+Defaults to `ANTLR4_JAR=/tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar` and `ANTLR4_RUNTIME_TESTSUITE=/tmp/antlr-cleanroom/antlr4-upstream/runtime-testsuite`. Override with `--antlr-jar`/`--descriptors` or env vars. Wall-clock ≈ 10–15 minutes on Apple Silicon, ≈ 30 minutes on the GitHub Linux runner.
+
+### The rendered (embedded-actions) pipeline
+
+The harness runs descriptors the way every official ANTLR target does:
+each descriptor grammar is rendered through
+`.conformance-review/Rust.test.stg` with the real StringTemplate engine
+(`tools/stg-render/RenderGrammar.java`, executed via the ANTLR jar and the
+Java single-file source launcher), so its actions/predicates become real
+Rust code. The rendered grammar feeds both the ANTLR tool and
+`antlr4-rust-gen --actions embedded`, which splices the bodies verbatim
+after `$`-attribute translation (`src/bin_support/embedded.rs`) and
+generates typed context views, per-rule attrs structs, members
+fields/methods, listener traits, and recognizer facades. `--stg PATH`
+overrides the template group. (An earlier template-recognition pipeline,
+which simulated action output instead of executing it, was replaced by
+this one before ever shipping.)
 
 ### Run a subset while iterating
 

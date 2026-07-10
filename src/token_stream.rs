@@ -324,9 +324,21 @@ where
         }
         self.tokens[start..=stop.min(self.tokens.len().saturating_sub(1))]
             .iter()
-            .filter_map(|token| token.text())
+            .map(|token| token.text())
             .collect::<Vec<_>>()
             .join("")
+    }
+
+    /// Concatenated text of every buffered token except EOF — ANTLR's
+    /// `TokenStream.getText()`, the shape generated test actions read through
+    /// `self.input().text()`.
+    pub fn text_all(&mut self) -> String {
+        self.fill();
+        self.tokens
+            .iter()
+            .filter(|token| token.token_type() != TOKEN_EOF)
+            .map(|token| token.text())
+            .collect()
     }
 
     /// Returns and clears diagnostics emitted by the underlying token source

@@ -62,8 +62,7 @@ pub(crate) fn named_action_templates<'a>(
 /// ANTLR action braces, for example `{ <writeln("$text")> }`.
 pub(crate) fn next_template_block(source: &str, offset: usize) -> Option<TemplateBlock<'_>> {
     let mut cursor = offset;
-    while let Some(open_rel) = source[cursor..].find('{') {
-        let open_brace = cursor + open_rel;
+    while let Some(open_brace) = find_significant_open_brace(source, cursor) {
         let template_start = skip_ascii_whitespace(source, open_brace + 1);
         if source.as_bytes().get(template_start) != Some(&b'<') {
             cursor = open_brace + 1;
@@ -93,8 +92,7 @@ pub(crate) fn next_predicate_action_block(
     offset: usize,
 ) -> Option<TemplateBlock<'_>> {
     let mut cursor = offset;
-    while let Some(open_rel) = source[cursor..].find('{') {
-        let open_brace = cursor + open_rel;
+    while let Some(open_brace) = find_significant_open_brace(source, cursor) {
         let close_brace = matching_action_brace(source, open_brace + 1)?;
         let after_brace = close_brace + 1;
         if source[after_brace..].trim_start().starts_with('?') {
@@ -118,8 +116,7 @@ pub(crate) fn next_parser_action_block(
     is_regular_action_body: impl Fn(&str) -> bool,
 ) -> Option<TemplateBlock<'_>> {
     let mut cursor = offset;
-    while let Some(open_rel) = source[cursor..].find('{') {
-        let open_brace = cursor + open_rel;
+    while let Some(open_brace) = find_significant_open_brace(source, cursor) {
         let close_brace = matching_action_brace(source, open_brace + 1)?;
         let body = &source[open_brace + 1..close_brace];
         if body.trim().is_empty()
@@ -156,6 +153,158 @@ pub(crate) fn template_sequence_bodies(body: &str) -> Option<Vec<&str>> {
         cursor = close_angle + 1;
     }
     (!templates.is_empty()).then_some(templates)
+}
+
+/// Finds the next `{` that is structurally significant grammar text.
+///
+/// Grammar rules routinely reference brace TOKENS as quoted literals
+/// (`'{' statementList? '}'`) and mention braces in comments; a naive
+/// `find('{')` desynchronizes every action/predicate walk on such grammars.
+/// All block walkers locate their opening brace through this scanner so the
+/// walk only ever starts at real action-block braces.
+pub(crate) fn find_significant_open_brace(source: &str, offset: usize) -> Option<usize> {
+    let mut cursor = GrammarSourceCursor::new(source, offset);
+    while let Some((index, ch)) = cursor.next_significant() {
+        if ch == '{' {
+            return Some(index);
+        }
+    }
+    None
+}
+
+/// Lexical cursor over ANTLR grammar source that skips line and block
+/// comments, string literals, and `[...]` character sets, yielding only
+/// characters that are significant to grammar structure.
+///
+/// Action extraction, predicate extraction, and rule-header scanning need the
+/// same skip rules; sharing one state machine keeps them from drifting apart.
+pub(crate) struct GrammarSourceCursor<'a> {
+    source: &'a str,
+    index: usize,
+    single_quoted: bool,
+    double_quoted: bool,
+    escaped: bool,
+    line_comment: bool,
+    block_comment: bool,
+    char_set: bool,
+}
+
+impl<'a> GrammarSourceCursor<'a> {
+    pub(crate) const fn new(source: &'a str, offset: usize) -> Self {
+        Self {
+            source,
+            index: offset,
+            single_quoted: false,
+            double_quoted: false,
+            escaped: false,
+            line_comment: false,
+            block_comment: false,
+            char_set: false,
+        }
+    }
+
+    /// Moves the cursor to `index`, which must be a char boundary outside any
+    /// comment, string literal, or character set.
+    ///
+    /// Only the generator's rule-header scanner needs this; the testsuite
+    /// harness compiles this module too, so the method is allowed to be
+    /// unused there.
+    #[allow(dead_code)]
+    pub(crate) const fn seek(&mut self, index: usize) {
+        self.index = index;
+    }
+
+    /// Returns the next structurally significant character with its byte
+    /// offset, consuming it.
+    pub(crate) fn next_significant(&mut self) -> Option<(usize, char)> {
+        while let Some(ch) = self.source[self.index..].chars().next() {
+            let index = self.index;
+            let size = ch.len_utf8();
+            if self.consume_skipped(ch, size) {
+                continue;
+            }
+            match ch {
+                '/' if self.source.as_bytes().get(index..index + 2) == Some(b"//") => {
+                    self.line_comment = true;
+                    self.index += 2;
+                }
+                '/' if self.source.as_bytes().get(index..index + 2) == Some(b"/*") => {
+                    self.block_comment = true;
+                    self.index += 2;
+                }
+                '\'' => {
+                    self.single_quoted = true;
+                    self.index += size;
+                }
+                '"' => {
+                    self.double_quoted = true;
+                    self.index += size;
+                }
+                '[' => {
+                    self.char_set = true;
+                    self.index += size;
+                }
+                _ => {
+                    self.index += size;
+                    return Some((index, ch));
+                }
+            }
+        }
+        None
+    }
+
+    /// Consumes one character belonging to an active comment, string, or
+    /// character-set region; false when the cursor is at top level.
+    fn consume_skipped(&mut self, ch: char, size: usize) -> bool {
+        if self.line_comment {
+            self.line_comment = ch != '\n';
+            self.index += size;
+            return true;
+        }
+        if self.block_comment {
+            if self.source.as_bytes().get(self.index..self.index + 2) == Some(b"*/") {
+                self.block_comment = false;
+                self.index += 2;
+            } else {
+                self.index += size;
+            }
+            return true;
+        }
+        if self.char_set {
+            match ch {
+                _ if self.escaped => self.escaped = false,
+                '\\' => self.escaped = true,
+                ']' => self.char_set = false,
+                _ => {}
+            }
+            self.index += size;
+            return true;
+        }
+        if self.escaped {
+            self.escaped = false;
+            self.index += size;
+            return true;
+        }
+        if self.single_quoted {
+            match ch {
+                '\\' => self.escaped = true,
+                '\'' => self.single_quoted = false,
+                _ => {}
+            }
+            self.index += size;
+            return true;
+        }
+        if self.double_quoted {
+            match ch {
+                '\\' => self.escaped = true,
+                '"' => self.double_quoted = false,
+                _ => {}
+            }
+            self.index += size;
+            return true;
+        }
+        false
+    }
 }
 
 /// Finds the closing brace for a named ANTLR action block while ignoring braces
@@ -349,7 +498,45 @@ pub(crate) fn parse_template_string(argument: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{matching_action_brace, matching_template_close};
+    use super::{
+        matching_action_brace, matching_template_close, next_predicate_action_block,
+        next_template_block,
+    };
+
+    #[test]
+    fn predicate_block_found_after_quoted_brace_literals() {
+        // Mirrors grammars-v4 JavaScriptParser: brace TOKENS appear as quoted
+        // literals before the first semantic predicate.
+        let source = "block : '{' statementList? '}' ;\n\
+                      stmt : {this.notLineTerminator()}? expr ;\n";
+
+        let block = next_predicate_action_block(source, 0).expect("predicate block is found");
+        assert_eq!(block.body, "this.notLineTerminator()");
+        assert!(block.predicate);
+        assert!(
+            next_predicate_action_block(source, block.after_brace).is_none(),
+            "quoted brace literals must not produce phantom blocks"
+        );
+    }
+
+    #[test]
+    fn predicate_block_found_after_commented_brace() {
+        let source = "// a { comment with a brace\n\
+                      /* and { another } one */\n\
+                      stmt : {this.closeBrace()}? expr ;\n";
+
+        let block = next_predicate_action_block(source, 0).expect("predicate block is found");
+        assert_eq!(block.body, "this.closeBrace()");
+    }
+
+    #[test]
+    fn template_block_skips_quoted_brace_literals() {
+        let source = "a : '{' {<True()>}? 'b' ;";
+
+        let block = next_template_block(source, 0).expect("template block is found");
+        assert_eq!(block.body, "True()");
+        assert!(block.predicate);
+    }
 
     #[test]
     fn action_brace_ignores_braces_inside_char_literals() {

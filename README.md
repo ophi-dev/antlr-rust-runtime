@@ -228,14 +228,148 @@ See [docs/kotlin-build.md](docs/kotlin-build.md) for the Kotlin smoke workflow.
 See [docs/runtime-testsuite.md](docs/runtime-testsuite.md) for the upstream
 runtime-testsuite harness.
 
+### Semantic Predicates and Actions: the Compatibility Boundary
+
+ANTLR grammars may embed **target-language** semantic predicates and actions
+(`{isTypeName()}?`, `{this.count++;}`). The serialized ATN records *where*
+they occur, but not executable code, so a metadata-first runtime cannot run
+arbitrary grammar-embedded snippets. The boundary is:
+
+- **Target-agnostic grammars** — no embedded code, or only built-in lexer
+  commands (`skip`, `channel(...)`, `mode(...)`, `type(...)`) — are fully
+  supported.
+- **Recognized predicate/action shapes** — a library of common idioms
+  (constant predicates, lookahead text/type checks, integer member counters,
+  column predicates, and the upstream testsuite's action templates) — are
+  translated into SemIR by `antlr4-rust-gen` when the grammar source is
+  passed via `--grammar`.
+- **User pattern files** — `--sem-patterns file.toml` can add exact predicate
+  rewrites, helper-call rewrites, and per-coordinate `hook` /
+  `assume-true` / `assume-false` / `error` dispositions without changing the
+  generator.
+- **Everything else is not silently guessed.** Each generator run writes a
+  `semantics.json` manifest next to the generated modules listing every
+  predicate/action coordinate with its grammar source span, body, and
+  disposition (`translated`, `hooked`, `assume-true`, `assume-false`,
+  `ignored`, `synthetic`, or `error`). A `synthetic` action is one ANTLR
+  inserts itself (e.g. during left-recursion elimination); it has no
+  grammar-author source, is a runtime no-op, and is exempt from the `error`
+  gate — only actions the author actually wrote in the grammar can fail it.
+
+Unknown coordinates are governed by `--sem-unknown`:
+
+```bash
+antlr4-rust-gen --lexer L.interp --parser P.interp --grammar G.g4 \
+    --out-dir src/generated --sem-unknown error
+```
+
+- `assume-true` (current default, deprecated): unknown predicates pass,
+  unknown actions are no-ops — the historical behavior. A future minor
+  release changes the default to `error`.
+- `hook`: unknown parser predicates are routed to `SemanticHooks` and fail if
+  the hook does not handle them.
+- `assume-false`: unknown predicates fail, removing the guarded alternatives.
+- `error`: generation fails, naming each coordinate:
+
+  ```text
+  unsupported semantic predicate: rule=s(0) pred_index=0 at 2:4: {isTypeName()}
+  ```
+
+At runtime the same policy exists as
+`ParserRuntimeOptions::unknown_predicate_policy`
+(`UnknownSemanticPolicy::{AssumeTrue, AssumeFalse, Error}`); under `Error`,
+evaluating an unknown predicate coordinate fails the parse with
+`AntlrError::Unsupported` instead of producing a tree whose shape silently
+depended on a guess.
+
+Generated parsers also expose a parser-side hook escape hatch:
+`MyParser::with_hooks(tokens, hooks)`, where `hooks` implements
+`SemanticHooks`. Unknown parser predicates are offered to
+`SemanticHooks::sempred` before the fallback policy is applied, and unhandled
+parser action events are offered to `SemanticHooks::action` after the committed
+parse path is selected. Predicate hooks may run speculatively during
+prediction, so they must be replay-safe.
+
+For bare helper-call predicates, generated parsers also emit a typed hook
+adapter (`MyParserHooks` plus `MyParserTypedHooks<T>`) that maps stable
+manifest coordinates to named Rust methods. Lexer callers can use
+`LexerSemCtx` with `atn::lexer::next_token_with_semantic_hooks` or the
+compiled-DFA variant to route lexer predicates/actions through the same
+`SemanticHooks` trait.
+
+Use `--require-full-semantics` in CI when every coordinate must be either
+translated or explicitly hooked; policy fallbacks fail generation.
+
+#### Embedded target-language actions are not portable — including in official ANTLR
+
+A grammar that embeds a **target-language** action (a `{ ... }` block of
+Java/C#/etc. code, rather than a portable lexer command) is only usable with
+the language it was written for. This is a limitation of ANTLR itself, not of
+this runtime: **the official ANTLR tool does not translate embedded actions
+between targets — it copies the source text verbatim into the generated code.**
+
+For example, the official
+[Kotlin/kotlin-spec](https://github.com/Kotlin/kotlin-spec) `KotlinLexer.g4`
+contains a Java-only action:
+
+```antlr
+RCURL: '}' { if (!_modeStack.isEmpty()) { popMode(); } };
+```
+
+Generating a **Go** parser from it with the official tool
+(`antlr4 -Dlanguage=Go KotlinLexer.g4`) emits the Java verbatim:
+
+```go
+func (l *KotlinLexer) RCURL_Action(localctx antlr.RuleContext, actionIndex int) {
+	switch actionIndex {
+	case 0:
+		if !_modeStack.isEmpty() { // undefined in Go — does not compile
+			popMode()              // undefined in Go — does not compile
+		}
+	}
+}
+```
+
+The generated Go **fails to compile** (`undefined: _modeStack`, `undefined:
+popMode`), and ANTLR offers no supported way to fix it beyond hand-editing the
+grammar — the grammar even carries a comment telling non-Java users to replace
+the snippet manually. Every non-Java ANTLR target has this gap.
+
+This runtime does better in two ways:
+
+1. It recognizes a **library of common embedded idioms** (e.g. the guarded
+   `popMode()` above) and maps them to the equivalent portable operation, so
+   many real grammars generate as-is.
+2. For anything it does not recognize, `--sem-unknown=error` fails **loudly**
+   at generation time, naming the coordinate, instead of silently emitting
+   uncompilable or no-op code. The fix is to express the action as a portable
+   lexer command (`-> popMode`, `-> pushMode(X)`, `-> type(X)`,
+   `-> channel(HIDDEN)`), add a `--sem-patterns` rewrite, or route it through a
+   `SemanticHooks` implementation.
+
+Portable lexer commands and the recognized idioms are the target-agnostic
+subset; prefer them when authoring grammars intended for multiple runtimes.
+
+Grammars whose `{ ... }` blocks are already **Rust** can skip translation
+entirely: `antlr4-rust-gen --actions embedded --grammar Foo.g4` splices the
+bodies verbatim (after `$`-attribute translation) into the generated parser,
+inline at their ATN action/predicate coordinates. This is the mode the
+conformance harness uses after rendering descriptor grammars through
+`Rust.test.stg` (see below).
+
 ## Runtime Testsuite
 
 On the maintainer checkout, where the ANTLR jar and upstream runtime-testsuite
 live under `/tmp/antlr-cleanroom`, run the full sweep with:
 
 ```bash
-cargo run --quiet --bin antlr4-runtime-testsuite
+cargo run --release --quiet --bin antlr4-runtime-testsuite
 ```
+
+The harness runs descriptors the way every official ANTLR target does: each
+descriptor grammar is rendered through `.conformance-review/Rust.test.stg`
+with the real StringTemplate engine, so its actions and predicates become real
+Rust code that is compiled and executed inline.
 
 Run a specific descriptor:
 

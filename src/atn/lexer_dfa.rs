@@ -997,7 +997,7 @@ mod tests {
         let mut lexer = BaseLexer::new(InputStream::new(" ab"), recognizer_data());
         let token = next_token_compiled(&mut lexer, &atn, &dfa);
         assert_eq!(token.token_type(), 1);
-        assert_eq!(token.text(), Some("ab"));
+        assert_eq!(token.text(), "ab");
         assert_eq!(
             next_token_compiled(&mut lexer, &atn, &dfa).token_type(),
             TOKEN_EOF
@@ -1022,7 +1022,7 @@ mod tests {
             |_, _, _| {},
         );
         assert_eq!(token.token_type(), 1);
-        assert_eq!(token.text(), Some("ab"));
+        assert_eq!(token.text(), "ab");
     }
 
     #[test]
@@ -1034,7 +1034,7 @@ mod tests {
         let mut lexer = BaseLexer::new(InputStream::new("ĀĂ"), recognizer_data());
         let token = next_token_compiled(&mut lexer, &atn, &dfa);
         assert_eq!(token.token_type(), 1);
-        assert_eq!(token.text(), Some("ĀĂ"));
+        assert_eq!(token.text(), "ĀĂ");
         assert_eq!(
             next_token_compiled(&mut lexer, &atn, &dfa).token_type(),
             TOKEN_EOF
@@ -1084,7 +1084,7 @@ mod tests {
         let mut lexer = BaseLexer::new(InputStream::new(" ab"), recognizer_data());
         let token = next_token_compiled(&mut lexer, &atn, &restored);
         assert_eq!(token.token_type(), 1);
-        assert_eq!(token.text(), Some("ab"));
+        assert_eq!(token.text(), "ab");
 
         // A stream from a different runtime version is rejected, not trusted.
         let mut wrong_tag = stream;
