@@ -350,10 +350,27 @@ This runtime does better in two ways:
 Portable lexer commands and the recognized idioms are the target-agnostic
 subset; prefer them when authoring grammars intended for multiple runtimes.
 
+Grammars whose `{ ... }` blocks are already **Rust** can skip translation
+entirely: `antlr4-rust-gen --actions embedded --grammar Foo.g4` splices the
+bodies verbatim (after `$`-attribute translation) into the generated parser,
+inline at their ATN action/predicate coordinates. This is the mode the
+conformance harness uses after rendering descriptor grammars through
+`Rust.test.stg` (see below).
+
 ## Runtime Testsuite
 
 On the maintainer checkout, where the ANTLR jar and upstream runtime-testsuite
 live under `/tmp/antlr-cleanroom`, run the full sweep with:
+
+```bash
+cargo run --release --quiet --bin antlr4-runtime-testsuite -- --embedded
+```
+
+`--embedded` runs descriptors the way every official ANTLR target does: each
+descriptor grammar is rendered through `.conformance-review/Rust.test.stg`
+with the real StringTemplate engine, so its actions and predicates become real
+Rust code that is compiled and executed inline. Omitting `--embedded` runs the
+legacy template-recognition pipeline instead:
 
 ```bash
 cargo run --quiet --bin antlr4-runtime-testsuite
