@@ -5905,9 +5905,20 @@ fn render_embedded_context_types(
         for (child_index, child) in model.rules.iter().enumerate() {
             let method = rust_function_name(&child.name);
             let child_view = format!("{}Context", rust_type_name(&child.name));
+            // A rule named like a built-in view method (`start`'s token
+            // accessor, `child_count`) would emit a duplicate definition;
+            // Java can overload the field, Rust cannot. Keep the built-in —
+            // rendered bodies use it — and leave `{method}_all` as the
+            // indexed escape hatch for the rule.
+            if method != "start" && method != "child_count" {
+                let _ = writeln!(
+                    accessors,
+                    "    pub fn {method}(&self, index: usize) -> Rc<{child_view}> {{ let node = self.__node.child_rules({child_index}).nth(index).expect(\"missing rule child\"); Rc::new({child_view}::__from_node_with_chain(node, self.__chain.clone())) }}"
+                );
+            }
             let _ = writeln!(
                 accessors,
-                "    pub fn {method}(&self, index: usize) -> Rc<{child_view}> {{ let node = self.__node.child_rules({child_index}).nth(index).expect(\"missing rule child\"); Rc::new({child_view}::__from_node_with_chain(node, self.__chain.clone())) }}\n    pub fn {method}_all(&self) -> Vec<Rc<{child_view}>> {{ self.__node.child_rules({child_index}).map(|node| Rc::new({child_view}::__from_node_with_chain(node, self.__chain.clone()))).collect() }}"
+                "    pub fn {method}_all(&self) -> Vec<Rc<{child_view}>> {{ self.__node.child_rules({child_index}).map(|node| Rc::new({child_view}::__from_node_with_chain(node, self.__chain.clone()))).collect() }}"
             );
         }
         for (token_name, token_type) in &token_accessors {
