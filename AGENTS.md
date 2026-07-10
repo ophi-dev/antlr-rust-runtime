@@ -86,9 +86,9 @@ Rust code. The rendered grammar feeds both the ANTLR tool and
 after `$`-attribute translation (`src/bin_support/embedded.rs`) and
 generates typed context views, per-rule attrs structs, members
 fields/methods, listener traits, and recognizer facades. `--stg PATH`
-overrides the template group. (The pre-2026-07 template-recognition
-pipeline, which simulated action output instead of executing it, is
-retired; `--embedded` is accepted as a no-op for compatibility.)
+overrides the template group. (An earlier template-recognition pipeline,
+which simulated action output instead of executing it, was replaced by
+this one before ever shipping.)
 
 ### Run a subset while iterating
 

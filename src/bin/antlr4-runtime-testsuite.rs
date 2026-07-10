@@ -143,9 +143,6 @@ impl Args {
                     );
                 }
                 "--keep" => keep = true,
-                // Accepted for compatibility: the rendered `.stg` pipeline is
-                // now the only pipeline.
-                "--embedded" => {}
                 "--stg" => stg = Some(PathBuf::from(next_arg(&mut iter, "--stg")?)),
                 "--help" | "-h" => return Err(usage()),
                 other => return Err(format!("unknown argument {other}\n\n{}", usage())),
