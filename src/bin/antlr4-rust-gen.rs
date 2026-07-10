@@ -5941,17 +5941,21 @@ fn render_embedded_context_types(
             accessors,
             "    fn __from_node_with_chain(node: &ParserRuleContext, mut chain: Vec<isize>) -> Self {{\n        chain.insert(0, node.invoking_state());\n        let __default = {attrs_struct}::default();\n        let __attrs = node.generated_attrs::<{attrs_struct}>().unwrap_or(&__default);\n        Self {{\n            __node: node.clone(),\n            __chain: chain,\n{field_inits}        }}\n    }}\n"
         );
-        let _ = writeln!(
-            accessors,
-            "    pub fn child_count(&self) -> usize {{ self.__node.child_count() }}"
-        );
-        // A grammar rule named `start` claims the accessor name; the built-in
-        // start-token helper yields to it.
-        if !model
-            .rules
-            .iter()
-            .any(|rule| rust_function_name(&rule.name) == "start")
-        {
+        // A grammar rule claiming a built-in helper's name (`start`,
+        // `child_count`) takes the accessor slot; the built-in yields.
+        let rule_claims = |name: &str| {
+            model
+                .rules
+                .iter()
+                .any(|rule| rust_function_name(&rule.name) == name)
+        };
+        if !rule_claims("child_count") {
+            let _ = writeln!(
+                accessors,
+                "    pub fn child_count(&self) -> usize {{ self.__node.child_count() }}"
+            );
+        }
+        if !rule_claims("start") {
             let _ = writeln!(
                 accessors,
                 "    pub fn start(&self) -> __GeneratedTokenView {{ __GeneratedTokenView {{ text: self.__node.start().map(|token| token.text().to_owned()).unwrap_or_default() }} }}"
