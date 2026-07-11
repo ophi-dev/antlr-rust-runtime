@@ -7172,7 +7172,7 @@ fn assign_states_to_parser_action_slots(
     source: &str,
     slots: Vec<ParserActionSourceSlot>,
 ) -> io::Result<Vec<(usize, ParserActionSourceSlot)>> {
-    let model = embedded::parse_embedded_model(source, &data.rule_names)?;
+    let model = embedded::parse_embedded_rules_model(source, &data.rule_names);
     assign_states_to_parser_action_slots_with_model(data, &model, slots)
 }
 
@@ -12466,6 +12466,25 @@ dispose = "hook"
         )
         .expect("empty action should not block generated parser output");
         assert!(module.contains("0 => {}"));
+    }
+
+    #[test]
+    fn parser_action_attribution_ignores_non_embedded_member_syntax() {
+        let grammar = "parser grammar T;\n@members { int x; }\ns : { native(); } A ;\n";
+        let entries = collect_parser_semantics(
+            &action_parser_data(),
+            Some(grammar),
+            SemUnknownPolicy::AssumeTrue,
+            &SemPatternFile::default(),
+        )
+        .expect("Java-style members are irrelevant to action attribution");
+        let action = entries
+            .iter()
+            .find(|entry| entry.kind == SemanticsKind::ParserAction)
+            .expect("action entry is inventoried");
+
+        assert_eq!(action.atn_state, Some(0));
+        assert_eq!(action.body.as_deref(), Some("native();"));
     }
 
     #[test]
