@@ -1,19 +1,62 @@
 version = 1
 
-# Parser-predicate helpers from grammars-v4 javascript/javascript
-# (JavaScriptParser.g4). Each appears as a bare `{this.<helper>()}?` guard, so
-# they route to the generated typed hook trait; implement them once in Rust
-# via `SemanticHooks` / the generated `*Hooks` trait.
-#
-# The lexer side of that grammar (IsRegexPossible, IsStrictMode, mode-state
-# actions such as ProcessOpenBrace) is intentionally NOT mapped here: generated
-# lexers have no hook plumbing yet, so those need
-# `antlr4_runtime::atn::lexer::next_token_with_semantic_hooks` driven manually.
-#
-# Not yet covered: the argument-taking text-lookahead helpers `this.n("...")`
-# and `this.p("...")` (next/previous token text equals). They need
-# argument-capturing pattern support; until then those coordinates follow the
-# --sem-unknown policy and are listed in semantics.json.
+# Grammar-family semantic helpers for grammars-v4's JavaScript lexer/parser.
+# Target-specific state and token names live in the caller's Rust base modules;
+# the generator/runtime only route structured helper calls to typed hooks.
+
+[[helper]]
+kind = "lexer-predicate"
+name = "IsStartOfFile"
+returns = "bool"
+lower = "hook"
+
+[[helper]]
+kind = "lexer-predicate"
+name = "IsRegexPossible"
+returns = "bool"
+lower = "hook"
+
+[[helper]]
+kind = "lexer-predicate"
+name = "IsInTemplateString"
+returns = "bool"
+lower = "hook"
+
+[[helper]]
+kind = "lexer-predicate"
+name = "IsStrictMode"
+returns = "bool"
+lower = "hook"
+
+[[helper]]
+kind = "lexer-action"
+name = "ProcessOpenBrace"
+returns = "unit"
+lower = "hook"
+
+[[helper]]
+kind = "lexer-action"
+name = "ProcessCloseBrace"
+returns = "unit"
+lower = "hook"
+
+[[helper]]
+kind = "lexer-action"
+name = "ProcessStringLiteral"
+returns = "unit"
+lower = "hook"
+
+[[helper]]
+kind = "lexer-action"
+name = "ProcessTemplateOpenBrace"
+returns = "unit"
+lower = "hook"
+
+[[helper]]
+kind = "lexer-action"
+name = "ProcessTemplateCloseBrace"
+returns = "unit"
+lower = "hook"
 
 [[helper]]
 name = "notLineTerminator"
@@ -32,5 +75,18 @@ lower = "hook"
 
 [[helper]]
 name = "closeBrace"
+returns = "bool"
+lower = "hook"
+
+[[helper]]
+name = "n"
+arguments = "string"
+returns = "bool"
+lower = "hook"
+
+# Used by the sibling TypeScript grammar and harmless for JavaScript.
+[[helper]]
+name = "p"
+arguments = "string"
 returns = "bool"
 lower = "hook"

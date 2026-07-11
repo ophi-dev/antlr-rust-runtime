@@ -11,7 +11,7 @@ use crate::lexer::{
     LexerDfaCachedState, LexerDfaCachedTransition, LexerDfaConfigKey, LexerDfaKey, LexerPredicate,
     LexerSemCtx,
 };
-use crate::parser::SemanticHooks;
+use crate::parser::{SemanticHooks, UnknownSemanticPolicy};
 use crate::prediction::PredictionFxHasher;
 use crate::token::{CommonToken, DEFAULT_CHANNEL, INVALID_TOKEN_TYPE, TokenFactory};
 
@@ -235,23 +235,24 @@ fn dispatch_lexer_action_hook<I, F, H>(
     hooks: &RefCell<&mut H>,
     lexer: &mut BaseLexer<I, F>,
     action: LexerCustomAction,
-) where
+) -> bool
+where
     I: CharStream,
     F: TokenFactory,
     H: SemanticHooks,
 {
     let Ok(rule_index) = usize::try_from(action.rule_index()) else {
-        return;
+        return false;
     };
     let Ok(action_index) = usize::try_from(action.action_index()) else {
-        return;
+        return false;
     };
     // A custom action runs on the committed path, so it gets a mutable lexer
     // borrow: a `lexer_action` hook can change the mode stack
     // (`push_mode`/`pop_mode`/`set_mode`), matching the closure-based
     // `custom_action` API that also receives `&mut BaseLexer`.
     let mut ctx = LexerSemCtx::new_mut(lexer, rule_index, action_index, action.position());
-    let _ = hooks.borrow_mut().lexer_action(&mut ctx, action);
+    hooks.borrow_mut().lexer_action(&mut ctx, action)
 }
 
 /// Dispatches one lexer semantic predicate to a shared [`SemanticHooks`]
@@ -261,7 +262,7 @@ fn dispatch_lexer_predicate_hook<I, F, H>(
     hooks: &RefCell<&mut H>,
     lexer: &BaseLexer<I, F>,
     predicate: LexerPredicate,
-) -> bool
+) -> Option<bool>
 where
     I: CharStream,
     F: TokenFactory,
@@ -276,7 +277,6 @@ where
     hooks
         .borrow_mut()
         .lexer_sempred(&mut ctx, predicate.rule_index(), predicate.pred_index())
-        .unwrap_or(true)
 }
 
 /// Runs one lexer-token match with a shared [`SemanticHooks`] object.
@@ -296,13 +296,19 @@ where
     H: SemanticHooks,
 {
     let hooks = RefCell::new(hooks);
-    next_token_with_hooks(
+    let token = next_token_with_hooks(
         lexer,
         atn,
-        |lexer, action| dispatch_lexer_action_hook(&hooks, lexer, action),
-        |lexer, predicate| dispatch_lexer_predicate_hook(&hooks, lexer, predicate),
+        |lexer, action| {
+            let _ = dispatch_lexer_action_hook(&hooks, lexer, action);
+        },
+        |lexer, predicate| {
+            dispatch_lexer_predicate_hook(&hooks, lexer, predicate).unwrap_or(true)
+        },
         |_, _, _| {},
-    )
+    );
+    hooks.borrow_mut().lexer_token_emitted(&token);
+    token
 }
 
 /// Runs one lexer-token match against an ahead-of-time compiled lexer DFA.
@@ -379,14 +385,142 @@ where
     H: SemanticHooks,
 {
     let hooks = RefCell::new(hooks);
-    next_token_compiled_with_hooks(
+    let token = next_token_compiled_with_hooks(
         lexer,
         atn,
         dfa,
-        |lexer, action| dispatch_lexer_action_hook(&hooks, lexer, action),
-        |lexer, predicate| dispatch_lexer_predicate_hook(&hooks, lexer, predicate),
+        |lexer, action| {
+            let _ = dispatch_lexer_action_hook(&hooks, lexer, action);
+        },
+        |lexer, predicate| {
+            dispatch_lexer_predicate_hook(&hooks, lexer, predicate).unwrap_or(true)
+        },
         |_, _, _| {},
-    )
+    );
+    hooks.borrow_mut().lexer_token_emitted(&token);
+    token
+}
+
+/// Runs one interpreted lexer-token match by composing generated translations
+/// with a caller-owned semantic hook object.
+///
+/// A generated action returning `true` owns the coordinate; otherwise it is
+/// offered to [`SemanticHooks::lexer_action`]. A generated predicate returning
+/// `Some` owns the coordinate; `None` falls through to
+/// [`SemanticHooks::lexer_sempred`] and finally the selected unknown policy.
+#[allow(clippy::too_many_arguments)]
+pub fn next_token_with_semantic_dispatch<I, F, H, A, P, E>(
+    lexer: &mut BaseLexer<I, F>,
+    atn: &Atn,
+    hooks: &mut H,
+    mut generated_action: A,
+    mut generated_predicate: P,
+    unknown_policy: UnknownSemanticPolicy,
+    accept_adjuster: E,
+) -> CommonToken
+where
+    I: CharStream,
+    F: TokenFactory,
+    H: SemanticHooks,
+    A: FnMut(&mut BaseLexer<I, F>, LexerCustomAction) -> bool,
+    P: FnMut(&BaseLexer<I, F>, LexerPredicate) -> Option<bool>,
+    E: FnMut(&mut BaseLexer<I, F>, i32, usize),
+{
+    let hooks = RefCell::new(hooks);
+    let token = next_token_with_hooks(
+        lexer,
+        atn,
+        |lexer, action| {
+            if !generated_action(lexer, action)
+                && !dispatch_lexer_action_hook(&hooks, lexer, action)
+                && unknown_policy == UnknownSemanticPolicy::Error
+                && let (Ok(rule), Ok(index)) = (
+                    usize::try_from(action.rule_index()),
+                    usize::try_from(action.action_index()),
+                )
+            {
+                lexer.record_semantic_error(true, rule, index);
+            }
+        },
+        |lexer, predicate| {
+            generated_predicate(lexer, predicate)
+                .or_else(|| dispatch_lexer_predicate_hook(&hooks, lexer, predicate))
+                .unwrap_or_else(|| match unknown_policy {
+                    UnknownSemanticPolicy::AssumeTrue => true,
+                    UnknownSemanticPolicy::AssumeFalse => false,
+                    UnknownSemanticPolicy::Error => {
+                        lexer.record_semantic_error(
+                            false,
+                            predicate.rule_index(),
+                            predicate.pred_index(),
+                        );
+                        false
+                    }
+                })
+        },
+        accept_adjuster,
+    );
+    hooks.borrow_mut().lexer_token_emitted(&token);
+    token
+}
+
+/// Compiled-DFA counterpart of [`next_token_with_semantic_dispatch`].
+#[allow(clippy::too_many_arguments)]
+pub fn next_token_compiled_with_semantic_dispatch<I, F, H, A, P, E>(
+    lexer: &mut BaseLexer<I, F>,
+    atn: &Atn,
+    dfa: &CompiledLexerDfa,
+    hooks: &mut H,
+    mut generated_action: A,
+    mut generated_predicate: P,
+    unknown_policy: UnknownSemanticPolicy,
+    accept_adjuster: E,
+) -> CommonToken
+where
+    I: CharStream,
+    F: TokenFactory,
+    H: SemanticHooks,
+    A: FnMut(&mut BaseLexer<I, F>, LexerCustomAction) -> bool,
+    P: FnMut(&BaseLexer<I, F>, LexerPredicate) -> Option<bool>,
+    E: FnMut(&mut BaseLexer<I, F>, i32, usize),
+{
+    let hooks = RefCell::new(hooks);
+    let token = next_token_compiled_with_hooks(
+        lexer,
+        atn,
+        dfa,
+        |lexer, action| {
+            if !generated_action(lexer, action)
+                && !dispatch_lexer_action_hook(&hooks, lexer, action)
+                && unknown_policy == UnknownSemanticPolicy::Error
+                && let (Ok(rule), Ok(index)) = (
+                    usize::try_from(action.rule_index()),
+                    usize::try_from(action.action_index()),
+                )
+            {
+                lexer.record_semantic_error(true, rule, index);
+            }
+        },
+        |lexer, predicate| {
+            generated_predicate(lexer, predicate)
+                .or_else(|| dispatch_lexer_predicate_hook(&hooks, lexer, predicate))
+                .unwrap_or_else(|| match unknown_policy {
+                    UnknownSemanticPolicy::AssumeTrue => true,
+                    UnknownSemanticPolicy::AssumeFalse => false,
+                    UnknownSemanticPolicy::Error => {
+                        lexer.record_semantic_error(
+                            false,
+                            predicate.rule_index(),
+                            predicate.pred_index(),
+                        );
+                        false
+                    }
+                })
+        },
+        accept_adjuster,
+    );
+    hooks.borrow_mut().lexer_token_emitted(&token);
+    token
 }
 
 fn next_token_with_cache<I, F, A, P, E>(
@@ -1302,7 +1436,7 @@ pub(super) fn set_config_state(atn: &Atn, config: &mut LexerConfig, state_number
 }
 
 /// Buffers ANTLR's default diagnostic for one unmatchable input span.
-fn record_token_recognition_error<I, F>(lexer: &mut BaseLexer<I, F>, start: usize, stop: usize)
+fn record_token_recognition_error<I, F>(lexer: &BaseLexer<I, F>, start: usize, stop: usize)
 where
     I: CharStream,
     F: TokenFactory,

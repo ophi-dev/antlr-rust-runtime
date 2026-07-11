@@ -276,7 +276,8 @@ pub struct BaseLexer<I, F = CommonTokenFactory> {
     column: usize,
     hit_eof: bool,
     force_interpreted: bool,
-    errors: Vec<TokenSourceError>,
+    errors: RefCell<Vec<TokenSourceError>>,
+    semantic_error_coordinates: RefCell<BTreeSet<(u8, usize, usize, usize)>>,
     dfa_cache: Rc<RefCell<LexerDfaCache>>,
 }
 
@@ -437,7 +438,8 @@ where
             column: 0,
             hit_eof: false,
             force_interpreted: false,
-            errors: Vec::new(),
+            errors: RefCell::new(Vec::new()),
+            semantic_error_coordinates: RefCell::new(BTreeSet::new()),
             dfa_cache: Rc::new(RefCell::new(LexerDfaCache::default())),
         }
     }
@@ -767,14 +769,41 @@ where
 
     /// Buffers a lexer diagnostic until the token stream consumer is ready to
     /// emit errors in parser-compatible order.
-    pub fn record_error(&mut self, line: usize, column: usize, message: impl Into<String>) {
+    pub fn record_error(&self, line: usize, column: usize, message: impl Into<String>) {
         self.errors
+            .borrow_mut()
             .push(TokenSourceError::new(line, column, message));
+    }
+
+    /// Records one fail-loud semantic-hook miss per coordinate and token start.
+    pub fn record_semantic_error(
+        &self,
+        action: bool,
+        rule_index: usize,
+        coordinate_index: usize,
+    ) {
+        let kind = u8::from(action);
+        if !self.semantic_error_coordinates.borrow_mut().insert((
+            kind,
+            rule_index,
+            coordinate_index,
+            self.token_start,
+        )) {
+            return;
+        }
+        let label = if action { "action" } else { "predicate" };
+        self.record_error(
+            self.token_start_line,
+            self.token_start_column,
+            format!(
+                "unhandled lexer semantic {label}: rule={rule_index} index={coordinate_index}"
+            ),
+        );
     }
 
     /// Returns and clears lexer diagnostics produced while fetching tokens.
     pub fn drain_errors(&mut self) -> Vec<TokenSourceError> {
-        std::mem::take(&mut self.errors)
+        std::mem::take(self.errors.get_mut())
     }
 
     /// Returns the stable state number for a normalized lexer DFA config set,
@@ -977,5 +1006,28 @@ mod tests {
         assert_eq!(token.stop(), 0);
         assert_eq!(token.text(), "β");
         assert_eq!(token.byte_span(), 0..2);
+    }
+
+    #[test]
+    fn semantic_hook_errors_are_deduplicated_per_token_coordinate() {
+        let data = RecognizerData::new(
+            "T",
+            Vocabulary::new(
+                std::iter::empty::<Option<&str>>(),
+                std::iter::empty::<Option<&str>>(),
+                std::iter::empty::<Option<&str>>(),
+            ),
+        );
+        let mut lexer = BaseLexer::new(InputStream::new("a"), data);
+        lexer.begin_token();
+        lexer.record_semantic_error(false, 3, 7);
+        lexer.record_semantic_error(false, 3, 7);
+
+        let errors = lexer.drain_errors();
+        assert_eq!(errors.len(), 1);
+        assert_eq!(
+            errors[0].message,
+            "unhandled lexer semantic predicate: rule=3 index=7"
+        );
     }
 }

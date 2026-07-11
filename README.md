@@ -297,6 +297,12 @@ manifest coordinates to named Rust methods. Lexer callers can use
 compiled-DFA variant to route lexer predicates/actions through the same
 `SemanticHooks` trait.
 
+Generated lexers also own optional hook state and emit typed lexer adapters
+when a semantic pattern maps lexer helper calls to hooks. The official
+grammars-v4 JavaScript grammar is a complete example, including checked-in Rust
+lexer/parser base modules and strict build commands; see
+[`docs/javascript-build.md`](docs/javascript-build.md).
+
 Use `--require-full-semantics` in CI when every coordinate must be either
 translated or explicitly hooked; policy fallbacks fail generation.
 

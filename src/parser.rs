@@ -392,6 +392,16 @@ where
         self.lt(offset).and_then(Token::text)
     }
 
+    /// Token at an absolute buffered index, including hidden/custom channels.
+    ///
+    /// Unlike [`Self::lt`], this does not apply the token stream's channel
+    /// filter and does not move its cursor. It is intended for semantic helpers
+    /// such as automatic-semicolon-insertion checks that inspect trivia
+    /// immediately before the current visible token.
+    pub fn token_at(&mut self, index: usize) -> Option<&CommonToken> {
+        self.input.get(index)
+    }
+
     /// Current generated rule context, when a generated rule predicate supplied
     /// one.
     #[must_use]
@@ -517,6 +527,16 @@ pub trait SemanticHooks {
     {
         let _ = (ctx, action);
         false
+    }
+
+    /// Observes a token after committed lexer actions and portable commands
+    /// have run and the token has been emitted, immediately before it is
+    /// returned to the token stream.
+    ///
+    /// Hidden and custom-channel tokens are included. `skip` and intermediate
+    /// `more` matches do not produce callbacks.
+    fn lexer_token_emitted(&mut self, token: &CommonToken) {
+        let _ = token;
     }
 }
 
