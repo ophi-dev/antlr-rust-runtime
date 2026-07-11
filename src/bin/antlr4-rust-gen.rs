@@ -26,9 +26,8 @@ use rust_names::{
 };
 use templates::{
     is_after_action, is_definitions_action, is_init_action, is_members_action, is_options_block,
-    matching_action_brace, matching_template_close, next_parser_action_block,
-    next_predicate_action_block, parse_template_string, split_template_arguments,
-    template_sequence_bodies,
+    matching_action_brace, matching_template_close, next_predicate_action_block,
+    parse_template_string, split_template_arguments, template_sequence_bodies,
 };
 
 const GENERATED_MODULE_HEADER: &str = "\
@@ -796,28 +795,33 @@ fn collect_parser_semantics(
         // than raw block position.
         let block_spans = grammar_source
             .map(|source| {
-                assign_states_to_action_slots(
+                assign_states_to_parser_action_slots(
                     data,
+                    source,
                     parser_action_source_block_slots(source, &data.rule_names),
                 )
             })
             .transpose()?
             .unwrap_or_default();
+        let empty_action_states = block_spans
+            .iter()
+            .filter_map(|(state, slot)| slot.body.trim().is_empty().then_some(*state))
+            .collect::<BTreeSet<_>>();
         for state in &action_states {
             let rule_index = state_rules.get(state).copied();
             let block = block_spans
                 .iter()
                 .find(|(covered, _)| covered == state)
-                .map(|(_, span)| span);
+                .map(|(_, slot)| slot);
             entries.push(SemanticsEntry {
                 kind: SemanticsKind::ParserAction,
                 rule_index,
                 rule_name: rule_index.and_then(|rule| data.rule_names.get(rule).cloned()),
                 index: None,
                 atn_state: Some(*state),
-                line: block.map(|(line, _, _)| *line),
-                column: block.map(|(_, column, _)| *column),
-                body: block.map(|(_, _, body)| body.clone()),
+                line: block.map(|slot| slot.line),
+                column: block.map(|slot| slot.column),
+                body: block.map(|slot| one_line_action_body(&slot.body)),
                 disposition: patterns
                     .coordinate_disposition(
                         SemanticsKind::ParserAction,
@@ -825,9 +829,11 @@ fn collect_parser_semantics(
                         None,
                         Some(*state),
                     )
-                    .unwrap_or_else(|| if synthetic_states.contains(state) {
-                        // ANTLR-synthesized action with no author intent to
-                        // implement: a no-op, exempt from the error gate.
+                    .unwrap_or_else(|| if synthetic_states.contains(state)
+                        || empty_action_states.contains(state)
+                    {
+                        // ANTLR-synthesized actions and authored empty action
+                        // bodies are no-op states exempt from the error gate.
                         SemanticsDisposition::Synthetic
                     } else {
                         policy.unknown_action_disposition()
@@ -880,13 +886,22 @@ fn lexer_action_source_blocks(source: &str, rule_names: &[String]) -> Vec<(usize
     blocks
 }
 
-/// Collects one `(line, column, body)` source-span slot for each authored parser
-/// action block. These spans feed the semantics manifest only; parser action
-/// bodies are no longer recognized as `StringTemplate` markup by the generator.
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ParserActionSourceSlot {
+    rule_index: usize,
+    source_offset: usize,
+    line: usize,
+    column: usize,
+    body: String,
+}
+
+/// Collects one source-span slot for each authored parser action block. Parser
+/// action bodies are no longer recognized as `StringTemplate` markup by the
+/// generator, but their rule/source positions still drive ATN attribution.
 fn parser_action_source_block_slots(
     source: &str,
     rule_names: &[String],
-) -> Vec<Option<(usize, usize, String)>> {
+) -> Vec<ParserActionSourceSlot> {
     let mut slots = Vec::new();
     let mut offset = 0;
     while let Some(block) = next_action_block(source, offset) {
@@ -894,8 +909,20 @@ fn parser_action_source_block_slots(
         if !is_parser_rule_body_action_block(source, &block, Some(rule_names)) {
             continue;
         }
+        let Some(header) = statement_rule_header(source, block.open_brace) else {
+            continue;
+        };
+        let Some(rule_index) = rule_names.iter().position(|name| name == header.name) else {
+            continue;
+        };
         let (line, column) = line_column(source, block.open_brace);
-        slots.push(Some((line, column, one_line_action_body(block.body))));
+        slots.push(ParserActionSourceSlot {
+            rule_index,
+            source_offset: block.open_brace,
+            line,
+            column,
+            body: block.body.to_owned(),
+        });
     }
     slots
 }
@@ -5382,94 +5409,23 @@ fn build_embedded_parser_data(
     };
 
     // Mid-rule embedded actions: pair every action block with its ATN action
-    // state using the same authored-block slot walk as the manifest.
-    let action_state_rules = parser_action_state_rules(data)?;
-    let mut slots: Vec<(usize, String)> = Vec::new();
-    let mut offset = 0;
-    while let Some(block) = next_parser_action_block(source, offset, |_| true) {
-        offset = block.after_brace;
-        if !is_parser_rule_body_action_block(source, &block, Some(&data.rule_names)) {
+    // state using the same per-rule authored-block slot walk as the manifest.
+    let slots = parser_action_source_block_slots(source, &data.rule_names);
+    for (state, slot) in assign_states_to_parser_action_slots_with_model(data, &model, slots)? {
+        if slot.body.trim().is_empty() {
+            out.inline_actions.insert(state, String::new());
             continue;
         }
-        slots.push((block.open_brace, block.body.to_owned()));
-    }
-    // Pair action blocks with ATN action states PER RULE: ANTLR can
-    // synthesize extra action states (left-recursion rewrites, implicit
-    // initializers), and a global offset would shift an author action into a
-    // neighboring rule. Both sides know their rule — blocks through the
-    // model's rule body spans, states through the serialized ATN.
-    let mut slots_by_rule: BTreeMap<usize, Vec<(usize, String)>> = BTreeMap::new();
-    for (block_offset, body) in slots {
-        let Some(rule_index) = model
-            .rules
-            .iter()
-            .position(|rule| rule.body_span.0 <= block_offset && block_offset < rule.body_span.1)
-        else {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("embedded action at offset {block_offset} is outside every parser rule"),
-            ));
+        let ctx = embedded::TranslationCtx {
+            model: &model,
+            rule_index: slot.rule_index,
+            body_offset: Some(slot.source_offset),
+            site: embedded::ActionSite::Body,
+            token_types: &token_types,
         };
-        slots_by_rule
-            .entry(rule_index)
-            .or_default()
-            .push((block_offset, body));
-    }
-    let mut states_by_rule: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
-    for state in parser_action_states(data)? {
-        let Some(rule_index) = action_state_rules.get(&state).copied() else {
-            continue;
-        };
-        states_by_rule.entry(rule_index).or_default().push(state);
-    }
-    for (rule_index, mut rule_slots) in slots_by_rule {
-        // ANTLR's left-recursion rewrite moves operator alternatives (those
-        // whose leftmost element is the rule itself) into the trailing loop,
-        // AFTER the primary alternatives — so the serialized action states
-        // follow that order, not source order. Reorder the source slots to
-        // match: primary-alt actions first, operator-alt actions second,
-        // preserving source order within each class.
-        let rule = &model.rules[rule_index];
-        let is_left_recursive = rule.alts.iter().any(|alt| alt.is_lr_operator(&rule.name));
-        if is_left_recursive {
-            let is_op_slot = |offset: usize| {
-                rule.alts
-                    .iter()
-                    .find(|alt| alt.span.0 <= offset && offset < alt.span.1)
-                    .is_some_and(|alt| alt.is_lr_operator(&rule.name))
-            };
-            let (primary, ops): (Vec<_>, Vec<_>) = rule_slots
-                .into_iter()
-                .partition(|(offset, _)| !is_op_slot(*offset));
-            rule_slots = primary.into_iter().chain(ops).collect();
-        }
-        let states = states_by_rule.remove(&rule_index).unwrap_or_default();
-        let state_offset = action_slot_state_offset(states.len(), rule_slots.len())
-            .map_err(|error| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("rule {rule_index}: {error}"),
-                )
-            })?;
-        for (index, (block_offset, body)) in rule_slots.into_iter().enumerate() {
-            let Some(state) = states.get(state_offset + index).copied() else {
-                continue;
-            };
-            if body.trim().is_empty() {
-                out.inline_actions.insert(state, String::new());
-                continue;
-            }
-            let ctx = embedded::TranslationCtx {
-                model: &model,
-                rule_index,
-                body_offset: Some(block_offset),
-                site: embedded::ActionSite::Body,
-                token_types: &token_types,
-            };
-            let translated = embedded::translate_body(&body, &ctx)?;
-            out.inline_actions
-                .insert(state, finish_body(&body, &translated));
-        }
+        let translated = embedded::translate_body(&slot.body, &ctx)?;
+        out.inline_actions
+            .insert(state, finish_body(&slot.body, &translated));
     }
 
     // Predicates: same source walk/coordinate pairing as non-embedded mode.
@@ -6181,6 +6137,10 @@ fn render_parser_with_options(
     // same treatment `enforce_sem_unknown` gives them at codegen time. Give each
     // an explicit empty `run_action` arm.
     noop_action_states.extend(synthetic_parser_action_states(data, grammar_source)?);
+    // Authored empty action bodies are explicit no-ops too: they carry source
+    // provenance for the manifest but should not disable generated parsing or
+    // fall through to runtime hooks under strict semantic policies.
+    noop_action_states.extend(empty_parser_action_states(data, grammar_source)?);
     let predicates = template_grammar_source.map_or_else(
         // Without grammar source, per-coordinate `--sem-patterns` overrides still
         // resolve by ATN coordinate, so honor them here too — otherwise a
@@ -7196,33 +7156,82 @@ fn action_slot_state_offset(states_len: usize, slot_len: usize) -> io::Result<us
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!(
-                "grammar has {slot_len} supported action template(s), but parser ATN has {states_len} action transition(s)"
+                "grammar has {slot_len} parser action source slot(s), but parser ATN has {states_len} action transition(s)"
             ),
         ));
     }
     Ok(0)
 }
 
-/// Pairs action-block source spans with ATN action states using the same
-/// offset for every source-span consumer, so the manifest's span/body
-/// provenance stays state-keyed.
-fn assign_states_to_action_slots(
+/// Pairs action-block source slots with ATN action states using per-rule
+/// offsets. ANTLR can synthesize action states independently in each rule, and
+/// left-recursion rewriting serializes primary alternatives before operator
+/// alternatives, so a global source-order offset is not stable.
+fn assign_states_to_parser_action_slots(
     data: &InterpData,
-    spans: Vec<Option<(usize, usize, String)>>,
-) -> io::Result<Vec<(usize, (usize, usize, String))>> {
-    if spans.is_empty() {
+    source: &str,
+    slots: Vec<ParserActionSourceSlot>,
+) -> io::Result<Vec<(usize, ParserActionSourceSlot)>> {
+    let model = embedded::parse_embedded_model(source, &data.rule_names)?;
+    assign_states_to_parser_action_slots_with_model(data, &model, slots)
+}
+
+fn assign_states_to_parser_action_slots_with_model(
+    data: &InterpData,
+    model: &embedded::EmbeddedModel,
+    slots: Vec<ParserActionSourceSlot>,
+) -> io::Result<Vec<(usize, ParserActionSourceSlot)>> {
+    if slots.is_empty() {
         return Ok(Vec::new());
     }
-    let states = parser_action_states(data)?;
-    let offset = action_slot_state_offset(states.len(), spans.len())?;
-    Ok(spans
-        .into_iter()
-        .enumerate()
-        .filter_map(|(index, span)| {
-            let state = *states.get(offset + index)?;
-            span.map(|span| (state, span))
-        })
-        .collect())
+    let action_state_rules = parser_action_state_rules(data)?;
+    let mut slots_by_rule: BTreeMap<usize, Vec<ParserActionSourceSlot>> = BTreeMap::new();
+    for slot in slots {
+        slots_by_rule.entry(slot.rule_index).or_default().push(slot);
+    }
+    let mut states_by_rule: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+    for state in parser_action_states(data)? {
+        let Some(rule_index) = action_state_rules.get(&state).copied() else {
+            continue;
+        };
+        states_by_rule.entry(rule_index).or_default().push(state);
+    }
+
+    let mut assigned = Vec::new();
+    for (rule_index, mut rule_slots) in slots_by_rule {
+        if let Some(rule) = model.rules.get(rule_index) {
+            let is_left_recursive = rule.alts.iter().any(|alt| alt.is_lr_operator(&rule.name));
+            if is_left_recursive {
+                let is_operator_slot = |offset: usize| {
+                    rule.alts
+                        .iter()
+                        .find(|alt| alt.span.0 <= offset && offset < alt.span.1)
+                        .is_some_and(|alt| alt.is_lr_operator(&rule.name))
+                };
+                let (primary, operators): (Vec<_>, Vec<_>) = rule_slots
+                    .into_iter()
+                    .partition(|slot| !is_operator_slot(slot.source_offset));
+                rule_slots = primary.into_iter().chain(operators).collect();
+            }
+        }
+
+        let states = states_by_rule.remove(&rule_index).unwrap_or_default();
+        let state_offset = action_slot_state_offset(states.len(), rule_slots.len())
+            .map_err(|error| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("rule {rule_index}: {error}"),
+                )
+            })?;
+        for (index, slot) in rule_slots.into_iter().enumerate() {
+            let Some(state) = states.get(state_offset + index).copied() else {
+                continue;
+            };
+            assigned.push((state, slot));
+        }
+    }
+    assigned.sort_by_key(|(state, _)| *state);
+    Ok(assigned)
 }
 
 /// Applies an optional rule-name filter to an action or signature position.
@@ -7251,8 +7260,11 @@ fn is_parser_rule_body_action_block(
 }
 
 fn is_tokens_or_channels_block(source: &str, open_brace: usize) -> bool {
-    let prefix = source[..open_brace].trim_end();
-    prefix.ends_with("tokens") || prefix.ends_with("channels")
+    let statement_start = statement_start_before(source, open_brace);
+    matches!(
+        source[statement_start..open_brace].trim(),
+        "tokens" | "channels"
+    )
 }
 
 fn is_rule_exception_handler_block(source: &str, open_brace: usize) -> bool {
@@ -7929,8 +7941,8 @@ fn authored_parser_action_blocks_per_rule(
 /// is grammar-source correlation:
 ///
 /// 1. An action state that a `{...}` source block was *attributed to* (via the
-///    same span walk the manifest uses) is authored — even an empty `{}` block,
-///    which yields a real (empty-body) span. These are never synthetic.
+///    same span walk the manifest uses) is authored. Empty `{}` blocks are
+///    handled separately as explicit no-op states, not ANTLR-synthetic states.
 /// 2. A state with no attributed span is either ANTLR-synthetic or a *native*
 ///    authored action the translatable span walk did not surface. Distinguish by
 ///    count: per rule, the author wrote `authored_blocks(rule)` action blocks
@@ -7955,8 +7967,9 @@ fn synthetic_parser_action_states(
     };
     let authored = authored_parser_action_blocks_per_rule(grammar_source, &data.rule_names);
     // States that a source block was attributed to (authored, incl. empty `{}`).
-    let spanned = assign_states_to_action_slots(
+    let spanned = assign_states_to_parser_action_slots(
         data,
+        grammar_source,
         parser_action_source_block_slots(grammar_source, &data.rule_names),
     )?
     .into_iter()
@@ -7991,6 +8004,23 @@ fn synthetic_parser_action_states(
         }
     }
     Ok(synthetic)
+}
+
+fn empty_parser_action_states(
+    data: &InterpData,
+    grammar_source: Option<&str>,
+) -> io::Result<BTreeSet<usize>> {
+    let Some(grammar_source) = grammar_source else {
+        return Ok(BTreeSet::new());
+    };
+    Ok(assign_states_to_parser_action_slots(
+        data,
+        grammar_source,
+        parser_action_source_block_slots(grammar_source, &data.rule_names),
+    )?
+    .into_iter()
+    .filter_map(|(state, slot)| slot.body.trim().is_empty().then_some(state))
+    .collect())
 }
 
 /// Pairs supported rule-call arguments from grammar source with the ATN
@@ -11150,11 +11180,13 @@ continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#;
         let spans = parser_action_source_block_slots(grammar, &rule_names);
 
         assert_eq!(spans.len(), 2, "only authored action blocks produce slots");
-        assert_eq!(spans[0].as_ref().map(|(_, _, body)| body.as_str()), Some(r#"<write("$text")>"#));
+        assert_eq!(spans[0].body, r#"<write("$text")>"#);
+        assert_eq!(spans[0].rule_index, 0);
         assert_eq!(
-            spans[1].as_ref().map(|(_, _, body)| body.as_str()),
-            Some(r#"<AssignLocal("$return","0")>"#)
+            spans[1].body,
+            r#"<AssignLocal("$return","0")>"#
         );
+        assert_eq!(spans[1].rule_index, 1);
     }
 
     #[test]
@@ -11170,10 +11202,53 @@ ID : [a-z]+ ;
         let spans = parser_action_source_block_slots(grammar, &rule_names);
 
         assert_eq!(spans.len(), 1, "only rule-body actions produce slots");
+        assert_eq!(spans[0].body.trim(), "native();");
+        assert_eq!(spans[0].rule_index, 0);
+    }
+
+    #[test]
+    fn parser_action_source_slots_keep_rule_refs_ending_in_metadata_words() {
+        let rule_names = vec!["s".to_owned()];
+        let grammar = r#"parser grammar T;
+s : mytokens { first(); } mychannels { second(); } ;
+"#;
+
+        let spans = parser_action_source_block_slots(grammar, &rule_names);
+
         assert_eq!(
-            spans[0].as_ref().map(|(_, _, body)| body.as_str()),
-            Some("native();")
+            spans
+                .iter()
+                .map(|slot| slot.body.trim())
+                .collect::<Vec<_>>(),
+            ["first();", "second();"]
         );
+    }
+
+    #[test]
+    fn parser_action_assignment_is_per_rule_and_left_recursion_aware() {
+        let data = multi_rule_action_parser_data();
+        let grammar = r#"parser grammar T;
+s : {one();} A ;
+expr : expr PLUS {op();} expr
+     | {primary();} A
+     ;
+"#;
+
+        let assigned = assign_states_to_parser_action_slots(
+            &data,
+            grammar,
+            parser_action_source_block_slots(grammar, &data.rule_names),
+        )
+        .expect("action slots should assign");
+        let by_state = assigned
+            .iter()
+            .map(|(state, slot)| (*state, (slot.rule_index, slot.body.as_str())))
+            .collect::<BTreeMap<_, _>>();
+
+        assert_eq!(by_state.get(&0), Some(&(0, "one();")));
+        assert_eq!(by_state.get(&5), Some(&(1, "primary();")));
+        assert_eq!(by_state.get(&6), Some(&(1, "op();")));
+        assert!(!by_state.contains_key(&4), "synthetic state 4 has no source body");
     }
 
     #[test]
@@ -11366,13 +11441,11 @@ INT : '0'..'9'+ ;\n";
         let rule_names = vec!["s".to_owned(), "x".to_owned()];
         let spans = parser_action_source_block_slots(grammar, &rule_names);
         assert_eq!(
-            spans
-                .iter()
-                .map(|span| span.as_ref().map(|(_, _, body)| body.as_str()))
-                .collect::<Vec<_>>(),
-            [Some(r#"<writeln("S.x")>"#)],
+            spans.iter().map(|span| span.body.as_str()).collect::<Vec<_>>(),
+            [r#"<writeln("S.x")>"#],
             "the imported rule's action source span must not be dropped"
         );
+        assert_eq!(spans[0].rule_index, 1);
     }
 
     #[test]
@@ -11848,6 +11921,47 @@ ID: [a-z]+ { customJava(); };
         }
     }
 
+    /// Parser `.interp` fixture with an authored action in rule `s`, then one
+    /// synthetic and two authored action states in left-recursive rule `expr`.
+    fn multi_rule_action_parser_data() -> InterpData {
+        InterpData {
+            literal_names: vec![None, Some("'a'".to_owned()), Some("'+'".to_owned())],
+            symbolic_names: vec![None, Some("A".to_owned()), Some("PLUS".to_owned())],
+            rule_names: vec!["s".to_owned(), "expr".to_owned()],
+            channel_names: vec!["DEFAULT_TOKEN_CHANNEL".to_owned()],
+            mode_names: vec!["DEFAULT_MODE".to_owned()],
+            atn: vec![
+                4, 1, 2, // version, parser grammar, max token type
+                9, // states
+                2, 0, // state 0: rule s start, authored action source
+                1, 0, // state 1: basic
+                1, 0, // state 2: basic
+                7, 0, // state 3: rule s stop
+                2, 1, // state 4: rule expr start, synthetic action source
+                1, 1, // state 5: primary action source
+                1, 1, // state 6: operator action source
+                1, 1, // state 7: basic
+                7, 1, // state 8: rule expr stop
+                0, // non-greedy states
+                0, // precedence states
+                2, // rules
+                0, // rule 0 start
+                4, // rule 1 start
+                0, // modes
+                0, // sets
+                7, // transitions
+                0, 1, 6, 0, 0, 0, // action rule s
+                1, 2, 5, 1, 0, 0, // atom A
+                2, 3, 1, 0, 0, 0, // epsilon
+                4, 5, 6, 1, 0, 0, // synthetic action in expr
+                5, 6, 6, 1, 1, 0, // authored primary action in expr
+                6, 7, 6, 1, 2, 0, // authored operator action in expr
+                7, 8, 5, 1, 0, 0, // atom A
+                0, // decisions
+            ],
+        }
+    }
+
     /// Parser `.interp` fixture whose ATN carries one semantic-predicate
     /// transition at coordinate `(rule 0, pred 0)`: `s : {…}? A ;`.
     fn predicate_parser_data() -> InterpData {
@@ -12316,6 +12430,42 @@ dispose = "hook"
 
         enforce_sem_unknown(SemUnknownPolicy::Error, &entries)
             .expect("fully translated grammar passes strict mode");
+    }
+
+    #[test]
+    fn authored_empty_parser_action_is_explicit_noop() {
+        let grammar = "parser grammar T;\ns : {} A ;\n";
+        let entries = collect_parser_semantics(
+            &action_parser_data(),
+            Some(grammar),
+            SemUnknownPolicy::Error,
+            &SemPatternFile::default(),
+        )
+        .expect("collection should succeed");
+        let action = entries
+            .iter()
+            .find(|entry| entry.kind == SemanticsKind::ParserAction)
+            .expect("action entry is inventoried");
+
+        assert_eq!(action.atn_state, Some(0));
+        assert_eq!(action.body.as_deref(), Some(""));
+        assert_eq!(action.disposition, SemanticsDisposition::Synthetic);
+        enforce_sem_unknown(SemUnknownPolicy::Error, &entries)
+            .expect("empty authored action is a strict-policy no-op");
+
+        let module = render_parser_with_options(
+            "TParser",
+            &action_parser_data(),
+            Some(grammar),
+            ParserRenderOptions {
+                require_generated_parser: true,
+                embedded: false,
+                sem_unknown: SemUnknownPolicy::Error,
+                patterns: None,
+            },
+        )
+        .expect("empty action should not block generated parser output");
+        assert!(module.contains("0 => {}"));
     }
 
     #[test]
