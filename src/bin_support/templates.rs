@@ -8,58 +8,9 @@ pub(crate) struct TemplateBlock<'a> {
     pub(crate) predicate: bool,
 }
 
-/// One target-template expression nested inside a named ANTLR action block.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct NamedActionTemplate<'a> {
-    pub(crate) open_brace: usize,
-    pub(crate) body: &'a str,
-}
-
-/// Finds all target templates inside a rule-level named action body, including
-/// multi-template blocks such as the listener-suite `@after` actions.
-pub(crate) fn named_action_templates<'a>(
-    source: &'a str,
-    marker: &str,
-) -> Vec<NamedActionTemplate<'a>> {
-    let mut templates = Vec::new();
-    let mut offset = 0;
-    while let Some(marker_start) = source[offset..].find(marker).map(|index| offset + index) {
-        let Some(open_brace) = source[marker_start..]
-            .find('{')
-            .map(|index| marker_start + index)
-        else {
-            break;
-        };
-        let Some(close_brace) = matching_action_brace(source, open_brace + 1) else {
-            break;
-        };
-        let mut cursor = open_brace + 1;
-        while cursor < close_brace {
-            let Some(open_angle) = source[cursor..close_brace]
-                .find('<')
-                .map(|index| cursor + index)
-            else {
-                break;
-            };
-            let Some(close_angle) = matching_template_close(source, open_angle + 1) else {
-                break;
-            };
-            if close_angle > close_brace {
-                break;
-            }
-            templates.push(NamedActionTemplate {
-                open_brace,
-                body: &source[open_angle + 1..close_angle],
-            });
-            cursor = close_angle + 1;
-        }
-        offset = close_brace + 1;
-    }
-    templates
-}
-
 /// Finds the next target-template block while allowing whitespace inside the
 /// ANTLR action braces, for example `{ <writeln("$text")> }`.
+#[cfg(test)]
 pub(crate) fn next_template_block(source: &str, offset: usize) -> Option<TemplateBlock<'_>> {
     let mut cursor = offset;
     while let Some(open_brace) = find_significant_open_brace(source, cursor) {
