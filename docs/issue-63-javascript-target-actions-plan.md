@@ -1,4 +1,4 @@
-# Issue #63: JavaScript target-action support plan
+# Issue #63: JavaScript and TypeScript target-action support plan
 
 Status: implemented 2026-07-11
 
@@ -6,22 +6,22 @@ Issue: [#63](https://github.com/ophi-dev/antlr-rust-runtime/issues/63)
 
 ## Outcome
 
-Generate a faithful Rust lexer and parser from the unmodified official
-`antlr/grammars-v4` JavaScript grammar by combining:
+Generate faithful Rust lexers and parsers from the unmodified official
+`antlr/grammars-v4` JavaScript and TypeScript grammars by combining:
 
 - grammar-agnostic runtime and generator hook plumbing,
-- JavaScript-specific mappings in `patterns/javascript.toml`, and
+- JavaScript-family mappings in `patterns/javascript.toml`, and
 - checked-in Rust lexer/parser support modules analogous to grammars-v4's
-  `JavaScriptLexerBase` and `JavaScriptParserBase` implementations.
+  JavaScript and TypeScript lexer/parser base implementations.
 
-The delivered demo must build from the upstream `.g4` files, tokenize and
-parse representative JavaScript correctly, and document the complete build
-from the ANTLR jar through a runnable Rust binary.
+The delivered demos must build from the upstream `.g4` files, tokenize and
+parse representative JavaScript and TypeScript correctly, and document the
+complete builds from the ANTLR jar through runnable Rust binaries.
 
 This is a target-support bundle, not an attempt to translate arbitrary
-JavaScript actions into Rust. JavaScript rule names, token names, helper names,
-and state machines remain outside `src/`; the generic generator learns their
-shape from grammar metadata plus the user-selected pattern file.
+target-language actions into Rust. Grammar-family rule names, token names,
+helper names, and state machines remain outside `src/`; the generic generator
+learns their shape from grammar metadata plus the user-selected pattern file.
 
 ## Scope decisions
 
@@ -39,10 +39,11 @@ shape from grammar metadata plus the user-selected pattern file.
   the last emitted default-channel token, as the official JavaScript bases do.
 - Expose read-only raw-token access through `ParserSemCtx` for hidden-channel
   line-terminator checks.
-- Add Rust JavaScript lexer/parser base modules, a runnable parity demo, CI,
-  and build documentation.
-- Make strict generation succeed with every authored JavaScript semantic
-  coordinate reported as `translated` or `hooked` in `semantics.json`.
+- Add Rust JavaScript and TypeScript lexer/parser base modules, runnable parity
+  demos, CI, and build documentation.
+- Make strict generation succeed with every authored JavaScript and TypeScript
+  semantic coordinate reported as `translated` or `hooked` in
+  `semantics.json`.
 
 ### Not in scope
 
@@ -58,10 +59,9 @@ shape from grammar metadata plus the user-selected pattern file.
   the direct recursive-descent compiler cannot yet emit. Closing the 59-rule
   direct-codegen gap is independent performance work; predicates and actions
   must remain faithful on both paths.
-- TypeScript parity is not an acceptance requirement for this issue. The hook
-  plumbing and literal-argument design must be reusable for it, and its support
-  should require only a TypeScript pattern/base/demo layer rather than runtime
-  special cases.
+- No arbitrary-expression argument lowering. Typed helpers accept declared
+  string, boolean, and integer literals; the official TypeScript grammar's
+  `p("of")` and `n("get"|"set")` calls are inside that boundary.
 
 ## Why this boundary
 
@@ -70,7 +70,7 @@ state in the generic ANTLR runtime. They ship grammar-specific base classes
 beside the grammar. Rust should follow the same ownership boundary:
 
 ```text
-official JavaScript .g4 + patterns/javascript.toml
+official JavaScript/TypeScript .g4 + patterns/javascript.toml
                        |
                        v
        antlr4-rust-gen emits typed hook coordinates
@@ -81,13 +81,13 @@ official JavaScript .g4 + patterns/javascript.toml
    generated lexer/parser    semantics.json
               |
               v
- checked-in JavaScriptLexerBase / JavaScriptParserBase
+ checked-in grammar-specific Rust lexer/parser bases
               |
               v
        runnable Rust parser crate
 ```
 
-Hard-coding `ProcessOpenBrace`, `IsRegexPossible`, JavaScript token constants,
+Hard-coding `ProcessOpenBrace`, `IsRegexPossible`, grammar token constants,
 or equivalent behavior in the generator/runtime would violate the repository's
 codegen boundary and make the next stateful grammar another runtime patch.
 
@@ -269,7 +269,7 @@ buffering, hidden channels, and a multiline comment containing `\r`/`\n`.
 
 ### 6. Complete `patterns/javascript.toml`
 
-Keep every JavaScript-specific spelling in this file. Map:
+Keep every JavaScript-family spelling in this file. Map:
 
 - lexer predicates: `IsStartOfFile`, `IsRegexPossible`,
   `IsInTemplateString`, and positive/negated `IsStrictMode` calls;
@@ -280,12 +280,14 @@ Keep every JavaScript-specific spelling in this file. Map:
   `notOpenBraceAndNotFunction`, `closeBrace`, and the string-argument `n`
   helper.
 
-The file may also declare compatible TypeScript helpers (`p`, for example),
-but JavaScript generation must not depend on TypeScript coordinates.
+Also map the TypeScript-only lexer actions `StartTemplateString`,
+`IncreaseTemplateDepth`, and `DecreaseTemplateDepth`; the parser predicate
+`notOpenBraceAndNotFunctionAndNotInterface`; and the string-argument `p`
+helper. JavaScript generation must not depend on TypeScript coordinates.
 
-With the official JavaScript grammar, strict generation must produce no
-`assume-true`, `assume-false`, `ignored`, or `error` disposition for an authored
-semantic coordinate.
+With either official grammar, strict generation must produce no `assume-true`,
+`assume-false`, `ignored`, or `error` disposition for an authored semantic
+coordinate.
 
 ### 7. Add JavaScript-specific Rust support modules
 
@@ -322,7 +324,7 @@ Preserve callback timing:
 
 Implement the generated `JavaScriptParserHooks` trait:
 
-- `p`/`prev` and `n`/`next` compare visible token text through `ParserSemCtx`;
+- `n`/`next` compares visible token text through `ParserSemCtx`;
 - `not_line_terminator` delegates to `line_terminator_ahead`;
 - the open-brace/function guard and `close_brace` use generated token
   constants and visible lookahead;
@@ -331,6 +333,17 @@ Implement the generated `JavaScriptParserHooks` trait:
 
 These files are examples users can copy into an application. They are not
 compiled into the runtime crate and are not generated output.
+
+### 8. Add TypeScript-specific Rust support modules
+
+Check in `typescript_lexer_base.rs` and `typescript_parser_base.rs` under the
+TypeScript parity demo. The lexer base mirrors the official TypeScript state
+model for strict scopes, previous default-channel tokens, brace depth, and
+template depth. The parser base implements `p` with visible lookbehind,
+`n` with visible lookahead, hidden-token line-terminator checks, and the
+open-brace/function/interface guard using generated token constants.
+
+No TypeScript helper, rule, grammar, or token name is added under `src/`.
 
 ## Demo, parity, and documentation layout
 
@@ -353,6 +366,23 @@ tests/javascript-parity/
     src/main.rs
     src/javascript_lexer_base.rs
     src/javascript_parser_base.rs
+    src/generated/              # populated by run.sh, not committed
+
+tests/typescript-parity/
+  README.md
+  run.sh
+  TypeScriptParityDumper.java
+  snippets/
+    01-types.ts
+    02-contextual-helpers.ts
+    03-template-nesting.ts
+    04-line-terminators.ts
+    05-strict-mode.ts
+  dumper/
+    Cargo.toml
+    src/main.rs
+    src/typescript_lexer_base.rs
+    src/typescript_parser_base.rs
     src/generated/              # populated by run.sh, not committed
 ```
 
@@ -377,6 +407,10 @@ Add `.github/workflows/javascript-parity.yml`, pinned to ANTLR 4.13.2, the jar
 checksum, and the same grammars-v4 commit used by Kotlin parity. Sparse-checkout
 only `javascript/javascript`.
 
+Add a parallel pinned TypeScript parity workflow. Its oracle is the official
+Java target and the Java base classes shipped beside the TypeScript grammar;
+compare both tokens and parse trees byte-for-byte.
+
 Add `docs/javascript-build.md` as the user-facing build guide. It must show:
 
 - prerequisites and pinned downloads;
@@ -389,6 +423,10 @@ Add `docs/javascript-build.md` as the user-facing build guide. It must show:
 - how to run the repository parity smoke;
 - the deliberate omission of `--require-generated-parser` and what the
   interpreter fallback means.
+
+Add `docs/typescript-build.md` with the same strict clean-room workflow, the
+TypeScript base files, and explicit construction that exercises the generated
+literal-argument hook signatures.
 
 Link the guide from the main `README.md` semantic-actions section.
 
@@ -437,6 +475,16 @@ Link the guide from the main `README.md` semantic-actions section.
 Each fixture must match the pinned official target's tokens and parse tree and
 produce zero unexpected lexer/parser errors.
 
+### TypeScript behavior matrix
+
+| Fixture | Required behavior |
+| --- | --- |
+| types | interfaces, generics, function types, and unions parse faithfully |
+| contextual helpers | `p("of")` uses lookbehind and `n("get"|"set")` uses lookahead |
+| template nesting | TypeScript template-depth actions preserve nested modes and regex tokens |
+| line terminators | `notLineTerminator` and ASI helpers observe the official hidden-token rules |
+| strict mode | string-literal actions and strict scopes match the official lexer base |
+
 ### Regression gates
 
 Run:
@@ -451,6 +499,9 @@ tests/kotlin-parity/run.sh \
 tests/javascript-parity/run.sh \
   --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
   --grammars-v4 /tmp/antlr-cleanroom/grammars-v4
+tests/typescript-parity/run.sh \
+  --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
+  --grammars-v4 /tmp/antlr-cleanroom/grammars-v4
 ```
 
 ## Implementation sequence
@@ -463,16 +514,16 @@ tests/javascript-parity/run.sh \
    and remove the current hook rejection.
 4. **Parser support surface**: add literal arguments to typed parser adapters
    and raw buffered-token access to `ParserSemCtx`.
-5. **JavaScript mappings and bases**: complete `patterns/javascript.toml` and
-   add the two checked-in Rust base modules.
-6. **Proof and docs**: add snippets, reference dumper, strict parity runner,
-   build guide, README link, and pinned CI workflow.
+5. **JavaScript/TypeScript mappings and bases**: complete
+   `patterns/javascript.toml` and add the four checked-in Rust base modules.
+6. **Proof and docs**: add snippets, reference dumpers, strict parity runners,
+   build guides, README links, and pinned CI workflows.
 7. **Full regression pass**: runtime testsuite, Kotlin parity, clippy, unit
-   tests, and JavaScript parity.
+   tests, and JavaScript/TypeScript parity.
 
 The sequence keeps each layer independently testable. Steps 1-4 contain no
-JavaScript identifiers in generic code; JavaScript-specific content first
-appears in step 5.
+JavaScript or TypeScript identifiers in generic code; grammar-family content
+first appears in step 5.
 
 ## Acceptance criteria
 
@@ -490,13 +541,22 @@ appears in step 5.
 - [x] Checked-in `javascript_lexer_base.rs` and
       `javascript_parser_base.rs` contain all grammar-specific behavior needed
       by the demo; no JavaScript rule/helper/token names are added under `src/`.
-- [x] The demo crate builds without editing generated Rust or upstream grammar
+- [x] Both demo crates build without editing generated Rust or upstream grammar
       files.
 - [x] All six behavior fixtures match a pinned official ANTLR target's token
       stream and parse tree byte-for-byte and report no unexpected diagnostics.
 - [x] `docs/javascript-build.md` contains a copy/pasteable clean-room build and
       explicit typed-hook construction example, and the main README links it.
 - [x] A pinned JavaScript parity workflow is included in CI.
+- [x] The unmodified official `TypeScriptLexer.g4` and
+      `TypeScriptParser.g4` generate strictly without ignored or assumed
+      semantics, including `p("of")` and `n("get"|"set")` literal arguments.
+- [x] Checked-in TypeScript Rust base modules cover its template actions,
+      strict/brace state, parser lookaround, and interface guard.
+- [x] All five TypeScript fixtures match the pinned official Java target's
+      token stream and parse tree byte-for-byte.
+- [x] `docs/typescript-build.md` provides a copy/pasteable strict build, and a
+      pinned TypeScript parity workflow is included in CI.
 - [x] Unit tests, strict clippy, the upstream runtime testsuite, and Kotlin
       parity continue to pass.
 
@@ -507,7 +567,7 @@ appears in step 5.
   parity grammar commit.
 - **Speculative side effects**: typed lexer predicate methods receive only the
   shared/read-only lexer context; only committed actions and token observation
-  mutate the JavaScript base.
+  mutate the grammar-specific base.
 - **Hook state bypasses translated behavior**: use a composed runtime API with
   explicit precedence and mixed-coordinate tests rather than switching the
   entire lexer to a hook-only path.

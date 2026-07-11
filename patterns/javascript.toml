@@ -58,6 +58,26 @@ name = "ProcessTemplateCloseBrace"
 returns = "unit"
 lower = "hook"
 
+# The sibling TypeScript grammar spells its template-state actions after the
+# base-class methods instead of the JavaScript grammar's ProcessTemplate* pair.
+[[helper]]
+kind = "lexer-action"
+name = "StartTemplateString"
+returns = "unit"
+lower = "hook"
+
+[[helper]]
+kind = "lexer-action"
+name = "IncreaseTemplateDepth"
+returns = "unit"
+lower = "hook"
+
+[[helper]]
+kind = "lexer-action"
+name = "DecreaseTemplateDepth"
+returns = "unit"
+lower = "hook"
+
 [[helper]]
 name = "notLineTerminator"
 returns = "bool"
@@ -70,6 +90,11 @@ lower = "hook"
 
 [[helper]]
 name = "notOpenBraceAndNotFunction"
+returns = "bool"
+lower = "hook"
+
+[[helper]]
+name = "notOpenBraceAndNotFunctionAndNotInterface"
 returns = "bool"
 lower = "hook"
 
