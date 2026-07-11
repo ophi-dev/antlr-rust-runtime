@@ -236,6 +236,20 @@ pub(crate) fn parse_embedded_model(
     source: &str,
     parser_rule_names: &[String],
 ) -> io::Result<EmbeddedModel> {
+    let mut model = parse_embedded_rules_model(source, parser_rule_names);
+    model.parser_members = parse_members_blocks(source, &["@parser::members", "@members"])?;
+    Ok(model)
+}
+
+/// Parses only parser rule structure from the rendered grammar.
+///
+/// This is enough for action-state attribution in non-embedded generation,
+/// where target-specific `@members` bodies are irrelevant and may be Java,
+/// Python, or another runtime's syntax.
+pub(crate) fn parse_embedded_rules_model(
+    source: &str,
+    parser_rule_names: &[String],
+) -> EmbeddedModel {
     let mut rules: Vec<RuleModel> = parser_rule_names
         .iter()
         .map(|name| RuleModel {
@@ -259,11 +273,10 @@ pub(crate) fn parse_embedded_model(
         rule.alts = parse_alternatives(source, colon + 1, semicolon);
     }
 
-    let parser_members = parse_members_blocks(source, &["@parser::members", "@members"])?;
-    Ok(EmbeddedModel {
+    EmbeddedModel {
         rules,
-        parser_members,
-    })
+        parser_members: MembersModel::default(),
+    }
 }
 
 /// Yields `(rule_name, header_start, colon_offset, semicolon_offset)` for
