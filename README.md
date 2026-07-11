@@ -22,7 +22,7 @@ For Rust projects, add the runtime crate:
 
 ```toml
 [dependencies]
-antlr-rust-runtime = "0.7"
+antlr-rust-runtime = "0.8"
 ```
 
 The library crate is imported as `antlr4_runtime`:
