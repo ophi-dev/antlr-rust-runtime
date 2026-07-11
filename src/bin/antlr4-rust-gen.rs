@@ -891,18 +891,7 @@ fn parser_action_source_block_slots(
     let mut offset = 0;
     while let Some(block) = next_action_block(source, offset) {
         offset = block.after_brace;
-        if !rule_action_included(source, block.open_brace, Some(rule_names)) {
-            continue;
-        }
-        if block.predicate
-            || is_after_action(source, block.open_brace)
-            || is_init_action(source, block.open_brace)
-            || is_definitions_action(source, block.open_brace)
-            || is_members_action(source, block.open_brace)
-            || is_options_block(source, block.open_brace)
-            || source[..block.open_brace].trim_end().ends_with("tokens")
-            || source[..block.open_brace].trim_end().ends_with("channels")
-        {
+        if !is_parser_rule_body_action_block(source, &block, Some(rule_names)) {
             continue;
         }
         let (line, column) = line_column(source, block.open_brace);
@@ -5399,20 +5388,7 @@ fn build_embedded_parser_data(
     let mut offset = 0;
     while let Some(block) = next_parser_action_block(source, offset, |_| true) {
         offset = block.after_brace;
-        if !rule_action_included(source, block.open_brace, Some(&data.rule_names)) {
-            continue;
-        }
-        if block.predicate
-            || is_after_action(source, block.open_brace)
-            || is_init_action(source, block.open_brace)
-            || is_definitions_action(source, block.open_brace)
-            || is_members_action(source, block.open_brace)
-            || is_options_block(source, block.open_brace)
-            // `tokens { A, B }` / `channels { ... }` blocks are grammar
-            // metadata, not semantic actions.
-            || source[..block.open_brace].trim_end().ends_with("tokens")
-            || source[..block.open_brace].trim_end().ends_with("channels")
-        {
+        if !is_parser_rule_body_action_block(source, &block, Some(&data.rule_names)) {
             continue;
         }
         slots.push((block.open_brace, block.body.to_owned()));
@@ -7258,6 +7234,40 @@ fn rule_action_included(source: &str, position: usize, rule_names: Option<&[Stri
         && !has_prior_rule_definition(source, header.name, header.start)
 }
 
+fn is_parser_rule_body_action_block(
+    source: &str,
+    block: &templates::TemplateBlock<'_>,
+    rule_names: Option<&[String]>,
+) -> bool {
+    rule_action_included(source, block.open_brace, rule_names)
+        && !block.predicate
+        && !is_after_action(source, block.open_brace)
+        && !is_init_action(source, block.open_brace)
+        && !is_definitions_action(source, block.open_brace)
+        && !is_members_action(source, block.open_brace)
+        && !is_options_block(source, block.open_brace)
+        && !is_tokens_or_channels_block(source, block.open_brace)
+        && !is_rule_exception_handler_block(source, block.open_brace)
+}
+
+fn is_tokens_or_channels_block(source: &str, open_brace: usize) -> bool {
+    let prefix = source[..open_brace].trim_end();
+    prefix.ends_with("tokens") || prefix.ends_with("channels")
+}
+
+fn is_rule_exception_handler_block(source: &str, open_brace: usize) -> bool {
+    let statement_start = statement_start_before(source, open_brace);
+    if last_rule_header_colon(source, open_brace).is_some_and(|colon| colon >= statement_start) {
+        return false;
+    }
+    let prefix = &source[statement_start..open_brace];
+    match rule_header_start_identifier(prefix) {
+        Some("finally") => true,
+        Some("catch") => prefix.contains('[') && prefix.contains(']'),
+        _ => false,
+    }
+}
+
 /// Reports whether a predicate block at `position` belongs to a rule this ATN
 /// covers, tolerating headers this scraper cannot resolve.
 ///
@@ -7415,17 +7425,21 @@ fn statement_rule_header(source: &str, position: usize) -> Option<RuleHeader<'_>
 /// Grammar-level `@name {...}` blocks that precede the rule are elided by the
 /// rule-name reader.
 fn rule_statement_start(source: &str, colon: usize) -> usize {
+    statement_start_before(source, colon)
+}
+
+fn statement_start_before(source: &str, position: usize) -> usize {
     let mut cursor = templates::GrammarSourceCursor::new(source, 0);
     let mut start = 0;
     while let Some((index, ch)) = cursor.next_significant() {
-        if index >= colon {
+        if index >= position {
             break;
         }
         match ch {
             '{' => {
                 // Skip the balanced action body so its inner `;`/`}` are ignored.
                 let resume = matching_action_brace(source, index + 1)
-                    .map_or(colon, |close| close.saturating_add(1).min(colon));
+                    .map_or(position, |close| close.saturating_add(1).min(position));
                 cursor.seek(resume);
             }
             ';' => start = index + 1,
@@ -7893,13 +7907,7 @@ fn authored_parser_action_blocks_per_rule(
     let mut offset = 0;
     while let Some(block) = next_action_block(grammar_source, offset) {
         offset = block.after_brace;
-        if block.predicate
-            || is_after_action(grammar_source, block.open_brace)
-            || is_init_action(grammar_source, block.open_brace)
-            || is_definitions_action(grammar_source, block.open_brace)
-            || is_members_action(grammar_source, block.open_brace)
-            || is_options_block(grammar_source, block.open_brace)
-        {
+        if !is_parser_rule_body_action_block(grammar_source, &block, Some(rule_names)) {
             continue;
         }
         let Some(header) = statement_rule_header(grammar_source, block.open_brace) else {
@@ -11150,6 +11158,25 @@ continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#;
     }
 
     #[test]
+    fn parser_action_source_slots_ignore_rule_exception_handlers() {
+        let rule_names = vec!["s".to_owned()];
+        let grammar = r#"parser grammar T;
+s : ID { native(); } EOF ;
+catch [antlr4_runtime::AntlrError error] { recover(error); }
+finally { cleanup(); }
+ID : [a-z]+ ;
+"#;
+
+        let spans = parser_action_source_block_slots(grammar, &rule_names);
+
+        assert_eq!(spans.len(), 1, "only rule-body actions produce slots");
+        assert_eq!(
+            spans[0].as_ref().map(|(_, _, body)| body.as_str()),
+            Some("native();")
+        );
+    }
+
+    #[test]
     fn parses_supported_predicate_helpers() {
         assert_eq!(
             parse_invoke_predicate(r#"True():Invoke_pred()"#),
@@ -12295,16 +12322,19 @@ dispose = "hook"
     fn authored_action_block_counter_counts_only_authored_parser_blocks() {
         // Counts author-written action `{...}` blocks per parser rule, including
         // native/untranslated ones, but excludes predicates, `@init`/`@after`,
-        // and members/options blocks.
+        // members/options blocks, and rule exception handlers.
         let grammar = "grammar T;\n\
 @members { int shared; }\n\
 s @init { init(); } : ID { native(); } { <writeln(\"x\")> } EOF ;\n\
+catch [antlr4_runtime::AntlrError error] { recover(error); }\n\
+finally { cleanup(); }\n\
 t : {pred()}? ID ;\n\
 ID : [a-z]+ ;\n";
         let rule_names = vec!["s".to_owned(), "t".to_owned()];
         let counts = authored_parser_action_blocks_per_rule(grammar, &rule_names);
         // Rule s: two body actions ({native()} + {<writeln>}). The @init and
-        // @members blocks are excluded; the predicate on t is excluded.
+        // @members blocks and exception handlers are excluded; the predicate on
+        // t is excluded.
         assert_eq!(counts.get(&0).copied(), Some(2), "counts: {counts:?}");
         assert_eq!(counts.get(&1).copied(), None, "rule t has no action block: {counts:?}");
     }
