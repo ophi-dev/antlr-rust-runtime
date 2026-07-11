@@ -956,9 +956,14 @@ impl<'a> ParserAtnSimulator<'a> {
             if !configs.has_semantic_context() {
                 let subsets = conflicting_alt_subsets(configs.configs());
                 if self.exact_ambig_detection {
-                    if all_subsets_conflict(&subsets) && all_subsets_equal(&subsets) {
-                        let alts: Vec<usize> = configs.alts().into_iter().collect();
-                        let alt = alts[0];
+                    let alts: Vec<usize> = configs.alts().into_iter().collect();
+                    // Both subset checks hold vacuously for an empty list; a
+                    // real exact ambiguity always carries alternatives, so
+                    // guard the pick instead of indexing.
+                    if all_subsets_conflict(&subsets)
+                        && all_subsets_equal(&subsets)
+                        && let Some(&alt) = alts.first()
+                    {
                         return Ok(full_context_prediction(
                             alt,
                             &configs,

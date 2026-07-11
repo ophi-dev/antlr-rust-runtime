@@ -5614,6 +5614,14 @@ fn tool_decision_analysis(data: &InterpData) -> io::Result<ToolDecisionAnalysis>
         let Some(state) = atn.state(state_number) else {
             continue;
         };
+        // The tool never LL(1)-compiles non-greedy or left-recursion
+        // precedence decisions, disjoint LOOK or not — Java always emits
+        // `adaptivePredict` for them (a token switch would make a
+        // non-greedy loop greedy).
+        if state.non_greedy || state.precedence_rule_decision {
+            analysis.adaptive_decisions.insert(decision);
+            continue;
+        }
         let looks: Vec<DecisionAltLook> = state
             .transitions
             .iter()
