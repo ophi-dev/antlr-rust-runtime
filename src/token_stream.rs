@@ -322,8 +322,12 @@ where
         if start > stop || start >= self.tokens.len() {
             return String::new();
         }
+        // Java's `BufferedTokenStream.getText(Interval)` stops at the first
+        // EOF token, so an interval whose stop index lands on EOF renders
+        // without a trailing `<EOF>` (diagnostics rely on this).
         self.tokens[start..=stop.min(self.tokens.len().saturating_sub(1))]
             .iter()
+            .take_while(|token| token.token_type() != TOKEN_EOF)
             .map(|token| token.text())
             .collect::<Vec<_>>()
             .join("")

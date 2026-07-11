@@ -730,24 +730,6 @@ fn unsupported_reason(descriptor: &Descriptor) -> Option<&'static str> {
     if !descriptor.flags.is_empty() && !runtime_flags_supported(descriptor) {
         return Some("diagnostic/profile/DFA flags are not implemented in the Rust harness yet");
     }
-    // Honest residuals: these descriptors FAIL when run (nothing is faked);
-    // they are skipped with the missing feature named until it lands.
-    if matches!(
-        descriptor.id().as_str(),
-        "FullContextParsing/AmbiguityNoLoop"
-            | "FullContextParsing/CtxSensitiveDFATwoDiffInput"
-            | "FullContextParsing/ExprAmbiguity_2"
-            | "FullContextParsing/FullContextIF_THEN_ELSEParse_1"
-            | "FullContextParsing/FullContextIF_THEN_ELSEParse_3"
-            | "FullContextParsing/FullContextIF_THEN_ELSEParse_4"
-            | "FullContextParsing/FullContextIF_THEN_ELSEParse_5"
-            | "FullContextParsing/FullContextIF_THEN_ELSEParse_6"
-            | "FullContextParsing/LoopsSimulateTailRecursion"
-    ) {
-        return Some(
-            "full-context DFA learning does not yet reproduce Java's per-decision dump/diagnostics",
-        );
-    }
     if descriptor.id() == "LexerExec/PositionAdjustingLexer" {
         return Some("lexer subclass method overrides are not supported yet");
     }
