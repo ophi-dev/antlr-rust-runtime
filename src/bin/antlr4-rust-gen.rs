@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use antlr4_runtime::atn::lexer_dfa::CompiledLexerDfa;
 use antlr4_runtime::atn::serialized::{AtnDeserializer, SerializedAtn};
 use antlr4_runtime::atn::{Atn, AtnStateKind, LexerAction, Transition};
+use antlr4_runtime::token::TOKEN_EOF;
 
 #[path = "../bin_support/rust_names.rs"]
 mod rust_names;
@@ -1996,15 +1997,45 @@ struct LeftRecursiveLoopRender<'a> {
 /// predicate expressions, per-rule attrs presence, and `@after` bodies.
 #[derive(Clone, Copy)]
 struct EmbeddedStepRender<'a> {
-    /// The grammar dumps the learned DFA; keep every decision on the
-    /// adaptive simulator (no LL(1)/fast-path shortcuts) so the learned
-    /// states match Java's.
+    /// Keep every decision on the adaptive simulator (no LL(1)/fast-path
+    /// shortcuts) regardless of the tool classification.
     force_adaptive: bool,
+    /// Tool-classified non-LL(1) decisions ([`tool_decision_analysis`]).
+    adaptive_decisions: &'a BTreeSet<usize>,
+    /// Tool LOOK(1) dispatch intervals for LL(1)-disjoint decisions.
+    ll1_decision_arms: &'a BTreeMap<usize, Vec<Vec<(i32, i32)>>>,
     predicates: &'a BTreeMap<(usize, usize), (String, Option<String>)>,
     rule_has_attrs: &'a [bool],
     after: &'a BTreeMap<usize, String>,
     call_args: &'a BTreeMap<usize, String>,
     rule_arg0: &'a [Option<String>],
+}
+
+impl EmbeddedStepRender<'_> {
+    /// Java routes this decision through `adaptivePredict` — only there are
+    /// DFA states learned and full-context diagnostics emitted — so the
+    /// generated code must skip its LL(1)/fast-path shortcuts for it.
+    fn adaptive_decision(&self, decision: usize) -> bool {
+        self.force_adaptive || self.adaptive_decisions.contains(&decision)
+    }
+
+    /// Complete dispatch table for a tool-LL(1) decision, exit alternatives
+    /// included — Java's switch compilation. Legit input never reaches the
+    /// simulator through this, so no DFA state is ever learned for the
+    /// decision (matching the dump).
+    fn tool_ll1_fast_path(&self, decision: usize) -> Option<GeneratedDecisionFastPath> {
+        let arms = self.ll1_decision_arms.get(&decision)?;
+        Some(GeneratedDecisionFastPath {
+            arms: arms
+                .iter()
+                .enumerate()
+                .map(|(index, intervals)| GeneratedDecisionFastArm {
+                    alt: index + 1,
+                    intervals: intervals.clone(),
+                })
+                .collect(),
+        })
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -4386,12 +4417,18 @@ fn render_generated_decision(
         alts,
     } = decision_info;
     let pad = "    ".repeat(indent);
+    // A tool-LL(1) decision dispatches on the tool's complete LOOK table
+    // (exit alternatives included), like Java's switch compilation.
+    let tool_fast_path = render_context
+        .embedded
+        .and_then(|embedded| embedded.tool_ll1_fast_path(decision));
+    let fast_path = tool_fast_path.as_ref().or(fast_path);
     if let Some(fast_path) = fast_path.filter(|_| {
         !allow_semantic_context
             && !force_context
             && !render_context
                 .embedded
-                .is_some_and(|embedded| embedded.force_adaptive)
+                .is_some_and(|embedded| embedded.adaptive_decision(decision))
     }) {
         writeln!(
             out,
@@ -4430,9 +4467,11 @@ fn render_generated_decision(
         .expect("writing to a string cannot fail");
         let force_adaptive = render_context
             .embedded
-            .is_some_and(|embedded| embedded.force_adaptive);
-        if allow_semantic_context || force_context || force_adaptive {
+            .is_some_and(|embedded| embedded.adaptive_decision(decision));
+        if allow_semantic_context || force_context {
             render_generated_adaptive_prediction(out, &pad, decision);
+        } else if force_adaptive {
+            render_generated_two_stage_adaptive_assignment(out, &pad, decision);
         } else {
             render_generated_ll1_then_adaptive_prediction(out, &pad, state, decision, true);
         }
@@ -4488,6 +4527,16 @@ fn render_generated_fast_prediction_arms(
         )
         .expect("writing to a string cannot fail");
     }
+}
+
+/// Two-stage adaptive prediction without the LL(1) shortcut — Java's plain
+/// `adaptivePredict`: the SLL probe resolves or flags a full-context
+/// conflict, and the retry with real outer context only runs when the
+/// parser's prediction mode allows it (never in SLL mode).
+fn render_generated_two_stage_adaptive_assignment(out: &mut String, pad: &str, decision: usize) {
+    writeln!(out, "{pad}let __prediction = {{").expect("writing to a string cannot fail");
+    render_generated_sll_then_context_prediction_with_indent(out, pad, decision, 1);
+    writeln!(out, "{pad}}};").expect("writing to a string cannot fail");
 }
 
 fn render_generated_ll1_then_adaptive_prediction(
@@ -4883,6 +4932,11 @@ fn render_generated_adaptive_prediction_with_indent(
     .expect("writing to a string cannot fail");
     writeln!(
         out,
+        "{nested}__simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
         "{nested}__simulator.adaptive_predict_stream_info_with_context({decision}, 0, self.base.input(), &__prediction_context)"
     )
     .expect("writing to a string cannot fail");
@@ -4966,6 +5020,12 @@ fn render_generated_star_loop(
     } = loop_info;
     let (enter_alt, exit_alt) = alts;
     let pad = "    ".repeat(indent);
+    // A tool-LL(1) loop decision dispatches on the tool's complete LOOK
+    // table (exit alternative included), like Java's switch-driven loops.
+    let tool_fast_path = render_context
+        .embedded
+        .and_then(|embedded| embedded.tool_ll1_fast_path(decision));
+    let fast_path = tool_fast_path.as_ref().or(fast_path);
     // Per-loop "iteration started" flag, threaded into `sync_decision` so it
     // recovers like ANTLR: a `*` loop's first sync is at the loop ENTRY
     // (single-token deletion), every later sync is a loop-BACK (multi-token
@@ -4981,7 +5041,7 @@ fn render_generated_star_loop(
             && !force_context
             && !render_context
                 .embedded
-                .is_some_and(|embedded| embedded.force_adaptive)
+                .is_some_and(|embedded| embedded.adaptive_decision(decision))
     }) {
         writeln!(
             out,
@@ -5016,9 +5076,11 @@ fn render_generated_star_loop(
         .expect("writing to a string cannot fail");
         let force_adaptive = render_context
             .embedded
-            .is_some_and(|embedded| embedded.force_adaptive);
-        if allow_semantic_context || force_context || force_adaptive {
+            .is_some_and(|embedded| embedded.adaptive_decision(decision));
+        if allow_semantic_context || force_context {
             render_generated_adaptive_prediction(out, &inner_pad, decision);
+        } else if force_adaptive {
+            render_generated_two_stage_adaptive_assignment(out, &inner_pad, decision);
         } else {
             render_generated_ll1_then_adaptive_prediction(out, &inner_pad, state, decision, true);
         }
@@ -5102,6 +5164,11 @@ fn render_generated_left_recursive_loop(
     writeln!(
         out,
         "{pad}        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));"
+    )
+    .expect("writing to a string cannot fail");
+    writeln!(
+        out,
+        "{pad}        __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);"
     )
     .expect("writing to a string cannot fail");
     writeln!(
@@ -5515,6 +5582,185 @@ struct EmbeddedParserData {
     impl_items: String,
     /// `@members` structs/impls and generated support types.
     module_items: String,
+    /// Decisions the ANTLR tool would compile to `adaptivePredict` calls
+    /// (non-LL(1) per [`tool_decision_analysis`]); the generated code must
+    /// route these through the simulator on every visit.
+    adaptive_decisions: BTreeSet<usize>,
+    /// Tool LOOK(1) dispatch intervals for LL(1)-disjoint decisions.
+    ll1_decision_arms: BTreeMap<usize, Vec<Vec<(i32, i32)>>>,
+}
+
+/// LOOK(1) of one decision alternative, plus whether the walk crossed a
+/// predicate — Java nulls such alternatives, forcing the decision adaptive.
+#[derive(Debug, Default)]
+struct DecisionAltLook {
+    symbols: BTreeSet<i32>,
+    hit_pred: bool,
+}
+
+/// Ports the ANTLR tool's `AnalysisPipeline` classification: the decisions
+/// whose alternatives' LOOK(1) sets are not pairwise disjoint (or hit a
+/// predicate, or come up empty). Java compiles LL(1)-disjoint decisions to
+/// plain token switches — no simulator, no learned DFA — and routes every
+/// other decision through `adaptivePredict`, the only place DFA states are
+/// learned and full-context diagnostics fire. `dumpDFA` and diagnostic
+/// output therefore only match Java when the generated routing agrees.
+fn tool_decision_analysis(data: &InterpData) -> io::Result<ToolDecisionAnalysis> {
+    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
+        .deserialize()
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    let mut analysis = ToolDecisionAnalysis::default();
+    for (decision, &state_number) in atn.decision_to_state().iter().enumerate() {
+        let Some(state) = atn.state(state_number) else {
+            continue;
+        };
+        let looks: Vec<DecisionAltLook> = state
+            .transitions
+            .iter()
+            .map(|transition| {
+                let mut look = DecisionAltLook::default();
+                let mut walk = DecisionLookWalk {
+                    atn: &atn,
+                    busy: BTreeSet::new(),
+                    called_rules: vec![false; atn.rule_to_start_state().len()],
+                };
+                walk.walk(transition.target(), &mut Vec::new(), &mut look);
+                look
+            })
+            .collect();
+        if decision_alt_looks_disjoint(&looks) {
+            analysis.ll1_decision_arms.insert(
+                decision,
+                looks
+                    .iter()
+                    .map(|look| symbol_intervals(&look.symbols))
+                    .collect(),
+            );
+        } else {
+            analysis.adaptive_decisions.insert(decision);
+        }
+    }
+    Ok(analysis)
+}
+
+/// Tool-side decision classification (see [`tool_decision_analysis`]).
+#[derive(Debug, Default)]
+struct ToolDecisionAnalysis {
+    /// Decisions Java compiles to `adaptivePredict` calls.
+    adaptive_decisions: BTreeSet<usize>,
+    /// Complete LOOK(1) dispatch intervals per alt for LL(1)-disjoint
+    /// decisions — exit alternatives included, unlike the within-rule
+    /// fast-path/LL(1) analyses, so legit input never falls through to the
+    /// simulator (Java's switch never does).
+    ll1_decision_arms: BTreeMap<usize, Vec<Vec<(i32, i32)>>>,
+}
+
+/// Collapses a sorted symbol set into inclusive intervals.
+fn symbol_intervals(symbols: &BTreeSet<i32>) -> Vec<(i32, i32)> {
+    let mut intervals: Vec<(i32, i32)> = Vec::new();
+    for &symbol in symbols {
+        match intervals.last_mut() {
+            Some((_, stop)) if *stop + 1 == symbol => *stop = symbol,
+            _ => intervals.push((symbol, symbol)),
+        }
+    }
+    intervals
+}
+
+/// `AnalysisPipeline.disjoint`: pairwise-disjoint alt LOOK sets, with
+/// Java's `getDecisionLookahead` nulling (empty or predicate-hitting sets)
+/// folded in as an immediate non-LL(1) verdict.
+fn decision_alt_looks_disjoint(looks: &[DecisionAltLook]) -> bool {
+    let mut combined = BTreeSet::new();
+    for look in looks {
+        if look.hit_pred || look.symbols.is_empty() {
+            return false;
+        }
+        if look.symbols.intersection(&combined).next().is_some() {
+            return false;
+        }
+        combined.extend(look.symbols.iter().copied());
+    }
+    true
+}
+
+struct DecisionLookWalk<'a> {
+    atn: &'a Atn,
+    /// Java's `lookBusy`: (state, calling context) pairs already expanded.
+    busy: BTreeSet<(usize, Vec<usize>)>,
+    /// Java's `calledRuleStack`: rules on the walk's invocation path, the
+    /// recursion guard that bounds the context stack.
+    called_rules: Vec<bool>,
+}
+
+impl DecisionLookWalk<'_> {
+    /// `LL1Analyzer._LOOK` with an initially empty context: nested rule
+    /// invocations return precisely through `ctx`; the decision's own rule
+    /// boundary falls through the rule-stop state's return edges — the
+    /// deserializer materializes one per call site, which is exactly the
+    /// context-free FOLLOW Java walks there.
+    fn walk(&mut self, state_number: usize, ctx: &mut Vec<usize>, look: &mut DecisionAltLook) {
+        if !self.busy.insert((state_number, ctx.clone())) {
+            return;
+        }
+        let Some(state) = self.atn.state(state_number) else {
+            return;
+        };
+        if state.kind == AtnStateKind::RuleStop {
+            if let Some(return_state) = ctx.pop() {
+                let cleared = state
+                    .rule_index
+                    .map(|rule| std::mem::replace(&mut self.called_rules[rule], false));
+                self.walk(return_state, ctx, look);
+                if let (Some(rule), Some(flag)) = (state.rule_index, cleared) {
+                    self.called_rules[rule] = flag;
+                }
+                ctx.push(return_state);
+                return;
+            }
+            if state.transitions.is_empty() {
+                // The walk escaped through a stop state with no call sites —
+                // the start rule's end, where the only lookahead is EOF.
+                look.symbols.insert(TOKEN_EOF);
+                return;
+            }
+        }
+        for transition in &state.transitions {
+            match transition {
+                Transition::Rule {
+                    target,
+                    rule_index,
+                    follow_state,
+                    ..
+                } => {
+                    if self.called_rules.get(*rule_index).copied().unwrap_or(true) {
+                        continue;
+                    }
+                    self.called_rules[*rule_index] = true;
+                    ctx.push(*follow_state);
+                    self.walk(*target, ctx, look);
+                    ctx.pop();
+                    self.called_rules[*rule_index] = false;
+                }
+                Transition::Predicate { .. } | Transition::Precedence { .. } => {
+                    look.hit_pred = true;
+                }
+                Transition::Epsilon { target } | Transition::Action { target, .. } => {
+                    self.walk(*target, ctx, look);
+                }
+                _ => {
+                    // Terminal edge: enumerate the vocabulary through the
+                    // shared `matches` so atoms, ranges, sets, negations and
+                    // wildcards agree with the simulator exactly.
+                    for symbol in TOKEN_EOF..=self.atn.max_token_type() {
+                        if transition.matches(symbol, 1, self.atn.max_token_type()) {
+                            look.symbols.insert(symbol);
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Builds the embedded translation of every action, predicate, `@init` and
@@ -5540,8 +5786,11 @@ fn build_embedded_parser_data(
     let finish_body =
         |body: &str, translated: &str| -> String { post_process_embedded(body, translated, type_name) };
 
+    let decision_analysis = tool_decision_analysis(data)?;
     let mut out = EmbeddedParserData {
         rule_has_attrs: model.rules.iter().map(embedded::RuleModel::has_attrs).collect(),
+        adaptive_decisions: decision_analysis.adaptive_decisions,
+        ll1_decision_arms: decision_analysis.ll1_decision_arms,
         ..EmbeddedParserData::default()
     };
 
@@ -6305,11 +6554,14 @@ fn render_public_rule_methods(public_rule_method_names: &[String]) -> String {
 
 /// Step-render view over the embedded data.
 ///
-/// `force_adaptive` stays off: adaptive-everywhere learns more DFA states
-/// than Java, whose tool inlines simple decisions like our LL(1) shortcut.
+/// `force_adaptive` stays off: per-decision routing follows the tool
+/// classification in `adaptive_decisions` instead, matching which decisions
+/// Java compiles to switches versus `adaptivePredict` calls.
 fn embedded_step_render(embedded: &EmbeddedParserData) -> EmbeddedStepRender<'_> {
     EmbeddedStepRender {
         force_adaptive: false,
+        adaptive_decisions: &embedded.adaptive_decisions,
+        ll1_decision_arms: &embedded.ll1_decision_arms,
         predicates: &embedded.predicates,
         rule_has_attrs: &embedded.rule_has_attrs,
         after: &embedded.after,
@@ -11839,7 +12091,7 @@ atn:
         assert_eq!(body.entry_state, 0);
         assert_eq!(
             body.steps,
-            [mt(1, 2), mt(antlr4_runtime::token::TOKEN_EOF, 3)]
+            [mt(1, 2), mt(TOKEN_EOF, 3)]
         );
 
         let rendered = render_generated_rule_dispatch(
@@ -14637,7 +14889,7 @@ ID: [a-z]+ { customJava(); };
             .expect("state 2")
             .add_transition(Transition::Atom {
                 target: 3,
-                label: antlr4_runtime::token::TOKEN_EOF,
+                label: TOKEN_EOF,
             });
         atn.set_rule_to_start_state(vec![0]);
         atn.set_rule_to_stop_state(vec![3]);

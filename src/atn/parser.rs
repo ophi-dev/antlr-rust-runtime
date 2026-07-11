@@ -3,8 +3,9 @@ use crate::dfa::{Dfa, DfaState};
 use crate::int_stream::IntStream;
 use crate::prediction::{
     AtnConfig, AtnConfigSet, EMPTY_RETURN_STATE, PredictionContext, PredictionContextCache,
-    PredictionContextMergeCache, PredictionFxHasher, SemanticContext,
-    has_sll_conflict_terminating_prediction, resolves_to_just_one_viable_alt,
+    PredictionContextMergeCache, PredictionFxHasher, SemanticContext, all_subsets_conflict,
+    all_subsets_equal, conflicting_alt_subsets, has_sll_conflict_terminating_prediction,
+    single_viable_alt,
 };
 use crate::token::TOKEN_EOF;
 use std::cell::RefCell;
@@ -20,6 +21,10 @@ pub struct ParserAtnSimulator<'a> {
     decision_to_dfa: Vec<Dfa>,
     shared_cache_key: Option<usize>,
     context_cache: Rc<RefCell<PredictionContextCache>>,
+    /// Java's `LL_EXACT_AMBIG_DETECTION`: the full-context loop keeps
+    /// consuming past "resolves to one viable alt" conflicts until every
+    /// `(state, context)` subset conflicts over the same alt set.
+    exact_ambig_detection: bool,
 }
 
 thread_local! {
@@ -43,6 +48,10 @@ pub struct ParserAtnPredictionDiagnostic {
     pub sll_stop_index: usize,
     pub ll_stop_index: usize,
     pub conflicting_alts: Vec<usize>,
+    /// For [`ParserAtnPredictionDiagnosticKind::Ambiguity`]: whether the
+    /// full-context loop proved an exact ambiguity (Java's `exact` flag —
+    /// the default `DiagnosticErrorListener` only reports exact ones).
+    pub exact: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -95,7 +104,35 @@ struct DfaPredictionInfo {
 struct FullContextPrediction {
     prediction: ParserAtnPrediction,
     stop_index: usize,
-    ambiguity_alts: Option<Vec<usize>>,
+    resolution: FullContextResolution,
+}
+
+/// How the full-context loop settled, mirroring the two exits of Java's
+/// `execATNWithFullContext`: a truly unique alt (reported as context
+/// sensitivity) or a conflict resolution (reported as ambiguity, exact or
+/// not).
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum FullContextResolution {
+    Unique,
+    Ambiguous { exact: bool, alts: Vec<usize> },
+}
+
+fn full_context_prediction(
+    alt: usize,
+    configs: &AtnConfigSet,
+    stop_index: usize,
+    resolution: FullContextResolution,
+) -> FullContextPrediction {
+    FullContextPrediction {
+        prediction: ParserAtnPrediction {
+            alt,
+            requires_full_context: true,
+            has_semantic_context: configs_have_semantic_context_for_alt(configs, alt),
+            diagnostic: None,
+        },
+        stop_index,
+        resolution,
+    }
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -319,7 +356,14 @@ impl<'a> ParserAtnSimulator<'a> {
             decision_to_dfa: initial_decision_dfas(atn),
             shared_cache_key: None,
             context_cache: Rc::new(RefCell::new(PredictionContextCache::new())),
+            exact_ambig_detection: false,
         }
+    }
+
+    /// Switches the full-context resolution strategy (Java's
+    /// `LL_EXACT_AMBIG_DETECTION` versus plain `LL`).
+    pub const fn set_exact_ambig_detection(&mut self, exact: bool) {
+        self.exact_ambig_detection = exact;
     }
 
     /// Creates a simulator that starts from, and publishes back into, a
@@ -389,6 +433,7 @@ impl<'a> ParserAtnSimulator<'a> {
             decision_to_dfa,
             shared_cache_key: Some(key),
             context_cache,
+            exact_ambig_detection: false,
         }
     }
 
@@ -704,14 +749,18 @@ impl<'a> ParserAtnSimulator<'a> {
                 outer_context,
                 merge_cache,
             )?;
-            let (kind, conflicting_alts) = if let Some(ambiguity_alts) = full_context.ambiguity_alts
-            {
-                (ParserAtnPredictionDiagnosticKind::Ambiguity, ambiguity_alts)
-            } else {
-                (
+            let (kind, exact, conflicting_alts) = match full_context.resolution {
+                FullContextResolution::Ambiguous { exact, ref alts } => {
+                    (ParserAtnPredictionDiagnosticKind::Ambiguity, exact, alts.clone())
+                }
+                // A unique full-context alt after an SLL conflict is Java's
+                // reportContextSensitivity; the SLL state's conflicting alts
+                // describe the conflict that forced the retry.
+                FullContextResolution::Unique => (
                     ParserAtnPredictionDiagnosticKind::ContextSensitivity,
+                    false,
                     info.conflicting_alts,
-                )
+                ),
             };
             let mut prediction = full_context.prediction;
             if conflicting_alts.len() > 1 {
@@ -721,6 +770,7 @@ impl<'a> ParserAtnSimulator<'a> {
                     sll_stop_index,
                     ll_stop_index: full_context.stop_index,
                     conflicting_alts,
+                    exact,
                 });
             }
             return Ok(Some(prediction));
@@ -870,18 +920,21 @@ impl<'a> ParserAtnSimulator<'a> {
             precedence,
             merge_cache,
         );
+        // Java's `execATNWithFullContext`: after each reach set a truly
+        // unique alt resolves as context sensitivity. Otherwise default LL
+        // mode stops at the first "resolves to just one viable alt" conflict
+        // — reported as a NON-exact ambiguity, which the exactOnly listener
+        // suppresses — while LL_EXACT_AMBIG_DETECTION keeps consuming until
+        // every (state, context) subset conflicts over the same alt set: an
+        // exact ambiguity.
         loop {
             if let Some(alt) = configs.unique_alt() {
-                return Ok(FullContextPrediction {
-                    prediction: ParserAtnPrediction {
-                        alt,
-                        requires_full_context: true,
-                        has_semantic_context: configs_have_semantic_context_for_alt(&configs, alt),
-                        diagnostic: None,
-                    },
-                    stop_index: input.index(),
-                    ambiguity_alts: None,
-                });
+                return Ok(full_context_prediction(
+                    alt,
+                    &configs,
+                    input.index(),
+                    FullContextResolution::Unique,
+                ));
             }
             let symbol = input.la(1);
             let reach = self.compute_reach_set(&configs, symbol, true, precedence, merge_cache);
@@ -893,48 +946,59 @@ impl<'a> ParserAtnSimulator<'a> {
             }
             configs = reach;
             if let Some(alt) = configs.unique_alt() {
-                return Ok(FullContextPrediction {
-                    prediction: ParserAtnPrediction {
+                return Ok(full_context_prediction(
+                    alt,
+                    &configs,
+                    input.index(),
+                    FullContextResolution::Unique,
+                ));
+            }
+            if !configs.has_semantic_context() {
+                let subsets = conflicting_alt_subsets(configs.configs());
+                if self.exact_ambig_detection {
+                    if all_subsets_conflict(&subsets) && all_subsets_equal(&subsets) {
+                        let alts: Vec<usize> = configs.alts().into_iter().collect();
+                        let alt = alts[0];
+                        return Ok(full_context_prediction(
+                            alt,
+                            &configs,
+                            input.index(),
+                            FullContextResolution::Ambiguous { exact: true, alts },
+                        ));
+                    }
+                } else if let Some(alt) = single_viable_alt(&subsets) {
+                    let alts: Vec<usize> = configs.alts().into_iter().collect();
+                    return Ok(full_context_prediction(
                         alt,
-                        requires_full_context: true,
-                        has_semantic_context: configs_have_semantic_context_for_alt(&configs, alt),
-                        diagnostic: None,
-                    },
-                    stop_index: input.index(),
-                    ambiguity_alts: None,
-                });
+                        &configs,
+                        input.index(),
+                        FullContextResolution::Ambiguous { exact: false, alts },
+                    ));
+                }
             }
             if symbol == TOKEN_EOF || self.configs_all_reached_rule_stop(&configs) {
-                let alts = configs.alts();
-                let alt = alts
-                    .iter()
-                    .next()
-                    .copied()
+                // Safety net Java reaches implicitly: at EOF every surviving
+                // path sits in a rule-stop config, so the checks above
+                // resolve; guard against pathological sets instead of
+                // spinning on an unconsumable EOF.
+                let alts: Vec<usize> = configs.alts().into_iter().collect();
+                let alt = *alts
+                    .first()
                     .ok_or(ParserAtnSimulatorError::PredictionRequiresMoreLookahead)?;
-                return Ok(FullContextPrediction {
-                    prediction: ParserAtnPrediction {
-                        alt,
-                        requires_full_context: true,
-                        has_semantic_context: configs_have_semantic_context_for_alt(&configs, alt),
-                        diagnostic: None,
-                    },
-                    stop_index: input.index(),
-                    ambiguity_alts: (alts.len() > 1).then(|| alts.into_iter().collect()),
-                });
-            }
-            if !configs.has_semantic_context()
-                && let Some(alt) = resolves_to_just_one_viable_alt(configs.configs())
-            {
-                return Ok(FullContextPrediction {
-                    prediction: ParserAtnPrediction {
-                        alt,
-                        requires_full_context: true,
-                        has_semantic_context: configs_have_semantic_context_for_alt(&configs, alt),
-                        diagnostic: None,
-                    },
-                    stop_index: input.index(),
-                    ambiguity_alts: None,
-                });
+                let resolution = if alts.len() > 1 {
+                    FullContextResolution::Ambiguous {
+                        exact: self.exact_ambig_detection,
+                        alts,
+                    }
+                } else {
+                    FullContextResolution::Unique
+                };
+                return Ok(full_context_prediction(
+                    alt,
+                    &configs,
+                    input.index(),
+                    resolution,
+                ));
             }
             input.consume();
         }
@@ -1602,6 +1666,7 @@ mod tests {
                     sll_stop_index: 0,
                     ll_stop_index: 0,
                     conflicting_alts: vec![1, 2],
+                    exact: false,
                 }),
             }
         );
@@ -1698,6 +1763,7 @@ mod tests {
                     sll_stop_index: 0,
                     ll_stop_index: 0,
                     conflicting_alts: vec![1, 2],
+                    exact: false,
                 }),
             }
         );
@@ -1751,6 +1817,7 @@ mod tests {
                     sll_stop_index: 0,
                     ll_stop_index: 1,
                     conflicting_alts: vec![1, 2],
+                    exact: false,
                 }),
             }
         );

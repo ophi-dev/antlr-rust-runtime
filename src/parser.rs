@@ -3290,12 +3290,11 @@ where
         let result_token = self.token_at(diagnostic.ll_stop_index);
         let message = match diagnostic.kind {
             ParserAtnPredictionDiagnosticKind::Ambiguity => {
-                // Java's default LL prediction stops at the first full-context
-                // conflict without exact-ambiguity detection, so
-                // `reportAmbiguity` fires with `exact == false` there and the
-                // `DiagnosticErrorListener` (exactOnly by default) suppresses
-                // it. Only LL_EXACT_AMBIG_DETECTION produces exact ambiguities.
-                if self.prediction_mode != PredictionMode::LlExactAmbigDetection {
+                // Java's DiagnosticErrorListener is exactOnly by default:
+                // non-exact ambiguities (default LL mode stopping at the
+                // first resolvable conflict) report the attempt above but
+                // suppress the ambiguity line itself.
+                if !diagnostic.exact {
                     return;
                 }
                 format!(
@@ -10527,6 +10526,7 @@ mod tests {
                     sll_stop_index: 1,
                     ll_stop_index: 0,
                     conflicting_alts: vec![1, 2],
+                    exact: false,
                 }),
             },
         );
@@ -10547,6 +10547,7 @@ mod tests {
                     sll_stop_index: 1,
                     ll_stop_index: 1,
                     conflicting_alts: vec![1, 2],
+                    exact: false,
                 }),
             },
         );

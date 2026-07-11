@@ -1181,7 +1181,22 @@ pub fn resolves_to_just_one_viable_alt(configs: &[AtnConfig]) -> Option<usize> {
     single_viable_alt(&conflicting_alt_subsets(configs))
 }
 
-fn single_viable_alt(alt_subsets: &[BTreeSet<usize>]) -> Option<usize> {
+/// Java `PredictionMode.allSubsetsConflict`: every `(state, context)` subset
+/// holds more than one alternative.
+pub fn all_subsets_conflict(alt_subsets: &[BTreeSet<usize>]) -> bool {
+    alt_subsets.iter().all(|alts| alts.len() > 1)
+}
+
+/// Java `PredictionMode.allSubsetsEqual`: every subset is the same alt set.
+pub fn all_subsets_equal(alt_subsets: &[BTreeSet<usize>]) -> bool {
+    let mut subsets = alt_subsets.iter();
+    let Some(first) = subsets.next() else {
+        return true;
+    };
+    subsets.all(|alts| alts == first)
+}
+
+pub fn single_viable_alt(alt_subsets: &[BTreeSet<usize>]) -> Option<usize> {
     let mut result = None;
     for alts in alt_subsets {
         let min_alt = alts.iter().next().copied()?;
