@@ -2589,6 +2589,20 @@ fn stop_outcome(
     }]
 }
 
+fn atn_has_observable_action_transitions(atn: &Atn) -> bool {
+    atn.states().iter().any(|state| {
+        state.transitions.iter().any(|transition| {
+            matches!(
+                transition,
+                Transition::Action {
+                    action_index: Some(_),
+                    ..
+                }
+            )
+        })
+    })
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct RecognizeRequest<'a> {
     state_number: usize,
@@ -2731,7 +2745,7 @@ struct FastRecoveryRequest<'a, 'b> {
     expected_symbols: Rc<BTreeSet<i32>>,
     target: usize,
     request: FastRecognizeRequest,
-    visiting: &'b mut FxHashSet<(usize, usize)>,
+    visiting: &'b mut FxHashSet<FastRecognizeKey>,
     memo: &'b mut FxHashMap<FastRecognizeKey, Rc<[FastRecognizeOutcome]>>,
     expected: &'b mut ExpectedTokens,
 }
@@ -2740,7 +2754,7 @@ struct FastCurrentTokenDeletionRequest<'a, 'b> {
     atn: &'a Atn,
     expected_symbols: Rc<BTreeSet<i32>>,
     request: FastRecognizeRequest,
-    visiting: &'b mut FxHashSet<(usize, usize)>,
+    visiting: &'b mut FxHashSet<FastRecognizeKey>,
     memo: &'b mut FxHashMap<FastRecognizeKey, Rc<[FastRecognizeOutcome]>>,
     expected: &'b mut ExpectedTokens,
 }
@@ -4501,9 +4515,7 @@ where
         // committed action is silently dropped — record it so the parse entry
         // can fail loud under the fail-loud boundary, mirroring unknown
         // predicates. `assume-*` policies opt out of the fail-loud recording.
-        if !handled
-            && matches!(self.unknown_predicate_policy, UnknownSemanticPolicy::Error)
-        {
+        if !handled && matches!(self.unknown_predicate_policy, UnknownSemanticPolicy::Error) {
             let coordinate = (rule_index, action.source_state());
             if !self.unhandled_action_hits.contains(&coordinate) {
                 self.unhandled_action_hits.push(coordinate);
@@ -4732,8 +4744,7 @@ where
             .and_then(Token::text)
             .is_some_and(is_caller_follow_boundary_text);
         let is_boundary_gap = token.as_ref().is_some_and(|token| {
-            token.channel() != visible_channel
-                || is_caller_follow_boundary_gap_text(token.text())
+            token.channel() != visible_channel || is_caller_follow_boundary_gap_text(token.text())
         });
         (token_type, is_boundary, is_boundary_gap)
     }
@@ -5107,6 +5118,20 @@ where
             return_actions,
             unknown_predicate_policy,
         } = options;
+        if init_action_rules.is_empty()
+            && !track_alt_numbers
+            && predicates.is_empty()
+            && semantics.is_none()
+            && rule_args.is_empty()
+            && member_actions.is_empty()
+            && return_actions.is_empty()
+            && unknown_predicate_policy == UnknownSemanticPolicy::AssumeTrue
+            && !atn_has_observable_action_transitions(atn)
+        {
+            return self
+                .parse_atn_rule_with_precedence(atn, rule_index, precedence)
+                .map(|tree| (tree, Vec::new()));
+        }
         self.unknown_predicate_policy = unknown_predicate_policy;
         // A generated parent may have already recorded unknown-predicate
         // coordinates before descending into this (interpreted) child. Clearing
@@ -5764,7 +5789,7 @@ where
         &mut self,
         atn: &Atn,
         request: FastRecognizeRequest,
-        visiting: &mut FxHashSet<(usize, usize)>,
+        visiting: &mut FxHashSet<FastRecognizeKey>,
         memo: &mut FxHashMap<FastRecognizeKey, Rc<[FastRecognizeOutcome]>>,
         expected: &mut ExpectedTokens,
     ) -> Vec<FastRecognizeOutcome> {
@@ -5968,15 +5993,15 @@ where
             perf_counters::inc(&perf_counters::RFS_MEMO_MISSES, 1);
         }
 
-        // Cycle detection: only insert into the visiting set for states
-        // that *could* re-enter without consuming — multi-alternative
-        // states. Single-transition states are walked in the loop above and
-        // never form cycles (the loop only advances toward the rule stop).
-        // Multi-alt states might contain epsilon-only edges that loop back
-        // to the same `(state, index)` (e.g. left-recursive precedence
-        // loops); we still need the guard there.
-        let needs_cycle_guard =
-            transition_count > 1 && self.state_can_reenter_without_consuming(atn, state_number);
+        // Cycle detection: clean recognition keeps the narrow static cycle
+        // guard used on hot paths. Recovery needs the broader epsilon-state
+        // guard because an otherwise non-nullable loop body can recover as an
+        // empty child at EOF and re-enter the loop at the same token.
+        let needs_cycle_guard = if self.fast_recovery_enabled {
+            state.transitions.iter().any(Transition::is_epsilon)
+        } else {
+            transition_count > 1 && self.state_can_reenter_without_consuming(atn, state_number)
+        };
         #[cfg(feature = "perf-counters")]
         if needs_cycle_guard {
             perf_counters::inc(&perf_counters::MULTI_TRANS_BODY, 1);
@@ -5998,12 +6023,17 @@ where
                 }
             }
         }
-        let visit_id = (state_number, index);
-        if needs_cycle_guard && !visiting.insert(visit_id) {
-            #[cfg(feature = "perf-counters")]
-            perf_counters::inc(&perf_counters::RFS_VISITING_CYCLE, 1);
-            return Vec::new();
-        }
+        let visit_id = if needs_cycle_guard {
+            let visit_id = key.clone();
+            if !visiting.insert(visit_id.clone()) {
+                #[cfg(feature = "perf-counters")]
+                perf_counters::inc(&perf_counters::RFS_VISITING_CYCLE, 1);
+                return Vec::new();
+            }
+            Some(visit_id)
+        } else {
+            None
+        };
         let next_decision_start_index = if starts_prediction_decision(state) {
             Some(index)
         } else {
@@ -6441,7 +6471,7 @@ where
             }
         }
 
-        if needs_cycle_guard {
+        if let Some(visit_id) = visit_id {
             visiting.remove(&visit_id);
         }
         if matches!(
@@ -9807,6 +9837,30 @@ mod tests {
         .expect("artificial parser ATN should deserialize")
     }
 
+    fn noop_action_then_token_then_eof_atn() -> Atn {
+        AtnDeserializer::new(&SerializedAtn::from_i32(&[
+            4, 1, 2, // version, parser, max token type
+            4, // states
+            2, 0, // rule start
+            1, 0, // basic
+            1, 0, // basic
+            7, 0, // rule stop
+            0, // non-greedy states
+            0, // precedence states
+            1, // rules
+            0, // rule 0 start
+            0, // modes
+            0, // sets
+            3, // transitions
+            0, 1, 6, 0, -1, 0, // no-op parser action
+            1, 2, 5, 1, 0, 0, // match token 1
+            2, 3, 5, -1, 0, 0, // match EOF
+            0, // decisions
+        ]))
+        .deserialize()
+        .expect("artificial no-op action ATN should deserialize")
+    }
+
     fn two_alt_decision_atn() -> Atn {
         let mut atn = Atn::new(AtnType::Parser, 2);
         atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
@@ -9953,6 +10007,87 @@ mod tests {
         ]))
         .deserialize()
         .expect("star-loop-then-EOF ATN should deserialize")
+    }
+
+    /// ATN for `s : a+ Y ; a : X ;`.
+    ///
+    /// At EOF, recovery can synthesize an empty failed `a` child. The enclosing
+    /// `+` loop must not treat that zero-width child as a successful iteration
+    /// and then re-enter the loop at the same token index.
+    fn plus_loop_with_recovering_body_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 2);
+        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
+        let mut loop_start = AtnState::new(1, AtnStateKind::PlusBlockStart).with_rule_index(0);
+        loop_start.end_state = Some(3);
+        atn.add_state(loop_start);
+        atn.add_state(AtnState::new(2, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(3, AtnStateKind::BlockEnd).with_rule_index(0));
+        atn.add_state(AtnState::new(4, AtnStateKind::PlusLoopBack).with_rule_index(0));
+        let mut loop_end = AtnState::new(5, AtnStateKind::LoopEnd).with_rule_index(0);
+        loop_end.loop_back_state = Some(4);
+        atn.add_state(loop_end);
+        atn.add_state(AtnState::new(6, AtnStateKind::RuleStop).with_rule_index(0));
+        atn.add_state(AtnState::new(7, AtnStateKind::RuleStart).with_rule_index(1));
+        atn.add_state(AtnState::new(8, AtnStateKind::Basic).with_rule_index(1));
+        atn.add_state(AtnState::new(9, AtnStateKind::RuleStop).with_rule_index(1));
+        atn.set_rule_to_start_state(vec![0, 7]);
+        atn.set_rule_to_stop_state(vec![6, 9]);
+        atn.state_mut(0)
+            .expect("state 0")
+            .add_transition(Transition::Epsilon { target: 1 });
+        atn.state_mut(1)
+            .expect("state 1")
+            .add_transition(Transition::Epsilon { target: 2 });
+        atn.state_mut(2)
+            .expect("state 2")
+            .add_transition(Transition::Rule {
+                target: 7,
+                rule_index: 1,
+                follow_state: 3,
+                precedence: 0,
+            });
+        atn.state_mut(3)
+            .expect("state 3")
+            .add_transition(Transition::Epsilon { target: 4 });
+        atn.state_mut(4)
+            .expect("state 4")
+            .add_transition(Transition::Epsilon { target: 1 });
+        atn.state_mut(4)
+            .expect("state 4")
+            .add_transition(Transition::Epsilon { target: 5 });
+        atn.state_mut(5)
+            .expect("state 5")
+            .add_transition(Transition::Atom {
+                target: 6,
+                label: 2,
+            });
+        atn.state_mut(7)
+            .expect("state 7")
+            .add_transition(Transition::Atom {
+                target: 8,
+                label: 1,
+            });
+        atn.state_mut(8)
+            .expect("state 8")
+            .add_transition(Transition::Epsilon { target: 9 });
+        atn
+    }
+
+    #[test]
+    fn runtime_options_default_exits_recovering_empty_plus_iteration() {
+        let atn = plus_loop_with_recovering_body_atn();
+        let mut parser = mini_parser(vec![CommonToken::eof("parser-test", 1, 1, 1)]);
+
+        let error = parser
+            .parse_atn_rule_with_runtime_options(&atn, 0, ParserRuntimeOptions::default())
+            .expect_err("EOF recovery should report a bounded mismatch");
+
+        let AntlrError::ParserError { message, .. } = error else {
+            panic!("expected ParserError, got {error:?}");
+        };
+        assert_eq!(message, "mismatched input '<EOF>' expecting {'x', 2}");
+        assert_eq!(parser.number_of_syntax_errors(), 1);
+        assert_eq!(parser.input.index(), 0, "EOF remains unconsumed");
     }
 
     #[test]
@@ -10898,6 +11033,26 @@ mod tests {
                 .token_type(),
             TOKEN_EOF
         );
+    }
+
+    #[test]
+    fn runtime_options_default_ignores_noop_action_transitions() {
+        let atn = noop_action_then_token_then_eof_atn();
+        let mut parser = mini_parser(vec![
+            CommonToken::new(1).with_text("x"),
+            CommonToken::eof("parser-test", 1, 1, 1),
+        ]);
+
+        let (tree, actions) = parser
+            .parse_atn_rule_with_runtime_options(&atn, 0, ParserRuntimeOptions::default())
+            .expect("no-op parser action should not force action replay");
+
+        assert_eq!(tree.text(), "x<EOF>");
+        assert!(
+            actions.is_empty(),
+            "action_index=None transitions are ANTLR metadata, not replay actions"
+        );
+        assert_eq!(parser.number_of_syntax_errors(), 0);
     }
 
     #[test]
