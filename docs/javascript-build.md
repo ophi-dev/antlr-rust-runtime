@@ -13,9 +13,12 @@ Python, C#, C++, Java, and JavaScript targets.
 - `antlr/grammars-v4` at the pinned parity commit
 
 ```bash
+ANTLR4_JAR=/tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar
+ANTLR_JAR_SHA256=eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76
 mkdir -p /tmp/antlr-cleanroom/tools
-curl -fLo /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
+curl -fLo "$ANTLR4_JAR" \
   https://www.antlr.org/download/antlr-4.13.2-complete.jar
+echo "${ANTLR_JAR_SHA256}  ${ANTLR4_JAR}" | shasum -a 256 -c -
 
 git clone --filter=blob:none --no-checkout \
   https://github.com/antlr/grammars-v4.git \
@@ -53,7 +56,7 @@ generator.
 From this repository's root:
 
 ```bash
-cargo run --release --bin antlr4-rust-gen -- \
+cargo run --locked --release --bin antlr4-rust-gen -- \
   --lexer "$BUILD/interp/JavaScriptLexer.interp" \
   --grammar "$GRAMMAR/JavaScriptLexer.g4" \
   --sem-patterns patterns/javascript.toml \
@@ -61,7 +64,7 @@ cargo run --release --bin antlr4-rust-gen -- \
   --require-full-semantics \
   --out-dir "$BUILD/lexer"
 
-cargo run --release --bin antlr4-rust-gen -- \
+cargo run --locked --release --bin antlr4-rust-gen -- \
   --parser "$BUILD/interp/JavaScriptParser.interp" \
   --grammar "$GRAMMAR/JavaScriptParser.g4" \
   --sem-patterns patterns/javascript.toml \

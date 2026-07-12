@@ -10,8 +10,8 @@ use antlr4_runtime::{
     CommonTokenStream, InputStream, ParseTree, Parser, Token, TOKEN_EOF,
 };
 
+#[allow(dead_code, unused_imports, unreachable_pub, unused_qualifications)]
 mod generated {
-    #![allow(dead_code, unused_imports, unreachable_pub, unused_qualifications)]
     pub mod java_script_lexer;
     pub mod java_script_parser;
 }

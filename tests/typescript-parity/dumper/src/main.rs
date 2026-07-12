@@ -8,8 +8,8 @@ use std::process::ExitCode;
 
 use antlr4_runtime::{CommonTokenStream, InputStream, ParseTree, Parser, TOKEN_EOF, Token};
 
+#[allow(dead_code, unused_imports, unreachable_pub, unused_qualifications)]
 mod generated {
-    #![allow(dead_code, unused_imports, unreachable_pub, unused_qualifications)]
     pub mod type_script_lexer;
     pub mod type_script_parser;
 }

@@ -473,6 +473,7 @@ where
     /// Captures the input index and source position for the token currently
     /// being matched.
     pub fn begin_token(&mut self) {
+        self.semantic_error_coordinates.get_mut().clear();
         self.token_start = self.input.index();
         self.token_start_line = self.line;
         self.token_start_column = self.column;
@@ -1028,6 +1029,14 @@ mod tests {
         assert_eq!(
             errors[0].message,
             "unhandled lexer semantic predicate: rule=3 index=7"
+        );
+
+        lexer.begin_token();
+        lexer.record_semantic_error(false, 3, 7);
+        assert_eq!(
+            lexer.drain_errors().len(),
+            1,
+            "deduplication resets at every token boundary, even after rewinding"
         );
     }
 }

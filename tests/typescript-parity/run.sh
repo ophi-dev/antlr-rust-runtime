@@ -44,14 +44,14 @@ cp "$UPSTREAM/Java/TypeScriptLexerBase.java" \
 javac --release 17 -cp "$ANTLR4_JAR" -d "$WORK_DIR/java-classes" \
     "$WORK_DIR/java-gen/"*.java "$SCRIPT_DIR/TypeScriptParityDumper.java"
 
-cargo run --quiet --release --manifest-path "$REPO_ROOT/Cargo.toml" \
+cargo run --quiet --locked --release --manifest-path "$REPO_ROOT/Cargo.toml" \
     --bin antlr4-rust-gen -- \
     --lexer "$WORK_DIR/java-gen/TypeScriptLexer.interp" \
     --grammar "$WORK_DIR/grammar/TypeScriptLexer.g4" \
     --sem-patterns "$REPO_ROOT/patterns/javascript.toml" \
     --sem-unknown error --require-full-semantics \
     --out-dir "$WORK_DIR/rust-lexer"
-cargo run --quiet --release --manifest-path "$REPO_ROOT/Cargo.toml" \
+cargo run --quiet --locked --release --manifest-path "$REPO_ROOT/Cargo.toml" \
     --bin antlr4-rust-gen -- \
     --parser "$WORK_DIR/java-gen/TypeScriptParser.interp" \
     --grammar "$WORK_DIR/grammar/TypeScriptParser.g4" \
@@ -63,7 +63,7 @@ GEN_DIR="$SCRIPT_DIR/dumper/src/generated"
 mkdir -p "$GEN_DIR"
 cp "$WORK_DIR/rust-lexer/type_script_lexer.rs" \
     "$WORK_DIR/rust-parser/type_script_parser.rs" "$GEN_DIR/"
-cargo build --quiet --release --manifest-path "$SCRIPT_DIR/dumper/Cargo.toml"
+cargo build --quiet --locked --release --manifest-path "$SCRIPT_DIR/dumper/Cargo.toml"
 RUST_DUMPER="$SCRIPT_DIR/dumper/target/release/typescript-parity-dumper"
 JAVA_CLASSPATH="$ANTLR4_JAR:$WORK_DIR/java-classes"
 

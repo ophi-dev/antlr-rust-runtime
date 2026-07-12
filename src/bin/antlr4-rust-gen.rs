@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 use std::env;
 use std::fmt::Write as _;
 use std::fs;
@@ -325,7 +325,9 @@ struct SemPatternRule {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct SemHelperRule {
-    kind: SemanticsKind,
+    /// Explicit helper kind. A missing kind preserves the pre-v1 wildcard
+    /// behavior for lexer and parser predicates.
+    kind: Option<SemanticsKind>,
     name: String,
     arguments: Vec<SemanticLiteralKind>,
     lower: String,
@@ -378,7 +380,7 @@ impl SemPatternFile {
         matches.extend(
             self.helpers
                 .iter()
-                .filter(|helper| helper.kind == kind)
+                .filter(|helper| semantic_helper_kind_matches(helper, kind))
                 .filter_map(|helper| {
                     parse_semantic_helper_call(body, kind)
                         .filter(|call| helper_call_matches(call, helper))
@@ -416,7 +418,9 @@ impl SemPatternFile {
         let matches = self
             .helpers
             .iter()
-            .filter(|helper| helper.kind == kind && helper.lower.trim() == "hook")
+            .filter(|helper| {
+                semantic_helper_kind_matches(helper, kind) && helper.lower.trim() == "hook"
+            })
             .filter(|helper| helper_call_matches(&call, helper))
             .collect::<Vec<_>>();
         if matches.len() > 1 {
@@ -478,6 +482,15 @@ impl SemPatternFile {
                     .is_none_or(|expected| atn_state == Some(expected))
         })
     }
+}
+
+fn semantic_helper_kind_matches(helper: &SemHelperRule, kind: SemanticsKind) -> bool {
+    helper.kind == Some(kind)
+        || (helper.kind.is_none()
+            && matches!(
+                kind,
+                SemanticsKind::LexerPredicate | SemanticsKind::ParserPredicate
+            ))
 }
 
 fn helper_call_matches(call: &SemanticHelperCall, helper: &SemHelperRule) -> bool {
@@ -545,7 +558,7 @@ fn parse_semantic_literals(body: &str) -> Option<Vec<SemanticLiteral>> {
     let mut literals = Vec::new();
     while !body.is_empty() {
         if body.starts_with('"') || body.starts_with('\'') {
-            let quote = body.as_bytes()[0];
+            let quote = *body.as_bytes().first()?;
             let mut escaped = false;
             let mut end = None;
             for (index, byte) in body.as_bytes().iter().copied().enumerate().skip(1) {
@@ -560,11 +573,7 @@ fn parse_semantic_literals(body: &str) -> Option<Vec<SemanticLiteral>> {
             }
             let end = end?;
             let raw = &body[1..end];
-            let value = if quote == b'"' {
-                unescape_semantic_string(raw)?
-            } else {
-                raw.to_owned()
-            };
+            let value = unescape_semantic_string(raw)?;
             literals.push(SemanticLiteral::String(value));
             body = body[end + 1..].trim_start();
         } else {
@@ -1341,9 +1350,8 @@ fn flush_pattern_section(
         PatternSection::Helper => {
             let kind = fields
                 .remove("kind")
-                .map_or(Ok(SemanticsKind::ParserPredicate), |value| {
-                    parse_coordinate_kind(&value)
-                })?;
+                .map(|value| parse_coordinate_kind(&value))
+                .transpose()?;
             let arguments = fields
                 .remove("arguments")
                 .map_or_else(|| Ok(Vec::new()), |value| parse_helper_arguments(&value))?;
@@ -1351,20 +1359,22 @@ fn flush_pattern_section(
             // its shape when present, but the semantic kind determines whether
             // the generated method returns bool or unit.
             if let Some(returns) = fields.remove("returns") {
-                let expected = if matches!(
-                    kind,
-                    SemanticsKind::LexerPredicate | SemanticsKind::ParserPredicate
-                ) {
+                let expected = if kind.is_none_or(|kind| {
+                    matches!(
+                        kind,
+                        SemanticsKind::LexerPredicate | SemanticsKind::ParserPredicate
+                    )
+                }) {
                     "bool"
                 } else {
                     "unit"
                 };
                 if returns != expected {
+                    let kind = kind.map_or("predicate", SemanticsKind::manifest_name);
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
                         format!(
-                            "semantic helper kind {} requires returns = {expected:?}, got {returns:?}",
-                            kind.manifest_name()
+                            "semantic helper kind {kind} requires returns = {expected:?}, got {returns:?}"
                         ),
                     ));
                 }
@@ -1861,7 +1871,16 @@ fn render_lexer(
             "impl<I, T> {type_name}<I, {adapter_name}<T>>\nwhere\n    I: CharStream,\n    T: {trait_name},\n{{\n    pub fn with_typed_hooks(input: I, hooks: T) -> Self {{\n        Self::with_hooks(input, {adapter_name}::new(hooks))\n    }}\n}}\n"
         )
     };
-    let has_semantic_hooks = !lexer_typed_hook_mappings.is_empty()
+    let action_coordinates = lexer_custom_actions(data)?;
+    let has_hook_disposed_actions = lexer_actions_require_semantic_hooks(
+        &action_coordinates,
+        &data.rule_names,
+        &actions,
+        patterns,
+        sem_unknown,
+    );
+    let has_semantic_hooks = has_hook_disposed_actions
+        || !lexer_typed_hook_mappings.is_empty()
         || actions
             .iter()
             .any(|(_, template)| matches!(template, ActionTemplate::Hook(_)))
@@ -2105,6 +2124,39 @@ where
     ))
 }
 
+fn lexer_actions_require_semantic_hooks(
+    coordinates: &[(i32, i32)],
+    rule_names: &[String],
+    actions: &[((i32, i32), ActionTemplate)],
+    patterns: &SemPatternFile,
+    sem_unknown: SemUnknownPolicy,
+) -> bool {
+    coordinates.iter().any(|coordinate| {
+        let (rule_index, action_index) = *coordinate;
+        let rule_name = usize::try_from(rule_index)
+            .ok()
+            .and_then(|rule| rule_names.get(rule).map(String::as_str));
+        if let Some(override_) = patterns.coordinate_override(
+            SemanticsKind::LexerAction,
+            rule_name,
+            usize::try_from(action_index).ok(),
+            None,
+        ) {
+            return override_.dispose == CoordinateDispose::Hook;
+        }
+        if sem_unknown != SemUnknownPolicy::Hook {
+            return false;
+        }
+        !matches!(
+            actions
+                .iter()
+                .find(|(candidate, _)| candidate == coordinate)
+                .map(|(_, template)| template),
+            Some(ActionTemplate::LexerPopMode)
+        )
+    })
+}
+
 /// Compiles the lexer DFA at generation time and flattens it for embedding.
 ///
 /// An empty stream makes the generated lexer fall back to compiling the DFA
@@ -2323,7 +2375,7 @@ struct TypedHookMapping {
     call: SemanticHelperCall,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 enum LexerTypedHookKind {
     Predicate,
     Action,
@@ -9004,6 +9056,7 @@ fn lexer_typed_hook_mappings(
             });
         }
     }
+    validate_lexer_typed_hook_signatures(&mappings)?;
     mappings.sort_by_key(|mapping| {
         (
             mapping.rule_index,
@@ -9013,6 +9066,37 @@ fn lexer_typed_hook_mappings(
     });
     mappings.dedup();
     Ok(mappings)
+}
+
+fn validate_lexer_typed_hook_signatures(
+    mappings: &[LexerTypedHookMapping],
+) -> io::Result<()> {
+    let mut signatures = BTreeMap::<(&str, LexerTypedHookKind), Vec<SemanticLiteralKind>>::new();
+    for mapping in mappings {
+        let signature = mapping
+            .call
+            .arguments
+            .iter()
+            .map(semantic_literal_kind)
+            .collect::<Vec<_>>();
+        match signatures.entry((&mapping.method_name, mapping.kind)) {
+            Entry::Occupied(entry) if entry.get() != &signature => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "typed lexer semantic helper {} has conflicting literal signatures {:?} and {signature:?}",
+                        mapping.call.name,
+                        entry.get()
+                    ),
+                ));
+            }
+            Entry::Occupied(_) => {}
+            Entry::Vacant(entry) => {
+                entry.insert(signature);
+            }
+        }
+    }
+    Ok(())
 }
 
 fn render_lexer_typed_hook_adapter(
@@ -9217,16 +9301,21 @@ fn validate_typed_hook_signatures(mappings: &[TypedHookMapping]) -> io::Result<(
             .iter()
             .map(semantic_literal_kind)
             .collect::<Vec<_>>();
-        if let Some(existing) = signatures.insert(&mapping.method_name, signature.clone())
-            && existing != signature
-        {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "typed semantic helper {} has conflicting literal signatures {existing:?} and {signature:?}",
-                    mapping.call.name
-                ),
-            ));
+        match signatures.entry(&mapping.method_name) {
+            Entry::Occupied(entry) if entry.get() != &signature => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "typed semantic helper {} has conflicting literal signatures {:?} and {signature:?}",
+                        mapping.call.name,
+                        entry.get()
+                    ),
+                ));
+            }
+            Entry::Occupied(_) => {}
+            Entry::Vacant(entry) => {
+                entry.insert(signature);
+            }
         }
     }
     Ok(())
@@ -12807,6 +12896,15 @@ lower = "bool(false)"
             SemanticsKind::ParserPredicate,
         )
         .is_none());
+        assert_eq!(
+            parse_semantic_helper_call(
+                r"this.n('line\n\'quoted\'')",
+                SemanticsKind::ParserPredicate,
+            )
+            .expect("single-quoted literal parses")
+            .arguments,
+            [SemanticLiteral::String("line\n'quoted'".to_owned())]
+        );
     }
 
     #[test]
@@ -12828,6 +12926,46 @@ lower = "bool(false)"
             .expect("matching cannot fail")
             .expect("string argument matches");
         assert_eq!(call.arguments, [SemanticLiteral::String("value".to_owned())]);
+        assert!(patterns
+            .hook_helper_call(SemanticsKind::LexerPredicate, r#"this.n("value")"#)
+            .expect("matching cannot fail")
+            .is_some());
+        assert!(patterns
+            .hook_helper_call(SemanticsKind::LexerAction, r#"this.n("value");"#)
+            .expect("matching cannot fail")
+            .is_none());
+    }
+
+    #[test]
+    fn lexer_typed_hook_signatures_reject_normalized_conflicts() {
+        let mappings = [
+            LexerTypedHookMapping {
+                rule_index: 0,
+                coordinate_index: 0,
+                kind: LexerTypedHookKind::Action,
+                method_name: "handle_value".to_owned(),
+                call: SemanticHelperCall {
+                    name: "HandleValue".to_owned(),
+                    arguments: vec![SemanticLiteral::String("x".to_owned())],
+                    negated: false,
+                },
+            },
+            LexerTypedHookMapping {
+                rule_index: 1,
+                coordinate_index: 0,
+                kind: LexerTypedHookKind::Action,
+                method_name: "handle_value".to_owned(),
+                call: SemanticHelperCall {
+                    name: "handle_value".to_owned(),
+                    arguments: vec![SemanticLiteral::Integer(1)],
+                    negated: false,
+                },
+            },
+        ];
+
+        let error = validate_lexer_typed_hook_signatures(&mappings)
+            .expect_err("conflicting normalized signatures must fail generation");
+        assert!(error.to_string().contains("conflicting literal signatures"));
     }
 
     #[test]
@@ -13667,6 +13805,42 @@ ID : [a-z]+ ;\n";
         .expect("hook policy should render generated hook plumbing");
         assert!(module.contains("next_token_compiled_with_semantic_dispatch"));
         assert!(module.contains("hooks: H"));
+    }
+
+    #[test]
+    fn hook_disposed_lexer_actions_require_semantic_dispatch() {
+        let coordinates = [(0, 0)];
+        let rule_names = ["A".to_owned()];
+        let no_actions = [];
+
+        assert!(lexer_actions_require_semantic_hooks(
+            &coordinates,
+            &rule_names,
+            &no_actions,
+            &SemPatternFile::default(),
+            SemUnknownPolicy::Hook,
+        ));
+
+        let patterns = parse_sem_patterns(
+            "version = 1\n[[coordinate]]\nkind = \"lexer-action\"\nindex = 0\ndispose = \"hook\"\n",
+        )
+        .expect("pattern file parses");
+        assert!(lexer_actions_require_semantic_hooks(
+            &coordinates,
+            &rule_names,
+            &no_actions,
+            &patterns,
+            SemUnknownPolicy::AssumeTrue,
+        ));
+
+        let translated = [((0, 0), ActionTemplate::LexerPopMode)];
+        assert!(!lexer_actions_require_semantic_hooks(
+            &coordinates,
+            &rule_names,
+            &translated,
+            &SemPatternFile::default(),
+            SemUnknownPolicy::Hook,
+        ));
     }
 
     #[test]
