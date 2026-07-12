@@ -1724,6 +1724,7 @@ struct SharedAtnCache {
     decision_lookahead: DecisionLookaheadCache,
     state_expected_tokens: FxHashMap<usize, Rc<TokenBitSet>>,
     rule_stop_reach: FxHashMap<usize, bool>,
+    observable_action_transitions: Option<bool>,
 }
 
 thread_local! {
@@ -2590,15 +2591,19 @@ fn stop_outcome(
 }
 
 fn atn_has_observable_action_transitions(atn: &Atn) -> bool {
-    atn.states().iter().any(|state| {
-        state.transitions.iter().any(|transition| {
-            matches!(
-                transition,
-                Transition::Action {
-                    action_index: Some(_),
-                    ..
-                }
-            )
+    with_shared_atn_caches(atn, |cache| {
+        *cache.observable_action_transitions.get_or_insert_with(|| {
+            atn.states().iter().any(|state| {
+                state.transitions.iter().any(|transition| {
+                    matches!(
+                        transition,
+                        Transition::Action {
+                            action_index: Some(_),
+                            ..
+                        }
+                    )
+                })
+            })
         })
     })
 }
@@ -6023,16 +6028,15 @@ where
                 }
             }
         }
-        let visit_id = if needs_cycle_guard {
-            let visit_id = key.clone();
-            if !visiting.insert(visit_id.clone()) {
+        let has_inserted_cycle_guard = if needs_cycle_guard {
+            if !visiting.insert(key.clone()) {
                 #[cfg(feature = "perf-counters")]
                 perf_counters::inc(&perf_counters::RFS_VISITING_CYCLE, 1);
                 return Vec::new();
             }
-            Some(visit_id)
+            true
         } else {
-            None
+            false
         };
         let next_decision_start_index = if starts_prediction_decision(state) {
             Some(index)
@@ -6471,8 +6475,8 @@ where
             }
         }
 
-        if let Some(visit_id) = visit_id {
-            visiting.remove(&visit_id);
+        if has_inserted_cycle_guard {
+            visiting.remove(&key);
         }
         if matches!(
             self.prediction_mode,
