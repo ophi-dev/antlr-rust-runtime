@@ -15,6 +15,31 @@ pub enum ParseTree {
 }
 
 impl ParseTree {
+    /// Returns this node's direct children.
+    ///
+    /// Rule nodes return their context children; terminal and error nodes
+    /// return an empty slice, so generic recursive walks can start from a
+    /// `&ParseTree` without matching on every variant first.
+    pub fn children(&self) -> &[Self] {
+        match self {
+            Self::Rule(rule) => rule.context().children(),
+            Self::Terminal(_) | Self::Error(_) => &[],
+        }
+    }
+
+    /// Iterates this tree in pre-order, starting with `self`.
+    pub fn descendants(&self) -> ParseTreeDescendants<'_> {
+        ParseTreeDescendants { stack: vec![self] }
+    }
+
+    /// Iterates this tree in pre-order, starting with `self`.
+    ///
+    /// This is an alias for [`Self::descendants`] for callers that prefer to
+    /// name the traversal order explicitly.
+    pub fn pre_order(&self) -> ParseTreeDescendants<'_> {
+        self.descendants()
+    }
+
     pub fn text(&self) -> String {
         match self {
             Self::Rule(rule) => rule.text(),
@@ -153,6 +178,21 @@ impl ParseTree {
         }
         stack.pop();
         false
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ParseTreeDescendants<'a> {
+    stack: Vec<&'a ParseTree>,
+}
+
+impl<'a> Iterator for ParseTreeDescendants<'a> {
+    type Item = &'a ParseTree;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let tree = self.stack.pop()?;
+        self.stack.extend(tree.children().iter().rev());
+        Some(tree)
     }
 }
 
@@ -667,6 +707,71 @@ mod tests {
         assert_eq!(
             tree.rule_invocation_stack(1, &["s", "a"]),
             Some(vec!["a".to_owned(), "s".to_owned()])
+        );
+    }
+
+    #[test]
+    fn parse_tree_children_returns_rule_children_and_empty_leaf_slices() {
+        let terminal =
+            ParseTree::Terminal(TerminalNode::new(CommonToken::new(1).with_text("terminal")));
+        let error = ParseTree::Error(ErrorNode::new(CommonToken::new(2).with_text("error")));
+
+        let mut root = ParserRuleContext::new(0, -1);
+        root.add_child(terminal);
+        root.add_child(error);
+        let tree = ParseTree::Rule(RuleNode::new(root));
+
+        let children = tree.children();
+        let [first, second] = children else {
+            panic!("expected exactly 2 children");
+        };
+        assert_eq!(first.text(), "terminal");
+        assert_eq!(second.text(), "error");
+        assert!(first.children().is_empty());
+        assert!(second.children().is_empty());
+    }
+
+    #[test]
+    fn iterates_descendants_in_pre_order() {
+        let mut nested = ParserRuleContext::new(1, -1);
+        nested.add_child(ParseTree::Terminal(TerminalNode::new(
+            CommonToken::new(10).with_text("child"),
+        )));
+
+        let mut root = ParserRuleContext::new(0, -1);
+        root.add_child(ParseTree::Terminal(TerminalNode::new(
+            CommonToken::new(11).with_text("prefix"),
+        )));
+        root.add_child(ParseTree::Rule(RuleNode::new(nested)));
+        root.add_child(ParseTree::Error(ErrorNode::new(
+            CommonToken::new(12).with_text("error"),
+        )));
+        let tree = ParseTree::Rule(RuleNode::new(root));
+
+        let visited = tree
+            .descendants()
+            .map(|node| match node {
+                ParseTree::Rule(rule) => format!("rule:{}", rule.context().rule_index()),
+                ParseTree::Terminal(terminal) => format!("terminal:{}", terminal.text()),
+                ParseTree::Error(error) => format!("error:{}", error.text()),
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            visited,
+            vec![
+                "rule:0".to_owned(),
+                "terminal:prefix".to_owned(),
+                "rule:1".to_owned(),
+                "terminal:child".to_owned(),
+                "error:error".to_owned(),
+            ]
+        );
+
+        let preorder = tree.pre_order().map(ParseTree::text).collect::<Vec<_>>();
+        assert_eq!(
+            preorder,
+            vec!["prefixchilderror", "prefix", "child", "child", "error"]
         );
     }
 
