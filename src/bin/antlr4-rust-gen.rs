@@ -2,7 +2,7 @@ use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 use std::env;
 use std::fmt::Write as _;
 use std::fs;
-use std::io;
+use std::io::{self, Write as _};
 use std::ops::AddAssign;
 use std::path::{Path, PathBuf};
 
@@ -46,6 +46,15 @@ pub use self::__antlr4_rust_generated::*;
 ";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    if env::args()
+        .skip(1)
+        .any(|arg| arg == "--help" || arg == "-h")
+    {
+        let mut stdout = io::stdout().lock();
+        writeln!(stdout, "{}", usage())?;
+        return Ok(());
+    }
+
     let args = Args::parse()?;
     fs::create_dir_all(&args.out_dir)?;
     let grammar_source = args
@@ -1616,7 +1625,25 @@ fn next_arg(iter: &mut impl Iterator<Item = String>, flag: &str) -> Result<Strin
 }
 
 fn usage() -> String {
-    "usage: antlr4-rust-gen [--lexer Lexer.interp] [--parser Parser.interp] [--grammar Grammar.g4] [--out-dir DIR] [--actions embedded|templates] [--require-generated-parser] [--allow-unsupported-lexer-actions] [--sem-unknown error|hook|assume-true|assume-false] [--sem-patterns FILE] [--require-full-semantics]"
+    "\
+Usage: antlr4-rust-gen [OPTIONS]
+
+Options:
+  --lexer Lexer.interp             Read lexer metadata from Lexer.interp
+  --parser Parser.interp           Read parser metadata from Parser.interp
+  --lexer-name NAME                Override the lexer grammar name
+  --parser-name NAME               Override the parser grammar name
+  --grammar Grammar.g4             Read the source grammar for semantic metadata
+  --out-dir DIR                    Write generated Rust files to DIR
+  --actions embedded|templates     Select real embedded actions or template metadata
+  --require-generated-parser       Require parser source for parser generation
+  --allow-unsupported-lexer-actions
+                                   Ignore unsupported lexer actions
+  --sem-unknown error|hook|assume-true|assume-false
+                                   Choose unsupported semantic predicate policy
+  --sem-patterns FILE              Load semantic helper patterns
+  --require-full-semantics         Fail if any semantic coordinate is unsupported
+  -h, --help                       Print this help"
         .to_owned()
 }
 
