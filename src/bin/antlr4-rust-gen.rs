@@ -6322,7 +6322,7 @@ fn embedded_parser_facades() -> String {
     }
 
     #[allow(dead_code)]
-    fn input(&mut self) -> __GeneratedInput<'_, S> {
+    fn input(&mut self) -> __GeneratedInput<'_, L> {
         __GeneratedInput(self.base.input())
     }
 
@@ -6361,10 +6361,10 @@ fn embedded_parser_facades() -> String {
 /// (`self.input().text()` / `.la(i)` / `.lt(i).text()`).
 const EMBEDDED_INPUT_FACADE: &str = r#"
 #[allow(dead_code)]
-pub struct __GeneratedInput<'a, S: TokenSource>(&'a mut CommonTokenStream<S>);
+pub struct __GeneratedInput<'a, L: TokenSource>(&'a mut CommonTokenStream<L>);
 
 #[allow(dead_code)]
-impl<S: TokenSource> __GeneratedInput<'_, S> {
+impl<L: TokenSource> __GeneratedInput<'_, L> {
     pub fn text(&mut self) -> String {
         self.0.text_all()
     }
@@ -6650,7 +6650,7 @@ fn render_parser_with_options(
         let trait_name = format!("{type_name}Hooks");
         let adapter_name = format!("{type_name}TypedHooks");
         format!(
-            "impl<S, T> {type_name}<S, {adapter_name}<T>>\nwhere\n    S: TokenSource,\n    T: {trait_name},\n{{\n    pub fn with_typed_hooks(input: CommonTokenStream<S>, hooks: T) -> Self {{\n        Self::with_hooks(input, {adapter_name}::new(hooks))\n    }}\n}}\n"
+            "impl<L, T> {type_name}<L, {adapter_name}<T>>\nwhere\n    L: TokenSource,\n    T: {trait_name},\n{{\n    pub fn with_typed_hooks(input: CommonTokenStream<L>, hooks: T) -> Self {{\n        Self::with_hooks(input, {adapter_name}::new(hooks))\n    }}\n}}\n"
         )
     };
     // The adaptive-direct path runs `parse_atn_rule_adaptive_or_fallback`, which
@@ -6726,12 +6726,12 @@ fn atn() -> &'static Atn {{
 {parse_convenience}
 
 {parser_rustdoc}#[derive(Debug)]
-pub struct {type_name}<S, H = antlr4_runtime::NoSemanticHooks>
+pub struct {type_name}<L, H = antlr4_runtime::NoSemanticHooks>
 where
-    S: TokenSource,
+    L: TokenSource,
     H: antlr4_runtime::SemanticHooks,
 {{
-    base: BaseParser<S, H>,
+    base: BaseParser<L, H>,
     simulator: Option<antlr4_runtime::ParserAtnSimulator<'static>>,
     generated_only: bool,
 {embedded_struct_fields}}}
@@ -6750,21 +6750,21 @@ impl GeneratedRuleError {{
     }}
 }}
 
-impl<S> {type_name}<S, antlr4_runtime::NoSemanticHooks>
+impl<L> {type_name}<L, antlr4_runtime::NoSemanticHooks>
 where
-    S: TokenSource,
+    L: TokenSource,
 {{
-    pub fn new(input: CommonTokenStream<S>) -> Self {{
+    pub fn new(input: CommonTokenStream<L>) -> Self {{
         Self::with_hooks(input, antlr4_runtime::NoSemanticHooks)
     }}
 }}
 
-impl<S, H> {type_name}<S, H>
+impl<L, H> {type_name}<L, H>
 where
-    S: TokenSource,
+    L: TokenSource,
     H: antlr4_runtime::SemanticHooks,
 {{
-    pub fn with_hooks(input: CommonTokenStream<S>, hooks: H) -> Self {{
+    pub fn with_hooks(input: CommonTokenStream<L>, hooks: H) -> Self {{
         let grammar_metadata = metadata();
         let data = RecognizerData::new(
             grammar_metadata.grammar_file_name(),
@@ -6786,12 +6786,12 @@ where
     }}
 
     #[must_use]
-    pub const fn token_stream(&self) -> &CommonTokenStream<S> {{
+    pub const fn token_stream(&self) -> &CommonTokenStream<L> {{
         self.base.token_stream()
     }}
 
     #[must_use]
-    pub fn into_token_stream(self) -> CommonTokenStream<S> {{
+    pub fn into_token_stream(self) -> CommonTokenStream<L> {{
         self.base.into_token_stream()
     }}
 
@@ -6905,9 +6905,9 @@ where
 
 {typed_parser_constructor}
 
-impl<S, H> GeneratedParser for {type_name}<S, H>
+impl<L, H> GeneratedParser for {type_name}<L, H>
 where
-    S: TokenSource,
+    L: TokenSource,
     H: antlr4_runtime::SemanticHooks,
 {{
     fn metadata() -> &'static GrammarMetadata {{
@@ -6915,9 +6915,9 @@ where
     }}
 }}
 
-impl<S, H> Recognizer for {type_name}<S, H>
+impl<L, H> Recognizer for {type_name}<L, H>
 where
-    S: TokenSource,
+    L: TokenSource,
     H: antlr4_runtime::SemanticHooks,
 {{
     fn data(&self) -> &antlr4_runtime::RecognizerData {{
@@ -6929,9 +6929,9 @@ where
     }}
 }}
 
-impl<S, H> Parser for {type_name}<S, H>
+impl<L, H> Parser for {type_name}<L, H>
 where
-    S: TokenSource,
+    L: TokenSource,
     H: antlr4_runtime::SemanticHooks,
 {{
     fn build_parse_trees(&self) -> bool {{ self.base.build_parse_trees() }}
@@ -9401,7 +9401,7 @@ fn render_typed_hook_adapter(type_name: &str, mappings: &[TypedHookMapping]) -> 
             let arguments = render_semantic_method_arguments(arguments);
             let separator = if arguments.is_empty() { "" } else { ", " };
             format!(
-                "    fn {method}<S>(&mut self, ctx: &mut antlr4_runtime::ParserSemCtx<'_, S>{separator}{arguments}) -> bool\n    where\n        S: TokenSource;"
+                "    fn {method}<L>(&mut self, ctx: &mut antlr4_runtime::ParserSemCtx<'_, L>{separator}{arguments}) -> bool\n    where\n        L: TokenSource;"
             )
         })
         .collect::<Vec<_>>()
@@ -9432,9 +9432,9 @@ fn render_typed_hook_adapter(type_name: &str, mappings: &[TypedHookMapping]) -> 
     /// `true` when the action is handled so it satisfies a `hook`/`error`
     /// unknown-semantic policy; the default no-op returns `false` (unhandled),
     /// which fails loud under those policies.
-    fn custom_action<S>(&mut self, _ctx: &mut antlr4_runtime::ParserSemCtx<'_, S>, _action: antlr4_runtime::ParserAction) -> bool
+    fn custom_action<L>(&mut self, _ctx: &mut antlr4_runtime::ParserSemCtx<'_, L>, _action: antlr4_runtime::ParserAction) -> bool
     where
-        S: TokenSource,
+        L: TokenSource,
     {{
         false
     }}
@@ -9451,9 +9451,9 @@ impl<T> antlr4_runtime::SemanticHooks for {adapter_name}<T>
 where
     T: {trait_name},
 {{
-    fn sempred<S>(&mut self, ctx: &mut antlr4_runtime::ParserSemCtx<'_, S>, rule_index: usize, pred_index: usize) -> Option<bool>
+    fn sempred<L>(&mut self, ctx: &mut antlr4_runtime::ParserSemCtx<'_, L>, rule_index: usize, pred_index: usize) -> Option<bool>
     where
-        S: TokenSource,
+        L: TokenSource,
     {{
         match (rule_index, pred_index) {{
 {arms}
@@ -9461,9 +9461,9 @@ where
         }}
     }}
 
-    fn action<S>(&mut self, ctx: &mut antlr4_runtime::ParserSemCtx<'_, S>, action: antlr4_runtime::ParserAction) -> bool
+    fn action<L>(&mut self, ctx: &mut antlr4_runtime::ParserSemCtx<'_, L>, action: antlr4_runtime::ParserAction) -> bool
     where
-        S: TokenSource,
+        L: TokenSource,
     {{
         self.0.custom_action(ctx, action)
     }}
@@ -9908,7 +9908,7 @@ atn:
             "/// Likely parser entry-rule methods (not called by other rules):\n/// - `s()`"
         ));
         assert!(rendered.contains(
-            "/// All parser rule methods:\n/// - `s()`\n#[derive(Debug)]\npub struct DemoParser<S, H = antlr4_runtime::NoSemanticHooks>"
+            "/// All parser rule methods:\n/// - `s()`\n#[derive(Debug)]\npub struct DemoParser<L, H = antlr4_runtime::NoSemanticHooks>"
         ));
     }
 
@@ -11132,9 +11132,9 @@ s : ;
         assert!(
             rendered.contains("parse_with_parser(input, lexer, entry).map(|output| output.result)")
         );
-        assert!(rendered.contains("pub fn new(input: CommonTokenStream<S>) -> Self"));
+        assert!(rendered.contains("pub fn new(input: CommonTokenStream<L>) -> Self"));
         assert!(
-            rendered.contains("pub fn with_hooks(input: CommonTokenStream<S>, hooks: H) -> Self")
+            rendered.contains("pub fn with_hooks(input: CommonTokenStream<L>, hooks: H) -> Self")
         );
     }
 
@@ -11168,9 +11168,9 @@ s : ;
         let rendered =
             render_parser("TParser", &minimal_parser_data(), None).expect("parser should render");
 
-        assert!(rendered.contains("pub const fn token_stream(&self) -> &CommonTokenStream<S>"));
+        assert!(rendered.contains("pub const fn token_stream(&self) -> &CommonTokenStream<L>"));
         assert!(rendered.contains("self.base.token_stream()"));
-        assert!(rendered.contains("pub fn into_token_stream(self) -> CommonTokenStream<S>"));
+        assert!(rendered.contains("pub fn into_token_stream(self) -> CommonTokenStream<L>"));
         assert!(rendered.contains("self.base.into_token_stream()"));
     }
 
@@ -11181,7 +11181,7 @@ s : ;
 
         let rendered = render_parser("TParser", &data, None).expect("parser should render");
 
-        assert!(rendered.contains("pub const fn token_stream(&self) -> &CommonTokenStream<S>"));
+        assert!(rendered.contains("pub const fn token_stream(&self) -> &CommonTokenStream<L>"));
         assert!(rendered.contains(
             "pub fn token_stream_rule(&mut self) -> Result<antlr4_runtime::ParseTree, antlr4_runtime::AntlrError>"
         ));
@@ -13099,9 +13099,9 @@ dispose = "hook"
         let adapter = render_typed_hook_adapter("SParser", &mappings);
         // The predicate method is the disambiguated name; the action hook keeps
         // the reserved name — two distinct methods, so the trait compiles.
-        assert!(adapter.contains("fn custom_action_pred<S>"));
+        assert!(adapter.contains("fn custom_action_pred<L>"));
         assert!(adapter.contains(
-            "fn custom_action<S>(&mut self, _ctx: &mut antlr4_runtime::ParserSemCtx<'_, S>, _action: antlr4_runtime::ParserAction) -> bool"
+            "fn custom_action<L>(&mut self, _ctx: &mut antlr4_runtime::ParserSemCtx<'_, L>, _action: antlr4_runtime::ParserAction) -> bool"
         ));
         assert!(adapter.contains("Some(self.0.custom_action_pred(ctx))"));
     }
