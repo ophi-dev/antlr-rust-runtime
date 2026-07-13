@@ -1,0 +1,73 @@
+name: JavaScript Parse-Tree Parity
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  ANTLR_VERSION: 4.13.2
+  ANTLR_JAR_SHA256: eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76
+  ANTLR4_JAR: /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar
+  GRAMMARS_V4: /tmp/grammars-v4
+  GRAMMARS_V4_SHA: 284602b3f23ca54dc30778204ab7ae9e969145e9
+  CARGO_TERM_COLOR: always
+
+jobs:
+  javascript-parity:
+    name: JavaScript Parser Parity
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        # actions/checkout v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+
+      - name: Install stable Rust
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+
+      - name: Install Java
+        # actions/setup-java v5
+        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Python
+        # actions/setup-python v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.14"
+
+      - name: Install antlr4-python3-runtime
+        run: pip install "antlr4-python3-runtime==${ANTLR_VERSION}"
+
+      - name: Download ANTLR jar
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/antlr-cleanroom/tools
+          curl --fail --location --output "${ANTLR4_JAR}" \
+            "https://www.antlr.org/download/antlr-${ANTLR_VERSION}-complete.jar"
+          echo "${ANTLR_JAR_SHA256}  ${ANTLR4_JAR}" | sha256sum -c -
+
+      - name: Fetch JavaScript grammar
+        run: |
+          set -euxo pipefail
+          git clone --filter=blob:none --no-checkout \
+            https://github.com/antlr/grammars-v4.git "${GRAMMARS_V4}"
+          git -C "${GRAMMARS_V4}" sparse-checkout init --cone
+          git -C "${GRAMMARS_V4}" sparse-checkout set javascript/javascript
+          git -C "${GRAMMARS_V4}" checkout "${GRAMMARS_V4_SHA}"
+
+      - name: Run JavaScript parity smoke
+        run: tests/javascript-parity/run.sh

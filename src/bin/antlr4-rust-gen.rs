@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 use std::env;
 use std::fmt::Write as _;
 use std::fs;
@@ -203,22 +203,6 @@ impl SemUnknownPolicy {
     }
 }
 
-/// Adjusts an action disposition for a lexer coordinate.
-///
-/// Generated lexers have no action-hook plumbing — `run_action` only dispatches
-/// translated templates and otherwise no-ops — so a lexer action can never be
-/// truthfully `Hooked`. Coerce a `Hooked` disposition (from `--sem-unknown=hook`
-/// or a per-coordinate `dispose = "hook"` override) to `Ignored`, the honest
-/// disposition since the action is dropped at runtime. That also lets
-/// `--require-full-semantics` reject it (it accepts only `Translated`/`Hooked`)
-/// instead of silently accepting a manifest the lexer cannot honor.
-const fn lexer_action_disposition(disposition: SemanticsDisposition) -> SemanticsDisposition {
-    match disposition {
-        SemanticsDisposition::Hooked => SemanticsDisposition::Ignored,
-        other => other,
-    }
-}
-
 /// Coordinate kinds tracked by the `semantics.json` manifest.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum SemanticsKind {
@@ -341,8 +325,33 @@ struct SemPatternRule {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct SemHelperRule {
+    /// Explicit helper kind. A missing kind preserves the pre-v1 wildcard
+    /// behavior for lexer and parser predicates.
+    kind: Option<SemanticsKind>,
     name: String,
+    arguments: Vec<SemanticLiteralKind>,
     lower: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum SemanticLiteralKind {
+    String,
+    Bool,
+    Integer,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum SemanticLiteral {
+    String(String),
+    Bool(bool),
+    Integer(i64),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct SemanticHelperCall {
+    name: String,
+    arguments: Vec<SemanticLiteral>,
+    negated: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -355,7 +364,11 @@ struct SemCoordinateOverride {
 }
 
 impl SemPatternFile {
-    fn predicate_template(&self, body: &str) -> io::Result<Option<PredicateTemplate>> {
+    fn predicate_template(
+        &self,
+        kind: SemanticsKind,
+        body: &str,
+    ) -> io::Result<Option<PredicateTemplate>> {
         let body = body.trim();
         let mut matches = Vec::new();
         matches.extend(
@@ -367,7 +380,12 @@ impl SemPatternFile {
         matches.extend(
             self.helpers
                 .iter()
-                .filter(|helper| helper_call_matches(body, &helper.name))
+                .filter(|helper| semantic_helper_kind_matches(helper, kind))
+                .filter_map(|helper| {
+                    parse_semantic_helper_call(body, kind)
+                        .filter(|call| helper_call_matches(call, helper))
+                        .map(|_| helper)
+                })
                 .map(|helper| (helper.name.as_str(), helper.lower.as_str())),
         );
         if matches.len() > 1 {
@@ -387,6 +405,38 @@ impl SemPatternFile {
             .first()
             .map(|(_, lower)| parse_pattern_lower(lower))
             .transpose()
+    }
+
+    fn hook_helper_call(
+        &self,
+        kind: SemanticsKind,
+        body: &str,
+    ) -> io::Result<Option<SemanticHelperCall>> {
+        let Some(call) = parse_semantic_helper_call(body, kind) else {
+            return Ok(None);
+        };
+        let matches = self
+            .helpers
+            .iter()
+            .filter(|helper| {
+                semantic_helper_kind_matches(helper, kind) && helper.lower.trim() == "hook"
+            })
+            .filter(|helper| helper_call_matches(&call, helper))
+            .collect::<Vec<_>>();
+        if matches.len() > 1 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "ambiguous semantic helper patterns for {body:?}: {}",
+                    matches
+                        .iter()
+                        .map(|helper| helper.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            ));
+        }
+        Ok(matches.first().map(|_| call))
     }
 
     fn coordinate_disposition(
@@ -434,11 +484,142 @@ impl SemPatternFile {
     }
 }
 
-fn helper_call_matches(body: &str, helper: &str) -> bool {
-    let body = body.trim();
-    body == format!("{helper}()")
-        || body == format!("this.{helper}()")
-        || body == format!("self.{helper}()")
+fn semantic_helper_kind_matches(helper: &SemHelperRule, kind: SemanticsKind) -> bool {
+    helper.kind == Some(kind)
+        || (helper.kind.is_none()
+            && matches!(
+                kind,
+                SemanticsKind::LexerPredicate | SemanticsKind::ParserPredicate
+            ))
+}
+
+fn helper_call_matches(call: &SemanticHelperCall, helper: &SemHelperRule) -> bool {
+    call.name == helper.name
+        && call.arguments.len() == helper.arguments.len()
+        && call
+            .arguments
+            .iter()
+            .zip(&helper.arguments)
+            .all(|(literal, kind)| {
+                matches!(
+                    (literal, kind),
+                    (SemanticLiteral::String(_), SemanticLiteralKind::String)
+                        | (SemanticLiteral::Bool(_), SemanticLiteralKind::Bool)
+                        | (SemanticLiteral::Integer(_), SemanticLiteralKind::Integer)
+                )
+            })
+}
+
+fn parse_semantic_helper_call(
+    body: &str,
+    kind: SemanticsKind,
+) -> Option<SemanticHelperCall> {
+    let mut body = body.trim();
+    if matches!(kind, SemanticsKind::LexerAction | SemanticsKind::ParserAction) {
+        body = body.strip_suffix(';').unwrap_or(body).trim_end();
+    }
+    let negated = matches!(
+        kind,
+        SemanticsKind::LexerPredicate | SemanticsKind::ParserPredicate
+    ) && body.starts_with('!');
+    if negated {
+        body = body[1..].trim_start();
+    }
+    body = body
+        .strip_prefix("this.")
+        .or_else(|| body.strip_prefix("self."))
+        .unwrap_or(body);
+    let open = body.find('(')?;
+    let name = body[..open].trim();
+    if !is_semantic_helper_identifier(name) || !body.ends_with(')') {
+        return None;
+    }
+    let arguments = parse_semantic_literals(&body[open + 1..body.len() - 1])?;
+    Some(SemanticHelperCall {
+        name: name.to_owned(),
+        arguments,
+        negated,
+    })
+}
+
+fn is_semantic_helper_identifier(value: &str) -> bool {
+    let mut chars = value.chars();
+    chars.next().is_some_and(|first| {
+        (first == '_' || first.is_ascii_alphabetic())
+            && chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+    })
+}
+
+fn parse_semantic_literals(body: &str) -> Option<Vec<SemanticLiteral>> {
+    let mut body = body.trim();
+    if body.is_empty() {
+        return Some(Vec::new());
+    }
+    let mut literals = Vec::new();
+    while !body.is_empty() {
+        if body.starts_with('"') || body.starts_with('\'') {
+            let quote = *body.as_bytes().first()?;
+            let mut escaped = false;
+            let mut end = None;
+            for (index, byte) in body.as_bytes().iter().copied().enumerate().skip(1) {
+                if escaped {
+                    escaped = false;
+                } else if byte == b'\\' {
+                    escaped = true;
+                } else if byte == quote {
+                    end = Some(index);
+                    break;
+                }
+            }
+            let end = end?;
+            let raw = &body[1..end];
+            let value = unescape_semantic_string(raw)?;
+            literals.push(SemanticLiteral::String(value));
+            body = body[end + 1..].trim_start();
+        } else {
+            let end = body.find(',').unwrap_or(body.len());
+            let raw = body[..end].trim();
+            let literal = match raw {
+                "true" => SemanticLiteral::Bool(true),
+                "false" => SemanticLiteral::Bool(false),
+                _ => SemanticLiteral::Integer(raw.parse().ok()?),
+            };
+            literals.push(literal);
+            body = body[end..].trim_start();
+        }
+        if body.is_empty() {
+            break;
+        }
+        body = body.strip_prefix(',')?.trim_start();
+        if body.is_empty() {
+            return None;
+        }
+    }
+    Some(literals)
+}
+
+fn unescape_semantic_string(value: &str) -> Option<String> {
+    let mut out = String::with_capacity(value.len());
+    let mut chars = value.chars();
+    while let Some(ch) = chars.next() {
+        if ch != '\\' {
+            out.push(ch);
+            continue;
+        }
+        match chars.next()? {
+            '"' => out.push('"'),
+            '\'' => out.push('\''),
+            '\\' => out.push('\\'),
+            'n' => out.push('\n'),
+            'r' => out.push('\r'),
+            't' => out.push('\t'),
+            other => {
+                out.push('\\');
+                out.push(other);
+            }
+        }
+    }
+    Some(out)
 }
 
 fn parse_pattern_lower(lower: &str) -> io::Result<PredicateTemplate> {
@@ -648,7 +829,14 @@ fn collect_lexer_semantics(
     let action_coordinates = lexer_custom_actions(data)?;
     if !action_coordinates.is_empty() {
         let templates = grammar_source
-            .map(|source| lexer_action_templates(data, source, allow_unsupported_lexer_actions))
+            .map(|source| {
+                lexer_action_templates(
+                    data,
+                    source,
+                    allow_unsupported_lexer_actions,
+                    patterns,
+                )
+            })
             .transpose()?;
         let blocks = grammar_source
             .map(|source| lexer_action_source_blocks(source, &data.rule_names))
@@ -658,9 +846,7 @@ fn collect_lexer_semantics(
                 .as_ref()
                 .and_then(|templates| templates.get(position))
                 .map(|(_, template)| template);
-            let translated = template.is_some_and(|template| {
-                !matches!(template, ActionTemplate::UnsupportedLexerAction { .. })
-            });
+            let translated = matches!(template, Some(ActionTemplate::LexerPopMode));
             let block = blocks.get(position);
             let rule_index = usize::try_from(*rule_index).ok();
             entries.push(SemanticsEntry {
@@ -672,21 +858,21 @@ fn collect_lexer_semantics(
                 line: block.map(|(line, _, _)| *line),
                 column: block.map(|(_, column, _)| *column),
                 body: block.map(|(_, _, body)| body.clone()),
-                disposition: lexer_action_disposition(
-                    patterns
-                        .coordinate_disposition(
-                            SemanticsKind::LexerAction,
-                            rule_index
-                                .and_then(|rule| data.rule_names.get(rule).map(String::as_str)),
-                            usize::try_from(*action_index).ok(),
-                            None,
-                        )
-                        .unwrap_or_else(|| if translated {
-                            SemanticsDisposition::Translated
-                        } else {
+                disposition: patterns
+                    .coordinate_disposition(
+                        SemanticsKind::LexerAction,
+                        rule_index
+                            .and_then(|rule| data.rule_names.get(rule).map(String::as_str)),
+                        usize::try_from(*action_index).ok(),
+                        None,
+                    )
+                    .unwrap_or_else(|| match template {
+                        Some(ActionTemplate::Hook(_)) => SemanticsDisposition::Hooked,
+                        Some(ActionTemplate::LexerPopMode) => SemanticsDisposition::Translated,
+                        Some(ActionTemplate::UnsupportedLexerAction { .. }) | None => {
                             policy.unknown_action_disposition()
-                        }),
-                ),
+                        }
+                    }),
                 template: template
                     .filter(|_| translated)
                     .map(|template| format!("{template:?}")),
@@ -1162,8 +1348,41 @@ fn flush_pattern_section(
             });
         }
         PatternSection::Helper => {
+            let kind = fields
+                .remove("kind")
+                .map(|value| parse_coordinate_kind(&value))
+                .transpose()?;
+            let arguments = fields
+                .remove("arguments")
+                .map_or_else(|| Ok(Vec::new()), |value| parse_helper_arguments(&value))?;
+            // `returns` is documentation in existing pattern files. Validate
+            // its shape when present, but the semantic kind determines whether
+            // the generated method returns bool or unit.
+            if let Some(returns) = fields.remove("returns") {
+                let expected = if kind.is_none_or(|kind| {
+                    matches!(
+                        kind,
+                        SemanticsKind::LexerPredicate | SemanticsKind::ParserPredicate
+                    )
+                }) {
+                    "bool"
+                } else {
+                    "unit"
+                };
+                if returns != expected {
+                    let kind = kind.map_or("predicate", SemanticsKind::manifest_name);
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!(
+                            "semantic helper kind {kind} requires returns = {expected:?}, got {returns:?}"
+                        ),
+                    ));
+                }
+            }
             file.helpers.push(SemHelperRule {
+                kind,
                 name: take_required_field(fields, "name")?,
+                arguments,
                 lower: take_required_field(fields, "lower")?,
             });
         }
@@ -1185,6 +1404,25 @@ fn flush_pattern_section(
     }
     fields.clear();
     Ok(())
+}
+
+fn parse_helper_arguments(value: &str) -> io::Result<Vec<SemanticLiteralKind>> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Ok(Vec::new());
+    }
+    value
+        .split(',')
+        .map(|part| match part.trim() {
+            "string" | "str" => Ok(SemanticLiteralKind::String),
+            "bool" | "boolean" => Ok(SemanticLiteralKind::Bool),
+            "int" | "integer" => Ok(SemanticLiteralKind::Integer),
+            other => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("unknown semantic helper argument kind {other:?}"),
+            )),
+        })
+        .collect()
 }
 
 fn take_required_field(fields: &mut BTreeMap<String, String>, name: &str) -> io::Result<String> {
@@ -1543,14 +1781,17 @@ fn render_lexer(
     };
     let mut actions = template_grammar_source.map_or_else(
         || Ok(Vec::new()),
-        |source| lexer_action_templates(data, source, allow_unsupported_lexer_actions),
+        |source| {
+            lexer_action_templates(
+                data,
+                source,
+                allow_unsupported_lexer_actions,
+                patterns,
+            )
+        },
     )?;
-    // Any per-coordinate override on a lexer action makes `collect_lexer_semantics`
-    // report a non-`Translated` disposition (`hook`→Ignored, assume-*→that
-    // fallback). Generated lexers can't route actions to hooks and an action has
-    // no truth value, so an overridden action must not run its translated
-    // `run_action` arm — drop it, or the lexer would execute a side effect (e.g.
-    // a mode change) the manifest says is a fallback.
+    // Any per-coordinate override replaces a translated action. Hook overrides
+    // fall through to the semantic hook object; assume-* overrides are no-ops.
     actions.retain(|((rule_index, action_index), _)| {
         let rule_name = usize::try_from(*rule_index)
             .ok()
@@ -1568,20 +1809,9 @@ fn render_lexer(
         || Ok(Vec::new()),
         |source| lexer_predicate_templates(data, source, patterns),
     )?;
-    // Apply per-coordinate `[[coordinate]]` overrides to every lexer predicate
-    // transition, so the generated lexer matches the disposition
-    // `collect_lexer_semantics` records in the manifest (the override wins there
-    // too). An override resolves by ATN coordinate, independent of `--grammar`:
-    //   * hook / error  -> reject codegen. Generated lexers have no hook plumbing
-    //     and no fail-loud runtime recording, so a `hooked`/errored manifest
-    //     entry the lexer can't honor would be a lie (mirrors the explicit-hook
-    //     rejection in `lexer_predicate_templates`). Also covers an *uncovered*
-    //     coordinate under the global `--sem-unknown=hook|error` policy.
-    //   * assume-false  -> force an explicit failing `run_predicate` arm.
-    //   * assume-true   -> force an always-true arm.
-    // A coordinate with no override keeps its translated template (or, if
-    // uncovered, the global policy via the catch-all).
-    let mut unhonorable_lexer_predicates = 0_usize;
+    // Apply per-coordinate overrides to every lexer predicate transition. Hook
+    // coordinates are represented explicitly so generated dispatch can fall
+    // through to the caller-owned semantic hook object.
     for coordinate in lexer_predicate_transitions(data)? {
         let (rule_index, pred_index) = coordinate;
         let dispose = patterns
@@ -1594,9 +1824,10 @@ fn render_lexer(
             .map(|override_| override_.dispose);
         let covered = predicates.iter().any(|(pred, _)| *pred == coordinate);
         match dispose {
-            Some(CoordinateDispose::Hook | CoordinateDispose::Error) => {
-                unhonorable_lexer_predicates += 1;
+            Some(CoordinateDispose::Hook) => {
+                set_lexer_predicate_template(&mut predicates, coordinate, PredicateTemplate::Hook);
             }
+            Some(CoordinateDispose::Error) => {}
             Some(CoordinateDispose::AssumeFalse) => {
                 set_lexer_predicate_template(&mut predicates, coordinate, PredicateTemplate::False);
             }
@@ -1604,24 +1835,15 @@ fn render_lexer(
                 set_lexer_predicate_template(&mut predicates, coordinate, PredicateTemplate::True);
             }
             None => {
-                // No override: an uncovered coordinate under the global
-                // hook/error policy is equally unhonorable by a generated lexer.
-                if !covered && matches!(sem_unknown, SemUnknownPolicy::Hook | SemUnknownPolicy::Error) {
-                    unhonorable_lexer_predicates += 1;
+                if !covered && sem_unknown == SemUnknownPolicy::Hook {
+                    set_lexer_predicate_template(
+                        &mut predicates,
+                        coordinate,
+                        PredicateTemplate::Hook,
+                    );
                 }
             }
         }
-    }
-    if unhonorable_lexer_predicates > 0 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!(
-                "{unhonorable_lexer_predicates} lexer predicate(s) resolve to hook/error with no Rust \
-                 implementation; generated lexers cannot route unknown predicates to hooks. Translate \
-                 them via --grammar/--sem-patterns or accept a documented fallback with \
-                 assume-true / assume-false",
-            ),
-        ));
     }
     // Predicate coordinates with no translated template normally fall back to
     // always-true; `--sem-unknown=assume-false` flips that fallback, which
@@ -1631,6 +1853,40 @@ fn render_lexer(
         && !lexer_predicate_transitions(data)?.is_empty();
     let adjusts_accept_position = template_grammar_source.is_some_and(uses_position_adjusting_lexer);
     let lexer_dfa_data = compiled_lexer_dfa_words(data);
+    let lexer_typed_hook_mappings = if embedded {
+        Vec::new()
+    } else {
+        lexer_typed_hook_mappings(data, grammar_source, patterns, &actions)?
+    };
+    let typed_hook_adapter = render_lexer_typed_hook_adapter(
+        &type_name,
+        &lexer_typed_hook_mappings,
+    );
+    let typed_lexer_constructor = if lexer_typed_hook_mappings.is_empty() {
+        String::new()
+    } else {
+        let trait_name = format!("{type_name}Hooks");
+        let adapter_name = format!("{type_name}TypedHooks");
+        format!(
+            "impl<I, T> {type_name}<I, {adapter_name}<T>>\nwhere\n    I: CharStream,\n    T: {trait_name},\n{{\n    pub fn with_typed_hooks(input: I, hooks: T) -> Self {{\n        Self::with_hooks(input, {adapter_name}::new(hooks))\n    }}\n}}\n"
+        )
+    };
+    let action_coordinates = lexer_custom_actions(data)?;
+    let has_hook_disposed_actions = lexer_actions_require_semantic_hooks(
+        &action_coordinates,
+        &data.rule_names,
+        &actions,
+        patterns,
+        sem_unknown,
+    );
+    let has_semantic_hooks = has_hook_disposed_actions
+        || !lexer_typed_hook_mappings.is_empty()
+        || actions
+            .iter()
+            .any(|(_, template)| matches!(template, ActionTemplate::Hook(_)))
+        || predicates
+            .iter()
+            .any(|(_, template)| matches!(template, PredicateTemplate::Hook));
     let has_action_dispatch = if embedded {
         embedded_lexer_actions
             .iter()
@@ -1658,7 +1914,33 @@ fn render_lexer(
     } else {
         !predicates.is_empty()
     };
-    let next_token_call = if !has_action_dispatch
+    let lexer_unknown_policy = match sem_unknown {
+        SemUnknownPolicy::AssumeTrue => "antlr4_runtime::UnknownSemanticPolicy::AssumeTrue",
+        SemUnknownPolicy::AssumeFalse => "antlr4_runtime::UnknownSemanticPolicy::AssumeFalse",
+        SemUnknownPolicy::Hook | SemUnknownPolicy::Error => {
+            "antlr4_runtime::UnknownSemanticPolicy::Error"
+        }
+    };
+    let next_token_call = if has_semantic_hooks {
+        let action = if has_action_dispatch {
+            "Self::run_action"
+        } else {
+            "|_, _| false"
+        };
+        let predicate = if has_predicate_dispatch {
+            "Self::run_predicate"
+        } else {
+            "|_, _| None"
+        };
+        let adjuster = if adjusts_accept_position {
+            "Self::adjust_accept_position"
+        } else {
+            "|_, _, _| {}"
+        };
+        format!(
+            "antlr4_runtime::atn::lexer::next_token_compiled_with_semantic_dispatch(&mut self.base, atn(), lexer_dfa(), &mut self.hooks, {action}, {predicate}, {lexer_unknown_policy}, {adjuster})"
+        )
+    } else if !has_action_dispatch
         && !has_predicate_dispatch
         && !adjusts_accept_position
         && !unknown_predicates_assume_false
@@ -1667,12 +1949,12 @@ fn render_lexer(
             .to_owned()
     } else {
         let action = if has_action_dispatch {
-            "Self::run_action"
+            "|base, action| { let _ = Self::run_action(base, action); }"
         } else {
             "|_, _| {}"
         };
         let predicate = if has_predicate_dispatch {
-            "Self::run_predicate"
+            "|base, predicate| Self::run_predicate(base, predicate).unwrap_or(true)"
         } else if unknown_predicates_assume_false {
             "|_, _| false"
         } else {
@@ -1702,6 +1984,7 @@ use std::sync::OnceLock;
 
 {token_constants}
 {metadata}
+{typed_hook_adapter}
 
 static ATN_CELL: OnceLock<Atn> = OnceLock::new();
 
@@ -1730,18 +2013,30 @@ fn lexer_dfa() -> &'static CompiledLexerDfa {{
 }}
 
 #[derive(Clone, Debug)]
-pub struct {type_name}<I>
+pub struct {type_name}<I, H = antlr4_runtime::NoSemanticHooks>
 where
     I: CharStream,
+    H: antlr4_runtime::SemanticHooks,
 {{
     base: BaseLexer<I>,
+    hooks: H,
 }}
 
-impl<I> {type_name}<I>
+impl<I> {type_name}<I, antlr4_runtime::NoSemanticHooks>
 where
     I: CharStream,
 {{
     pub fn new(input: I) -> Self {{
+        Self::with_hooks(input, antlr4_runtime::NoSemanticHooks)
+    }}
+}}
+
+impl<I, H> {type_name}<I, H>
+where
+    I: CharStream,
+    H: antlr4_runtime::SemanticHooks,
+{{
+    pub fn with_hooks(input: I, hooks: H) -> Self {{
         let grammar_metadata = metadata();
         let data = RecognizerData::new(
             grammar_metadata.grammar_file_name(),
@@ -1750,7 +2045,7 @@ where
         .with_rule_names(grammar_metadata.rule_names().iter().copied())
         .with_channel_names(grammar_metadata.channel_names().iter().copied())
         .with_mode_names(grammar_metadata.mode_names().iter().copied());
-        Self {{ base: BaseLexer::new(input, data).with_shared_dfa(atn()) }}
+        Self {{ base: BaseLexer::new(input, data).with_shared_dfa(atn()), hooks }}
     }}
 
     pub fn metadata() -> &'static GrammarMetadata {{
@@ -1769,18 +2064,22 @@ where
 {accept_adjust_method}
 }}
 
-impl<I> GeneratedLexer for {type_name}<I>
+{typed_lexer_constructor}
+
+impl<I, H> GeneratedLexer for {type_name}<I, H>
 where
     I: CharStream,
+    H: antlr4_runtime::SemanticHooks,
 {{
     fn metadata() -> &'static GrammarMetadata {{
         metadata()
     }}
 }}
 
-impl<I> Recognizer for {type_name}<I>
+impl<I, H> Recognizer for {type_name}<I, H>
 where
     I: CharStream,
+    H: antlr4_runtime::SemanticHooks,
 {{
     fn data(&self) -> &antlr4_runtime::RecognizerData {{
         self.base.data()
@@ -1791,9 +2090,10 @@ where
     }}
 }}
 
-impl<I> Lexer for {type_name}<I>
+impl<I, H> Lexer for {type_name}<I, H>
 where
     I: CharStream,
+    H: antlr4_runtime::SemanticHooks,
 {{
     fn mode(&self) -> i32 {{ self.base.mode() }}
     fn set_mode(&mut self, mode: i32) {{ self.base.set_mode(mode); }}
@@ -1801,9 +2101,10 @@ where
     fn pop_mode(&mut self) -> Option<i32> {{ self.base.pop_mode() }}
 }}
 
-impl<I> TokenSource for {type_name}<I>
+impl<I, H> TokenSource for {type_name}<I, H>
 where
     I: CharStream,
+    H: antlr4_runtime::SemanticHooks,
 {{
     fn next_token(&mut self) -> CommonToken {{
         {next_token_call}
@@ -1821,6 +2122,39 @@ where
 }}
 {generated_footer}"#
     ))
+}
+
+fn lexer_actions_require_semantic_hooks(
+    coordinates: &[(i32, i32)],
+    rule_names: &[String],
+    actions: &[((i32, i32), ActionTemplate)],
+    patterns: &SemPatternFile,
+    sem_unknown: SemUnknownPolicy,
+) -> bool {
+    coordinates.iter().any(|coordinate| {
+        let (rule_index, action_index) = *coordinate;
+        let rule_name = usize::try_from(rule_index)
+            .ok()
+            .and_then(|rule| rule_names.get(rule).map(String::as_str));
+        if let Some(override_) = patterns.coordinate_override(
+            SemanticsKind::LexerAction,
+            rule_name,
+            usize::try_from(action_index).ok(),
+            None,
+        ) {
+            return override_.dispose == CoordinateDispose::Hook;
+        }
+        if sem_unknown != SemUnknownPolicy::Hook {
+            return false;
+        }
+        !matches!(
+            actions
+                .iter()
+                .find(|(candidate, _)| candidate == coordinate)
+                .map(|(_, template)| template),
+            Some(ActionTemplate::LexerPopMode)
+        )
+    })
 }
 
 /// Compiles the lexer DFA at generation time and flattens it for embedding.
@@ -2038,6 +2372,22 @@ struct TypedHookMapping {
     rule_index: usize,
     pred_index: usize,
     method_name: String,
+    call: SemanticHelperCall,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum LexerTypedHookKind {
+    Predicate,
+    Action,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct LexerTypedHookMapping {
+    rule_index: usize,
+    coordinate_index: usize,
+    kind: LexerTypedHookKind,
+    method_name: String,
+    call: SemanticHelperCall,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -6260,6 +6610,15 @@ fn render_parser_with_options(
         &type_name,
         &parser_typed_hook_mappings(data, grammar_source, patterns)?,
     );
+    let typed_parser_constructor = if typed_hook_adapter.is_empty() {
+        String::new()
+    } else {
+        let trait_name = format!("{type_name}Hooks");
+        let adapter_name = format!("{type_name}TypedHooks");
+        format!(
+            "impl<S, T> {type_name}<S, {adapter_name}<T>>\nwhere\n    S: TokenSource,\n    T: {trait_name},\n{{\n    pub fn with_typed_hooks(input: CommonTokenStream<S>, hooks: T) -> Self {{\n        Self::with_hooks(input, {adapter_name}::new(hooks))\n    }}\n}}\n"
+        )
+    };
     // The adaptive-direct path runs `parse_atn_rule_adaptive_or_fallback`, which
     // falls back through `parse_atn_rule` without the `ParserRuntimeOptions`
     // emitted below. A non-default unknown-predicate policy only reaches the
@@ -6510,6 +6869,8 @@ where
 {action_method}
 }}
 
+{typed_parser_constructor}
+
 impl<S, H> GeneratedParser for {type_name}<S, H>
 where
     S: TokenSource,
@@ -6554,6 +6915,7 @@ where
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum ActionTemplate {
     LexerPopMode,
+    Hook(SemanticHelperCall),
     UnsupportedLexerAction {
         rule_name: String,
         body: String,
@@ -6749,13 +7111,13 @@ fn render_embedded_lexer_action_method(actions: &[((i32, i32), String)]) -> Stri
     for ((rule_index, action_index), statement) in actions {
         writeln!(
             arms,
-            "            ({rule_index}, {action_index}) => {{ {statement} }}"
+            "            ({rule_index}, {action_index}) => {{ {statement} true }}"
         )
         .expect("writing to a string cannot fail");
     }
-    arms.push_str("            _ => {}\n");
+    arms.push_str("            _ => false,\n");
     format!(
-        "    fn run_action(_base: &mut BaseLexer<I>, action: antlr4_runtime::LexerCustomAction) {{\n        #[allow(unused_imports)]\n        use std::io::Write as _;\n        match (action.rule_index(), action.action_index()) {{\n{arms}        }}\n    }}\n"
+        "    fn run_action(_base: &mut BaseLexer<I>, action: antlr4_runtime::LexerCustomAction) -> bool {{\n        #[allow(unused_imports)]\n        use std::io::Write as _;\n        match (action.rule_index(), action.action_index()) {{\n{arms}        }}\n    }}\n"
     )
 }
 
@@ -6767,13 +7129,13 @@ fn render_embedded_lexer_predicate_method(predicates: &[((usize, usize), String)
     for ((rule_index, pred_index), expression) in predicates {
         writeln!(
             arms,
-            "            ({rule_index}, {pred_index}) => {{ {expression} }}"
+            "            ({rule_index}, {pred_index}) => Some({{ {expression} }}),"
         )
         .expect("writing to a string cannot fail");
     }
-    arms.push_str("            _ => true,\n");
+    arms.push_str("            _ => None,\n");
     format!(
-        "    fn run_predicate(_base: &BaseLexer<I>, predicate: antlr4_runtime::LexerPredicate) -> bool {{\n        match (predicate.rule_index(), predicate.pred_index()) {{\n{arms}        }}\n    }}\n"
+        "    fn run_predicate(_base: &BaseLexer<I>, predicate: antlr4_runtime::LexerPredicate) -> Option<bool> {{\n        match (predicate.rule_index(), predicate.pred_index()) {{\n{arms}        }}\n    }}\n"
     )
 }
 
@@ -6783,12 +7145,14 @@ fn lexer_action_templates(
     data: &InterpData,
     grammar_source: &str,
     allow_unsupported_only: bool,
+    patterns: &SemPatternFile,
 ) -> io::Result<Vec<((i32, i32), ActionTemplate)>> {
     let actions = lexer_custom_actions(data)?;
     if actions.is_empty() {
         return Ok(Vec::new());
     }
-    let templates = extract_lexer_action_templates(grammar_source, &data.rule_names);
+    let templates =
+        extract_lexer_action_templates_with_patterns(grammar_source, &data.rule_names, patterns)?;
     if actions.len() == templates.len() {
         reject_unsupported_lexer_action_templates(&templates, allow_unsupported_only)?;
         return Ok(actions.into_iter().zip(templates).collect());
@@ -6805,10 +7169,24 @@ fn lexer_action_templates(
 
 /// Extracts lexer action templates in the same source order ANTLR uses for
 /// custom lexer-action indexes.
+#[cfg(test)]
 fn extract_lexer_action_templates(
     grammar_source: &str,
     rule_names: &[String],
 ) -> Vec<ActionTemplate> {
+    extract_lexer_action_templates_with_patterns(
+        grammar_source,
+        rule_names,
+        &SemPatternFile::default(),
+    )
+    .expect("empty semantic patterns cannot fail")
+}
+
+fn extract_lexer_action_templates_with_patterns(
+    grammar_source: &str,
+    rule_names: &[String],
+    patterns: &SemPatternFile,
+) -> io::Result<Vec<ActionTemplate>> {
     let mut actions = Vec::new();
     let mut offset = 0;
     while let Some(block) = next_action_block(grammar_source, offset) {
@@ -6816,12 +7194,24 @@ fn extract_lexer_action_templates(
         if !is_lexer_custom_action_block(grammar_source, &block, rule_names) {
             continue;
         }
-        let template = parse_lexer_action_block_template(block.body).unwrap_or_else(|| {
-            unsupported_lexer_action_template(grammar_source, block.open_brace, block.body)
-        });
+        let template = match parse_lexer_action_block_template(block.body) {
+            Some(template) => template,
+            None => patterns
+                .hook_helper_call(SemanticsKind::LexerAction, block.body)?
+                .map_or_else(
+                    || {
+                        unsupported_lexer_action_template(
+                            grammar_source,
+                            block.open_brace,
+                            block.body,
+                        )
+                    },
+                    ActionTemplate::Hook,
+                ),
+        };
         actions.push(template);
     }
-    actions
+    Ok(actions)
 }
 
 /// Reports whether an action block found in grammar source participates in
@@ -6947,8 +7337,12 @@ fn lexer_predicate_templates(
     if predicates.is_empty() {
         return Ok(Vec::new());
     }
-    let slots =
-        extract_predicate_template_slots_filtered(grammar_source, patterns, Some(&data.rule_names))?;
+    let slots = extract_predicate_template_slots_filtered(
+        grammar_source,
+        patterns,
+        Some(&data.rule_names),
+        SemanticsKind::LexerPredicate,
+    )?;
     if slots.iter().all(Option::is_none) {
         return Ok(Vec::new());
     }
@@ -6982,23 +7376,6 @@ fn lexer_predicate_templates(
         ) {
             *slot = override_template;
         }
-    }
-    // Generated lexers have no semantic-hooks plumbing yet: their predicate
-    // dispatch is a static `run_predicate` method, so a hook-routed lexer
-    // predicate has nowhere to land. Reject it instead of panicking in the
-    // renderer; callers can drive `next_token_with_semantic_hooks` manually. A
-    // coordinate override above can turn such a `Hook` slot into an honorable
-    // fallback (`assume-false`/`assume-true`) so it is not rejected here.
-    if slots
-        .iter()
-        .any(|slot| matches!(slot, Some(PredicateTemplate::Hook)))
-    {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "hook-routed lexer predicates are not supported by generated lexers yet; \
-             remove the lexer helper/coordinate hook mapping or drive \
-             antlr4_runtime::atn::lexer::next_token_with_semantic_hooks manually",
-        ));
     }
     // Pair only the translated slots with their coordinate; leave untranslated
     // ones (None) uncovered so `render_lexer_predicate_method`'s catch-all
@@ -7067,7 +7444,11 @@ fn parser_predicate_templates(
         });
         let template = match override_template {
             Some(template) => template,
-            None => parse_predicate_template_with_patterns(block.body, patterns)?,
+            None => parse_predicate_template_with_patterns_kind(
+                block.body,
+                patterns,
+                SemanticsKind::ParserPredicate,
+            )?,
         };
         if let Some(template) = template {
             let template = match predicate_fail_message(grammar_source, block.after_brace) {
@@ -7326,7 +7707,12 @@ fn extract_supported_predicate_templates_filtered(
     patterns: &SemPatternFile,
     rule_names: Option<&[String]>,
 ) -> io::Result<Vec<PredicateTemplate>> {
-    Ok(extract_predicate_template_slots_filtered(grammar_source, patterns, rule_names)?
+    Ok(extract_predicate_template_slots_filtered(
+        grammar_source,
+        patterns,
+        rule_names,
+        SemanticsKind::LexerPredicate,
+    )?
         .into_iter()
         .flatten()
         .collect())
@@ -7340,6 +7726,7 @@ fn extract_predicate_template_slots_filtered(
     grammar_source: &str,
     patterns: &SemPatternFile,
     rule_names: Option<&[String]>,
+    kind: SemanticsKind,
 ) -> io::Result<Vec<Option<PredicateTemplate>>> {
     let mut slots = Vec::new();
     let mut offset = 0;
@@ -7355,7 +7742,9 @@ fn extract_predicate_template_slots_filtered(
         if excluded {
             continue;
         }
-        if let Some(template) = parse_predicate_template_with_patterns(block.body, patterns)? {
+        if let Some(template) =
+            parse_predicate_template_with_patterns_kind(block.body, patterns, kind)?
+        {
             slots.push(Some(template));
         } else if is_unsupported_string_template_body(block.body) {
             // An untranslated ANTLR `<...>` StringTemplate predicate is a
@@ -7645,9 +8034,17 @@ fn parse_predicate_template_with_patterns(
     body: &str,
     patterns: &SemPatternFile,
 ) -> io::Result<Option<PredicateTemplate>> {
+    parse_predicate_template_with_patterns_kind(body, patterns, SemanticsKind::ParserPredicate)
+}
+
+fn parse_predicate_template_with_patterns_kind(
+    body: &str,
+    patterns: &SemPatternFile,
+    kind: SemanticsKind,
+) -> io::Result<Option<PredicateTemplate>> {
     Ok(match parse_predicate_template(body) {
         Some(template) => Some(template),
-        None => patterns.predicate_template(body)?,
+        None => patterns.predicate_template(kind, body)?,
     })
 }
 
@@ -8183,16 +8580,19 @@ fn render_lexer_action_method(actions: &[((i32, i32), ActionTemplate)]) -> Strin
     }
     let mut arms = String::new();
     for ((rule_index, action_index), template) in actions {
+        if !lexer_action_template_needs_dispatch(template) {
+            continue;
+        }
         let statement = render_lexer_action_statement(template);
         writeln!(
             arms,
-            "            ({rule_index}, {action_index}) => {{ {statement} }}"
+            "            ({rule_index}, {action_index}) => {{ {statement} true }}"
         )
         .expect("writing to a string cannot fail");
     }
-    arms.push_str("            _ => {}\n");
+    arms.push_str("            _ => false,\n");
     format!(
-        "{comments}    fn run_action(_base: &mut BaseLexer<I>, action: antlr4_runtime::LexerCustomAction) {{\n        match (action.rule_index(), action.action_index()) {{\n{arms}        }}\n    }}\n"
+        "{comments}    fn run_action(_base: &mut BaseLexer<I>, action: antlr4_runtime::LexerCustomAction) -> bool {{\n        match (action.rule_index(), action.action_index()) {{\n{arms}        }}\n    }}\n"
     )
 }
 
@@ -8204,7 +8604,7 @@ fn lexer_actions_need_dispatch(actions: &[((i32, i32), ActionTemplate)]) -> bool
 
 fn lexer_action_template_needs_dispatch(template: &ActionTemplate) -> bool {
     match template {
-        ActionTemplate::UnsupportedLexerAction { .. } => false,
+        ActionTemplate::Hook(_) | ActionTemplate::UnsupportedLexerAction { .. } => false,
         ActionTemplate::LexerPopMode => !render_lexer_action_statement(template).is_empty(),
     }
 }
@@ -8213,6 +8613,7 @@ fn lexer_action_template_needs_dispatch(template: &ActionTemplate) -> bool {
 fn render_lexer_action_statement(template: &ActionTemplate) -> String {
     match template {
         ActionTemplate::LexerPopMode => "_base.pop_mode();".to_owned(),
+        ActionTemplate::Hook(_) => String::new(),
         ActionTemplate::UnsupportedLexerAction { rule_name, body } => {
             render_unsupported_lexer_action_comment(rule_name, body)
         }
@@ -8238,7 +8639,11 @@ fn render_lexer_predicate_method(
     }
     let mut arms = String::new();
     for ((rule_index, pred_index), template) in predicates {
-        let statement = render_lexer_predicate_expression(template);
+        let statement = if matches!(template, PredicateTemplate::Hook) {
+            "None".to_owned()
+        } else {
+            format!("Some({})", render_lexer_predicate_expression(template))
+        };
         writeln!(
             arms,
             "            ({rule_index}, {pred_index}) => {{ {statement} }}"
@@ -8251,13 +8656,15 @@ fn render_lexer_predicate_method(
     // predicate plus an uncovered coordinate) keeps the uncovered guard viable
     // even though the manifest promised assume-false.
     let default_arm = if sem_unknown == SemUnknownPolicy::AssumeFalse {
-        "            _ => false,\n"
+        "            _ => Some(false),\n"
+    } else if sem_unknown == SemUnknownPolicy::Hook {
+        "            _ => None,\n"
     } else {
-        "            _ => true,\n"
+        "            _ => Some(true),\n"
     };
     arms.push_str(default_arm);
     format!(
-        "    fn run_predicate(_base: &BaseLexer<I>, predicate: antlr4_runtime::LexerPredicate) -> bool {{\n        match (predicate.rule_index(), predicate.pred_index()) {{\n{arms}        }}\n    }}\n"
+        "    fn run_predicate(_base: &BaseLexer<I>, predicate: antlr4_runtime::LexerPredicate) -> Option<bool> {{\n        match (predicate.rule_index(), predicate.pred_index()) {{\n{arms}        }}\n    }}\n"
     )
 }
 
@@ -8578,6 +8985,234 @@ fn render_parser_semantics_function(
     ))
 }
 
+fn lexer_typed_hook_mappings(
+    data: &InterpData,
+    grammar_source: Option<&str>,
+    patterns: &SemPatternFile,
+    actions: &[((i32, i32), ActionTemplate)],
+) -> io::Result<Vec<LexerTypedHookMapping>> {
+    let Some(grammar_source) = grammar_source else {
+        return Ok(Vec::new());
+    };
+    let mut mappings = actions
+        .iter()
+        .filter_map(|((rule_index, action_index), template)| {
+            let ActionTemplate::Hook(call) = template else {
+                return None;
+            };
+            Some(LexerTypedHookMapping {
+                rule_index: usize::try_from(*rule_index).ok()?,
+                coordinate_index: usize::try_from(*action_index).ok()?,
+                kind: LexerTypedHookKind::Action,
+                method_name: rust_function_name(&call.name),
+                call: call.clone(),
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let coordinates = lexer_predicate_transitions(data)?;
+    let mut predicate_index = 0;
+    let mut offset = 0;
+    while let Some(block) = next_predicate_action_block(grammar_source, offset) {
+        offset = block.after_brace;
+        if !predicate_block_included(grammar_source, block.open_brace, &data.rule_names) {
+            continue;
+        }
+        let Some((rule_index, pred_index)) = coordinates.get(predicate_index).copied() else {
+            predicate_index += 1;
+            continue;
+        };
+        if let Some(call) =
+            patterns.hook_helper_call(SemanticsKind::LexerPredicate, block.body)?
+        {
+            mappings.push(LexerTypedHookMapping {
+                rule_index,
+                coordinate_index: pred_index,
+                kind: LexerTypedHookKind::Predicate,
+                method_name: rust_function_name(&call.name),
+                call,
+            });
+        }
+        predicate_index += 1;
+    }
+
+    let predicate_names = mappings
+        .iter()
+        .filter(|mapping| mapping.kind == LexerTypedHookKind::Predicate)
+        .map(|mapping| mapping.method_name.clone())
+        .collect::<BTreeSet<_>>();
+    let action_names = mappings
+        .iter()
+        .filter(|mapping| mapping.kind == LexerTypedHookKind::Action)
+        .map(|mapping| mapping.method_name.clone())
+        .collect::<BTreeSet<_>>();
+    for mapping in &mut mappings {
+        if predicate_names.contains(&mapping.method_name)
+            && action_names.contains(&mapping.method_name)
+        {
+            mapping.method_name.push_str(match mapping.kind {
+                LexerTypedHookKind::Predicate => "_pred",
+                LexerTypedHookKind::Action => "_action",
+            });
+        }
+    }
+    validate_lexer_typed_hook_signatures(&mappings)?;
+    mappings.sort_by_key(|mapping| {
+        (
+            mapping.rule_index,
+            mapping.coordinate_index,
+            matches!(mapping.kind, LexerTypedHookKind::Action),
+        )
+    });
+    mappings.dedup();
+    Ok(mappings)
+}
+
+fn validate_lexer_typed_hook_signatures(
+    mappings: &[LexerTypedHookMapping],
+) -> io::Result<()> {
+    let mut signatures = BTreeMap::<(&str, LexerTypedHookKind), Vec<SemanticLiteralKind>>::new();
+    for mapping in mappings {
+        let signature = mapping
+            .call
+            .arguments
+            .iter()
+            .map(semantic_literal_kind)
+            .collect::<Vec<_>>();
+        match signatures.entry((&mapping.method_name, mapping.kind)) {
+            Entry::Occupied(entry) if entry.get() != &signature => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "typed lexer semantic helper {} has conflicting literal signatures {:?} and {signature:?}",
+                        mapping.call.name,
+                        entry.get()
+                    ),
+                ));
+            }
+            Entry::Occupied(_) => {}
+            Entry::Vacant(entry) => {
+                entry.insert(signature);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn render_lexer_typed_hook_adapter(
+    type_name: &str,
+    mappings: &[LexerTypedHookMapping],
+) -> String {
+    if mappings.is_empty() {
+        return String::new();
+    }
+    let trait_name = format!("{type_name}Hooks");
+    let adapter_name = format!("{type_name}TypedHooks");
+    let mut methods = BTreeMap::<(String, bool), Vec<SemanticLiteral>>::new();
+    for mapping in mappings {
+        methods
+            .entry((
+                mapping.method_name.clone(),
+                mapping.kind == LexerTypedHookKind::Predicate,
+            ))
+            .or_insert_with(|| mapping.call.arguments.clone());
+    }
+    let method_decls = methods
+        .iter()
+        .map(|((method, predicate), arguments)| {
+            let arguments = render_semantic_method_arguments(arguments);
+            let separator = if arguments.is_empty() { "" } else { ", " };
+            let result = if *predicate { " -> bool" } else { "" };
+            format!(
+                "    fn {method}<I, F>(&mut self, ctx: &mut antlr4_runtime::LexerSemCtx<'_, I, F>{separator}{arguments}){result}\n    where\n        I: antlr4_runtime::CharStream,\n        F: antlr4_runtime::TokenFactory;"
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let predicate_arms = mappings
+        .iter()
+        .filter(|mapping| mapping.kind == LexerTypedHookKind::Predicate)
+        .map(|mapping| {
+            let rule = mapping.rule_index;
+            let index = mapping.coordinate_index;
+            let arguments = render_semantic_call_arguments(&mapping.call.arguments);
+            let separator = if arguments.is_empty() { "" } else { ", " };
+            let method = &mapping.method_name;
+            let call = format!("self.0.{method}(ctx{separator}{arguments})");
+            let call = if mapping.call.negated {
+                format!("!{call}")
+            } else {
+                call
+            };
+            format!("            ({rule}, {index}) => Some({call}),")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let action_arms = mappings
+        .iter()
+        .filter(|mapping| mapping.kind == LexerTypedHookKind::Action)
+        .map(|mapping| {
+            let rule = mapping.rule_index;
+            let index = mapping.coordinate_index;
+            let arguments = render_semantic_call_arguments(&mapping.call.arguments);
+            let separator = if arguments.is_empty() { "" } else { ", " };
+            let method = &mapping.method_name;
+            format!(
+                "            ({rule}, {index}) => {{ self.0.{method}(ctx{separator}{arguments}); true }}"
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!(
+        r#"pub trait {trait_name}: Sized {{
+{method_decls}
+
+    fn token_emitted(&mut self, _token: &antlr4_runtime::CommonToken) {{}}
+}}
+
+#[derive(Clone, Debug, Default)]
+pub struct {adapter_name}<T>(pub T);
+
+impl<T> {adapter_name}<T> {{
+    pub const fn new(inner: T) -> Self {{ Self(inner) }}
+}}
+
+impl<T> antlr4_runtime::SemanticHooks for {adapter_name}<T>
+where
+    T: {trait_name},
+{{
+    fn lexer_sempred<I, F>(&mut self, ctx: &mut antlr4_runtime::LexerSemCtx<'_, I, F>, rule_index: usize, pred_index: usize) -> Option<bool>
+    where
+        I: antlr4_runtime::CharStream,
+        F: antlr4_runtime::TokenFactory,
+    {{
+        match (rule_index, pred_index) {{
+{predicate_arms}
+            _ => None,
+        }}
+    }}
+
+    fn lexer_action<I, F>(&mut self, ctx: &mut antlr4_runtime::LexerSemCtx<'_, I, F>, action: antlr4_runtime::LexerCustomAction) -> bool
+    where
+        I: antlr4_runtime::CharStream,
+        F: antlr4_runtime::TokenFactory,
+    {{
+        let Ok(rule_index) = usize::try_from(action.rule_index()) else {{ return false; }};
+        let Ok(action_index) = usize::try_from(action.action_index()) else {{ return false; }};
+        match (rule_index, action_index) {{
+{action_arms}
+            _ => false,
+        }}
+    }}
+
+    fn lexer_token_emitted(&mut self, token: &antlr4_runtime::CommonToken) {{
+        self.0.token_emitted(token);
+    }}
+}}
+"#
+    )
+}
+
 fn parser_typed_hook_mappings(
     data: &InterpData,
     grammar_source: Option<&str>,
@@ -8603,7 +9238,7 @@ fn parser_typed_hook_mappings(
             predicate_index += 1;
             continue;
         };
-        let helper = bare_predicate_helper_name(block.body);
+        let helper_call = parse_semantic_helper_call(block.body, SemanticsKind::ParserPredicate);
         let forced_hook = patterns
             .coordinate_predicate_template(
                 SemanticsKind::ParserPredicate,
@@ -8612,19 +9247,22 @@ fn parser_typed_hook_mappings(
             )
             .is_some_and(|template| matches!(template, Some(PredicateTemplate::Hook)));
         let parsed = parse_predicate_template_with_patterns(block.body, patterns)?;
-        if let Some(helper) = helper
+        if let Some(call) = helper_call
             && (forced_hook || parsed.is_none() || matches!(parsed, Some(PredicateTemplate::Hook)))
         {
+            let method_name = typed_hook_predicate_method_name(&call.name);
             mappings.push(TypedHookMapping {
                 rule_index,
                 pred_index,
-                method_name: typed_hook_predicate_method_name(&helper),
+                method_name,
+                call,
             });
         }
         predicate_index += 1;
     }
     mappings.sort_by_key(|mapping| (mapping.rule_index, mapping.pred_index));
     mappings.dedup();
+    validate_typed_hook_signatures(&mappings)?;
     Ok(mappings)
 }
 
@@ -8646,21 +9284,69 @@ fn typed_hook_predicate_method_name(helper: &str) -> String {
     }
 }
 
-fn bare_predicate_helper_name(body: &str) -> Option<String> {
-    let body = body.trim();
-    let body = body
-        .strip_prefix("this.")
-        .or_else(|| body.strip_prefix("self."))
-        .unwrap_or(body);
-    let name = body.strip_suffix("()")?;
-    let mut chars = name.chars();
-    let first = chars.next()?;
-    if !(first == '_' || first.is_ascii_alphabetic()) {
-        return None;
+const fn semantic_literal_kind(literal: &SemanticLiteral) -> SemanticLiteralKind {
+    match literal {
+        SemanticLiteral::String(_) => SemanticLiteralKind::String,
+        SemanticLiteral::Bool(_) => SemanticLiteralKind::Bool,
+        SemanticLiteral::Integer(_) => SemanticLiteralKind::Integer,
     }
-    chars
-        .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
-        .then(|| name.to_owned())
+}
+
+fn validate_typed_hook_signatures(mappings: &[TypedHookMapping]) -> io::Result<()> {
+    let mut signatures = BTreeMap::<&str, Vec<SemanticLiteralKind>>::new();
+    for mapping in mappings {
+        let signature = mapping
+            .call
+            .arguments
+            .iter()
+            .map(semantic_literal_kind)
+            .collect::<Vec<_>>();
+        match signatures.entry(&mapping.method_name) {
+            Entry::Occupied(entry) if entry.get() != &signature => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "typed semantic helper {} has conflicting literal signatures {:?} and {signature:?}",
+                        mapping.call.name,
+                        entry.get()
+                    ),
+                ));
+            }
+            Entry::Occupied(_) => {}
+            Entry::Vacant(entry) => {
+                entry.insert(signature);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn render_semantic_method_arguments(arguments: &[SemanticLiteral]) -> String {
+    arguments
+        .iter()
+        .enumerate()
+        .map(|(index, literal)| {
+            let ty = match literal {
+                SemanticLiteral::String(_) => "&str",
+                SemanticLiteral::Bool(_) => "bool",
+                SemanticLiteral::Integer(_) => "i64",
+            };
+            format!("arg{index}: {ty}")
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn render_semantic_call_arguments(arguments: &[SemanticLiteral]) -> String {
+    arguments
+        .iter()
+        .map(|literal| match literal {
+            SemanticLiteral::String(value) => format!("\"{}\"", rust_string(value)),
+            SemanticLiteral::Bool(value) => value.to_string(),
+            SemanticLiteral::Integer(value) => value.to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn render_typed_hook_adapter(type_name: &str, mappings: &[TypedHookMapping]) -> String {
@@ -8669,15 +9355,19 @@ fn render_typed_hook_adapter(type_name: &str, mappings: &[TypedHookMapping]) -> 
     }
     let trait_name = format!("{type_name}Hooks");
     let adapter_name = format!("{type_name}TypedHooks");
-    let mut methods = BTreeSet::new();
+    let mut methods = BTreeMap::new();
     for mapping in mappings {
-        methods.insert(mapping.method_name.clone());
+        methods
+            .entry(mapping.method_name.clone())
+            .or_insert_with(|| mapping.call.arguments.clone());
     }
     let method_decls = methods
         .iter()
-        .map(|method| {
+        .map(|(method, arguments)| {
+            let arguments = render_semantic_method_arguments(arguments);
+            let separator = if arguments.is_empty() { "" } else { ", " };
             format!(
-                "    fn {method}<S>(&mut self, ctx: &mut antlr4_runtime::ParserSemCtx<'_, S>) -> bool\n    where\n        S: TokenSource;"
+                "    fn {method}<S>(&mut self, ctx: &mut antlr4_runtime::ParserSemCtx<'_, S>{separator}{arguments}) -> bool\n    where\n        S: TokenSource;"
             )
         })
         .collect::<Vec<_>>()
@@ -8688,7 +9378,15 @@ fn render_typed_hook_adapter(type_name: &str, mappings: &[TypedHookMapping]) -> 
             let rule_index = mapping.rule_index;
             let pred_index = mapping.pred_index;
             let method = &mapping.method_name;
-            format!("            ({rule_index}, {pred_index}) => Some(self.0.{method}(ctx)),")
+            let arguments = render_semantic_call_arguments(&mapping.call.arguments);
+            let separator = if arguments.is_empty() { "" } else { ", " };
+            let call = format!("self.0.{method}(ctx{separator}{arguments})");
+            let call = if mapping.call.negated {
+                format!("!{call}")
+            } else {
+                call
+            };
+            format!("            ({rule_index}, {pred_index}) => Some({call}),")
         })
         .collect::<Vec<_>>()
         .join("\n");
@@ -11023,6 +11721,7 @@ fragment ID2 : { <Column()> >= 2 }? [a-zA-Z];"#,
             "lexer grammar L;\nA : { <Column()> >= 2 }? [a-z]+ ;\nB : {aheadIsDigit()}? [0-9]+ ;\n",
             &SemPatternFile::default(),
             None,
+            SemanticsKind::LexerPredicate,
         )
         .expect("slot extraction succeeds");
 
@@ -12123,7 +12822,7 @@ lower = "bool(false)"
         )
         .expect("pattern file parses");
         let template = patterns
-            .predicate_template("col == '#'")
+            .predicate_template(SemanticsKind::ParserPredicate, "col == '#'")
             .expect("pattern lookup should not fail")
             .expect("the '#'-bearing match body must be retained");
         assert_eq!(template, PredicateTemplate::False);
@@ -12162,6 +12861,111 @@ lower = "bool(false)"
             Some(Some(PredicateTemplate::False)),
             "single-quoted dispose must resolve to assume-false"
         );
+    }
+
+    #[test]
+    fn semantic_helper_calls_capture_kind_negation_and_literals() {
+        assert_eq!(
+            parse_semantic_helper_call(
+                r#"!this.matches("marker", true, -2)"#,
+                SemanticsKind::LexerPredicate,
+            ),
+            Some(SemanticHelperCall {
+                name: "matches".to_owned(),
+                arguments: vec![
+                    SemanticLiteral::String("marker".to_owned()),
+                    SemanticLiteral::Bool(true),
+                    SemanticLiteral::Integer(-2),
+                ],
+                negated: true,
+            })
+        );
+        assert_eq!(
+            parse_semantic_helper_call(
+                "this.HandleAction();",
+                SemanticsKind::LexerAction,
+            ),
+            Some(SemanticHelperCall {
+                name: "HandleAction".to_owned(),
+                arguments: Vec::new(),
+                negated: false,
+            })
+        );
+        assert!(parse_semantic_helper_call(
+            "this.n(dynamicValue)",
+            SemanticsKind::ParserPredicate,
+        )
+        .is_none());
+        assert_eq!(
+            parse_semantic_helper_call(
+                r"this.n('line\n\'quoted\'')",
+                SemanticsKind::ParserPredicate,
+            )
+            .expect("single-quoted literal parses")
+            .arguments,
+            [SemanticLiteral::String("line\n'quoted'".to_owned())]
+        );
+    }
+
+    #[test]
+    fn semantic_helper_patterns_are_scoped_by_kind_and_signature() {
+        let patterns = parse_sem_patterns(
+            "version = 1\n[[helper]]\nkind = \"lexer-action\"\nname = \"handle\"\nreturns = \"unit\"\nlower = \"hook\"\n[[helper]]\nname = \"n\"\narguments = \"string\"\nreturns = \"bool\"\nlower = \"hook\"\n",
+        )
+        .expect("pattern file parses");
+        assert!(patterns
+            .hook_helper_call(SemanticsKind::LexerAction, "this.handle();")
+            .expect("matching cannot fail")
+            .is_some());
+        assert!(patterns
+            .hook_helper_call(SemanticsKind::LexerPredicate, "this.handle()")
+            .expect("matching cannot fail")
+            .is_none());
+        let call = patterns
+            .hook_helper_call(SemanticsKind::ParserPredicate, r#"this.n("value")"#)
+            .expect("matching cannot fail")
+            .expect("string argument matches");
+        assert_eq!(call.arguments, [SemanticLiteral::String("value".to_owned())]);
+        assert!(patterns
+            .hook_helper_call(SemanticsKind::LexerPredicate, r#"this.n("value")"#)
+            .expect("matching cannot fail")
+            .is_some());
+        assert!(patterns
+            .hook_helper_call(SemanticsKind::LexerAction, r#"this.n("value");"#)
+            .expect("matching cannot fail")
+            .is_none());
+    }
+
+    #[test]
+    fn lexer_typed_hook_signatures_reject_normalized_conflicts() {
+        let mappings = [
+            LexerTypedHookMapping {
+                rule_index: 0,
+                coordinate_index: 0,
+                kind: LexerTypedHookKind::Action,
+                method_name: "handle_value".to_owned(),
+                call: SemanticHelperCall {
+                    name: "HandleValue".to_owned(),
+                    arguments: vec![SemanticLiteral::String("x".to_owned())],
+                    negated: false,
+                },
+            },
+            LexerTypedHookMapping {
+                rule_index: 1,
+                coordinate_index: 0,
+                kind: LexerTypedHookKind::Action,
+                method_name: "handle_value".to_owned(),
+                call: SemanticHelperCall {
+                    name: "handle_value".to_owned(),
+                    arguments: vec![SemanticLiteral::Integer(1)],
+                    negated: false,
+                },
+            },
+        ];
+
+        let error = validate_lexer_typed_hook_signatures(&mappings)
+            .expect_err("conflicting normalized signatures must fail generation");
+        assert!(error.to_string().contains("conflicting literal signatures"));
     }
 
     #[test]
@@ -12904,31 +13708,23 @@ ID : [a-z]+ ;\n";
     }
 
     #[test]
-    fn lexer_per_coordinate_hook_override_is_rejected_under_default_policy() {
-        // A per-coordinate `dispose = "hook"` (or "error") override on a lexer
-        // predicate must fail codegen even under the default global policy:
-        // generated lexers have no hook plumbing, so the manifest must not claim
-        // the coordinate is hooked while the lexer silently keeps it viable.
-        for dispose in ["hook", "error"] {
-            let patterns = parse_sem_patterns(&format!(
-                "version = 1\n[[coordinate]]\nkind = \"lexer-predicate\"\nindex = 0\ndispose = \"{dispose}\"\n"
-            ))
-            .expect("pattern file parses");
-            let error = render_lexer(
-                "SLexer",
-                &predicate_parser_data(),
-                None,
-                false,
-                SemUnknownPolicy::AssumeTrue,
-                &patterns,
-                false,
-            )
-            .expect_err("per-coordinate hook/error lexer override must fail codegen");
-            assert!(
-                error.to_string().contains("lexer predicate"),
-                "dispose {dispose}: {error}"
-            );
-        }
+    fn lexer_per_coordinate_hook_override_routes_to_owned_hooks() {
+        let patterns = parse_sem_patterns(
+            "version = 1\n[[coordinate]]\nkind = \"lexer-predicate\"\nindex = 0\ndispose = \"hook\"\n",
+        )
+        .expect("pattern file parses");
+        let module = render_lexer(
+            "SLexer",
+            &predicate_parser_data(),
+            None,
+            false,
+            SemUnknownPolicy::AssumeTrue,
+            &patterns,
+            false,
+        )
+        .expect("per-coordinate hooks should render generated lexer plumbing");
+        assert!(module.contains("next_token_compiled_with_semantic_dispatch"));
+        assert!(module.contains("=> { None }"));
     }
 
     #[test]
@@ -12955,7 +13751,10 @@ ID : [a-z]+ ;\n";
 
         // The uncovered coordinate now has an explicit `false` predicate arm and
         // the lexer takes the hook-carrying token path (not next_token_compiled).
-        assert!(module.contains("=> { false }"), "override renders a failing arm");
+        assert!(
+            module.contains("=> { Some(false) }"),
+            "override renders a failing arm"
+        );
         assert!(module.contains("run_predicate"));
         assert!(!module.contains("next_token_compiled(&mut self.base, atn(), lexer_dfa())"));
     }
@@ -12993,50 +13792,73 @@ ID : [a-z]+ ;\n";
     }
 
     #[test]
-    fn lexer_hook_and_error_policies_reject_uncovered_predicates() {
-        // Generated lexers have no hook plumbing and no runtime coordinate
-        // recording, so an uncovered lexer predicate under hook/error must fail
-        // codegen rather than be silently marked hooked / kept viable.
-        for policy in [SemUnknownPolicy::Hook, SemUnknownPolicy::Error] {
-            let error = render_lexer(
-                "SLexer",
-                &predicate_parser_data(),
-                None,
-                false,
-                policy,
-                &SemPatternFile::default(),
+    fn lexer_hook_policy_routes_uncovered_predicates_to_owned_hooks() {
+        let module = render_lexer(
+            "SLexer",
+            &predicate_parser_data(),
+            None,
             false,
-            )
-            .expect_err("uncovered lexer predicate must fail under hook/error policy");
-            assert_eq!(error.kind(), io::ErrorKind::InvalidData);
-            let message = error.to_string();
-            assert!(
-                message.contains("lexer predicate") && message.contains("no Rust implementation"),
-                "policy {policy:?} message should explain the uncovered predicate: {message}"
-            );
-        }
+            SemUnknownPolicy::Hook,
+            &SemPatternFile::default(),
+            false,
+        )
+        .expect("hook policy should render generated hook plumbing");
+        assert!(module.contains("next_token_compiled_with_semantic_dispatch"));
+        assert!(module.contains("hooks: H"));
     }
 
     #[test]
-    fn lexer_action_is_never_reported_hooked() {
-        // Generated lexers have no action-hook plumbing, so a lexer action's
-        // disposition must never be `Hooked` (which `--require-full-semantics`
-        // would accept as complete). `hook` degrades to `Ignored`, so strict mode
-        // rejects it instead of silently accepting a dropped action.
-        assert_eq!(
-            lexer_action_disposition(SemanticsDisposition::Hooked),
-            SemanticsDisposition::Ignored
-        );
-        // Every other disposition is preserved unchanged.
-        for disposition in [
-            SemanticsDisposition::Translated,
-            SemanticsDisposition::AssumeTrue,
-            SemanticsDisposition::AssumeFalse,
-            SemanticsDisposition::Error,
-            SemanticsDisposition::Ignored,
-        ] {
-            assert_eq!(lexer_action_disposition(disposition), disposition);
-        }
+    fn hook_disposed_lexer_actions_require_semantic_dispatch() {
+        let coordinates = [(0, 0)];
+        let rule_names = ["A".to_owned()];
+        let no_actions = [];
+
+        assert!(lexer_actions_require_semantic_hooks(
+            &coordinates,
+            &rule_names,
+            &no_actions,
+            &SemPatternFile::default(),
+            SemUnknownPolicy::Hook,
+        ));
+
+        let patterns = parse_sem_patterns(
+            "version = 1\n[[coordinate]]\nkind = \"lexer-action\"\nindex = 0\ndispose = \"hook\"\n",
+        )
+        .expect("pattern file parses");
+        assert!(lexer_actions_require_semantic_hooks(
+            &coordinates,
+            &rule_names,
+            &no_actions,
+            &patterns,
+            SemUnknownPolicy::AssumeTrue,
+        ));
+
+        let translated = [((0, 0), ActionTemplate::LexerPopMode)];
+        assert!(!lexer_actions_require_semantic_hooks(
+            &coordinates,
+            &rule_names,
+            &translated,
+            &SemPatternFile::default(),
+            SemUnknownPolicy::Hook,
+        ));
+    }
+
+    #[test]
+    fn lexer_hook_disposition_is_full_semantics() {
+        let entry = SemanticsEntry {
+            kind: SemanticsKind::LexerAction,
+            rule_index: Some(0),
+            rule_name: Some("A".to_owned()),
+            index: Some(0),
+            atn_state: None,
+            line: None,
+            column: None,
+            body: Some("this.handle();".to_owned()),
+            disposition: SemanticsDisposition::Hooked,
+            template: None,
+        };
+        enforce_require_full_semantics(true, &[entry])
+            .expect("hooked lexer actions are implemented by generated hook plumbing");
     }
 
     #[test]
@@ -13063,17 +13885,17 @@ ID : [a-z]+ ;\n";
         let predicates = [((0_usize, 0_usize), PredicateTemplate::True)];
 
         let assume_true = render_lexer_predicate_method(&predicates, SemUnknownPolicy::AssumeTrue);
-        assert!(assume_true.contains("_ => true,"));
-        assert!(!assume_true.contains("_ => false,"));
+        assert!(assume_true.contains("_ => Some(true),"));
+        assert!(!assume_true.contains("_ => Some(false),"));
 
         let assume_false = render_lexer_predicate_method(&predicates, SemUnknownPolicy::AssumeFalse);
-        assert!(assume_false.contains("_ => false,"));
-        assert!(!assume_false.contains("_ => true,"));
+        assert!(assume_false.contains("_ => Some(false),"));
+        assert!(!assume_false.contains("_ => Some(true),"));
 
         // `error`/`hook` keep the conservative assume-true lexer default that
         // matches historical behavior (lexer fail-loud is a codegen-time error,
         // not a runtime catch-all).
         let error = render_lexer_predicate_method(&predicates, SemUnknownPolicy::Error);
-        assert!(error.contains("_ => true,"));
+        assert!(error.contains("_ => Some(true),"));
     }
 }
