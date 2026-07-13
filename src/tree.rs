@@ -721,11 +721,14 @@ mod tests {
         root.add_child(error);
         let tree = ParseTree::Rule(RuleNode::new(root));
 
-        assert_eq!(tree.children().len(), 2);
-        assert_eq!(tree.children()[0].text(), "terminal");
-        assert_eq!(tree.children()[1].text(), "error");
-        assert!(tree.children()[0].children().is_empty());
-        assert!(tree.children()[1].children().is_empty());
+        let children = tree.children();
+        let [first, second] = children else {
+            panic!("expected exactly 2 children");
+        };
+        assert_eq!(first.text(), "terminal");
+        assert_eq!(second.text(), "error");
+        assert!(first.children().is_empty());
+        assert!(second.children().is_empty());
     }
 
     #[test]
