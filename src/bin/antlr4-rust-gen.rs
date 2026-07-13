@@ -46,13 +46,20 @@ pub use self::__antlr4_rust_generated::*;
 ";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    if env::args()
-        .skip(1)
-        .any(|arg| arg == "--help" || arg == "-h")
-    {
-        let mut stdout = io::stdout().lock();
-        writeln!(stdout, "{}", usage())?;
-        return Ok(());
+    let mut args_iter = env::args().skip(1);
+    while let Some(arg) = args_iter.next() {
+        match arg.as_str() {
+            "--lexer" | "--parser" | "--lexer-name" | "--parser-name" | "--grammar"
+            | "--out-dir" | "--sem-patterns" | "--actions" | "--sem-unknown" => {
+                let _ = args_iter.next();
+            }
+            "--help" | "-h" => {
+                let mut stdout = io::stdout().lock();
+                writeln!(stdout, "{}", usage())?;
+                return Ok(());
+            }
+            _ => {}
+        }
     }
 
     let args = Args::parse()?;

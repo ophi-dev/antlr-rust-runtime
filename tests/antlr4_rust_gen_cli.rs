@@ -42,6 +42,18 @@ fn short_help_exits_successfully_on_stdout() {
 }
 
 #[test]
+fn help_flag_as_option_value_is_not_intercepted() {
+    let output = run_antlr4_rust_gen(&["--lexer-name", "--help"]);
+
+    assert!(!output.status.success(), "stdout: {}", utf8(&output.stdout));
+    assert_eq!(utf8(&output.stdout), "");
+
+    let stderr = utf8(&output.stderr);
+    assert!(stderr.contains("at least one of --lexer or --parser is required"));
+    assert!(stderr.contains("Usage: antlr4-rust-gen"));
+}
+
+#[test]
 fn missing_inputs_still_report_usage_on_stderr() {
     let output = run_antlr4_rust_gen(&[]);
 
