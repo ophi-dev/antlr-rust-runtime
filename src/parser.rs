@@ -472,6 +472,14 @@ where
 /// to the configured [`UnknownSemanticPolicy`]. Predicate hooks may run during
 /// speculative prediction and must be replay-safe.
 pub trait SemanticHooks {
+    /// Whether this hook object may observe parser predicate transitions.
+    ///
+    /// Custom hooks default to conservative predicate handling so the fast
+    /// recognizer does not bypass a `sempred` implementation.
+    fn observes_parser_predicates(&self) -> bool {
+        true
+    }
+
     fn sempred<S>(
         &mut self,
         ctx: &mut ParserSemCtx<'_, S>,
@@ -545,7 +553,11 @@ pub trait SemanticHooks {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct NoSemanticHooks;
 
-impl SemanticHooks for NoSemanticHooks {}
+impl SemanticHooks for NoSemanticHooks {
+    fn observes_parser_predicates(&self) -> bool {
+        false
+    }
+}
 
 /// Parser semantic predicate rendered from a supported target template.
 ///
@@ -1725,6 +1737,7 @@ struct SharedAtnCache {
     state_expected_tokens: FxHashMap<usize, Rc<TokenBitSet>>,
     rule_stop_reach: FxHashMap<usize, bool>,
     observable_action_transitions: Option<bool>,
+    predicate_transitions: Option<bool>,
 }
 
 thread_local! {
@@ -2603,6 +2616,19 @@ fn atn_has_observable_action_transitions(atn: &Atn) -> bool {
                         }
                     )
                 })
+            })
+        })
+    })
+}
+
+fn atn_has_predicate_transitions(atn: &Atn) -> bool {
+    with_shared_atn_caches(atn, |cache| {
+        *cache.predicate_transitions.get_or_insert_with(|| {
+            atn.states().iter().any(|state| {
+                state
+                    .transitions
+                    .iter()
+                    .any(|transition| matches!(transition, Transition::Predicate { .. }))
             })
         })
     })
@@ -5132,6 +5158,8 @@ where
             && return_actions.is_empty()
             && unknown_predicate_policy == UnknownSemanticPolicy::AssumeTrue
             && !atn_has_observable_action_transitions(atn)
+            && (!self.semantic_hooks.observes_parser_predicates()
+                || !atn_has_predicate_transitions(atn))
         {
             return self
                 .parse_atn_rule_with_precedence(atn, rule_index, precedence)
@@ -11337,6 +11365,31 @@ mod tests {
         }
     }
 
+    #[derive(Debug, Default)]
+    struct RejectingPredicateHooks {
+        predicates: Vec<(usize, usize, usize, Option<String>)>,
+    }
+
+    impl SemanticHooks for RejectingPredicateHooks {
+        fn sempred<S>(
+            &mut self,
+            ctx: &mut ParserSemCtx<'_, S>,
+            rule_index: usize,
+            pred_index: usize,
+        ) -> Option<bool>
+        where
+            S: TokenSource,
+        {
+            self.predicates.push((
+                ctx.input_index(),
+                rule_index,
+                pred_index,
+                ctx.token_text(1).map(str::to_owned),
+            ));
+            Some(false)
+        }
+    }
+
     #[test]
     fn semantic_hook_handles_unknown_predicate_before_error_policy() {
         let atn = predicate_after_token_atn();
@@ -11361,6 +11414,31 @@ mod tests {
             .expect("hook supplies the missing predicate result");
 
         assert_eq!(tree.text(), "xy");
+        assert_eq!(
+            parser.semantic_hooks.predicates,
+            vec![(1, 0, 0, Some("y".to_owned()))]
+        );
+    }
+
+    #[test]
+    fn runtime_options_default_preserves_semantic_hook_predicates() {
+        let atn = predicate_after_token_atn();
+        let mut parser = mini_parser_with_hooks(
+            vec![
+                CommonToken::new(1).with_text("x"),
+                CommonToken::new(2).with_text("y"),
+                CommonToken::eof("parser-test", 2, 1, 2),
+            ],
+            RejectingPredicateHooks::default(),
+        );
+
+        let result =
+            parser.parse_atn_rule_with_runtime_options(&atn, 0, ParserRuntimeOptions::default());
+
+        assert!(
+            result.is_err(),
+            "default runtime options must not bypass semantic hooks for predicate ATNs"
+        );
         assert_eq!(
             parser.semantic_hooks.predicates,
             vec![(1, 0, 0, Some("y".to_owned()))]
