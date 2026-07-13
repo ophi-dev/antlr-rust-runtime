@@ -63,7 +63,7 @@ GEN_DIR="$SCRIPT_DIR/dumper/src/generated"
 mkdir -p "$GEN_DIR"
 cp "$WORK_DIR/rust-lexer/type_script_lexer.rs" \
     "$WORK_DIR/rust-parser/type_script_parser.rs" "$GEN_DIR/"
-cargo build --quiet --locked --release --manifest-path "$SCRIPT_DIR/dumper/Cargo.toml"
+cargo build --quiet --release --manifest-path "$SCRIPT_DIR/dumper/Cargo.toml"
 RUST_DUMPER="$SCRIPT_DIR/dumper/target/release/typescript-parity-dumper"
 JAVA_CLASSPATH="$ANTLR4_JAR:$WORK_DIR/java-classes"
 

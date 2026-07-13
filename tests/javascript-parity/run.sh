@@ -72,7 +72,7 @@ GEN_DIR="$SCRIPT_DIR/dumper/src/generated"
 mkdir -p "$GEN_DIR"
 cp "$WORK_DIR/rust-lexer/java_script_lexer.rs" \
     "$WORK_DIR/rust-parser/java_script_parser.rs" "$GEN_DIR/"
-cargo build --quiet --locked --release --manifest-path "$SCRIPT_DIR/dumper/Cargo.toml"
+cargo build --quiet --release --manifest-path "$SCRIPT_DIR/dumper/Cargo.toml"
 DUMPER="$SCRIPT_DIR/dumper/target/release/javascript-parity-dumper"
 
 for snippet in "$SCRIPT_DIR"/snippets/*.js; do
