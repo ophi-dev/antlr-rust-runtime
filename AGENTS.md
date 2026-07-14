@@ -108,3 +108,10 @@ Per-case scratch crates land under `target/antlr-runtime-testsuite/<case>/`. Sta
 ## CI parity
 
 CI runs `cargo clippy --locked --all-targets --all-features -- -D warnings`, so reproduce locally with the same flags before pushing — `clippy::excessive-nesting`, `clippy::disallowed_types`, and similar nursery/pedantic lints all promote to errors there.
+
+Run `cargo fmt` on files you touched before committing so formatting-only churn
+doesn't ride along with logic changes (and never bulk-`cargo fmt` unrelated files
+in a logic commit). Hand-grouped data — e.g. the positional serialized-ATN
+fixtures in `src/atn/lexer_dfa.rs`, laid out one record-per-line to mirror the
+ANTLR layout — carries `#[rustfmt::skip]`; leave those attributes in place rather
+than letting fmt explode the block to one element per line.

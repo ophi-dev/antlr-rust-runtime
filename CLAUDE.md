@@ -11,6 +11,13 @@ CI's clippy runs with the same `-D warnings` and promotes nursery/pedantic lints
 (`clippy::excessive-nesting`, `clippy::disallowed_types`, …) to errors — reproduce
 locally before pushing.
 
+Run `cargo fmt` on files you touched before committing so formatting-only churn
+doesn't ride along with logic changes (and never bulk-`cargo fmt` unrelated files
+in a logic commit). Hand-grouped data — e.g. the positional serialized-ATN
+fixtures in `src/atn/lexer_dfa.rs`, laid out one record-per-line to mirror the
+ANTLR layout — carries `#[rustfmt::skip]`; leave those attributes in place rather
+than letting fmt explode the block to one element per line.
+
 ## Source layout
 
 - `src/lib.rs` — public exports
