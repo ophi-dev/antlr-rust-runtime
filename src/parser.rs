@@ -3048,8 +3048,29 @@ where
 /// truly matched, matching ANTLR's `matchedEOF` semantics.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GeneratedMatch {
-    children: Vec<ParseTree>,
+    children: GeneratedMatchChildren,
     consumed_eof: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum GeneratedMatchChildren {
+    One(ParseTree),
+    Many(Vec<ParseTree>),
+}
+
+struct GeneratedMatchChildrenIntoIter {
+    one: Option<ParseTree>,
+    many: Option<std::vec::IntoIter<ParseTree>>,
+}
+
+impl Iterator for GeneratedMatchChildrenIntoIter {
+    type Item = ParseTree;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.one
+            .take()
+            .or_else(|| self.many.as_mut().and_then(Iterator::next))
+    }
 }
 
 impl GeneratedMatch {
@@ -3058,14 +3079,34 @@ impl GeneratedMatch {
     /// error node).
     #[must_use]
     pub fn children(&self) -> &[ParseTree] {
-        &self.children
+        match &self.children {
+            GeneratedMatchChildren::One(child) => std::slice::from_ref(child),
+            GeneratedMatchChildren::Many(children) => children,
+        }
     }
 
     /// Consumes the result, returning the children for appending to the rule
     /// context.
     #[must_use]
     pub fn into_children(self) -> Vec<ParseTree> {
-        self.children
+        match self.children {
+            GeneratedMatchChildren::One(child) => vec![child],
+            GeneratedMatchChildren::Many(children) => children,
+        }
+    }
+
+    /// Consumes the match without allocating for the common single-child case.
+    pub fn into_child_iter(self) -> impl Iterator<Item = ParseTree> {
+        match self.children {
+            GeneratedMatchChildren::One(child) => GeneratedMatchChildrenIntoIter {
+                one: Some(child),
+                many: None,
+            },
+            GeneratedMatchChildren::Many(children) => GeneratedMatchChildrenIntoIter {
+                one: None,
+                many: Some(children.into_iter()),
+            },
+        }
     }
 
     /// Whether a real EOF terminal was consumed by this match.
@@ -3460,7 +3501,9 @@ where
             let consumed_eof = current.token_type() == TOKEN_EOF;
             self.consume();
             return Ok(GeneratedMatch {
-                children: vec![ParseTree::Terminal(TerminalNode::from_ref(current))],
+                children: GeneratedMatchChildren::One(ParseTree::Terminal(TerminalNode::from_ref(
+                    current,
+                ))),
                 consumed_eof,
             });
         }
@@ -3494,7 +3537,9 @@ where
             let consumed_eof = current.token_type() == TOKEN_EOF;
             self.consume();
             return Ok(GeneratedMatch {
-                children: vec![ParseTree::Terminal(TerminalNode::from_ref(current))],
+                children: GeneratedMatchChildren::One(ParseTree::Terminal(TerminalNode::from_ref(
+                    current,
+                ))),
                 consumed_eof,
             });
         }
@@ -3531,7 +3576,9 @@ where
             let consumed_eof = current.token_type() == TOKEN_EOF;
             self.consume();
             return Ok(GeneratedMatch {
-                children: vec![ParseTree::Terminal(TerminalNode::from_ref(current))],
+                children: GeneratedMatchChildren::One(ParseTree::Terminal(TerminalNode::from_ref(
+                    current,
+                ))),
                 consumed_eof,
             });
         }
@@ -3585,10 +3632,10 @@ where
             self.consume();
             self.consume();
             return Ok(GeneratedMatch {
-                children: vec![
+                children: GeneratedMatchChildren::Many(vec![
                     ParseTree::Error(ErrorNode::new(current)),
                     ParseTree::Terminal(TerminalNode::new(next)),
-                ],
+                ]),
                 consumed_eof,
             });
         }
@@ -3631,7 +3678,7 @@ where
             // EOF. Reporting consumed_eof=false here is what keeps `finish_rule`
             // from recording EOF as the rule stop on this recovery path.
             return Ok(GeneratedMatch {
-                children: vec![ParseTree::Error(ErrorNode::new(token))],
+                children: GeneratedMatchChildren::One(ParseTree::Error(ErrorNode::new(token))),
                 consumed_eof: false,
             });
         }
@@ -3975,28 +4022,25 @@ where
         self.exit_rule();
     }
 
-    /// Checks whether a generated left-recursive loop has an operator
-    /// alternative that can start at the current token under the active
-    /// precedence. The operator block still performs adaptive prediction; this
-    /// guard only decides whether the loop should enter or exit.
-    pub fn left_recursive_loop_enter_matches(
+    /// Predicts a generated left-recursive loop from one-token lookahead.
+    ///
+    /// `Some(true)` enters the operator alternative, `Some(false)` exits, and
+    /// `None` means the caller can consume the same symbol so full-context
+    /// adaptive prediction must break the ambiguity.
+    pub fn left_recursive_loop_enter_prediction(
         &mut self,
         atn: &Atn,
         state_number: usize,
         precedence: i32,
-    ) -> bool {
+    ) -> Option<bool> {
         let symbol = self.la(1);
         if symbol == TOKEN_EOF {
-            return false;
+            return Some(false);
         }
         let Some(state) = atn.state(state_number) else {
-            return false;
+            return Some(false);
         };
-        let context = self.prediction_context(atn);
-        if context_can_match_symbol_before_state(atn, &context, state_number, symbol) {
-            return false;
-        }
-        state.transitions.iter().any(|transition| {
+        let operator_matches = state.transitions.iter().any(|transition| {
             let target = transition.target();
             if atn
                 .state(target)
@@ -4011,7 +4055,26 @@ where
                 precedence,
                 &mut BTreeSet::new(),
             )
-        })
+        });
+        if !operator_matches {
+            return Some(false);
+        }
+        let context = self.prediction_context(atn);
+        if context_can_match_symbol_before_state(atn, &context, state_number, symbol) {
+            return None;
+        }
+        Some(true)
+    }
+
+    /// Checks whether a generated left-recursive loop can unambiguously enter
+    /// its operator alternative from one-token lookahead.
+    pub fn left_recursive_loop_enter_matches(
+        &mut self,
+        atn: &Atn,
+        state_number: usize,
+        precedence: i32,
+    ) -> bool {
+        self.left_recursive_loop_enter_prediction(atn, state_number, precedence) == Some(true)
     }
 
     /// Implements generated `precpred(_ctx, k)` checks.
@@ -9816,6 +9879,113 @@ mod tests {
         )
     }
 
+    fn left_recursive_loop_with_caller_follow_atn(caller_symbol: i32) -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 2);
+        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
+        atn.add_state(AtnState::new(1, AtnStateKind::Basic).with_rule_index(0));
+        atn.add_state(AtnState::new(2, AtnStateKind::Basic).with_rule_index(0));
+        let mut callee_start = AtnState::new(3, AtnStateKind::RuleStart).with_rule_index(1);
+        callee_start.left_recursive_rule = true;
+        atn.add_state(callee_start);
+        let mut loop_entry = AtnState::new(4, AtnStateKind::StarLoopEntry).with_rule_index(1);
+        loop_entry.precedence_rule_decision = true;
+        atn.add_state(loop_entry);
+        atn.add_state(AtnState::new(5, AtnStateKind::Basic).with_rule_index(1));
+        atn.add_state(AtnState::new(6, AtnStateKind::Basic).with_rule_index(1));
+        atn.add_state(AtnState::new(7, AtnStateKind::LoopEnd).with_rule_index(1));
+        atn.add_state(AtnState::new(8, AtnStateKind::RuleStop).with_rule_index(1));
+        atn.add_state(AtnState::new(9, AtnStateKind::RuleStop).with_rule_index(0));
+        atn.set_rule_to_start_state(vec![0, 3]);
+        atn.set_rule_to_stop_state(vec![9, 8]);
+        atn.state_mut(1)
+            .expect("caller invoking state")
+            .add_transition(Transition::Rule {
+                target: 3,
+                rule_index: 1,
+                follow_state: 2,
+                precedence: 0,
+            });
+        atn.state_mut(2)
+            .expect("caller follow")
+            .add_transition(Transition::Atom {
+                target: 9,
+                label: caller_symbol,
+            });
+        atn.state_mut(4)
+            .expect("precedence loop")
+            .add_transition(Transition::Epsilon { target: 5 });
+        atn.state_mut(4)
+            .expect("precedence loop")
+            .add_transition(Transition::Epsilon { target: 7 });
+        atn.state_mut(5)
+            .expect("precedence predicate")
+            .add_transition(Transition::Precedence {
+                target: 6,
+                precedence: 1,
+            });
+        atn.state_mut(6)
+            .expect("operator token")
+            .add_transition(Transition::Atom {
+                target: 4,
+                label: 1,
+            });
+        atn.state_mut(7)
+            .expect("loop exit")
+            .add_transition(Transition::Epsilon { target: 8 });
+        atn
+    }
+
+    fn parser_inside_left_recursive_callee(symbol: i32) -> BaseParser<Source> {
+        let mut parser = mini_parser(vec![
+            CommonToken::new(symbol).with_text("lookahead"),
+            CommonToken::eof("parser-test", 1, 1, 1),
+        ]);
+        parser.rule_context_stack = vec![
+            RuleContextFrame {
+                rule_index: 0,
+                invoking_state: -1,
+            },
+            RuleContextFrame {
+                rule_index: 1,
+                invoking_state: 1,
+            },
+        ];
+        parser
+    }
+
+    #[test]
+    fn left_recursive_loop_defers_overlapping_caller_lookahead() {
+        let mut overlapping = parser_inside_left_recursive_callee(1);
+        assert_eq!(
+            overlapping.left_recursive_loop_enter_prediction(
+                &left_recursive_loop_with_caller_follow_atn(1),
+                4,
+                0,
+            ),
+            None
+        );
+
+        let mut unambiguous_enter = parser_inside_left_recursive_callee(1);
+        assert_eq!(
+            unambiguous_enter.left_recursive_loop_enter_prediction(
+                &left_recursive_loop_with_caller_follow_atn(2),
+                4,
+                0,
+            ),
+            Some(true)
+        );
+
+        let mut unambiguous_exit = parser_inside_left_recursive_callee(2);
+        assert_eq!(
+            unambiguous_exit.left_recursive_loop_enter_prediction(
+                &left_recursive_loop_with_caller_follow_atn(2),
+                4,
+                0,
+            ),
+            Some(false)
+        );
+    }
+
     fn token_then_eof_atn() -> Atn {
         AtnDeserializer::new(&SerializedAtn::from_i32(&[
             4, 1, 2, // version, parser, max token type
@@ -10570,6 +10740,13 @@ mod tests {
 
         assert_eq!(node.children().len(), 1);
         assert_eq!(node.children()[0].text(), "<missing 'Y'>");
+        assert_eq!(
+            node.clone()
+                .into_child_iter()
+                .map(|child| child.text())
+                .collect::<Vec<_>>(),
+            ["<missing 'Y'>"]
+        );
         // Single-token insertion synthesizes a missing token and consumes nothing,
         // so no EOF terminal is consumed even though lookahead is EOF.
         assert!(!node.consumed_eof());
@@ -10616,7 +10793,48 @@ mod tests {
         assert!(matches!(node.children()[0], ParseTree::Error(_)));
         assert_eq!(node.children()[0].text(), "z");
         assert_eq!(node.children()[1].text(), "y");
+        assert_eq!(
+            node.into_child_iter()
+                .map(|child| child.text())
+                .collect::<Vec<_>>(),
+            ["z", "y"]
+        );
         assert_eq!(parser.number_of_syntax_errors(), 1);
+    }
+
+    #[test]
+    fn generated_match_token_iterates_single_success_without_a_children_vec() {
+        let atn = generated_match_recovery_atn();
+        let data = RecognizerData::new(
+            "Mini.g4",
+            Vocabulary::new(
+                [None, Some("'X'"), Some("'Y'")],
+                [None, Some("X"), Some("Y")],
+                [None::<&str>, None, None],
+            ),
+        );
+        let mut parser = BaseParser::new(
+            CommonTokenStream::new(Source {
+                tokens: vec![
+                    CommonToken::new(2).with_text("y"),
+                    CommonToken::eof("parser-test", 1, 1, 1),
+                ],
+                index: 0,
+            }),
+            data,
+        );
+
+        let node = parser
+            .match_token_recovering(2, 5, &atn)
+            .expect("generated match should consume the expected token");
+
+        assert_eq!(
+            node.into_child_iter()
+                .map(|child| child.text())
+                .collect::<Vec<_>>(),
+            ["y"]
+        );
+        assert_eq!(parser.number_of_syntax_errors(), 0);
     }
 
     #[test]

@@ -75,6 +75,8 @@ pub(crate) struct RuleModel {
     /// Args, returns and locals, flattened (names are unique per rule in the
     /// runtime testsuite corpus).
     pub(crate) attrs: Vec<AttrDecl>,
+    /// Names declared specifically by the rule's `locals [...]` clause.
+    pub(crate) local_names: Vec<String>,
     /// Names of the attrs that come from the `[...]` args clause, in order —
     /// call sites initialize these positionally (`a[2]`).
     pub(crate) arg_names: Vec<String>,
@@ -160,7 +162,7 @@ fn map_attr_type(raw: &str) -> String {
 fn parse_attr_decls(clause: &str) -> Vec<AttrDecl> {
     let mut decls = Vec::new();
     for part in split_top_level(clause, ',') {
-        let part = part.trim();
+        let part = strip_default_initializer(part.trim());
         if part.is_empty() {
             continue;
         }
@@ -177,6 +179,20 @@ fn parse_attr_decls(clause: &str) -> Vec<AttrDecl> {
         }
     }
     decls
+}
+
+/// Removes a raw grammar initializer when it is the type's Rust `Default`.
+///
+/// Embedded attrs are initialized through `Default::default()`, so retaining
+/// explicit `false` / zero initializers would only prevent the declaration
+/// parser from recognizing otherwise portable ANTLR rule locals.
+fn strip_default_initializer(part: &str) -> &str {
+    let Some((declaration, value)) = part.rsplit_once('=') else {
+        return part;
+    };
+    matches!(value.trim(), "false" | "0")
+        .then_some(declaration.trim_end())
+        .unwrap_or(part)
 }
 
 /// Splits `name: type`, tolerating generic types containing `:` (`Vec<T>` has
@@ -446,7 +462,12 @@ fn parse_rule_header_clauses(
             let clause = &header[offset + 1..close];
             let decls = parse_attr_decls(clause);
             match pending_keyword.take() {
-                Some("returns" | "locals") => rule.attrs.extend(decls),
+                Some("locals") => {
+                    rule.local_names
+                        .extend(decls.iter().map(|decl| decl.name.clone()));
+                    rule.attrs.extend(decls);
+                }
+                Some("returns") => rule.attrs.extend(decls),
                 _ => {
                     for decl in &decls {
                         rule.arg_names.push(decl.name.clone());
@@ -1209,6 +1230,28 @@ mod tests {
         assert_eq!(m.rules[1].alts[0].refs.len(), 2);
         assert_eq!(m.rules[1].alts[0].refs[0].label.as_deref(), Some("a"));
         assert_eq!(m.rules[1].alts[0].refs[1].label.as_deref(), Some("b"));
+    }
+
+    #[test]
+    fn parses_raw_default_valued_rule_locals() {
+        let model = parse_embedded_rules_model(
+            "parser grammar T;\ns locals [boolean seen=false, int count = 0] : ;",
+            &["s".to_owned()],
+        );
+
+        assert_eq!(
+            model.rules[0].attrs,
+            [
+                AttrDecl {
+                    name: "seen".to_owned(),
+                    ty: "bool".to_owned(),
+                },
+                AttrDecl {
+                    name: "count".to_owned(),
+                    ty: "i32".to_owned(),
+                },
+            ]
+        );
     }
 
     #[test]

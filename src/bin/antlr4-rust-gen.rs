@@ -942,6 +942,10 @@ fn collect_parser_semantics(
     patterns: &SemPatternFile,
 ) -> io::Result<Vec<SemanticsEntry>> {
     let mut entries = Vec::new();
+    let portable_locals = grammar_source
+        .map(|source| build_portable_local_data(data, source, patterns))
+        .transpose()?
+        .unwrap_or_default();
 
     let predicate_coordinates = lexer_predicate_transitions(data)?;
     if !predicate_coordinates.is_empty() {
@@ -975,8 +979,18 @@ fn collect_parser_semantics(
                         Some(pred_index),
                         None,
                     )
-                    .unwrap_or_else(|| predicate_template_disposition(template, policy)),
-                template: template.map(|template| format!("{template:?}")),
+                    .unwrap_or_else(|| {
+                        if portable_locals.predicates.contains_key(coordinate) {
+                            SemanticsDisposition::Translated
+                        } else {
+                            predicate_template_disposition(template, policy)
+                        }
+                    }),
+                template: portable_locals
+                    .predicates
+                    .contains_key(coordinate)
+                    .then(|| "PortableBooleanLocal".to_owned())
+                    .or_else(|| template.map(|template| format!("{template:?}"))),
             });
         }
     }
@@ -1029,7 +1043,11 @@ fn collect_parser_semantics(
                         Some(*state),
                     )
                     .unwrap_or_else(|| {
-                        if synthetic_states.contains(state) || empty_action_states.contains(state) {
+                        if portable_locals.inline_actions.contains_key(state) {
+                            SemanticsDisposition::Translated
+                        } else if synthetic_states.contains(state)
+                            || empty_action_states.contains(state)
+                        {
                             // ANTLR-synthesized actions and authored empty action
                             // bodies are no-op states exempt from the error gate.
                             SemanticsDisposition::Synthetic
@@ -1037,7 +1055,10 @@ fn collect_parser_semantics(
                             policy.unknown_action_disposition()
                         }
                     }),
-                template: None,
+                template: portable_locals
+                    .inline_actions
+                    .contains_key(state)
+                    .then(|| "PortableBooleanLocal".to_owned()),
             });
         }
     }
@@ -2378,9 +2399,17 @@ impl EmbeddedStepRender<'_> {
 }
 
 #[derive(Clone, Copy)]
+struct PortableLocalStepRender<'a> {
+    declarations: &'a [Vec<String>],
+    predicates: &'a BTreeMap<(usize, usize), String>,
+}
+
+#[derive(Clone, Copy)]
 struct GeneratedStepRenderContext<'a> {
     /// `Some` in embedded mode: actions/predicates are verbatim Rust.
     embedded: Option<EmbeddedStepRender<'a>>,
+    /// Portable raw-grammar boolean locals translated without embedded mode.
+    portable_locals: Option<PortableLocalStepRender<'a>>,
     inline_action_statements: &'a BTreeMap<usize, String>,
     track_alt_numbers: bool,
     direct_generated_rule_calls: &'a [bool],
@@ -3771,9 +3800,11 @@ fn render_generated_rule_dispatch(
         inline_action_statements,
         track_alt_numbers,
         None,
+        None,
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_generated_rule_dispatch_with_rule_names(
     rules: &[Option<GeneratedParserRule>],
     direct_generated_rule_calls: &[bool],
@@ -3781,6 +3812,7 @@ fn render_generated_rule_dispatch_with_rule_names(
     inline_action_statements: &BTreeMap<usize, String>,
     track_alt_numbers: bool,
     embedded: Option<EmbeddedStepRender<'_>>,
+    portable_locals: Option<PortableLocalStepRender<'_>>,
 ) -> String {
     let mut out = String::new();
     let atn_preferred_rule_calls = generated_atn_preferred_rule_calls(rules, rule_names);
@@ -3817,6 +3849,7 @@ fn render_generated_rule_dispatch_with_rule_names(
     writeln!(out, "    }}").expect("writing to a string cannot fail");
     let step_render_context = GeneratedStepRenderContext {
         embedded,
+        portable_locals,
         inline_action_statements,
         track_alt_numbers,
         direct_generated_rule_calls,
@@ -3847,6 +3880,23 @@ fn render_generated_rule_dispatch_with_rule_names(
         render_generated_rule_method(&mut out, rule, step_render_context);
     }
     out
+}
+
+fn render_portable_local_declarations(
+    out: &mut String,
+    rule_index: usize,
+    step_render_context: GeneratedStepRenderContext<'_>,
+) {
+    let Some(portable) = step_render_context.portable_locals else {
+        return;
+    };
+    let Some(declarations) = portable.declarations.get(rule_index) else {
+        return;
+    };
+    for declaration in declarations {
+        writeln!(out, "        #[allow(unused_mut)]\n        {declaration}")
+            .expect("writing to a string cannot fail");
+    }
 }
 
 /// Declares the embedded per-rule attrs local (`__attrs`) on rule entry.
@@ -3967,6 +4017,7 @@ fn render_generated_rule_method(
         "        let __rule_start = antlr4_runtime::IntStream::index(self.base.input());"
     )
     .expect("writing to a string cannot fail");
+    render_portable_local_declarations(out, index, step_render_context);
     render_embedded_attrs_local(out, index, step_render_context);
     render_embedded_init_entry(out, index, step_render_context);
     writeln!(out, "        let mut __consumed_eof = false;")
@@ -4102,6 +4153,7 @@ fn render_generated_left_recursive_rule_method(
         "        let __rule_start = antlr4_runtime::IntStream::index(self.base.input());"
     )
     .expect("writing to a string cannot fail");
+    render_portable_local_declarations(out, index, step_render_context);
     render_embedded_attrs_local(out, index, step_render_context);
     render_embedded_init_entry(out, index, step_render_context);
     writeln!(out, "        let mut __consumed_eof = false;")
@@ -4226,7 +4278,7 @@ fn render_generated_step(
                 .expect("writing to a string cannot fail");
             writeln!(
                 out,
-                "{pad}for __child in __match.into_children() {{ self.base.add_parse_child(&mut __ctx, __child); }}"
+                "{pad}for __child in __match.into_child_iter() {{ self.base.add_parse_child(&mut __ctx, __child); }}"
             )
             .expect("writing to a string cannot fail");
         }
@@ -4244,7 +4296,7 @@ fn render_generated_step(
                 .expect("writing to a string cannot fail");
             writeln!(
                 out,
-                "{pad}for __child in __match.into_children() {{ self.base.add_parse_child(&mut __ctx, __child); }}"
+                "{pad}for __child in __match.into_child_iter() {{ self.base.add_parse_child(&mut __ctx, __child); }}"
             )
             .expect("writing to a string cannot fail");
         }
@@ -4262,7 +4314,7 @@ fn render_generated_step(
                 .expect("writing to a string cannot fail");
             writeln!(
                 out,
-                "{pad}for __child in __match.into_children() {{ self.base.add_parse_child(&mut __ctx, __child); }}"
+                "{pad}for __child in __match.into_child_iter() {{ self.base.add_parse_child(&mut __ctx, __child); }}"
             )
             .expect("writing to a string cannot fail");
         }
@@ -4281,7 +4333,7 @@ fn render_generated_step(
                 .expect("writing to a string cannot fail");
             writeln!(
                 out,
-                "{pad}for __child in __match.into_children() {{ self.base.add_parse_child(&mut __ctx, __child); }}"
+                "{pad}for __child in __match.into_child_iter() {{ self.base.add_parse_child(&mut __ctx, __child); }}"
             )
             .expect("writing to a string cannot fail");
         }
@@ -4299,6 +4351,20 @@ fn render_generated_step(
             rule_index,
             pred_index,
         } => {
+            if let Some(condition) = render_context
+                .portable_locals
+                .and_then(|portable| portable.predicates.get(&(*rule_index, *pred_index)))
+            {
+                writeln!(out, "{pad}if !({condition}) {{")
+                    .expect("writing to a string cannot fail");
+                writeln!(
+                    out,
+                    "{pad}    return Err(self.base.failed_predicate_error(\"semantic predicate\"));"
+                )
+                .expect("writing to a string cannot fail");
+                writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
+                return;
+            }
             if let Some(embedded) = render_context.embedded {
                 let (condition, message) =
                     embedded_predicate_condition_and_message(&embedded, *rule_index, *pred_index);
@@ -4583,13 +4649,20 @@ fn render_generated_decision(
         }
     }
     if allow_semantic_context {
-        render_generated_semantic_prediction_filter(out, &pad, alts, render_context.embedded);
+        render_generated_semantic_prediction_filter(
+            out,
+            &pad,
+            alts,
+            render_context.embedded,
+            render_context.portable_locals,
+        );
         render_generated_decision_diagnostic_report(
             out,
             &pad,
             state,
             alts,
             render_context.embedded,
+            render_context.portable_locals,
         );
     } else {
         writeln!(
@@ -4671,10 +4744,13 @@ fn render_generated_decision_diagnostic_report(
     state: usize,
     alts: &[Vec<GeneratedParserStep>],
     embedded: Option<EmbeddedStepRender<'_>>,
+    portable: Option<PortableLocalStepRender<'_>>,
 ) {
     let alt_conditions = alts
         .iter()
-        .map(|steps| semantic_alt_candidate_condition_with_la(steps, "__diagnostic_la", embedded))
+        .map(|steps| {
+            semantic_alt_candidate_condition_with_la(steps, "__diagnostic_la", embedded, portable)
+        })
         .collect::<Vec<_>>();
     if alt_conditions
         .iter()
@@ -4708,6 +4784,7 @@ fn render_generated_semantic_prediction_filter(
     pad: &str,
     alts: &[Vec<GeneratedParserStep>],
     embedded: Option<EmbeddedStepRender<'_>>,
+    portable: Option<PortableLocalStepRender<'_>>,
 ) {
     let alt_has_predicates = alts
         .iter()
@@ -4721,7 +4798,7 @@ fn render_generated_semantic_prediction_filter(
     }
     let alt_conditions = alts
         .iter()
-        .map(|steps| semantic_alt_candidate_condition(steps, embedded))
+        .map(|steps| semantic_alt_candidate_condition(steps, embedded, portable))
         .collect::<Vec<_>>();
     writeln!(
         out,
@@ -4843,14 +4920,16 @@ fn embedded_predicate_condition_and_message(
 fn semantic_alt_candidate_condition(
     steps: &[GeneratedParserStep],
     embedded: Option<EmbeddedStepRender<'_>>,
+    portable: Option<PortableLocalStepRender<'_>>,
 ) -> String {
-    semantic_alt_candidate_condition_with_la(steps, "__semantic_la", embedded)
+    semantic_alt_candidate_condition_with_la(steps, "__semantic_la", embedded, portable)
 }
 
 fn semantic_alt_candidate_condition_with_la(
     steps: &[GeneratedParserStep],
     la_symbol: &str,
     embedded: Option<EmbeddedStepRender<'_>>,
+    portable: Option<PortableLocalStepRender<'_>>,
 ) -> String {
     // Order matters: the lookahead guard comes FIRST so `&&` short-circuits on it
     // before any predicate hook runs. Otherwise, searching alternatives in a
@@ -4866,6 +4945,11 @@ fn semantic_alt_candidate_condition_with_la(
     }
     conditions.extend(leading_predicates(steps).into_iter().map(
         |(rule_index, pred_index)| {
+            if let Some(condition) = portable.and_then(|portable| {
+                portable.predicates.get(&(rule_index, pred_index))
+            }) {
+                return format!("({condition})");
+            }
             embedded.map_or_else(
                 || {
                     format!(
@@ -5201,6 +5285,7 @@ fn render_generated_star_loop(
         exit_alt,
         body,
         render_context.embedded,
+        render_context.portable_locals,
     );
     writeln!(
         out,
@@ -5259,62 +5344,125 @@ fn render_generated_left_recursive_loop(
         "{pad}    let __decision_start = antlr4_runtime::IntStream::index(self.base.input());"
     )
     .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "{pad}    let __prediction_precedence = if __precedence <= 0 {{ 0 }} else {{ __precedence as usize }};"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(out, "{pad}    let __prediction = match {{").expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "{pad}        let __prediction_context = self.base.prediction_context(atn());"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "{pad}        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "{pad}        __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "{pad}        __simulator.adaptive_predict_stream_info_with_context({decision}, __prediction_precedence, self.base.input(), &__prediction_context)"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(out, "{pad}    }} {{").expect("writing to a string cannot fail");
-    writeln!(out, "{pad}        Ok(__prediction) => __prediction,")
+    if render_context.embedded.is_some() {
+        writeln!(
+            out,
+            "{pad}    let __prediction_precedence = if __precedence <= 0 {{ 0 }} else {{ __precedence as usize }};"
+        )
         .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "{pad}        Err(antlr4_runtime::ParserAtnSimulatorError::NoViableAlt {{ .. }}) if self.base.left_recursive_loop_enter_matches(atn(), {state}, __precedence) => {{"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "{pad}            antlr4_runtime::ParserAtnPrediction {{ alt: {enter_alt}, requires_full_context: true, has_semantic_context: true, diagnostic: None }}"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "{pad}        Err(antlr4_runtime::ParserAtnSimulatorError::NoViableAlt {{ .. }}) => {{"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "{pad}            antlr4_runtime::ParserAtnPrediction {{ alt: {exit_alt}, requires_full_context: true, has_semantic_context: false, diagnostic: None }}"
-    )
-    .expect("writing to a string cannot fail");
-    writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
-    writeln!(
-        out,
-        "{pad}        Err(_) => return Err(self.base.no_viable_alternative_error(__decision_start)),"
-    )
-    .expect("writing to a string cannot fail");
+        writeln!(out, "{pad}    let __prediction = match {{")
+            .expect("writing to a string cannot fail");
+        writeln!(
+            out,
+            "{pad}        let __prediction_context = self.base.prediction_context(atn());"
+        )
+        .expect("writing to a string cannot fail");
+        writeln!(
+            out,
+            "{pad}        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));"
+        )
+        .expect("writing to a string cannot fail");
+        writeln!(
+            out,
+            "{pad}        __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);"
+        )
+        .expect("writing to a string cannot fail");
+        writeln!(
+            out,
+            "{pad}        __simulator.adaptive_predict_stream_info_with_context({decision}, __prediction_precedence, self.base.input(), &__prediction_context)"
+        )
+        .expect("writing to a string cannot fail");
+        writeln!(out, "{pad}    }} {{").expect("writing to a string cannot fail");
+        writeln!(out, "{pad}        Ok(__prediction) => __prediction,")
+            .expect("writing to a string cannot fail");
+        writeln!(
+            out,
+            "{pad}        Err(antlr4_runtime::ParserAtnSimulatorError::NoViableAlt {{ .. }}) if self.base.left_recursive_loop_enter_matches(atn(), {state}, __precedence) => {{"
+        )
+        .expect("writing to a string cannot fail");
+        writeln!(
+            out,
+            "{pad}            antlr4_runtime::ParserAtnPrediction {{ alt: {enter_alt}, requires_full_context: true, has_semantic_context: true, diagnostic: None }}"
+        )
+        .expect("writing to a string cannot fail");
+        writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
+        writeln!(
+            out,
+            "{pad}        Err(antlr4_runtime::ParserAtnSimulatorError::NoViableAlt {{ .. }}) => {{"
+        )
+        .expect("writing to a string cannot fail");
+        writeln!(
+            out,
+            "{pad}            antlr4_runtime::ParserAtnPrediction {{ alt: {exit_alt}, requires_full_context: true, has_semantic_context: false, diagnostic: None }}"
+        )
+        .expect("writing to a string cannot fail");
+        writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
+        writeln!(
+            out,
+            "{pad}        Err(_) => return Err(self.base.no_viable_alternative_error(__decision_start)),"
+        )
+        .expect("writing to a string cannot fail");
+        writeln!(out, "{pad}    }};").expect("writing to a string cannot fail");
+    } else {
+        writeln!(
+            out,
+            "{pad}    let __prediction = match self.base.left_recursive_loop_enter_prediction(atn(), {state}, __precedence) {{"
+        )
+        .expect("writing to a string cannot fail");
+        writeln!(
+            out,
+            "{pad}        Some(true) => antlr4_runtime::ParserAtnPrediction {{ alt: {enter_alt}, requires_full_context: false, has_semantic_context: true, diagnostic: None }},"
+        )
+        .expect("writing to a string cannot fail");
+        writeln!(
+            out,
+            "{pad}        Some(false) => antlr4_runtime::ParserAtnPrediction {{ alt: {exit_alt}, requires_full_context: false, has_semantic_context: false, diagnostic: None }},"
+        )
+        .expect("writing to a string cannot fail");
+        writeln!(out, "{pad}        None => {{").expect("writing to a string cannot fail");
+        writeln!(
+            out,
+            "{pad}            let __prediction_precedence = if __precedence <= 0 {{ 0 }} else {{ __precedence as usize }};"
+        )
+        .expect("writing to a string cannot fail");
+        writeln!(
+            out,
+            "{pad}            let __prediction_context = self.base.prediction_context(atn());"
+        )
+        .expect("writing to a string cannot fail");
+        writeln!(
+            out,
+            "{pad}            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));"
+        )
+        .expect("writing to a string cannot fail");
+        writeln!(
+            out,
+            "{pad}            __simulator.set_exact_ambig_detection(self.base.prediction_mode() == antlr4_runtime::PredictionMode::LlExactAmbigDetection);"
+        )
+        .expect("writing to a string cannot fail");
+        writeln!(
+            out,
+            "{pad}            __simulator.adaptive_predict_stream_info_with_context({decision}, __prediction_precedence, self.base.input(), &__prediction_context)"
+        )
+        .expect("writing to a string cannot fail");
+        writeln!(
+            out,
+            "{pad}                .map_err(|__error| match __error {{"
+        )
+        .expect("writing to a string cannot fail");
+        writeln!(
+            out,
+            "{pad}                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt {{ index, .. }} => self.base.no_viable_alternative_error_at(__decision_start, index),"
+        )
+        .expect("writing to a string cannot fail");
+        writeln!(
+            out,
+            "{pad}                    _ => self.base.no_viable_alternative_error(__decision_start),"
+        )
+        .expect("writing to a string cannot fail");
+        writeln!(out, "{pad}                }})?").expect("writing to a string cannot fail");
+        writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
+    }
     writeln!(out, "{pad}    }};").expect("writing to a string cannot fail");
     render_generated_loop_semantic_prediction_filter(
         out,
@@ -5323,6 +5471,7 @@ fn render_generated_left_recursive_loop(
         exit_alt,
         body,
         render_context.embedded,
+        render_context.portable_locals,
     );
     writeln!(
         out,
@@ -5365,6 +5514,7 @@ fn render_generated_left_recursive_loop(
     writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_generated_loop_semantic_prediction_filter(
     out: &mut String,
     pad: &str,
@@ -5372,8 +5522,9 @@ fn render_generated_loop_semantic_prediction_filter(
     exit_alt: usize,
     body: &[GeneratedParserStep],
     embedded: Option<EmbeddedStepRender<'_>>,
+    portable: Option<PortableLocalStepRender<'_>>,
 ) {
-    let Some(condition) = loop_entry_condition(body, embedded) else {
+    let Some(condition) = loop_entry_condition(body, embedded, portable) else {
         return;
     };
     writeln!(
@@ -5400,11 +5551,12 @@ fn render_generated_loop_semantic_prediction_filter(
 fn loop_entry_condition(
     body: &[GeneratedParserStep],
     embedded: Option<EmbeddedStepRender<'_>>,
+    portable: Option<PortableLocalStepRender<'_>>,
 ) -> Option<String> {
     let step = body.first()?;
     match step {
         GeneratedParserStep::Predicate { .. } | GeneratedParserStep::Precedence(_) => {
-            Some(semantic_alt_candidate_condition(body, embedded))
+            Some(semantic_alt_candidate_condition(body, embedded, portable))
         }
         GeneratedParserStep::Decision { alts, .. } => {
             if !alts.iter().any(|alt| steps_contain_predicate(alt)) {
@@ -5412,7 +5564,12 @@ fn loop_entry_condition(
             }
             Some(
                 alts.iter()
-                    .map(|alt| format!("({})", semantic_alt_candidate_condition(alt, embedded)))
+                    .map(|alt| {
+                        format!(
+                            "({})",
+                            semantic_alt_candidate_condition(alt, embedded, portable)
+                        )
+                    })
                     .collect::<Vec<_>>()
                     .join(" || "),
             )
@@ -5573,6 +5730,162 @@ struct EmbeddedParserData {
     adaptive_decisions: BTreeSet<usize>,
     /// Tool LOOK(1) dispatch intervals for LL(1)-disjoint decisions.
     ll1_decision_arms: BTreeMap<usize, Vec<Vec<(i32, i32)>>>,
+}
+
+/// Raw grammar-local booleans whose actions and predicates are portable
+/// without executing target-language code.
+#[derive(Debug, Default)]
+struct PortableLocalData {
+    /// Rule index -> generated local variable declarations.
+    declarations: Vec<Vec<String>>,
+    /// ATN action source state -> generated assignment.
+    inline_actions: BTreeMap<usize, String>,
+    /// Parser predicate coordinate -> generated boolean expression.
+    predicates: BTreeMap<(usize, usize), String>,
+}
+
+impl PortableLocalData {
+    fn step_render(&self) -> Option<PortableLocalStepRender<'_>> {
+        (!self.inline_actions.is_empty() || !self.predicates.is_empty()).then_some(
+            PortableLocalStepRender {
+                declarations: &self.declarations,
+                predicates: &self.predicates,
+            },
+        )
+    }
+}
+
+fn portable_local_name(name: &str) -> String {
+    format!("__antlr_local_{name}")
+}
+
+fn parse_portable_bool_assignment(body: &str) -> Option<(&str, bool)> {
+    let body = body.trim();
+    let body = body.strip_suffix(';').unwrap_or(body);
+    let (target, value) = body.split_once('=')?;
+    let target = target.trim().strip_prefix('$')?;
+    let value = match value.trim() {
+        "true" => true,
+        "false" => false,
+        _ => return None,
+    };
+    (!target.is_empty()
+        && target
+            .chars()
+            .all(|ch| ch == '_' || ch.is_ascii_alphanumeric()))
+    .then_some((target, value))
+}
+
+fn parse_portable_bool_predicate(body: &str) -> Option<(&str, bool)> {
+    let body = body.trim();
+    let (body, negated) = body
+        .strip_prefix('!')
+        .map_or((body, false), |body| (body.trim(), true));
+    let name = body.strip_prefix('$')?.trim();
+    (!name.is_empty()
+        && name
+            .chars()
+            .all(|ch| ch == '_' || ch.is_ascii_alphanumeric()))
+    .then_some((name, negated))
+}
+
+fn build_portable_local_data(
+    data: &InterpData,
+    source: &str,
+    patterns: &SemPatternFile,
+) -> io::Result<PortableLocalData> {
+    let model = embedded::parse_embedded_rules_model(source, &data.rule_names);
+    let mut out = PortableLocalData {
+        declarations: vec![Vec::new(); data.rule_names.len()],
+        ..PortableLocalData::default()
+    };
+    let mut local_names = Vec::with_capacity(data.rule_names.len());
+    for (rule_index, rule) in model.rules.iter().enumerate() {
+        let mut names = BTreeMap::new();
+        for attr in rule.attrs.iter().filter(|attr| attr.ty == "bool") {
+            let initial = if rule.local_names.contains(&attr.name) {
+                "false"
+            } else if rule.arg_names.first() == Some(&attr.name) {
+                "__precedence != 0"
+            } else {
+                continue;
+            };
+            let local = portable_local_name(&attr.name);
+            out.declarations[rule_index].push(format!("let mut {local} = {initial};"));
+            names.insert(attr.name.clone(), local);
+        }
+        local_names.push(names);
+    }
+
+    let action_slots = parser_action_source_block_slots(source, &data.rule_names);
+    for (state, slot) in
+        assign_states_to_parser_action_slots_with_model(data, &model, action_slots)?
+    {
+        let Some((name, value)) = parse_portable_bool_assignment(&slot.body) else {
+            continue;
+        };
+        let Some(local) = local_names
+            .get(slot.rule_index)
+            .and_then(|names| names.get(name))
+        else {
+            continue;
+        };
+        if patterns
+            .coordinate_disposition(
+                SemanticsKind::ParserAction,
+                data.rule_names.get(slot.rule_index).map(String::as_str),
+                None,
+                Some(state),
+            )
+            .is_some()
+        {
+            continue;
+        }
+        out.inline_actions
+            .insert(state, format!("{local} = {value};"));
+    }
+
+    let coordinates = lexer_predicate_transitions(data)?;
+    let mut predicate_index = 0;
+    let mut offset = 0;
+    while let Some(block) = next_predicate_action_block(source, offset) {
+        offset = block.after_brace;
+        if !predicate_block_included(source, block.open_brace, &data.rule_names) {
+            continue;
+        }
+        let Some(&(rule_index, pred_index)) = coordinates.get(predicate_index) else {
+            break;
+        };
+        predicate_index += 1;
+        let Some((name, negated)) = parse_portable_bool_predicate(block.body) else {
+            continue;
+        };
+        let Some(local) = local_names
+            .get(rule_index)
+            .and_then(|names| names.get(name))
+        else {
+            continue;
+        };
+        if patterns
+            .coordinate_disposition(
+                SemanticsKind::ParserPredicate,
+                data.rule_names.get(rule_index).map(String::as_str),
+                Some(pred_index),
+                None,
+            )
+            .is_some()
+        {
+            continue;
+        }
+        let expression = if negated {
+            format!("!{local}")
+        } else {
+            local.clone()
+        };
+        out.predicates.insert((rule_index, pred_index), expression);
+    }
+
+    Ok(out)
 }
 
 /// LOOK(1) of one decision alternative, plus whether the walk crossed a
@@ -6515,6 +6828,10 @@ fn render_parser_with_options(
     } else {
         grammar_source
     };
+    let portable_local_data = template_grammar_source
+        .map(|source| build_portable_local_data(data, source, patterns))
+        .transpose()?
+        .unwrap_or_default();
     // A per-coordinate `assume-*` override is a documented no-op fallback; it
     // must not fall through to `parser_action_hook`, which would fail loud under
     // the Error policy or run a user side effect for a coordinate the manifest
@@ -6542,9 +6859,10 @@ fn render_parser_with_options(
     )?;
     let rule_args = template_grammar_source
         .map_or_else(|| Ok(Vec::new()), |grammar| parser_rule_args(data, grammar))?;
-    let inline_action_statements = embedded_data
-        .as_ref()
-        .map_or_else(BTreeMap::new, |embedded| embedded.inline_actions.clone());
+    let inline_action_statements = embedded_data.as_ref().map_or_else(
+        || portable_local_data.inline_actions.clone(),
+        |embedded| embedded.inline_actions.clone(),
+    );
     let inline_action_states = inline_action_statements
         .keys()
         .copied()
@@ -6552,7 +6870,7 @@ fn render_parser_with_options(
     let action_states = parser_action_states(data)?
         .into_iter()
         .collect::<BTreeSet<_>>();
-    let generated_action_states = if options.embedded {
+    let mut generated_action_states = if options.embedded {
         action_states.clone()
     } else {
         // Synthetic actions and explicit assume-* overrides are no-op states.
@@ -6564,6 +6882,7 @@ fn render_parser_with_options(
             .copied()
             .collect()
     };
+    generated_action_states.extend(portable_local_data.inline_actions.keys().copied());
     // Under a non-default unknown-coordinate policy every predicate transition
     // must reach the interpreter (which applies the policy), so the coordinate
     // inventory is read from the ATN even without grammar source.
@@ -6575,7 +6894,7 @@ fn render_parser_with_options(
         }
         .into_iter()
         .collect::<BTreeSet<_>>();
-    let generated_predicate_coordinates = if options.embedded {
+    let mut generated_predicate_coordinates = if options.embedded {
         predicate_coordinates.clone()
     } else {
         predicates
@@ -6585,6 +6904,7 @@ fn render_parser_with_options(
             })
             .collect::<BTreeSet<_>>()
     };
+    generated_predicate_coordinates.extend(portable_local_data.predicates.keys().copied());
     let has_action_dispatch = !action_states.is_empty();
     let has_predicate_dispatch = !predicates.is_empty();
     let track_alt_numbers = grammar_source.is_some_and(uses_alt_number_contexts);
@@ -6602,7 +6922,7 @@ fn render_parser_with_options(
             all: &predicate_coordinates,
             generated: &generated_predicate_coordinates,
         },
-        (has_action_dispatch || has_predicate_dispatch) && !options.embedded,
+        false,
     )?;
     if options.require_generated_parser || options.embedded {
         // Embedded actions only run on the generated path, so every rule must
@@ -6620,6 +6940,7 @@ fn render_parser_with_options(
         &inline_action_statements,
         track_alt_numbers,
         embedded_step_render,
+        portable_local_data.step_render(),
     );
     // A non-default policy must reach the interpreter through the emitted
     // runtime options, so its literal forces the options-carrying call shape.
@@ -8530,6 +8851,12 @@ fn literal_rule_arg_calls(
                 let value = grammar_source[value_start..value_stop].trim();
                 if let Ok(value) = value.parse::<i64>() {
                     calls.push((start, rule_index, RuleArgTemplate::Literal(value)));
+                } else if matches!(value, "true" | "false") {
+                    calls.push((
+                        start,
+                        rule_index,
+                        RuleArgTemplate::Literal(i64::from(value == "true")),
+                    ));
                 } else if value == r#"<VarRef("i")>"# {
                     calls.push((start, rule_index, RuleArgTemplate::InheritLocal));
                 }
@@ -10283,11 +10610,15 @@ atn:
         assert!(rendered.contains("parse_rule_precedence_from_generated(0, 3)"));
         assert!(rendered.contains("precpred(_ctx, 2)"));
         assert!(
+            rendered.contains(
+                "let __prediction = match self.base.left_recursive_loop_enter_prediction(atn(), 2, __precedence)"
+            )
+        );
+        assert!(rendered.contains("Some(true) => antlr4_runtime::ParserAtnPrediction"));
+        assert!(
             rendered
                 .contains("adaptive_predict_stream_info_with_context(0, __prediction_precedence")
         );
-        assert!(rendered.contains("left_recursive_loop_enter_matches(atn(), 2, __precedence)"));
-        assert!(rendered.contains("ParserAtnSimulatorError::NoViableAlt { .. }"));
     }
 
     #[test]
@@ -10317,6 +10648,32 @@ atn:
         assert!(rules[0].is_none());
         assert!(rules[1].is_none());
         assert!(rules[2].is_some());
+    }
+
+    #[test]
+    fn generated_parent_keeps_interpreted_child_call() {
+        let rules = vec![
+            Some(GeneratedParserRule {
+                rule_index: 0,
+                entry_state: 0,
+                left_recursive: false,
+                steps: vec![GeneratedParserStep::CallRule {
+                    source_state: 4,
+                    rule_index: 1,
+                    precedence: GeneratedRuleCallPrecedence::Literal(0),
+                }],
+            }),
+            None,
+        ];
+
+        let rendered =
+            render_generated_rule_dispatch(&rules, &[true, false], &BTreeMap::new(), false);
+
+        assert!(rendered.contains(
+            "0 => Some(self.parse_generated_rule_0_dispatch(precedence, allow_fallback))"
+        ));
+        assert!(rendered.contains("self.parse_rule_precedence_from_generated(1, 0)"));
+        assert!(!rendered.contains("parse_generated_rule_1_dispatch"));
     }
 
     #[test]
@@ -10426,6 +10783,7 @@ atn:
             &BTreeMap::new(),
             true,
             None,
+            None,
         );
 
         // ATN-preferred children route through `parse_rule_precedence_from_generated`:
@@ -10461,6 +10819,7 @@ atn:
             &rule_names,
             &BTreeMap::new(),
             true,
+            None,
             None,
         );
 
@@ -10661,6 +11020,25 @@ atn:
     }
 
     #[test]
+    fn parses_boolean_literal_rule_arguments() {
+        let data = InterpData {
+            rule_names: vec!["s".to_owned(), "flag".to_owned()],
+            ..InterpData::default()
+        };
+
+        assert_eq!(
+            literal_rule_arg_calls(
+                &data,
+                "parser grammar T;\ns : flag[true] flag[false] ;\nflag[boolean enabled] : ;"
+            ),
+            [
+                (1, RuleArgTemplate::Literal(1)),
+                (1, RuleArgTemplate::Literal(0)),
+            ]
+        );
+    }
+
+    #[test]
     fn compiles_synthetic_noop_action_transitions_as_epsilon() {
         let action = Transition::Action {
             target: 8,
@@ -10793,6 +11171,7 @@ atn:
             0,
             GeneratedStepRenderContext {
                 embedded: None,
+                portable_locals: None,
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 direct_generated_rule_calls: &[],
@@ -10824,6 +11203,7 @@ atn:
             2,
             GeneratedStepRenderContext {
                 embedded: None,
+                portable_locals: None,
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 direct_generated_rule_calls,
@@ -11264,6 +11644,7 @@ s : ;
             0,
             GeneratedStepRenderContext {
                 embedded: None,
+                portable_locals: None,
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 direct_generated_rule_calls: &[],
@@ -11311,6 +11692,7 @@ s : ;
             0,
             GeneratedStepRenderContext {
                 embedded: None,
+                portable_locals: None,
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 direct_generated_rule_calls: &[],
@@ -11352,6 +11734,7 @@ s : ;
             0,
             GeneratedStepRenderContext {
                 embedded: None,
+                portable_locals: None,
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 direct_generated_rule_calls: &[],
@@ -11394,6 +11777,7 @@ s : ;
             0,
             GeneratedStepRenderContext {
                 embedded: None,
+                portable_locals: None,
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 direct_generated_rule_calls: &[],
@@ -11438,6 +11822,7 @@ s : ;
             0,
             GeneratedStepRenderContext {
                 embedded: None,
+                portable_locals: None,
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 direct_generated_rule_calls: &[],
@@ -11494,6 +11879,7 @@ s : ;
             0,
             GeneratedStepRenderContext {
                 embedded: None,
+                portable_locals: None,
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 direct_generated_rule_calls: &[],
@@ -11529,7 +11915,7 @@ s : ;
             },
             mt(7, 4),
         ];
-        let condition = semantic_alt_candidate_condition(&steps, None);
+        let condition = semantic_alt_candidate_condition(&steps, None, None);
         let la_at = condition
             .find("__semantic_la == 7")
             .expect("condition includes the leading lookahead guard");
@@ -11592,7 +11978,7 @@ s : ;
         ];
         let alt_conditions = alts
             .iter()
-            .map(|steps| semantic_alt_candidate_condition(steps, None))
+            .map(|steps| semantic_alt_candidate_condition(steps, None, None))
             .collect::<Vec<_>>();
         let mut rendered = String::new();
         render_semantic_alt_search(&mut rendered, "", &alt_conditions, &alts);
@@ -11643,7 +12029,7 @@ s : ;
         ];
         let alt_conditions = alts
             .iter()
-            .map(|steps| semantic_alt_candidate_condition(steps, None))
+            .map(|steps| semantic_alt_candidate_condition(steps, None, None))
             .collect::<Vec<_>>();
         let mut rendered = String::new();
         render_semantic_alt_search(&mut rendered, "", &alt_conditions, &alts);
@@ -12714,6 +13100,42 @@ ID: [a-z]+ { customJava(); };
         }
     }
 
+    /// Parser `.interp` fixture for
+    /// `s locals [boolean seen=false] : {$seen=true;} {$seen}? A ;`.
+    fn portable_bool_parser_data() -> InterpData {
+        InterpData {
+            literal_names: vec![None, Some("'a'".to_owned())],
+            symbolic_names: vec![None, Some("A".to_owned())],
+            rule_names: vec!["s".to_owned()],
+            channel_names: vec!["DEFAULT_TOKEN_CHANNEL".to_owned()],
+            mode_names: vec!["DEFAULT_MODE".to_owned()],
+            atn: vec![
+                4, 1, 1, // version, parser grammar, max token type
+                4, // states
+                2, 0, // state 0: rule start/action source
+                1, 0, // state 1: predicate source
+                1, 0, // state 2: token source
+                7, 0, // state 3: rule stop
+                0, // non-greedy states
+                0, // precedence states
+                1, // rules
+                0, // rule 0 start
+                0, // modes
+                0, // sets
+                3, // transitions
+                0, 1, 6, 0, 0, 0, // action rule 0 action 0
+                1, 2, 4, 0, 0, 0, // predicate rule 0 pred 0
+                2, 3, 5, 1, 0, 0, // atom A
+                0, // decisions
+            ],
+        }
+    }
+
+    const PORTABLE_BOOL_GRAMMAR: &str = "parser grammar S;\n\
+s locals [boolean seen=false]\n\
+    : { $seen = true; } {$seen}? A\n\
+    ;\n";
+
     const PREDICATE_GRAMMAR: &str = "parser grammar S;\ns : {isTypeName()}? A ;\n";
 
     #[test]
@@ -13461,6 +13883,54 @@ ID : [a-z]+ ;\n";
         assert!(manifest.contains("\"disposition\": \"assume-true\""));
         assert!(manifest.contains("\"body\": \"isTypeName()\""));
         assert!(manifest.contains("\"line\": 2"));
+    }
+
+    #[test]
+    fn translates_portable_boolean_local_semantics() {
+        let data = portable_bool_parser_data();
+        let portable =
+            build_portable_local_data(&data, PORTABLE_BOOL_GRAMMAR, &SemPatternFile::default())
+                .expect("portable local semantics should build");
+
+        assert_eq!(
+            portable.declarations,
+            [vec!["let mut __antlr_local_seen = false;".to_owned()]]
+        );
+        assert_eq!(
+            portable.inline_actions.get(&0).map(String::as_str),
+            Some("__antlr_local_seen = true;")
+        );
+        assert_eq!(
+            portable.predicates.get(&(0, 0)).map(String::as_str),
+            Some("__antlr_local_seen")
+        );
+
+        let module = render_parser("SParser", &data, Some(PORTABLE_BOOL_GRAMMAR))
+            .expect("portable grammar should render");
+        assert!(module.contains("let mut __antlr_local_seen = false;"));
+        assert!(module.contains("__antlr_local_seen = true;"));
+        assert!(module.contains("if !(__antlr_local_seen) {"));
+
+        let entries = collect_parser_semantics(
+            &data,
+            Some(PORTABLE_BOOL_GRAMMAR),
+            SemUnknownPolicy::Error,
+            &SemPatternFile::default(),
+        )
+        .expect("portable coordinates should be inventoried");
+        assert_eq!(entries.len(), 2);
+        assert!(
+            entries
+                .iter()
+                .all(|entry| entry.disposition == SemanticsDisposition::Translated)
+        );
+        assert!(
+            entries
+                .iter()
+                .all(|entry| entry.template.as_deref() == Some("PortableBooleanLocal"))
+        );
+        enforce_sem_unknown(SemUnknownPolicy::Error, &entries)
+            .expect("portable coordinates satisfy strict semantics");
     }
 
     #[test]
