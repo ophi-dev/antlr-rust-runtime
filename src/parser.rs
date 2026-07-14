@@ -4653,7 +4653,6 @@ where
         };
         let first_pass = self.fast_recognize_top(atn, top_request);
         self.fast_token_nodes_enabled = true;
-        self.fast_recovery_enabled = true;
         let needs_tree_retry = matches!(
             &first_pass,
             Ok((outcome, _)) if self.build_parse_trees && outcome.nodes.has_left_recursive_boundary()
@@ -4676,16 +4675,27 @@ where
         };
         let (outcome, _expected) = if needs_retry {
             self.fast_first_set_prefilter = false;
-            let retry = self.fast_recognize_top(atn, top_request);
-            self.fast_first_set_prefilter = true;
-            let selected = if needs_tree_retry {
-                match retry {
+            self.fast_recovery_enabled = false;
+            let clean_retry = self.fast_recognize_top(atn, top_request);
+            let clean_selected = if needs_tree_retry {
+                match clean_retry {
                     ok @ Ok(_) => ok,
                     Err(_) => first_pass,
                 }
             } else {
-                select_better_top_outcome(first_pass, retry)
+                select_better_top_outcome(first_pass, clean_retry)
             };
+            let selected = if clean_selected.is_err()
+                || matches!(&clean_selected, Ok((outcome, _)) if !outcome.diagnostics.is_empty())
+            {
+                self.fast_recovery_enabled = true;
+                let recovery_retry = self.fast_recognize_top(atn, top_request);
+                select_better_top_outcome(clean_selected, recovery_retry)
+            } else {
+                clean_selected
+            };
+            self.fast_first_set_prefilter = true;
+            self.fast_recovery_enabled = true;
             selected.map_err(|expected| {
                 let error = self.recognition_error(rule_index, start_index, &expected);
                 self.record_syntax_errors(1);
@@ -9618,33 +9628,14 @@ fn dedupe_fast_outcomes(outcomes: &mut Vec<FastRecognizeOutcome>) {
     if outcomes.len() < 2 {
         return;
     }
-    let mut keep = Vec::with_capacity(outcomes.len());
-    let mut seen: BTreeMap<(usize, bool), Vec<usize>> = BTreeMap::new();
-    'outcomes: for (index, outcome) in outcomes.iter().enumerate() {
-        let bucket = seen
-            .entry((outcome.index, outcome.consumed_eof))
-            .or_default();
-        for &previous in bucket.iter() {
-            if outcomes[previous].diagnostics == outcome.diagnostics {
-                continue 'outcomes;
-            }
-        }
-        bucket.push(index);
-        keep.push(index);
-    }
-    if keep.len() == outcomes.len() {
-        return;
-    }
-    let mut iter = keep.into_iter();
-    let mut next_keep = iter.next();
-    let mut current = 0_usize;
-    outcomes.retain(|_| {
-        let result = next_keep == Some(current);
-        if result {
-            next_keep = iter.next();
-        }
-        current += 1;
-        result
+    let mut seen = FxHashSet::with_capacity_and_hasher(outcomes.len(), FxBuildHasher::default());
+    outcomes.retain(|outcome| {
+        seen.insert((
+            outcome.index,
+            outcome.consumed_eof,
+            outcome.diagnostics.len(),
+            diagnostic_recovery_rank(&outcome.diagnostics),
+        ))
     });
 }
 
@@ -11822,6 +11813,50 @@ mod tests {
         )
         .expect("one outcome should be selected");
         assert!(selected.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn recovery_fast_outcome_dedupe_uses_selection_rank() {
+        let first = FastRecognizeOutcome {
+            index: 3,
+            consumed_eof: false,
+            diagnostics: FastDiagnostics::from_vec(vec![ParserDiagnostic {
+                line: 1,
+                column: 0,
+                message: "mismatched input 'x' expecting 'a'".to_owned(),
+            }]),
+            nodes: NodeList::new(),
+        };
+        let same_rank = FastRecognizeOutcome {
+            index: first.index,
+            consumed_eof: first.consumed_eof,
+            diagnostics: FastDiagnostics::from_vec(vec![ParserDiagnostic {
+                line: 1,
+                column: 0,
+                message: "mismatched input 'x' expecting 'b'".to_owned(),
+            }]),
+            nodes: NodeList::new(),
+        };
+        let better_rank = FastRecognizeOutcome {
+            index: first.index,
+            consumed_eof: first.consumed_eof,
+            diagnostics: FastDiagnostics::from_vec(vec![ParserDiagnostic {
+                line: 1,
+                column: 0,
+                message: "missing 'a' at 'x'".to_owned(),
+            }]),
+            nodes: NodeList::new(),
+        };
+        let mut outcomes = vec![first, same_rank, better_rank];
+
+        dedupe_fast_outcomes(&mut outcomes);
+
+        assert_eq!(outcomes.len(), 2);
+        assert_eq!(
+            outcomes[0].diagnostics[0].message,
+            "mismatched input 'x' expecting 'a'"
+        );
+        assert_eq!(outcomes[1].diagnostics[0].message, "missing 'a' at 'x'");
     }
 
     #[test]
