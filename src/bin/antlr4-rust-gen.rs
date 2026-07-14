@@ -1,4 +1,4 @@
-use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 use std::env;
 use std::fmt::Write as _;
 use std::fs;
@@ -11,10 +11,10 @@ use antlr4_runtime::atn::serialized::{AtnDeserializer, SerializedAtn};
 use antlr4_runtime::atn::{Atn, AtnStateKind, LexerAction, Transition};
 use antlr4_runtime::token::TOKEN_EOF;
 
-#[path = "../bin_support/rust_names.rs"]
-mod rust_names;
 #[path = "../bin_support/embedded.rs"]
 mod embedded;
+#[path = "../bin_support/rust_names.rs"]
+mod rust_names;
 #[path = "../bin_support/templates.rs"]
 mod templates;
 
@@ -128,12 +128,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         } else {
             grammar_source.as_deref()
         };
-        let entries = collect_parser_semantics(
-            &data,
-            manifest_source,
-            args.sem_unknown,
-            &args.sem_patterns,
-        )?;
+        let entries =
+            collect_parser_semantics(&data, manifest_source, args.sem_unknown, &args.sem_patterns)?;
         enforce_sem_unknown(args.sem_unknown, &entries)?;
         enforce_require_full_semantics(args.require_full_semantics, &entries)?;
         let module = render_parser_with_options(
@@ -533,12 +529,12 @@ fn helper_call_matches(call: &SemanticHelperCall, helper: &SemHelperRule) -> boo
             })
 }
 
-fn parse_semantic_helper_call(
-    body: &str,
-    kind: SemanticsKind,
-) -> Option<SemanticHelperCall> {
+fn parse_semantic_helper_call(body: &str, kind: SemanticsKind) -> Option<SemanticHelperCall> {
     let mut body = body.trim();
-    if matches!(kind, SemanticsKind::LexerAction | SemanticsKind::ParserAction) {
+    if matches!(
+        kind,
+        SemanticsKind::LexerAction | SemanticsKind::ParserAction
+    ) {
         body = body.strip_suffix(';').unwrap_or(body).trim_end();
     }
     let negated = matches!(
@@ -853,12 +849,7 @@ fn collect_lexer_semantics(
     if !action_coordinates.is_empty() {
         let templates = grammar_source
             .map(|source| {
-                lexer_action_templates(
-                    data,
-                    source,
-                    allow_unsupported_lexer_actions,
-                    patterns,
-                )
+                lexer_action_templates(data, source, allow_unsupported_lexer_actions, patterns)
             })
             .transpose()?;
         let blocks = grammar_source
@@ -884,8 +875,7 @@ fn collect_lexer_semantics(
                 disposition: patterns
                     .coordinate_disposition(
                         SemanticsKind::LexerAction,
-                        rule_index
-                            .and_then(|rule| data.rule_names.get(rule).map(String::as_str)),
+                        rule_index.and_then(|rule| data.rule_names.get(rule).map(String::as_str)),
                         usize::try_from(*action_index).ok(),
                         None,
                     )
@@ -1038,14 +1028,14 @@ fn collect_parser_semantics(
                         None,
                         Some(*state),
                     )
-                    .unwrap_or_else(|| if synthetic_states.contains(state)
-                        || empty_action_states.contains(state)
-                    {
-                        // ANTLR-synthesized actions and authored empty action
-                        // bodies are no-op states exempt from the error gate.
-                        SemanticsDisposition::Synthetic
-                    } else {
-                        policy.unknown_action_disposition()
+                    .unwrap_or_else(|| {
+                        if synthetic_states.contains(state) || empty_action_states.contains(state) {
+                            // ANTLR-synthesized actions and authored empty action
+                            // bodies are no-op states exempt from the error gate.
+                            SemanticsDisposition::Synthetic
+                        } else {
+                            policy.unknown_action_disposition()
+                        }
                     }),
                 template: None,
             });
@@ -1472,7 +1462,10 @@ fn parse_toml_scalar(value: &str) -> String {
     // it would be rejected or fail to match. Require length >= 2 so a lone `'`
     // is not mistaken for an empty literal.
     if value.len() >= 2 {
-        if let Some(body) = value.strip_prefix('\'').and_then(|body| body.strip_suffix('\'')) {
+        if let Some(body) = value
+            .strip_prefix('\'')
+            .and_then(|body| body.strip_suffix('\''))
+        {
             return body.to_owned();
         }
     }
@@ -1810,26 +1803,24 @@ fn render_lexer(
     // the template machinery entirely.
     let template_grammar_source = if embedded { None } else { grammar_source };
     let embedded_lexer_actions = if embedded {
-        grammar_source.map_or_else(|| Ok(Vec::new()), |source| embedded_lexer_actions(data, source))?
+        grammar_source.map_or_else(
+            || Ok(Vec::new()),
+            |source| embedded_lexer_actions(data, source),
+        )?
     } else {
         Vec::new()
     };
     let embedded_lexer_predicates = if embedded {
-        grammar_source
-            .map_or_else(|| Ok(Vec::new()), |source| embedded_lexer_predicates(data, source))?
+        grammar_source.map_or_else(
+            || Ok(Vec::new()),
+            |source| embedded_lexer_predicates(data, source),
+        )?
     } else {
         Vec::new()
     };
     let mut actions = template_grammar_source.map_or_else(
         || Ok(Vec::new()),
-        |source| {
-            lexer_action_templates(
-                data,
-                source,
-                allow_unsupported_lexer_actions,
-                patterns,
-            )
-        },
+        |source| lexer_action_templates(data, source, allow_unsupported_lexer_actions, patterns),
     )?;
     // Any per-coordinate override replaces a translated action. Hook overrides
     // fall through to the semantic hook object; assume-* overrides are no-ops.
@@ -1892,17 +1883,16 @@ fn render_lexer(
     let unknown_predicates_assume_false = sem_unknown == SemUnknownPolicy::AssumeFalse
         && predicates.is_empty()
         && !lexer_predicate_transitions(data)?.is_empty();
-    let adjusts_accept_position = template_grammar_source.is_some_and(uses_position_adjusting_lexer);
+    let adjusts_accept_position =
+        template_grammar_source.is_some_and(uses_position_adjusting_lexer);
     let lexer_dfa_data = compiled_lexer_dfa_words(data);
     let lexer_typed_hook_mappings = if embedded {
         Vec::new()
     } else {
         lexer_typed_hook_mappings(data, grammar_source, patterns, &actions)?
     };
-    let typed_hook_adapter = render_lexer_typed_hook_adapter(
-        &type_name,
-        &lexer_typed_hook_mappings,
-    );
+    let typed_hook_adapter =
+        render_lexer_typed_hook_adapter(&type_name, &lexer_typed_hook_mappings);
     let typed_lexer_constructor = if lexer_typed_hook_mappings.is_empty() {
         String::new()
     } else {
@@ -4310,11 +4300,8 @@ fn render_generated_step(
             pred_index,
         } => {
             if let Some(embedded) = render_context.embedded {
-                let (condition, message) = embedded_predicate_condition_and_message(
-                    &embedded,
-                    *rule_index,
-                    *pred_index,
-                );
+                let (condition, message) =
+                    embedded_predicate_condition_and_message(&embedded, *rule_index, *pred_index);
                 writeln!(out, "{pad}if !({condition}) {{")
                     .expect("writing to a string cannot fail");
                 match message {
@@ -4844,10 +4831,13 @@ fn embedded_predicate_condition_and_message(
     rule_index: usize,
     pred_index: usize,
 ) -> (String, Option<String>) {
-    embedded.predicates.get(&(rule_index, pred_index)).map_or_else(
-        || ("true".to_owned(), None),
-        |(expression, message)| (expression.clone(), message.clone()),
-    )
+    embedded
+        .predicates
+        .get(&(rule_index, pred_index))
+        .map_or_else(
+            || ("true".to_owned(), None),
+            |(expression, message)| (expression.clone(), message.clone()),
+        )
 }
 
 fn semantic_alt_candidate_condition(
@@ -5422,9 +5412,7 @@ fn loop_entry_condition(
             }
             Some(
                 alts.iter()
-                    .map(|alt| {
-                        format!("({})", semantic_alt_candidate_condition(alt, embedded))
-                    })
+                    .map(|alt| format!("({})", semantic_alt_candidate_condition(alt, embedded)))
                     .collect::<Vec<_>>()
                     .join(" || "),
             )
@@ -5788,12 +5776,17 @@ fn build_embedded_parser_data(
                 .map(|token_type| (name.clone(), token_type))
         })
         .collect();
-    let finish_body =
-        |body: &str, translated: &str| -> String { post_process_embedded(body, translated, type_name) };
+    let finish_body = |body: &str, translated: &str| -> String {
+        post_process_embedded(body, translated, type_name)
+    };
 
     let decision_analysis = tool_decision_analysis(data)?;
     let mut out = EmbeddedParserData {
-        rule_has_attrs: model.rules.iter().map(embedded::RuleModel::has_attrs).collect(),
+        rule_has_attrs: model
+            .rules
+            .iter()
+            .map(embedded::RuleModel::has_attrs)
+            .collect(),
         adaptive_decisions: decision_analysis.adaptive_decisions,
         ll1_decision_arms: decision_analysis.ll1_decision_arms,
         ..EmbeddedParserData::default()
@@ -5906,7 +5899,11 @@ fn build_embedded_parser_data(
         .push_str("            __embedded_pending_arg: None,\n");
     for field in &model.parser_members.fields {
         let _ = writeln!(out.struct_fields, "    {}: {},", field.name, field.ty);
-        let _ = writeln!(out.field_inits, "            {}: {},", field.name, field.init);
+        let _ = writeln!(
+            out.field_inits,
+            "            {}: {},",
+            field.name, field.init
+        );
     }
     for item in &model.parser_members.impl_items {
         let item = post_process_embedded(item, item, type_name);
@@ -5955,7 +5952,6 @@ fn build_embedded_parser_data(
     Ok(out)
 }
 
-
 /// Scans `rule[expr]` call sites in the rendered grammar and pairs each with
 /// its ATN rule-transition source state (source order per callee rule, the
 /// same correlation as `parser_rule_args`). Supports integer literals and
@@ -5989,7 +5985,9 @@ fn embedded_rule_call_args(
             let value = source[value_start..value_stop].trim();
             let expression = if value.parse::<i64>().is_ok() {
                 Some(value.to_owned())
-            } else if value.chars().all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+            } else if value
+                .chars()
+                .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
                 && value
                     .chars()
                     .next()
@@ -6033,7 +6031,6 @@ fn embedded_rule_call_args(
     }
     Ok(args)
 }
-
 
 /// Generates the typed context views, listener trait, and walker for the
 /// embedded `.test.stg` surface:
@@ -6091,10 +6088,7 @@ fn render_embedded_context_types(
         for attr in &rule.attrs {
             let name = embedded::escape_keyword(&attr.name);
             let _ = writeln!(fields, "    pub {name}: {ty},", ty = attr.ty);
-            let _ = writeln!(
-                field_inits,
-                "            {name}: __attrs.{name}.clone(),"
-            );
+            let _ = writeln!(field_inits, "            {name}: __attrs.{name}.clone(),");
         }
         let _ = writeln!(
             out,
@@ -6212,16 +6206,12 @@ fn render_embedded_context_types(
                 );
             }
             let mut out = String::new();
-            let op = op_labels.first().filter(|_| {
-                op_labels.iter().collect::<BTreeSet<_>>().len() == 1
-            });
-            let primary = primary_labels.first().filter(|_| {
-                primary_labels
-                    .iter()
-                    .collect::<BTreeSet<_>>()
-                    .len()
-                    == 1
-            });
+            let op = op_labels
+                .first()
+                .filter(|_| op_labels.iter().collect::<BTreeSet<_>>().len() == 1);
+            let primary = primary_labels
+                .first()
+                .filter(|_| primary_labels.iter().collect::<BTreeSet<_>>().len() == 1);
             match (op, primary) {
                 (Some(op), Some(primary)) => {
                     let op_method = listener_method(op);
@@ -6247,8 +6237,14 @@ fn render_embedded_context_types(
         };
         let enter_calls = dispatch("enter");
         let exit_calls = dispatch("exit");
-        let _ = writeln!(enter_arms, "            {rule_index} => {{\n{enter_calls}            }}");
-        let _ = writeln!(exit_arms, "            {rule_index} => {{\n{exit_calls}            }}");
+        let _ = writeln!(
+            enter_arms,
+            "            {rule_index} => {{\n{enter_calls}            }}"
+        );
+        let _ = writeln!(
+            exit_arms,
+            "            {rule_index} => {{\n{exit_calls}            }}"
+        );
     }
     let _ = writeln!(
         out,
@@ -6420,7 +6416,6 @@ fn collect_noop_action_states(
     Ok(noop_action_states)
 }
 
-
 /// Public per-rule entry methods (`pub fn s(&mut self) -> …`).
 fn render_public_rule_methods(public_rule_method_names: &[String]) -> String {
     let mut rule_methods = String::new();
@@ -6505,7 +6500,12 @@ fn render_parser_with_options(
                 "--actions embedded requires --grammar",
             )
         })?;
-        Some(build_embedded_parser_data(data, source, &type_name, grammar_name)?)
+        Some(build_embedded_parser_data(
+            data,
+            source,
+            &type_name,
+            grammar_name,
+        )?)
     } else {
         None
     };
@@ -6957,10 +6957,7 @@ where
 enum ActionTemplate {
     LexerPopMode,
     Hook(SemanticHelperCall),
-    UnsupportedLexerAction {
-        rule_name: String,
-        body: String,
-    },
+    UnsupportedLexerAction { rule_name: String, body: String },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -7029,7 +7026,6 @@ enum RuleArgTemplate {
     Literal(i64),
     InheritLocal,
 }
-
 
 /// Translates the lexer recognizer surface used by rendered test bodies onto
 /// the `BaseLexer` hooks: `self.text()` / column accessors become position
@@ -7529,11 +7525,12 @@ fn predicate_template_with_fail_message(
         PredicateTemplate::False => PredicateTemplate::FalseWithMessage { message },
         // Already message-carrying: replace the message (a later `<fail=...>`
         // wins) rather than nesting wrappers.
-        PredicateTemplate::FalseWithMessage { .. } => PredicateTemplate::FalseWithMessage { message },
-        PredicateTemplate::WithFailMessage { inner, .. } => PredicateTemplate::WithFailMessage {
-            inner,
-            message,
-        },
+        PredicateTemplate::FalseWithMessage { .. } => {
+            PredicateTemplate::FalseWithMessage { message }
+        }
+        PredicateTemplate::WithFailMessage { inner, .. } => {
+            PredicateTemplate::WithFailMessage { inner, message }
+        }
         other => PredicateTemplate::WithFailMessage {
             inner: Box::new(other),
             message,
@@ -7638,8 +7635,8 @@ fn assign_states_to_parser_action_slots_with_model(
         }
 
         let states = states_by_rule.remove(&rule_index).unwrap_or_default();
-        let state_offset = action_slot_state_offset(states.len(), rule_slots.len())
-            .map_err(|error| {
+        let state_offset =
+            action_slot_state_offset(states.len(), rule_slots.len()).map_err(|error| {
                 io::Error::new(
                     io::ErrorKind::InvalidData,
                     format!("rule {rule_index}: {error}"),
@@ -7754,9 +7751,9 @@ fn extract_supported_predicate_templates_filtered(
         rule_names,
         SemanticsKind::LexerPredicate,
     )?
-        .into_iter()
-        .flatten()
-        .collect())
+    .into_iter()
+    .flatten()
+    .collect())
 }
 
 /// Extracts one slot per in-scope predicate block, preserving position: a
@@ -7778,8 +7775,9 @@ fn extract_predicate_template_slots_filtered(
         // lexer), so positional pairing with this ATN's predicate transitions
         // does not drift. Only skip blocks that positively resolve to a
         // non-target rule; unresolvable headers keep the block.
-        let excluded = rule_names
-            .is_some_and(|names| !predicate_block_included(grammar_source, block.open_brace, names));
+        let excluded = rule_names.is_some_and(|names| {
+            !predicate_block_included(grammar_source, block.open_brace, names)
+        });
         if excluded {
             continue;
         }
@@ -7983,9 +7981,7 @@ fn rule_header_identifier(header: &str, first: bool) -> Option<&str> {
             // body, so its internal identifiers are not mistaken for the rule.
             b'@' => {
                 let mut cursor = index + 1;
-                while cursor < bytes.len()
-                    && !matches!(bytes[cursor], b'{' | b';' | b'\n')
-                {
+                while cursor < bytes.len() && !matches!(bytes[cursor], b'{' | b';' | b'\n') {
                     cursor += 1;
                 }
                 if cursor < bytes.len() && bytes[cursor] == b'{' {
@@ -8769,10 +8765,7 @@ fn parser_action_assume_overridden(
         })
 }
 
-fn render_parser_action_method(
-    has_action_states: bool,
-    noop_states: &BTreeSet<usize>,
-) -> String {
+fn render_parser_action_method(has_action_states: bool, noop_states: &BTreeSet<usize>) -> String {
     if !has_action_states {
         return "    fn run_action(&mut self, _action: antlr4_runtime::ParserAction, _tree: &antlr4_runtime::ParseTree) {}\n"
             .to_owned();
@@ -9063,9 +9056,7 @@ fn lexer_typed_hook_mappings(
             predicate_index += 1;
             continue;
         };
-        if let Some(call) =
-            patterns.hook_helper_call(SemanticsKind::LexerPredicate, block.body)?
-        {
+        if let Some(call) = patterns.hook_helper_call(SemanticsKind::LexerPredicate, block.body)? {
             mappings.push(LexerTypedHookMapping {
                 rule_index,
                 coordinate_index: pred_index,
@@ -9109,9 +9100,7 @@ fn lexer_typed_hook_mappings(
     Ok(mappings)
 }
 
-fn validate_lexer_typed_hook_signatures(
-    mappings: &[LexerTypedHookMapping],
-) -> io::Result<()> {
+fn validate_lexer_typed_hook_signatures(mappings: &[LexerTypedHookMapping]) -> io::Result<()> {
     let mut signatures = BTreeMap::<(&str, LexerTypedHookKind), Vec<SemanticLiteralKind>>::new();
     for mapping in mappings {
         let signature = mapping
@@ -9140,10 +9129,7 @@ fn validate_lexer_typed_hook_signatures(
     Ok(())
 }
 
-fn render_lexer_typed_hook_adapter(
-    type_name: &str,
-    mappings: &[LexerTypedHookMapping],
-) -> String {
+fn render_lexer_typed_hook_adapter(type_name: &str, mappings: &[LexerTypedHookMapping]) -> String {
     if mappings.is_empty() {
         return String::new();
     }
@@ -9669,9 +9655,9 @@ fn render_parser_predicate_array(
             }
             // `predicate_effective_template` above already unwrapped any wrapper;
             // the constructor never nests, so this is unreachable.
-            PredicateTemplate::WithFailMessage { .. } => unreachable!(
-                "predicate_effective_template unwraps the fail-message wrapper"
-            ),
+            PredicateTemplate::WithFailMessage { .. } => {
+                unreachable!("predicate_effective_template unwraps the fail-message wrapper")
+            }
         };
         items.push(format!("({rule_index}, {pred_index}, {expression})"));
     }
@@ -9710,8 +9696,11 @@ fn render_parser_base_initialization(unknown_policy_literal: Option<&str>) -> St
         "        let base = BaseParser::with_semantic_hooks(input, data, hooks);".to_owned()
     };
     if let Some(policy) = unknown_policy_literal {
-        write!(out, "\n        base.set_unknown_predicate_policy({policy});")
-            .expect("writing to a string cannot fail");
+        write!(
+            out,
+            "\n        base.set_unknown_predicate_policy({policy});"
+        )
+        .expect("writing to a string cannot fail");
     }
     out
 }
@@ -10071,17 +10060,9 @@ atn:
 
         assert_eq!(body.rule_index, 0);
         assert_eq!(body.entry_state, 0);
-        assert_eq!(
-            body.steps,
-            [mt(1, 2), mt(TOKEN_EOF, 3)]
-        );
+        assert_eq!(body.steps, [mt(1, 2), mt(TOKEN_EOF, 3)]);
 
-        let rendered = render_generated_rule_dispatch(
-            &[Some(body)],
-            &[],
-            &BTreeMap::new(),
-            false,
-        );
+        let rendered = render_generated_rule_dispatch(&[Some(body)], &[], &BTreeMap::new(), false);
         assert!(rendered.contains("match_token_recovering(1, 2, atn())"));
         assert!(rendered.contains("generated_diagnostics_checkpoint()"));
         assert!(rendered.contains("restore_generated_diagnostics(__generated_diagnostic_marker)"));
@@ -10117,12 +10098,8 @@ atn:
             }]
         );
 
-        let rendered = render_generated_rule_dispatch(
-            &[Some(body.clone())],
-            &[],
-            &BTreeMap::new(),
-            false,
-        );
+        let rendered =
+            render_generated_rule_dispatch(&[Some(body.clone())], &[], &BTreeMap::new(), false);
         assert!(rendered.contains("parse_generated_rule_0"));
         assert!(rendered.contains("sync_decision(atn(), 1, !__ctx.has_matched_child(), false)"));
         assert!(rendered.contains("ll1_decision_prediction(atn(), 1)"));
@@ -10131,12 +10108,8 @@ atn:
         assert!(rendered.contains("adaptive_predict_stream_info_sll_probe(0, 0"));
         assert!(rendered.contains("adaptive_predict_stream_info_with_context(0, 0"));
 
-        let rendered_with_alt_numbers = render_generated_rule_dispatch(
-            &[Some(body)],
-            &[],
-            &BTreeMap::new(),
-            true,
-        );
+        let rendered_with_alt_numbers =
+            render_generated_rule_dispatch(&[Some(body)], &[], &BTreeMap::new(), true);
         assert!(rendered_with_alt_numbers.contains("__ctx.set_alt_number(1);"));
         assert!(rendered_with_alt_numbers.contains("__ctx.set_alt_number(2);"));
     }
@@ -10163,12 +10136,7 @@ atn:
             }]
         );
 
-        let rendered = render_generated_rule_dispatch(
-            &[Some(body)],
-            &[],
-            &BTreeMap::new(),
-            false,
-        );
+        let rendered = render_generated_rule_dispatch(&[Some(body)], &[], &BTreeMap::new(), false);
         assert!(rendered.contains("loop {"));
         // A `*` loop starts NOT iterated: its first sync is at the loop entry
         // (single-token deletion), so the iteration flag inits to `false`.
@@ -10210,12 +10178,7 @@ atn:
             ]
         );
 
-        let rendered = render_generated_rule_dispatch(
-            &[Some(body)],
-            &[],
-            &BTreeMap::new(),
-            false,
-        );
+        let rendered = render_generated_rule_dispatch(&[Some(body)], &[], &BTreeMap::new(), false);
         // A `+` loop's mandatory first element is iteration 1, so the iteration
         // flag inits to `true`: its first loop-back sync recovers with multi-token
         // `consumeUntil`, matching ANTLR's PLUS_LOOP_BACK.
@@ -10312,12 +10275,7 @@ atn:
             ]
         );
 
-        let rendered = render_generated_rule_dispatch(
-            &[Some(body)],
-            &[],
-            &BTreeMap::new(),
-            false,
-        );
+        let rendered = render_generated_rule_dispatch(&[Some(body)], &[], &BTreeMap::new(), false);
         assert!(rendered.contains("parse_generated_rule_0_precedence(precedence, allow_fallback)"));
         assert!(
             rendered.contains("push_new_recursion_context_with_previous(0isize, 0, &mut __ctx)")
@@ -10833,7 +10791,8 @@ atn:
                 pred_index: 1,
             },
             0,
-            GeneratedStepRenderContext { embedded: None,
+            GeneratedStepRenderContext {
+                embedded: None,
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 direct_generated_rule_calls: &[],
@@ -10863,7 +10822,8 @@ atn:
                 precedence: GeneratedRuleCallPrecedence::Literal(0),
             },
             2,
-            GeneratedStepRenderContext { embedded: None,
+            GeneratedStepRenderContext {
+                embedded: None,
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 direct_generated_rule_calls,
@@ -10933,14 +10893,7 @@ atn:
 
     #[test]
     fn parse_rule_fallback_runs_parser_actions() {
-        let fallback = render_parser_parse_rule_fallback(
-            false,
-            &[],
-            &[],
-            true,
-            false,
-            None,
-        );
+        let fallback = render_parser_parse_rule_fallback(false, &[], &[], true, false, None);
 
         assert!(fallback.contains(
             "parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence"
@@ -11280,12 +11233,7 @@ s : ;
             steps: vec![GeneratedParserStep::MatchWildcard { follow_state: 7 }],
         };
 
-        let rendered = render_generated_rule_dispatch(
-            &[Some(rule)],
-            &[],
-            &BTreeMap::new(),
-            false,
-        );
+        let rendered = render_generated_rule_dispatch(&[Some(rule)], &[], &BTreeMap::new(), false);
 
         // Recovering not-set over 1..=max with an empty exclusion = "any token",
         // threading the wildcard's follow state for EOF-insertion follow checks.
@@ -11314,7 +11262,8 @@ s : ;
                 alts: &alts,
             },
             0,
-            GeneratedStepRenderContext { embedded: None,
+            GeneratedStepRenderContext {
+                embedded: None,
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 direct_generated_rule_calls: &[],
@@ -11360,7 +11309,8 @@ s : ;
                 alts: &alts,
             },
             0,
-            GeneratedStepRenderContext { embedded: None,
+            GeneratedStepRenderContext {
+                embedded: None,
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 direct_generated_rule_calls: &[],
@@ -11400,7 +11350,8 @@ s : ;
                 alts: &alts,
             },
             0,
-            GeneratedStepRenderContext { embedded: None,
+            GeneratedStepRenderContext {
+                embedded: None,
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 direct_generated_rule_calls: &[],
@@ -11441,7 +11392,8 @@ s : ;
                 alts: &alts,
             },
             0,
-            GeneratedStepRenderContext { embedded: None,
+            GeneratedStepRenderContext {
+                embedded: None,
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 direct_generated_rule_calls: &[],
@@ -11484,7 +11436,8 @@ s : ;
                 body: &body,
             },
             0,
-            GeneratedStepRenderContext { embedded: None,
+            GeneratedStepRenderContext {
+                embedded: None,
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 direct_generated_rule_calls: &[],
@@ -11539,7 +11492,8 @@ s : ;
                 body: &body,
             },
             0,
-            GeneratedStepRenderContext { embedded: None,
+            GeneratedStepRenderContext {
+                embedded: None,
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
                 direct_generated_rule_calls: &[],
@@ -11757,7 +11711,11 @@ fragment ID2 : { <Column()> >= 2 }? [a-zA-Z];"#,
             &SemPatternFile::default(),
         )
         .expect_err("an untranslated <...> StringTemplate predicate must still abort");
-        assert!(error.to_string().contains("unsupported target predicate template"));
+        assert!(
+            error
+                .to_string()
+                .contains("unsupported target predicate template")
+        );
     }
 
     #[test]
@@ -11788,8 +11746,7 @@ fragment ID2 : { <Column()> >= 2 }? [a-zA-Z];"#,
         // (mis-mapping) and the leftover would error with "no parser ATN
         // predicate transition". The filter must skip the lexer-rule predicate
         // so only `s`'s coordinate is considered.
-        let combined =
-            "grammar S;\nID : { <Column()> >= 2 }? [a-z]+ ;\ns : {isTypeName()}? A ;\n";
+        let combined = "grammar S;\nID : { <Column()> >= 2 }? [a-z]+ ;\ns : {isTypeName()}? A ;\n";
         let templates = parser_predicate_templates(
             &predicate_parser_data(),
             combined,
@@ -11812,15 +11769,13 @@ fragment ID2 : { <Column()> >= 2 }? [a-zA-Z];"#,
         // coordinate override. Only the parser-rule predicate (rule `s`, pred 0)
         // should map, proving the lexer predicate is filtered rather than
         // shifting the parser predicate onto the wrong coordinate.
-        let combined =
-            "grammar S;\nID : { <Column()> >= 2 }? [a-z]+ ;\ns : {isTypeName()}? A ;\n";
+        let combined = "grammar S;\nID : { <Column()> >= 2 }? [a-z]+ ;\ns : {isTypeName()}? A ;\n";
         let patterns = parse_sem_patterns(
             "version = 1\n[[coordinate]]\nkind = \"predicate\"\nrule = \"s\"\nindex = 0\ndispose = \"hook\"\n",
         )
         .expect("pattern file parses");
-        let templates =
-            parser_predicate_templates(&predicate_parser_data(), combined, &patterns)
-                .expect("combined grammar maps only the parser-rule predicate");
+        let templates = parser_predicate_templates(&predicate_parser_data(), combined, &patterns)
+            .expect("combined grammar maps only the parser-rule predicate");
 
         assert_eq!(templates.len(), 1, "only the parser-rule predicate maps");
         assert_eq!(templates[0].0, (0, 0), "mapped to rule `s` pred 0");
@@ -11861,7 +11816,6 @@ fragment ID2 : { <Column()> >= 2 }? [a-zA-Z];"#,
         );
     }
 
-
     #[test]
     fn parses_predicate_fail_option_message() {
         let grammar = "a : a ID {<False()>}?<fail='custom message'> | ID ;";
@@ -11884,10 +11838,8 @@ fragment ID2 : { <Column()> >= 2 }? [a-zA-Z];"#,
         // A non-constant-false predicate (hook, member, lookahead, …) preserves
         // its `<fail=...>` message via the transparent `WithFailMessage` wrapper
         // rather than discarding it.
-        let wrapped = predicate_template_with_fail_message(
-            PredicateTemplate::Hook,
-            "hook failed".to_owned(),
-        );
+        let wrapped =
+            predicate_template_with_fail_message(PredicateTemplate::Hook, "hook failed".to_owned());
         assert_eq!(
             wrapped,
             PredicateTemplate::WithFailMessage {
@@ -11902,7 +11854,10 @@ fragment ID2 : { <Column()> >= 2 }? [a-zA-Z];"#,
             &PredicateTemplate::Hook
         );
         assert!(can_generate_parser_predicate(&wrapped));
-        assert_eq!(predicate_template_fail_message(&wrapped), Some("hook failed"));
+        assert_eq!(
+            predicate_template_fail_message(&wrapped),
+            Some("hook failed")
+        );
         // Disposition follows the inner: a wrapped hook is still `Hooked`.
         assert_eq!(
             predicate_template_disposition(Some(&wrapped), SemUnknownPolicy::AssumeTrue),
@@ -11930,10 +11885,7 @@ continue returns [<IntArg("return")>] : {<AssignLocal("$return","0")>} ;"#;
         assert_eq!(spans.len(), 2, "only authored action blocks produce slots");
         assert_eq!(spans[0].body, r#"<write("$text")>"#);
         assert_eq!(spans[0].rule_index, 0);
-        assert_eq!(
-            spans[1].body,
-            r#"<AssignLocal("$return","0")>"#
-        );
+        assert_eq!(spans[1].body, r#"<AssignLocal("$return","0")>"#);
         assert_eq!(spans[1].rule_index, 1);
     }
 
@@ -11996,7 +11948,10 @@ expr : expr PLUS {op();} expr
         assert_eq!(by_state.get(&0), Some(&(0, "one();")));
         assert_eq!(by_state.get(&5), Some(&(1, "primary();")));
         assert_eq!(by_state.get(&6), Some(&(1, "op();")));
-        assert!(!by_state.contains_key(&4), "synthetic state 4 has no source body");
+        assert!(
+            !by_state.contains_key(&4),
+            "synthetic state 4 has no source body"
+        );
     }
 
     #[test]
@@ -12134,7 +12089,10 @@ ID: [a-z]+ ;\n";
         // The rule-name reader skips leading `//` and `/* */` comments so the
         // rule name that follows resolves (the header for an action after a
         // doc-commented rule).
-        assert_eq!(rule_header_start_identifier("/* one-line */ RCURL"), Some("RCURL"));
+        assert_eq!(
+            rule_header_start_identifier("/* one-line */ RCURL"),
+            Some("RCURL")
+        );
         assert_eq!(
             rule_header_start_identifier("/*\n * multi\n * line\n */\nRCURL"),
             Some("RCURL")
@@ -12145,7 +12103,10 @@ ID: [a-z]+ ;\n";
         );
         // A rule-level `@init {...}` clause between the name and `:` is skipped,
         // so the name still resolves.
-        assert_eq!(rule_header_start_identifier("s @init { init(); }"), Some("s"));
+        assert_eq!(
+            rule_header_start_identifier("s @init { init(); }"),
+            Some("s")
+        );
 
         // The statement-start reader takes the FIRST identifier, so a rule with a
         // `returns [...]` / `locals [...]` clause resolves to the rule name, not
@@ -12155,10 +12116,19 @@ ID: [a-z]+ ;\n";
             rule_header_start_identifier("continue returns [int x]"),
             Some("continue")
         );
-        assert_eq!(rule_header_start_identifier("s @init { init(); }"), Some("s"));
-        assert_eq!(rule_header_start_identifier("/* doc */ RCURL"), Some("RCURL"));
+        assert_eq!(
+            rule_header_start_identifier("s @init { init(); }"),
+            Some("s")
+        );
+        assert_eq!(
+            rule_header_start_identifier("/* doc */ RCURL"),
+            Some("RCURL")
+        );
         // `fragment` lexer rules keep their name.
-        assert_eq!(rule_header_start_identifier("fragment DIGIT"), Some("DIGIT"));
+        assert_eq!(
+            rule_header_start_identifier("fragment DIGIT"),
+            Some("DIGIT")
+        );
         // A grammar-level `tokens { ... }` / `options { ... }` declaration
         // precedes the first rule with no terminating `;`; it must be skipped so
         // the following rule name resolves (composite/imported grammars).
@@ -12189,7 +12159,10 @@ INT : '0'..'9'+ ;\n";
         let rule_names = vec!["s".to_owned(), "x".to_owned()];
         let spans = parser_action_source_block_slots(grammar, &rule_names);
         assert_eq!(
-            spans.iter().map(|span| span.body.as_str()).collect::<Vec<_>>(),
+            spans
+                .iter()
+                .map(|span| span.body.as_str())
+                .collect::<Vec<_>>(),
             [r#"<writeln("S.x")>"#],
             "the imported rule's action source span must not be dropped"
         );
@@ -12771,12 +12744,19 @@ ID: [a-z]+ { customJava(); };
         // a duplicate arm; an uncovered coordinate is appended.
         let mut predicates = vec![((0, 0), PredicateTemplate::True)];
         set_lexer_predicate_template(&mut predicates, (0, 0), PredicateTemplate::False);
-        assert_eq!(predicates, [((0, 0), PredicateTemplate::False)], "replaces covered");
+        assert_eq!(
+            predicates,
+            [((0, 0), PredicateTemplate::False)],
+            "replaces covered"
+        );
 
         set_lexer_predicate_template(&mut predicates, (1, 2), PredicateTemplate::True);
         assert_eq!(
             predicates,
-            [((0, 0), PredicateTemplate::False), ((1, 2), PredicateTemplate::True)],
+            [
+                ((0, 0), PredicateTemplate::False),
+                ((1, 2), PredicateTemplate::True)
+            ],
             "appends uncovered"
         );
     }
@@ -12930,21 +12910,17 @@ lower = "bool(false)"
             })
         );
         assert_eq!(
-            parse_semantic_helper_call(
-                "this.HandleAction();",
-                SemanticsKind::LexerAction,
-            ),
+            parse_semantic_helper_call("this.HandleAction();", SemanticsKind::LexerAction,),
             Some(SemanticHelperCall {
                 name: "HandleAction".to_owned(),
                 arguments: Vec::new(),
                 negated: false,
             })
         );
-        assert!(parse_semantic_helper_call(
-            "this.n(dynamicValue)",
-            SemanticsKind::ParserPredicate,
-        )
-        .is_none());
+        assert!(
+            parse_semantic_helper_call("this.n(dynamicValue)", SemanticsKind::ParserPredicate,)
+                .is_none()
+        );
         assert_eq!(
             parse_semantic_helper_call(
                 r"this.n('line\n\'quoted\'')",
@@ -12962,27 +12938,38 @@ lower = "bool(false)"
             "version = 1\n[[helper]]\nkind = \"lexer-action\"\nname = \"handle\"\nreturns = \"unit\"\nlower = \"hook\"\n[[helper]]\nname = \"n\"\narguments = \"string\"\nreturns = \"bool\"\nlower = \"hook\"\n",
         )
         .expect("pattern file parses");
-        assert!(patterns
-            .hook_helper_call(SemanticsKind::LexerAction, "this.handle();")
-            .expect("matching cannot fail")
-            .is_some());
-        assert!(patterns
-            .hook_helper_call(SemanticsKind::LexerPredicate, "this.handle()")
-            .expect("matching cannot fail")
-            .is_none());
+        assert!(
+            patterns
+                .hook_helper_call(SemanticsKind::LexerAction, "this.handle();")
+                .expect("matching cannot fail")
+                .is_some()
+        );
+        assert!(
+            patterns
+                .hook_helper_call(SemanticsKind::LexerPredicate, "this.handle()")
+                .expect("matching cannot fail")
+                .is_none()
+        );
         let call = patterns
             .hook_helper_call(SemanticsKind::ParserPredicate, r#"this.n("value")"#)
             .expect("matching cannot fail")
             .expect("string argument matches");
-        assert_eq!(call.arguments, [SemanticLiteral::String("value".to_owned())]);
-        assert!(patterns
-            .hook_helper_call(SemanticsKind::LexerPredicate, r#"this.n("value")"#)
-            .expect("matching cannot fail")
-            .is_some());
-        assert!(patterns
-            .hook_helper_call(SemanticsKind::LexerAction, r#"this.n("value");"#)
-            .expect("matching cannot fail")
-            .is_none());
+        assert_eq!(
+            call.arguments,
+            [SemanticLiteral::String("value".to_owned())]
+        );
+        assert!(
+            patterns
+                .hook_helper_call(SemanticsKind::LexerPredicate, r#"this.n("value")"#)
+                .expect("matching cannot fail")
+                .is_some()
+        );
+        assert!(
+            patterns
+                .hook_helper_call(SemanticsKind::LexerAction, r#"this.n("value");"#)
+                .expect("matching cannot fail")
+                .is_none()
+        );
     }
 
     #[test]
@@ -13078,13 +13065,20 @@ dispose = "hook"
             "ID : {aheadIsDigit()}? [a-z]+ ;\n",
             "s : {isTypeName()}? A ;\n",
         );
-        let mappings =
-            parser_typed_hook_mappings(&predicate_parser_data(), Some(combined), &SemPatternFile::default())
-                .expect("typed hook mapping should succeed");
+        let mappings = parser_typed_hook_mappings(
+            &predicate_parser_data(),
+            Some(combined),
+            &SemPatternFile::default(),
+        )
+        .expect("typed hook mapping should succeed");
 
         // Only the parser-rule helper (`isTypeName` on rule `s`, pred 0) maps;
         // the lexer-rule `aheadIsDigit` helper is not wired to a parser hook.
-        assert_eq!(mappings.len(), 1, "only the parser-rule helper maps: {mappings:?}");
+        assert_eq!(
+            mappings.len(),
+            1,
+            "only the parser-rule helper maps: {mappings:?}"
+        );
         assert_eq!((mappings[0].rule_index, mappings[0].pred_index), (0, 0));
         assert_eq!(mappings[0].method_name, "is_type_name");
     }
@@ -13094,10 +13088,19 @@ dispose = "hook"
         // A grammar helper that normalizes to the reserved action-hook method
         // name must be disambiguated, or the generated trait would declare two
         // `custom_action` methods (Rust has no arity overloading).
-        assert_eq!(typed_hook_predicate_method_name("customAction"), "custom_action_pred");
-        assert_eq!(typed_hook_predicate_method_name("custom_action"), "custom_action_pred");
+        assert_eq!(
+            typed_hook_predicate_method_name("customAction"),
+            "custom_action_pred"
+        );
+        assert_eq!(
+            typed_hook_predicate_method_name("custom_action"),
+            "custom_action_pred"
+        );
         // An unrelated helper keeps its normalized name.
-        assert_eq!(typed_hook_predicate_method_name("isTypeName"), "is_type_name");
+        assert_eq!(
+            typed_hook_predicate_method_name("isTypeName"),
+            "is_type_name"
+        );
     }
 
     #[test]
@@ -13105,9 +13108,12 @@ dispose = "hook"
         // End-to-end: a bare `customAction()` predicate helper must not collide
         // with the fixed `custom_action` action-hook method on the trait.
         let grammar = "grammar S;\ns : {customAction()}? A ;\n";
-        let mappings =
-            parser_typed_hook_mappings(&predicate_parser_data(), Some(grammar), &SemPatternFile::default())
-                .expect("typed hook mapping should succeed");
+        let mappings = parser_typed_hook_mappings(
+            &predicate_parser_data(),
+            Some(grammar),
+            &SemPatternFile::default(),
+        )
+        .expect("typed hook mapping should succeed");
         assert_eq!(mappings.len(), 1);
         assert_eq!(mappings[0].method_name, "custom_action_pred");
 
@@ -13358,7 +13364,11 @@ ID : [a-z]+ ;\n";
         // @members blocks and exception handlers are excluded; the predicate on
         // t is excluded.
         assert_eq!(counts.get(&0).copied(), Some(2), "counts: {counts:?}");
-        assert_eq!(counts.get(&1).copied(), None, "rule t has no action block: {counts:?}");
+        assert_eq!(
+            counts.get(&1).copied(),
+            None,
+            "rule t has no action block: {counts:?}"
+        );
     }
 
     #[test]
@@ -13708,11 +13718,10 @@ ID : [a-z]+ ;\n";
         // adaptive-direct shortcut, but that path drops the emitted
         // ParserRuntimeOptions (and thus the policy). The gate must be disabled
         // so a non-default policy always reaches the options-carrying call.
-        let default_module =
-            render_parser_with_options("TParser", &minimal_parser_data(), None, {
-                ParserRenderOptions::default()
-            })
-            .expect("parser should render under default policy");
+        let default_module = render_parser_with_options("TParser", &minimal_parser_data(), None, {
+            ParserRenderOptions::default()
+        })
+        .expect("parser should render under default policy");
         assert!(
             default_module.contains("&& true && std::env::var_os(\"ANTLR4_RUST_ADAPTIVE_DIRECT\")"),
             "the predicate-free fixture must allow adaptive-direct by default, or this test proves nothing"
@@ -13732,8 +13741,7 @@ ID : [a-z]+ ;\n";
             )
             .expect("parser should render under a non-default policy");
             assert!(
-                module
-                    .contains("&& false && std::env::var_os(\"ANTLR4_RUST_ADAPTIVE_DIRECT\")"),
+                module.contains("&& false && std::env::var_os(\"ANTLR4_RUST_ADAPTIVE_DIRECT\")"),
                 "policy {policy:?} must disable the adaptive-direct gate"
             );
         }
@@ -13818,8 +13826,9 @@ ID : [a-z]+ ;\n";
             "version = 1\n[[coordinate]]\nkind = \"predicate\"\nrule = \"s\"\nindex = 0\ndispose = \"assume-false\"\n",
         )
         .expect("pattern file parses");
-        let templates = parser_predicate_templates_from_overrides(&predicate_parser_data(), &patterns)
-            .expect("override synthesis should succeed");
+        let templates =
+            parser_predicate_templates_from_overrides(&predicate_parser_data(), &patterns)
+                .expect("override synthesis should succeed");
         assert_eq!(templates, [((0, 0), PredicateTemplate::False)]);
 
         // And the rendered parser without grammar source carries the SemIR
@@ -13937,7 +13946,8 @@ ID : [a-z]+ ;\n";
         assert!(assume_true.contains("_ => Some(true),"));
         assert!(!assume_true.contains("_ => Some(false),"));
 
-        let assume_false = render_lexer_predicate_method(&predicates, SemUnknownPolicy::AssumeFalse);
+        let assume_false =
+            render_lexer_predicate_method(&predicates, SemUnknownPolicy::AssumeFalse);
         assert!(assume_false.contains("_ => Some(false),"));
         assert!(!assume_false.contains("_ => Some(true),"));
 

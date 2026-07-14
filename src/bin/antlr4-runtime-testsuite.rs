@@ -115,10 +115,7 @@ fn run_case(
         Ok(result) if result.output == descriptor.output && result.errors == descriptor.errors => {
             println!("pass {}", descriptor.id());
             if let Err(error) = remove_descriptor_work_dir(args, descriptor) {
-                eprintln!(
-                    "warning: could not clean {}: {error}",
-                    descriptor.id()
-                );
+                eprintln!("warning: could not clean {}: {error}", descriptor.id());
             }
             true
         }
@@ -161,7 +158,10 @@ impl<'a> SweepContext<'a> {
                 .arg(&args.antlr_jar)
                 .arg("-d")
                 .arg(&render_classes)
-                .arg(args.runtime_crate.join("tools/stg-render/RenderGrammar.java")),
+                .arg(
+                    args.runtime_crate
+                        .join("tools/stg-render/RenderGrammar.java"),
+                ),
             "StringTemplate render driver compile",
         )?;
         let generator = prebuild_generator(args)?;
@@ -268,7 +268,10 @@ mod tests {
             json_string_value(r#"{"executable":"a\"b c"}"#, "executable").as_deref(),
             Some("a\"b c")
         );
-        assert_eq!(json_string_value(r#"{"executable":"broken"#, "executable"), None);
+        assert_eq!(
+            json_string_value(r#"{"executable":"broken"#, "executable"),
+            None
+        );
         assert_eq!(json_string_value("{}", "executable"), None);
     }
 }
@@ -923,8 +926,13 @@ fn run_descriptor(
         "ANTLR tool",
     )?;
 
-    let rust_dir =
-        generate_rust_modules(context, descriptor, &java_dir, &case_dir, &source_grammar_path)?;
+    let rust_dir = generate_rust_modules(
+        context,
+        descriptor,
+        &java_dir,
+        &case_dir,
+        &source_grammar_path,
+    )?;
 
     let smoke_dir = case_dir.join("rust");
     create_smoke_crate(args, descriptor, &rust_dir, &smoke_dir)?;
@@ -1077,10 +1085,7 @@ fn smoke_main(descriptor: &Descriptor) -> String {
     // The learned-DFA trace only exists when tokens go through ATN
     // interpretation, so showDFA cases opt out of the compiled lexer DFA.
     let (lexer_binding, force_interpreted) = if show_dfa {
-        (
-            "let mut lexer",
-            "    lexer.set_force_interpreted(true);\n",
-        )
+        ("let mut lexer", "    lexer.set_force_interpreted(true);\n")
     } else {
         ("let lexer", "")
     };

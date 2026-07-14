@@ -750,9 +750,11 @@ impl<'a> ParserAtnSimulator<'a> {
                 merge_cache,
             )?;
             let (kind, exact, conflicting_alts) = match full_context.resolution {
-                FullContextResolution::Ambiguous { exact, ref alts } => {
-                    (ParserAtnPredictionDiagnosticKind::Ambiguity, exact, alts.clone())
-                }
+                FullContextResolution::Ambiguous { exact, ref alts } => (
+                    ParserAtnPredictionDiagnosticKind::Ambiguity,
+                    exact,
+                    alts.clone(),
+                ),
                 // A unique full-context alt after an SLL conflict is Java's
                 // reportContextSensitivity; the SLL state's conflicting alts
                 // describe the conflict that forced the retry.
@@ -1531,7 +1533,6 @@ pub enum ParserAtnSimulatorError {
     PredictionRequiresMoreLookahead,
     UnknownDecision(usize),
 }
-
 
 /// Java `DFASerializer.getStateString`: `:sN^=>alt` for accept states.
 fn dfa_state_display(state: &DfaState) -> String {

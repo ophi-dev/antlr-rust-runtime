@@ -21,8 +21,8 @@ use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 
 use crate::atn::lexer::{
-    LexerConfig, best_accept, epsilon_closure, lexer_action_belongs_to_accept,
-    prune_after_accepts, set_config_state,
+    LexerConfig, best_accept, epsilon_closure, lexer_action_belongs_to_accept, prune_after_accepts,
+    set_config_state,
 };
 use crate::atn::{Atn, Transition};
 use crate::int_stream::EOF;
@@ -259,7 +259,11 @@ impl CompiledLexerDfa {
                 out.push(action.behind as u32);
             }
         }
-        debug_assert_eq!(out.len(), capacity, "serialized stream fills its capacity exactly");
+        debug_assert_eq!(
+            out.len(),
+            capacity,
+            "serialized stream fills its capacity exactly"
+        );
         out
     }
 
@@ -301,9 +305,8 @@ impl CompiledLexerDfa {
     /// Cheap structural validation so a corrupted embedded stream degrades to
     /// runtime compilation instead of an out-of-bounds panic mid-parse.
     fn table_indexes_are_valid(&self) -> bool {
-        let state_ok = |target: u16| {
-            usize::from(target) < self.states.len() || target >= ESCAPE_STATE
-        };
+        let state_ok =
+            |target: u16| usize::from(target) < self.states.len() || target >= ESCAPE_STATE;
         self.mode_starts
             .iter()
             .flatten()
@@ -314,7 +317,10 @@ impl CompiledLexerDfa {
                     && state_ok(state.eof_target)
                     && (state.accept == u32::MAX || (state.accept as usize) < self.accepts.len())
             })
-            && self.ascii_rows.iter().all(|row| row.iter().all(|&target| state_ok(target)))
+            && self
+                .ascii_rows
+                .iter()
+                .all(|row| row.iter().all(|&target| state_ok(target)))
             && self.wide_rows.iter().all(|row| {
                 wide_row_is_searchable(row) && row.iter().all(|range| state_ok(range.target))
             })
@@ -433,7 +439,11 @@ struct RowPools {
 }
 
 impl RowPools {
-    fn intern_ascii(&mut self, rows: &mut Vec<[u16; ASCII_EDGE_SYMBOLS]>, row: [u16; ASCII_EDGE_SYMBOLS]) -> u32 {
+    fn intern_ascii(
+        &mut self,
+        rows: &mut Vec<[u16; ASCII_EDGE_SYMBOLS]>,
+        row: [u16; ASCII_EDGE_SYMBOLS],
+    ) -> u32 {
         *self.ascii_ids.entry(row).or_insert_with(|| {
             rows.push(row);
             (rows.len() - 1) as u32
@@ -853,7 +863,12 @@ fn eof_move(
 }
 
 /// Converts a finished mode's edge rows into pooled table entries.
-fn commit_mode(dfa: &mut CompiledLexerDfa, pools: &mut RowPools, build: ModeBuild, rows: Vec<StateRows>) {
+fn commit_mode(
+    dfa: &mut CompiledLexerDfa,
+    pools: &mut RowPools,
+    build: ModeBuild,
+    rows: Vec<StateRows>,
+) {
     for (accept, state_rows) in build.accepts.into_iter().zip(rows) {
         let accept_id = accept.map_or(u32::MAX, |accept| {
             dfa.accepts.push(accept);
@@ -921,37 +936,93 @@ mod tests {
     fn two_rule_atn(with_predicate: bool) -> Atn {
         let epsilon_or_predicate = if with_predicate { 4 } else { 1 };
         AtnDeserializer::new(&SerializedAtn::from_i32(&[
-            4, 0, 2, // version, lexer, max token type
+            4,
+            0,
+            2, // version, lexer, max token type
             9, // states
-            6, -1, // 0 token start
-            2, 0, // 1 rule 0 start
-            1, 0, // 2
-            1, 0, // 3
-            7, 0, // 4 rule 0 stop
-            2, 1, // 5 rule 1 start
-            1, 1, // 6
-            1, 1, // 7
-            7, 1, // 8 rule 1 stop
+            6,
+            -1, // 0 token start
+            2,
+            0, // 1 rule 0 start
+            1,
+            0, // 2
+            1,
+            0, // 3
+            7,
+            0, // 4 rule 0 stop
+            2,
+            1, // 5 rule 1 start
+            1,
+            1, // 6
+            1,
+            1, // 7
+            7,
+            1, // 8 rule 1 stop
             0, // non-greedy
             0, // precedence
             2, // rules
-            1, 1, // rule 0 starts at 1, token type 1
-            5, 2, // rule 1 starts at 5, token type 2
+            1,
+            1, // rule 0 starts at 1, token type 1
+            5,
+            2, // rule 1 starts at 5, token type 2
             1, // modes
             0, // default mode starts at 0
             0, // sets
             8, // edges
-            0, 1, 1, 0, 0, 0, // start -> rule 0
-            0, 5, 1, 0, 0, 0, // start -> rule 1
-            1, 2, 5, 'a' as i32, 0, 0, // 'a'
-            2, 3, 5, 'b' as i32, 0, 0, // 'b'
-            3, 4, epsilon_or_predicate, 0, 0, 0, // epsilon or predicate to stop
-            5, 6, 5, ' ' as i32, 0, 0, // ' '
-            6, 7, 1, 0, 0, 0, //
-            7, 8, 6, 1, 0, 0, // action 0, then stop
+            0,
+            1,
+            1,
+            0,
+            0,
+            0, // start -> rule 0
+            0,
+            5,
+            1,
+            0,
+            0,
+            0, // start -> rule 1
+            1,
+            2,
+            5,
+            'a' as i32,
+            0,
+            0, // 'a'
+            2,
+            3,
+            5,
+            'b' as i32,
+            0,
+            0, // 'b'
+            3,
+            4,
+            epsilon_or_predicate,
+            0,
+            0,
+            0, // epsilon or predicate to stop
+            5,
+            6,
+            5,
+            ' ' as i32,
+            0,
+            0, // ' '
+            6,
+            7,
+            1,
+            0,
+            0,
+            0, //
+            7,
+            8,
+            6,
+            1,
+            0,
+            0, // action 0, then stop
             1, // decisions
-            0, 1, // lexer actions
-            6, 0, 0, // skip
+            0,
+            1, // lexer actions
+            6,
+            0,
+            0, // skip
         ]))
         .deserialize()
         .expect("artificial lexer ATN should deserialize")

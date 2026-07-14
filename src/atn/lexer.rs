@@ -302,9 +302,7 @@ where
         |lexer, action| {
             let _ = dispatch_lexer_action_hook(&hooks, lexer, action);
         },
-        |lexer, predicate| {
-            dispatch_lexer_predicate_hook(&hooks, lexer, predicate).unwrap_or(true)
-        },
+        |lexer, predicate| dispatch_lexer_predicate_hook(&hooks, lexer, predicate).unwrap_or(true),
         |_, _, _| {},
     );
     hooks.borrow_mut().lexer_token_emitted(&token);
@@ -392,9 +390,7 @@ where
         |lexer, action| {
             let _ = dispatch_lexer_action_hook(&hooks, lexer, action);
         },
-        |lexer, predicate| {
-            dispatch_lexer_predicate_hook(&hooks, lexer, predicate).unwrap_or(true)
-        },
+        |lexer, predicate| dispatch_lexer_predicate_hook(&hooks, lexer, predicate).unwrap_or(true),
         |_, _, _| {},
     );
     hooks.borrow_mut().lexer_token_emitted(&token);
@@ -1535,7 +1531,11 @@ mod tests {
             assert!(!ctx.set_mode(3), "predicate context does not mutate");
             assert_eq!(ctx.pop_mode(), None, "predicate context does not mutate");
         }
-        assert_eq!(lexer.mode(), 0, "shared-context calls left the lexer unchanged");
+        assert_eq!(
+            lexer.mode(),
+            0,
+            "shared-context calls left the lexer unchanged"
+        );
     }
 
     #[test]

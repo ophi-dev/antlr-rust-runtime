@@ -414,7 +414,12 @@ fn matching_arg_bracket(source: &str, mut index: usize) -> Option<usize> {
 
 /// Parses the clauses between a rule's name and its `:`: args `[...]`,
 /// `returns [...]`, `locals [...]`, `@init {...}`, `@after {...}`.
-fn parse_rule_header_clauses(source: &str, header_start: usize, colon: usize, rule: &mut RuleModel) {
+fn parse_rule_header_clauses(
+    source: &str,
+    header_start: usize,
+    colon: usize,
+    rule: &mut RuleModel,
+) {
     let header = &source[header_start..colon];
     let mut offset = 0;
     // The rule name itself.
@@ -734,7 +739,9 @@ fn classify_members(body: &str, members: &mut MembersModel) -> io::Result<()> {
             item.push_str(body[offset..item_end].trim());
             members.impl_items.push(item);
             offset = item_end;
-        } else if rest.starts_with("struct ") || rest.starts_with("impl ") || rest.starts_with("use ")
+        } else if rest.starts_with("struct ")
+            || rest.starts_with("impl ")
+            || rest.starts_with("use ")
         {
             let item_end = item_end_from(body, offset)?;
             let mut item = std::mem::take(&mut pending_attrs);
@@ -1007,11 +1014,7 @@ fn text_expression(ctx: &TranslationCtx<'_>) -> String {
 
 /// `$ctx.member` — a labeled element read (`$ctx.r`) or a generated list
 /// accessor (`$ctx.elseIfStatement_all`).
-fn translate_ctx_member(
-    member: &str,
-    ctx: &TranslationCtx<'_>,
-    body: &str,
-) -> io::Result<String> {
+fn translate_ctx_member(member: &str, ctx: &TranslationCtx<'_>, body: &str) -> io::Result<String> {
     if let Some((element, occurrence)) = ctx.resolve_label(member) {
         // `$ctx.r` denotes the labeled child's subtree (Java field of the
         // context); translate like `$r.ctx`.
@@ -1195,7 +1198,13 @@ mod tests {
             e returns [v: i32] : a=e '*' b=e {$v = 1;} | INT {$v = 2;} ;\n\
             INT : [0-9]+ ;\n";
         let m = model(source, &["s", "e"]);
-        assert_eq!(m.rules[1].attrs, vec![AttrDecl { name: "v".into(), ty: "i32".into() }]);
+        assert_eq!(
+            m.rules[1].attrs,
+            vec![AttrDecl {
+                name: "v".into(),
+                ty: "i32".into()
+            }]
+        );
         assert_eq!(m.rules[1].alts.len(), 2);
         assert_eq!(m.rules[1].alts[0].refs.len(), 2);
         assert_eq!(m.rules[1].alts[0].refs[0].label.as_deref(), Some("a"));
@@ -1205,8 +1214,20 @@ mod tests {
     #[test]
     fn parses_java_style_attr_decls() {
         let decls = parse_attr_decls("int v, String s");
-        assert_eq!(decls[0], AttrDecl { name: "v".into(), ty: "i32".into() });
-        assert_eq!(decls[1], AttrDecl { name: "s".into(), ty: "String".into() });
+        assert_eq!(
+            decls[0],
+            AttrDecl {
+                name: "v".into(),
+                ty: "i32".into()
+            }
+        );
+        assert_eq!(
+            decls[1],
+            AttrDecl {
+                name: "s".into(),
+                ty: "String".into()
+            }
+        );
     }
 
     #[test]
@@ -1252,7 +1273,10 @@ mod tests {
             token_types: &toks,
         };
         let text = translate_body("$text", &ctx).expect("translates");
-        assert!(text.contains("text_interval(action.start_index()"), "{text}");
+        assert!(
+            text.contains("text_interval(action.start_index()"),
+            "{text}"
+        );
         let tree = translate_body("$ctx.to_string_tree(Some(self))", &ctx).expect("translates");
         assert_eq!(tree, "(&__ctx).to_string_tree(Some(self))");
     }

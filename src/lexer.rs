@@ -777,12 +777,7 @@ where
     }
 
     /// Records one fail-loud semantic-hook miss per coordinate and token start.
-    pub fn record_semantic_error(
-        &self,
-        action: bool,
-        rule_index: usize,
-        coordinate_index: usize,
-    ) {
+    pub fn record_semantic_error(&self, action: bool, rule_index: usize, coordinate_index: usize) {
         let kind = u8::from(action);
         if !self.semantic_error_coordinates.borrow_mut().insert((
             kind,
@@ -796,9 +791,7 @@ where
         self.record_error(
             self.token_start_line,
             self.token_start_column,
-            format!(
-                "unhandled lexer semantic {label}: rule={rule_index} index={coordinate_index}"
-            ),
+            format!("unhandled lexer semantic {label}: rule={rule_index} index={coordinate_index}"),
         );
     }
 
