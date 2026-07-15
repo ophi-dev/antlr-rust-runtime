@@ -402,15 +402,17 @@ Run the Rust-vs-Go comparison across all fixture languages:
 python3 tools/parse-bench/run.py \
   --languages kotlin,csharp,java,trino \
   --runtimes rust-antlr,go-antlr \
-  --quick \
+  --iters 10 \
+  --warmups 2 \
   --json target/parse-bench/results.json \
   --markdown target/parse-bench/results.md
 ```
 
 The report prints `min`/`avg` parse time and a ratio against `rust-antlr` for
-every fixture. Drop `--quick` (or add `--iters`/`--warmups`) for longer, lower
-variance runs; add `--runtimes rust-antlr,go-antlr,python-antlr,tree-sitter` to
-include the other runtimes.
+every fixture. Use `--quick` for a 3-iteration/1-warmup smoke run, or adjust
+`--iters`/`--warmups` for longer, lower-variance runs; add
+`--runtimes rust-antlr,go-antlr,python-antlr,tree-sitter` to include the other
+runtimes.
 
 ### Current results
 
@@ -420,19 +422,21 @@ group (**> 1.0** means Rust is faster than Go; **< 1.0** means slower):
 
 | Language | Fixtures | Rust vs Go (parse time) |
 |----------|---------:|-------------------------|
-| Kotlin   | 4        | ~18× faster             |
-| Java     | 4        | ~1.8× faster            |
-| C#       | 4        | ~1.2× faster            |
-| Trino SQL| 5        | ~1.1× faster            |
+| Kotlin   | 4        | ~18.5× faster           |
+| Java     | 4        | ~2.5× faster            |
+| C#       | 4        | ~1.7× faster            |
+| Trino SQL| 5        | ~2.2× faster            |
 
-Rust is faster than Go on every fixture in all four language groups, with
+Rust is faster than Go on average in all four language groups, with
 Kotlin leading dramatically (expression-ladder memoization in the generated
 walker). Lexer DFAs are compiled at generation time and embedded in the
 generated lexer, so tokenization needs no warmup at all; learned parser
 decision DFAs are shared across parser instances, so repeated parses of the
 same grammar — the common case for a CLI tool or language server — skip
-relearning entirely. Numbers are warm-parse minimums on an Apple M3 Pro and
-are indicative — re-run the benchmark on your own hardware for authoritative
+relearning entirely. Shared grammar-level lookahead caches likewise amortize
+left-recursive loop prediction across parses. Numbers are warm-parse minimums
+from 10 measured iterations after two warmups on an Apple M3 Pro and are
+indicative — re-run the benchmark on your own hardware for authoritative
 figures.
 
 ## Useful Information
