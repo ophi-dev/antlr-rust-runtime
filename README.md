@@ -130,15 +130,15 @@ use generated::json::{self, Json};
 use generated::json_lexer::JsonLexer;
 
 fn main() -> Result<(), antlr4_runtime::AntlrError> {
-    let tree = json::parse(r#"{"a":1}"#, JsonLexer::new, Json::json)?;
+    let parsed = json::parse(r#"{"a":1}"#, JsonLexer::new, Json::json)?;
 
-    println!("{}", tree.text());
+    println!("{}", parsed.tree.text(&parsed.tokens));
     Ok(())
 }
 ```
 
 Use `parse_with_parser` when you want the compact setup path and also need the
-parser afterward for diagnostics or the owned token stream:
+parser afterward for diagnostics:
 
 ```rust
 use antlr4_runtime::Parser;
@@ -148,11 +148,14 @@ use generated::json_lexer::JsonLexer;
 fn main() -> Result<(), antlr4_runtime::AntlrError> {
     let output = json::parse_with_parser(r#"{"a":1}"#, JsonLexer::new, Json::json)?;
     let syntax_errors = output.parser.number_of_syntax_errors();
-    let tree = output.result;
-    let tokens = output.parser.into_token_stream();
+    let json::JsonParseOutput {
+        result: tree,
+        parser,
+    } = output;
+    let tokens = parser.into_token_store();
 
-    println!("{} errors across {} tokens", syntax_errors, tokens.tokens().len());
-    println!("{}", tree.text());
+    println!("{} errors across {} tokens", syntax_errors, tokens.len());
+    println!("{}", tree.text(&tokens));
     Ok(())
 }
 ```
@@ -171,7 +174,7 @@ fn main() -> Result<(), antlr4_runtime::AntlrError> {
     let mut parser = Json::new(tokens);
     let tree = parser.json()?;
 
-    println!("{}", tree.text());
+    println!("{}", tree.text(parser.token_store()));
     Ok(())
 }
 ```
@@ -203,6 +206,13 @@ now append a `TokenSpec` directly to the supplied `TokenSink` and return its
 should provide `source_text()` when the complete UTF-8 input can be shared;
 otherwise token text is stored explicitly in the sparse side pool.
 
+`CommonTokenStream` owns its `TokenStore` directly. Parse-tree nodes contain
+only `TokenId` values, so token-dependent tree methods take `&TokenStore`.
+Generated `parse()` returns `ParsedFile<R>`, which owns both `tokens` and the
+entry-rule result in `tree`. Direct rule calls can resolve their returned tree
+through `parser.token_store()` while the parser is alive, or consume the parser
+with `into_token_store()`.
+
 Token IDs cover indices through `u32::MAX`. Source scalar/byte offsets, line
 numbers, and columns are limited to `u32::MAX - 1` (4,294,967,294);
 `u32::MAX` is reserved for ANTLR's synthetic `-1` boundary. All conversions are
@@ -216,8 +226,8 @@ errors; `new` and `with_channel` panic with the same error.
 - Supports ANTLR serialized ATN deserialization.
 - Supports lexer and parser execution through generated Rust wrappers.
 - Supports real split lexer/parser grammars, including Kotlin smoke builds.
-- Passes every upstream ANTLR runtime-testsuite descriptor discovered by the
-  harness: `357 passed, 0 failed, 0 skipped, 357 run`.
+- Passes every supported upstream ANTLR runtime-testsuite descriptor discovered
+  by the harness: `356 passed, 0 failed, 1 skipped, 356 run`.
 - Licensed under BSD-3-Clause for compatibility with ANTLR's runtime licensing
   pattern and downstream open-source applications.
 

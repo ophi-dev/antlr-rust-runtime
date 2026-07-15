@@ -2,13 +2,13 @@ use crate::int_stream::{EOF, IntStream, UNKNOWN_SOURCE_NAME};
 
 use crate::token::{
     DEFAULT_CHANNEL, TOKEN_EOF, Token, TokenId, TokenSink, TokenSource, TokenSourceError,
-    TokenSpec, TokenStore, TokenStoreError, TokenStoreHandle, TokenView,
+    TokenSpec, TokenStore, TokenStoreError, TokenView,
 };
 
 #[derive(Debug)]
 pub struct CommonTokenStream<S> {
     source: S,
-    store: TokenStoreHandle,
+    store: TokenStore,
     source_token_count: usize,
     next_visible_after: Vec<usize>,
     cursor: usize,
@@ -58,7 +58,6 @@ where
             }
         }
         let source_token_count = store.len();
-        let store = TokenStoreHandle::new(store);
         let mut stream = Self {
             source,
             store,
@@ -154,15 +153,23 @@ where
         self.source_token_count
     }
 
+    /// Returns the canonical token store owned by this stream.
+    #[must_use]
+    pub const fn token_store(&self) -> &TokenStore {
+        &self.store
+    }
+
+    /// Consumes the stream and returns its canonical token store.
+    #[must_use]
+    pub fn into_token_store(self) -> TokenStore {
+        self.store
+    }
+
     pub(crate) fn token_view(&self, id: TokenId) -> Option<TokenView<'_>> {
         self.store.view(id)
     }
 
-    pub(crate) fn token_store_handle(&self) -> TokenStoreHandle {
-        self.store.clone()
-    }
-
-    pub(crate) fn insert(&self, spec: TokenSpec) -> Result<TokenId, TokenStoreError> {
+    pub(crate) fn insert(&mut self, spec: TokenSpec) -> Result<TokenId, TokenStoreError> {
         self.store.push(spec)
     }
 
@@ -174,8 +181,10 @@ where
 
     /// Finds the next buffered token on `channel`.
     fn next_token_on_channel(&self, mut index: usize, channel: i32) -> usize {
-        while let Some(token) = self.get(index) {
-            if token.token_type() == TOKEN_EOF || token.channel() == channel {
+        while let Some(id) = self.get_id(index) {
+            if self.store.token_type(id) == Some(TOKEN_EOF)
+                || self.store.channel(id) == Some(channel)
+            {
                 return index;
             }
             index += 1;
@@ -187,8 +196,10 @@ where
     fn previous_token_on_channel(&self, mut index: usize, channel: i32) -> Option<usize> {
         while index > 0 {
             index -= 1;
-            let token = self.get(index)?;
-            if token.token_type() == TOKEN_EOF || token.channel() == channel {
+            let id = self.get_id(index)?;
+            if self.store.token_type(id) == Some(TOKEN_EOF)
+                || self.store.channel(id) == Some(channel)
+            {
                 return Some(index);
             }
         }
@@ -245,15 +256,17 @@ where
     S: TokenSource,
 {
     pub fn la_token(&self, offset: isize) -> i32 {
-        self.lt(offset)
-            .map_or(TOKEN_EOF, |token| token.token_type())
+        self.lt_id(offset)
+            .and_then(|id| self.store.token_type(id))
+            .unwrap_or(TOKEN_EOF)
     }
 
     /// Returns the token type at a buffered absolute index. Past-EOF reads are
     /// reported as `TOKEN_EOF`.
     pub fn token_type_at_index(&self, index: usize) -> i32 {
-        self.get(index)
-            .map_or(TOKEN_EOF, |token| token.token_type())
+        self.get_id(index)
+            .and_then(|id| self.store.token_type(id))
+            .unwrap_or(TOKEN_EOF)
     }
 
     /// Returns the token channel visible to `LT/LA` operations.
@@ -275,9 +288,10 @@ where
 
         let mut next = index + 1;
         let found = loop {
-            match self.get(next) {
-                Some(token)
-                    if token.token_type() != TOKEN_EOF && token.channel() != self.channel =>
+            match self.get_id(next) {
+                Some(id)
+                    if self.store.token_type(id) != Some(TOKEN_EOF)
+                        && self.store.channel(id) != Some(self.channel) =>
                 {
                     next += 1;
                     continue;
@@ -322,7 +336,7 @@ where
 
 #[derive(Debug)]
 pub struct TokenIter<'a> {
-    store: &'a TokenStoreHandle,
+    store: &'a TokenStore,
     next: usize,
     stop: usize,
 }

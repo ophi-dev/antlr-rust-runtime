@@ -3291,7 +3291,7 @@ where
         self.context.and_then(|context| {
             context.children().iter().find_map(|child| match child {
                 ParseTree::Rule(rule) if rule.context().rule_index() == rule_index => {
-                    Some(child.text())
+                    Some(child.text(self.input.token_store()))
                 }
                 ParseTree::Rule(_) | ParseTree::Terminal(_) | ParseTree::Error(_) => None,
             })
@@ -3597,10 +3597,22 @@ where
         &self.input
     }
 
+    /// Returns the canonical token store referenced by parse trees.
+    #[must_use]
+    pub const fn token_store(&self) -> &crate::token::TokenStore {
+        self.input.token_store()
+    }
+
     /// Consumes this parser and returns its token stream.
     #[must_use]
     pub fn into_token_stream(self) -> CommonTokenStream<S> {
         self.input
+    }
+
+    /// Consumes this parser and returns its canonical token store.
+    #[must_use]
+    pub fn into_token_store(self) -> crate::token::TokenStore {
+        self.input.into_token_store()
     }
 
     /// Returns the number of parser syntax errors recorded by committed parse
@@ -3823,29 +3835,27 @@ where
     }
 
     fn token_type_for_id(&self, id: TokenId) -> i32 {
-        self.input
-            .token_view(id)
-            .map_or(TOKEN_EOF, |token| token.token_type())
+        self.input.token_store().token_type(id).unwrap_or(TOKEN_EOF)
     }
 
-    fn terminal_tree(&self, id: TokenId) -> ParseTree {
-        ParseTree::Terminal(TerminalNode::from_id(id, self.input.token_store_handle()))
+    const fn terminal_tree(&self, id: TokenId) -> ParseTree {
+        ParseTree::Terminal(TerminalNode::from_id(id))
     }
 
-    fn error_tree(&self, id: TokenId) -> ParseTree {
-        ParseTree::Error(ErrorNode::from_id(id, self.input.token_store_handle()))
+    const fn error_tree(&self, id: TokenId) -> ParseTree {
+        ParseTree::Error(ErrorNode::from_id(id))
     }
 
-    fn set_context_start(&self, context: &mut ParserRuleContext, id: TokenId) {
-        context.set_start_id(id, self.input.token_store_handle());
+    const fn set_context_start(&self, context: &mut ParserRuleContext, id: TokenId) {
+        context.set_start_id(id);
     }
 
-    fn set_context_stop(&self, context: &mut ParserRuleContext, id: TokenId) {
-        context.set_stop_id(id, self.input.token_store_handle());
+    const fn set_context_stop(&self, context: &mut ParserRuleContext, id: TokenId) {
+        context.set_stop_id(id);
     }
 
     fn insert_synthetic_token(
-        &self,
+        &mut self,
         token_type: i32,
         text: String,
         line: usize,
@@ -4397,7 +4407,6 @@ where
         let start = current.start_id();
         let mut replacement = ParserRuleContext::new(rule_index, invoking_state);
         if start.is_some() {
-            replacement.set_store_from_context(current);
             replacement.set_start_from_context(current);
         }
         let previous = std::mem::replace(current, replacement);
@@ -8384,8 +8393,8 @@ where
         current_index: usize,
     ) -> Option<usize> {
         if let ParseTree::Rule(rule) = tree {
-            if let Some(stop) = rule.context().stop() {
-                return Some(stop.token_id().index());
+            if let Some(stop) = rule.context().stop_id() {
+                return Some(stop.index());
             }
         }
         self.after_action_stop_index(current_index)
@@ -8401,14 +8410,14 @@ where
     /// pre-rule cursor still points at. Falls back to `fallback_index` only when
     /// the tree carries no rule start.
     #[must_use]
-    pub fn after_action_start_index_for_tree(
+    pub const fn after_action_start_index_for_tree(
         &self,
         tree: &ParseTree,
         fallback_index: usize,
     ) -> usize {
         if let ParseTree::Rule(rule) = tree {
-            if let Some(start) = rule.context().start() {
-                return start.token_id().index();
+            if let Some(start) = rule.context().start_id() {
+                return start.index();
             }
         }
         fallback_index
@@ -8703,7 +8712,7 @@ where
                 .and_then(|context| {
                     context.children().iter().find_map(|child| match child {
                         ParseTree::Rule(rule) if rule.context().rule_index() == *rule_index => {
-                            Some(child.text())
+                            Some(child.text(self.input.token_store()))
                         }
                         ParseTree::Rule(_) | ParseTree::Terminal(_) | ParseTree::Error(_) => None,
                     })
@@ -10210,10 +10219,7 @@ mod tests {
         ParserAtnPredictionDiagnostic, ParserAtnPredictionDiagnosticKind, ParserAtnSimulator,
     };
     use crate::atn::serialized::{AtnDeserializer, SerializedAtn};
-    use crate::token::{
-        HIDDEN_CHANNEL, Token, TokenId, TokenSink, TokenSpec, TokenStore, TokenStoreError,
-        TokenStoreHandle,
-    };
+    use crate::token::{HIDDEN_CHANNEL, Token, TokenId, TokenSink, TokenSpec, TokenStoreError};
     use crate::token_stream::CommonTokenStream;
     use crate::vocabulary::Vocabulary;
 
@@ -10335,10 +10341,8 @@ mod tests {
         }
     }
 
-    fn test_terminal(token: TestToken) -> TerminalNode {
-        let store = TokenStoreHandle::new(TokenStore::new(None, token.source_name.as_str()));
-        let id = store.push(token.spec).expect("test token should fit");
-        TerminalNode::from_id(id, store)
+    fn test_terminal(token: &TestToken) -> TerminalNode {
+        TerminalNode::from_id(token.id)
     }
 
     #[derive(Debug)]
@@ -11542,10 +11546,8 @@ mod tests {
             Vocabulary::new([None, Some("'x'")], [None, Some("X")], [None::<&str>, None]),
         );
         let mut parser = BaseParser::new(CommonTokenStream::new(source), data);
-        assert_eq!(
-            parser.match_token(1).expect("token 1 should match").text(),
-            "x"
-        );
+        let matched = parser.match_token(1).expect("token 1 should match");
+        assert_eq!(matched.text(parser.token_store()), "x");
         assert!(parser.match_token(1).is_err());
     }
 
@@ -11556,13 +11558,10 @@ mod tests {
             TestToken::eof("parser-test", 1, 1, 1),
         ]);
 
-        assert_eq!(
-            parser
-                .match_set(&[(1, 1), (3, 4)])
-                .expect("token set should match")
-                .text(),
-            "x"
-        );
+        let matched = parser
+            .match_set(&[(1, 1), (3, 4)])
+            .expect("token set should match");
+        assert_eq!(matched.text(parser.token_store()), "x");
         assert!(parser.match_not_set(&[(1, 1)], 1, 4).is_err());
     }
 
@@ -11634,11 +11633,14 @@ mod tests {
 
     #[test]
     fn parser_predicates_support_context_child_text_checks() {
-        let mut parser = mini_parser(vec![TestToken::eof("parser-test", 1, 1, 1)]);
+        let mut parser = mini_parser(vec![
+            TestToken::new(1).with_text("var"),
+            TestToken::eof("parser-test", 1, 1, 1),
+        ]);
         let mut context = ParserRuleContext::new(1, 0);
         let mut child_context = ParserRuleContext::new(2, 0);
         child_context.add_child(ParseTree::Terminal(test_terminal(
-            TestToken::new(1).with_text("var"),
+            &TestToken::new(1).with_text("var"),
         )));
         context.add_child(ParseTree::Rule(RuleNode::new(child_context)));
         let predicates = [(
@@ -11749,11 +11751,14 @@ mod tests {
             .expect("generated match should insert missing token");
 
         assert_eq!(node.children().len(), 1);
-        assert_eq!(node.children()[0].text(), "<missing 'Y'>");
+        assert_eq!(
+            node.children()[0].text(parser.token_store()),
+            "<missing 'Y'>"
+        );
         assert_eq!(
             node.clone()
                 .into_child_iter()
-                .map(|child| child.text())
+                .map(|child| child.text(parser.token_store()))
                 .collect::<Vec<_>>(),
             ["<missing 'Y'>"]
         );
@@ -11801,11 +11806,11 @@ mod tests {
 
         assert_eq!(node.children().len(), 2);
         assert!(matches!(node.children()[0], ParseTree::Error(_)));
-        assert_eq!(node.children()[0].text(), "z");
-        assert_eq!(node.children()[1].text(), "y");
+        assert_eq!(node.children()[0].text(parser.token_store()), "z");
+        assert_eq!(node.children()[1].text(parser.token_store()), "y");
         assert_eq!(
             node.into_child_iter()
-                .map(|child| child.text())
+                .map(|child| child.text(parser.token_store()))
                 .collect::<Vec<_>>(),
             ["z", "y"]
         );
@@ -11840,7 +11845,7 @@ mod tests {
 
         assert_eq!(
             node.into_child_iter()
-                .map(|child| child.text())
+                .map(|child| child.text(parser.token_store()))
                 .collect::<Vec<_>>(),
             ["y"]
         );
@@ -12039,7 +12044,11 @@ mod tests {
         // A single `<missing ...>` error node is inserted; EOF is not consumed.
         assert_eq!(node.children().len(), 1);
         assert!(!node.consumed_eof());
-        assert!(node.children()[0].text().starts_with("<missing"));
+        assert!(
+            node.children()[0]
+                .text(parser.token_store())
+                .starts_with("<missing")
+        );
         assert_eq!(parser.la(1), TOKEN_EOF);
         assert_eq!(
             parser.generated_parser_diagnostics,
@@ -12089,7 +12098,10 @@ mod tests {
         let tree = parser.finish_rule(child, false);
 
         assert_eq!(parser.la(1), TOKEN_EOF);
-        assert_eq!(tree.to_string_tree_with_names(&["s", "a"]), "(a z)");
+        assert_eq!(
+            tree.to_string_tree_with_names(&["s", "a"], parser.token_store()),
+            "(a z)"
+        );
         assert_eq!(parser.number_of_syntax_errors(), 1);
         assert_eq!(
             parser.generated_parser_diagnostics,
@@ -12217,7 +12229,8 @@ mod tests {
             TestToken::new(1).with_text("x"),
             TestToken::eof("parser-test", 1, 1, 1),
         ]);
-        assert_eq!(parser.match_wildcard().expect("wildcard").text(), "x");
+        let matched = parser.match_wildcard().expect("wildcard");
+        assert_eq!(matched.text(parser.token_store()), "x");
         assert!(parser.match_wildcard().is_err());
     }
 
@@ -12233,7 +12246,7 @@ mod tests {
         parser.set_build_parse_trees(false);
         let mut ctx = ParserRuleContext::new(0, 0);
         assert!(!ctx.has_matched_child());
-        parser.add_parse_child(&mut ctx, ParseTree::Terminal(test_terminal(token.clone())));
+        parser.add_parse_child(&mut ctx, ParseTree::Terminal(test_terminal(&token)));
         // Tree building is off, so no child is stored...
         assert!(ctx.children().is_empty());
         // ...but the match is recorded, so the context is no longer "empty".
@@ -12242,7 +12255,7 @@ mod tests {
         // With tree building on, the child is stored and the match is recorded.
         parser.set_build_parse_trees(true);
         let mut ctx = ParserRuleContext::new(0, 0);
-        parser.add_parse_child(&mut ctx, ParseTree::Terminal(test_terminal(token)));
+        parser.add_parse_child(&mut ctx, ParseTree::Terminal(test_terminal(&token)));
         assert_eq!(ctx.children().len(), 1);
         assert!(ctx.has_matched_child());
     }
@@ -12258,10 +12271,10 @@ mod tests {
         let tree = parser
             .parse_atn_rule(&atn, 0)
             .expect("artificial parser rule should parse");
-        assert_eq!(tree.text(), "x<EOF>");
+        assert_eq!(tree.text(parser.token_store()), "x<EOF>");
         assert_eq!(parser.number_of_syntax_errors(), 0);
         assert_eq!(
-            tree.first_rule_stop(0)
+            tree.first_rule_stop(0, parser.token_store())
                 .expect("rule should stop at EOF")
                 .token_type(),
             TOKEN_EOF
@@ -12276,7 +12289,7 @@ mod tests {
             .expect("runtime-option parser rule should parse");
         assert!(actions.is_empty());
         assert_eq!(
-            tree.first_rule_stop(0)
+            tree.first_rule_stop(0, parser.token_store())
                 .expect("rule should stop at EOF")
                 .token_type(),
             TOKEN_EOF
@@ -12295,7 +12308,7 @@ mod tests {
             .parse_atn_rule_with_runtime_options(&atn, 0, ParserRuntimeOptions::default())
             .expect("no-op parser action should not force action replay");
 
-        assert_eq!(tree.text(), "x<EOF>");
+        assert_eq!(tree.text(parser.token_store()), "x<EOF>");
         assert!(
             actions.is_empty(),
             "action_index=None transitions are ANTLR metadata, not replay actions"
@@ -12314,7 +12327,7 @@ mod tests {
         let tree = parser
             .parse_atn_rule(&atn, 0)
             .expect("artificial parser rule should parse");
-        assert_eq!(tree.text(), "x<EOF>");
+        assert_eq!(tree.text(parser.token_store()), "x<EOF>");
 
         let stream = parser.token_stream();
         let source_index_after_parse = stream.token_source().index;
@@ -12350,7 +12363,7 @@ mod tests {
 
         assert_eq!(parser.number_of_syntax_errors(), 1);
         assert_eq!(
-            tree.first_error_token()
+            tree.first_error_token(parser.token_store())
                 .expect("recovery should embed an error token")
                 .text(),
             "y"
@@ -12386,7 +12399,7 @@ mod tests {
             .parse_atn_rule_adaptive_or_fallback(&atn, &mut simulator, 0)
             .expect("direct adaptive rule should parse");
 
-        assert_eq!(tree.text(), "y");
+        assert_eq!(tree.text(parser.token_store()), "y");
         assert_eq!(parser.input.index(), 1);
     }
 
@@ -12404,7 +12417,7 @@ mod tests {
             .parse_atn_rule_adaptive_or_fallback(&atn, &mut simulator, 0)
             .expect("fallback recognizer should parse");
 
-        assert_eq!(tree.text(), "xy");
+        assert_eq!(tree.text(parser.token_store()), "xy");
         assert_eq!(parser.input.index(), 2);
     }
 
@@ -12421,7 +12434,7 @@ mod tests {
             .parse_atn_rule_with_runtime_options(&atn, 0, ParserRuntimeOptions::default())
             .expect("unknown predicate should pass under the default policy");
 
-        assert_eq!(tree.text(), "xy");
+        assert_eq!(tree.text(parser.token_store()), "xy");
         assert_eq!(parser.number_of_syntax_errors(), 0);
     }
 
@@ -12633,7 +12646,7 @@ mod tests {
             )
             .expect("hook supplies the missing predicate result");
 
-        assert_eq!(tree.text(), "xy");
+        assert_eq!(tree.text(parser.token_store()), "xy");
         assert_eq!(
             parser.semantic_hooks.predicates,
             vec![(1, 0, 0, Some("y".to_owned()))]
@@ -12738,7 +12751,7 @@ mod tests {
             )
             .expect("a predicate covered by the table is not an unknown coordinate");
 
-        assert_eq!(tree.text(), "xy");
+        assert_eq!(tree.text(parser.token_store()), "xy");
     }
 
     /// Hooks that decline (`None`) must fall through to the configured policy
@@ -12790,7 +12803,7 @@ mod tests {
             )
             .expect("a declined SemIR hook must pass under assume-true");
 
-        assert_eq!(tree.text(), "xy");
+        assert_eq!(tree.text(parser.token_store()), "xy");
     }
 
     #[test]
@@ -12913,7 +12926,7 @@ mod tests {
         };
         assert_eq!(
             rule.context()
-                .start()
+                .start(parser.token_store())
                 .expect("rule should have a start token")
                 .token_type(),
             1

@@ -1,5 +1,4 @@
 use crate::char_stream::TextInterval;
-use std::cell::{Ref, RefCell};
 use std::fmt;
 use std::ops::Range;
 use std::rc::Rc;
@@ -298,7 +297,7 @@ impl TokenStore {
         self.token_types.is_empty()
     }
 
-    fn push(&mut self, spec: TokenSpec) -> Result<TokenId, TokenStoreError> {
+    pub(crate) fn push(&mut self, spec: TokenSpec) -> Result<TokenId, TokenStoreError> {
         let raw_id = u32::try_from(self.len())
             .map_err(|_| TokenStoreError::overflow("count", self.len(), u32::MAX as usize))?;
         let id = TokenId(raw_id);
@@ -341,6 +340,70 @@ impl TokenStore {
         id.index() < self.len()
     }
 
+    /// Returns a borrowing view of one token record.
+    #[must_use]
+    pub fn view(&self, id: TokenId) -> Option<TokenView<'_>> {
+        self.contains(id).then_some(TokenView { store: self, id })
+    }
+
+    /// Returns the token type for `id`.
+    #[must_use]
+    pub fn token_type(&self, id: TokenId) -> Option<i32> {
+        self.token_types.get(id.index()).copied()
+    }
+
+    /// Returns the token channel for `id`.
+    #[must_use]
+    pub fn channel(&self, id: TokenId) -> Option<i32> {
+        self.channels.get(id.index()).copied()
+    }
+
+    /// Returns the token's zero-based scalar start offset.
+    #[must_use]
+    pub fn start(&self, id: TokenId) -> Option<usize> {
+        self.scalar_starts
+            .get(id.index())
+            .copied()
+            .map(expand_boundary)
+    }
+
+    /// Returns the token's zero-based inclusive scalar stop offset.
+    #[must_use]
+    pub fn stop(&self, id: TokenId) -> Option<usize> {
+        self.scalar_stops
+            .get(id.index())
+            .copied()
+            .map(expand_boundary)
+    }
+
+    /// Returns the token's one-based source line.
+    #[must_use]
+    pub fn line(&self, id: TokenId) -> Option<usize> {
+        self.lines.get(id.index()).map(|line| *line as usize)
+    }
+
+    /// Returns the token's zero-based source column.
+    #[must_use]
+    pub fn column(&self, id: TokenId) -> Option<usize> {
+        self.columns.get(id.index()).map(|column| *column as usize)
+    }
+
+    /// Returns the token's zero-based UTF-8 byte start offset.
+    #[must_use]
+    pub fn start_byte(&self, id: TokenId) -> Option<usize> {
+        self.byte_starts
+            .get(id.index())
+            .map(|offset| *offset as usize)
+    }
+
+    /// Returns the token's zero-based exclusive UTF-8 byte stop offset.
+    #[must_use]
+    pub fn stop_byte(&self, id: TokenId) -> Option<usize> {
+        self.byte_stops
+            .get(id.index())
+            .map(|offset| *offset as usize)
+    }
+
     fn explicit_text(&self, id: TokenId) -> Option<&str> {
         self.explicit_text
             .binary_search_by_key(&id, |(token_id, _)| *token_id)
@@ -348,7 +411,9 @@ impl TokenStore {
             .map(|index| self.explicit_text[index].1.as_ref())
     }
 
-    fn text(&self, id: TokenId) -> Option<&str> {
+    /// Returns explicit or source-backed text for `id`.
+    #[must_use]
+    pub fn text(&self, id: TokenId) -> Option<&str> {
         if let Some(text) = self.explicit_text(id) {
             return Some(text);
         }
@@ -383,82 +448,18 @@ const fn compact_offset(field: &'static str, value: usize) -> Result<u32, TokenS
     Ok(value as u32)
 }
 
-#[derive(Clone)]
-pub(crate) struct TokenStoreHandle(Rc<RefCell<TokenStore>>);
-
-impl TokenStoreHandle {
-    pub(crate) fn new(store: TokenStore) -> Self {
-        Self(Rc::new(RefCell::new(store)))
-    }
-
-    pub(crate) fn push(&self, spec: TokenSpec) -> Result<TokenId, TokenStoreError> {
-        self.0.borrow_mut().push(spec)
-    }
-
-    pub(crate) fn view(&self, id: TokenId) -> Option<TokenView<'_>> {
-        let store = self.0.borrow();
-        store.contains(id).then_some(TokenView {
-            store: TokenStoreBorrow::Shared(store),
-            id,
-        })
-    }
-}
-
-impl fmt::Debug for TokenStoreHandle {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("TokenStoreHandle")
-            .field("tokens", &self.0.borrow().len())
-            .finish()
-    }
-}
-
-impl PartialEq for TokenStoreHandle {
-    fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.0, &other.0)
-    }
-}
-
-impl Eq for TokenStoreHandle {}
-
-enum TokenStoreBorrow<'a> {
-    Direct(&'a TokenStore),
-    Shared(Ref<'a, TokenStore>),
-}
-
-impl TokenStoreBorrow<'_> {
-    fn store(&self) -> &TokenStore {
-        match self {
-            Self::Direct(store) => store,
-            Self::Shared(store) => store,
-        }
-    }
-}
-
-impl Clone for TokenStoreBorrow<'_> {
-    fn clone(&self) -> Self {
-        match self {
-            Self::Direct(store) => Self::Direct(store),
-            Self::Shared(store) => Self::Shared(Ref::clone(store)),
-        }
-    }
-}
-
 /// Borrowing public view of one canonical token-store record.
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct TokenView<'a> {
-    store: TokenStoreBorrow<'a>,
+    store: &'a TokenStore,
     id: TokenId,
 }
 
 impl TokenView<'_> {
-    fn store(&self) -> &TokenStore {
-        self.store.store()
-    }
-
     /// The token's text, empty when no explicit or source-backed text exists.
     #[must_use]
     pub fn text(&self) -> &str {
-        self.store().text(self.id).unwrap_or("")
+        self.store.text(self.id).unwrap_or("")
     }
 }
 
@@ -495,43 +496,43 @@ impl Token for TokenView<'_> {
     }
 
     fn token_type(&self) -> i32 {
-        self.store().token_types[self.id.index()]
+        self.store.token_types[self.id.index()]
     }
 
     fn channel(&self) -> i32 {
-        self.store().channels[self.id.index()]
+        self.store.channels[self.id.index()]
     }
 
     fn start(&self) -> usize {
-        expand_boundary(self.store().scalar_starts[self.id.index()])
+        expand_boundary(self.store.scalar_starts[self.id.index()])
     }
 
     fn stop(&self) -> usize {
-        expand_boundary(self.store().scalar_stops[self.id.index()])
+        expand_boundary(self.store.scalar_stops[self.id.index()])
     }
 
     fn line(&self) -> usize {
-        self.store().lines[self.id.index()] as usize
+        self.store.lines[self.id.index()] as usize
     }
 
     fn column(&self) -> usize {
-        self.store().columns[self.id.index()] as usize
+        self.store.columns[self.id.index()] as usize
     }
 
     fn text(&self) -> Option<&str> {
-        self.store().text(self.id)
+        self.store.text(self.id)
     }
 
     fn source_name(&self) -> &str {
-        self.store().source_name.as_ref()
+        self.store.source_name.as_ref()
     }
 
     fn start_byte(&self) -> usize {
-        self.store().byte_starts[self.id.index()] as usize
+        self.store.byte_starts[self.id.index()] as usize
     }
 
     fn stop_byte(&self) -> usize {
-        self.store().byte_stops[self.id.index()] as usize
+        self.store.byte_stops[self.id.index()] as usize
     }
 }
 
@@ -587,10 +588,7 @@ impl<'a> TokenSink<'a> {
     }
 
     pub fn view(&self, id: TokenId) -> Option<TokenView<'_>> {
-        self.store.contains(id).then_some(TokenView {
-            store: TokenStoreBorrow::Direct(self.store),
-            id,
-        })
+        self.store.view(id)
     }
 }
 
@@ -673,35 +671,35 @@ fn display_text(text: &str) -> String {
 mod tests {
     use super::*;
 
-    fn one_token(spec: TokenSpec) -> TokenStoreHandle {
-        let handle = TokenStoreHandle::new(TokenStore::new(None, ""));
-        handle.push(spec).expect("test token should fit");
-        handle
+    fn one_token(spec: TokenSpec) -> TokenStore {
+        let mut store = TokenStore::new(None, "");
+        store.push(spec).expect("test token should fit");
+        store
     }
 
     #[test]
     fn token_view_display_matches_antlr_shape() {
-        let handle = one_token(
+        let store = one_token(
             TokenSpec::explicit(7, "abc")
                 .with_span(2, 4)
                 .with_position(3, 9),
         );
         assert_eq!(
-            handle.view(TokenId(0)).expect("token").to_string(),
+            store.view(TokenId(0)).expect("token").to_string(),
             "[@0,2:4='abc',<7>,3:9]"
         );
     }
 
     #[test]
     fn synthetic_token_display_uses_antlr_negative_index() {
-        let handle = one_token(
+        let store = one_token(
             TokenSpec::explicit(7, "<missing X>")
                 .with_span(usize::MAX, usize::MAX)
                 .with_byte_span(0, 0)
                 .with_position(3, 9),
         );
         assert_eq!(
-            handle.view(TokenId(0)).expect("token").to_string(),
+            store.view(TokenId(0)).expect("token").to_string(),
             "[@-1,-1:-1='<missing X>',<7>,3:9]"
         );
     }
@@ -723,10 +721,7 @@ mod tests {
                 source_backed: true,
             })
             .expect("token should fit");
-        let token = TokenView {
-            store: TokenStoreBorrow::Direct(&store),
-            id,
-        };
+        let token = TokenView { store: &store, id };
 
         assert_eq!(token.start(), 1);
         assert_eq!(token.stop(), 1);

@@ -45,7 +45,7 @@ pub use token::{
 pub use token_stream::CommonTokenStream;
 pub use tree::{
     ErrorNode, FromRuleContext, GeneratedAttrs, ParseTree, ParseTreeDescendants, ParseTreeListener,
-    ParseTreeWalker, ParserRuleContext, RuleNode, TerminalNode,
+    ParseTreeWalker, ParsedFile, ParserRuleContext, RuleNode, TerminalNode,
 };
 pub use vocabulary::Vocabulary;
 

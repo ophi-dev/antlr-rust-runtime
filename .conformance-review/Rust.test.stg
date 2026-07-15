@@ -55,7 +55,7 @@ Not(v) ::= "!<v>"
 // target that renders a real assertion receives uncompilable Java syntax.
 Assert(s) ::= ""
 
-Cast(t,v) ::= "(<v>).downcast_ref::\<<t>>().unwrap()"
+Cast(t,v) ::= "(<v>).downcast_ref::\<<t>>(self.base.token_store()).unwrap()"
 
 // Rust has no `&str + &str` operator, and descriptors chain Append/AppendStr
 // with bare string literals on the left (`"(" + $ID.text + …` in Java terms),
@@ -110,7 +110,7 @@ BuildParseTrees() ::= "self.set_build_parse_trees(true);"
 
 BailErrorStrategy() ::= <%self.set_error_handler(BailErrorStrategy::new());%>
 
-ToStringTree(s) ::= <%<s>.to_string_tree(Some(self))%>
+ToStringTree(s) ::= <%<s>.to_string_tree(Some(self), self.base.token_store())%>
 
 Column() ::= "self.char_position_in_line()"
 
@@ -280,7 +280,7 @@ impl TListener for LeafListener {
 
 WalkListener(s) ::= <<
 let mut listener = LeafListener::default();
-ParseTreeWalker::walk(&mut listener, <s>);
+ParseTreeWalker::walk(&mut listener, <s>, self.base.token_store());
 >>
 
 // Java needs a custom context superclass because its default RuleContext does
