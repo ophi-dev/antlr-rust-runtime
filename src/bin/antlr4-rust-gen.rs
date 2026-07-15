@@ -2652,6 +2652,54 @@ fn generated_rule_callers_reaching(
     }
 }
 
+fn parser_rule_callers_reaching(
+    data: &InterpData,
+    target_rules: &BTreeSet<usize>,
+) -> io::Result<BTreeSet<usize>> {
+    if target_rules.is_empty() {
+        return Ok(BTreeSet::new());
+    }
+    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
+        .deserialize()
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    Ok(atn_rule_callers_reaching(
+        &atn,
+        target_rules,
+        data.rule_names.len(),
+    ))
+}
+
+fn atn_rule_callers_reaching(
+    atn: &Atn,
+    target_rules: &BTreeSet<usize>,
+    rule_count: usize,
+) -> BTreeSet<usize> {
+    let mut reaching = target_rules.clone();
+    loop {
+        let mut changed = false;
+        for state in atn.states() {
+            let Some(caller_rule) = state.rule_index.filter(|index| *index < rule_count) else {
+                continue;
+            };
+            if reaching.contains(&caller_rule) {
+                continue;
+            }
+            let calls_reaching_rule = state.transitions.iter().any(|transition| {
+                matches!(
+                    transition,
+                    Transition::Rule { rule_index, .. } if reaching.contains(rule_index)
+                )
+            });
+            if calls_reaching_rule {
+                changed |= reaching.insert(caller_rule);
+            }
+        }
+        if !changed {
+            return reaching;
+        }
+    }
+}
+
 fn generated_steps_call_any_rule(
     steps: &[GeneratedParserStep],
     rule_indices: &BTreeSet<usize>,
@@ -6938,10 +6986,12 @@ fn render_parser_with_options(
     } else {
         grammar_source
     };
-    let portable_local_data = template_grammar_source
+    let mut portable_local_data = template_grammar_source
         .map(|source| build_portable_local_data(data, source, patterns))
         .transpose()?
         .unwrap_or_default();
+    portable_local_data.required_generated_rules =
+        parser_rule_callers_reaching(data, &portable_local_data.required_generated_rules)?;
     // A per-coordinate `assume-*` override is a documented no-op fallback; it
     // must not fall through to `parser_action_hook`, which would fail loud under
     // the Error policy or run a user side effect for a coordinate the manifest
@@ -11636,6 +11686,36 @@ s : ;
         assert_eq!(
             error.to_string(),
             "portable local semantics require 1 generated parser rule(s): s"
+        );
+    }
+
+    #[test]
+    fn portable_local_semantics_reject_missing_generated_caller() {
+        let required = atn_rule_callers_reaching(&entry_candidate_atn(), &BTreeSet::from([1]), 4);
+        assert_eq!(required, BTreeSet::from([0, 1, 2]));
+
+        let rules = vec![
+            None,
+            Some(test_rule(1, Vec::new())),
+            Some(test_rule(2, Vec::new())),
+            Some(test_rule(3, Vec::new())),
+        ];
+        let data = InterpData {
+            rule_names: vec![
+                "firstEntry".to_owned(),
+                "child".to_owned(),
+                "secondEntry".to_owned(),
+                "recursive".to_owned(),
+            ],
+            ..InterpData::default()
+        };
+        let error = require_portable_local_rules_generated(&rules, &required, &data)
+            .expect_err("interpreted callers cannot bypass generated local state");
+
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert_eq!(
+            error.to_string(),
+            "portable local semantics require 1 generated parser rule(s): firstEntry"
         );
     }
 
