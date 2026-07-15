@@ -5607,25 +5607,25 @@ fn render_generated_left_recursive_loop(
         .expect("writing to a string cannot fail");
         writeln!(
             out,
-            "{pad}            __simulator.adaptive_predict_stream_info_with_context({decision}, __prediction_precedence, self.base.input(), &__prediction_context)"
+            "{pad}            match __simulator.adaptive_predict_stream_info_with_context({decision}, __prediction_precedence, self.base.input(), &__prediction_context) {{"
         )
         .expect("writing to a string cannot fail");
         writeln!(
             out,
-            "{pad}                .map_err(|__error| match __error {{"
+            "{pad}                Ok(__prediction) => __prediction,"
         )
         .expect("writing to a string cannot fail");
         writeln!(
             out,
-            "{pad}                    antlr4_runtime::ParserAtnSimulatorError::NoViableAlt {{ index, .. }} => self.base.no_viable_alternative_error_at(__decision_start, index),"
+            "{pad}                Err(antlr4_runtime::ParserAtnSimulatorError::NoViableAlt {{ .. }}) => antlr4_runtime::ParserAtnPrediction {{ alt: {exit_alt}, requires_full_context: true, has_semantic_context: false, diagnostic: None }},"
         )
         .expect("writing to a string cannot fail");
         writeln!(
             out,
-            "{pad}                    _ => self.base.no_viable_alternative_error(__decision_start),"
+            "{pad}                Err(_) => return Err(self.base.no_viable_alternative_error(__decision_start)),"
         )
         .expect("writing to a string cannot fail");
-        writeln!(out, "{pad}                }})?").expect("writing to a string cannot fail");
+        writeln!(out, "{pad}            }}").expect("writing to a string cannot fail");
         writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
     }
     writeln!(out, "{pad}    }};").expect("writing to a string cannot fail");
@@ -10829,6 +10829,9 @@ atn:
             rendered
                 .contains("adaptive_predict_stream_info_with_context(0, __prediction_precedence")
         );
+        assert!(rendered.contains(
+            "Err(antlr4_runtime::ParserAtnSimulatorError::NoViableAlt { .. }) => antlr4_runtime::ParserAtnPrediction { alt: 2, requires_full_context: true, has_semantic_context: false, diagnostic: None }"
+        ));
     }
 
     #[test]
