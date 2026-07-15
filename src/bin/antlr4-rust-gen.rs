@@ -3949,9 +3949,13 @@ fn render_generated_rule_dispatch_with_rule_names(
     portable_locals: Option<PortableLocalStepRender<'_>>,
 ) -> String {
     let mut out = String::new();
-    let force_generated_rules = portable_locals.map_or_else(BTreeSet::new, |portable| {
-        generated_rule_callers_reaching(rules, portable.required_generated_rules)
-    });
+    let force_generated_rules = if embedded.is_some() {
+        rules.iter().flatten().map(|rule| rule.rule_index).collect()
+    } else {
+        portable_locals.map_or_else(BTreeSet::new, |portable| {
+            generated_rule_callers_reaching(rules, portable.required_generated_rules)
+        })
+    };
     let atn_preferred_rule_calls =
         generated_atn_preferred_rule_calls_excluding(rules, rule_names, &force_generated_rules);
     writeln!(
@@ -11031,6 +11035,56 @@ atn:
         // The ATN-preferred child call routes through the buffering wrapper.
         assert!(rendered.contains("self.parse_rule_precedence_from_generated(2, 0)"));
         assert!(!rendered.contains("self.parse_interpreted_rule_precedence(2, 0)"));
+    }
+
+    #[test]
+    fn embedded_rules_never_use_atn_preferred_fallback() {
+        let rules = (0..ATN_PREFERRED_LEADING_CALL_CHAIN_MIN)
+            .map(|rule_index| {
+                let next = if rule_index + 1 == ATN_PREFERRED_LEADING_CALL_CHAIN_MIN {
+                    None
+                } else {
+                    Some(rule_index + 1)
+                };
+                Some(expensive_ladder_rule(rule_index, next))
+            })
+            .collect::<Vec<_>>();
+        let direct_generated_rule_calls = vec![true; rules.len()];
+        let adaptive_decisions = BTreeSet::new();
+        let ll1_decision_arms = BTreeMap::new();
+        let predicates = BTreeMap::new();
+        let rule_has_attrs = vec![false; rules.len()];
+        let init_entry = BTreeMap::new();
+        let after = BTreeMap::new();
+        let call_args = BTreeMap::new();
+        let rule_arg0 = vec![None; rules.len()];
+
+        let rendered = render_generated_rule_dispatch_with_rule_names(
+            &rules,
+            &direct_generated_rule_calls,
+            &[],
+            &BTreeMap::new(),
+            true,
+            Some(EmbeddedStepRender {
+                force_adaptive: false,
+                adaptive_decisions: &adaptive_decisions,
+                ll1_decision_arms: &ll1_decision_arms,
+                predicates: &predicates,
+                rule_has_attrs: &rule_has_attrs,
+                init_entry: &init_entry,
+                after: &after,
+                call_args: &call_args,
+                rule_arg0: &rule_arg0,
+            }),
+            None,
+        );
+
+        assert!(!rendered.contains("if self.generated_only()"));
+        assert!(rendered.contains(
+            "0 => Some(self.parse_generated_rule_0_dispatch(precedence, allow_fallback))"
+        ));
+        assert!(rendered.contains("self.parse_generated_rule_1_dispatch(0, false)"));
+        assert!(!rendered.contains("self.parse_rule_precedence_from_generated(1, 0)"));
     }
 
     #[test]
