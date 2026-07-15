@@ -998,7 +998,9 @@ fn translate_reference(
         ("text", None) => return Ok(text_expression(ctx)),
         ("_p", None) => return Ok("__precedence".to_owned()),
         ("parser", None) => return Ok("self".to_owned()),
-        ("start", None) => return Ok("__ctx.start()".to_owned()),
+        ("start", None) => {
+            return Ok("__ctx.start(self.base.token_store())".to_owned());
+        }
         _ => {}
     }
     let rule = ctx.rule();
@@ -1101,7 +1103,7 @@ fn translate_element_read(
         }
         if let Some(token_type) = ctx.token_types.get(&element.target) {
             return Ok(format!(
-                "__ctx.child_tokens({token_type}).collect::<Vec<_>>()"
+                "__ctx.child_tokens({token_type}, self.base.token_store()).collect::<Vec<_>>()"
             ));
         }
     }
@@ -1112,11 +1114,11 @@ fn translate_element_read(
         // `Token.toString()`), which is the same rendering as start/stop.
         return match suffix {
             None | Some("stop" | "start") => Ok(
-                "__ctx.terminal_children().last().map(|__t| __t.symbol().to_string()).unwrap_or_default()"
+                "__ctx.terminal_children().last().map(|__t| __t.symbol(self.base.token_store()).to_string()).unwrap_or_default()"
                     .to_owned(),
             ),
             Some("text") => Ok(
-                "__ctx.terminal_children().last().map(antlr4_runtime::TerminalNode::text).unwrap_or_default()"
+                "__ctx.terminal_children().last().map(|__t| __t.text(self.base.token_store()).to_owned()).unwrap_or_default()"
                     .to_owned(),
             ),
             _ => Err(io::Error::new(
@@ -1136,13 +1138,13 @@ fn translate_element_read(
                 "__ctx.child_rule_trees({rule_index}).{pick}.expect(\"labeled rule child\")"
             )),
             Some("text") => Ok(format!(
-                "__ctx.child_rules({rule_index}).{pick}.map(antlr4_runtime::ParserRuleContext::text).unwrap_or_default()"
+                "__ctx.child_rules({rule_index}).{pick}.map(|__c| __c.text(self.base.token_store())).unwrap_or_default()"
             )),
             Some("start") => Ok(format!(
-                "__ctx.child_rules({rule_index}).{pick}.and_then(|__c| __c.start()).map(|__t| __t.to_string()).unwrap_or_default()"
+                "__ctx.child_rules({rule_index}).{pick}.and_then(|__c| __c.start(self.base.token_store())).map(|__t| __t.to_string()).unwrap_or_default()"
             )),
             Some("stop") => Ok(format!(
-                "__ctx.child_rules({rule_index}).{pick}.and_then(|__c| __c.stop()).map(|__t| __t.to_string()).unwrap_or_default()"
+                "__ctx.child_rules({rule_index}).{pick}.and_then(|__c| __c.stop(self.base.token_store())).map(|__t| __t.to_string()).unwrap_or_default()"
             )),
             Some(attr) => {
                 let target_rule = &ctx.model.rules[rule_index];
@@ -1171,16 +1173,16 @@ fn translate_element_read(
         };
         return match suffix {
             Some("text") => Ok(format!(
-                "__ctx.child_tokens({token_type}).{pick}.map(antlr4_runtime::TerminalNode::text).unwrap_or_default()"
+                "__ctx.child_tokens({token_type}, self.base.token_store()).{pick}.map(|__t| __t.text(self.base.token_store()).to_owned()).unwrap_or_default()"
             )),
             Some("int") => Ok(format!(
-                "__ctx.child_tokens({token_type}).{pick}.map(|__t| __t.text().parse::<i32>().unwrap_or_default()).unwrap_or_default()"
+                "__ctx.child_tokens({token_type}, self.base.token_store()).{pick}.map(|__t| __t.text(self.base.token_store()).parse::<i32>().unwrap_or_default()).unwrap_or_default()"
             )),
             Some("line") => Ok(format!(
-                "__ctx.child_tokens({token_type}).{pick}.map(|__t| __t.symbol().line()).unwrap_or_default()"
+                "__ctx.child_tokens({token_type}, self.base.token_store()).{pick}.map(|__t| __t.symbol(self.base.token_store()).line()).unwrap_or_default()"
             )),
             None | Some("stop" | "start") => Ok(format!(
-                "__ctx.child_tokens({token_type}).{pick}.map(|__t| __t.symbol().to_string()).unwrap_or_default()"
+                "__ctx.child_tokens({token_type}, self.base.token_store()).{pick}.map(|__t| __t.symbol(self.base.token_store()).to_string()).unwrap_or_default()"
             )),
             Some(other) => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -1325,7 +1327,10 @@ mod tests {
         };
         let translated = translate_body("$v = $INT.int;", &ctx).expect("translates");
         assert!(translated.starts_with("__attrs.v = "), "{translated}");
-        assert!(translated.contains("child_tokens(1)"), "{translated}");
+        assert!(
+            translated.contains("child_tokens(1, self.base.token_store())"),
+            "{translated}"
+        );
 
         let parent_ctx = TranslationCtx {
             model: &m,

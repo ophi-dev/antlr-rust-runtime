@@ -1990,14 +1990,14 @@ fn render_lexer(
             "|_, _, _| {}"
         };
         format!(
-            "antlr4_runtime::atn::lexer::next_token_compiled_with_semantic_dispatch(&mut self.base, atn(), lexer_dfa(), &mut self.hooks, {action}, {predicate}, {lexer_unknown_policy}, {adjuster})"
+            "antlr4_runtime::atn::lexer::next_token_compiled_with_semantic_dispatch(&mut self.base, sink, atn(), lexer_dfa(), &mut self.hooks, {action}, {predicate}, {lexer_unknown_policy}, {adjuster})"
         )
     } else if !has_action_dispatch
         && !has_predicate_dispatch
         && !adjusts_accept_position
         && !unknown_predicates_assume_false
     {
-        "antlr4_runtime::atn::lexer::next_token_compiled(&mut self.base, atn(), lexer_dfa())"
+        "antlr4_runtime::atn::lexer::next_token_compiled(&mut self.base, sink, atn(), lexer_dfa())"
             .to_owned()
     } else {
         let action = if has_action_dispatch {
@@ -2018,7 +2018,7 @@ fn render_lexer(
             "|_, _, _| {}"
         };
         format!(
-            "antlr4_runtime::atn::lexer::next_token_compiled_with_hooks(&mut self.base, atn(), lexer_dfa(), {action}, {predicate}, {adjuster})"
+            "antlr4_runtime::atn::lexer::next_token_compiled_with_hooks(&mut self.base, sink, atn(), lexer_dfa(), {action}, {predicate}, {adjuster})"
         )
     };
     let generated_header = GENERATED_MODULE_HEADER;
@@ -2027,7 +2027,7 @@ fn render_lexer(
     Ok(format!(
         r#"{generated_header}use antlr4_runtime::char_stream::CharStream;
 use antlr4_runtime::recognizer::RecognizerData;
-use antlr4_runtime::token::{{CommonToken, TokenSource}};
+use antlr4_runtime::token::{{TokenId, TokenSink, TokenSource, TokenStoreError}};
 use antlr4_runtime::atn::Atn;
 use antlr4_runtime::atn::lexer_dfa::CompiledLexerDfa;
 use antlr4_runtime::atn::serialized::AtnDeserializer;
@@ -2158,13 +2158,14 @@ where
     I: CharStream,
     H: antlr4_runtime::SemanticHooks,
 {{
-    fn next_token(&mut self) -> CommonToken {{
+    fn next_token(&mut self, sink: &mut TokenSink<'_>) -> Result<TokenId, TokenStoreError> {{
         {next_token_call}
     }}
 
     fn line(&self) -> usize {{ self.base.line() }}
     fn column(&self) -> usize {{ self.base.column() }}
     fn source_name(&self) -> &str {{ self.base.source_name() }}
+    fn source_text(&self) -> Option<std::rc::Rc<str>> {{ self.base.source_text() }}
     fn drain_errors(&mut self) -> Vec<antlr4_runtime::token::TokenSourceError> {{
         self.base.drain_errors()
     }}
@@ -5821,7 +5822,12 @@ fn render_parser(
     )
 }
 
-const GENERATED_PARSER_RESERVED_RULE_METHODS: &[&str] = &["token_stream", "into_token_stream"];
+const GENERATED_PARSER_RESERVED_RULE_METHODS: &[&str] = &[
+    "token_stream",
+    "token_store",
+    "into_token_stream",
+    "into_token_store",
+];
 
 fn parser_public_rule_method_names(rule_names: &[String]) -> Vec<String> {
     let mut used = GENERATED_PARSER_RESERVED_RULE_METHODS
@@ -6531,7 +6537,7 @@ fn embedded_rule_call_args(
 ///   alternative) with positional child accessors (`ctx.e(0)` /
 ///   `ctx.e_all()`, `ctx.INT(0)` / `ctx.INT_all()`), `child_count()`,
 ///   `start()`, public attribute fields, and a `FromRuleContext` impl backing
-///   `$ctx.downcast_ref::<XContext>()`;
+///   `$ctx.downcast_ref::<XContext>(tokens)`;
 /// * the `<Grammar>Listener` trait with defaulted `enter_/exit_<rule>` (and
 ///   per-labeled-alternative) callbacks plus `visit_terminal`;
 /// * a module-local `ParseTreeWalker` whose bridge dispatches the runtime
@@ -6556,6 +6562,37 @@ fn render_embedded_context_types(
             i32::try_from(token_type).ok().map(|ty| (name.clone(), ty))
         })
         .collect();
+
+    out.push_str(
+        r#"#[allow(dead_code)]
+#[derive(Clone)]
+pub struct TerminalNode<'a> {
+    __node: RuntimeTerminalNode,
+    __tokens: &'a antlr4_runtime::TokenStore,
+}
+
+#[allow(dead_code)]
+impl<'a> TerminalNode<'a> {
+    fn new(node: RuntimeTerminalNode, tokens: &'a antlr4_runtime::TokenStore) -> Self {
+        Self {
+            __node: node,
+            __tokens: tokens,
+        }
+    }
+
+    pub fn symbol(&self) -> antlr4_runtime::TokenView<'a> {
+        self.__node.symbol(self.__tokens)
+    }
+}
+
+impl std::fmt::Display for TerminalNode<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.__node.text(self.__tokens))
+    }
+}
+
+"#,
+    );
 
     // (struct name, rule index, alt label) — one per rule plus one per
     // labeled alternative.
@@ -6584,16 +6621,16 @@ fn render_embedded_context_types(
         }
         let _ = writeln!(
             out,
-            "#[allow(non_camel_case_types, dead_code)]\n#[derive(Clone)]\npub struct {view_name} {{\n    __node: ParserRuleContext,\n    __chain: Vec<isize>,\n{fields}}}\n"
+            "#[allow(non_camel_case_types, dead_code)]\n#[derive(Clone)]\npub struct {view_name}<'a> {{\n    __node: ParserRuleContext,\n    __tokens: &'a antlr4_runtime::TokenStore,\n    __chain: Vec<isize>,\n{fields}}}\n"
         );
         let _ = writeln!(
             out,
-            "impl FromRuleContext for {view_name} {{\n    fn from_rule_context(context: &ParserRuleContext) -> Option<Self> {{\n        if context.rule_index() != {rule_index} {{ return None; }}\n        Some(Self::__from_node_with_chain(context, Vec::new()))\n    }}\n}}\n"
+            "impl<'a> FromRuleContext<'a> for {view_name}<'a> {{\n    fn from_rule_context(context: &ParserRuleContext, tokens: &'a antlr4_runtime::TokenStore) -> Option<Self> {{\n        if context.rule_index() != {rule_index} {{ return None; }}\n        Some(Self::__from_node_with_chain(context, tokens, Vec::new()))\n    }}\n}}\n"
         );
         let mut accessors = String::new();
         let _ = writeln!(
             accessors,
-            "    fn __from_node_with_chain(node: &ParserRuleContext, mut chain: Vec<isize>) -> Self {{\n        chain.insert(0, node.invoking_state());\n        let __default = {attrs_struct}::default();\n        let __attrs = node.generated_attrs::<{attrs_struct}>().unwrap_or(&__default);\n        Self {{\n            __node: node.clone(),\n            __chain: chain,\n{field_inits}        }}\n    }}\n"
+            "    fn __from_node_with_chain(node: &ParserRuleContext, tokens: &'a antlr4_runtime::TokenStore, mut chain: Vec<isize>) -> Self {{\n        chain.insert(0, node.invoking_state());\n        let __default = {attrs_struct}::default();\n        let __attrs = node.generated_attrs::<{attrs_struct}>().unwrap_or(&__default);\n        Self {{\n            __node: node.clone(),\n            __tokens: tokens,\n            __chain: chain,\n{field_inits}        }}\n    }}\n"
         );
         // A grammar rule claiming a built-in helper's name (`start`,
         // `child_count`) takes the accessor slot; the built-in yields.
@@ -6612,7 +6649,7 @@ fn render_embedded_context_types(
         if !rule_claims("start") {
             let _ = writeln!(
                 accessors,
-                "    pub fn start(&self) -> __GeneratedTokenView {{ __GeneratedTokenView {{ text: self.__node.start().map(|token| token.text().to_owned()).unwrap_or_default() }} }}"
+                "    pub fn start(&self) -> __GeneratedTokenView {{ __GeneratedTokenView {{ text: self.__node.start(self.__tokens).map(|token| token.text().to_owned()).unwrap_or_default() }} }}"
             );
         }
         for (child_index, child) in model.rules.iter().enumerate() {
@@ -6620,24 +6657,24 @@ fn render_embedded_context_types(
             let child_view = format!("{}Context", rust_type_name(&child.name));
             let _ = writeln!(
                 accessors,
-                "    pub fn {method}(&self, index: usize) -> Rc<{child_view}> {{ let node = self.__node.child_rules({child_index}).nth(index).expect(\"missing rule child\"); Rc::new({child_view}::__from_node_with_chain(node, self.__chain.clone())) }}\n    pub fn {method}_all(&self) -> Vec<Rc<{child_view}>> {{ self.__node.child_rules({child_index}).map(|node| Rc::new({child_view}::__from_node_with_chain(node, self.__chain.clone()))).collect() }}"
+                "    pub fn {method}(&self, index: usize) -> Rc<{child_view}<'a>> {{ let node = self.__node.child_rules({child_index}).nth(index).expect(\"missing rule child\"); Rc::new({child_view}::__from_node_with_chain(node, self.__tokens, self.__chain.clone())) }}\n    pub fn {method}_all(&self) -> Vec<Rc<{child_view}<'a>>> {{ self.__node.child_rules({child_index}).map(|node| Rc::new({child_view}::__from_node_with_chain(node, self.__tokens, self.__chain.clone()))).collect() }}"
             );
         }
         for (token_name, token_type) in &token_accessors {
             let _ = writeln!(
                 accessors,
-                "    #[allow(non_snake_case)]\n    pub fn {token_name}(&self, index: usize) -> Rc<TerminalNode> {{ Rc::new(self.__node.child_tokens({token_type}).nth(index).expect(\"missing token child\").clone()) }}\n    #[allow(non_snake_case)]\n    pub fn {token_name}_all(&self) -> Vec<Rc<TerminalNode>> {{ self.__node.child_tokens({token_type}).cloned().map(Rc::new).collect() }}"
+                "    #[allow(non_snake_case)]\n    pub fn {token_name}(&self, index: usize) -> Rc<TerminalNode<'a>> {{ let node = self.__node.child_tokens({token_type}, self.__tokens).nth(index).expect(\"missing token child\"); Rc::new(TerminalNode::new(node.clone(), self.__tokens)) }}\n    #[allow(non_snake_case)]\n    pub fn {token_name}_all(&self) -> Vec<Rc<TerminalNode<'a>>> {{ self.__node.child_tokens({token_type}, self.__tokens).map(|node| Rc::new(TerminalNode::new(node.clone(), self.__tokens))).collect() }}"
             );
         }
         let _ = writeln!(
             out,
-            "#[allow(dead_code, clippy::all)]\nimpl {view_name} {{\n{accessors}}}\n"
+            "#[allow(dead_code, clippy::all)]\nimpl<'a> {view_name}<'a> {{\n{accessors}}}\n"
         );
         // Java's RuleContext.toString(): bracketed invoking-state chain from
         // this context to the root, the root's sentinel excluded.
         let _ = writeln!(
             out,
-            "impl std::fmt::Display for {view_name} {{\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{\n        let chain: Vec<String> = self.__chain.iter().take(self.__chain.len().saturating_sub(1)).map(|state| state.to_string()).collect();\n        write!(f, \"[{{}}]\", chain.join(\" \"))\n    }}\n}}\n"
+            "impl std::fmt::Display for {view_name}<'_> {{\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{\n        let chain: Vec<String> = self.__chain.iter().take(self.__chain.len().saturating_sub(1)).map(|state| state.to_string()).collect();\n        write!(f, \"[{{}}]\", chain.join(\" \"))\n    }}\n}}\n"
         );
     }
 
@@ -6694,7 +6731,7 @@ fn render_embedded_context_types(
             if !has_labels {
                 let (method, view) = &names[0];
                 return format!(
-                    "                self.0.{phase}_{method}(&{view}::__from_node_with_chain(context, self.1.clone()));\n"
+                    "                self.0.{phase}_{method}(&{view}::__from_node_with_chain(context, tokens, self.1.clone()));\n"
                 );
             }
             let mut out = String::new();
@@ -6712,7 +6749,7 @@ fn render_embedded_context_types(
                     let primary_view = format!("{}Context", rust_type_name(primary));
                     let _ = writeln!(
                         out,
-                        "                if context.child_rule_trees({rule_index}).next().is_some() {{ self.0.{phase}_{op_method}(&{op_view}::__from_node_with_chain(context, self.1.clone())); }} else {{ self.0.{phase}_{primary_method}(&{primary_view}::__from_node_with_chain(context, self.1.clone())); }}"
+                        "                if context.child_rule_trees({rule_index}).next().is_some() {{ self.0.{phase}_{op_method}(&{op_view}::__from_node_with_chain(context, tokens, self.1.clone())); }} else {{ self.0.{phase}_{primary_method}(&{primary_view}::__from_node_with_chain(context, tokens, self.1.clone())); }}"
                     );
                 }
                 _ => {
@@ -6721,7 +6758,7 @@ fn render_embedded_context_types(
                     let (method, view) = &names[0];
                     let _ = writeln!(
                         out,
-                        "                self.0.{phase}_{method}(&{view}::__from_node_with_chain(context, self.1.clone()));"
+                        "                self.0.{phase}_{method}(&{view}::__from_node_with_chain(context, tokens, self.1.clone()));"
                     );
                 }
             }
@@ -6744,14 +6781,15 @@ fn render_embedded_context_types(
     );
 
     // Bridge + module-local walker (shadows the runtime walker so rendered
-    // `ParseTreeWalker::walk(&mut listener, tree)` dispatches typed callbacks).
+    // `ParseTreeWalker::walk(&mut listener, tree, tokens)` dispatches typed
+    // callbacks.
     let _ = writeln!(
         out,
         r#"#[allow(dead_code)]
 struct __ListenerBridge<'a, T: {listener_trait}>(&'a mut T, Vec<isize>);
 
 impl<T: {listener_trait}> antlr4_runtime::ParseTreeListener for __ListenerBridge<'_, T> {{
-    fn enter_every_rule(&mut self, context: &ParserRuleContext) -> Result<(), antlr4_runtime::AntlrError> {{
+    fn enter_every_rule(&mut self, context: &ParserRuleContext, tokens: &antlr4_runtime::TokenStore) -> Result<(), antlr4_runtime::AntlrError> {{
         self.1.insert(0, context.invoking_state());
         match context.rule_index() {{
 {enter_arms}            _ => {{}}
@@ -6759,7 +6797,7 @@ impl<T: {listener_trait}> antlr4_runtime::ParseTreeListener for __ListenerBridge
         Ok(())
     }}
 
-    fn exit_every_rule(&mut self, context: &ParserRuleContext) -> Result<(), antlr4_runtime::AntlrError> {{
+    fn exit_every_rule(&mut self, context: &ParserRuleContext, tokens: &antlr4_runtime::TokenStore) -> Result<(), antlr4_runtime::AntlrError> {{
         match context.rule_index() {{
 {exit_arms}            _ => {{}}
         }}
@@ -6769,8 +6807,8 @@ impl<T: {listener_trait}> antlr4_runtime::ParseTreeListener for __ListenerBridge
         Ok(())
     }}
 
-    fn visit_terminal(&mut self, node: &TerminalNode) -> Result<(), antlr4_runtime::AntlrError> {{
-        self.0.visit_terminal(node);
+    fn visit_terminal(&mut self, node: &RuntimeTerminalNode, tokens: &antlr4_runtime::TokenStore) -> Result<(), antlr4_runtime::AntlrError> {{
+        self.0.visit_terminal(&TerminalNode::new(node.clone(), tokens));
         Ok(())
     }}
 }}
@@ -6780,9 +6818,9 @@ pub struct ParseTreeWalker;
 
 #[allow(dead_code)]
 impl ParseTreeWalker {{
-    pub fn walk<T: {listener_trait}>(listener: &mut T, tree: &antlr4_runtime::ParseTree) {{
+    pub fn walk<T: {listener_trait}>(listener: &mut T, tree: &antlr4_runtime::ParseTree, tokens: &antlr4_runtime::TokenStore) {{
         let mut bridge = __ListenerBridge(listener, Vec::new());
-        let _ = antlr4_runtime::ParseTreeWalker::walk(&mut bridge, tree);
+        let _ = antlr4_runtime::ParseTreeWalker::walk(&mut bridge, tree, tokens);
     }}
 }}
 "#
@@ -7204,7 +7242,7 @@ fn render_parser_with_options(
     let generated_footer = GENERATED_MODULE_FOOTER;
 
     let embedded_imports = if options.embedded {
-        "#[allow(unused_imports)]\nuse std::io::Write as _;\n#[allow(unused_imports)]\nuse std::rc::Rc;\n#[allow(unused_imports)]\nuse antlr4_runtime::{{java_style_list, PredictionMode, BailErrorStrategy, TerminalNode, ParserRuleContext, FromRuleContext, Token as _}};\n"
+        "#[allow(unused_imports)]\nuse std::io::Write as _;\n#[allow(unused_imports)]\nuse std::rc::Rc;\n#[allow(unused_imports)]\nuse antlr4_runtime::{{java_style_list, PredictionMode, BailErrorStrategy, TerminalNode as RuntimeTerminalNode, ParserRuleContext, FromRuleContext, Token as _}};\n"
     } else {
         ""
     };
@@ -7306,8 +7344,18 @@ where
     }}
 
     #[must_use]
+    pub const fn token_store(&self) -> &antlr4_runtime::TokenStore {{
+        self.base.token_store()
+    }}
+
+    #[must_use]
     pub fn into_token_stream(self) -> CommonTokenStream<L> {{
         self.base.into_token_stream()
+    }}
+
+    #[must_use]
+    pub fn into_token_store(self) -> antlr4_runtime::TokenStore {{
+        self.base.into_token_store()
     }}
 
     #[allow(dead_code)]
@@ -9688,7 +9736,7 @@ fn render_lexer_typed_hook_adapter(type_name: &str, mappings: &[LexerTypedHookMa
             let separator = if arguments.is_empty() { "" } else { ", " };
             let result = if *predicate { " -> bool" } else { "" };
             format!(
-                "    fn {method}<I, F>(&mut self, ctx: &mut antlr4_runtime::LexerSemCtx<'_, I, F>{separator}{arguments}){result}\n    where\n        I: antlr4_runtime::CharStream,\n        F: antlr4_runtime::TokenFactory;"
+                "    fn {method}<I>(&mut self, ctx: &mut antlr4_runtime::LexerSemCtx<'_, I>{separator}{arguments}){result}\n    where\n        I: antlr4_runtime::CharStream;"
             )
         })
         .collect::<Vec<_>>()
@@ -9731,7 +9779,7 @@ fn render_lexer_typed_hook_adapter(type_name: &str, mappings: &[LexerTypedHookMa
         r#"pub trait {trait_name}: Sized {{
 {method_decls}
 
-    fn token_emitted(&mut self, _token: &antlr4_runtime::CommonToken) {{}}
+    fn token_emitted(&mut self, _token: antlr4_runtime::TokenView<'_>) {{}}
 }}
 
 #[derive(Clone, Debug, Default)]
@@ -9745,10 +9793,9 @@ impl<T> antlr4_runtime::SemanticHooks for {adapter_name}<T>
 where
     T: {trait_name},
 {{
-    fn lexer_sempred<I, F>(&mut self, ctx: &mut antlr4_runtime::LexerSemCtx<'_, I, F>, rule_index: usize, pred_index: usize) -> Option<bool>
+    fn lexer_sempred<I>(&mut self, ctx: &mut antlr4_runtime::LexerSemCtx<'_, I>, rule_index: usize, pred_index: usize) -> Option<bool>
     where
         I: antlr4_runtime::CharStream,
-        F: antlr4_runtime::TokenFactory,
     {{
         match (rule_index, pred_index) {{
 {predicate_arms}
@@ -9756,10 +9803,9 @@ where
         }}
     }}
 
-    fn lexer_action<I, F>(&mut self, ctx: &mut antlr4_runtime::LexerSemCtx<'_, I, F>, action: antlr4_runtime::LexerCustomAction) -> bool
+    fn lexer_action<I>(&mut self, ctx: &mut antlr4_runtime::LexerSemCtx<'_, I>, action: antlr4_runtime::LexerCustomAction) -> bool
     where
         I: antlr4_runtime::CharStream,
-        F: antlr4_runtime::TokenFactory,
     {{
         let Ok(rule_index) = usize::try_from(action.rule_index()) else {{ return false; }};
         let Ok(action_index) = usize::try_from(action.action_index()) else {{ return false; }};
@@ -9769,7 +9815,7 @@ where
         }}
     }}
 
-    fn lexer_token_emitted(&mut self, token: &antlr4_runtime::CommonToken) {{
+    fn lexer_token_emitted(&mut self, token: antlr4_runtime::TokenView<'_>) {{
         self.0.token_emitted(token);
     }}
 }}
@@ -10266,15 +10312,18 @@ where
 /// Pass the generated lexer constructor and a parser entry rule, for example
 /// `parse(src, MyGrammarLexer::new, {type_name}::file)`.
 ///
-/// Use [`parse_with_parser`] instead when the caller needs parser diagnostics
-/// or the parser-owned token stream after the entry rule runs.
+/// The returned [`antlr4_runtime::ParsedFile`] owns both the entry-rule result
+/// and the canonical token store referenced by any parse tree in that result.
+/// Use [`parse_with_parser`] instead when the caller also needs parser
+/// diagnostics after the entry rule runs.
 pub fn parse<L: TokenSource, R>(
     input: impl AsRef<str>,
     lexer: impl FnOnce(antlr4_runtime::InputStream) -> L,
     entry: impl FnOnce(&mut {type_name}<L>) -> Result<R, antlr4_runtime::AntlrError>,
-) -> Result<R, antlr4_runtime::AntlrError>
+) -> Result<antlr4_runtime::ParsedFile<R>, antlr4_runtime::AntlrError>
 {{
-    parse_with_parser(input, lexer, entry).map(|output| output.result)
+    let {output_type_name} {{ result, parser }} = parse_with_parser(input, lexer, entry)?;
+    Ok(antlr4_runtime::ParsedFile::new(parser.into_token_store(), result))
 }}
 
 /// Parses UTF-8 text like [`parse`] while returning the parser after the entry
@@ -11815,8 +11864,12 @@ s : ;
         assert!(rendered.contains("let tokens = CommonTokenStream::new(lexer);"));
         assert!(rendered.contains("let result = entry(&mut parser)?;"));
         assert!(rendered.contains("Ok(TParserParseOutput { result, parser })"));
+        assert!(rendered.contains(
+            "let TParserParseOutput { result, parser } = parse_with_parser(input, lexer, entry)?;"
+        ));
         assert!(
-            rendered.contains("parse_with_parser(input, lexer, entry).map(|output| output.result)")
+            rendered
+                .contains("Ok(antlr4_runtime::ParsedFile::new(parser.into_token_store(), result))")
         );
         assert!(rendered.contains("pub fn new(input: CommonTokenStream<L>) -> Self"));
         assert!(
@@ -11858,6 +11911,12 @@ s : ;
         assert!(rendered.contains("self.base.token_stream()"));
         assert!(rendered.contains("pub fn into_token_stream(self) -> CommonTokenStream<L>"));
         assert!(rendered.contains("self.base.into_token_stream()"));
+        assert!(
+            rendered.contains("pub const fn token_store(&self) -> &antlr4_runtime::TokenStore")
+        );
+        assert!(rendered.contains("self.base.token_store()"));
+        assert!(rendered.contains("pub fn into_token_store(self) -> antlr4_runtime::TokenStore"));
+        assert!(rendered.contains("self.base.into_token_store()"));
     }
 
     #[test]
@@ -14740,7 +14799,7 @@ ID : [a-z]+ ;\n";
             "override renders a failing arm"
         );
         assert!(module.contains("run_predicate"));
-        assert!(!module.contains("next_token_compiled(&mut self.base, atn(), lexer_dfa())"));
+        assert!(!module.contains("next_token_compiled(&mut self.base, sink, atn(), lexer_dfa())"));
     }
 
     #[test]
@@ -14859,7 +14918,15 @@ ID : [a-z]+ ;\n";
         )
         .expect("lexer should render");
 
-        assert!(module.contains("next_token_compiled(&mut self.base, atn(), lexer_dfa())"));
+        assert!(module.contains("next_token_compiled(&mut self.base, sink, atn(), lexer_dfa())"));
+        assert!(module.contains(
+            "fn next_token(&mut self, sink: &mut TokenSink<'_>) -> Result<TokenId, TokenStoreError>"
+        ));
+        assert!(module.contains(
+            "fn source_text(&self) -> Option<std::rc::Rc<str>> { self.base.source_text() }"
+        ));
+        assert!(!module.contains("CommonToken"));
+        assert!(!module.contains("TokenFactory"));
     }
 
     #[test]

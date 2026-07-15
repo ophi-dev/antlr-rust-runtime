@@ -65,14 +65,16 @@ impl TypeScriptParserHooks for TypeScriptParserBase {
     where
         S: TokenSource,
     {
-        ctx.token_text(-1) == Some(expected)
+        ctx.token_text(-1)
+            .is_some_and(|token| token.text() == expected)
     }
 
     fn n<S>(&mut self, ctx: &mut ParserSemCtx<'_, S>, expected: &str) -> bool
     where
         S: TokenSource,
     {
-        ctx.token_text(1) == Some(expected)
+        ctx.token_text(1)
+            .is_some_and(|token| token.text() == expected)
     }
 
     fn not_line_terminator<S>(&mut self, ctx: &mut ParserSemCtx<'_, S>) -> bool

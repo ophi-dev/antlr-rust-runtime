@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use antlr4_runtime::{
-    CommonTokenStream, InputStream, ParseTree, Parser, Token, TOKEN_EOF,
+    CommonTokenStream, InputStream, ParseTree, Parser, TOKEN_EOF, Token, TokenStore,
 };
 
 #[allow(dead_code, unused_imports, unreachable_pub, unused_qualifications)]
@@ -26,6 +26,7 @@ use javascript_parser_base::JavaScriptParserBase;
 fn dump_tree<S: AsRef<str>>(
     out: &mut dyn Write,
     tree: &ParseTree,
+    tokens: &TokenStore,
     rule_names: &[S],
     depth: usize,
 ) -> io::Result<()> {
@@ -41,11 +42,11 @@ fn dump_tree<S: AsRef<str>>(
                 rule.context().children().len()
             )?;
             for child in rule.context().children() {
-                dump_tree(out, child, rule_names, depth + 1)?;
+                dump_tree(out, child, tokens, rule_names, depth + 1)?;
             }
         }
-        ParseTree::Terminal(token) => writeln!(out, "{pad}Term({:?})", token.text())?,
-        ParseTree::Error(token) => writeln!(out, "{pad}Err({:?})", token.text())?,
+        ParseTree::Terminal(token) => writeln!(out, "{pad}Term({:?})", token.text(tokens))?,
+        ParseTree::Error(token) => writeln!(out, "{pad}Err({:?})", token.text(tokens))?,
     }
     Ok(())
 }
@@ -92,7 +93,12 @@ fn main() -> ExitCode {
         }
         for token in stream.tokens() {
             if token.token_type() != TOKEN_EOF {
-                println!("{}\t{}\t{:?}", token.token_type(), token.channel(), token.text());
+                println!(
+                    "{}\t{}\t{:?}",
+                    token.token_type(),
+                    token.channel(),
+                    token.text()
+                );
             }
         }
         return ExitCode::SUCCESS;
@@ -112,12 +118,16 @@ fn main() -> ExitCode {
         }
     };
     if parser.number_of_syntax_errors() != 0 {
-        eprintln!("parse produced {} syntax error(s)", parser.number_of_syntax_errors());
+        eprintln!(
+            "parse produced {} syntax error(s)",
+            parser.number_of_syntax_errors()
+        );
         return ExitCode::FAILURE;
     }
     if let Err(error) = dump_tree(
         &mut io::stdout().lock(),
         &tree,
+        parser.token_store(),
         java_script_parser::rule_names(),
         0,
     ) {

@@ -1,8 +1,8 @@
 use antlr4_runtime::{HIDDEN_CHANNEL, ParserSemCtx, Token, TokenSource};
 
 use crate::generated::java_script_parser::{
-    CLOSE_BRACE, FUNCTION, JavaScriptParserHooks, LINE_TERMINATOR, MULTI_LINE_COMMENT,
-    OPEN_BRACE, WHITE_SPACES,
+    CLOSE_BRACE, FUNCTION, JavaScriptParserHooks, LINE_TERMINATOR, MULTI_LINE_COMMENT, OPEN_BRACE,
+    WHITE_SPACES,
 };
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -54,7 +54,8 @@ impl JavaScriptParserHooks for JavaScriptParserBase {
     where
         S: TokenSource,
     {
-        ctx.token_text(1) == Some(expected)
+        ctx.token_text(1)
+            .is_some_and(|token| token.text() == expected)
     }
 
     fn not_line_terminator<S>(&mut self, ctx: &mut ParserSemCtx<'_, S>) -> bool

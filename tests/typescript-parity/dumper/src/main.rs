@@ -6,7 +6,9 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use antlr4_runtime::{CommonTokenStream, InputStream, ParseTree, Parser, TOKEN_EOF, Token};
+use antlr4_runtime::{
+    CommonTokenStream, InputStream, ParseTree, Parser, TOKEN_EOF, Token, TokenStore,
+};
 
 #[allow(dead_code, unused_imports, unreachable_pub, unused_qualifications)]
 mod generated {
@@ -24,6 +26,7 @@ use typescript_parser_base::TypeScriptParserBase;
 fn dump_tree<S: AsRef<str>>(
     out: &mut dyn Write,
     tree: &ParseTree,
+    tokens: &TokenStore,
     rule_names: &[S],
     depth: usize,
 ) -> io::Result<()> {
@@ -39,11 +42,11 @@ fn dump_tree<S: AsRef<str>>(
                 rule.context().children().len()
             )?;
             for child in rule.context().children() {
-                dump_tree(out, child, rule_names, depth + 1)?;
+                dump_tree(out, child, tokens, rule_names, depth + 1)?;
             }
         }
-        ParseTree::Terminal(token) => writeln!(out, "{pad}Term({:?})", token.text())?,
-        ParseTree::Error(token) => writeln!(out, "{pad}Err({:?})", token.text())?,
+        ParseTree::Terminal(token) => writeln!(out, "{pad}Term({:?})", token.text(tokens))?,
+        ParseTree::Error(token) => writeln!(out, "{pad}Err({:?})", token.text(tokens))?,
     }
     Ok(())
 }
@@ -124,6 +127,7 @@ fn main() -> ExitCode {
     if let Err(error) = dump_tree(
         &mut io::stdout().lock(),
         &tree,
+        parser.token_store(),
         type_script_parser::rule_names(),
         0,
     ) {

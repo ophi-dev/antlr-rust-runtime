@@ -8,7 +8,7 @@ use crate::char_stream::{CharStream, TextInterval};
 use crate::int_stream::EOF;
 use crate::prediction::PredictionFxHasher;
 use crate::recognizer::{Recognizer, RecognizerData};
-use crate::token::{CommonToken, CommonTokenFactory, TokenFactory, TokenSourceError, TokenSpec};
+use crate::token::{TokenId, TokenSink, TokenSourceError, TokenSpec, TokenStoreError};
 
 #[allow(clippy::disallowed_types)]
 type FxHashMap<K, V> = HashMap<K, V, BuildHasherDefault<PredictionFxHasher>>;
@@ -98,21 +98,19 @@ impl LexerPredicate {
 /// committed path and gets a mutable borrow so a hook can change lexer state
 /// (mode stack), matching the closure-based `custom_action` API.
 #[derive(Debug)]
-enum LexerRef<'a, I, F>
+enum LexerRef<'a, I>
 where
     I: CharStream,
-    F: TokenFactory,
 {
-    Shared(&'a BaseLexer<I, F>),
-    Mut(&'a mut BaseLexer<I, F>),
+    Shared(&'a BaseLexer<I>),
+    Mut(&'a mut BaseLexer<I>),
 }
 
-impl<I, F> LexerRef<'_, I, F>
+impl<I> LexerRef<'_, I>
 where
     I: CharStream,
-    F: TokenFactory,
 {
-    const fn get(&self) -> &BaseLexer<I, F> {
+    const fn get(&self) -> &BaseLexer<I> {
         match self {
             LexerRef::Shared(lexer) => lexer,
             LexerRef::Mut(lexer) => lexer,
@@ -122,24 +120,22 @@ where
 
 /// Runtime view passed to lexer semantic hooks.
 #[derive(Debug)]
-pub struct LexerSemCtx<'a, I, F = CommonTokenFactory>
+pub struct LexerSemCtx<'a, I>
 where
     I: CharStream,
-    F: TokenFactory,
 {
-    lexer: LexerRef<'a, I, F>,
+    lexer: LexerRef<'a, I>,
     rule_index: usize,
     coordinate_index: usize,
     position: usize,
 }
 
-impl<'a, I, F> LexerSemCtx<'a, I, F>
+impl<'a, I> LexerSemCtx<'a, I>
 where
     I: CharStream,
-    F: TokenFactory,
 {
     pub(crate) const fn new(
-        lexer: &'a BaseLexer<I, F>,
+        lexer: &'a BaseLexer<I>,
         rule_index: usize,
         coordinate_index: usize,
         position: usize,
@@ -155,7 +151,7 @@ where
     /// Builds a context with a mutable lexer borrow, for a custom-action hook
     /// that may change lexer state (mode stack). See [`Self::push_mode`] etc.
     pub(crate) const fn new_mut(
-        lexer: &'a mut BaseLexer<I, F>,
+        lexer: &'a mut BaseLexer<I>,
         rule_index: usize,
         coordinate_index: usize,
         position: usize,
@@ -263,10 +259,10 @@ pub trait Lexer: Recognizer {
 }
 
 #[derive(Clone, Debug)]
-pub struct BaseLexer<I, F = CommonTokenFactory> {
+pub struct BaseLexer<I> {
     input: I,
     data: RecognizerData,
-    factory: F,
+    has_source_text: bool,
     mode: i32,
     mode_stack: Vec<i32>,
     token_start: usize,
@@ -412,23 +408,12 @@ impl<I> BaseLexer<I>
 where
     I: CharStream,
 {
-    /// Creates a lexer base using `CommonTokenFactory`.
     pub fn new(input: I, data: RecognizerData) -> Self {
-        Self::with_factory(input, data, CommonTokenFactory)
-    }
-}
-
-impl<I, F> BaseLexer<I, F>
-where
-    I: CharStream,
-    F: TokenFactory,
-{
-    /// Creates a lexer base with a custom token factory.
-    pub fn with_factory(input: I, data: RecognizerData, factory: F) -> Self {
+        let has_source_text = input.source_text().is_some();
         Self {
             input,
             data,
-            factory,
+            has_source_text,
             mode: DEFAULT_MODE,
             mode_stack: Vec::new(),
             token_start: 0,
@@ -537,9 +522,15 @@ where
     /// the base lexer captures the matched source interval so downstream token
     /// streams and parse trees can render token text without retaining a source
     /// pair object.
-    pub fn emit(&self, token_type: i32, channel: i32, text: Option<String>) -> CommonToken {
+    pub fn emit(
+        &self,
+        sink: &mut TokenSink<'_>,
+        token_type: i32,
+        channel: i32,
+        text: Option<String>,
+    ) -> Result<TokenId, TokenStoreError> {
         let stop = self.input.index().checked_sub(1).unwrap_or(usize::MAX);
-        self.emit_with_stop(token_type, channel, stop, text)
+        self.emit_with_stop(sink, token_type, channel, stop, text)
     }
 
     /// Builds a token with an explicit stop index.
@@ -549,11 +540,12 @@ where
     /// `usize::MAX` to represent ANTLR's `-1` stop index at empty input.
     pub fn emit_with_stop(
         &self,
+        sink: &mut TokenSink<'_>,
         token_type: i32,
         channel: i32,
         stop: usize,
         text: Option<String>,
-    ) -> CommonToken {
+    ) -> Result<TokenId, TokenStoreError> {
         let text = text.or_else(|| {
             if stop == usize::MAX {
                 Some("<EOF>".to_owned())
@@ -561,46 +553,36 @@ where
                 None
             }
         });
-        let source_interval = if text.is_none() && stop != usize::MAX && self.token_start <= stop {
+        let source_interval = if self.has_source_text
+            && text.is_none()
+            && stop != usize::MAX
+            && self.token_start <= stop
+        {
             self.input
-                .text_source_interval(TextInterval::new(self.token_start, stop))
+                .byte_interval(TextInterval::new(self.token_start, stop))
         } else {
             None
         };
-        let source_text = source_interval
-            .as_ref()
-            .and_then(|(input, start_byte, stop_byte)| {
-                Some(crate::token::TokenSourceText {
-                    input: Rc::clone(input),
-                    start_byte: u32::try_from(*start_byte).ok()?,
-                    stop_byte: u32::try_from(*stop_byte).ok()?,
-                })
-            });
-        let source_byte_span = source_text
-            .as_ref()
-            .map(|source_text| (source_text.start_byte, source_text.stop_byte));
         let text = text.or_else(|| {
-            source_text
+            source_interval
                 .is_none()
                 .then(|| self.input.text(TextInterval::new(self.token_start, stop)))
         });
-        let mut token = self.factory.create(TokenSpec {
+        let (start_byte, stop_byte) = source_interval
+            .or_else(|| self.token_byte_span(stop))
+            .unwrap_or((self.token_start, self.token_start));
+        sink.push(TokenSpec {
             token_type,
             channel,
             start: self.token_start,
             stop,
+            start_byte,
+            stop_byte,
             line: self.token_start_line,
             column: self.token_start_column,
             text,
-            source_text,
-            source_name: self.input.source_name(),
-        });
-        if let Some((start_byte, stop_byte)) =
-            source_byte_span.or_else(|| self.token_byte_span(stop))
-        {
-            token = token.with_byte_span(start_byte, stop_byte);
-        }
-        token
+            source_backed: source_interval.is_some(),
+        })
     }
 
     /// Returns the current token text from the token start through the input
@@ -646,52 +628,45 @@ where
     }
 
     /// Builds the synthetic EOF token at the current input cursor.
-    pub fn eof_token(&self) -> CommonToken {
-        let token = CommonToken::eof(
-            self.input.source_name(),
+    pub fn eof_token(&self, sink: &mut TokenSink<'_>) -> Result<TokenId, TokenStoreError> {
+        let byte_offset = self.eof_byte_offset().unwrap_or_else(|| self.input.index());
+        sink.push(TokenSpec::eof(
             self.input.index(),
+            byte_offset,
             self.line,
             self.column,
-        );
-        match self.eof_byte_offset() {
-            Some(byte_offset) => token.with_byte_span(byte_offset, byte_offset),
-            None => token,
-        }
+        ))
     }
 
-    fn eof_byte_offset(&self) -> Option<u32> {
+    fn eof_byte_offset(&self) -> Option<usize> {
         self.byte_offset_at(self.input.index())
     }
 
-    fn token_byte_span(&self, stop: usize) -> Option<(u32, u32)> {
+    fn token_byte_span(&self, stop: usize) -> Option<(usize, usize)> {
         if stop != usize::MAX && self.token_start <= stop {
-            let (_, start_byte, stop_byte) = self
+            let (start_byte, stop_byte) = self
                 .input
-                .text_source_interval(TextInterval::new(self.token_start, stop))?;
-            return Some((
-                u32::try_from(start_byte).ok()?,
-                u32::try_from(stop_byte).ok()?,
-            ));
+                .byte_interval(TextInterval::new(self.token_start, stop))?;
+            return Some((start_byte, stop_byte));
         }
         let byte_offset = self.byte_offset_at(self.token_start)?;
         Some((byte_offset, byte_offset))
     }
 
-    fn byte_offset_at(&self, index: usize) -> Option<u32> {
+    fn byte_offset_at(&self, index: usize) -> Option<usize> {
         let byte_offset = if index == 0 {
             0
         } else {
             let previous = TextInterval::new(index - 1, index - 1);
-            self.input.text_source_interval(previous)?.2
+            self.input.byte_interval(previous)?.1
         };
-        u32::try_from(byte_offset).ok()
+        Some(byte_offset)
     }
 }
 
-impl<I, F> Recognizer for BaseLexer<I, F>
+impl<I> Recognizer for BaseLexer<I>
 where
     I: CharStream,
-    F: TokenFactory,
 {
     fn data(&self) -> &RecognizerData {
         &self.data
@@ -702,10 +677,9 @@ where
     }
 }
 
-impl<I, F> Lexer for BaseLexer<I, F>
+impl<I> Lexer for BaseLexer<I>
 where
     I: CharStream,
-    F: TokenFactory,
 {
     fn mode(&self) -> i32 {
         self.mode
@@ -727,10 +701,9 @@ where
     }
 }
 
-impl<I, F> BaseLexer<I, F>
+impl<I> BaseLexer<I>
 where
     I: CharStream,
-    F: TokenFactory,
 {
     pub const fn line(&self) -> usize {
         self.line
@@ -742,6 +715,10 @@ where
 
     pub fn source_name(&self) -> &str {
         self.input.source_name()
+    }
+
+    pub fn source_text(&self) -> Option<Rc<str>> {
+        self.input.source_text()
     }
 
     pub const fn hit_eof(&self) -> bool {
@@ -933,9 +910,49 @@ fn lexer_dfa_edge_label(symbol: i32) -> Option<String> {
 mod tests {
     use super::*;
     use crate::char_stream::InputStream;
+    use crate::int_stream::IntStream;
     use crate::recognizer::RecognizerData;
-    use crate::token::{DEFAULT_CHANNEL, Token};
+    use crate::token::{DEFAULT_CHANNEL, Token, TokenStore};
     use crate::vocabulary::Vocabulary;
+
+    #[derive(Clone, Debug)]
+    struct UnsharedInput(InputStream);
+
+    impl IntStream for UnsharedInput {
+        fn consume(&mut self) {
+            self.0.consume();
+        }
+
+        fn la(&mut self, offset: isize) -> i32 {
+            self.0.la(offset)
+        }
+
+        fn index(&self) -> usize {
+            self.0.index()
+        }
+
+        fn seek(&mut self, index: usize) {
+            self.0.seek(index);
+        }
+
+        fn size(&self) -> usize {
+            self.0.size()
+        }
+
+        fn source_name(&self) -> &str {
+            self.0.source_name()
+        }
+    }
+
+    impl CharStream for UnsharedInput {
+        fn text(&self, interval: TextInterval) -> String {
+            self.0.text(interval)
+        }
+
+        fn byte_interval(&self, interval: TextInterval) -> Option<(usize, usize)> {
+            self.0.byte_interval(interval)
+        }
+    }
 
     #[test]
     fn eof_token_uses_utf8_byte_offset_after_non_ascii_input() {
@@ -950,7 +967,10 @@ mod tests {
         let mut lexer = BaseLexer::new(InputStream::new("β"), data);
         lexer.consume_char();
 
-        let token = lexer.eof_token();
+        let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
+        let mut sink = TokenSink::new(&mut store);
+        let id = lexer.eof_token(&mut sink).expect("test token should fit");
+        let token = sink.view(id).expect("emitted token should exist");
 
         assert_eq!(token.start(), 1);
         assert_eq!(token.stop(), 0);
@@ -972,7 +992,12 @@ mod tests {
         lexer.consume_char();
         lexer.begin_token();
 
-        let token = lexer.emit_with_stop(1, DEFAULT_CHANNEL, 0, Some("<EOF>".to_owned()));
+        let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
+        let mut sink = TokenSink::new(&mut store);
+        let id = lexer
+            .emit_with_stop(&mut sink, 1, DEFAULT_CHANNEL, 0, Some("<EOF>".to_owned()))
+            .expect("test token should fit");
+        let token = sink.view(id).expect("emitted token should exist");
 
         assert_eq!(token.start(), 1);
         assert_eq!(token.stop(), 0);
@@ -994,10 +1019,40 @@ mod tests {
         lexer.begin_token();
         lexer.consume_char();
 
-        let token = lexer.emit(1, DEFAULT_CHANNEL, None);
+        let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
+        let mut sink = TokenSink::new(&mut store);
+        let id = lexer
+            .emit(&mut sink, 1, DEFAULT_CHANNEL, None)
+            .expect("test token should fit");
+        let token = sink.view(id).expect("emitted token should exist");
 
         assert_eq!(token.start(), 0);
         assert_eq!(token.stop(), 0);
+        assert_eq!(token.text(), "β");
+        assert_eq!(token.byte_span(), 0..2);
+    }
+
+    #[test]
+    fn emit_falls_back_to_explicit_text_without_shareable_source() {
+        let data = RecognizerData::new(
+            "T",
+            Vocabulary::new(
+                std::iter::empty::<Option<&str>>(),
+                std::iter::empty::<Option<&str>>(),
+                std::iter::empty::<Option<&str>>(),
+            ),
+        );
+        let mut lexer = BaseLexer::new(UnsharedInput(InputStream::new("β")), data);
+        lexer.begin_token();
+        lexer.consume_char();
+
+        let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
+        let mut sink = TokenSink::new(&mut store);
+        let id = lexer
+            .emit(&mut sink, 1, DEFAULT_CHANNEL, None)
+            .expect("unshared input should emit explicit token text");
+        let token = sink.view(id).expect("emitted token should exist");
+
         assert_eq!(token.text(), "β");
         assert_eq!(token.byte_span(), 0..2);
     }

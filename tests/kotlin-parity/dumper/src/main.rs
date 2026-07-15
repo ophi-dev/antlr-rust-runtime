@@ -15,7 +15,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
 
-use antlr4_runtime::ParseTree;
+use antlr4_runtime::{ParseTree, TokenStore};
 
 mod generated {
     #![allow(dead_code, unused_imports, unreachable_pub, unused_qualifications)]
@@ -45,6 +45,7 @@ impl EntryRule {
 fn dump<S: AsRef<str>>(
     out: &mut dyn Write,
     tree: &ParseTree,
+    tokens: &TokenStore,
     rule_names: &[S],
     depth: usize,
 ) -> io::Result<()> {
@@ -60,11 +61,11 @@ fn dump<S: AsRef<str>>(
                 rl.context().children().len()
             )?;
             for c in rl.context().children() {
-                dump(out, c, rule_names, depth + 1)?;
+                dump(out, c, tokens, rule_names, depth + 1)?;
             }
         }
-        ParseTree::Terminal(t) => writeln!(out, "{pad}Term({:?})", t.text())?,
-        ParseTree::Error(e) => writeln!(out, "{pad}Err({:?})", e.text())?,
+        ParseTree::Terminal(t) => writeln!(out, "{pad}Term({:?})", t.text(tokens))?,
+        ParseTree::Error(e) => writeln!(out, "{pad}Err({:?})", e.text(tokens))?,
     }
     Ok(())
 }
@@ -157,7 +158,7 @@ fn main() -> ExitCode {
             avg_us as f64 / 1000.0,
         );
     }
-    let Some(tree) = last_tree else {
+    let Some(parsed) = last_tree else {
         eprintln!("no parse iterations produced a tree");
         return ExitCode::from(1);
     };
@@ -174,7 +175,13 @@ fn main() -> ExitCode {
         },
         None => Box::new(io::stdout().lock()),
     };
-    if let Err(err) = dump(sink.as_mut(), &tree, &rule_names, 0) {
+    if let Err(err) = dump(
+        sink.as_mut(),
+        parsed.tree(),
+        parsed.tokens(),
+        &rule_names,
+        0,
+    ) {
         eprintln!("write failed: {err}");
         return ExitCode::from(1);
     }

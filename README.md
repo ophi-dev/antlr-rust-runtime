@@ -130,15 +130,15 @@ use generated::json::{self, Json};
 use generated::json_lexer::JsonLexer;
 
 fn main() -> Result<(), antlr4_runtime::AntlrError> {
-    let tree = json::parse(r#"{"a":1}"#, JsonLexer::new, Json::json)?;
+    let parsed = json::parse(r#"{"a":1}"#, JsonLexer::new, Json::json)?;
 
-    println!("{}", tree.text());
+    println!("{}", parsed.tree().text(parsed.tokens()));
     Ok(())
 }
 ```
 
 Use `parse_with_parser` when you want the compact setup path and also need the
-parser afterward for diagnostics or the owned token stream:
+parser afterward for diagnostics:
 
 ```rust
 use antlr4_runtime::Parser;
@@ -148,11 +148,14 @@ use generated::json_lexer::JsonLexer;
 fn main() -> Result<(), antlr4_runtime::AntlrError> {
     let output = json::parse_with_parser(r#"{"a":1}"#, JsonLexer::new, Json::json)?;
     let syntax_errors = output.parser.number_of_syntax_errors();
-    let tree = output.result;
-    let tokens = output.parser.into_token_stream();
+    let json::JsonParseOutput {
+        result: tree,
+        parser,
+    } = output;
+    let tokens = parser.into_token_store();
 
-    println!("{} errors across {} tokens", syntax_errors, tokens.tokens().len());
-    println!("{}", tree.text());
+    println!("{} errors across {} tokens", syntax_errors, tokens.len());
+    println!("{}", tree.text(&tokens));
     Ok(())
 }
 ```
@@ -171,7 +174,7 @@ fn main() -> Result<(), antlr4_runtime::AntlrError> {
     let mut parser = Json::new(tokens);
     let tree = parser.json()?;
 
-    println!("{}", tree.text());
+    println!("{}", tree.text(parser.token_store()));
     Ok(())
 }
 ```
@@ -190,6 +193,32 @@ grammar's documentation. Calling the wrong rule can still recover and return a
 parse tree with error nodes, so check parser diagnostics when adding a new input
 form.
 
+## Token API Migration
+
+The compact token store is a breaking runtime/generator change. Regenerate all
+generated lexers and parsers with the matching `antlr4-rust-gen`; code generated
+against the pointer-owned token API does not compile against this runtime.
+
+`CommonToken`, `TokenRef`, and token factories are removed. Custom token sources
+now append a `TokenSpec` directly to the supplied `TokenSink` and return its
+`TokenId`. Buffered-token consumers use borrowing `TokenView` values from
+`get`, `lt`, or the `tokens()` iterator. Custom `CharStream` implementations
+should provide `source_text()` when the complete UTF-8 input can be shared;
+otherwise token text is stored explicitly in the sparse side pool.
+
+`CommonTokenStream` owns its `TokenStore` directly. Parse-tree nodes contain
+only `TokenId` values, so token-dependent tree methods take `&TokenStore`.
+Generated `parse()` returns `ParsedFile<R>`, which owns both the token store and
+entry-rule result. Access them through `tokens()` and `tree()`. Direct rule calls
+can resolve their returned tree through `parser.token_store()` while the parser
+is alive, or consume the parser with `into_token_store()`.
+
+Token IDs cover indices through `u32::MAX`. Source scalar/byte offsets, line
+numbers, and columns are limited to `u32::MAX - 1` (4,294,967,294);
+`u32::MAX` is reserved for ANTLR's synthetic `-1` boundary. All conversions are
+checked. Use `CommonTokenStream::try_new` or `try_with_channel` to handle limit
+errors; `new` and `with_channel` panic with the same error.
+
 ## Technical Notes
 
 - Pure Rust runtime implementation.
@@ -197,8 +226,8 @@ form.
 - Supports ANTLR serialized ATN deserialization.
 - Supports lexer and parser execution through generated Rust wrappers.
 - Supports real split lexer/parser grammars, including Kotlin smoke builds.
-- Passes every upstream ANTLR runtime-testsuite descriptor discovered by the
-  harness: `357 passed, 0 failed, 0 skipped, 357 run`.
+- Passes every supported upstream ANTLR runtime-testsuite descriptor discovered
+  by the harness: `356 passed, 0 failed, 1 skipped, 356 run`.
 - Licensed under BSD-3-Clause for compatibility with ANTLR's runtime licensing
   pattern and downstream open-source applications.
 
@@ -206,7 +235,8 @@ The runtime contains:
 
 - `IntStream` and `CharStream`
 - UTF-8 input as Unicode scalar values
-- `Token`, `CommonToken`, token factories, and `TokenSource`
+- compact `TokenId`/`TokenView` access, `TokenSource`, and one canonical
+  `TokenStore`
 - buffered, channel-aware `CommonTokenStream`
 - `Vocabulary`
 - recognizer metadata and error listener plumbing
@@ -422,10 +452,10 @@ group (**> 1.0** means Rust is faster than Go; **< 1.0** means slower):
 
 | Language | Fixtures | Rust vs Go (parse time) |
 |----------|---------:|-------------------------|
-| Kotlin   | 4        | ~18.5× faster           |
-| Java     | 4        | ~2.5× faster            |
+| Kotlin   | 4        | ~18.6× faster           |
+| Java     | 4        | ~2.7× faster            |
 | C#       | 4        | ~1.7× faster            |
-| Trino SQL| 5        | ~2.2× faster            |
+| Trino SQL| 5        | ~2.5× faster            |
 
 Rust is faster than Go on average in all four language groups, with
 Kotlin leading dramatically (expression-ladder memoization in the generated
