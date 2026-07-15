@@ -402,15 +402,17 @@ Run the Rust-vs-Go comparison across all fixture languages:
 python3 tools/parse-bench/run.py \
   --languages kotlin,csharp,java,trino \
   --runtimes rust-antlr,go-antlr \
-  --quick \
+  --iters 10 \
+  --warmups 2 \
   --json target/parse-bench/results.json \
   --markdown target/parse-bench/results.md
 ```
 
 The report prints `min`/`avg` parse time and a ratio against `rust-antlr` for
-every fixture. Drop `--quick` (or add `--iters`/`--warmups`) for longer, lower
-variance runs; add `--runtimes rust-antlr,go-antlr,python-antlr,tree-sitter` to
-include the other runtimes.
+every fixture. Use `--quick` for a 3-iteration/1-warmup smoke run, or adjust
+`--iters`/`--warmups` for longer, lower-variance runs; add
+`--runtimes rust-antlr,go-antlr,python-antlr,tree-sitter` to include the other
+runtimes.
 
 ### Current results
 

@@ -12105,6 +12105,55 @@ s : ;
     }
 
     #[test]
+    fn generated_loop_filters_portable_local_predicate() {
+        let body = vec![
+            GeneratedParserStep::Predicate {
+                rule_index: 1,
+                pred_index: 0,
+            },
+            mt(3, 4),
+        ];
+        let declarations = vec![vec!["let mut __antlr_local_seen = false;".to_owned()]];
+        let predicates = BTreeMap::from([((1, 0), ("__antlr_local_seen".to_owned(), None))]);
+        let required_generated_rules = BTreeSet::from([1]);
+        let mut rendered = String::new();
+
+        render_generated_star_loop(
+            &mut rendered,
+            StarLoopRender {
+                state: 1,
+                decision: 0,
+                alts: (1, 2),
+                track_alt_number: false,
+                allow_semantic_context: true,
+                force_context: false,
+                plus_loop: false,
+                fast_path: None,
+                body: &body,
+            },
+            0,
+            GeneratedStepRenderContext {
+                embedded: None,
+                portable_locals: Some(PortableLocalStepRender {
+                    declarations: &declarations,
+                    predicates: &predicates,
+                    required_generated_rules: &required_generated_rules,
+                }),
+                inline_action_statements: &BTreeMap::new(),
+                track_alt_numbers: false,
+                direct_generated_rule_calls: &[],
+                atn_preferred_rule_calls: &[],
+            },
+        );
+
+        assert!(rendered.contains("__semantic_la == 3 && (__antlr_local_seen)"));
+        assert!(!rendered.contains("parser_semantic_ir_predicate_matches"));
+        assert!(
+            rendered.contains("antlr4_runtime::ParserAtnPrediction { alt: 2, ..__prediction }")
+        );
+    }
+
+    #[test]
     fn generated_loop_filters_first_nested_predicated_decision() {
         let body = vec![GeneratedParserStep::Decision {
             state: 1,

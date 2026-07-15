@@ -2275,44 +2275,51 @@ struct OperatorReachabilityRequest {
     predicate_dependent: bool,
 }
 
-struct PredicateFreeNullableCtx<'a> {
-    first_set_cache: &'a mut FirstSetCache,
-    cache: FxHashMap<(usize, usize, i32), bool>,
-    in_progress: BTreeSet<(usize, usize, i32)>,
+struct NullablePrecedenceCtx {
+    cache: FxHashMap<(usize, usize, i32, bool), bool>,
+    in_progress: BTreeSet<(usize, usize, i32, bool)>,
     hit_cycle: bool,
 }
 
-fn state_is_predicate_free_nullable(
+fn state_is_nullable_with_precedence(
     atn: &Atn,
     state_number: usize,
     stop_state_number: usize,
     precedence: i32,
-    ctx: &mut PredicateFreeNullableCtx<'_>,
+    allow_predicates: bool,
+    ctx: &mut NullablePrecedenceCtx,
 ) -> bool {
     let saved_hit_cycle = ctx.hit_cycle;
     ctx.hit_cycle = false;
-    let nullable = state_is_predicate_free_nullable_cached(
+    let nullable = state_is_nullable_with_precedence_cached(
         atn,
         state_number,
         stop_state_number,
         precedence,
+        allow_predicates,
         ctx,
     );
     ctx.hit_cycle = saved_hit_cycle;
     nullable
 }
 
-fn state_is_predicate_free_nullable_cached(
+fn state_is_nullable_with_precedence_cached(
     atn: &Atn,
     state_number: usize,
     stop_state_number: usize,
     precedence: i32,
-    ctx: &mut PredicateFreeNullableCtx<'_>,
+    allow_predicates: bool,
+    ctx: &mut NullablePrecedenceCtx,
 ) -> bool {
     if state_number == stop_state_number {
         return true;
     }
-    let key = (state_number, stop_state_number, precedence);
+    let key = (
+        state_number,
+        stop_state_number,
+        precedence,
+        allow_predicates,
+    );
     if let Some(cached) = ctx.cache.get(&key) {
         return *cached;
     }
@@ -2328,40 +2335,56 @@ fn state_is_predicate_free_nullable_cached(
                 target,
                 rule_index,
                 follow_state,
-                ..
+                precedence: rule_precedence,
             } => {
                 let Some(child_stop) = atn.rule_to_stop_state().get(*rule_index).copied() else {
                     return false;
                 };
-                rule_first_set(atn, *target, child_stop, ctx.first_set_cache).nullable
-                    && state_is_predicate_free_nullable_cached(
-                        atn, *target, child_stop, precedence, ctx,
-                    )
-                    && state_is_predicate_free_nullable_cached(
-                        atn,
-                        *follow_state,
-                        stop_state_number,
-                        precedence,
-                        ctx,
-                    )
+                state_is_nullable_with_precedence_cached(
+                    atn,
+                    *target,
+                    child_stop,
+                    *rule_precedence,
+                    allow_predicates,
+                    ctx,
+                ) && state_is_nullable_with_precedence_cached(
+                    atn,
+                    *follow_state,
+                    stop_state_number,
+                    precedence,
+                    allow_predicates,
+                    ctx,
+                )
             }
             Transition::Epsilon { target } | Transition::Action { target, .. } => {
-                state_is_predicate_free_nullable_cached(
+                state_is_nullable_with_precedence_cached(
                     atn,
                     *target,
                     stop_state_number,
                     precedence,
+                    allow_predicates,
+                    ctx,
+                )
+            }
+            Transition::Predicate { target, .. } if allow_predicates => {
+                state_is_nullable_with_precedence_cached(
+                    atn,
+                    *target,
+                    stop_state_number,
+                    precedence,
+                    allow_predicates,
                     ctx,
                 )
             }
             Transition::Precedence {
                 target,
                 precedence: transition_precedence,
-            } if *transition_precedence >= precedence => state_is_predicate_free_nullable_cached(
+            } if *transition_precedence >= precedence => state_is_nullable_with_precedence_cached(
                 atn,
                 *target,
                 stop_state_number,
                 precedence,
+                allow_predicates,
                 ctx,
             ),
             Transition::Atom { .. }
@@ -2385,10 +2408,14 @@ fn state_can_reach_symbol_with_precedence(
     atn: &Atn,
     state_number: usize,
     request: OperatorReachabilityRequest,
-    nullable_ctx: &mut PredicateFreeNullableCtx<'_>,
-    visited: &mut BTreeSet<(usize, bool)>,
+    nullable_ctx: &mut NullablePrecedenceCtx,
+    visited: &mut BTreeSet<(usize, i32, bool)>,
 ) -> OperatorSymbolReachability {
-    if !visited.insert((state_number, request.predicate_dependent)) {
+    if !visited.insert((
+        state_number,
+        request.precedence,
+        request.predicate_dependent,
+    )) {
         return OperatorSymbolReachability::None;
     }
     let Some(state) = atn.state(state_number) else {
@@ -2408,12 +2435,15 @@ fn state_can_reach_symbol_with_precedence(
                 target,
                 rule_index,
                 follow_state,
-                ..
+                precedence: rule_precedence,
             } => {
                 let mut result = state_can_reach_symbol_with_precedence(
                     atn,
                     *target,
-                    request,
+                    OperatorReachabilityRequest {
+                        precedence: *rule_precedence,
+                        ..request
+                    },
                     nullable_ctx,
                     visited,
                 );
@@ -2423,13 +2453,21 @@ fn state_can_reach_symbol_with_precedence(
                 let Some(child_stop) = atn.rule_to_stop_state().get(*rule_index).copied() else {
                     continue;
                 };
-                if rule_first_set(atn, *target, child_stop, nullable_ctx.first_set_cache).nullable {
+                if state_is_nullable_with_precedence(
+                    atn,
+                    *target,
+                    child_stop,
+                    *rule_precedence,
+                    true,
+                    nullable_ctx,
+                ) {
                     let child_predicate_dependent = request.predicate_dependent
-                        || !state_is_predicate_free_nullable(
+                        || !state_is_nullable_with_precedence(
                             atn,
                             *target,
                             child_stop,
-                            request.precedence,
+                            *rule_precedence,
+                            false,
                             nullable_ctx,
                         );
                     result = result.max(state_can_reach_symbol_with_precedence(
@@ -2487,14 +2525,12 @@ fn left_recursive_operator_lookahead(
     atn: &Atn,
     state_number: usize,
     precedence: i32,
-    first_set_cache: &mut FirstSetCache,
 ) -> LeftRecursiveOperatorLookahead {
     let Some(state) = atn.state(state_number) else {
         return LeftRecursiveOperatorLookahead::default();
     };
     let mut lookahead = LeftRecursiveOperatorLookahead::default();
-    let mut nullable_ctx = PredicateFreeNullableCtx {
-        first_set_cache,
+    let mut nullable_ctx = NullablePrecedenceCtx {
         cache: FxHashMap::default(),
         in_progress: BTreeSet::new(),
         hit_cycle: false,
@@ -2535,7 +2571,7 @@ fn left_recursive_operator_lookahead(
 #[derive(Debug, Default)]
 struct StateBeforeStopLookahead {
     symbols: TokenBitSet,
-    reaches_rule_stop: bool,
+    reaches_context_boundary: bool,
 }
 
 fn state_before_stop_lookahead(
@@ -2574,6 +2610,7 @@ fn state_before_stop_lookahead_inner(
     lookahead: &mut StateBeforeStopLookahead,
 ) {
     if state_number == stop_state_number {
+        lookahead.reaches_context_boundary = true;
         return;
     }
     if !visited.insert(state_number) {
@@ -2583,7 +2620,7 @@ fn state_before_stop_lookahead_inner(
         return;
     };
     if state.kind == AtnStateKind::RuleStop {
-        lookahead.reaches_rule_stop = true;
+        lookahead.reaches_context_boundary = true;
         return;
     }
     for transition in &state.transitions {
@@ -2653,7 +2690,7 @@ fn context_can_match_symbol_before_state(
                 .unwrap_or_else(PredictionContext::empty);
             let lookahead = state_before_stop_lookahead(atn, return_state, stop_state_number);
             lookahead.symbols.contains(symbol)
-                || (lookahead.reaches_rule_stop
+                || (lookahead.reaches_context_boundary
                     && context_can_match_symbol_before_state(
                         atn,
                         &parent,
@@ -4374,7 +4411,6 @@ where
                 atn,
                 state_number,
                 precedence,
-                &mut cache.first_set,
             ));
             cache
                 .left_recursive_operator_lookahead
@@ -10326,6 +10362,7 @@ mod tests {
             (6, AtnStateKind::RuleStop, 0),
             (7, AtnStateKind::RuleStart, 1),
             (8, AtnStateKind::RuleStop, 1),
+            (9, AtnStateKind::Basic, 1),
         ] {
             let mut atn_state = AtnState::new(state, kind).with_rule_index(rule);
             if state == 0 {
@@ -10347,7 +10384,7 @@ mod tests {
             .expect("precedence predicate")
             .add_transition(Transition::Precedence {
                 target: 3,
-                precedence: 1,
+                precedence: 3,
             });
         atn.state_mut(3)
             .expect("nullable operator prefix")
@@ -10367,6 +10404,12 @@ mod tests {
             .expect("loop exit")
             .add_transition(Transition::Epsilon { target: 6 });
         atn.state_mut(7)
+            .expect("nullable operator prefix")
+            .add_transition(Transition::Precedence {
+                target: 9,
+                precedence: 1,
+            });
+        atn.state_mut(9)
             .expect("nullable operator prefix")
             .add_transition(Transition::Epsilon { target: 8 });
         atn
@@ -10587,6 +10630,84 @@ mod tests {
         atn
     }
 
+    fn left_recursive_loop_with_recursive_operand_return_atn(caller_symbol: i32) -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 2);
+        for (state, kind, rule) in [
+            (0, AtnStateKind::RuleStart, 0),
+            (1, AtnStateKind::Basic, 0),
+            (2, AtnStateKind::Basic, 0),
+            (3, AtnStateKind::RuleStop, 0),
+            (4, AtnStateKind::RuleStart, 1),
+            (5, AtnStateKind::StarLoopEntry, 1),
+            (6, AtnStateKind::Basic, 1),
+            (7, AtnStateKind::Basic, 1),
+            (8, AtnStateKind::Basic, 1),
+            (9, AtnStateKind::Basic, 1),
+            (10, AtnStateKind::LoopEnd, 1),
+            (11, AtnStateKind::RuleStop, 1),
+        ] {
+            let mut atn_state = AtnState::new(state, kind).with_rule_index(rule);
+            if state == 4 {
+                atn_state.left_recursive_rule = true;
+            } else if state == 5 {
+                atn_state.precedence_rule_decision = true;
+            }
+            atn.add_state(atn_state);
+        }
+        atn.set_rule_to_start_state(vec![0, 4]);
+        atn.set_rule_to_stop_state(vec![3, 11]);
+        atn.state_mut(0)
+            .expect("caller start")
+            .add_transition(Transition::Epsilon { target: 1 });
+        atn.state_mut(1)
+            .expect("caller invocation")
+            .add_transition(Transition::Rule {
+                target: 4,
+                rule_index: 1,
+                follow_state: 2,
+                precedence: 0,
+            });
+        atn.state_mut(2)
+            .expect("caller follow")
+            .add_transition(Transition::Atom {
+                target: 3,
+                label: caller_symbol,
+            });
+        atn.state_mut(5)
+            .expect("precedence loop")
+            .add_transition(Transition::Epsilon { target: 6 });
+        atn.state_mut(5)
+            .expect("precedence loop")
+            .add_transition(Transition::Epsilon { target: 10 });
+        atn.state_mut(6)
+            .expect("precedence predicate")
+            .add_transition(Transition::Precedence {
+                target: 7,
+                precedence: 1,
+            });
+        atn.state_mut(7)
+            .expect("operator token")
+            .add_transition(Transition::Atom {
+                target: 8,
+                label: 1,
+            });
+        atn.state_mut(8)
+            .expect("recursive operand")
+            .add_transition(Transition::Rule {
+                target: 4,
+                rule_index: 1,
+                follow_state: 9,
+                precedence: 2,
+            });
+        atn.state_mut(9)
+            .expect("recursive operand follow")
+            .add_transition(Transition::Epsilon { target: 5 });
+        atn.state_mut(10)
+            .expect("loop exit")
+            .add_transition(Transition::Epsilon { target: 11 });
+        atn
+    }
+
     #[test]
     fn left_recursive_loop_defers_overlapping_caller_lookahead() {
         let overlapping_atn = left_recursive_loop_with_caller_follow_atn(1);
@@ -10637,6 +10758,11 @@ mod tests {
             parser.left_recursive_loop_enter_prediction(&atn, 1, 0),
             Some(true),
             "cached operator lookahead must preserve the nullable prefix return path"
+        );
+        assert_eq!(
+            parser.left_recursive_loop_enter_prediction(&atn, 1, 2),
+            Some(true),
+            "the nullable child must use its rule-call precedence, not the caller precedence"
         );
     }
 
@@ -10714,6 +10840,40 @@ mod tests {
             parser.left_recursive_loop_enter_prediction(&atn, 9, 0),
             None,
             "the caller-overlap cache must not retain a false negative"
+        );
+    }
+
+    #[test]
+    fn left_recursive_loop_defers_after_recursive_operand_returns_to_loop() {
+        let atn = left_recursive_loop_with_recursive_operand_return_atn(1);
+        let mut parser = mini_parser(vec![
+            CommonToken::new(1).with_text("lookahead"),
+            CommonToken::eof("parser-test", 1, 1, 1),
+        ]);
+        parser.rule_context_stack = vec![
+            RuleContextFrame {
+                rule_index: 0,
+                invoking_state: -1,
+            },
+            RuleContextFrame {
+                rule_index: 1,
+                invoking_state: 1,
+            },
+            RuleContextFrame {
+                rule_index: 1,
+                invoking_state: 8,
+            },
+        ];
+
+        assert_eq!(
+            parser.left_recursive_loop_enter_prediction(&atn, 5, 0),
+            None,
+            "a recursive operand return must preserve its parent caller context"
+        );
+        assert_eq!(
+            parser.left_recursive_loop_enter_prediction(&atn, 5, 0),
+            None,
+            "the caller-overlap cache must preserve the loop-boundary return"
         );
     }
 
