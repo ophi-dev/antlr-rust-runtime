@@ -2401,7 +2401,7 @@ impl EmbeddedStepRender<'_> {
 #[derive(Clone, Copy)]
 struct PortableLocalStepRender<'a> {
     declarations: &'a [Vec<String>],
-    predicates: &'a BTreeMap<(usize, usize), String>,
+    predicates: &'a BTreeMap<(usize, usize), (String, Option<String>)>,
 }
 
 #[derive(Clone, Copy)]
@@ -4351,17 +4351,25 @@ fn render_generated_step(
             rule_index,
             pred_index,
         } => {
-            if let Some(condition) = render_context
+            if let Some((condition, message)) = render_context
                 .portable_locals
                 .and_then(|portable| portable.predicates.get(&(*rule_index, *pred_index)))
             {
                 writeln!(out, "{pad}if !({condition}) {{")
                     .expect("writing to a string cannot fail");
-                writeln!(
-                    out,
-                    "{pad}    return Err(self.base.failed_predicate_error(\"semantic predicate\"));"
-                )
-                .expect("writing to a string cannot fail");
+                match message {
+                    Some(message) => writeln!(
+                        out,
+                        "{pad}    return Err(self.base.failed_predicate_option_error({rule_index}, \"{}\".to_owned()));",
+                        rust_string(message)
+                    )
+                    .expect("writing to a string cannot fail"),
+                    None => writeln!(
+                        out,
+                        "{pad}    return Err(self.base.failed_predicate_error(\"semantic predicate\"));"
+                    )
+                    .expect("writing to a string cannot fail"),
+                }
                 writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
                 return;
             }
@@ -4945,9 +4953,9 @@ fn semantic_alt_candidate_condition_with_la(
     }
     conditions.extend(leading_predicates(steps).into_iter().map(
         |(rule_index, pred_index)| {
-            if let Some(condition) = portable.and_then(|portable| {
-                portable.predicates.get(&(rule_index, pred_index))
-            }) {
+            if let Some((condition, _)) =
+                portable.and_then(|portable| portable.predicates.get(&(rule_index, pred_index)))
+            {
                 return format!("({condition})");
             }
             embedded.map_or_else(
@@ -5402,7 +5410,6 @@ fn render_generated_left_recursive_loop(
             "{pad}        Err(_) => return Err(self.base.no_viable_alternative_error(__decision_start)),"
         )
         .expect("writing to a string cannot fail");
-        writeln!(out, "{pad}    }};").expect("writing to a string cannot fail");
     } else {
         writeln!(
             out,
@@ -5741,17 +5748,19 @@ struct PortableLocalData {
     /// ATN action source state -> generated assignment.
     inline_actions: BTreeMap<usize, String>,
     /// Parser predicate coordinate -> generated boolean expression.
-    predicates: BTreeMap<(usize, usize), String>,
+    predicates: BTreeMap<(usize, usize), (String, Option<String>)>,
 }
 
 impl PortableLocalData {
+    fn has_semantics(&self) -> bool {
+        !self.inline_actions.is_empty() || !self.predicates.is_empty()
+    }
+
     fn step_render(&self) -> Option<PortableLocalStepRender<'_>> {
-        (!self.inline_actions.is_empty() || !self.predicates.is_empty()).then_some(
-            PortableLocalStepRender {
-                declarations: &self.declarations,
-                predicates: &self.predicates,
-            },
-        )
+        self.has_semantics().then_some(PortableLocalStepRender {
+            declarations: &self.declarations,
+            predicates: &self.predicates,
+        })
     }
 }
 
@@ -5882,7 +5891,13 @@ fn build_portable_local_data(
         } else {
             local.clone()
         };
-        out.predicates.insert((rule_index, pred_index), expression);
+        out.predicates.insert(
+            (rule_index, pred_index),
+            (
+                expression,
+                predicate_fail_message(source, block.after_brace),
+            ),
+        );
     }
 
     Ok(out)
@@ -6922,7 +6937,8 @@ fn render_parser_with_options(
             all: &predicate_coordinates,
             generated: &generated_predicate_coordinates,
         },
-        false,
+        (has_action_dispatch || has_predicate_dispatch || portable_local_data.has_semantics())
+            && !options.embedded,
     )?;
     if options.require_generated_parser || options.embedded {
         // Embedded actions only run on the generated path, so every rule must
@@ -13133,7 +13149,7 @@ ID: [a-z]+ { customJava(); };
 
     const PORTABLE_BOOL_GRAMMAR: &str = "parser grammar S;\n\
 s locals [boolean seen=false]\n\
-    : { $seen = true; } {$seen}? A\n\
+    : { $seen = true; } {$seen}?<fail='not seen'> A\n\
     ;\n";
 
     const PREDICATE_GRAMMAR: &str = "parser grammar S;\ns : {isTypeName()}? A ;\n";
@@ -13901,8 +13917,11 @@ ID : [a-z]+ ;\n";
             Some("__antlr_local_seen = true;")
         );
         assert_eq!(
-            portable.predicates.get(&(0, 0)).map(String::as_str),
-            Some("__antlr_local_seen")
+            portable
+                .predicates
+                .get(&(0, 0))
+                .map(|(condition, message)| (condition.as_str(), message.as_deref())),
+            Some(("__antlr_local_seen", Some("not seen")))
         );
 
         let module = render_parser("SParser", &data, Some(PORTABLE_BOOL_GRAMMAR))
@@ -13910,6 +13929,7 @@ ID : [a-z]+ ;\n";
         assert!(module.contains("let mut __antlr_local_seen = false;"));
         assert!(module.contains("__antlr_local_seen = true;"));
         assert!(module.contains("if !(__antlr_local_seen) {"));
+        assert!(module.contains("failed_predicate_option_error(0, \"not seen\".to_owned())"));
 
         let entries = collect_parser_semantics(
             &data,
