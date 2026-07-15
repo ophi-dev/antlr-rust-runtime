@@ -425,7 +425,7 @@ group (**> 1.0** means Rust is faster than Go; **< 1.0** means slower):
 | C#       | 4        | ~1.7× faster            |
 | Trino SQL| 5        | ~2.2× faster            |
 
-Rust is faster than Go on every fixture in all four language groups, with
+Rust is faster than Go on average in all four language groups, with
 Kotlin leading dramatically (expression-ladder memoization in the generated
 walker). Lexer DFAs are compiled at generation time and embedded in the
 generated lexer, so tokenization needs no warmup at all; learned parser

@@ -1743,11 +1743,17 @@ type FirstSetCache = FxHashMap<(usize, usize), Rc<FirstSet>>;
 // is stable, which is what we hash on.
 type DecisionLookaheadCache = FxHashMap<usize, Rc<DecisionLookahead>>;
 
+#[derive(Debug, Default)]
+struct LeftRecursiveOperatorLookahead {
+    unconditional_symbols: TokenBitSet,
+    predicate_dependent_symbols: TokenBitSet,
+}
+
 #[derive(Default)]
 struct SharedAtnCache {
     first_set: FirstSetCache,
     decision_lookahead: DecisionLookaheadCache,
-    left_recursive_operator_lookahead: FxHashMap<(usize, i32), Rc<TokenBitSet>>,
+    left_recursive_operator_lookahead: FxHashMap<(usize, i32), Rc<LeftRecursiveOperatorLookahead>>,
     state_before_stop_lookahead: FxHashMap<(usize, usize), Rc<StateBeforeStopLookahead>>,
     state_expected_tokens: FxHashMap<usize, Rc<TokenBitSet>>,
     rule_stop_reach: FxHashMap<usize, bool>,
@@ -2254,89 +2260,227 @@ fn state_sync_symbols_inner(
     }
 }
 
-fn state_can_reach_symbol_with_precedence(
-    atn: &Atn,
-    state_number: usize,
+#[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
+enum OperatorSymbolReachability {
+    #[default]
+    None,
+    PredicateDependent,
+    Unconditional,
+}
+
+#[derive(Clone, Copy)]
+struct OperatorReachabilityRequest {
     symbol: i32,
     precedence: i32,
-    first_set_cache: &mut FirstSetCache,
-    visited: &mut BTreeSet<usize>,
+    predicate_dependent: bool,
+}
+
+struct PredicateFreeNullableCtx<'a> {
+    first_set_cache: &'a mut FirstSetCache,
+    cache: FxHashMap<(usize, usize, i32), bool>,
+    in_progress: BTreeSet<(usize, usize, i32)>,
+    hit_cycle: bool,
+}
+
+fn state_is_predicate_free_nullable(
+    atn: &Atn,
+    state_number: usize,
+    stop_state_number: usize,
+    precedence: i32,
+    ctx: &mut PredicateFreeNullableCtx<'_>,
 ) -> bool {
-    if !visited.insert(state_number) {
+    let saved_hit_cycle = ctx.hit_cycle;
+    ctx.hit_cycle = false;
+    let nullable = state_is_predicate_free_nullable_cached(
+        atn,
+        state_number,
+        stop_state_number,
+        precedence,
+        ctx,
+    );
+    ctx.hit_cycle = saved_hit_cycle;
+    nullable
+}
+
+fn state_is_predicate_free_nullable_cached(
+    atn: &Atn,
+    state_number: usize,
+    stop_state_number: usize,
+    precedence: i32,
+    ctx: &mut PredicateFreeNullableCtx<'_>,
+) -> bool {
+    if state_number == stop_state_number {
+        return true;
+    }
+    let key = (state_number, stop_state_number, precedence);
+    if let Some(cached) = ctx.cache.get(&key) {
+        return *cached;
+    }
+    if !ctx.in_progress.insert(key) {
+        ctx.hit_cycle = true;
         return false;
     }
-    let Some(state) = atn.state(state_number) else {
-        return false;
-    };
-    for transition in &state.transitions {
-        if transition.matches(symbol, 1, atn.max_token_type()) {
-            return true;
-        }
-        match transition {
+    let saved_hit_cycle = ctx.hit_cycle;
+    ctx.hit_cycle = false;
+    let nullable = atn.state(state_number).is_some_and(|state| {
+        state.transitions.iter().any(|transition| match transition {
             Transition::Rule {
                 target,
                 rule_index,
                 follow_state,
                 ..
             } => {
-                if state_can_reach_symbol_with_precedence(
+                let Some(child_stop) = atn.rule_to_stop_state().get(*rule_index).copied() else {
+                    return false;
+                };
+                rule_first_set(atn, *target, child_stop, ctx.first_set_cache).nullable
+                    && state_is_predicate_free_nullable_cached(
+                        atn, *target, child_stop, precedence, ctx,
+                    )
+                    && state_is_predicate_free_nullable_cached(
+                        atn,
+                        *follow_state,
+                        stop_state_number,
+                        precedence,
+                        ctx,
+                    )
+            }
+            Transition::Epsilon { target } | Transition::Action { target, .. } => {
+                state_is_predicate_free_nullable_cached(
                     atn,
                     *target,
-                    symbol,
+                    stop_state_number,
                     precedence,
-                    first_set_cache,
+                    ctx,
+                )
+            }
+            Transition::Precedence {
+                target,
+                precedence: transition_precedence,
+            } if *transition_precedence >= precedence => state_is_predicate_free_nullable_cached(
+                atn,
+                *target,
+                stop_state_number,
+                precedence,
+                ctx,
+            ),
+            Transition::Atom { .. }
+            | Transition::Range { .. }
+            | Transition::Set { .. }
+            | Transition::NotSet { .. }
+            | Transition::Wildcard { .. }
+            | Transition::Predicate { .. }
+            | Transition::Precedence { .. } => false,
+        })
+    });
+    ctx.in_progress.remove(&key);
+    if !ctx.hit_cycle {
+        ctx.cache.insert(key, nullable);
+    }
+    ctx.hit_cycle = saved_hit_cycle || ctx.hit_cycle;
+    nullable
+}
+
+fn state_can_reach_symbol_with_precedence(
+    atn: &Atn,
+    state_number: usize,
+    request: OperatorReachabilityRequest,
+    nullable_ctx: &mut PredicateFreeNullableCtx<'_>,
+    visited: &mut BTreeSet<(usize, bool)>,
+) -> OperatorSymbolReachability {
+    if !visited.insert((state_number, request.predicate_dependent)) {
+        return OperatorSymbolReachability::None;
+    }
+    let Some(state) = atn.state(state_number) else {
+        return OperatorSymbolReachability::None;
+    };
+    let mut reachability = OperatorSymbolReachability::None;
+    for transition in &state.transitions {
+        if transition.matches(request.symbol, 1, atn.max_token_type()) {
+            if request.predicate_dependent {
+                reachability = OperatorSymbolReachability::PredicateDependent;
+                continue;
+            }
+            return OperatorSymbolReachability::Unconditional;
+        }
+        let transition_reachability = match transition {
+            Transition::Rule {
+                target,
+                rule_index,
+                follow_state,
+                ..
+            } => {
+                let mut result = state_can_reach_symbol_with_precedence(
+                    atn,
+                    *target,
+                    request,
+                    nullable_ctx,
                     visited,
-                ) {
-                    return true;
+                );
+                if result == OperatorSymbolReachability::Unconditional {
+                    return result;
                 }
                 let Some(child_stop) = atn.rule_to_stop_state().get(*rule_index).copied() else {
                     continue;
                 };
-                if rule_first_set(atn, *target, child_stop, first_set_cache).nullable
-                    && state_can_reach_symbol_with_precedence(
+                if rule_first_set(atn, *target, child_stop, nullable_ctx.first_set_cache).nullable {
+                    let child_predicate_dependent = request.predicate_dependent
+                        || !state_is_predicate_free_nullable(
+                            atn,
+                            *target,
+                            child_stop,
+                            request.precedence,
+                            nullable_ctx,
+                        );
+                    result = result.max(state_can_reach_symbol_with_precedence(
                         atn,
                         *follow_state,
-                        symbol,
-                        precedence,
-                        first_set_cache,
+                        OperatorReachabilityRequest {
+                            predicate_dependent: child_predicate_dependent,
+                            ..request
+                        },
+                        nullable_ctx,
                         visited,
-                    )
-                {
-                    return true;
+                    ));
                 }
+                result
             }
             Transition::Epsilon { target }
             | Transition::Action { target, .. }
-            | Transition::Predicate { target, .. }
             | Transition::Precedence { target, .. } => {
                 if matches!(
                     transition,
                     Transition::Precedence {
                         precedence: transition_precedence,
                         ..
-                    } if *transition_precedence < precedence
+                    } if *transition_precedence < request.precedence
                 ) {
                     continue;
                 }
-                if state_can_reach_symbol_with_precedence(
-                    atn,
-                    *target,
-                    symbol,
-                    precedence,
-                    first_set_cache,
-                    visited,
-                ) {
-                    return true;
-                }
+                state_can_reach_symbol_with_precedence(atn, *target, request, nullable_ctx, visited)
             }
+            Transition::Predicate { target, .. } => state_can_reach_symbol_with_precedence(
+                atn,
+                *target,
+                OperatorReachabilityRequest {
+                    predicate_dependent: true,
+                    ..request
+                },
+                nullable_ctx,
+                visited,
+            ),
             Transition::Atom { .. }
             | Transition::Range { .. }
             | Transition::Set { .. }
             | Transition::NotSet { .. }
-            | Transition::Wildcard { .. } => {}
+            | Transition::Wildcard { .. } => OperatorSymbolReachability::None,
+        };
+        if transition_reachability == OperatorSymbolReachability::Unconditional {
+            return transition_reachability;
         }
+        reachability = reachability.max(transition_reachability);
     }
-    false
+    reachability
 }
 
 fn left_recursive_operator_lookahead(
@@ -2344,11 +2488,17 @@ fn left_recursive_operator_lookahead(
     state_number: usize,
     precedence: i32,
     first_set_cache: &mut FirstSetCache,
-) -> TokenBitSet {
+) -> LeftRecursiveOperatorLookahead {
     let Some(state) = atn.state(state_number) else {
-        return TokenBitSet::default();
+        return LeftRecursiveOperatorLookahead::default();
     };
-    let mut symbols = TokenBitSet::default();
+    let mut lookahead = LeftRecursiveOperatorLookahead::default();
+    let mut nullable_ctx = PredicateFreeNullableCtx {
+        first_set_cache,
+        cache: FxHashMap::default(),
+        in_progress: BTreeSet::new(),
+        hit_cycle: false,
+    };
     for transition in &state.transitions {
         let target = transition.target();
         if atn
@@ -2358,19 +2508,28 @@ fn left_recursive_operator_lookahead(
             continue;
         }
         for symbol in 1..=atn.max_token_type() {
-            if state_can_reach_symbol_with_precedence(
+            match state_can_reach_symbol_with_precedence(
                 atn,
                 target,
-                symbol,
-                precedence,
-                first_set_cache,
+                OperatorReachabilityRequest {
+                    symbol,
+                    precedence,
+                    predicate_dependent: false,
+                },
+                &mut nullable_ctx,
                 &mut BTreeSet::new(),
             ) {
-                symbols.insert(symbol);
+                OperatorSymbolReachability::Unconditional => {
+                    lookahead.unconditional_symbols.insert(symbol);
+                }
+                OperatorSymbolReachability::PredicateDependent => {
+                    lookahead.predicate_dependent_symbols.insert(symbol);
+                }
+                OperatorSymbolReachability::None => {}
             }
         }
     }
-    symbols
+    lookahead
 }
 
 #[derive(Debug, Default)]
@@ -4194,8 +4353,8 @@ where
     /// Predicts a generated left-recursive loop from one-token lookahead.
     ///
     /// `Some(true)` enters the operator alternative, `Some(false)` exits, and
-    /// `None` means the caller can consume the same symbol so full-context
-    /// adaptive prediction must break the ambiguity.
+    /// `None` means caller overlap or an unresolved semantic predicate requires
+    /// full-context adaptive prediction.
     pub fn left_recursive_loop_enter_prediction(
         &mut self,
         atn: &Atn,
@@ -4222,7 +4381,13 @@ where
                 .insert(key, Rc::clone(&lookahead));
             lookahead
         });
-        if !operator_lookahead.contains(symbol) {
+        if !operator_lookahead.unconditional_symbols.contains(symbol) {
+            if operator_lookahead
+                .predicate_dependent_symbols
+                .contains(symbol)
+            {
+                return None;
+            }
             return Some(false);
         }
         let context = self.prediction_context(atn);
@@ -10207,6 +10372,59 @@ mod tests {
         atn
     }
 
+    fn left_recursive_loop_with_predicate_guarded_operator_atn() -> Atn {
+        let mut atn = Atn::new(AtnType::Parser, 2);
+        for (state, kind) in [
+            (0, AtnStateKind::RuleStart),
+            (1, AtnStateKind::StarLoopEntry),
+            (2, AtnStateKind::Basic),
+            (3, AtnStateKind::Basic),
+            (4, AtnStateKind::Basic),
+            (5, AtnStateKind::LoopEnd),
+            (6, AtnStateKind::RuleStop),
+        ] {
+            let mut atn_state = AtnState::new(state, kind).with_rule_index(0);
+            if state == 0 {
+                atn_state.left_recursive_rule = true;
+            } else if state == 1 {
+                atn_state.precedence_rule_decision = true;
+            }
+            atn.add_state(atn_state);
+        }
+        atn.set_rule_to_start_state(vec![0]);
+        atn.set_rule_to_stop_state(vec![6]);
+        atn.state_mut(1)
+            .expect("precedence loop")
+            .add_transition(Transition::Epsilon { target: 2 });
+        atn.state_mut(1)
+            .expect("precedence loop")
+            .add_transition(Transition::Epsilon { target: 5 });
+        atn.state_mut(2)
+            .expect("precedence predicate")
+            .add_transition(Transition::Precedence {
+                target: 3,
+                precedence: 1,
+            });
+        atn.state_mut(3)
+            .expect("semantic predicate")
+            .add_transition(Transition::Predicate {
+                target: 4,
+                rule_index: 0,
+                pred_index: 0,
+                context_dependent: false,
+            });
+        atn.state_mut(4)
+            .expect("operator token")
+            .add_transition(Transition::Atom {
+                target: 1,
+                label: 1,
+            });
+        atn.state_mut(5)
+            .expect("loop exit")
+            .add_transition(Transition::Epsilon { target: 6 });
+        atn
+    }
+
     fn left_recursive_loop_with_nullable_follow_call_atn(caller_symbol: i32) -> Atn {
         let mut atn = Atn::new(AtnType::Parser, 2);
         for (state, kind, rule) in [
@@ -10419,6 +10637,33 @@ mod tests {
             parser.left_recursive_loop_enter_prediction(&atn, 1, 0),
             Some(true),
             "cached operator lookahead must preserve the nullable prefix return path"
+        );
+    }
+
+    #[test]
+    fn left_recursive_loop_defers_predicate_guarded_operator() {
+        let atn = left_recursive_loop_with_predicate_guarded_operator_atn();
+        let mut parser = mini_parser_with_hooks(
+            vec![
+                CommonToken::new(1).with_text("operator"),
+                CommonToken::eof("parser-test", 1, 1, 1),
+            ],
+            RejectingPredicateHooks::default(),
+        );
+        parser.rule_context_stack = vec![RuleContextFrame {
+            rule_index: 0,
+            invoking_state: -1,
+        }];
+
+        assert_eq!(
+            parser.left_recursive_loop_enter_prediction(&atn, 1, 0),
+            None,
+            "a false predicate must be evaluated before entering the operator alternative"
+        );
+        assert_eq!(
+            parser.left_recursive_loop_enter_prediction(&atn, 1, 0),
+            None,
+            "cached predicate-dependent lookahead must keep deferring"
         );
     }
 
