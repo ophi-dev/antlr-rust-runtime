@@ -187,9 +187,27 @@ fn parse_attr_decls(clause: &str) -> Vec<AttrDecl> {
 /// explicit `false` / zero initializers would only prevent the declaration
 /// parser from recognizing otherwise portable ANTLR rule locals.
 fn strip_default_initializer(part: &str) -> &str {
-    let Some((declaration, value)) = part.rsplit_once('=') else {
+    let Some(index) = part
+        .as_bytes()
+        .iter()
+        .enumerate()
+        .find_map(|(index, byte)| {
+            if *byte != b'='
+                || part.as_bytes().get(index + 1) == Some(&b'=')
+                || part
+                    .as_bytes()
+                    .get(index.wrapping_sub(1))
+                    .is_some_and(|byte| matches!(*byte, b'!' | b'<' | b'>' | b'='))
+            {
+                return None;
+            }
+            Some(index)
+        })
+    else {
         return part;
     };
+    let (declaration, value) = part.split_at(index);
+    let value = &value[1..];
     matches!(value.trim(), "false" | "0")
         .then_some(declaration.trim_end())
         .unwrap_or(part)
@@ -1252,6 +1270,24 @@ mod tests {
                 },
             ]
         );
+        assert_eq!(model.rules[0].local_names, ["seen", "count"]);
+    }
+
+    #[test]
+    fn preserves_non_default_local_comparison_initializers() {
+        assert_eq!(
+            strip_default_initializer("boolean seen = other == false"),
+            "boolean seen = other == false"
+        );
+        assert_eq!(
+            strip_default_initializer("int count = other == 0"),
+            "int count = other == 0"
+        );
+        assert_eq!(
+            strip_default_initializer("boolean seen=false"),
+            "boolean seen"
+        );
+        assert_eq!(strip_default_initializer("int count = 0"), "int count");
     }
 
     #[test]

@@ -420,10 +420,10 @@ group (**> 1.0** means Rust is faster than Go; **< 1.0** means slower):
 
 | Language | Fixtures | Rust vs Go (parse time) |
 |----------|---------:|-------------------------|
-| Kotlin   | 4        | ~18.1× faster           |
+| Kotlin   | 4        | ~18.5× faster           |
 | Java     | 4        | ~2.5× faster            |
 | C#       | 4        | ~1.7× faster            |
-| Trino SQL| 5        | ~2.3× faster            |
+| Trino SQL| 5        | ~2.2× faster            |
 
 Rust is faster than Go on every fixture in all four language groups, with
 Kotlin leading dramatically (expression-ladder memoization in the generated
