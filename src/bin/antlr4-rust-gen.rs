@@ -2401,6 +2401,7 @@ impl EmbeddedStepRender<'_> {
 #[derive(Clone, Copy)]
 struct PortableLocalStepRender<'a> {
     declarations: &'a [Vec<String>],
+    inline_actions: &'a BTreeMap<usize, String>,
     predicates: &'a BTreeMap<(usize, usize), (String, Option<String>)>,
     required_generated_rules: &'a BTreeSet<usize>,
 }
@@ -4938,7 +4939,7 @@ fn render_generated_semantic_prediction_filter(
 ) {
     let alt_has_predicates = alts
         .iter()
-        .map(|steps| !leading_predicates(steps).is_empty())
+        .map(|steps| !leading_predicates(steps, portable).is_empty())
         .collect::<Vec<_>>();
     if !alt_has_predicates
         .iter()
@@ -4970,7 +4971,7 @@ fn render_generated_semantic_prediction_filter(
         writeln!(out, "{pad}        {alt} if {condition} => Some({alt}),")
             .expect("writing to a string cannot fail");
         writeln!(out, "{pad}        {alt} => {{").expect("writing to a string cannot fail");
-        render_semantic_alt_search(out, pad, &alt_conditions, alts);
+        render_semantic_alt_search(out, pad, &alt_conditions, alts, portable);
         writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
     }
     writeln!(out, "{pad}        _ => Some(__prediction.alt),")
@@ -5002,6 +5003,7 @@ fn render_semantic_alt_search(
     pad: &str,
     alt_conditions: &[String],
     alts: &[Vec<GeneratedParserStep>],
+    portable: Option<PortableLocalStepRender<'_>>,
 ) {
     // The predicted alt's predicate failed; pick another alt whose candidate
     // condition holds. This runs in TWO passes so an alt whose viability is not
@@ -5023,7 +5025,7 @@ fn render_semantic_alt_search(
     // loop-entry and diagnostic paths keep their behavior.
     let unresolved = alts
         .iter()
-        .map(|steps| semantic_alt_guard_is_unresolved(steps))
+        .map(|steps| semantic_alt_guard_is_unresolved(steps, portable))
         .collect::<Vec<_>>();
     for (index, condition) in alt_conditions.iter().enumerate() {
         if unresolved.get(index).copied().unwrap_or(false) {
@@ -5093,7 +5095,7 @@ fn semantic_alt_candidate_condition_with_la(
     if let Some(lookahead) = leading_lookahead_condition(steps, la_symbol) {
         conditions.push(lookahead);
     }
-    conditions.extend(leading_predicates(steps).into_iter().map(
+    conditions.extend(leading_predicates(steps, portable).into_iter().map(
         |(rule_index, pred_index)| {
             if let Some((condition, _)) =
                 portable.and_then(|portable| portable.predicates.get(&(rule_index, pred_index)))
@@ -5130,8 +5132,11 @@ fn semantic_alt_candidate_condition_with_la(
 /// concrete matching lookahead. The search treats these as last-resort
 /// candidates instead. A genuine epsilon alt (no consuming step at all) is NOT
 /// unguarded in this sense — it legitimately matches anything.
-fn semantic_alt_guard_is_unresolved(steps: &[GeneratedParserStep]) -> bool {
-    if !leading_predicates(steps).is_empty() {
+fn semantic_alt_guard_is_unresolved(
+    steps: &[GeneratedParserStep],
+    portable: Option<PortableLocalStepRender<'_>>,
+) -> bool {
+    if !leading_predicates(steps, portable).is_empty() {
         return false;
     }
     if leading_lookahead_condition(steps, "__semantic_la").is_some() {
@@ -5150,7 +5155,10 @@ fn semantic_alt_guard_is_unresolved(steps: &[GeneratedParserStep]) -> bool {
     })
 }
 
-fn leading_predicates(steps: &[GeneratedParserStep]) -> Vec<(usize, usize)> {
+fn leading_predicates(
+    steps: &[GeneratedParserStep],
+    portable: Option<PortableLocalStepRender<'_>>,
+) -> Vec<(usize, usize)> {
     let mut predicates = Vec::new();
     for step in steps {
         match step {
@@ -5158,6 +5166,14 @@ fn leading_predicates(steps: &[GeneratedParserStep]) -> Vec<(usize, usize)> {
                 rule_index,
                 pred_index,
             } => predicates.push((*rule_index, *pred_index)),
+            // Portable assignments run only after the alternative is selected,
+            // so predicates after one are not prediction-visible.
+            GeneratedParserStep::Action { source_state, .. }
+                if portable
+                    .is_some_and(|portable| portable.inline_actions.contains_key(source_state)) =>
+            {
+                break;
+            }
             GeneratedParserStep::Action { .. } | GeneratedParserStep::Precedence(_) => {}
             GeneratedParserStep::MatchToken { .. }
             | GeneratedParserStep::MatchSet { .. }
@@ -5903,6 +5919,7 @@ impl PortableLocalData {
     fn step_render(&self) -> Option<PortableLocalStepRender<'_>> {
         self.has_semantics().then_some(PortableLocalStepRender {
             declarations: &self.declarations,
+            inline_actions: &self.inline_actions,
             predicates: &self.predicates,
             required_generated_rules: &self.required_generated_rules,
         })
@@ -12034,6 +12051,69 @@ s : ;
     }
 
     #[test]
+    fn generated_decision_does_not_hoist_portable_predicate_past_local_action() {
+        let alts = vec![
+            vec![
+                GeneratedParserStep::Action {
+                    source_state: 5,
+                    rule_index: 1,
+                },
+                GeneratedParserStep::Predicate {
+                    rule_index: 1,
+                    pred_index: 0,
+                },
+                mt(1, 2),
+            ],
+            vec![mt(1, 3)],
+        ];
+        let declarations = vec![
+            Vec::new(),
+            vec!["let mut __antlr_local_seen = false;".to_owned()],
+        ];
+        let inline_actions = BTreeMap::from([(5, "__antlr_local_seen = true;".to_owned())]);
+        let predicates = BTreeMap::from([((1, 0), ("__antlr_local_seen".to_owned(), None))]);
+        let required_generated_rules = BTreeSet::from([1]);
+        let mut rendered = String::new();
+
+        render_generated_decision(
+            &mut rendered,
+            DecisionRender {
+                state: 1,
+                decision: 0,
+                track_alt_number: false,
+                allow_semantic_context: true,
+                force_context: false,
+                fast_path: None,
+                alts: &alts,
+            },
+            0,
+            GeneratedStepRenderContext {
+                embedded: None,
+                portable_locals: Some(PortableLocalStepRender {
+                    declarations: &declarations,
+                    inline_actions: &inline_actions,
+                    predicates: &predicates,
+                    required_generated_rules: &required_generated_rules,
+                }),
+                inline_action_statements: &inline_actions,
+                track_alt_numbers: false,
+                direct_generated_rule_calls: &[],
+                atn_preferred_rule_calls: &[],
+            },
+        );
+
+        assert!(!rendered.contains("let __semantic_alt"));
+        assert!(!rendered.contains("__semantic_la == 1 && (__antlr_local_seen)"));
+        let assignment = rendered
+            .find("__antlr_local_seen = true;")
+            .expect("portable assignment is rendered in the committed alternative");
+        let predicate = rendered
+            .find("if !(__antlr_local_seen)")
+            .expect("portable predicate is evaluated in the committed alternative");
+        assert!(assignment < predicate);
+    }
+
+    #[test]
     fn generated_decision_records_adaptive_diagnostics() {
         let alts = vec![vec![mt(1, 4)], vec![mt(2, 5)]];
         let mut rendered = String::new();
@@ -12190,6 +12270,7 @@ s : ;
                 embedded: None,
                 portable_locals: Some(PortableLocalStepRender {
                     declarations: &declarations,
+                    inline_actions: &BTreeMap::new(),
                     predicates: &predicates,
                     required_generated_rules: &required_generated_rules,
                 }),
@@ -12308,18 +12389,19 @@ s : ;
             rule_index: 1,
             precedence: GeneratedRuleCallPrecedence::Literal(0),
         }];
-        assert!(semantic_alt_guard_is_unresolved(&rule_call));
+        assert!(semantic_alt_guard_is_unresolved(&rule_call, None));
         // A token-led alt is resolved (concrete lookahead), so NOT unresolved.
-        assert!(!semantic_alt_guard_is_unresolved(&[mt(7, 4)]));
+        assert!(!semantic_alt_guard_is_unresolved(&[mt(7, 4)], None));
         // A predicate-led alt is resolved (guarded by the predicate).
-        assert!(!semantic_alt_guard_is_unresolved(&[
-            GeneratedParserStep::Predicate {
+        assert!(!semantic_alt_guard_is_unresolved(
+            &[GeneratedParserStep::Predicate {
                 rule_index: 2,
                 pred_index: 0,
-            },
-        ]));
+            }],
+            None,
+        ));
         // A pure epsilon alt (no consuming step) legitimately matches; not unresolved.
-        assert!(!semantic_alt_guard_is_unresolved(&[]));
+        assert!(!semantic_alt_guard_is_unresolved(&[], None));
     }
 
     #[test]
@@ -12348,7 +12430,7 @@ s : ;
             .map(|steps| semantic_alt_candidate_condition(steps, None, None))
             .collect::<Vec<_>>();
         let mut rendered = String::new();
-        render_semantic_alt_search(&mut rendered, "", &alt_conditions, &alts);
+        render_semantic_alt_search(&mut rendered, "", &alt_conditions, &alts, None);
 
         // The resolved token alt 3 is emitted before the unresolved rule-call
         // alt 2 (which keeps its real `true` condition as a last-resort branch),
@@ -12399,7 +12481,7 @@ s : ;
             .map(|steps| semantic_alt_candidate_condition(steps, None, None))
             .collect::<Vec<_>>();
         let mut rendered = String::new();
-        render_semantic_alt_search(&mut rendered, "", &alt_conditions, &alts);
+        render_semantic_alt_search(&mut rendered, "", &alt_conditions, &alts, None);
 
         // The lone unresolved alt is reachable via its real condition, not disabled.
         assert!(
