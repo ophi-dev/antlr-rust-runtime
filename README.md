@@ -132,7 +132,7 @@ use generated::json_lexer::JsonLexer;
 fn main() -> Result<(), antlr4_runtime::AntlrError> {
     let parsed = json::parse(r#"{"a":1}"#, JsonLexer::new, Json::json)?;
 
-    println!("{}", parsed.tree.text(&parsed.tokens));
+    println!("{}", parsed.tree().text(parsed.tokens()));
     Ok(())
 }
 ```
@@ -208,10 +208,10 @@ otherwise token text is stored explicitly in the sparse side pool.
 
 `CommonTokenStream` owns its `TokenStore` directly. Parse-tree nodes contain
 only `TokenId` values, so token-dependent tree methods take `&TokenStore`.
-Generated `parse()` returns `ParsedFile<R>`, which owns both `tokens` and the
-entry-rule result in `tree`. Direct rule calls can resolve their returned tree
-through `parser.token_store()` while the parser is alive, or consume the parser
-with `into_token_store()`.
+Generated `parse()` returns `ParsedFile<R>`, which owns both the token store and
+entry-rule result. Access them through `tokens()` and `tree()`. Direct rule calls
+can resolve their returned tree through `parser.token_store()` while the parser
+is alive, or consume the parser with `into_token_store()`.
 
 Token IDs cover indices through `u32::MAX`. Source scalar/byte offsets, line
 numbers, and columns are limited to `u32::MAX - 1` (4,294,967,294);

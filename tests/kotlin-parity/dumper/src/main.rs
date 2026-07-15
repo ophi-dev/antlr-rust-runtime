@@ -175,7 +175,13 @@ fn main() -> ExitCode {
         },
         None => Box::new(io::stdout().lock()),
     };
-    if let Err(err) = dump(sink.as_mut(), &parsed.tree, &parsed.tokens, &rule_names, 0) {
+    if let Err(err) = dump(
+        sink.as_mut(),
+        parsed.tree(),
+        parsed.tokens(),
+        &rule_names,
+        0,
+    ) {
         eprintln!("write failed: {err}");
         return ExitCode::from(1);
     }

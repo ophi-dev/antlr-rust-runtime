@@ -222,35 +222,82 @@ impl TokenSpec {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct TokenStoreError {
-    field: &'static str,
-    value: usize,
-    limit: usize,
-}
+pub struct TokenStoreError(TokenStoreErrorKind);
 
 impl TokenStoreError {
     const fn overflow(field: &'static str, value: usize, limit: usize) -> Self {
-        Self {
+        Self(TokenStoreErrorKind::Overflow {
             field,
             value,
             limit,
-        }
+        })
+    }
+
+    const fn invalid_source_boundary(offset: usize, source_len: usize) -> Self {
+        Self(TokenStoreErrorKind::InvalidSourceBoundary { offset, source_len })
+    }
+
+    pub(crate) const fn invalid_source_output(
+        expected_id: usize,
+        returned_id: usize,
+        appended: usize,
+    ) -> Self {
+        Self(TokenStoreErrorKind::InvalidSourceOutput {
+            expected_id,
+            returned_id,
+            appended,
+        })
     }
 }
 
 impl fmt::Display for TokenStoreError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "token {field} {value} exceeds the supported limit {limit}",
-            field = self.field,
-            value = self.value,
-            limit = self.limit
-        )
+        match self.0 {
+            TokenStoreErrorKind::Overflow {
+                field,
+                value,
+                limit,
+            } => write!(
+                f,
+                "token {field} {value} exceeds the supported limit {limit}"
+            ),
+            TokenStoreErrorKind::InvalidSourceBoundary { offset, source_len } => write!(
+                f,
+                "token source byte offset {offset} is not a UTF-8 character boundary \
+                 for source length {source_len}"
+            ),
+            TokenStoreErrorKind::InvalidSourceOutput {
+                expected_id,
+                returned_id,
+                appended,
+            } => write!(
+                f,
+                "token source must append exactly one token and return ID {expected_id}, \
+                 but appended {appended} and returned ID {returned_id}"
+            ),
+        }
     }
 }
 
 impl std::error::Error for TokenStoreError {}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum TokenStoreErrorKind {
+    Overflow {
+        field: &'static str,
+        value: usize,
+        limit: usize,
+    },
+    InvalidSourceBoundary {
+        offset: usize,
+        source_len: usize,
+    },
+    InvalidSourceOutput {
+        expected_id: usize,
+        returned_id: usize,
+        appended: usize,
+    },
+}
 
 /// Canonical compact storage for every token associated with one token stream.
 #[derive(Debug)]
@@ -315,6 +362,18 @@ impl TokenStore {
             if spec.start_byte > spec.stop_byte || spec.stop_byte > source.len() {
                 return Err(TokenStoreError::overflow(
                     "source byte span",
+                    spec.stop_byte,
+                    source.len(),
+                ));
+            }
+            if !source.is_char_boundary(spec.start_byte) {
+                return Err(TokenStoreError::invalid_source_boundary(
+                    spec.start_byte,
+                    source.len(),
+                ));
+            }
+            if !source.is_char_boundary(spec.stop_byte) {
+                return Err(TokenStoreError::invalid_source_boundary(
                     spec.stop_byte,
                     source.len(),
                 ));
@@ -591,6 +650,10 @@ impl<'a> TokenSink<'a> {
     pub fn view(&self, id: TokenId) -> Option<TokenView<'_>> {
         self.store.view(id)
     }
+
+    pub(crate) const fn token_count(&self) -> usize {
+        self.store.len()
+    }
 }
 
 /// A diagnostic buffered by a token source while it was producing tokens.
@@ -728,6 +791,30 @@ mod tests {
         assert_eq!(token.stop(), 1);
         assert_eq!(token.byte_span(), 2..4);
         assert_eq!(token.text(), "β");
+    }
+
+    #[test]
+    fn source_backed_token_rejects_non_utf8_boundaries() {
+        for (start_byte, stop_byte) in [(1, 2), (0, 1)] {
+            let mut store = TokenStore::new(Some(Rc::from("éz")), "");
+            let error = store
+                .push(TokenSpec {
+                    token_type: 1,
+                    channel: DEFAULT_CHANNEL,
+                    start: 0,
+                    stop: 0,
+                    start_byte,
+                    stop_byte,
+                    line: 1,
+                    column: 0,
+                    text: None,
+                    source_backed: true,
+                })
+                .expect_err("spans that split UTF-8 code points must fail");
+
+            assert!(error.to_string().contains("UTF-8 character boundary"));
+            assert!(store.is_empty());
+        }
     }
 
     #[test]

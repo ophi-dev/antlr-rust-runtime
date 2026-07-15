@@ -709,8 +709,8 @@ impl ParseTreeWalker {
 /// A completed parse result paired with the canonical tokens referenced by it.
 #[derive(Debug)]
 pub struct ParsedFile<R> {
-    pub tokens: TokenStore,
-    pub tree: R,
+    tokens: TokenStore,
+    tree: R,
 }
 
 impl<R> ParsedFile<R> {

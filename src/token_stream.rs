@@ -55,8 +55,17 @@ where
         let mut store = TokenStore::new(source.source_text(), source_name);
         let mut source_errors = Vec::new();
         loop {
+            let expected_id = store.len();
             let mut sink = TokenSink::new(&mut store);
             let id = source.next_token(&mut sink)?;
+            let appended = sink.token_count().saturating_sub(expected_id);
+            if appended != 1 || id.index() != expected_id {
+                return Err(TokenStoreError::invalid_source_output(
+                    expected_id,
+                    id.index(),
+                    appended,
+                ));
+            }
             source_errors.extend(source.drain_errors().into_iter().map(|error| {
                 BufferedSourceError {
                     token_index: id.index(),
@@ -474,6 +483,30 @@ mod tests {
         }
     }
 
+    #[derive(Debug, Default)]
+    struct StaleIdTokenSource {
+        previous: Option<TokenId>,
+    }
+
+    impl TokenSource for StaleIdTokenSource {
+        fn next_token(&mut self, sink: &mut TokenSink<'_>) -> Result<TokenId, TokenStoreError> {
+            let emitted = sink.push(TokenSpec::explicit(1, "x"))?;
+            Ok(self.previous.replace(emitted).unwrap_or(emitted))
+        }
+
+        fn line(&self) -> usize {
+            1
+        }
+
+        fn column(&self) -> usize {
+            0
+        }
+
+        fn source_name(&self) -> &'static str {
+            "stale-id"
+        }
+    }
+
     fn source(tokens: Vec<TokenSpec>) -> VecTokenSource {
         VecTokenSource {
             tokens: tokens.into(),
@@ -519,6 +552,15 @@ mod tests {
         ]));
         assert_eq!(stream.text(0, 1), "ab");
         assert_eq!(stream.text_all(), "ab");
+    }
+
+    #[test]
+    fn construction_rejects_stale_non_eof_token_id() {
+        let error = CommonTokenStream::try_new(StaleIdTokenSource::default())
+            .expect_err("a stale token ID must terminate buffering with an error");
+
+        assert!(error.to_string().contains("return ID 1"));
+        assert!(error.to_string().contains("returned ID 0"));
     }
 
     #[test]
