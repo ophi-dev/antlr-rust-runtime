@@ -190,6 +190,25 @@ grammar's documentation. Calling the wrong rule can still recover and return a
 parse tree with error nodes, so check parser diagnostics when adding a new input
 form.
 
+## Token API Migration
+
+The compact token store is a breaking runtime/generator change. Regenerate all
+generated lexers and parsers with the matching `antlr4-rust-gen`; code generated
+against the pointer-owned token API does not compile against this runtime.
+
+`CommonToken`, `TokenRef`, and token factories are removed. Custom token sources
+now append a `TokenSpec` directly to the supplied `TokenSink` and return its
+`TokenId`. Buffered-token consumers use borrowing `TokenView` values from
+`get`, `lt`, or the `tokens()` iterator. Custom `CharStream` implementations
+should provide `source_text()` when the complete UTF-8 input can be shared;
+otherwise token text is stored explicitly in the sparse side pool.
+
+Token IDs cover indices through `u32::MAX`. Source scalar/byte offsets, line
+numbers, and columns are limited to `u32::MAX - 1` (4,294,967,294);
+`u32::MAX` is reserved for ANTLR's synthetic `-1` boundary. All conversions are
+checked. Use `CommonTokenStream::try_new` or `try_with_channel` to handle limit
+errors; `new` and `with_channel` panic with the same error.
+
 ## Technical Notes
 
 - Pure Rust runtime implementation.
@@ -206,7 +225,8 @@ The runtime contains:
 
 - `IntStream` and `CharStream`
 - UTF-8 input as Unicode scalar values
-- `Token`, `CommonToken`, token factories, and `TokenSource`
+- compact `TokenId`/`TokenView` access, `TokenSource`, and one canonical
+  `TokenStore`
 - buffered, channel-aware `CommonTokenStream`
 - `Vocabulary`
 - recognizer metadata and error listener plumbing

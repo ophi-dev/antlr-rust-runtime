@@ -1,4 +1,4 @@
-use antlr4_runtime::{CharStream, CommonToken, DEFAULT_CHANNEL, LexerSemCtx, Token, TokenFactory};
+use antlr4_runtime::{CharStream, DEFAULT_CHANNEL, LexerSemCtx, Token, TokenView};
 
 use crate::generated::type_script_lexer::{
     BOOLEAN_LITERAL, CLOSE_BRACKET, CLOSE_PAREN, DECIMAL_LITERAL, HEX_INTEGER_LITERAL, IDENTIFIER,
@@ -36,18 +36,16 @@ impl TypeScriptLexerBase {
 }
 
 impl TypeScriptLexerHooks for TypeScriptLexerBase {
-    fn is_strict_mode<I, F>(&mut self, _ctx: &mut LexerSemCtx<'_, I, F>) -> bool
+    fn is_strict_mode<I>(&mut self, _ctx: &mut LexerSemCtx<'_, I>) -> bool
     where
         I: CharStream,
-        F: TokenFactory,
     {
         self.use_strict_current
     }
 
-    fn is_regex_possible<I, F>(&mut self, _ctx: &mut LexerSemCtx<'_, I, F>) -> bool
+    fn is_regex_possible<I>(&mut self, _ctx: &mut LexerSemCtx<'_, I>) -> bool
     where
         I: CharStream,
-        F: TokenFactory,
     {
         !matches!(
             self.last_token_type,
@@ -68,18 +66,16 @@ impl TypeScriptLexerHooks for TypeScriptLexerBase {
         )
     }
 
-    fn is_in_template_string<I, F>(&mut self, _ctx: &mut LexerSemCtx<'_, I, F>) -> bool
+    fn is_in_template_string<I>(&mut self, _ctx: &mut LexerSemCtx<'_, I>) -> bool
     where
         I: CharStream,
-        F: TokenFactory,
     {
         self.template_depth > 0 && self.braces_depth == 0
     }
 
-    fn process_open_brace<I, F>(&mut self, _ctx: &mut LexerSemCtx<'_, I, F>)
+    fn process_open_brace<I>(&mut self, _ctx: &mut LexerSemCtx<'_, I>)
     where
         I: CharStream,
-        F: TokenFactory,
     {
         self.braces_depth += 1;
         self.use_strict_current =
@@ -87,10 +83,9 @@ impl TypeScriptLexerHooks for TypeScriptLexerBase {
         self.push_strict_mode_scope(self.use_strict_current);
     }
 
-    fn process_close_brace<I, F>(&mut self, _ctx: &mut LexerSemCtx<'_, I, F>)
+    fn process_close_brace<I>(&mut self, _ctx: &mut LexerSemCtx<'_, I>)
     where
         I: CharStream,
-        F: TokenFactory,
     {
         self.braces_depth -= 1;
         self.use_strict_current = self
@@ -98,10 +93,9 @@ impl TypeScriptLexerHooks for TypeScriptLexerBase {
             .unwrap_or(self.use_strict_default);
     }
 
-    fn process_string_literal<I, F>(&mut self, ctx: &mut LexerSemCtx<'_, I, F>)
+    fn process_string_literal<I>(&mut self, ctx: &mut LexerSemCtx<'_, I>)
     where
         I: CharStream,
-        F: TokenFactory,
     {
         if self.last_token_type.is_none() || self.last_token_type == Some(OPEN_BRACE) {
             let text = ctx.text_so_far();
@@ -113,31 +107,28 @@ impl TypeScriptLexerHooks for TypeScriptLexerBase {
         }
     }
 
-    fn start_template_string<I, F>(&mut self, _ctx: &mut LexerSemCtx<'_, I, F>)
+    fn start_template_string<I>(&mut self, _ctx: &mut LexerSemCtx<'_, I>)
     where
         I: CharStream,
-        F: TokenFactory,
     {
         self.braces_depth = 0;
     }
 
-    fn increase_template_depth<I, F>(&mut self, _ctx: &mut LexerSemCtx<'_, I, F>)
+    fn increase_template_depth<I>(&mut self, _ctx: &mut LexerSemCtx<'_, I>)
     where
         I: CharStream,
-        F: TokenFactory,
     {
         self.template_depth += 1;
     }
 
-    fn decrease_template_depth<I, F>(&mut self, _ctx: &mut LexerSemCtx<'_, I, F>)
+    fn decrease_template_depth<I>(&mut self, _ctx: &mut LexerSemCtx<'_, I>)
     where
         I: CharStream,
-        F: TokenFactory,
     {
         self.template_depth -= 1;
     }
 
-    fn token_emitted(&mut self, token: &CommonToken) {
+    fn token_emitted(&mut self, token: TokenView<'_>) {
         if token.channel() == DEFAULT_CHANNEL {
             self.last_token_type = Some(token.token_type());
         }

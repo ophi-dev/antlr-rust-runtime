@@ -1,4 +1,5 @@
 use crate::char_stream::TextInterval;
+use std::cell::{Ref, RefCell};
 use std::fmt;
 use std::ops::Range;
 use std::rc::Rc;
@@ -7,6 +8,32 @@ pub const TOKEN_EOF: i32 = -1;
 pub const INVALID_TOKEN_TYPE: i32 = 0;
 pub const DEFAULT_CHANNEL: i32 = 0;
 pub const HIDDEN_CHANNEL: i32 = 1;
+
+/// Largest source or location offset accepted by the compact token store.
+///
+/// `u32::MAX` is reserved for ANTLR's synthetic `-1` source boundary.
+pub const MAX_TOKEN_OFFSET: usize = (u32::MAX - 1) as usize;
+
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct TokenId(u32);
+
+impl TokenId {
+    #[must_use]
+    pub const fn index(self) -> usize {
+        self.0 as usize
+    }
+}
+
+impl TryFrom<usize> for TokenId {
+    type Error = TokenStoreError;
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        u32::try_from(value)
+            .map(Self)
+            .map_err(|_| TokenStoreError::overflow("index", value, u32::MAX as usize))
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TokenChannel {
@@ -36,6 +63,7 @@ impl From<i32> for TokenChannel {
 }
 
 pub trait Token: fmt::Debug {
+    fn token_id(&self) -> TokenId;
     fn token_type(&self) -> i32;
     fn channel(&self) -> i32;
     /// Zero-based absolute start index measured in Unicode scalar values.
@@ -43,7 +71,6 @@ pub trait Token: fmt::Debug {
     /// Zero-based absolute inclusive stop index measured in Unicode scalar
     /// values.
     fn stop(&self) -> usize;
-    fn token_index(&self) -> isize;
     /// One-based source line where the token starts.
     fn line(&self) -> usize;
     /// Zero-based source column where the token starts, measured in Unicode
@@ -57,23 +84,10 @@ pub trait Token: fmt::Debug {
     }
 
     /// Zero-based absolute start offset measured in UTF-8 bytes.
-    ///
-    /// The default implementation treats the character index as a byte offset,
-    /// which is exact for ASCII and preserves compatibility for token
-    /// implementations that do not expose source byte bounds.
-    fn start_byte(&self) -> usize {
-        self.start()
-    }
+    fn start_byte(&self) -> usize;
 
     /// Zero-based exclusive end offset measured in UTF-8 bytes.
-    ///
-    /// Unlike [`Self::stop`], this is exclusive so
-    /// `token.start_byte()..token.stop_byte()` can slice the original UTF-8
-    /// source when the token carries source byte bounds. The default
-    /// implementation treats character indices as byte offsets.
-    fn stop_byte(&self) -> usize {
-        default_stop_byte(self.start(), self.stop())
-    }
+    fn stop_byte(&self) -> usize;
 
     /// Zero-based UTF-8 byte span for the token text.
     fn byte_span(&self) -> Range<usize> {
@@ -81,150 +95,101 @@ pub trait Token: fmt::Debug {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CommonToken {
-    token_type: i32,
-    channel: i32,
-    start: usize,
-    stop: usize,
-    token_index: isize,
-    line: usize,
-    column: usize,
-    text: Option<TokenText>,
-    byte_span: Option<TokenByteSpan>,
-    source_name: Rc<str>,
-}
+impl<T: Token + ?Sized> Token for &T {
+    fn token_id(&self) -> TokenId {
+        (**self).token_id()
+    }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct TokenByteSpan {
-    start_byte: u32,
-    stop_byte: u32,
-}
+    fn token_type(&self) -> i32 {
+        (**self).token_type()
+    }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-enum TokenText {
-    Explicit(Rc<str>),
-    Source {
-        input: Rc<str>,
-        start_byte: u32,
-        stop_byte: u32,
-    },
-}
+    fn channel(&self) -> i32 {
+        (**self).channel()
+    }
 
-impl TokenText {
-    fn as_str(&self) -> &str {
-        match self {
-            Self::Explicit(text) => text.as_ref(),
-            Self::Source {
-                input,
-                start_byte,
-                stop_byte,
-            } => &input[*start_byte as usize..*stop_byte as usize],
-        }
+    fn start(&self) -> usize {
+        (**self).start()
+    }
+
+    fn stop(&self) -> usize {
+        (**self).stop()
+    }
+
+    fn line(&self) -> usize {
+        (**self).line()
+    }
+
+    fn column(&self) -> usize {
+        (**self).column()
+    }
+
+    fn text(&self) -> Option<&str> {
+        (**self).text()
+    }
+
+    fn source_name(&self) -> &str {
+        (**self).source_name()
+    }
+
+    fn start_byte(&self) -> usize {
+        (**self).start_byte()
+    }
+
+    fn stop_byte(&self) -> usize {
+        (**self).stop_byte()
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct TokenSourceText {
-    pub input: Rc<str>,
-    pub start_byte: u32,
-    pub stop_byte: u32,
-}
-
-#[derive(Debug)]
-pub struct TokenSpec<'a> {
+/// The fields emitted for one token.
+///
+/// This is transient sink input, not an owned token representation. Source
+/// text and the source name live once in [`TokenStore`].
+#[derive(Clone, Debug)]
+pub struct TokenSpec {
     pub token_type: i32,
     pub channel: i32,
     pub start: usize,
     pub stop: usize,
+    pub start_byte: usize,
+    pub stop_byte: usize,
     pub line: usize,
     pub column: usize,
     pub text: Option<String>,
-    pub source_text: Option<TokenSourceText>,
-    pub source_name: &'a str,
+    pub source_backed: bool,
 }
 
-impl CommonToken {
-    pub fn new(token_type: i32) -> Self {
+impl TokenSpec {
+    #[must_use]
+    pub fn explicit(token_type: i32, text: impl Into<String>) -> Self {
         Self {
             token_type,
             channel: DEFAULT_CHANNEL,
             start: 0,
             stop: 0,
-            token_index: -1,
+            start_byte: 0,
+            stop_byte: 1,
             line: 1,
             column: 0,
-            text: None,
-            byte_span: None,
-            source_name: Rc::from(""),
+            text: Some(text.into()),
+            source_backed: false,
         }
     }
 
-    pub fn eof(source_name: impl Into<Rc<str>>, index: usize, line: usize, column: usize) -> Self {
+    #[must_use]
+    pub fn eof(index: usize, byte_offset: usize, line: usize, column: usize) -> Self {
         Self {
             token_type: TOKEN_EOF,
             channel: DEFAULT_CHANNEL,
             start: index,
             stop: index.checked_sub(1).unwrap_or(usize::MAX),
-            token_index: -1,
+            start_byte: byte_offset,
+            stop_byte: byte_offset,
             line,
             column,
-            text: Some(TokenText::Explicit(Rc::from("<EOF>"))),
-            byte_span: None,
-            source_name: source_name.into(),
+            text: Some("<EOF>".to_owned()),
+            source_backed: false,
         }
-    }
-
-    #[must_use]
-    pub fn with_text(mut self, text: impl Into<Rc<str>>) -> Self {
-        self.text = Some(TokenText::Explicit(text.into()));
-        self
-    }
-
-    #[must_use]
-    pub fn with_source_text(mut self, input: Rc<str>, start_byte: u32, stop_byte: u32) -> Self {
-        debug_assert!(
-            start_byte <= stop_byte && stop_byte as usize <= input.len(),
-            "invalid token source-text bounds: start={start_byte}, stop={stop_byte}, len={}",
-            input.len()
-        );
-        self.text = Some(TokenText::Source {
-            input,
-            start_byte,
-            stop_byte,
-        });
-        self.byte_span = Some(TokenByteSpan {
-            start_byte,
-            stop_byte,
-        });
-        self
-    }
-
-    #[must_use]
-    pub(crate) fn with_byte_span(mut self, start_byte: u32, stop_byte: u32) -> Self {
-        debug_assert!(
-            start_byte <= stop_byte,
-            "invalid token byte span: start={start_byte}, stop={stop_byte}"
-        );
-        self.byte_span = Some(TokenByteSpan {
-            start_byte,
-            stop_byte,
-        });
-        self
-    }
-
-    #[must_use]
-    pub const fn with_span(mut self, start: usize, stop: usize) -> Self {
-        self.start = start;
-        self.stop = stop;
-        self
-    }
-
-    #[must_use]
-    pub const fn with_position(mut self, line: usize, column: usize) -> Self {
-        self.line = line;
-        self.column = column;
-        self
     }
 
     #[must_use]
@@ -234,116 +199,166 @@ impl CommonToken {
     }
 
     #[must_use]
-    pub fn with_source_name(mut self, source_name: impl Into<Rc<str>>) -> Self {
-        self.source_name = source_name.into();
+    pub const fn with_span(mut self, start: usize, stop: usize) -> Self {
+        self.start = start;
+        self.stop = stop;
+        self.start_byte = start;
+        self.stop_byte = default_stop_byte(start, stop);
         self
     }
 
-    pub const fn set_token_index(&mut self, token_index: isize) {
-        self.token_index = token_index;
+    #[must_use]
+    pub const fn with_byte_span(mut self, start_byte: usize, stop_byte: usize) -> Self {
+        self.start_byte = start_byte;
+        self.stop_byte = stop_byte;
+        self
     }
 
-    const fn source_byte_span(&self) -> Option<Range<usize>> {
-        match self.byte_span {
-            Some(TokenByteSpan {
-                start_byte,
-                stop_byte,
-            }) => Some(start_byte as usize..stop_byte as usize),
-            None => None,
+    #[must_use]
+    pub const fn with_position(mut self, line: usize, column: usize) -> Self {
+        self.line = line;
+        self.column = column;
+        self
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TokenStoreError {
+    field: &'static str,
+    value: usize,
+    limit: usize,
+}
+
+impl TokenStoreError {
+    const fn overflow(field: &'static str, value: usize, limit: usize) -> Self {
+        Self {
+            field,
+            value,
+            limit,
         }
     }
 }
 
-impl Token for CommonToken {
-    fn token_type(&self) -> i32 {
-        self.token_type
-    }
-
-    fn channel(&self) -> i32 {
-        self.channel
-    }
-
-    fn start(&self) -> usize {
-        self.start
-    }
-
-    fn stop(&self) -> usize {
-        self.stop
-    }
-
-    fn token_index(&self) -> isize {
-        self.token_index
-    }
-
-    fn line(&self) -> usize {
-        self.line
-    }
-
-    fn column(&self) -> usize {
-        self.column
-    }
-
-    fn text(&self) -> Option<&str> {
-        self.text.as_ref().map(TokenText::as_str)
-    }
-
-    fn source_name(&self) -> &str {
-        self.source_name.as_ref()
-    }
-
-    fn start_byte(&self) -> usize {
-        self.source_byte_span()
-            .map_or(self.start, |byte_span| byte_span.start)
-    }
-
-    fn stop_byte(&self) -> usize {
-        self.source_byte_span()
-            .map_or_else(|| default_stop_byte(self.start, self.stop), |span| span.end)
-    }
-}
-
-impl CommonToken {
-    /// The token's text, empty when unset — ANTLR's `getText()` shape, which
-    /// generated test actions print directly (`token.text()` in `{}`).
-    ///
-    /// This inherent method intentionally shadows the Option-returning
-    /// [`Token::text`] trait method on concrete `CommonToken` values; generic
-    /// code keeps the trait signature.
-    #[must_use]
-    pub fn text(&self) -> &str {
-        self.text.as_ref().map_or("", TokenText::as_str)
-    }
-}
-
-impl fmt::Display for CommonToken {
+impl fmt::Display for TokenStoreError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let text = Self::text(self);
-        let channel = if self.channel() == DEFAULT_CHANNEL {
-            String::new()
-        } else {
-            format!(",channel={}", self.channel())
-        };
         write!(
             f,
-            "[@{},{}:{}='{}',<{}>{},{}:{}]",
-            self.token_index(),
-            display_token_boundary(self.start()),
-            display_token_boundary(self.stop()),
-            display_text(text),
-            self.token_type(),
-            channel,
-            self.line(),
-            self.column()
+            "token {field} {value} exceeds the supported limit {limit}",
+            field = self.field,
+            value = self.value,
+            limit = self.limit
         )
     }
 }
 
-/// Formats synthetic-token boundaries with ANTLR's `-1` sentinel.
-fn display_token_boundary(value: usize) -> String {
-    if value == usize::MAX {
-        "-1".to_owned()
-    } else {
-        value.to_string()
+impl std::error::Error for TokenStoreError {}
+
+/// Canonical compact storage for every token associated with one token stream.
+#[derive(Debug)]
+pub struct TokenStore {
+    source: Option<Rc<str>>,
+    source_name: Rc<str>,
+    token_types: Vec<i32>,
+    channels: Vec<i32>,
+    scalar_starts: Vec<u32>,
+    scalar_stops: Vec<u32>,
+    byte_starts: Vec<u32>,
+    byte_stops: Vec<u32>,
+    lines: Vec<u32>,
+    columns: Vec<u32>,
+    source_backed: Vec<bool>,
+    explicit_text: Vec<(TokenId, Rc<str>)>,
+}
+
+impl TokenStore {
+    pub(crate) fn new(source: Option<Rc<str>>, source_name: impl Into<Rc<str>>) -> Self {
+        Self {
+            source,
+            source_name: source_name.into(),
+            token_types: Vec::new(),
+            channels: Vec::new(),
+            scalar_starts: Vec::new(),
+            scalar_stops: Vec::new(),
+            byte_starts: Vec::new(),
+            byte_stops: Vec::new(),
+            lines: Vec::new(),
+            columns: Vec::new(),
+            source_backed: Vec::new(),
+            explicit_text: Vec::new(),
+        }
+    }
+
+    #[must_use]
+    pub const fn len(&self) -> usize {
+        self.token_types.len()
+    }
+
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.token_types.is_empty()
+    }
+
+    fn push(&mut self, spec: TokenSpec) -> Result<TokenId, TokenStoreError> {
+        let raw_id = u32::try_from(self.len())
+            .map_err(|_| TokenStoreError::overflow("count", self.len(), u32::MAX as usize))?;
+        let id = TokenId(raw_id);
+        let scalar_start = compact_boundary("start offset", spec.start)?;
+        let scalar_stop = compact_boundary("stop offset", spec.stop)?;
+        let byte_start = compact_offset("start byte", spec.start_byte)?;
+        let byte_stop = compact_offset("stop byte", spec.stop_byte)?;
+        let line = compact_offset("line", spec.line)?;
+        let column = compact_offset("column", spec.column)?;
+
+        if spec.source_backed {
+            let Some(source) = self.source.as_ref() else {
+                return Err(TokenStoreError::overflow("source text", 1, 0));
+            };
+            if spec.start_byte > spec.stop_byte || spec.stop_byte > source.len() {
+                return Err(TokenStoreError::overflow(
+                    "source byte span",
+                    spec.stop_byte,
+                    source.len(),
+                ));
+            }
+        }
+
+        self.token_types.push(spec.token_type);
+        self.channels.push(spec.channel);
+        self.scalar_starts.push(scalar_start);
+        self.scalar_stops.push(scalar_stop);
+        self.byte_starts.push(byte_start);
+        self.byte_stops.push(byte_stop);
+        self.lines.push(line);
+        self.columns.push(column);
+        self.source_backed.push(spec.source_backed);
+        if let Some(text) = spec.text {
+            self.explicit_text.push((id, Rc::from(text)));
+        }
+        Ok(id)
+    }
+
+    const fn contains(&self, id: TokenId) -> bool {
+        id.index() < self.len()
+    }
+
+    fn explicit_text(&self, id: TokenId) -> Option<&str> {
+        self.explicit_text
+            .binary_search_by_key(&id, |(token_id, _)| *token_id)
+            .ok()
+            .map(|index| self.explicit_text[index].1.as_ref())
+    }
+
+    fn text(&self, id: TokenId) -> Option<&str> {
+        if let Some(text) = self.explicit_text(id) {
+            return Some(text);
+        }
+        if !self.source_backed.get(id.index()).copied().unwrap_or(false) {
+            return None;
+        }
+        let source = self.source.as_deref()?;
+        let start = self.byte_starts[id.index()] as usize;
+        let stop = self.byte_stops[id.index()] as usize;
+        source.get(start..stop)
     }
 }
 
@@ -354,50 +369,228 @@ const fn default_stop_byte(start: usize, stop: usize) -> usize {
     }
 }
 
-/// Escapes token text the way ANTLR's token display format expects.
-///
-/// Debug escaping is close but not identical: ANTLR leaves ordinary
-/// backslashes and quotes unescaped, and only normalizes control characters
-/// that would otherwise disrupt the one-line token representation.
-fn display_text(text: &str) -> String {
-    let mut out = String::new();
-    for ch in text.chars() {
-        match ch {
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            other => out.push(other),
+const fn compact_boundary(field: &'static str, value: usize) -> Result<u32, TokenStoreError> {
+    if value == usize::MAX {
+        return Ok(u32::MAX);
+    }
+    compact_offset(field, value)
+}
+
+const fn compact_offset(field: &'static str, value: usize) -> Result<u32, TokenStoreError> {
+    if value > MAX_TOKEN_OFFSET {
+        return Err(TokenStoreError::overflow(field, value, MAX_TOKEN_OFFSET));
+    }
+    Ok(value as u32)
+}
+
+#[derive(Clone)]
+pub(crate) struct TokenStoreHandle(Rc<RefCell<TokenStore>>);
+
+impl TokenStoreHandle {
+    pub(crate) fn new(store: TokenStore) -> Self {
+        Self(Rc::new(RefCell::new(store)))
+    }
+
+    pub(crate) fn push(&self, spec: TokenSpec) -> Result<TokenId, TokenStoreError> {
+        self.0.borrow_mut().push(spec)
+    }
+
+    pub(crate) fn view(&self, id: TokenId) -> Option<TokenView<'_>> {
+        let store = self.0.borrow();
+        store.contains(id).then_some(TokenView {
+            store: TokenStoreBorrow::Shared(store),
+            id,
+        })
+    }
+}
+
+impl fmt::Debug for TokenStoreHandle {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TokenStoreHandle")
+            .field("tokens", &self.0.borrow().len())
+            .finish()
+    }
+}
+
+impl PartialEq for TokenStoreHandle {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for TokenStoreHandle {}
+
+enum TokenStoreBorrow<'a> {
+    Direct(&'a TokenStore),
+    Shared(Ref<'a, TokenStore>),
+}
+
+impl TokenStoreBorrow<'_> {
+    fn store(&self) -> &TokenStore {
+        match self {
+            Self::Direct(store) => store,
+            Self::Shared(store) => store,
         }
     }
-    out
 }
 
-pub type TokenRef = Rc<CommonToken>;
-
-pub trait TokenFactory {
-    fn create(&self, spec: TokenSpec<'_>) -> CommonToken;
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct CommonTokenFactory;
-
-impl TokenFactory for CommonTokenFactory {
-    fn create(&self, spec: TokenSpec<'_>) -> CommonToken {
-        let mut token = CommonToken::new(spec.token_type)
-            .with_channel(spec.channel)
-            .with_span(spec.start, spec.stop)
-            .with_position(spec.line, spec.column)
-            .with_source_name(spec.source_name);
-        if let Some(text) = spec.text {
-            token = token.with_text(text);
-        } else if let Some(source_text) = spec.source_text {
-            token = token.with_source_text(
-                source_text.input,
-                source_text.start_byte,
-                source_text.stop_byte,
-            );
+impl Clone for TokenStoreBorrow<'_> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Direct(store) => Self::Direct(store),
+            Self::Shared(store) => Self::Shared(Ref::clone(store)),
         }
-        token
+    }
+}
+
+/// Borrowing public view of one canonical token-store record.
+#[derive(Clone)]
+pub struct TokenView<'a> {
+    store: TokenStoreBorrow<'a>,
+    id: TokenId,
+}
+
+impl TokenView<'_> {
+    fn store(&self) -> &TokenStore {
+        self.store.store()
+    }
+
+    /// The token's text, empty when no explicit or source-backed text exists.
+    #[must_use]
+    pub fn text(&self) -> &str {
+        self.store().text(self.id).unwrap_or("")
+    }
+}
+
+impl fmt::Debug for TokenView<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TokenView")
+            .field("id", &self.id)
+            .field("token_type", &self.token_type())
+            .field("channel", &self.channel())
+            .field("text", &self.text())
+            .finish()
+    }
+}
+
+impl PartialEq for TokenView<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.token_type() == other.token_type()
+            && self.channel() == other.channel()
+            && self.start() == other.start()
+            && self.stop() == other.stop()
+            && self.line() == other.line()
+            && self.column() == other.column()
+            && self.text() == other.text()
+            && self.source_name() == other.source_name()
+    }
+}
+
+impl Eq for TokenView<'_> {}
+
+impl Token for TokenView<'_> {
+    fn token_id(&self) -> TokenId {
+        self.id
+    }
+
+    fn token_type(&self) -> i32 {
+        self.store().token_types[self.id.index()]
+    }
+
+    fn channel(&self) -> i32 {
+        self.store().channels[self.id.index()]
+    }
+
+    fn start(&self) -> usize {
+        expand_boundary(self.store().scalar_starts[self.id.index()])
+    }
+
+    fn stop(&self) -> usize {
+        expand_boundary(self.store().scalar_stops[self.id.index()])
+    }
+
+    fn line(&self) -> usize {
+        self.store().lines[self.id.index()] as usize
+    }
+
+    fn column(&self) -> usize {
+        self.store().columns[self.id.index()] as usize
+    }
+
+    fn text(&self) -> Option<&str> {
+        self.store().text(self.id)
+    }
+
+    fn source_name(&self) -> &str {
+        self.store().source_name.as_ref()
+    }
+
+    fn start_byte(&self) -> usize {
+        self.store().byte_starts[self.id.index()] as usize
+    }
+
+    fn stop_byte(&self) -> usize {
+        self.store().byte_stops[self.id.index()] as usize
+    }
+}
+
+impl fmt::Display for TokenView<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let channel = if self.channel() == DEFAULT_CHANNEL {
+            String::new()
+        } else {
+            format!(",channel={}", self.channel())
+        };
+        write!(
+            f,
+            "[@{},{}:{}='{}',<{}>{},{}:{}]",
+            display_token_index(self),
+            display_token_boundary(self.start()),
+            display_token_boundary(self.stop()),
+            display_text(self.text()),
+            self.token_type(),
+            channel,
+            self.line(),
+            self.column()
+        )
+    }
+}
+
+impl AsRef<str> for TokenView<'_> {
+    fn as_ref(&self) -> &str {
+        self.text()
+    }
+}
+
+const fn expand_boundary(value: u32) -> usize {
+    if value == u32::MAX {
+        usize::MAX
+    } else {
+        value as usize
+    }
+}
+
+/// Mutable append-only view used by a token source.
+#[derive(Debug)]
+pub struct TokenSink<'a> {
+    store: &'a mut TokenStore,
+}
+
+impl<'a> TokenSink<'a> {
+    pub(crate) const fn new(store: &'a mut TokenStore) -> Self {
+        Self { store }
+    }
+
+    pub fn push(&mut self, spec: TokenSpec) -> Result<TokenId, TokenStoreError> {
+        self.store.push(spec)
+    }
+
+    pub fn view(&self, id: TokenId) -> Option<TokenView<'_>> {
+        self.store.contains(id).then_some(TokenView {
+            store: TokenStoreBorrow::Direct(self.store),
+            id,
+        })
     }
 }
 
@@ -424,10 +617,16 @@ impl TokenSourceError {
 }
 
 pub trait TokenSource {
-    fn next_token(&mut self) -> CommonToken;
+    fn next_token(&mut self, sink: &mut TokenSink<'_>) -> Result<TokenId, TokenStoreError>;
     fn line(&self) -> usize;
     fn column(&self) -> usize;
     fn source_name(&self) -> &str;
+
+    /// Returns the source buffer once for ownership by the token store.
+    fn source_text(&self) -> Option<Rc<str>> {
+        None
+    }
+
     /// Returns and clears diagnostics emitted while fetching tokens.
     fn drain_errors(&mut self) -> Vec<TokenSourceError> {
         Vec::new()
@@ -439,74 +638,108 @@ pub trait TokenSource {
     }
 }
 
+fn display_token_index(token: &impl Token) -> String {
+    if token.start() == usize::MAX && token.stop() == usize::MAX {
+        "-1".to_owned()
+    } else {
+        token.token_id().index().to_string()
+    }
+}
+
+/// Formats synthetic-token boundaries with ANTLR's `-1` sentinel.
+fn display_token_boundary(value: usize) -> String {
+    if value == usize::MAX {
+        "-1".to_owned()
+    } else {
+        value.to_string()
+    }
+}
+
+/// Escapes token text the way ANTLR's token display format expects.
+fn display_text(text: &str) -> String {
+    let mut out = String::new();
+    for ch in text.chars() {
+        match ch {
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            other => out.push(other),
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn common_token_display_matches_antlr_shape() {
-        let mut token = CommonToken::new(7)
-            .with_text("abc")
-            .with_span(2, 4)
-            .with_position(3, 9);
-        token.set_token_index(5);
-        assert_eq!(token.to_string(), "[@5,2:4='abc',<7>,3:9]");
+    fn one_token(spec: TokenSpec) -> TokenStoreHandle {
+        let handle = TokenStoreHandle::new(TokenStore::new(None, ""));
+        handle.push(spec).expect("test token should fit");
+        handle
     }
 
     #[test]
-    fn common_token_display_matches_antlr_escaping() {
-        let quote = CommonToken::new(1).with_text("\"");
-        assert_eq!(quote.to_string(), "[@-1,0:0='\"',<1>,1:0]");
-
-        let newline = CommonToken::new(1).with_text("\n");
-        assert_eq!(newline.to_string(), "[@-1,0:0='\\n',<1>,1:0]");
-
-        let backslash = CommonToken::new(1).with_text("\\");
-        assert_eq!(backslash.to_string(), "[@-1,0:0='\\',<1>,1:0]");
+    fn token_view_display_matches_antlr_shape() {
+        let handle = one_token(
+            TokenSpec::explicit(7, "abc")
+                .with_span(2, 4)
+                .with_position(3, 9),
+        );
+        assert_eq!(
+            handle.view(TokenId(0)).expect("token").to_string(),
+            "[@0,2:4='abc',<7>,3:9]"
+        );
     }
 
     #[test]
-    fn common_token_display_includes_non_default_channel() {
-        let token = CommonToken::new(2).with_text("b").with_channel(2);
-        assert_eq!(token.to_string(), "[@-1,0:0='b',<2>,channel=2,1:0]");
-    }
-
-    #[test]
-    fn eof_display_uses_antlr_empty_input_stop_index() {
-        let token = CommonToken::eof("", 0, 1, 0);
-        assert_eq!(token.to_string(), "[@-1,0:-1='<EOF>',<-1>,1:0]");
+    fn synthetic_token_display_uses_antlr_negative_index() {
+        let handle = one_token(
+            TokenSpec::explicit(7, "<missing X>")
+                .with_span(usize::MAX, usize::MAX)
+                .with_byte_span(0, 0)
+                .with_position(3, 9),
+        );
+        assert_eq!(
+            handle.view(TokenId(0)).expect("token").to_string(),
+            "[@-1,-1:-1='<missing X>',<7>,3:9]"
+        );
     }
 
     #[test]
     fn source_backed_token_exposes_utf8_byte_span() {
-        let source: Rc<str> = Rc::from("éβz");
-        let token = CommonToken::new(1)
-            .with_span(1, 1)
-            .with_source_text(source, 2, 4);
+        let mut store = TokenStore::new(Some(Rc::from("éβz")), "");
+        let id = store
+            .push(TokenSpec {
+                token_type: 1,
+                channel: DEFAULT_CHANNEL,
+                start: 1,
+                stop: 1,
+                start_byte: 2,
+                stop_byte: 4,
+                line: 1,
+                column: 1,
+                text: None,
+                source_backed: true,
+            })
+            .expect("token should fit");
+        let token = TokenView {
+            store: TokenStoreBorrow::Direct(&store),
+            id,
+        };
 
         assert_eq!(token.start(), 1);
         assert_eq!(token.stop(), 1);
-        assert_eq!(token.start_byte(), 2);
-        assert_eq!(token.stop_byte(), 4);
         assert_eq!(token.byte_span(), 2..4);
         assert_eq!(token.text(), "β");
     }
 
     #[test]
-    fn explicit_text_byte_span_falls_back_to_character_span() {
-        let token = CommonToken::new(1).with_text("β").with_span(3, 3);
-
-        assert_eq!(token.byte_span(), 3..4);
-    }
-
-    #[test]
-    fn explicit_text_can_carry_utf8_byte_span() {
-        let token = CommonToken::new(TOKEN_EOF)
-            .with_text("<EOF>")
-            .with_span(1, 0)
-            .with_byte_span(2, 2);
-
-        assert_eq!(token.text(), "<EOF>");
-        assert_eq!(token.byte_span(), 2..2);
+    fn overlarge_offset_is_rejected() {
+        let mut store = TokenStore::new(None, "");
+        let error = store
+            .push(TokenSpec::explicit(1, "x").with_span(MAX_TOKEN_OFFSET + 1, 0))
+            .expect_err("overlarge offsets must fail");
+        assert!(error.to_string().contains("supported limit"));
     }
 }

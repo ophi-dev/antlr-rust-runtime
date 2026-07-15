@@ -917,8 +917,40 @@ mod tests {
     use crate::char_stream::InputStream;
     use crate::lexer::BaseLexer;
     use crate::recognizer::RecognizerData;
-    use crate::token::{TOKEN_EOF, Token};
+    use crate::token::{TOKEN_EOF, Token, TokenSink, TokenStore};
     use crate::vocabulary::Vocabulary;
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct TokenSnapshot {
+        token_type: i32,
+        text: String,
+    }
+
+    fn compiled_token(
+        lexer: &mut BaseLexer<InputStream>,
+        atn: &Atn,
+        dfa: &CompiledLexerDfa,
+    ) -> TokenSnapshot {
+        let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
+        let mut sink = TokenSink::new(&mut store);
+        let id = next_token_compiled(lexer, &mut sink, atn, dfa).expect("test token should fit");
+        let token = sink.view(id).expect("emitted token should exist");
+        TokenSnapshot {
+            token_type: token.token_type(),
+            text: token.text().to_owned(),
+        }
+    }
+
+    fn interpreted_token(lexer: &mut BaseLexer<InputStream>, atn: &Atn) -> TokenSnapshot {
+        let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
+        let mut sink = TokenSink::new(&mut store);
+        let id = next_token(lexer, &mut sink, atn).expect("test token should fit");
+        let token = sink.view(id).expect("emitted token should exist");
+        TokenSnapshot {
+            token_type: token.token_type(),
+            text: token.text().to_owned(),
+        }
+    }
 
     fn recognizer_data() -> RecognizerData {
         RecognizerData::new(
@@ -1019,13 +1051,10 @@ mod tests {
         assert!(dfa.mode_start(0).is_some());
 
         let mut lexer = BaseLexer::new(InputStream::new(" ab"), recognizer_data());
-        let token = next_token_compiled(&mut lexer, &atn, &dfa);
-        assert_eq!(token.token_type(), 1);
-        assert_eq!(token.text(), "ab");
-        assert_eq!(
-            next_token_compiled(&mut lexer, &atn, &dfa).token_type(),
-            TOKEN_EOF
-        );
+        let token = compiled_token(&mut lexer, &atn, &dfa);
+        assert_eq!(token.token_type, 1);
+        assert_eq!(token.text, "ab");
+        assert_eq!(compiled_token(&mut lexer, &atn, &dfa).token_type, TOKEN_EOF);
     }
 
     #[test]
@@ -1037,14 +1066,19 @@ mod tests {
         assert!(dfa.mode_start(0).is_some());
 
         let mut lexer = BaseLexer::new(InputStream::new(" ab"), recognizer_data());
-        let token = next_token_compiled_with_hooks(
+        let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
+        let mut sink = TokenSink::new(&mut store);
+        let id = next_token_compiled_with_hooks(
             &mut lexer,
+            &mut sink,
             &atn,
             &dfa,
             |_, _| {},
             |_, _| true,
             |_, _, _| {},
-        );
+        )
+        .expect("test token should fit");
+        let token = sink.view(id).expect("emitted token should exist");
         assert_eq!(token.token_type(), 1);
         assert_eq!(token.text(), "ab");
     }
@@ -1056,13 +1090,10 @@ mod tests {
         assert!(dfa.mode_start(0).is_some());
 
         let mut lexer = BaseLexer::new(InputStream::new("ĀĂ"), recognizer_data());
-        let token = next_token_compiled(&mut lexer, &atn, &dfa);
-        assert_eq!(token.token_type(), 1);
-        assert_eq!(token.text(), "ĀĂ");
-        assert_eq!(
-            next_token_compiled(&mut lexer, &atn, &dfa).token_type(),
-            TOKEN_EOF
-        );
+        let token = compiled_token(&mut lexer, &atn, &dfa);
+        assert_eq!(token.token_type, 1);
+        assert_eq!(token.text, "ĀĂ");
+        assert_eq!(compiled_token(&mut lexer, &atn, &dfa).token_type, TOKEN_EOF);
     }
 
     #[test]
@@ -1073,11 +1104,10 @@ mod tests {
         let mut compiled = BaseLexer::new(InputStream::new("zĀ"), recognizer_data());
         let mut interpreted = BaseLexer::new(InputStream::new("zĀ"), recognizer_data());
         loop {
-            let compiled_token = next_token_compiled(&mut compiled, &atn, &dfa);
-            let interpreted_token = next_token(&mut interpreted, &atn);
-            assert_eq!(compiled_token.token_type(), interpreted_token.token_type());
-            assert_eq!(compiled_token.text(), interpreted_token.text());
-            if compiled_token.token_type() == TOKEN_EOF {
+            let compiled_token = compiled_token(&mut compiled, &atn, &dfa);
+            let interpreted_token = interpreted_token(&mut interpreted, &atn);
+            assert_eq!(compiled_token, interpreted_token);
+            if compiled_token.token_type == TOKEN_EOF {
                 break;
             }
         }
@@ -1106,9 +1136,9 @@ mod tests {
         assert_eq!(restored.serialize(), stream);
 
         let mut lexer = BaseLexer::new(InputStream::new(" ab"), recognizer_data());
-        let token = next_token_compiled(&mut lexer, &atn, &restored);
-        assert_eq!(token.token_type(), 1);
-        assert_eq!(token.text(), "ab");
+        let token = compiled_token(&mut lexer, &atn, &restored);
+        assert_eq!(token.token_type, 1);
+        assert_eq!(token.text, "ab");
 
         // A stream from a different runtime version is rejected, not trusted.
         let mut wrong_tag = stream;
@@ -1139,8 +1169,8 @@ mod tests {
 
         let mut lexer = BaseLexer::new(InputStream::new("ab"), recognizer_data());
         lexer.set_force_interpreted(true);
-        let token = next_token_compiled(&mut lexer, &atn, &dfa);
-        assert_eq!(token.token_type(), 1);
+        let token = compiled_token(&mut lexer, &atn, &dfa);
+        assert_eq!(token.token_type, 1);
         // The interpreter path records the learned-DFA trace; the compiled
         // walk does not.
         assert!(!lexer.lexer_dfa_string().is_empty());

@@ -1990,14 +1990,14 @@ fn render_lexer(
             "|_, _, _| {}"
         };
         format!(
-            "antlr4_runtime::atn::lexer::next_token_compiled_with_semantic_dispatch(&mut self.base, atn(), lexer_dfa(), &mut self.hooks, {action}, {predicate}, {lexer_unknown_policy}, {adjuster})"
+            "antlr4_runtime::atn::lexer::next_token_compiled_with_semantic_dispatch(&mut self.base, sink, atn(), lexer_dfa(), &mut self.hooks, {action}, {predicate}, {lexer_unknown_policy}, {adjuster})"
         )
     } else if !has_action_dispatch
         && !has_predicate_dispatch
         && !adjusts_accept_position
         && !unknown_predicates_assume_false
     {
-        "antlr4_runtime::atn::lexer::next_token_compiled(&mut self.base, atn(), lexer_dfa())"
+        "antlr4_runtime::atn::lexer::next_token_compiled(&mut self.base, sink, atn(), lexer_dfa())"
             .to_owned()
     } else {
         let action = if has_action_dispatch {
@@ -2018,7 +2018,7 @@ fn render_lexer(
             "|_, _, _| {}"
         };
         format!(
-            "antlr4_runtime::atn::lexer::next_token_compiled_with_hooks(&mut self.base, atn(), lexer_dfa(), {action}, {predicate}, {adjuster})"
+            "antlr4_runtime::atn::lexer::next_token_compiled_with_hooks(&mut self.base, sink, atn(), lexer_dfa(), {action}, {predicate}, {adjuster})"
         )
     };
     let generated_header = GENERATED_MODULE_HEADER;
@@ -2027,7 +2027,7 @@ fn render_lexer(
     Ok(format!(
         r#"{generated_header}use antlr4_runtime::char_stream::CharStream;
 use antlr4_runtime::recognizer::RecognizerData;
-use antlr4_runtime::token::{{CommonToken, TokenSource}};
+use antlr4_runtime::token::{{TokenId, TokenSink, TokenSource, TokenStoreError}};
 use antlr4_runtime::atn::Atn;
 use antlr4_runtime::atn::lexer_dfa::CompiledLexerDfa;
 use antlr4_runtime::atn::serialized::AtnDeserializer;
@@ -2158,13 +2158,14 @@ where
     I: CharStream,
     H: antlr4_runtime::SemanticHooks,
 {{
-    fn next_token(&mut self) -> CommonToken {{
+    fn next_token(&mut self, sink: &mut TokenSink<'_>) -> Result<TokenId, TokenStoreError> {{
         {next_token_call}
     }}
 
     fn line(&self) -> usize {{ self.base.line() }}
     fn column(&self) -> usize {{ self.base.column() }}
     fn source_name(&self) -> &str {{ self.base.source_name() }}
+    fn source_text(&self) -> Option<std::rc::Rc<str>> {{ self.base.source_text() }}
     fn drain_errors(&mut self) -> Vec<antlr4_runtime::token::TokenSourceError> {{
         self.base.drain_errors()
     }}
@@ -9688,7 +9689,7 @@ fn render_lexer_typed_hook_adapter(type_name: &str, mappings: &[LexerTypedHookMa
             let separator = if arguments.is_empty() { "" } else { ", " };
             let result = if *predicate { " -> bool" } else { "" };
             format!(
-                "    fn {method}<I, F>(&mut self, ctx: &mut antlr4_runtime::LexerSemCtx<'_, I, F>{separator}{arguments}){result}\n    where\n        I: antlr4_runtime::CharStream,\n        F: antlr4_runtime::TokenFactory;"
+                "    fn {method}<I>(&mut self, ctx: &mut antlr4_runtime::LexerSemCtx<'_, I>{separator}{arguments}){result}\n    where\n        I: antlr4_runtime::CharStream;"
             )
         })
         .collect::<Vec<_>>()
@@ -9731,7 +9732,7 @@ fn render_lexer_typed_hook_adapter(type_name: &str, mappings: &[LexerTypedHookMa
         r#"pub trait {trait_name}: Sized {{
 {method_decls}
 
-    fn token_emitted(&mut self, _token: &antlr4_runtime::CommonToken) {{}}
+    fn token_emitted(&mut self, _token: antlr4_runtime::TokenView<'_>) {{}}
 }}
 
 #[derive(Clone, Debug, Default)]
@@ -9745,10 +9746,9 @@ impl<T> antlr4_runtime::SemanticHooks for {adapter_name}<T>
 where
     T: {trait_name},
 {{
-    fn lexer_sempred<I, F>(&mut self, ctx: &mut antlr4_runtime::LexerSemCtx<'_, I, F>, rule_index: usize, pred_index: usize) -> Option<bool>
+    fn lexer_sempred<I>(&mut self, ctx: &mut antlr4_runtime::LexerSemCtx<'_, I>, rule_index: usize, pred_index: usize) -> Option<bool>
     where
         I: antlr4_runtime::CharStream,
-        F: antlr4_runtime::TokenFactory,
     {{
         match (rule_index, pred_index) {{
 {predicate_arms}
@@ -9756,10 +9756,9 @@ where
         }}
     }}
 
-    fn lexer_action<I, F>(&mut self, ctx: &mut antlr4_runtime::LexerSemCtx<'_, I, F>, action: antlr4_runtime::LexerCustomAction) -> bool
+    fn lexer_action<I>(&mut self, ctx: &mut antlr4_runtime::LexerSemCtx<'_, I>, action: antlr4_runtime::LexerCustomAction) -> bool
     where
         I: antlr4_runtime::CharStream,
-        F: antlr4_runtime::TokenFactory,
     {{
         let Ok(rule_index) = usize::try_from(action.rule_index()) else {{ return false; }};
         let Ok(action_index) = usize::try_from(action.action_index()) else {{ return false; }};
@@ -9769,7 +9768,7 @@ where
         }}
     }}
 
-    fn lexer_token_emitted(&mut self, token: &antlr4_runtime::CommonToken) {{
+    fn lexer_token_emitted(&mut self, token: antlr4_runtime::TokenView<'_>) {{
         self.0.token_emitted(token);
     }}
 }}
@@ -14740,7 +14739,7 @@ ID : [a-z]+ ;\n";
             "override renders a failing arm"
         );
         assert!(module.contains("run_predicate"));
-        assert!(!module.contains("next_token_compiled(&mut self.base, atn(), lexer_dfa())"));
+        assert!(!module.contains("next_token_compiled(&mut self.base, sink, atn(), lexer_dfa())"));
     }
 
     #[test]
@@ -14859,7 +14858,15 @@ ID : [a-z]+ ;\n";
         )
         .expect("lexer should render");
 
-        assert!(module.contains("next_token_compiled(&mut self.base, atn(), lexer_dfa())"));
+        assert!(module.contains("next_token_compiled(&mut self.base, sink, atn(), lexer_dfa())"));
+        assert!(module.contains(
+            "fn next_token(&mut self, sink: &mut TokenSink<'_>) -> Result<TokenId, TokenStoreError>"
+        ));
+        assert!(module.contains(
+            "fn source_text(&self) -> Option<std::rc::Rc<str>> { self.base.source_text() }"
+        ));
+        assert!(!module.contains("CommonToken"));
+        assert!(!module.contains("TokenFactory"));
     }
 
     #[test]

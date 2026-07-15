@@ -245,10 +245,14 @@ impl Value {
 /// Null). Lookahead methods take `&mut self` because token streams buffer
 /// lazily.
 pub trait PredContext {
+    type TokenText<'a>: AsRef<str>
+    where
+        Self: 'a;
+
     /// Token type (parser) or character (lexer) at the given lookahead.
     fn la(&mut self, offset: isize) -> i64;
     /// Text of the token at the given lookahead, if present.
-    fn token_text(&mut self, offset: isize) -> Option<&str>;
+    fn token_text(&mut self, offset: isize) -> Option<Self::TokenText<'_>>;
     /// Whether `LT(-2)` and `LT(-1)` are adjacent token-stream entries.
     fn token_index_adjacent(&mut self) -> bool;
     /// Text of the current context's first child with this rule index.
@@ -506,7 +510,9 @@ fn resolve_owned_text<C: PredContext>(
     ctx: &mut C,
 ) -> Option<String> {
     match source {
-        TextSource::Lookahead(offset) => ctx.token_text(offset).map(str::to_owned),
+        TextSource::Lookahead(offset) => {
+            ctx.token_text(offset).map(|text| text.as_ref().to_owned())
+        }
         other => resolve_static_text(ir, other, ctx).map(Cow::into_owned),
     }
 }
@@ -527,22 +533,21 @@ fn eval_text_cmp<C: PredContext>(
     };
     Value::Bool(match (left_source, right_source) {
         (TextSource::Lookahead(left), TextSource::Lookahead(right)) => {
-            // Two live lookahead borrows cannot coexist; own the left side.
-            // No current producer emits this shape, so the allocation is
-            // acceptable.
-            let left = ctx.token_text(left).map(str::to_owned);
+            // Holding the first token-text borrow would keep `ctx` borrowed,
+            // so own this unsupported producer shape's first operand.
+            let left = ctx.token_text(left).map(|text| text.as_ref().to_owned());
             let right = ctx.token_text(right);
-            cmp_texts(op, left.as_deref(), right)
+            cmp_texts(op, left.as_deref(), right.as_ref().map(AsRef::as_ref))
         }
         (TextSource::Lookahead(offset), other) => {
             let right = resolve_static_text(ir, other, ctx);
             let left = ctx.token_text(offset);
-            cmp_texts(op, left, right.as_deref())
+            cmp_texts(op, left.as_ref().map(AsRef::as_ref), right.as_deref())
         }
         (other, TextSource::Lookahead(offset)) => {
             let left = resolve_static_text(ir, other, ctx);
             let right = ctx.token_text(offset);
-            cmp_texts(op, left.as_deref(), right)
+            cmp_texts(op, left.as_deref(), right.as_ref().map(AsRef::as_ref))
         }
         (left, right) => {
             let left = resolve_static_text(ir, left, ctx);
@@ -615,12 +620,17 @@ mod tests {
     }
 
     impl PredContext for MockCtx {
+        type TokenText<'a>
+            = &'a str
+        where
+            Self: 'a;
+
         fn la(&mut self, offset: isize) -> i64 {
             self.la_calls += 1;
             self.lookup(offset).map_or(-1, |(token_type, _)| token_type)
         }
 
-        fn token_text(&mut self, offset: isize) -> Option<&str> {
+        fn token_text(&mut self, offset: isize) -> Option<Self::TokenText<'_>> {
             self.lookup(offset).and_then(|(_, text)| text)
         }
 

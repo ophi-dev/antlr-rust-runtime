@@ -13,7 +13,7 @@ use crate::lexer::{
 };
 use crate::parser::{SemanticHooks, UnknownSemanticPolicy};
 use crate::prediction::PredictionFxHasher;
-use crate::token::{CommonToken, DEFAULT_CHANNEL, INVALID_TOKEN_TYPE, TokenFactory};
+use crate::token::{DEFAULT_CHANNEL, INVALID_TOKEN_TYPE, TokenId, TokenSink, TokenStoreError};
 
 #[allow(clippy::disallowed_types)]
 type FxHashSet<K> = HashSet<K, BuildHasherDefault<PredictionFxHasher>>;
@@ -86,10 +86,9 @@ impl LexerActionResult {
 
     /// Applies one deserialized lexer action to this token emission result and
     /// to the lexer mode stack when the action changes modes.
-    fn apply<I, F>(&mut self, action: &LexerAction, lexer: &mut BaseLexer<I, F>)
+    fn apply<I>(&mut self, action: &LexerAction, lexer: &mut BaseLexer<I>)
     where
         I: CharStream,
-        F: TokenFactory,
     {
         match action {
             LexerAction::Channel(channel) => self.channel = *channel,
@@ -123,12 +122,15 @@ struct ClosureState {
 /// actions collected on the accepted path are applied after the input cursor is
 /// moved to the accepted token boundary, so mode changes and token type/channel
 /// rewrites happen at the same point generated ANTLR lexers perform them.
-pub fn next_token<I, F>(lexer: &mut BaseLexer<I, F>, atn: &Atn) -> CommonToken
+pub fn next_token<I>(
+    lexer: &mut BaseLexer<I>,
+    sink: &mut TokenSink<'_>,
+    atn: &Atn,
+) -> Result<TokenId, TokenStoreError>
 where
     I: CharStream,
-    F: TokenFactory,
 {
-    next_token_with_cache(lexer, atn, |_, _| {}, |_, _| true, |_, _, _| {})
+    next_token_with_cache(lexer, sink, atn, |_, _| {}, |_, _| true, |_, _, _| {})
 }
 
 /// Runs one lexer-token match and invokes `custom_action` for embedded
@@ -137,17 +139,17 @@ where
 /// The callback receives the base lexer plus the serialized custom-action
 /// coordinates. It is used by generated lexers to replay target templates while
 /// keeping all ATN path exploration in the shared runtime.
-pub fn next_token_with_actions<I, F, A>(
-    lexer: &mut BaseLexer<I, F>,
+pub fn next_token_with_actions<I, A>(
+    lexer: &mut BaseLexer<I>,
+    sink: &mut TokenSink<'_>,
     atn: &Atn,
     custom_action: A,
-) -> CommonToken
+) -> Result<TokenId, TokenStoreError>
 where
     I: CharStream,
-    F: TokenFactory,
-    A: FnMut(&mut BaseLexer<I, F>, LexerCustomAction),
+    A: FnMut(&mut BaseLexer<I>, LexerCustomAction),
 {
-    next_token_with_hooks(lexer, atn, custom_action, |_, _| true, |_, _, _| {})
+    next_token_with_hooks(lexer, sink, atn, custom_action, |_, _| true, |_, _, _| {})
 }
 
 /// Runs one lexer-token match and lets generated code adjust the final accept
@@ -156,37 +158,38 @@ where
 /// ANTLR target templates such as `PositionAdjustingLexer` use this to accept
 /// a long disambiguating token path but emit only the prefix, leaving the
 /// remaining characters for the next token.
-pub fn next_token_with_accept_adjuster<I, F, E>(
-    lexer: &mut BaseLexer<I, F>,
+pub fn next_token_with_accept_adjuster<I, E>(
+    lexer: &mut BaseLexer<I>,
+    sink: &mut TokenSink<'_>,
     atn: &Atn,
     accept_adjuster: E,
-) -> CommonToken
+) -> Result<TokenId, TokenStoreError>
 where
     I: CharStream,
-    F: TokenFactory,
-    E: FnMut(&mut BaseLexer<I, F>, i32, usize),
+    E: FnMut(&mut BaseLexer<I>, i32, usize),
 {
-    next_token_with_hooks(lexer, atn, |_, _| {}, |_, _| true, accept_adjuster)
+    next_token_with_hooks(lexer, sink, atn, |_, _| {}, |_, _| true, accept_adjuster)
 }
 
 /// Runs one lexer-token match with grammar-specific actions and predicates.
 ///
 /// Predicates are evaluated during ATN closure construction so non-viable
 /// paths are rejected before longest-match and lexer-rule priority selection.
-pub fn next_token_with_actions_and_predicates<I, F, A, P>(
-    lexer: &mut BaseLexer<I, F>,
+pub fn next_token_with_actions_and_predicates<I, A, P>(
+    lexer: &mut BaseLexer<I>,
+    sink: &mut TokenSink<'_>,
     atn: &Atn,
     mut custom_action: A,
     mut semantic_predicate: P,
-) -> CommonToken
+) -> Result<TokenId, TokenStoreError>
 where
     I: CharStream,
-    F: TokenFactory,
-    A: FnMut(&mut BaseLexer<I, F>, LexerCustomAction),
-    P: FnMut(&BaseLexer<I, F>, LexerPredicate) -> bool,
+    A: FnMut(&mut BaseLexer<I>, LexerCustomAction),
+    P: FnMut(&BaseLexer<I>, LexerPredicate) -> bool,
 {
     next_token_with_hooks(
         lexer,
+        sink,
         atn,
         &mut custom_action,
         &mut semantic_predicate,
@@ -199,22 +202,23 @@ where
 /// Custom actions and predicates correspond to serialized ATN edges. The
 /// accept adjuster runs after lexer commands but before `emit`, matching target
 /// runtimes that override emission to split a longest-match token.
-pub fn next_token_with_hooks<I, F, A, P, E>(
-    lexer: &mut BaseLexer<I, F>,
+pub fn next_token_with_hooks<I, A, P, E>(
+    lexer: &mut BaseLexer<I>,
+    sink: &mut TokenSink<'_>,
     atn: &Atn,
     mut custom_action: A,
     mut semantic_predicate: P,
     mut accept_adjuster: E,
-) -> CommonToken
+) -> Result<TokenId, TokenStoreError>
 where
     I: CharStream,
-    F: TokenFactory,
-    A: FnMut(&mut BaseLexer<I, F>, LexerCustomAction),
-    P: FnMut(&BaseLexer<I, F>, LexerPredicate) -> bool,
-    E: FnMut(&mut BaseLexer<I, F>, i32, usize),
+    A: FnMut(&mut BaseLexer<I>, LexerCustomAction),
+    P: FnMut(&BaseLexer<I>, LexerPredicate) -> bool,
+    E: FnMut(&mut BaseLexer<I>, i32, usize),
 {
     next_token_with_hooks_impl(
         lexer,
+        sink,
         atn,
         &mut custom_action,
         &mut semantic_predicate,
@@ -231,14 +235,13 @@ where
 /// Both `next_token_*_with_semantic_hooks` entry points wire the interpreter's
 /// action callback to this, so the `RefCell` borrow + [`LexerSemCtx`] plumbing
 /// lives in one place instead of being copied per entry point.
-fn dispatch_lexer_action_hook<I, F, H>(
+fn dispatch_lexer_action_hook<I, H>(
     hooks: &RefCell<&mut H>,
-    lexer: &mut BaseLexer<I, F>,
+    lexer: &mut BaseLexer<I>,
     action: LexerCustomAction,
 ) -> bool
 where
     I: CharStream,
-    F: TokenFactory,
     H: SemanticHooks,
 {
     let Ok(rule_index) = usize::try_from(action.rule_index()) else {
@@ -258,14 +261,13 @@ where
 /// Dispatches one lexer semantic predicate to a shared [`SemanticHooks`]
 /// object, defaulting unknown coordinates to `true` (the historical closure
 /// default) when the hook declines with `None`.
-fn dispatch_lexer_predicate_hook<I, F, H>(
+fn dispatch_lexer_predicate_hook<I, H>(
     hooks: &RefCell<&mut H>,
-    lexer: &BaseLexer<I, F>,
+    lexer: &BaseLexer<I>,
     predicate: LexerPredicate,
 ) -> Option<bool>
 where
     I: CharStream,
-    F: TokenFactory,
     H: SemanticHooks,
 {
     let mut ctx = LexerSemCtx::new(
@@ -285,19 +287,20 @@ where
 /// Unknown lexer predicates default to `true` when the hook returns `None`,
 /// matching the existing closure default; callers that need fail-loud behavior
 /// can implement the hook to record and reject coordinates explicitly.
-pub fn next_token_with_semantic_hooks<I, F, H>(
-    lexer: &mut BaseLexer<I, F>,
+pub fn next_token_with_semantic_hooks<I, H>(
+    lexer: &mut BaseLexer<I>,
+    sink: &mut TokenSink<'_>,
     atn: &Atn,
     hooks: &mut H,
-) -> CommonToken
+) -> Result<TokenId, TokenStoreError>
 where
     I: CharStream,
-    F: TokenFactory,
     H: SemanticHooks,
 {
     let hooks = RefCell::new(hooks);
     let token = next_token_with_hooks(
         lexer,
+        sink,
         atn,
         |lexer, action| {
             let _ = dispatch_lexer_action_hook(&hooks, lexer, action);
@@ -305,8 +308,12 @@ where
         |lexer, predicate| dispatch_lexer_predicate_hook(&hooks, lexer, predicate).unwrap_or(true),
         |_, _, _| {},
     );
-    hooks.borrow_mut().lexer_token_emitted(&token);
-    token
+    let token = token?;
+    hooks.borrow_mut().lexer_token_emitted(
+        sink.view(token)
+            .expect("lexer hook token should be present in its sink"),
+    );
+    Ok(token)
 }
 
 /// Runs one lexer-token match against an ahead-of-time compiled lexer DFA.
@@ -314,17 +321,18 @@ where
 /// Tokens starting in a compiled mode are matched by walking static tables;
 /// modes the compiler left dynamic fall back to cached ATN interpretation per
 /// token, so behavior always matches [`next_token`].
-pub fn next_token_compiled<I, F>(
-    lexer: &mut BaseLexer<I, F>,
+pub fn next_token_compiled<I>(
+    lexer: &mut BaseLexer<I>,
+    sink: &mut TokenSink<'_>,
     atn: &Atn,
     dfa: &CompiledLexerDfa,
-) -> CommonToken
+) -> Result<TokenId, TokenStoreError>
 where
     I: CharStream,
-    F: TokenFactory,
 {
     next_token_with_hooks_impl(
         lexer,
+        sink,
         atn,
         &mut |_, _| {},
         &mut |_, _| true,
@@ -341,23 +349,25 @@ where
 /// Compiled modes never contain semantic predicates, so hook grammars still
 /// take the table walk for their static modes; predicate-bearing modes re-run
 /// the ATN interpreter exactly like [`next_token_with_hooks`].
-pub fn next_token_compiled_with_hooks<I, F, A, P, E>(
-    lexer: &mut BaseLexer<I, F>,
+#[allow(clippy::too_many_arguments)]
+pub fn next_token_compiled_with_hooks<I, A, P, E>(
+    lexer: &mut BaseLexer<I>,
+    sink: &mut TokenSink<'_>,
     atn: &Atn,
     dfa: &CompiledLexerDfa,
     mut custom_action: A,
     mut semantic_predicate: P,
     mut accept_adjuster: E,
-) -> CommonToken
+) -> Result<TokenId, TokenStoreError>
 where
     I: CharStream,
-    F: TokenFactory,
-    A: FnMut(&mut BaseLexer<I, F>, LexerCustomAction),
-    P: FnMut(&BaseLexer<I, F>, LexerPredicate) -> bool,
-    E: FnMut(&mut BaseLexer<I, F>, i32, usize),
+    A: FnMut(&mut BaseLexer<I>, LexerCustomAction),
+    P: FnMut(&BaseLexer<I>, LexerPredicate) -> bool,
+    E: FnMut(&mut BaseLexer<I>, i32, usize),
 {
     next_token_with_hooks_impl(
         lexer,
+        sink,
         atn,
         &mut custom_action,
         &mut semantic_predicate,
@@ -371,20 +381,21 @@ where
 
 /// Runs one compiled-DFA lexer-token match with a shared [`SemanticHooks`]
 /// object for dynamic predicate/action modes.
-pub fn next_token_compiled_with_semantic_hooks<I, F, H>(
-    lexer: &mut BaseLexer<I, F>,
+pub fn next_token_compiled_with_semantic_hooks<I, H>(
+    lexer: &mut BaseLexer<I>,
+    sink: &mut TokenSink<'_>,
     atn: &Atn,
     dfa: &CompiledLexerDfa,
     hooks: &mut H,
-) -> CommonToken
+) -> Result<TokenId, TokenStoreError>
 where
     I: CharStream,
-    F: TokenFactory,
     H: SemanticHooks,
 {
     let hooks = RefCell::new(hooks);
     let token = next_token_compiled_with_hooks(
         lexer,
+        sink,
         atn,
         dfa,
         |lexer, action| {
@@ -393,8 +404,12 @@ where
         |lexer, predicate| dispatch_lexer_predicate_hook(&hooks, lexer, predicate).unwrap_or(true),
         |_, _, _| {},
     );
-    hooks.borrow_mut().lexer_token_emitted(&token);
-    token
+    let token = token?;
+    hooks.borrow_mut().lexer_token_emitted(
+        sink.view(token)
+            .expect("lexer hook token should be present in its sink"),
+    );
+    Ok(token)
 }
 
 /// Runs one interpreted lexer-token match by composing generated translations
@@ -405,26 +420,27 @@ where
 /// `Some` owns the coordinate; `None` falls through to
 /// [`SemanticHooks::lexer_sempred`] and finally the selected unknown policy.
 #[allow(clippy::too_many_arguments)]
-pub fn next_token_with_semantic_dispatch<I, F, H, A, P, E>(
-    lexer: &mut BaseLexer<I, F>,
+pub fn next_token_with_semantic_dispatch<I, H, A, P, E>(
+    lexer: &mut BaseLexer<I>,
+    sink: &mut TokenSink<'_>,
     atn: &Atn,
     hooks: &mut H,
     mut generated_action: A,
     mut generated_predicate: P,
     unknown_policy: UnknownSemanticPolicy,
     accept_adjuster: E,
-) -> CommonToken
+) -> Result<TokenId, TokenStoreError>
 where
     I: CharStream,
-    F: TokenFactory,
     H: SemanticHooks,
-    A: FnMut(&mut BaseLexer<I, F>, LexerCustomAction) -> bool,
-    P: FnMut(&BaseLexer<I, F>, LexerPredicate) -> Option<bool>,
-    E: FnMut(&mut BaseLexer<I, F>, i32, usize),
+    A: FnMut(&mut BaseLexer<I>, LexerCustomAction) -> bool,
+    P: FnMut(&BaseLexer<I>, LexerPredicate) -> Option<bool>,
+    E: FnMut(&mut BaseLexer<I>, i32, usize),
 {
     let hooks = RefCell::new(hooks);
     let token = next_token_with_hooks(
         lexer,
+        sink,
         atn,
         |lexer, action| {
             if !generated_action(lexer, action)
@@ -456,14 +472,19 @@ where
         },
         accept_adjuster,
     );
-    hooks.borrow_mut().lexer_token_emitted(&token);
-    token
+    let token = token?;
+    hooks.borrow_mut().lexer_token_emitted(
+        sink.view(token)
+            .expect("lexer hook token should be present in its sink"),
+    );
+    Ok(token)
 }
 
 /// Compiled-DFA counterpart of [`next_token_with_semantic_dispatch`].
 #[allow(clippy::too_many_arguments)]
-pub fn next_token_compiled_with_semantic_dispatch<I, F, H, A, P, E>(
-    lexer: &mut BaseLexer<I, F>,
+pub fn next_token_compiled_with_semantic_dispatch<I, H, A, P, E>(
+    lexer: &mut BaseLexer<I>,
+    sink: &mut TokenSink<'_>,
     atn: &Atn,
     dfa: &CompiledLexerDfa,
     hooks: &mut H,
@@ -471,18 +492,18 @@ pub fn next_token_compiled_with_semantic_dispatch<I, F, H, A, P, E>(
     mut generated_predicate: P,
     unknown_policy: UnknownSemanticPolicy,
     accept_adjuster: E,
-) -> CommonToken
+) -> Result<TokenId, TokenStoreError>
 where
     I: CharStream,
-    F: TokenFactory,
     H: SemanticHooks,
-    A: FnMut(&mut BaseLexer<I, F>, LexerCustomAction) -> bool,
-    P: FnMut(&BaseLexer<I, F>, LexerPredicate) -> Option<bool>,
-    E: FnMut(&mut BaseLexer<I, F>, i32, usize),
+    A: FnMut(&mut BaseLexer<I>, LexerCustomAction) -> bool,
+    P: FnMut(&BaseLexer<I>, LexerPredicate) -> Option<bool>,
+    E: FnMut(&mut BaseLexer<I>, i32, usize),
 {
     let hooks = RefCell::new(hooks);
     let token = next_token_compiled_with_hooks(
         lexer,
+        sink,
         atn,
         dfa,
         |lexer, action| {
@@ -515,26 +536,31 @@ where
         },
         accept_adjuster,
     );
-    hooks.borrow_mut().lexer_token_emitted(&token);
-    token
+    let token = token?;
+    hooks.borrow_mut().lexer_token_emitted(
+        sink.view(token)
+            .expect("lexer hook token should be present in its sink"),
+    );
+    Ok(token)
 }
 
-fn next_token_with_cache<I, F, A, P, E>(
-    lexer: &mut BaseLexer<I, F>,
+fn next_token_with_cache<I, A, P, E>(
+    lexer: &mut BaseLexer<I>,
+    sink: &mut TokenSink<'_>,
     atn: &Atn,
     mut custom_action: A,
     mut semantic_predicate: P,
     mut accept_adjuster: E,
-) -> CommonToken
+) -> Result<TokenId, TokenStoreError>
 where
     I: CharStream,
-    F: TokenFactory,
-    A: FnMut(&mut BaseLexer<I, F>, LexerCustomAction),
-    P: FnMut(&BaseLexer<I, F>, LexerPredicate) -> bool,
-    E: FnMut(&mut BaseLexer<I, F>, i32, usize),
+    A: FnMut(&mut BaseLexer<I>, LexerCustomAction),
+    P: FnMut(&BaseLexer<I>, LexerPredicate) -> bool,
+    E: FnMut(&mut BaseLexer<I>, i32, usize),
 {
     next_token_with_hooks_impl(
         lexer,
+        sink,
         atn,
         &mut custom_action,
         &mut semantic_predicate,
@@ -558,8 +584,8 @@ struct LexerMatchStrategy<'a> {
 }
 
 /// Dispatches one token match to the strategy's backend.
-fn match_token_with_strategy<I, F, P>(
-    lexer: &mut BaseLexer<I, F>,
+fn match_token_with_strategy<I, P>(
+    lexer: &mut BaseLexer<I>,
     atn: &Atn,
     mode: i32,
     start: usize,
@@ -568,8 +594,7 @@ fn match_token_with_strategy<I, F, P>(
 ) -> MatchResult
 where
     I: CharStream,
-    F: TokenFactory,
-    P: FnMut(&BaseLexer<I, F>, LexerPredicate) -> bool,
+    P: FnMut(&BaseLexer<I>, LexerPredicate) -> bool,
 {
     if let Some(dfa) = strategy.compiled
         && !lexer.force_interpreted()
@@ -585,25 +610,26 @@ where
     }
 }
 
-fn next_token_with_hooks_impl<I, F, A, P, E>(
-    lexer: &mut BaseLexer<I, F>,
+#[allow(clippy::too_many_arguments)]
+fn next_token_with_hooks_impl<I, A, P, E>(
+    lexer: &mut BaseLexer<I>,
+    sink: &mut TokenSink<'_>,
     atn: &Atn,
     custom_action: &mut A,
     semantic_predicate: &mut P,
     accept_adjuster: &mut E,
     strategy: LexerMatchStrategy<'_>,
-) -> CommonToken
+) -> Result<TokenId, TokenStoreError>
 where
     I: CharStream,
-    F: TokenFactory,
-    A: FnMut(&mut BaseLexer<I, F>, LexerCustomAction),
-    P: FnMut(&BaseLexer<I, F>, LexerPredicate) -> bool,
-    E: FnMut(&mut BaseLexer<I, F>, i32, usize),
+    A: FnMut(&mut BaseLexer<I>, LexerCustomAction),
+    P: FnMut(&BaseLexer<I>, LexerPredicate) -> bool,
+    E: FnMut(&mut BaseLexer<I>, i32, usize),
 {
     let mut continuing_more = false;
     loop {
         if lexer.hit_eof() {
-            return lexer.eof_token();
+            return lexer.eof_token(sink);
         }
 
         if !continuing_more {
@@ -619,7 +645,7 @@ where
                 lexer.input_mut().seek(start);
                 if lexer.input_mut().la(1) == EOF {
                     lexer.set_hit_eof(true);
-                    return lexer.eof_token();
+                    return lexer.eof_token(sink);
                 }
                 record_token_recognition_error(lexer, start, stop);
                 while lexer.input().index() < stop {
@@ -681,7 +707,7 @@ where
         } else {
             None
         };
-        return lexer.emit_with_stop(result.token_type, result.channel, stop, text);
+        return lexer.emit_with_stop(sink, result.token_type, result.channel, stop, text);
     }
 }
 
@@ -713,8 +739,8 @@ pub(super) fn lexer_action_belongs_to_accept(
 /// This is intentionally an ATN simulation, not generated Rust code for each
 /// rule. The generated lexer carries the serialized ATN and this interpreter
 /// supplies matching semantics shared by all generated grammars.
-fn match_token<I, F, P>(
-    lexer: &mut BaseLexer<I, F>,
+fn match_token<I, P>(
+    lexer: &mut BaseLexer<I>,
     atn: &Atn,
     mode: i32,
     start: usize,
@@ -722,8 +748,7 @@ fn match_token<I, F, P>(
 ) -> MatchResult
 where
     I: CharStream,
-    F: TokenFactory,
-    P: FnMut(&BaseLexer<I, F>, LexerPredicate) -> bool,
+    P: FnMut(&BaseLexer<I>, LexerPredicate) -> bool,
 {
     let Some(mode_index) = usize::try_from(mode).ok() else {
         return MatchResult::NoViableAlt { stop: start };
@@ -817,8 +842,8 @@ where
     )
 }
 
-fn match_token_cached<I, F, P>(
-    lexer: &mut BaseLexer<I, F>,
+fn match_token_cached<I, P>(
+    lexer: &mut BaseLexer<I>,
     atn: &Atn,
     mode: i32,
     start: usize,
@@ -826,8 +851,7 @@ fn match_token_cached<I, F, P>(
 ) -> MatchResult
 where
     I: CharStream,
-    F: TokenFactory,
-    P: FnMut(&BaseLexer<I, F>, LexerPredicate) -> bool,
+    P: FnMut(&BaseLexer<I>, LexerPredicate) -> bool,
 {
     let Some((mut dfa_state, mode_start_has_semantic_context)) =
         cached_mode_start_state(lexer, atn, mode, start, semantic_predicate)
@@ -957,15 +981,14 @@ const MAX_COMPILED_EOF_EDGES: u32 = 8;
 /// character the walk looked at, exactly like `match_token`. Reaching an
 /// escape edge (semantic predicate, recursive lexer rule, state budget)
 /// returns `None`, and the caller re-matches the token with the interpreter.
-fn match_token_compiled<I, F>(
-    lexer: &mut BaseLexer<I, F>,
+fn match_token_compiled<I>(
+    lexer: &mut BaseLexer<I>,
     dfa: &CompiledLexerDfa,
     start_state: u16,
     start: usize,
 ) -> Option<MatchResult>
 where
     I: CharStream,
-    F: TokenFactory,
 {
     let mut state = start_state;
     let mut position = start;
@@ -1035,8 +1058,8 @@ fn record_compiled_accept(
     });
 }
 
-fn cached_mode_start_state<I, F, P>(
-    lexer: &BaseLexer<I, F>,
+fn cached_mode_start_state<I, P>(
+    lexer: &BaseLexer<I>,
     atn: &Atn,
     mode: i32,
     start: usize,
@@ -1044,8 +1067,7 @@ fn cached_mode_start_state<I, F, P>(
 ) -> Option<(usize, bool)>
 where
     I: CharStream,
-    F: TokenFactory,
-    P: FnMut(&BaseLexer<I, F>, LexerPredicate) -> bool,
+    P: FnMut(&BaseLexer<I>, LexerPredicate) -> bool,
 {
     if let Some(state) = lexer.cached_lexer_mode_start(mode) {
         return Some((state, false));
@@ -1081,8 +1103,8 @@ where
     Some((state, start_closure.has_semantic_context))
 }
 
-fn cache_dfa_state<I, F>(
-    lexer: &BaseLexer<I, F>,
+fn cache_dfa_state<I>(
+    lexer: &BaseLexer<I>,
     atn: &Atn,
     active: &[LexerConfig],
     has_semantic_context: bool,
@@ -1091,7 +1113,6 @@ fn cache_dfa_state<I, F>(
 ) -> usize
 where
     I: CharStream,
-    F: TokenFactory,
 {
     let state = lexer.lexer_dfa_state(
         lexer_dfa_key(active, token_start),
@@ -1432,10 +1453,9 @@ pub(super) fn set_config_state(atn: &Atn, config: &mut LexerConfig, state_number
 }
 
 /// Buffers ANTLR's default diagnostic for one unmatchable input span.
-fn record_token_recognition_error<I, F>(lexer: &BaseLexer<I, F>, start: usize, stop: usize)
+fn record_token_recognition_error<I>(lexer: &BaseLexer<I>, start: usize, stop: usize)
 where
     I: CharStream,
-    F: TokenFactory,
 {
     let stop = stop.saturating_sub(1);
     let text = display_error_text(&lexer.input().text(TextInterval::new(start, stop)));
@@ -1463,10 +1483,9 @@ fn display_error_text(text: &str) -> String {
 ///
 /// The interpreter explores many paths at different input offsets, so it seeks
 /// the shared input stream before each lookahead instead of cloning the stream.
-fn symbol_at<I, F>(lexer: &mut BaseLexer<I, F>, position: usize) -> i32
+fn symbol_at<I>(lexer: &mut BaseLexer<I>, position: usize) -> i32
 where
     I: CharStream,
-    F: TokenFactory,
 {
     lexer.input_mut().seek(position);
     lexer.input_mut().la(1)
@@ -1479,8 +1498,29 @@ mod tests {
     use crate::atn::serialized::{AtnDeserializer, SerializedAtn};
     use crate::char_stream::InputStream;
     use crate::recognizer::RecognizerData;
-    use crate::token::{TOKEN_EOF, Token};
+    use crate::token::{TOKEN_EOF, Token, TokenStore};
     use crate::vocabulary::Vocabulary;
+
+    #[derive(Debug)]
+    struct TokenSnapshot {
+        token_type: i32,
+        start: usize,
+        stop: usize,
+        text: String,
+    }
+
+    fn lex_one<I: CharStream>(lexer: &mut BaseLexer<I>, atn: &Atn) -> TokenSnapshot {
+        let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
+        let mut sink = TokenSink::new(&mut store);
+        let id = next_token(lexer, &mut sink, atn).expect("test token should fit");
+        let token = sink.view(id).expect("emitted token should exist");
+        TokenSnapshot {
+            token_type: token.token_type(),
+            start: token.start(),
+            stop: token.stop(),
+            text: token.text().to_owned(),
+        }
+    }
 
     #[test]
     fn predicate_sensitive_lexer_state_is_not_replay_cached() {
@@ -1581,10 +1621,10 @@ mod tests {
         );
         let mut lexer = BaseLexer::new(InputStream::new(" ab"), data);
 
-        let token = next_token(&mut lexer, &atn);
-        assert_eq!(token.token_type(), 1);
-        assert_eq!(token.text(), "ab");
-        assert_eq!(next_token(&mut lexer, &atn).token_type(), TOKEN_EOF);
+        let token = lex_one(&mut lexer, &atn);
+        assert_eq!(token.token_type, 1);
+        assert_eq!(token.text, "ab");
+        assert_eq!(lex_one(&mut lexer, &atn).token_type, TOKEN_EOF);
     }
 
     #[test]
@@ -1624,10 +1664,10 @@ mod tests {
         );
         let mut lexer = BaseLexer::new(InputStream::new("ab"), data);
 
-        let token = next_token(&mut lexer, &atn);
-        assert_eq!(token.token_type(), 1);
-        assert_eq!(token.start(), 0);
-        assert_eq!(token.stop(), 1);
-        assert_eq!(token.text(), "ab");
+        let token = lex_one(&mut lexer, &atn);
+        assert_eq!(token.token_type, 1);
+        assert_eq!(token.start, 0);
+        assert_eq!(token.stop, 1);
+        assert_eq!(token.text, "ab");
     }
 }

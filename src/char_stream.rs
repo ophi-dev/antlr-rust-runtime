@@ -24,6 +24,20 @@ impl TextInterval {
 pub trait CharStream: IntStream {
     fn text(&self, interval: TextInterval) -> String;
 
+    /// Returns the complete backing UTF-8 source when it can be shared with a
+    /// token store.
+    ///
+    /// Implementations that return `None` remain supported, but their token
+    /// text is copied into the store's sparse explicit-text pool.
+    fn source_text(&self) -> Option<Rc<str>> {
+        None
+    }
+
+    fn byte_interval(&self, interval: TextInterval) -> Option<(usize, usize)> {
+        self.text_source_interval(interval)
+            .map(|(_, start, stop)| (start, stop))
+    }
+
     fn text_source_interval(&self, _interval: TextInterval) -> Option<(Rc<str>, usize, usize)> {
         None
     }
@@ -175,6 +189,22 @@ impl CharStream for InputStream {
 
         let (start_byte, stop_byte) = self.data.byte_bounds(&self.source, start, stop)?;
         Some((Rc::clone(&self.source), start_byte, stop_byte))
+    }
+
+    fn source_text(&self) -> Option<Rc<str>> {
+        Some(Rc::clone(&self.source))
+    }
+
+    fn byte_interval(&self, interval: TextInterval) -> Option<(usize, usize)> {
+        let len = self.data.len(&self.source);
+        if interval.is_empty() || len == 0 {
+            return None;
+        }
+        let start = interval.start.min(len);
+        let stop = interval.stop.min(len.saturating_sub(1));
+        (start <= stop)
+            .then(|| self.data.byte_bounds(&self.source, start, stop))
+            .flatten()
     }
 }
 

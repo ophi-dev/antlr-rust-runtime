@@ -38,8 +38,9 @@ pub use prediction::{
 };
 pub use recognizer::{Recognizer, RecognizerData};
 pub use token::{
-    CommonToken, CommonTokenFactory, DEFAULT_CHANNEL, HIDDEN_CHANNEL, INVALID_TOKEN_TYPE,
-    TOKEN_EOF, Token, TokenChannel, TokenFactory, TokenSource,
+    DEFAULT_CHANNEL, HIDDEN_CHANNEL, INVALID_TOKEN_TYPE, MAX_TOKEN_OFFSET, TOKEN_EOF, Token,
+    TokenChannel, TokenId, TokenSink, TokenSource, TokenSpec, TokenStore, TokenStoreError,
+    TokenView,
 };
 pub use token_stream::CommonTokenStream;
 pub use tree::{

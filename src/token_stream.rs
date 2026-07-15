@@ -1,18 +1,17 @@
 use crate::int_stream::{EOF, IntStream, UNKNOWN_SOURCE_NAME};
-use std::rc::Rc;
 
 use crate::token::{
-    CommonToken, DEFAULT_CHANNEL, TOKEN_EOF, Token, TokenRef, TokenSource, TokenSourceError,
+    DEFAULT_CHANNEL, TOKEN_EOF, Token, TokenId, TokenSink, TokenSource, TokenSourceError,
+    TokenSpec, TokenStore, TokenStoreError, TokenStoreHandle, TokenView,
 };
 
 #[derive(Debug)]
 pub struct CommonTokenStream<S> {
     source: S,
-    tokens: Vec<TokenRef>,
-    public_tokens: Vec<CommonToken>,
+    store: TokenStoreHandle,
+    source_token_count: usize,
     next_visible_after: Vec<usize>,
     cursor: usize,
-    fetched_eof: bool,
     channel: i32,
     source_errors: Vec<TokenSourceError>,
 }
@@ -23,49 +22,85 @@ impl<S> CommonTokenStream<S>
 where
     S: TokenSource,
 {
-    /// Creates a token stream that filters lookahead to the default channel.
-    pub const fn new(source: S) -> Self {
-        Self::with_channel(source, DEFAULT_CHANNEL)
+    /// Creates and fills a token stream that filters lookahead to the default
+    /// channel.
+    ///
+    /// Use [`Self::try_new`] when token/source limit errors should be handled
+    /// instead of reported as a construction panic.
+    pub fn new(source: S) -> Self {
+        Self::try_new(source).unwrap_or_else(|error| panic!("failed to buffer tokens: {error}"))
     }
 
-    /// Creates a token stream whose `LT/LA` operations see only `channel`.
-    pub const fn with_channel(source: S, channel: i32) -> Self {
-        Self {
+    pub fn try_new(source: S) -> Result<Self, TokenStoreError> {
+        Self::try_with_channel(source, DEFAULT_CHANNEL)
+    }
+
+    /// Creates and fills a token stream whose `LT/LA` operations see only
+    /// `channel`.
+    pub fn with_channel(source: S, channel: i32) -> Self {
+        Self::try_with_channel(source, channel)
+            .unwrap_or_else(|error| panic!("failed to buffer tokens: {error}"))
+    }
+
+    pub fn try_with_channel(mut source: S, channel: i32) -> Result<Self, TokenStoreError> {
+        let source_name = source.source_name().to_owned();
+        let mut store = TokenStore::new(source.source_text(), source_name);
+        let mut source_errors = Vec::new();
+        loop {
+            let mut sink = TokenSink::new(&mut store);
+            let id = source.next_token(&mut sink)?;
+            source_errors.extend(source.drain_errors());
+            let token = sink
+                .view(id)
+                .expect("token source returned an ID it did not emit");
+            if token.token_type() == TOKEN_EOF {
+                break;
+            }
+        }
+        let source_token_count = store.len();
+        let store = TokenStoreHandle::new(store);
+        let mut stream = Self {
             source,
-            tokens: Vec::new(),
-            public_tokens: Vec::new(),
-            next_visible_after: Vec::new(),
+            store,
+            source_token_count,
+            next_visible_after: vec![UNKNOWN_NEXT_VISIBLE; source_token_count],
             cursor: 0,
-            fetched_eof: false,
             channel,
-            source_errors: Vec::new(),
-        }
+            source_errors,
+        };
+        stream.cursor = stream.adjust_seek_index(0);
+        Ok(stream)
     }
 
-    /// Reads tokens from the source until EOF is buffered.
+    /// Idempotent eager-buffering operation. Construction already buffers
+    /// through EOF so the store can be shared with CST nodes.
     pub fn fill(&mut self) {
-        while !self.fetched_eof {
-            self.fetch_one();
-        }
         self.cursor = self.adjust_seek_index(self.cursor);
     }
 
-    /// Returns the token at an absolute buffered index, fetching from the source
-    /// as needed.
-    pub fn get(&mut self, index: usize) -> Option<&CommonToken> {
-        self.sync(index);
-        self.tokens.get(index).map(Rc::as_ref)
+    /// Returns a borrowing view of the token at an absolute buffered index.
+    pub fn get(&self, index: usize) -> Option<TokenView<'_>> {
+        (index < self.source_token_count)
+            .then(|| TokenId::try_from(index).ok())
+            .flatten()
+            .and_then(|id| self.store.view(id))
     }
 
-    /// Returns a shared reference-counted token at an absolute buffered index.
-    pub fn get_ref(&mut self, index: usize) -> Option<TokenRef> {
-        self.sync(index);
-        self.tokens.get(index).map(Rc::clone)
+    /// Returns the compact ID at an absolute buffered index.
+    pub fn get_id(&self, index: usize) -> Option<TokenId> {
+        (index < self.source_token_count)
+            .then(|| TokenId::try_from(index).ok())
+            .flatten()
     }
 
     /// Returns the token at one-based lookahead/lookbehind offset, skipping
     /// tokens outside the configured channel for positive offsets.
-    pub fn lt(&mut self, offset: isize) -> Option<&CommonToken> {
+    pub fn lt(&self, offset: isize) -> Option<TokenView<'_>> {
+        self.lt_id(offset).and_then(|id| self.store.view(id))
+    }
+
+    /// Returns the compact token ID at one-based lookahead/lookbehind offset.
+    pub fn lt_id(&self, offset: isize) -> Option<TokenId> {
         if offset == 0 {
             return None;
         }
@@ -73,7 +108,7 @@ where
             return offset
                 .checked_neg()
                 .map(isize::cast_unsigned)
-                .and_then(|offset| self.lb(offset));
+                .and_then(|offset| self.lb_id(offset));
         }
 
         let mut index = self.next_token_on_channel(self.cursor, self.channel);
@@ -82,34 +117,14 @@ where
             index = self.next_token_on_channel(index + 1, self.channel);
             remaining -= 1;
         }
-        self.sync(index);
-        self.tokens.get(index).map(Rc::as_ref)
+        self.get_id(index)
     }
 
-    /// Returns the token at one-based lookahead/lookbehind offset as a shared
-    /// reference-counted token.
-    pub fn lt_ref(&mut self, offset: isize) -> Option<TokenRef> {
-        if offset == 0 {
-            return None;
-        }
-        if offset < 0 {
-            return offset
-                .checked_neg()
-                .map(isize::cast_unsigned)
-                .and_then(|offset| self.lb_ref(offset));
-        }
-
-        let mut index = self.next_token_on_channel(self.cursor, self.channel);
-        let mut remaining = offset;
-        while remaining > 1 {
-            index = self.next_token_on_channel(index + 1, self.channel);
-            remaining -= 1;
-        }
-        self.sync(index);
-        self.tokens.get(index).map(Rc::clone)
+    pub fn lb(&self, offset: usize) -> Option<TokenView<'_>> {
+        self.lb_id(offset).and_then(|id| self.store.view(id))
     }
 
-    pub fn lb(&self, offset: usize) -> Option<&CommonToken> {
+    fn lb_id(&self, offset: usize) -> Option<TokenId> {
         if offset == 0 || self.cursor == 0 {
             return None;
         }
@@ -119,75 +134,51 @@ where
             index = self.previous_token_on_channel(index, self.channel)?;
             remaining -= 1;
         }
-        self.tokens.get(index).map(Rc::as_ref)
-    }
-
-    fn lb_ref(&self, offset: usize) -> Option<TokenRef> {
-        if offset == 0 || self.cursor == 0 {
-            return None;
-        }
-        let mut index = self.cursor;
-        let mut remaining = offset;
-        while remaining > 0 {
-            index = self.previous_token_on_channel(index, self.channel)?;
-            remaining -= 1;
-        }
-        self.tokens.get(index).map(Rc::clone)
+        self.get_id(index)
     }
 
     pub const fn token_source(&self) -> &S {
         &self.source
     }
 
-    pub fn tokens(&self) -> &[CommonToken] {
-        &self.public_tokens
-    }
-
-    /// Ensures the buffer contains `index`, unless EOF has already been fetched.
-    fn sync(&mut self, index: usize) -> bool {
-        if index < self.tokens.len() {
-            return true;
+    /// Iterates borrowing views of the original buffered token sequence.
+    pub const fn tokens(&self) -> TokenIter<'_> {
+        TokenIter {
+            store: &self.store,
+            next: 0,
+            stop: self.source_token_count,
         }
-        let needed = index + 1 - self.tokens.len();
-        self.fetch(needed) >= needed
     }
 
-    /// Fetches up to `count` more tokens, stopping early at EOF.
-    fn fetch(&mut self, count: usize) -> usize {
-        let mut fetched = 0;
-        while fetched < count && !self.fetched_eof {
-            self.fetch_one();
-            fetched += 1;
-        }
-        fetched
+    pub const fn token_count(&self) -> usize {
+        self.source_token_count
     }
 
-    fn fetch_one(&mut self) {
-        let mut token = self.source.next_token();
-        self.source_errors.extend(self.source.drain_errors());
-        let token_index = isize::try_from(self.tokens.len()).unwrap_or(isize::MAX);
-        token.set_token_index(token_index);
-        self.fetched_eof = token.token_type() == TOKEN_EOF;
-        self.tokens.push(Rc::new(token.clone()));
-        self.public_tokens.push(token);
-        self.next_visible_after.push(UNKNOWN_NEXT_VISIBLE);
+    pub(crate) fn token_view(&self, id: TokenId) -> Option<TokenView<'_>> {
+        self.store.view(id)
+    }
+
+    pub(crate) fn token_store_handle(&self) -> TokenStoreHandle {
+        self.store.clone()
+    }
+
+    pub(crate) fn insert(&self, spec: TokenSpec) -> Result<TokenId, TokenStoreError> {
+        self.store.push(spec)
     }
 
     /// Moves a raw token index to the next token visible on this stream's
     /// channel.
-    fn adjust_seek_index(&mut self, index: usize) -> usize {
+    fn adjust_seek_index(&self, index: usize) -> usize {
         self.next_token_on_channel(index, self.channel)
     }
 
-    /// Finds the next buffered token on `channel`, fetching as needed.
-    fn next_token_on_channel(&mut self, mut index: usize, channel: i32) -> usize {
-        self.sync(index);
-        while let Some(token) = self.tokens.get(index) {
+    /// Finds the next buffered token on `channel`.
+    fn next_token_on_channel(&self, mut index: usize, channel: i32) -> usize {
+        while let Some(token) = self.get(index) {
             if token.token_type() == TOKEN_EOF || token.channel() == channel {
                 return index;
             }
             index += 1;
-            self.sync(index);
         }
         index
     }
@@ -196,7 +187,7 @@ where
     fn previous_token_on_channel(&self, mut index: usize, channel: i32) -> Option<usize> {
         while index > 0 {
             index -= 1;
-            let token = self.tokens.get(index)?;
+            let token = self.get(index)?;
             if token.token_type() == TOKEN_EOF || token.channel() == channel {
                 return Some(index);
             }
@@ -206,16 +197,7 @@ where
 
     /// Finds the previous buffered token visible to this stream before
     /// `index`.
-    ///
-    /// Parser rule intervals and `$text` actions are defined in terms of
-    /// visible tokens, but their rendered source text still includes hidden
-    /// tokens between the visible start and stop. Returning the previous token
-    /// on the stream channel avoids accidentally using trailing hidden
-    /// whitespace as the stop token.
-    pub fn previous_visible_token_index(&mut self, index: usize) -> Option<usize> {
-        if index > 0 {
-            self.sync(index - 1);
-        }
+    pub fn previous_visible_token_index(&self, index: usize) -> Option<usize> {
         self.previous_token_on_channel(index, self.channel)
     }
 }
@@ -245,7 +227,7 @@ where
     }
 
     fn size(&self) -> usize {
-        self.tokens.len()
+        self.source_token_count
     }
 
     fn source_name(&self) -> &str {
@@ -262,19 +244,15 @@ impl<S> CommonTokenStream<S>
 where
     S: TokenSource,
 {
-    pub fn la_token(&mut self, offset: isize) -> i32 {
-        self.lt(offset).map_or(TOKEN_EOF, Token::token_type)
+    pub fn la_token(&self, offset: isize) -> i32 {
+        self.lt(offset)
+            .map_or(TOKEN_EOF, |token| token.token_type())
     }
 
-    /// Returns the token type at a buffered absolute index, fetching from the
-    /// source on demand. Past-EOF reads are reported as `TOKEN_EOF` so the
-    /// caller does not need to special-case the buffer's stop. The cursor is
-    /// not modified, which lets hot speculative loops avoid the seek
-    /// round-trip when they only need lookahead types.
-    pub fn token_type_at_index(&mut self, index: usize) -> i32 {
-        self.sync(index);
-        self.tokens
-            .get(index)
+    /// Returns the token type at a buffered absolute index. Past-EOF reads are
+    /// reported as `TOKEN_EOF`.
+    pub fn token_type_at_index(&self, index: usize) -> i32 {
+        self.get(index)
             .map_or(TOKEN_EOF, |token| token.token_type())
     }
 
@@ -284,11 +262,8 @@ where
     }
 
     /// Returns the next parser-visible token index after consuming the token
-    /// at `index`, skipping hidden-channel tokens. The parser's stream cursor
-    /// is not modified. Used by speculative recognition that simulates token
-    /// consumption thousands of times without committing it.
+    /// at `index`, skipping hidden-channel tokens.
     pub fn next_visible_after(&mut self, index: usize) -> usize {
-        self.sync(index);
         if let Some(cached) = self
             .next_visible_after
             .get(index)
@@ -300,8 +275,7 @@ where
 
         let mut next = index + 1;
         let found = loop {
-            self.sync(next);
-            match self.tokens.get(next) {
+            match self.get(next) {
                 Some(token)
                     if token.token_type() != TOKEN_EOF && token.channel() != self.channel =>
                 {
@@ -317,65 +291,93 @@ where
         found
     }
 
-    pub fn text(&mut self, start: usize, stop: usize) -> String {
-        self.sync(stop);
-        if start > stop || start >= self.tokens.len() {
+    pub fn text(&self, start: usize, stop: usize) -> String {
+        if start > stop || start >= self.source_token_count {
             return String::new();
         }
-        // Java's `BufferedTokenStream.getText(Interval)` stops at the first
-        // EOF token, so an interval whose stop index lands on EOF renders
-        // without a trailing `<EOF>` (diagnostics rely on this).
-        self.tokens[start..=stop.min(self.tokens.len().saturating_sub(1))]
-            .iter()
+        (start..=stop.min(self.source_token_count.saturating_sub(1)))
+            .filter_map(|index| self.get(index))
             .take_while(|token| token.token_type() != TOKEN_EOF)
-            .map(|token| token.text())
-            .collect::<Vec<_>>()
-            .join("")
-    }
-
-    /// Concatenated text of every buffered token except EOF — ANTLR's
-    /// `TokenStream.getText()`, the shape generated test actions read through
-    /// `self.input().text()`.
-    pub fn text_all(&mut self) -> String {
-        self.fill();
-        self.tokens
-            .iter()
-            .filter(|token| token.token_type() != TOKEN_EOF)
-            .map(|token| token.text())
+            .map(|token| token.text().to_owned())
             .collect()
     }
 
-    /// Returns and clears diagnostics emitted by the underlying token source
-    /// while this stream was fetching tokens.
+    /// Concatenated text of every buffered token except EOF.
+    pub fn text_all(&self) -> String {
+        self.tokens()
+            .filter(|token| token.token_type() != TOKEN_EOF)
+            .map(|token| token.text().to_owned())
+            .collect()
+    }
+
+    /// Returns and clears diagnostics emitted by the underlying token source.
     pub fn drain_source_errors(&mut self) -> Vec<TokenSourceError> {
         std::mem::take(&mut self.source_errors)
     }
 
     pub const fn is_filled(&self) -> bool {
-        self.fetched_eof
+        true
     }
 }
+
+#[derive(Debug)]
+pub struct TokenIter<'a> {
+    store: &'a TokenStoreHandle,
+    next: usize,
+    stop: usize,
+}
+
+impl<'a> Iterator for TokenIter<'a> {
+    type Item = TokenView<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.next >= self.stop {
+            return None;
+        }
+        let id = TokenId::try_from(self.next).ok()?;
+        self.next += 1;
+        self.store.view(id)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.stop - self.next;
+        (remaining, Some(remaining))
+    }
+}
+
+impl DoubleEndedIterator for TokenIter<'_> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.next >= self.stop {
+            return None;
+        }
+        self.stop -= 1;
+        let id = TokenId::try_from(self.stop).ok()?;
+        self.store.view(id)
+    }
+}
+
+impl ExactSizeIterator for TokenIter<'_> {}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::token::{CommonToken, HIDDEN_CHANNEL};
+    use crate::token::HIDDEN_CHANNEL;
+    use std::collections::VecDeque;
 
     #[derive(Debug)]
     struct VecTokenSource {
-        tokens: Vec<CommonToken>,
+        tokens: VecDeque<TokenSpec>,
         index: usize,
     }
 
     impl TokenSource for VecTokenSource {
-        fn next_token(&mut self) -> CommonToken {
-            let token = self
+        fn next_token(&mut self, sink: &mut TokenSink<'_>) -> Result<TokenId, TokenStoreError> {
+            let spec = self
                 .tokens
-                .get(self.index)
-                .cloned()
-                .unwrap_or_else(|| CommonToken::eof("vec", self.index, 1, self.index));
+                .pop_front()
+                .unwrap_or_else(|| TokenSpec::eof(self.index, self.index, 1, self.index));
             self.index += 1;
-            token
+            sink.push(spec)
         }
 
         fn line(&self) -> usize {
@@ -391,20 +393,21 @@ mod tests {
         }
     }
 
+    fn source(tokens: Vec<TokenSpec>) -> VecTokenSource {
+        VecTokenSource {
+            tokens: tokens.into(),
+            index: 0,
+        }
+    }
+
     #[test]
     fn stream_skips_hidden_channel_for_lookahead() {
-        let source = VecTokenSource {
-            tokens: vec![
-                CommonToken::new(1).with_text("a"),
-                CommonToken::new(2)
-                    .with_text(" ")
-                    .with_channel(HIDDEN_CHANNEL),
-                CommonToken::new(3).with_text("b"),
-                CommonToken::eof("vec", 3, 1, 3),
-            ],
-            index: 0,
-        };
-        let mut stream = CommonTokenStream::new(source);
+        let mut stream = CommonTokenStream::new(source(vec![
+            TokenSpec::explicit(1, "a"),
+            TokenSpec::explicit(2, " ").with_channel(HIDDEN_CHANNEL),
+            TokenSpec::explicit(3, "b"),
+            TokenSpec::eof(3, 3, 1, 3),
+        ]));
         assert_eq!(stream.la_token(1), 1);
         stream.consume();
         assert_eq!(stream.la_token(1), 3);
@@ -418,62 +421,28 @@ mod tests {
     }
 
     #[test]
-    fn lookahead_skips_hidden_token_at_initial_cursor() {
-        let source = VecTokenSource {
-            tokens: vec![
-                CommonToken::new(2)
-                    .with_text(" ")
-                    .with_channel(HIDDEN_CHANNEL),
-                CommonToken::new(1).with_text("a"),
-                CommonToken::eof("vec", 2, 1, 2),
-            ],
-            index: 0,
-        };
-        let mut stream = CommonTokenStream::new(source);
-
-        assert_eq!(stream.la_token(1), 1);
-        assert_eq!(stream.lt(1).and_then(Token::text), Some("a"));
-        stream.consume();
-        assert_eq!(stream.la_token(1), TOKEN_EOF);
-    }
-
-    #[test]
     fn text_returns_empty_when_start_is_past_buffer() {
-        let source = VecTokenSource {
-            tokens: vec![
-                CommonToken::new(1).with_text("a"),
-                CommonToken::eof("vec", 1, 1, 1),
-            ],
-            index: 0,
-        };
-        let mut stream = CommonTokenStream::new(source);
-
+        let stream = CommonTokenStream::new(source(vec![
+            TokenSpec::explicit(1, "a"),
+            TokenSpec::eof(1, 1, 1, 1),
+        ]));
         assert_eq!(stream.text(10, 12), "");
     }
 
     #[test]
-    fn tokens_returns_public_slice() {
-        let source = VecTokenSource {
-            tokens: vec![
-                CommonToken::new(1).with_text("a"),
-                CommonToken::new(2).with_text("b"),
-                CommonToken::eof("vec", 2, 1, 2),
-            ],
-            index: 0,
-        };
-        let mut stream = CommonTokenStream::new(source);
-        stream.fill();
-
-        fn token_count(tokens: &[CommonToken]) -> usize {
-            tokens.len()
-        }
-
-        let tokens = stream.tokens();
-        assert_eq!(token_count(tokens), 3);
-        assert_eq!(tokens[0].token_type(), 1);
-        assert_eq!(tokens.first().map(Token::token_type), Some(1));
+    fn tokens_returns_borrowing_views() {
+        let stream = CommonTokenStream::new(source(vec![
+            TokenSpec::explicit(1, "a"),
+            TokenSpec::explicit(2, "b"),
+            TokenSpec::eof(2, 2, 1, 2),
+        ]));
+        assert_eq!(stream.tokens().len(), 3);
         assert_eq!(
-            tokens.iter().next_back().map(Token::token_type),
+            stream.tokens().next().map(|token| token.token_type()),
+            Some(1)
+        );
+        assert_eq!(
+            stream.tokens().next_back().map(|token| token.token_type()),
             Some(TOKEN_EOF)
         );
     }

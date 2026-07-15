@@ -4,7 +4,7 @@ use std::any::Any;
 use std::fmt;
 use std::rc::Rc;
 
-use crate::token::{CommonToken, Token, TokenRef};
+use crate::token::{Token, TokenId, TokenStoreHandle, TokenView};
 use std::collections::BTreeMap;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -83,7 +83,7 @@ impl ParseTree {
     }
 
     /// Finds the stop token for the first rule node with `rule_index`.
-    pub fn first_rule_stop(&self, rule_index: usize) -> Option<&CommonToken> {
+    pub fn first_rule_stop(&self, rule_index: usize) -> Option<TokenView<'_>> {
         let Self::Rule(rule) = self else {
             return None;
         };
@@ -124,7 +124,7 @@ impl ParseTree {
     }
 
     /// Finds the first recovery error token in a depth-first walk.
-    pub fn first_error_token(&self) -> Option<&CommonToken> {
+    pub fn first_error_token(&self) -> Option<TokenView<'_>> {
         match self {
             Self::Rule(rule) => rule
                 .context()
@@ -241,8 +241,9 @@ pub struct ParserRuleContext {
     rule_index: usize,
     invoking_state: isize,
     alt_number: usize,
-    start: Option<TokenRef>,
-    stop: Option<TokenRef>,
+    token_store: Option<TokenStoreHandle>,
+    start: Option<TokenId>,
+    stop: Option<TokenId>,
     int_returns: Option<Box<IntReturns>>,
     children: Vec<ParseTree>,
     /// Whether any child has been offered to this context, independent of whether
@@ -304,6 +305,7 @@ impl ParserRuleContext {
             rule_index,
             invoking_state,
             alt_number: 0,
+            token_store: None,
             start: None,
             stop: None,
             int_returns: None,
@@ -323,6 +325,7 @@ impl ParserRuleContext {
             rule_index,
             invoking_state,
             alt_number: 0,
+            token_store: None,
             start: None,
             stop: None,
             int_returns: None,
@@ -349,32 +352,35 @@ impl ParserRuleContext {
         self.alt_number = alt_number;
     }
 
-    pub fn start(&self) -> Option<&CommonToken> {
-        self.start.as_deref()
+    pub fn start(&self) -> Option<TokenView<'_>> {
+        self.start
+            .and_then(|id| self.token_store.as_ref()?.view(id))
     }
 
-    pub(crate) fn start_ref(&self) -> Option<TokenRef> {
-        self.start.as_ref().map(Rc::clone)
+    pub(crate) const fn start_id(&self) -> Option<TokenId> {
+        self.start
     }
 
-    pub fn stop(&self) -> Option<&CommonToken> {
-        self.stop.as_deref()
+    pub fn stop(&self) -> Option<TokenView<'_>> {
+        self.stop.and_then(|id| self.token_store.as_ref()?.view(id))
     }
 
-    pub fn set_start(&mut self, token: CommonToken) {
-        self.start = Some(Rc::new(token));
-    }
-
-    pub(crate) fn set_start_ref(&mut self, token: TokenRef) {
+    pub(crate) fn set_start_id(&mut self, token: TokenId, store: TokenStoreHandle) {
+        self.token_store = Some(store);
         self.start = Some(token);
     }
 
-    pub fn set_stop(&mut self, token: CommonToken) {
-        self.stop = Some(Rc::new(token));
+    pub(crate) fn set_stop_id(&mut self, token: TokenId, store: TokenStoreHandle) {
+        self.token_store = Some(store);
+        self.stop = Some(token);
     }
 
-    pub(crate) fn set_stop_ref(&mut self, token: TokenRef) {
-        self.stop = Some(token);
+    pub(crate) const fn set_start_from_context(&mut self, other: &Self) {
+        self.start = other.start;
+    }
+
+    pub(crate) fn set_store_from_context(&mut self, other: &Self) {
+        self.token_store.clone_from(&other.token_store);
     }
 
     /// Stores a generated integer return value on this rule context.
@@ -545,26 +551,23 @@ impl ParserRuleContext {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TerminalNode {
-    token: TokenRef,
+    token: TokenId,
+    store: TokenStoreHandle,
 }
 
 impl TerminalNode {
-    pub fn new(token: CommonToken) -> Self {
-        Self {
-            token: Rc::new(token),
-        }
+    pub(crate) const fn from_id(token: TokenId, store: TokenStoreHandle) -> Self {
+        Self { token, store }
     }
 
-    pub(crate) const fn from_ref(token: TokenRef) -> Self {
-        Self { token }
-    }
-
-    pub fn symbol(&self) -> &CommonToken {
-        self.token.as_ref()
+    pub fn symbol(&self) -> TokenView<'_> {
+        self.store
+            .view(self.token)
+            .expect("terminal node token ID should remain valid")
     }
 
     pub fn text(&self) -> String {
-        self.token.text().to_owned()
+        self.symbol().text().to_owned()
     }
 }
 
@@ -572,7 +575,7 @@ impl TerminalNode {
 /// test listeners print terminal nodes directly (`java_style_list(&ctx.INT_all())`).
 impl fmt::Display for TerminalNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.token.text())
+        f.write_str(&self.text())
     }
 }
 
@@ -582,15 +585,9 @@ pub struct ErrorNode {
 }
 
 impl ErrorNode {
-    pub fn new(token: CommonToken) -> Self {
+    pub(crate) const fn from_id(token: TokenId, store: TokenStoreHandle) -> Self {
         Self {
-            terminal: TerminalNode::new(token),
-        }
-    }
-
-    pub(crate) const fn from_ref(token: TokenRef) -> Self {
-        Self {
-            terminal: TerminalNode::from_ref(token),
+            terminal: TerminalNode::from_id(token, store),
         }
     }
 
@@ -598,7 +595,7 @@ impl ErrorNode {
         &self.terminal
     }
 
-    pub fn symbol(&self) -> &CommonToken {
+    pub fn symbol(&self) -> TokenView<'_> {
         self.terminal.symbol()
     }
 
@@ -662,13 +659,38 @@ impl ParseTreeWalker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::token::CommonToken;
+    use crate::token::{TokenSpec, TokenStore};
+
+    struct TreeToken(TokenSpec);
+
+    impl TreeToken {
+        fn new(token_type: i32) -> Self {
+            Self(TokenSpec::explicit(token_type, ""))
+        }
+
+        fn with_text(mut self, text: impl Into<String>) -> Self {
+            self.0.text = Some(text.into());
+            self
+        }
+    }
+
+    fn terminal(token: TreeToken) -> TerminalNode {
+        let store = TokenStoreHandle::new(TokenStore::new(None, ""));
+        let id = store.push(token.0).expect("test token should fit");
+        TerminalNode::from_id(id, store)
+    }
+
+    fn error(token: TreeToken) -> ErrorNode {
+        let store = TokenStoreHandle::new(TokenStore::new(None, ""));
+        let id = store.push(token.0).expect("test token should fit");
+        ErrorNode::from_id(id, store)
+    }
 
     #[test]
     fn renders_rule_tree() {
         let mut ctx = ParserRuleContext::new(0, -1);
-        ctx.add_child(ParseTree::Terminal(TerminalNode::new(
-            CommonToken::new(1).with_text("x"),
+        ctx.add_child(ParseTree::Terminal(terminal(
+            TreeToken::new(1).with_text("x"),
         )));
         let tree = ParseTree::Rule(RuleNode::new(ctx));
         assert_eq!(tree.to_string_tree_with_names(&["expr"]), "(expr x)");
@@ -677,8 +699,8 @@ mod tests {
     #[test]
     fn finds_first_rule_depth_first() {
         let mut nested = ParserRuleContext::new(1, -1);
-        nested.add_child(ParseTree::Terminal(TerminalNode::new(
-            CommonToken::new(1).with_text("x"),
+        nested.add_child(ParseTree::Terminal(terminal(
+            TreeToken::new(1).with_text("x"),
         )));
 
         let mut root = ParserRuleContext::new(0, -1);
@@ -696,8 +718,8 @@ mod tests {
     #[test]
     fn reports_rule_invocation_stack_from_leaf_to_root() {
         let mut nested = ParserRuleContext::new(1, -1);
-        nested.add_child(ParseTree::Terminal(TerminalNode::new(
-            CommonToken::new(1).with_text("x"),
+        nested.add_child(ParseTree::Terminal(terminal(
+            TreeToken::new(1).with_text("x"),
         )));
 
         let mut root = ParserRuleContext::new(0, -1);
@@ -712,9 +734,8 @@ mod tests {
 
     #[test]
     fn parse_tree_children_returns_rule_children_and_empty_leaf_slices() {
-        let terminal =
-            ParseTree::Terminal(TerminalNode::new(CommonToken::new(1).with_text("terminal")));
-        let error = ParseTree::Error(ErrorNode::new(CommonToken::new(2).with_text("error")));
+        let terminal = ParseTree::Terminal(terminal(TreeToken::new(1).with_text("terminal")));
+        let error = ParseTree::Error(error(TreeToken::new(2).with_text("error")));
 
         let mut root = ParserRuleContext::new(0, -1);
         root.add_child(terminal);
@@ -734,17 +755,17 @@ mod tests {
     #[test]
     fn iterates_descendants_in_pre_order() {
         let mut nested = ParserRuleContext::new(1, -1);
-        nested.add_child(ParseTree::Terminal(TerminalNode::new(
-            CommonToken::new(10).with_text("child"),
+        nested.add_child(ParseTree::Terminal(terminal(
+            TreeToken::new(10).with_text("child"),
         )));
 
         let mut root = ParserRuleContext::new(0, -1);
-        root.add_child(ParseTree::Terminal(TerminalNode::new(
-            CommonToken::new(11).with_text("prefix"),
+        root.add_child(ParseTree::Terminal(terminal(
+            TreeToken::new(11).with_text("prefix"),
         )));
         root.add_child(ParseTree::Rule(RuleNode::new(nested)));
-        root.add_child(ParseTree::Error(ErrorNode::new(
-            CommonToken::new(12).with_text("error"),
+        root.add_child(ParseTree::Error(error(
+            TreeToken::new(12).with_text("error"),
         )));
         let tree = ParseTree::Rule(RuleNode::new(root));
 
@@ -778,20 +799,20 @@ mod tests {
     #[test]
     fn finds_direct_child_rules_by_index() {
         let mut direct = ParserRuleContext::new(1, -1);
-        direct.add_child(ParseTree::Terminal(TerminalNode::new(
-            CommonToken::new(10).with_text("direct"),
+        direct.add_child(ParseTree::Terminal(terminal(
+            TreeToken::new(10).with_text("direct"),
         )));
 
         let mut nested_match = ParserRuleContext::new(1, -1);
-        nested_match.add_child(ParseTree::Terminal(TerminalNode::new(
-            CommonToken::new(11).with_text("nested"),
+        nested_match.add_child(ParseTree::Terminal(terminal(
+            TreeToken::new(11).with_text("nested"),
         )));
         let mut wrapper = ParserRuleContext::new(2, -1);
         wrapper.add_child(ParseTree::Rule(RuleNode::new(nested_match)));
 
         let mut root = ParserRuleContext::new(0, -1);
-        root.add_child(ParseTree::Terminal(TerminalNode::new(
-            CommonToken::new(12).with_text("prefix"),
+        root.add_child(ParseTree::Terminal(terminal(
+            TreeToken::new(12).with_text("prefix"),
         )));
         root.add_child(ParseTree::Rule(RuleNode::new(direct)));
         root.add_child(ParseTree::Rule(RuleNode::new(wrapper)));
@@ -812,19 +833,19 @@ mod tests {
     #[test]
     fn finds_direct_terminal_children_by_token_type() {
         let mut nested = ParserRuleContext::new(1, -1);
-        nested.add_child(ParseTree::Terminal(TerminalNode::new(
-            CommonToken::new(13).with_text("nested"),
+        nested.add_child(ParseTree::Terminal(terminal(
+            TreeToken::new(13).with_text("nested"),
         )));
 
         let mut root = ParserRuleContext::new(0, -1);
-        root.add_child(ParseTree::Error(ErrorNode::new(
-            CommonToken::new(12).with_text("error"),
+        root.add_child(ParseTree::Error(error(
+            TreeToken::new(12).with_text("error"),
         )));
-        root.add_child(ParseTree::Terminal(TerminalNode::new(
-            CommonToken::new(10).with_text("direct"),
+        root.add_child(ParseTree::Terminal(terminal(
+            TreeToken::new(10).with_text("direct"),
         )));
-        root.add_child(ParseTree::Terminal(TerminalNode::new(
-            CommonToken::new(11).with_text("other"),
+        root.add_child(ParseTree::Terminal(terminal(
+            TreeToken::new(11).with_text("other"),
         )));
         root.add_child(ParseTree::Rule(RuleNode::new(nested)));
 
