@@ -1,9 +1,16 @@
 use crate::int_stream::{EOF, IntStream, UNKNOWN_SOURCE_NAME};
+use std::cell::Cell;
 
 use crate::token::{
     DEFAULT_CHANNEL, TOKEN_EOF, Token, TokenId, TokenSink, TokenSource, TokenSourceError,
     TokenSpec, TokenStore, TokenStoreError, TokenView,
 };
+
+#[derive(Debug)]
+struct BufferedSourceError {
+    token_index: usize,
+    error: TokenSourceError,
+}
 
 #[derive(Debug)]
 pub struct CommonTokenStream<S> {
@@ -13,7 +20,8 @@ pub struct CommonTokenStream<S> {
     next_visible_after: Vec<usize>,
     cursor: usize,
     channel: i32,
-    source_errors: Vec<TokenSourceError>,
+    requested_token_count: Cell<usize>,
+    source_errors: Vec<BufferedSourceError>,
 }
 
 const UNKNOWN_NEXT_VISIBLE: usize = usize::MAX;
@@ -49,7 +57,12 @@ where
         loop {
             let mut sink = TokenSink::new(&mut store);
             let id = source.next_token(&mut sink)?;
-            source_errors.extend(source.drain_errors());
+            source_errors.extend(source.drain_errors().into_iter().map(|error| {
+                BufferedSourceError {
+                    token_index: id.index(),
+                    error,
+                }
+            }));
             let token = sink
                 .view(id)
                 .expect("token source returned an ID it did not emit");
@@ -65,28 +78,29 @@ where
             next_visible_after: vec![UNKNOWN_NEXT_VISIBLE; source_token_count],
             cursor: 0,
             channel,
+            requested_token_count: Cell::new(0),
             source_errors,
         };
         stream.cursor = stream.adjust_seek_index(0);
+        stream.requested_token_count.set(0);
         Ok(stream)
     }
 
     /// Idempotent eager-buffering operation. Construction already buffers
     /// through EOF so the store can be shared with CST nodes.
     pub fn fill(&mut self) {
+        self.note_requested_count(self.source_token_count);
         self.cursor = self.adjust_seek_index(self.cursor);
     }
 
     /// Returns a borrowing view of the token at an absolute buffered index.
     pub fn get(&self, index: usize) -> Option<TokenView<'_>> {
-        (index < self.source_token_count)
-            .then(|| TokenId::try_from(index).ok())
-            .flatten()
-            .and_then(|id| self.store.view(id))
+        self.get_id(index).and_then(|id| self.store.view(id))
     }
 
     /// Returns the compact ID at an absolute buffered index.
     pub fn get_id(&self, index: usize) -> Option<TokenId> {
+        self.note_requested_count(index.saturating_add(1));
         (index < self.source_token_count)
             .then(|| TokenId::try_from(index).ok())
             .flatten()
@@ -141,7 +155,8 @@ where
     }
 
     /// Iterates borrowing views of the original buffered token sequence.
-    pub const fn tokens(&self) -> TokenIter<'_> {
+    pub fn tokens(&self) -> TokenIter<'_> {
+        self.note_requested_count(self.source_token_count);
         TokenIter {
             store: &self.store,
             next: 0,
@@ -171,6 +186,14 @@ where
 
     pub(crate) fn insert(&mut self, spec: TokenSpec) -> Result<TokenId, TokenStoreError> {
         self.store.push(spec)
+    }
+
+    fn note_requested_count(&self, count: usize) {
+        self.requested_token_count.set(
+            self.requested_token_count
+                .get()
+                .max(count.min(self.source_token_count)),
+        );
     }
 
     /// Moves a raw token index to the next token visible on this stream's
@@ -312,7 +335,7 @@ where
         (start..=stop.min(self.source_token_count.saturating_sub(1)))
             .filter_map(|index| self.get(index))
             .take_while(|token| token.token_type() != TOKEN_EOF)
-            .map(|token| token.text().to_owned())
+            .map(|token| token.text())
             .collect()
     }
 
@@ -320,13 +343,20 @@ where
     pub fn text_all(&self) -> String {
         self.tokens()
             .filter(|token| token.token_type() != TOKEN_EOF)
-            .map(|token| token.text().to_owned())
+            .map(|token| token.text())
             .collect()
     }
 
-    /// Returns and clears diagnostics emitted by the underlying token source.
+    /// Returns and clears diagnostics emitted while producing requested tokens.
     pub fn drain_source_errors(&mut self) -> Vec<TokenSourceError> {
-        std::mem::take(&mut self.source_errors)
+        let requested = self.requested_token_count.get();
+        let ready = self
+            .source_errors
+            .partition_point(|buffered| buffered.token_index < requested);
+        self.source_errors
+            .drain(..ready)
+            .map(|buffered| buffered.error)
+            .collect()
     }
 
     pub const fn is_filled(&self) -> bool {
@@ -407,6 +437,43 @@ mod tests {
         }
     }
 
+    #[derive(Debug)]
+    struct ErrorTokenSource {
+        tokens: VecDeque<(TokenSpec, Vec<TokenSourceError>)>,
+        pending_errors: Vec<TokenSourceError>,
+        index: usize,
+    }
+
+    impl TokenSource for ErrorTokenSource {
+        fn next_token(&mut self, sink: &mut TokenSink<'_>) -> Result<TokenId, TokenStoreError> {
+            let (spec, errors) = self.tokens.pop_front().unwrap_or_else(|| {
+                (
+                    TokenSpec::eof(self.index, self.index, 1, self.index),
+                    Vec::new(),
+                )
+            });
+            self.index += 1;
+            self.pending_errors = errors;
+            sink.push(spec)
+        }
+
+        fn line(&self) -> usize {
+            1
+        }
+
+        fn column(&self) -> usize {
+            self.index
+        }
+
+        fn source_name(&self) -> &'static str {
+            "errors"
+        }
+
+        fn drain_errors(&mut self) -> Vec<TokenSourceError> {
+            std::mem::take(&mut self.pending_errors)
+        }
+    }
+
     fn source(tokens: Vec<TokenSpec>) -> VecTokenSource {
         VecTokenSource {
             tokens: tokens.into(),
@@ -441,6 +508,39 @@ mod tests {
             TokenSpec::eof(1, 1, 1, 1),
         ]));
         assert_eq!(stream.text(10, 12), "");
+    }
+
+    #[test]
+    fn text_concatenates_borrowed_token_text() {
+        let stream = CommonTokenStream::new(source(vec![
+            TokenSpec::explicit(1, "a"),
+            TokenSpec::explicit(2, "b"),
+            TokenSpec::eof(2, 2, 1, 2),
+        ]));
+        assert_eq!(stream.text(0, 1), "ab");
+        assert_eq!(stream.text_all(), "ab");
+    }
+
+    #[test]
+    fn source_errors_remain_hidden_until_their_token_is_requested() {
+        let suffix_error = TokenSourceError::new(1, 4, "token recognition error at: '@'");
+        let mut stream = CommonTokenStream::new(ErrorTokenSource {
+            tokens: [
+                (TokenSpec::explicit(1, "x"), Vec::new()),
+                (TokenSpec::explicit(2, "y"), Vec::new()),
+                (TokenSpec::eof(3, 3, 1, 3), vec![suffix_error.clone()]),
+            ]
+            .into(),
+            pending_errors: Vec::new(),
+            index: 0,
+        });
+
+        assert!(stream.drain_source_errors().is_empty());
+        assert_eq!(stream.token_type_at_index(1), 2);
+        assert!(stream.drain_source_errors().is_empty());
+
+        assert_eq!(stream.token_type_at_index(2), TOKEN_EOF);
+        assert_eq!(stream.drain_source_errors(), vec![suffix_error]);
     }
 
     #[test]

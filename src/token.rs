@@ -455,10 +455,11 @@ pub struct TokenView<'a> {
     id: TokenId,
 }
 
-impl TokenView<'_> {
+impl<'a> TokenView<'a> {
     /// The token's text, empty when no explicit or source-backed text exists.
     #[must_use]
-    pub fn text(&self) -> &str {
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn text(&self) -> &'a str {
         self.store.text(self.id).unwrap_or("")
     }
 }
