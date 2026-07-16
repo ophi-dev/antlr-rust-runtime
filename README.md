@@ -431,10 +431,10 @@ group (**> 1.0** means Rust is faster than Go; **< 1.0** means slower):
 
 | Language | Fixtures | Rust vs Go (parse time) |
 |----------|---------:|-------------------------|
-| Kotlin   | 4        | 24.959x                 |
-| Java     | 4        | 3.024x                  |
-| C#       | 4        | 2.205x                  |
-| Trino SQL | 5       | 3.413x                  |
+| Kotlin   | 4        | 24.968x                 |
+| Java     | 4        | 3.055x                  |
+| C#       | 4        | 2.206x                  |
+| Trino SQL | 5       | 3.412x                  |
 
 ## Useful Information
 
