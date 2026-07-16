@@ -4311,11 +4311,19 @@ where
     }
 
     fn terminal_tree(&mut self, id: TokenId) -> ParseTree {
-        self.tree.terminal(id)
+        if self.build_parse_trees {
+            self.tree.terminal(id)
+        } else {
+            NodeId::placeholder()
+        }
     }
 
     fn error_tree(&mut self, id: TokenId) -> ParseTree {
-        self.tree.error(id)
+        if self.build_parse_trees {
+            self.tree.error(id)
+        } else {
+            NodeId::placeholder()
+        }
     }
 
     const fn set_context_start(&self, context: &mut ParserRuleContext, id: TokenId) {
@@ -4649,7 +4657,11 @@ where
     }
 
     pub fn rule_node(&mut self, context: ParserRuleContext) -> ParseTree {
-        self.tree.finish_rule(context)
+        if self.build_parse_trees {
+            self.tree.finish_rule(context)
+        } else {
+            NodeId::placeholder()
+        }
     }
 
     /// Enters a generated parser rule and returns the context object the
@@ -10588,7 +10600,7 @@ mod tests {
     use crate::atn::serialized::{AtnDeserializer, SerializedAtn};
     use crate::token::{HIDDEN_CHANNEL, Token, TokenId, TokenSink, TokenSpec, TokenStoreError};
     use crate::token_stream::CommonTokenStream;
-    use crate::tree::NodeKind;
+    use crate::tree::{NodeKind, ParseTreeStats};
     use crate::vocabulary::Vocabulary;
     use std::mem::size_of;
 
@@ -12617,6 +12629,7 @@ mod tests {
         parser.add_parse_child(&mut ctx, child);
         // Tree building is off, so no child is stored...
         assert_eq!(ctx.child_count(), 0);
+        assert_eq!(parser.parse_tree_storage().node_count(), 0);
         // ...but the match is recorded, so the context is no longer "empty".
         assert!(ctx.has_matched_child());
 
@@ -12627,6 +12640,38 @@ mod tests {
         parser.add_parse_child(&mut ctx, child);
         assert_eq!(ctx.child_count(), 1);
         assert!(ctx.has_matched_child());
+    }
+
+    #[test]
+    fn disabled_tree_building_does_not_grow_flat_storage() {
+        let mut parser = mini_parser(vec![
+            TestToken::new(1).with_text("x"),
+            TestToken::new(1).with_text("y"),
+            TestToken::eof("parser-test", 2, 1, 2),
+        ]);
+        parser.set_build_parse_trees(false);
+        let mut context = ParserRuleContext::new(0, -1);
+
+        for _ in 0..2 {
+            let child = parser.match_token(1).expect("token should match");
+            parser.add_parse_child(&mut context, child);
+        }
+        let current = parser.input.lt_id(1).expect("EOF token");
+        let error = parser.error_tree(current);
+        parser.add_parse_child(&mut context, error);
+        let root = parser.rule_node(context);
+
+        assert_eq!(
+            parser.parse_tree_storage().stats(),
+            ParseTreeStats::default()
+        );
+        assert!(
+            parser
+                .parse_tree_storage()
+                .node(parser.token_store(), root)
+                .is_none(),
+            "the no-tree sentinel must not resolve to stored data"
+        );
     }
 
     #[test]

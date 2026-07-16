@@ -16,6 +16,10 @@ const FLAG_STOP_PRESENT: u8 = 1 << 2;
 pub struct NodeId(u32);
 
 impl NodeId {
+    pub(crate) const fn placeholder() -> Self {
+        Self(NONE)
+    }
+
     #[must_use]
     pub const fn index(self) -> usize {
         self.0 as usize

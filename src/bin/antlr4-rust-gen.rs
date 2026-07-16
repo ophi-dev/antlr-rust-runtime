@@ -6542,7 +6542,7 @@ fn embedded_rule_call_args(
 ///   `start()`, public attribute fields, and a `FromRuleNode` impl backing
 ///   `ctx.downcast_ref::<XContext>()`;
 /// * the `<Grammar>Listener` trait with defaulted `enter_/exit_<rule>` (and
-///   per-labeled-alternative) callbacks plus `visit_terminal`;
+///   per-labeled-alternative) callbacks plus terminal/error-node visitors;
 /// * a module-local `ParseTreeWalker` whose bridge dispatches the runtime
 ///   walker onto the typed listener callbacks, threading the invoking-state
 ///   chain Java's `RuleContext.toString` renders (`[13 6]`).
@@ -6585,6 +6585,29 @@ impl<'a> TerminalNode<'a> {
 }
 
 impl std::fmt::Display for TerminalNode<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.__node.text())
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Clone)]
+pub struct ErrorNode<'a> {
+    __node: RuntimeErrorNode<'a>,
+}
+
+#[allow(dead_code)]
+impl<'a> ErrorNode<'a> {
+    fn new(node: RuntimeErrorNode<'a>) -> Self {
+        Self { __node: node }
+    }
+
+    pub fn symbol(&self) -> antlr4_runtime::TokenView<'a> {
+        self.__node.symbol()
+    }
+}
+
+impl std::fmt::Display for ErrorNode<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.__node.text())
     }
@@ -6805,7 +6828,7 @@ fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
     }
     let _ = writeln!(
         out,
-        "#[allow(dead_code, unused_variables)]\npub trait {listener_trait} {{\n{trait_methods}    fn visit_terminal(&mut self, _node: &TerminalNode) {{}}\n    fn output(&mut self) -> std::io::Stdout {{ std::io::stdout() }}\n}}\n"
+        "#[allow(dead_code, unused_variables)]\npub trait {listener_trait} {{\n{trait_methods}    fn visit_terminal(&mut self, _node: &TerminalNode) {{}}\n    fn visit_error_node(&mut self, _node: &ErrorNode) {{}}\n    fn output(&mut self) -> std::io::Stdout {{ std::io::stdout() }}\n}}\n"
     );
 
     // Bridge + module-local walker (shadows the runtime walker so rendered
@@ -6833,6 +6856,11 @@ impl<T: {listener_trait}> antlr4_runtime::ParseTreeListener for __ListenerBridge
 
     fn visit_terminal(&mut self, node: RuntimeTerminalNode<'_>) -> Result<(), antlr4_runtime::AntlrError> {{
         self.0.visit_terminal(&TerminalNode::new(node));
+        Ok(())
+    }}
+
+    fn visit_error_node(&mut self, node: RuntimeErrorNode<'_>) -> Result<(), antlr4_runtime::AntlrError> {{
+        self.0.visit_error_node(&ErrorNode::new(node));
         Ok(())
     }}
 }}
@@ -7276,7 +7304,7 @@ fn render_parser_with_options(
     let generated_footer = GENERATED_MODULE_FOOTER;
 
     let embedded_imports = if options.embedded {
-        "#[allow(unused_imports)]\nuse std::io::Write as _;\n#[allow(unused_imports)]\nuse antlr4_runtime::{{java_style_list, PredictionMode, BailErrorStrategy, TerminalNodeView as RuntimeTerminalNode, RuleNodeView, FromRuleNode, Token as _}};\n"
+        "#[allow(unused_imports)]\nuse std::io::Write as _;\n#[allow(unused_imports)]\nuse antlr4_runtime::{{java_style_list, PredictionMode, BailErrorStrategy, TerminalNodeView as RuntimeTerminalNode, ErrorNodeView as RuntimeErrorNode, RuleNodeView, FromRuleNode, Token as _}};\n"
     } else {
         ""
     };
@@ -9408,9 +9436,9 @@ fn render_parser_action_method(has_action_states: bool, noop_states: &BTreeSet<u
     for state in noop_states {
         writeln!(arms, "            {state} => {{}}").expect("writing to a string cannot fail");
     }
-    arms.push_str("            _ => { let _ = self.base.parser_action_hook(action, _tree); }\n");
+    arms.push_str("            _ => { let _ = self.base.parser_action_hook(action, tree); }\n");
     format!(
-        "    fn run_action(&mut self, action: antlr4_runtime::ParserAction, _tree: antlr4_runtime::ParseTree) {{\n        match action.source_state() {{\n{arms}        }}\n    }}\n"
+        "    fn run_action(&mut self, action: antlr4_runtime::ParserAction, tree: antlr4_runtime::ParseTree) {{\n        match action.source_state() {{\n{arms}        }}\n    }}\n"
     )
 }
 
@@ -11677,7 +11705,7 @@ atn:
         let method = render_parser_action_method(true, &BTreeSet::new());
 
         assert!(method.contains("fn run_action"));
-        assert!(method.contains("self.base.parser_action_hook(action, _tree)"));
+        assert!(method.contains("self.base.parser_action_hook(action, tree)"));
     }
 
     #[test]
@@ -11697,7 +11725,7 @@ atn:
             .find("7 => {}")
             .expect("assume-* action state gets an explicit no-op arm");
         let hook_at = method
-            .find("self.base.parser_action_hook(action, _tree)")
+            .find("self.base.parser_action_hook(action, tree)")
             .expect("the hook catch-all is still emitted for hook/unknown states");
         assert!(
             noop_at < hook_at,
@@ -11760,6 +11788,29 @@ atn:
     }
 
     #[test]
+    fn embedded_listener_forwards_error_nodes() {
+        let rendered = render_parser_with_options(
+            "TParser",
+            &minimal_parser_data(),
+            Some("parser grammar T; s : ;"),
+            ParserRenderOptions {
+                embedded: true,
+                ..ParserRenderOptions::default()
+            },
+        )
+        .expect("embedded parser should render");
+
+        assert!(rendered.contains("ErrorNodeView as RuntimeErrorNode"));
+        assert!(rendered.contains("pub struct ErrorNode<'a>"));
+        assert!(rendered.contains("fn visit_error_node(&mut self, _node: &ErrorNode)"));
+        assert!(
+            rendered
+                .contains("fn visit_error_node(&mut self, node: RuntimeErrorNode<'_>) -> Result<")
+        );
+        assert!(rendered.contains("self.0.visit_error_node(&ErrorNode::new(node));"));
+    }
+
+    #[test]
     fn non_embedded_parser_action_disables_generated_rule() {
         let rendered = render_parser(
             "TParser",
@@ -11772,7 +11823,7 @@ atn:
             !rendered.contains("parse_generated_rule_0_dispatch"),
             "non-embedded parser action rules must stay on the interpreted path"
         );
-        assert!(rendered.contains("self.base.parser_action_hook(action, _tree)"));
+        assert!(rendered.contains("self.base.parser_action_hook(action, tree)"));
         assert!(!rendered.contains(&format!("{}{}", "Generated", "Action")));
         assert!(!rendered.contains(&format!("{}{}", "generated", "_actions")));
     }

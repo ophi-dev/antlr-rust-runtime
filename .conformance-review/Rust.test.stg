@@ -31,8 +31,8 @@
  *   - Parser "members" are injected as an `impl` block on the generated parser
  *     via `@parser::members`; helpers are called `self.foo()` / `self.pred(v)`.
  *   - The generated listener trait is `TListener` with snake_case
- *     `enter_x`/`exit_x` and a defaulted `visit_terminal`; a test listener is a
- *     unit struct implementing it, walked by `ParseTreeWalker::walk`.
+ *     `enter_x`/`exit_x` and defaulted terminal/error-node visitors; a test
+ *     listener is a unit struct implementing it, walked by `ParseTreeWalker::walk`.
  *   - Casts from an active `ParserRuleContext` to a labeled-alt / concrete
  *     borrowing view use the generated `__active_context_view` adapter.
  */
