@@ -1101,7 +1101,8 @@ pub struct BaseParser<S, H = NoSemanticHooks> {
     /// Each public interpreted-rule entry clears lengths while retaining
     /// bounded backing capacities for parser reuse.
     recognition_arena: RecognitionArena,
-    last_recognition_arena_stats: RecognitionArenaStats,
+    last_recognition_arena_root: NodeSeqId,
+    last_recognition_arena_diagnostics: DiagnosticSeqId,
 }
 
 /// Rollback marker for speculative generated parser paths.
@@ -3953,7 +3954,8 @@ where
             fast_recovery_enabled: true,
             fast_token_nodes_enabled: true,
             recognition_arena: RecognitionArena::default(),
-            last_recognition_arena_stats: RecognitionArenaStats::default(),
+            last_recognition_arena_root: NodeSeqId::EMPTY,
+            last_recognition_arena_diagnostics: DiagnosticSeqId::EMPTY,
         }
     }
 
@@ -4029,11 +4031,17 @@ where
         self.syntax_errors
     }
 
-    /// Returns reachability and retained-capacity counters for the most recent
+    /// Computes reachability and retained-capacity counters for the most recent
     /// interpreted-rule recognition arena.
+    ///
+    /// The reachability scan is linear in the arena size and is deferred until
+    /// this instrumentation method is called.
     #[must_use]
-    pub const fn recognition_arena_stats(&self) -> RecognitionArenaStats {
-        self.last_recognition_arena_stats
+    pub fn recognition_arena_stats(&self) -> RecognitionArenaStats {
+        self.recognition_arena.stats(
+            self.last_recognition_arena_root,
+            self.last_recognition_arena_diagnostics,
+        )
     }
 
     /// Records a syntax error that generated parser code returns as fatal before
@@ -5664,7 +5672,7 @@ where
                 )?;
             }
         }
-        self.record_recognition_arena_stats(live_root, outcome.diagnostics);
+        self.finish_recognition_arena(live_root, outcome.diagnostics);
         self.input.seek(outcome.index);
 
         Ok(self.rule_node(context))
@@ -6178,7 +6186,7 @@ where
                 nodes = link.tail;
             }
         }
-        self.record_recognition_arena_stats(live_root, outcome.diagnostics);
+        self.finish_recognition_arena(live_root, outcome.diagnostics);
         self.input.seek(outcome.index);
 
         Ok((self.rule_node(context), actions))
@@ -8784,11 +8792,12 @@ where
         *sequence = self.recognition_arena.prepend(*sequence, node);
     }
 
-    fn record_recognition_arena_stats(&mut self, root: NodeSeqId, diagnostics: DiagnosticSeqId) {
-        self.last_recognition_arena_stats = self.recognition_arena.stats(root, diagnostics);
+    fn finish_recognition_arena(&mut self, root: NodeSeqId, diagnostics: DiagnosticSeqId) {
+        self.last_recognition_arena_root = root;
+        self.last_recognition_arena_diagnostics = diagnostics;
         #[cfg(feature = "perf-counters")]
         if std::env::var("ANTLR_PERF_DUMP").is_ok() {
-            let stats = self.last_recognition_arena_stats;
+            let stats = self.recognition_arena_stats();
             #[allow(clippy::print_stderr)]
             {
                 eprintln!("perf recognition_nodes_total={}", stats.total_nodes);
@@ -8809,7 +8818,8 @@ where
 
     fn reset_recognition_arena(&mut self) {
         self.recognition_arena.reset();
-        self.last_recognition_arena_stats = RecognitionArenaStats::default();
+        self.last_recognition_arena_root = NodeSeqId::EMPTY;
+        self.last_recognition_arena_diagnostics = DiagnosticSeqId::EMPTY;
     }
 
     /// Normalizes the current token-stream cursor to the next parser-visible
@@ -13772,6 +13782,37 @@ mod tests {
                 reset.extra_capacity,
             ),
             capacities
+        );
+    }
+
+    #[test]
+    fn parser_computes_recognition_arena_stats_on_demand() {
+        let mut parser = mini_parser(Vec::new());
+        let live = parser
+            .recognition_arena
+            .push_node(ArenaRecognizedNode::Token {
+                token: TokenId::try_from(0).expect("test token ID"),
+            });
+        let discarded = parser
+            .recognition_arena
+            .push_node(ArenaRecognizedNode::ErrorToken {
+                token: TokenId::try_from(1).expect("test token ID"),
+            });
+        let live_root = parser.recognition_arena.prepend(NodeSeqId::EMPTY, live);
+        let _discarded_root = parser
+            .recognition_arena
+            .prepend(NodeSeqId::EMPTY, discarded);
+        parser.finish_recognition_arena(live_root, DiagnosticSeqId::EMPTY);
+
+        let stats = parser.recognition_arena_stats();
+
+        assert_eq!(
+            (stats.total_nodes, stats.live_nodes, stats.dead_nodes),
+            (2, 1, 1)
+        );
+        assert_eq!(
+            (stats.total_links, stats.live_links, stats.dead_links),
+            (2, 1, 1)
         );
     }
 
