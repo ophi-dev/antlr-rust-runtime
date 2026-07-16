@@ -12,5 +12,9 @@
   ownership of their canonical token store.
 - `CommonToken`, `TokenRef`, and token factories are removed. `TokenSource`
   implementations write directly to `TokenSink`.
+- Speculative parser nodes, child sequences, recovery diagnostics, and uncommon
+  payloads now live in one parser-owned, index-addressed recognition arena.
+  `RecognitionArenaStats` reports total/live/dead records and retained
+  capacities for the latest interpreted rule parse.
 - Generated lexers and parsers must be regenerated with the matching
   `antlr4-rust-gen` release.

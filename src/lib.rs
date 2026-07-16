@@ -29,7 +29,7 @@ pub use parser::{
     BailErrorStrategy, BaseParser, ExpectedTokenSet, NoSemanticHooks, Parser, ParserAction,
     ParserMemberAction, ParserPredicate, ParserReturnAction, ParserRuleArg, ParserRuntimeOptions,
     ParserSemCtx, ParserSemanticAction, ParserSemanticPredicate, ParserSemantics, PredictionMode,
-    SemanticHooks, UnknownSemanticPolicy,
+    RecognitionArenaStats, SemanticHooks, UnknownSemanticPolicy,
 };
 #[cfg(feature = "perf-counters")]
 pub use perf::{dump as dump_prediction_perf_counters, reset as reset_prediction_perf_counters};
