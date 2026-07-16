@@ -5639,11 +5639,13 @@ where
         if let Some(token) = stop_index.and_then(|token_index| self.token_id_at(token_index)) {
             self.set_context_stop(&mut context, token);
         }
-        self.record_recognition_arena_stats(outcome.nodes, outcome.diagnostics);
+        let live_root = if self.build_parse_trees {
+            self.recognition_arena
+                .fold_left_recursive_boundaries(outcome.nodes)
+        } else {
+            outcome.nodes
+        };
         if self.build_parse_trees {
-            let live_root = self
-                .recognition_arena
-                .fold_left_recursive_boundaries(outcome.nodes);
             if self
                 .recognition_arena
                 .sequence_has_explicit_token(live_root)
@@ -5662,6 +5664,7 @@ where
                 )?;
             }
         }
+        self.record_recognition_arena_stats(live_root, outcome.diagnostics);
         self.input.seek(outcome.index);
 
         Ok(self.rule_node(context))
@@ -6162,17 +6165,20 @@ where
         if let Some(token) = self.rule_stop_token_id(outcome.index, outcome.consumed_eof) {
             self.set_context_stop(&mut context, token);
         }
-        self.record_recognition_arena_stats(outcome.nodes, outcome.diagnostics);
+        let live_root = if self.build_parse_trees {
+            self.recognition_arena
+                .fold_left_recursive_boundaries(outcome.nodes)
+        } else {
+            outcome.nodes
+        };
         if self.build_parse_trees {
-            let live_root = self
-                .recognition_arena
-                .fold_left_recursive_boundaries(outcome.nodes);
             let mut nodes = live_root;
             while let Some(link) = self.recognition_arena.link(nodes) {
                 context.add_child(self.arena_recognized_node_tree(link.head, track_alt_numbers)?);
                 nodes = link.tail;
             }
         }
+        self.record_recognition_arena_stats(live_root, outcome.diagnostics);
         self.input.seek(outcome.index);
 
         Ok((self.rule_node(context), actions))
@@ -13688,6 +13694,16 @@ mod tests {
         assert_eq!(stop_index, Some(0));
         assert_eq!(arena.iter(children).collect::<Vec<_>>(), [first]);
         assert_eq!(arena.node(folded_nodes[1]), arena.node(second));
+
+        let stats = arena.stats(folded, DiagnosticSeqId::EMPTY);
+        assert_eq!(
+            (stats.total_nodes, stats.live_nodes, stats.dead_nodes),
+            (4, 3, 1)
+        );
+        assert_eq!(
+            (stats.total_links, stats.live_links, stats.dead_links),
+            (9, 3, 6)
+        );
     }
 
     #[test]
