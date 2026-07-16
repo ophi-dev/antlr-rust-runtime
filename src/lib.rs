@@ -20,7 +20,7 @@ pub mod vocabulary;
 
 pub use atn::parser::{ParserAtnPrediction, ParserAtnSimulator, ParserAtnSimulatorError};
 pub use char_stream::{CharStream, InputStream, TextInterval};
-pub use dfa::{Dfa, DfaState};
+pub use dfa::{DfaStateId, DfaTransition, ParserDfa, ParserDfaStateView, ParserDfaStats};
 pub use errors::{AntlrError, ConsoleErrorListener, ErrorListener};
 pub use generated::{GeneratedLexer, GeneratedParser, GrammarMetadata};
 pub use int_stream::{EOF, IntStream, UNKNOWN_SOURCE_NAME};

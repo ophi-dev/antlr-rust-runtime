@@ -1,5 +1,7 @@
 use crate::atn::{Atn, AtnState, AtnStateKind, Transition};
-use crate::dfa::{Dfa, DfaState};
+use crate::dfa::{
+    DfaStateBuilder, DfaStateId, NO_DFA_STATE, ParserDfa, ParserDfaStateView, ParserDfaStats,
+};
 use crate::int_stream::IntStream;
 use crate::prediction::{
     AtnConfig, AtnConfigSet, ContextArena, ContextId, EMPTY_CONTEXT, EMPTY_RETURN_STATE,
@@ -38,7 +40,7 @@ struct CachedOuterContext {
 #[derive(Debug, Default)]
 struct PredictionStore {
     contexts: ContextArena,
-    decision_to_dfa: Vec<Dfa>,
+    decision_to_dfa: Vec<ParserDfa>,
 }
 
 impl PredictionStore {
@@ -86,7 +88,7 @@ pub enum ParserAtnPredictionDiagnosticKind {
 struct PredictionCheck {
     decision: usize,
     decision_state: usize,
-    state_number: usize,
+    state_number: DfaStateId,
     start_index: usize,
     precedence: i32,
     outer_context: ContextId,
@@ -113,7 +115,7 @@ struct AdaptivePredictRequest {
 #[derive(Clone, Copy)]
 struct DfaEdge {
     decision: usize,
-    source_state: usize,
+    source_state: DfaStateId,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -248,13 +250,13 @@ impl IntStream for LookaheadIntStream {
     }
 }
 
-fn initial_decision_dfas(atn: &Atn) -> Vec<Dfa> {
+fn initial_decision_dfas(atn: &Atn) -> Vec<ParserDfa> {
     atn.decision_to_state()
         .iter()
         .copied()
         .enumerate()
         .map(|(decision, state)| {
-            let mut dfa = Dfa::with_max_token_type(state, decision, atn.max_token_type());
+            let mut dfa = ParserDfa::with_max_token_type(state, decision, atn.max_token_type());
             if atn
                 .state(state)
                 .is_some_and(|state| state.precedence_rule_decision)
@@ -270,12 +272,12 @@ fn initial_decision_dfas(atn: &Atn) -> Vec<Dfa> {
 /// checked in first, losslessly. The two evolved independently (the
 /// later-constructed one started cold), so numeric state ids are not
 /// comparable — but DFA states ARE comparable by their ATN config set, the
-/// same identity `Dfa::add_state` dedups on. Re-keying `local`'s states into
+/// same identity `ParserDfa::add_state` dedups on. Re-keying `local`'s states into
 /// `shared`'s numbering and unioning edges/starts means overlapping
 /// simulators never lose learned coverage, however it is distributed.
 /// Walking every state is fine here: this only runs on the rare
 /// overlapping-simulators drop path.
-fn union_decision_dfas(shared: &mut Vec<Dfa>, local: Vec<Dfa>) {
+fn union_decision_dfas(shared: &mut Vec<ParserDfa>, local: Vec<ParserDfa>) {
     if shared.len() != local.len() {
         *shared = local;
         return;
@@ -297,11 +299,11 @@ fn union_prediction_stores(
     union_decision_dfas(&mut shared.decision_to_dfa, local.decision_to_dfa);
 }
 
-fn union_decision_dfa(shared: &mut Dfa, local: Dfa) {
+fn union_decision_dfa(shared: &mut ParserDfa, local: ParserDfa) {
     if shared.is_precedence_dfa() != local.is_precedence_dfa() {
         // A mode flip resets the tables (`set_precedence_dfa`), so the two are
         // not unionable; keep whichever learned more states.
-        if local.states().len() > shared.states().len() {
+        if local.state_count() > shared.state_count() {
             *shared = local;
         }
         return;
@@ -310,50 +312,42 @@ fn union_decision_dfa(shared: &mut Dfa, local: Dfa) {
     // config-set identity, inserting the states shared has not learned.
     // Their edges reference local numbering, so they are cleared here and
     // re-added in pass 2 under the shared numbering.
-    let mut renumber = Vec::with_capacity(local.states().len());
+    let mut renumber = Vec::with_capacity(local.state_count());
     for state in local.states() {
-        let number = shared
-            .state_number_for_configs(&state.configs)
-            .unwrap_or_else(|| {
-                let missing = state.clone_without_edges();
-                shared.insert_state(missing)
-            });
+        let configs = local.configs(state.id());
+        let number = shared.state_id_for_configs(configs).unwrap_or_else(|| {
+            let missing = local.clone_state_without_edges(state.id());
+            shared.insert_state(missing)
+        });
         renumber.push(number);
     }
     // Pass 2: union edges, translating targets into shared numbering. The
     // incumbent's entries win; only gaps are filled. Accept metadata needs no
     // reconciliation: it is a pure function of the config set, and equal
     // config sets produced it through the same accept-time computation.
-    for (state, &mapped) in local.states().iter().zip(&renumber) {
-        for (index, target) in state.edges.iter().enumerate() {
-            let (Some(target), Ok(index)) = (*target, i32::try_from(index)) else {
+    for state in local.states() {
+        let mapped = renumber[state.id().index()];
+        for transition in state.transitions() {
+            let Some(&mapped_target) = renumber.get(transition.target.index()) else {
                 continue;
             };
-            // Inverse of `edge_index`: slot 0 holds EOF (symbol -1).
-            let symbol = index - 1;
-            let Some(&mapped_target) = renumber.get(target) else {
-                continue;
-            };
-            let Some(shared_state) = shared.state_mut(mapped) else {
-                continue;
-            };
-            if shared_state.edge(symbol).is_none() {
-                shared_state.add_edge(symbol, mapped_target);
+            if shared.edge(mapped, transition.symbol).is_none() {
+                shared.add_edge(mapped, transition.symbol, mapped_target);
             }
         }
     }
     if shared.start_state().is_none()
         && let Some(start) = local.start_state()
-        && let Some(&mapped) = renumber.get(start)
+        && let Some(&mapped) = renumber.get(start.index())
     {
         shared.set_start_state(mapped);
     }
-    for (precedence, start) in local.precedence_start_states().iter().enumerate() {
-        let Some(start) = *start else {
+    for (precedence, start) in local.precedence_start_states().iter().copied().enumerate() {
+        if start == NO_DFA_STATE {
             continue;
-        };
+        }
         if shared.precedence_start_state(precedence).is_none()
-            && let Some(&mapped) = renumber.get(start)
+            && let Some(&mapped) = renumber.get(start.index())
         {
             shared.set_precedence_start_state(precedence, mapped);
         }
@@ -365,6 +359,15 @@ impl Drop for ParserAtnSimulator<'_> {
         let Some(key) = self.shared_cache_key else {
             return;
         };
+        #[cfg(feature = "perf-counters")]
+        let publication_started = std::time::Instant::now();
+        #[cfg(feature = "perf-counters")]
+        let published_states = self
+            .store
+            .decision_to_dfa
+            .iter()
+            .map(ParserDfa::state_count)
+            .sum();
         // Check the DFAs back IN by move. The slot is normally vacant because
         // `new_shared` checked them out; it is occupied only when another
         // simulator for the same ATN was created while this one was alive
@@ -379,6 +382,11 @@ impl Drop for ParserAtnSimulator<'_> {
                 cache.insert(key, store);
             }
         });
+        #[cfg(feature = "perf-counters")]
+        crate::perf::record_dfa_cache_publication(
+            publication_started.elapsed().as_nanos(),
+            published_states,
+        );
     }
 }
 
@@ -424,7 +432,7 @@ impl<'a> ParserAtnSimulator<'a> {
         let mut out = String::new();
         let mut seen_one = false;
         for dfa in &self.store.decision_to_dfa {
-            if dfa.states().is_empty() {
+            if dfa.is_empty() {
                 continue;
             }
             if seen_one {
@@ -434,15 +442,11 @@ impl<'a> ParserAtnSimulator<'a> {
             let _ = writeln!(out, "Decision {}:", dfa.decision());
             for state in dfa.states() {
                 let source = dfa_state_display(state);
-                for (index, target) in state.edges.iter().enumerate() {
-                    let Some(target) = target else {
+                for transition in state.transitions() {
+                    let Some(target_state) = dfa.state(transition.target) else {
                         continue;
                     };
-                    let Some(target_state) = dfa.state(*target) else {
-                        continue;
-                    };
-                    let symbol = i32::try_from(index).unwrap_or_default() - 1;
-                    let label = vocabulary.display_name(symbol);
+                    let label = vocabulary.display_name(transition.symbol);
                     let _ = writeln!(out, "{source}-{label}->{}", dfa_state_display(target_state));
                 }
             }
@@ -453,9 +457,20 @@ impl<'a> ParserAtnSimulator<'a> {
     pub fn new_shared(atn: &'static Atn) -> Self {
         let ptr: *const Atn = atn;
         let key = ptr as usize;
+        #[cfg(feature = "perf-counters")]
+        let import_started = std::time::Instant::now();
         let store = SHARED_PREDICTION_STORES
             .with(|cache| cache.borrow_mut().remove(&key))
             .unwrap_or_else(|| PredictionStore::new(atn));
+        #[cfg(feature = "perf-counters")]
+        crate::perf::record_dfa_cache_import(
+            import_started.elapsed().as_nanos(),
+            store
+                .decision_to_dfa
+                .iter()
+                .map(ParserDfa::state_count)
+                .sum(),
+        );
         Self {
             atn,
             store,
@@ -468,8 +483,17 @@ impl<'a> ParserAtnSimulator<'a> {
         }
     }
 
-    pub fn decision_dfas(&self) -> &[Dfa] {
+    pub fn decision_dfas(&self) -> &[ParserDfa] {
         &self.store.decision_to_dfa
+    }
+
+    /// Returns aggregate learned parser-DFA storage and interning measurements.
+    pub fn parser_dfa_stats(&self) -> ParserDfaStats {
+        let mut stats = ParserDfaStats::default();
+        for dfa in &self.store.decision_to_dfa {
+            stats.add_assign(dfa.stats());
+        }
+        stats
     }
 
     /// Returns compact prediction-context allocation and interning totals for
@@ -694,21 +718,21 @@ impl<'a> ParserAtnSimulator<'a> {
         }
         loop {
             let symbol = input.la(1);
-            if let Some(target) = self
+            let target = self
                 .store
                 .decision_to_dfa
                 .get(decision)
-                .and_then(|dfa| dfa.state(state_number))
-                .and_then(|state| state.edge(symbol))
-            {
+                .and_then(|dfa| dfa.edge(state_number, symbol));
+            #[cfg(feature = "perf-counters")]
+            crate::perf::record_dfa_edge_lookup(target.is_some());
+            if let Some(target) = target {
                 state_number = target;
             } else {
                 let configs = self
                     .store
                     .decision_to_dfa
                     .get(decision)
-                    .and_then(|dfa| dfa.state(state_number))
-                    .map(|state| state.configs.clone())
+                    .map(|dfa| dfa.configs(state_number).clone())
                     .ok_or(ParserAtnSimulatorError::MissingDfaState(state_number))?;
                 let target = match self.compute_target_state(
                     DfaEdge {
@@ -761,8 +785,7 @@ impl<'a> ParserAtnSimulator<'a> {
                     .store
                     .decision_to_dfa
                     .get(decision)
-                    .and_then(|dfa| dfa.state(state_number))
-                    .map(|state| state.configs.clone())
+                    .map(|dfa| dfa.configs(state_number).clone())
                     && let Some(alt) = self.alt_that_finished_decision_entry_rule(&configs)
                 {
                     return Ok(ParserAtnPrediction {
@@ -862,7 +885,7 @@ impl<'a> ParserAtnSimulator<'a> {
         &self,
         decision: usize,
         decision_state: usize,
-        state_number: usize,
+        state_number: DfaStateId,
     ) -> Option<ParserAtnPrediction> {
         if !self
             .atn
@@ -875,8 +898,7 @@ impl<'a> ParserAtnSimulator<'a> {
             .store
             .decision_to_dfa
             .get(decision)?
-            .state(state_number)?
-            .configs;
+            .configs(state_number);
         let alt = configs
             .configs()
             .iter()
@@ -902,7 +924,7 @@ impl<'a> ParserAtnSimulator<'a> {
         decision_state: usize,
         precedence: i32,
         merge_cache: &mut PredictionWorkspace,
-    ) -> Result<usize, ParserAtnSimulatorError> {
+    ) -> Result<DfaStateId, ParserAtnSimulatorError> {
         if self.store.decision_to_dfa[decision].is_precedence_dfa() {
             let precedence_key = usize::try_from(precedence.max(0)).unwrap_or_default();
             if let Some(start) =
@@ -918,7 +940,7 @@ impl<'a> ParserAtnSimulator<'a> {
             .state(decision_state)
             .ok_or(ParserAtnSimulatorError::MissingAtnState(decision_state))?;
         let configs = self.compute_start_state(decision_state, precedence, merge_cache);
-        let state_number = self.add_dfa_state(decision, DfaState::new(configs));
+        let state_number = self.add_dfa_state(decision, DfaStateBuilder::new(configs));
         if self.store.decision_to_dfa[decision].is_precedence_dfa() {
             let precedence_key = usize::try_from(precedence.max(0)).unwrap_or_default();
             self.store.decision_to_dfa[decision]
@@ -929,16 +951,8 @@ impl<'a> ParserAtnSimulator<'a> {
         Ok(state_number)
     }
 
-    fn add_dfa_state(&mut self, decision: usize, state: DfaState) -> usize {
-        if state.configs.is_readonly() {
-            return self.store.decision_to_dfa[decision].add_state(state);
-        }
-        if let Some(existing) =
-            self.store.decision_to_dfa[decision].state_number_for_configs(&state.configs)
-        {
-            return existing;
-        }
-        self.store.decision_to_dfa[decision].insert_state(state)
+    fn add_dfa_state(&mut self, decision: usize, state: DfaStateBuilder) -> DfaStateId {
+        self.store.decision_to_dfa[decision].add_state(state)
     }
 
     fn compute_start_state(
@@ -1099,22 +1113,24 @@ impl<'a> ParserAtnSimulator<'a> {
         symbol: i32,
         precedence: i32,
         merge_cache: &mut PredictionWorkspace,
-    ) -> Result<usize, ParserAtnSimulatorError> {
+    ) -> Result<DfaStateId, ParserAtnSimulatorError> {
         let mut reach = self.compute_reach_set(configs, symbol, false, precedence, merge_cache);
         if reach.is_empty() {
             if let Some(prediction) = self.alt_that_finished_decision_entry_rule(configs) {
-                let mut dfa_state = DfaState::new(configs.clone());
+                let mut dfa_state = DfaStateBuilder::new(configs.clone());
                 dfa_state.mark_accept(prediction);
                 // The set-wide flag gates the per-alt scan: if no config in the
                 // set carries a semantic context, no alt can either.
-                dfa_state.has_semantic_context_for_alt = dfa_state.configs.has_semantic_context()
-                    && configs_have_semantic_context_for_alt(&dfa_state.configs, prediction);
+                dfa_state.set_has_semantic_context_for_alt(
+                    configs.has_semantic_context()
+                        && configs_have_semantic_context_for_alt(configs, prediction),
+                );
                 let target_state = self.add_dfa_state(edge.decision, dfa_state);
-                if let Some(source) =
-                    self.store.decision_to_dfa[edge.decision].state_mut(edge.source_state)
-                {
-                    source.add_edge(symbol, target_state);
-                }
+                self.store.decision_to_dfa[edge.decision].add_edge(
+                    edge.source_state,
+                    symbol,
+                    target_state,
+                );
                 return Ok(target_state);
             }
             return Err(ParserAtnSimulatorError::NoViableAlt { symbol, index: 0 });
@@ -1145,21 +1161,20 @@ impl<'a> ParserAtnSimulator<'a> {
         } else {
             Vec::new()
         };
-        let mut dfa_state = DfaState::new(reach);
+        let mut dfa_state = DfaStateBuilder::new(reach);
         if let Some(prediction) = conflict_prediction {
             dfa_state.mark_accept(prediction);
-            dfa_state.requires_full_context = requires_full_context;
-            dfa_state.conflicting_alts = conflicting_alts;
+            dfa_state.set_requires_full_context(requires_full_context);
+            dfa_state.set_conflicting_alts(conflicting_alts);
             // The set-wide flag gates the per-alt scan: if no config in the set
             // carries a semantic context, no alt can either.
-            dfa_state.has_semantic_context_for_alt = dfa_state.configs.has_semantic_context()
-                && configs_have_semantic_context_for_alt(&dfa_state.configs, prediction);
+            dfa_state.set_has_semantic_context_for_alt(
+                dfa_state.configs.has_semantic_context()
+                    && configs_have_semantic_context_for_alt(&dfa_state.configs, prediction),
+            );
         }
         let target_state = self.add_dfa_state(edge.decision, dfa_state);
-        if let Some(source) = self.store.decision_to_dfa[edge.decision].state_mut(edge.source_state)
-        {
-            source.add_edge(symbol, target_state);
-        }
+        self.store.decision_to_dfa[edge.decision].add_edge(edge.source_state, symbol, target_state);
         Ok(target_state)
     }
 
@@ -1478,36 +1493,33 @@ impl<'a> ParserAtnSimulator<'a> {
     fn dfa_prediction_info(
         &self,
         decision: usize,
-        state_number: usize,
+        state_number: DfaStateId,
     ) -> Option<DfaPredictionInfo> {
-        self.store
-            .decision_to_dfa
-            .get(decision)
-            .and_then(|dfa| dfa.state(state_number))
-            .and_then(|state| {
-                state.prediction.map(|alt| {
-                    let conflicting_alts = if state.requires_full_context {
-                        if state.conflicting_alts.is_empty() {
-                            state.configs.alts().into_iter().collect()
-                        } else {
-                            state.conflicting_alts.clone()
-                        }
-                    } else {
-                        Vec::new()
-                    };
-                    DfaPredictionInfo {
-                        prediction: ParserAtnPrediction {
-                            alt,
-                            requires_full_context: state.requires_full_context,
-                            // Precomputed at accept time (see compute_target_state)
-                            // so this warm-hit path avoids an O(configs) rescan.
-                            has_semantic_context: state.has_semantic_context_for_alt,
-                            diagnostic: None,
-                        },
-                        conflicting_alts,
-                    }
-                })
-            })
+        let dfa = self.store.decision_to_dfa.get(decision)?;
+        let state = dfa.state(state_number)?;
+        let alt = state.prediction()?;
+        let requires_full_context = state.requires_full_context();
+        let conflicting_alts = if requires_full_context {
+            let stored = dfa.conflicting_alts(state_number);
+            if stored.is_empty() {
+                dfa.configs(state_number).alts().into_iter().collect()
+            } else {
+                stored.to_vec()
+            }
+        } else {
+            Vec::new()
+        };
+        Some(DfaPredictionInfo {
+            prediction: ParserAtnPrediction {
+                alt,
+                requires_full_context,
+                // Precomputed at accept time (see compute_target_state) so
+                // warm accept lookup does not rescan the cold config set.
+                has_semantic_context: state.has_semantic_context(),
+                diagnostic: None,
+            },
+            conflicting_alts,
+        })
     }
 }
 
@@ -1593,28 +1605,28 @@ fn configs_have_semantic_context_for_alt(configs: &AtnConfigSet, alt: usize) -> 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ParserAtnSimulatorError {
     MissingAtnState(usize),
-    MissingDfaState(usize),
+    MissingDfaState(DfaStateId),
     NoViableAlt { symbol: i32, index: usize },
     PredictionRequiresMoreLookahead,
     UnknownDecision(usize),
 }
 
 /// Java `DFASerializer.getStateString`: `:sN^=>alt` for accept states.
-fn dfa_state_display(state: &DfaState) -> String {
+fn dfa_state_display(state: ParserDfaStateView<'_>) -> String {
     let mut out = String::new();
-    if state.is_accept_state {
+    if state.is_accept_state() {
         out.push(':');
     }
     out.push('s');
-    out.push_str(&state.state_number.to_string());
-    if state.requires_full_context {
+    out.push_str(&state.id().index().to_string());
+    if state.requires_full_context() {
         out.push('^');
     }
-    if state.is_accept_state {
+    if state.is_accept_state() {
         out.push_str("=>");
         out.push_str(
             &state
-                .prediction
+                .prediction()
                 .map(|prediction| prediction.to_string())
                 .unwrap_or_default(),
         );
@@ -1646,8 +1658,8 @@ mod tests {
             atn_state: usize,
             arena: &mut ContextArena,
             workspace: &mut PredictionWorkspace,
-        ) -> DfaState {
-            DfaState::new(configs(atn_state, arena, workspace))
+        ) -> DfaStateBuilder {
+            DfaStateBuilder::new(configs(atn_state, arena, workspace))
         }
         let mut arena = ContextArena::new();
         let mut workspace = PredictionWorkspace::default();
@@ -1655,34 +1667,27 @@ mod tests {
         // Two DFAs that evolved independently from the same grammar: equal
         // state/edge counts, but disjoint transitions and different state
         // numbering for the shared successor.
-        let mut shared = Dfa::with_max_token_type(0, 0, 8);
+        let mut shared = ParserDfa::with_max_token_type(0, 0, 8);
         let shared_root = shared.add_state(state(10, &mut arena, &mut workspace));
         let shared_a = shared.add_state(state(11, &mut arena, &mut workspace));
-        shared
-            .state_mut(shared_root)
-            .expect("shared root")
-            .add_edge(1, shared_a);
+        shared.add_edge(shared_root, 1, shared_a);
         shared.set_start_state(shared_root);
 
-        let mut local = Dfa::with_max_token_type(0, 0, 8);
+        let mut local = ParserDfa::with_max_token_type(0, 0, 8);
         let local_b = local.add_state(state(12, &mut arena, &mut workspace));
         let local_root = local.add_state(state(10, &mut arena, &mut workspace));
-        local
-            .state_mut(local_root)
-            .expect("local root")
-            .add_edge(2, local_b);
+        local.add_edge(local_root, 2, local_b);
         local.set_precedence_start_state(3, local_root);
 
         union_decision_dfa(&mut shared, local);
 
         // The root (same config set) gained local's edge without losing its
         // own, with the target re-keyed into shared numbering.
-        let root = shared.state(shared_root).expect("root");
-        assert_eq!(root.edge(1), Some(shared_a));
+        assert_eq!(shared.edge(shared_root, 1), Some(shared_a));
         let merged_b = shared
-            .state_number_for_configs(&configs(12, &mut arena, &mut workspace))
+            .state_id_for_configs(&configs(12, &mut arena, &mut workspace))
             .expect("local-only state adopted");
-        assert_eq!(root.edge(2), Some(merged_b));
+        assert_eq!(shared.edge(shared_root, 2), Some(merged_b));
         assert_eq!(shared.states().len(), 3);
         // Start-state gaps fill from local; incumbents are kept.
         assert_eq!(shared.start_state(), Some(shared_root));
@@ -1706,14 +1711,13 @@ mod tests {
             &mut local.contexts,
             &mut workspace,
         );
-        local.decision_to_dfa[0].add_state(DfaState::new(configs));
+        local.decision_to_dfa[0].add_state(DfaStateBuilder::new(configs));
 
         union_prediction_stores(&mut shared, local, &mut workspace);
 
         let imported = shared.decision_to_dfa[0]
             .states()
-            .iter()
-            .flat_map(|state| state.configs.configs())
+            .flat_map(|state| shared.decision_to_dfa[0].configs(state.id()).configs())
             .find(|config| config.state == 42)
             .expect("local DFA config imported");
         assert_ne!(imported.context, local_context);
@@ -1831,9 +1835,9 @@ mod tests {
             .and_then(|state| state.edge(1))
             .expect("edge for token 1");
         let state = dfa.state(target).expect("target state");
-        assert!(state.is_accept_state);
-        assert!(state.requires_full_context);
-        assert_eq!(state.prediction, Some(1));
+        assert!(state.is_accept_state());
+        assert!(state.requires_full_context());
+        assert_eq!(state.prediction(), Some(1));
     }
 
     #[test]
@@ -1934,7 +1938,8 @@ mod tests {
             &mut simulator.store.contexts,
             &mut workspace,
         );
-        let start = simulator.store.decision_to_dfa[0].add_state(DfaState::new(start_configs));
+        let start =
+            simulator.store.decision_to_dfa[0].add_state(DfaStateBuilder::new(start_configs));
         simulator.store.decision_to_dfa[0].set_start_state(start);
 
         let mut accept_configs = AtnConfigSet::new();
@@ -1949,15 +1954,12 @@ mod tests {
             &mut simulator.store.contexts,
             &mut workspace,
         );
-        let mut accept_state = DfaState::new(accept_configs);
+        let mut accept_state = DfaStateBuilder::new(accept_configs);
         accept_state.mark_accept(1);
-        accept_state.requires_full_context = true;
-        accept_state.conflicting_alts = vec![1, 2];
+        accept_state.set_requires_full_context(true);
+        accept_state.set_conflicting_alts(vec![1, 2]);
         let accept = simulator.store.decision_to_dfa[0].add_state(accept_state);
-        simulator.store.decision_to_dfa[0]
-            .state_mut(start)
-            .expect("start state")
-            .add_edge(1, accept);
+        simulator.store.decision_to_dfa[0].add_edge(start, 1, accept);
 
         let mut input = VecIntStream::new(vec![1, 3, TOKEN_EOF]);
         let prediction = simulator

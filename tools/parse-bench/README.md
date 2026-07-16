@@ -89,8 +89,11 @@ ANTLR_PERF_DUMP=1 python3 tools/parse-bench/run.py \
 
 The dump includes canonical context counts, pooled and retained bytes, arena
 and workspace capacities, merge-cache activity, and outer-context cache
-hits/misses. Store statistics are collected in a separate untimed parse after
-the benchmark loop, so walking the arena does not affect reported timings.
+hits/misses. It also reports learned parser-DFA warm hits/misses, ATN
+fallbacks, state interning activity, dense/sparse row counts, edge-density
+histograms, and hot/cold retained bytes. Store statistics are collected in a
+separate untimed parse after the benchmark loop, so walking the stores does not
+affect reported timings.
 
 ## PR Watchdog
 

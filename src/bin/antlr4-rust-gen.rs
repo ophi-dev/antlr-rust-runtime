@@ -7441,6 +7441,14 @@ where
     }}
 
     #[must_use]
+    pub fn parser_dfa_stats(&self) -> antlr4_runtime::ParserDfaStats {{
+        self.simulator.as_ref().map_or_else(
+            antlr4_runtime::ParserDfaStats::default,
+            antlr4_runtime::ParserAtnSimulator::parser_dfa_stats,
+        )
+    }}
+
+    #[must_use]
     pub fn node(&self, id: antlr4_runtime::NodeId) -> antlr4_runtime::Node<'_> {{
         self.base.node(id)
     }}
