@@ -734,31 +734,27 @@ impl EdgeTable {
         }
     }
 
-    fn add(&mut self, state: DfaStateId, symbol: i32, target: DfaStateId) -> bool {
+    fn add(&mut self, state: DfaStateId, symbol: i32, target: DfaStateId) {
         let Some(slot) = self.slot(symbol) else {
-            return false;
+            return;
         };
         match self.rows[state.index()] {
             EdgeRow::Empty => {
                 self.rows[state.index()] = EdgeRow::Inline { symbol, target };
-                true
             }
             EdgeRow::Inline {
                 symbol: stored_symbol,
                 target: stored_target,
             } => {
                 if stored_symbol == symbol {
-                    let changed = stored_target != target;
                     self.rows[state.index()] = EdgeRow::Inline { symbol, target };
-                    return changed;
+                    return;
                 }
                 self.promote_inline_to_sparse(state, stored_symbol, stored_target, symbol, target);
-                true
             }
             EdgeRow::Dense { start, populated } => {
                 let index = usize::try_from(start.checked_add(slot).expect("dense slot overflow"))
                     .expect("u32 dense slot fits in usize");
-                let changed = self.dense_targets[index] != target;
                 if self.dense_targets[index] == NO_DFA_STATE {
                     self.rows[state.index()] = EdgeRow::Dense {
                         start,
@@ -768,14 +764,12 @@ impl EdgeTable {
                     };
                 }
                 self.dense_targets[index] = target;
-                changed
             }
             EdgeRow::Sparse { head, len } => {
-                if let Some(changed) = self.update_sparse(head, symbol, target) {
-                    return changed;
+                if self.update_sparse(head, symbol, target).is_some() {
+                    return;
                 }
                 self.insert_sparse(state, head, len, symbol, target);
-                true
             }
         }
     }
