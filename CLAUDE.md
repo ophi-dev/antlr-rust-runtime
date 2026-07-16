@@ -24,7 +24,7 @@ than letting fmt explode the block to one element per line.
 - `src/lexer.rs`, `src/atn/lexer.rs` — `BaseLexer` + lexer ATN simulator
 - `src/parser.rs` — `BaseParser` and the recursive `recognize_state_fast` walker
 - `src/atn/`, `src/atn/serialized.rs` — ATN graph + ANTLR `.interp` deserializer
-- `src/prediction.rs` — `PredictionContext`, `AtnConfig`, `PredictionFxHasher`
+- `src/prediction.rs` — compact `ContextId` storage, `AtnConfig`, `PredictionFxHasher`
 - `src/token.rs`, `src/token_stream.rs`, `src/char_stream.rs` — input + token plumbing
 - `src/tree.rs` — public `ParseTree` / `ParserRuleContext`
 - `src/bin/antlr4-rust-gen.rs` — `.interp` → Rust parser code generator

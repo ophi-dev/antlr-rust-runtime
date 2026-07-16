@@ -1,7 +1,7 @@
-use crate::prediction::AtnConfigSet;
+use crate::prediction::{AtnConfigSet, ContextArena, ContextId};
 use std::collections::BTreeMap;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct Dfa {
     decision: usize,
     atn_start_state: usize,
@@ -149,12 +149,21 @@ impl Dfa {
         self.dirty = true;
         self.states.get_mut(state_number)
     }
+
+    pub(crate) fn remap_contexts(&mut self, remap: &[ContextId], arena: &ContextArena) {
+        self.state_index.clear();
+        for (state_number, state) in self.states.iter_mut().enumerate() {
+            state.configs.remap_contexts(remap, arena);
+            self.state_index
+                .insert(state.configs.clone(), state_number);
+        }
+    }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct DfaState {
     pub state_number: usize,
-    pub configs: AtnConfigSet,
+    pub(crate) configs: AtnConfigSet,
     pub edges: Vec<Option<usize>>,
     pub is_accept_state: bool,
     pub prediction: Option<usize>,
@@ -173,7 +182,7 @@ pub struct DfaState {
 }
 
 impl DfaState {
-    pub const fn new(configs: AtnConfigSet) -> Self {
+    pub(crate) const fn new(configs: AtnConfigSet) -> Self {
         Self {
             state_number: usize::MAX,
             configs,
@@ -215,6 +224,19 @@ impl DfaState {
             self.edges.resize(max + 2, None);
         }
     }
+
+    pub(crate) fn clone_without_edges(&self) -> Self {
+        Self {
+            state_number: self.state_number,
+            configs: self.configs.clone(),
+            edges: Vec::new(),
+            is_accept_state: self.is_accept_state,
+            prediction: self.prediction,
+            requires_full_context: self.requires_full_context,
+            conflicting_alts: self.conflicting_alts.clone(),
+            has_semantic_context_for_alt: self.has_semantic_context_for_alt,
+        }
+    }
 }
 
 fn edge_index(symbol: i32) -> Option<usize> {
@@ -228,12 +250,20 @@ fn edge_index(symbol: i32) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prediction::{AtnConfig, AtnConfigSet, PredictionContext};
+    use crate::prediction::{
+        AtnConfig, AtnConfigSet, ContextArena, EMPTY_CONTEXT, PredictionWorkspace,
+    };
 
     #[test]
     fn dfa_reuses_equal_config_sets() {
+        let mut arena = ContextArena::new();
+        let mut workspace = PredictionWorkspace::default();
         let mut configs = AtnConfigSet::new();
-        configs.add(AtnConfig::new(1, 1, PredictionContext::empty()));
+        configs.add(
+            AtnConfig::new(1, 1, EMPTY_CONTEXT, &arena),
+            &mut arena,
+            &mut workspace,
+        );
         let state = DfaState::new(configs.clone());
         let mut dfa = Dfa::with_max_token_type(0, 0, 16);
         assert_eq!(dfa.add_state(state), 0);

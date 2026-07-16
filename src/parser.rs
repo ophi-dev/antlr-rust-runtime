@@ -80,7 +80,6 @@ use crate::char_stream::CharStream;
 use crate::errors::AntlrError;
 use crate::int_stream::IntStream;
 use crate::lexer::{LexerCustomAction, LexerSemCtx};
-use crate::prediction::{EMPTY_RETURN_STATE, PredictionContext};
 use crate::recognizer::{Recognizer, RecognizerData};
 use crate::semir::{self, AStmt, ArithOp, CmpOp, ExprId, HookId, PExpr, SemIr, StmtId};
 use crate::token::{
@@ -996,18 +995,11 @@ pub trait Parser: Recognizer {
 }
 
 #[derive(Debug)]
-struct CachedPredictionContext {
-    version: usize,
-    atn_key: usize,
-    context: Rc<PredictionContext>,
-}
-
-#[derive(Debug)]
 struct LeftRecursiveCallerOverlap {
     atn_key: SharedAtnCacheKey,
     state_number: usize,
     symbol: i32,
-    context: Rc<PredictionContext>,
+    context_version: usize,
     overlaps: bool,
 }
 
@@ -1030,7 +1022,6 @@ pub struct BaseParser<S, H = NoSemanticHooks> {
     int_members: BTreeMap<usize, i64>,
     rule_context_stack: Vec<RuleContextFrame>,
     rule_context_version: usize,
-    prediction_context_cache: Option<CachedPredictionContext>,
     left_recursive_caller_overlap_cache:
         [Option<LeftRecursiveCallerOverlap>; LEFT_RECURSIVE_CALLER_OVERLAP_CACHE_SIZE],
     pending_invoking_states: Vec<isize>,
@@ -3101,31 +3092,22 @@ fn state_before_stop_lookahead_inner(
     }
 }
 
-fn context_can_match_symbol_before_state(
+fn caller_context_can_match_symbol_before_state(
     atn: &Atn,
-    context: &PredictionContext,
+    return_states: impl DoubleEndedIterator<Item = usize>,
     stop_state_number: usize,
     symbol: i32,
 ) -> bool {
-    (0..context.len()).any(|index| {
-        context.return_state(index).is_some_and(|return_state| {
-            if return_state == EMPTY_RETURN_STATE {
-                return false;
-            }
-            let parent = context
-                .parent(index)
-                .unwrap_or_else(PredictionContext::empty);
-            let lookahead = state_before_stop_lookahead(atn, return_state, stop_state_number);
-            lookahead.symbols.contains(symbol)
-                || (lookahead.reaches_context_boundary
-                    && context_can_match_symbol_before_state(
-                        atn,
-                        &parent,
-                        stop_state_number,
-                        symbol,
-                    ))
-        })
-    })
+    for return_state in return_states.rev() {
+        let lookahead = state_before_stop_lookahead(atn, return_state, stop_state_number);
+        if lookahead.symbols.contains(symbol) {
+            return true;
+        }
+        if !lookahead.reaches_context_boundary {
+            return false;
+        }
+    }
+    false
 }
 
 /// Carries recovery expectations and their restart state through epsilon-only
@@ -3955,7 +3937,6 @@ where
             int_members: BTreeMap::new(),
             rule_context_stack: Vec::new(),
             rule_context_version: 0,
-            prediction_context_cache: None,
             left_recursive_caller_overlap_cache: std::array::from_fn(|_| None),
             pending_invoking_states: Vec::new(),
             precedence_stack: vec![0],
@@ -4673,7 +4654,7 @@ where
             rule_index,
             invoking_state,
         });
-        self.invalidate_prediction_context_cache();
+        self.advance_rule_context_version();
         let start_index = self.current_visible_index();
         let mut context = ParserRuleContext::new(rule_index, invoking_state);
         if let Some(token) = self.token_id_at(start_index) {
@@ -4702,44 +4683,31 @@ where
     /// Exits the current generated parser rule.
     pub fn exit_rule(&mut self) {
         self.rule_context_stack.pop();
-        self.invalidate_prediction_context_cache();
+        self.advance_rule_context_version();
     }
 
-    /// Converts the active generated-parser rule stack into an ANTLR prediction
-    /// context for full-context adaptive prediction.
-    pub fn prediction_context(&mut self, atn: &Atn) -> Rc<PredictionContext> {
-        let atn_ptr: *const Atn = atn;
-        let atn_key = atn_ptr as usize;
-        if let Some(cached) = &self.prediction_context_cache
-            && cached.version == self.rule_context_version
-            && cached.atn_key == atn_key
-        {
-            return Rc::clone(&cached.context);
-        }
-        let mut context = PredictionContext::empty();
-        for frame in self.rule_context_stack.iter().skip(1) {
+    /// Returns caller follow states for interning in a parser ATN simulator's
+    /// prediction store. States are yielded outermost to innermost.
+    pub fn prediction_context_return_states<'a>(
+        &'a self,
+        atn: &'a Atn,
+    ) -> impl DoubleEndedIterator<Item = usize> + 'a {
+        self.rule_context_stack.iter().skip(1).filter_map(|frame| {
             let Ok(state_number) = usize::try_from(frame.invoking_state) else {
-                continue;
+                return None;
             };
             let Some(Transition::Rule { follow_state, .. }) = atn
                 .state(state_number)
                 .and_then(|state| state.transitions.first())
             else {
-                continue;
+                return None;
             };
-            context = PredictionContext::singleton(context, *follow_state);
-        }
-        self.prediction_context_cache = Some(CachedPredictionContext {
-            version: self.rule_context_version,
-            atn_key,
-            context: Rc::clone(&context),
-        });
-        context
+            Some(*follow_state)
+        })
     }
 
-    fn invalidate_prediction_context_cache(&mut self) {
+    const fn advance_rule_context_version(&mut self) {
         self.rule_context_version = self.rule_context_version.wrapping_add(1);
-        self.prediction_context_cache = None;
     }
 
     /// Adds a generated parser child only when parse-tree construction is
@@ -4958,7 +4926,6 @@ where
             }
             return Some(false);
         }
-        let context = self.prediction_context(atn);
         let atn_key = SharedAtnCacheKey::for_atn(atn);
         let cached_overlap = self
             .left_recursive_caller_overlap_cache
@@ -4968,12 +4935,16 @@ where
                 entry.atn_key == atn_key
                     && entry.state_number == state_number
                     && entry.symbol == symbol
-                    && entry.context == context
+                    && entry.context_version == self.rule_context_version
             })
             .map(|entry| entry.overlaps);
         let caller_overlaps = cached_overlap.unwrap_or_else(|| {
-            let overlaps =
-                context_can_match_symbol_before_state(atn, &context, state_number, symbol);
+            let overlaps = caller_context_can_match_symbol_before_state(
+                atn,
+                self.prediction_context_return_states(atn),
+                state_number,
+                symbol,
+            );
             if let Some(slot) = self
                 .left_recursive_caller_overlap_cache
                 .iter_mut()
@@ -4983,7 +4954,7 @@ where
                     atn_key,
                     state_number,
                     symbol,
-                    context: Rc::clone(&context),
+                    context_version: self.rule_context_version,
                     overlaps,
                 });
             }
@@ -5334,16 +5305,48 @@ where
     }
 
     fn context_expected_symbols(&mut self, atn: &Atn) -> BTreeSet<i32> {
-        let context = self.prediction_context(atn);
         let mut expected = BTreeSet::new();
-        self.collect_context_expected_symbols(atn, &context, &mut expected);
+        for index in (1..self.rule_context_stack.len()).rev() {
+            let invoking_state = self.rule_context_stack[index].invoking_state;
+            let Ok(state_number) = usize::try_from(invoking_state) else {
+                continue;
+            };
+            let Some(Transition::Rule { follow_state, .. }) = atn
+                .state(state_number)
+                .and_then(|state| state.transitions.first())
+            else {
+                continue;
+            };
+            let return_state = *follow_state;
+            expected.extend(self.cached_state_expected_symbols(atn, return_state).iter());
+            if !self.cached_state_can_reach_rule_stop(atn, return_state) {
+                return expected;
+            }
+        }
+        expected.insert(TOKEN_EOF);
         expected
     }
 
     fn context_expected_token_set(&mut self, atn: &Atn) -> TokenBitSet {
-        let context = self.prediction_context(atn);
         let mut expected = TokenBitSet::default();
-        self.collect_context_expected_token_set(atn, &context, &mut expected);
+        for index in (1..self.rule_context_stack.len()).rev() {
+            let invoking_state = self.rule_context_stack[index].invoking_state;
+            let Ok(state_number) = usize::try_from(invoking_state) else {
+                continue;
+            };
+            let Some(Transition::Rule { follow_state, .. }) = atn
+                .state(state_number)
+                .and_then(|state| state.transitions.first())
+            else {
+                continue;
+            };
+            let follow_state = *follow_state;
+            expected.extend_from(&self.cached_state_expected_token_set(atn, follow_state));
+            if !self.cached_state_can_reach_rule_stop(atn, follow_state) {
+                return expected;
+            }
+        }
+        expected.insert(TOKEN_EOF);
         expected
     }
 
@@ -5352,8 +5355,8 @@ where
     ///
     /// This walks the rule-invocation stack directly, innermost frame first —
     /// the same frames, in the same order, with the same rule-stop gating as
-    /// `collect_context_expected_token_set` over `prediction_context(atn)`
-    /// (whose chain head is the innermost frame's follow state). The nullable
+    /// the same outer-context return-state chain used by adaptive prediction.
+    /// The nullable
     /// exit in `sync_decision` asks only this membership question, and on
     /// valid input the innermost frame answers it, so the early exit replaces
     /// an O(stack-depth) set union per loop/optional exit with one probe.
@@ -5381,61 +5384,6 @@ where
             }
         }
         symbol == TOKEN_EOF
-    }
-
-    fn collect_context_expected_symbols(
-        &mut self,
-        atn: &Atn,
-        context: &Rc<PredictionContext>,
-        expected: &mut BTreeSet<i32>,
-    ) {
-        if context.is_empty() {
-            expected.insert(TOKEN_EOF);
-            return;
-        }
-        for index in 0..context.len() {
-            let Some(return_state) = context.return_state(index) else {
-                continue;
-            };
-            if return_state == EMPTY_RETURN_STATE {
-                expected.insert(TOKEN_EOF);
-                continue;
-            }
-            expected.extend(self.cached_state_expected_symbols(atn, return_state).iter());
-            if self.cached_state_can_reach_rule_stop(atn, return_state)
-                && let Some(parent) = context.parent(index)
-            {
-                self.collect_context_expected_symbols(atn, &parent, expected);
-            }
-        }
-    }
-
-    fn collect_context_expected_token_set(
-        &mut self,
-        atn: &Atn,
-        context: &Rc<PredictionContext>,
-        expected: &mut TokenBitSet,
-    ) {
-        if context.is_empty() {
-            expected.insert(TOKEN_EOF);
-            return;
-        }
-        for index in 0..context.len() {
-            let Some(return_state) = context.return_state(index) else {
-                continue;
-            };
-            if return_state == EMPTY_RETURN_STATE {
-                expected.insert(TOKEN_EOF);
-                continue;
-            }
-            let state_expected = self.cached_state_expected_token_set(atn, return_state);
-            expected.extend_from(&state_expected);
-            if self.cached_state_can_reach_rule_stop(atn, return_state)
-                && let Some(parent) = context.parent(index)
-            {
-                self.collect_context_expected_token_set(atn, &parent, expected);
-            }
-        }
     }
 
     /// Builds a generated no-viable-alternative parser error.
@@ -12104,7 +12052,7 @@ mod tests {
     }
 
     #[test]
-    fn prediction_context_reuses_cached_stack_until_rule_stack_changes() {
+    fn prediction_context_return_states_track_rule_stack_changes() {
         let atn = nested_nullable_context_atn();
         let mut parser = mini_parser(vec![TestToken::eof("parser-test", 1, 1, 1)]);
         parser.rule_context_stack = vec![
@@ -12122,13 +12070,13 @@ mod tests {
             },
         ];
 
-        let first = parser.prediction_context(&atn);
-        let second = parser.prediction_context(&atn);
-        assert!(Rc::ptr_eq(&first, &second));
+        let first: Vec<_> = parser.prediction_context_return_states(&atn).collect();
+        let second: Vec<_> = parser.prediction_context_return_states(&atn).collect();
+        assert_eq!(first, second);
 
         parser.exit_rule();
-        let after_pop = parser.prediction_context(&atn);
-        assert!(!Rc::ptr_eq(&first, &after_pop));
+        let after_pop: Vec<_> = parser.prediction_context_return_states(&atn).collect();
+        assert_ne!(first, after_pop);
     }
 
     #[test]
