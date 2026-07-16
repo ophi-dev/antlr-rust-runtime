@@ -280,7 +280,7 @@ impl TListener for LeafListener {
 
 WalkListener(s) ::= <<
 let mut listener = LeafListener::default();
-ParseTreeWalker::walk(&mut listener, <s>);
+ParseTreeWalker::walk_with_invocation_states(&mut listener, <s>, self.base.active_invocation_states());
 >>
 
 // Java needs a custom context superclass because its default RuleContext does
