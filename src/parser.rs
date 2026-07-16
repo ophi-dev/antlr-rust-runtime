@@ -4,6 +4,7 @@
 // guards against non-deterministic iteration order leaking out) does not
 // apply to these uses.
 use std::cell::RefCell;
+use std::cmp::Ordering;
 #[allow(clippy::disallowed_types)]
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::hash::{BuildHasherDefault, Hash, Hasher};
@@ -1093,9 +1094,15 @@ pub struct BaseParser<S, H = NoSemanticHooks> {
     fast_recovery_enabled: bool,
     /// Whether the fast recognizer should record terminal-token nodes while
     /// speculating. Clean valid-input parsing can reconstruct terminals from
-    /// selected rule spans after recognition, avoiding many speculative `Rc`
+    /// selected rule spans after recognition, avoiding many speculative
     /// nodes that are thrown away with losing paths.
     fast_token_nodes_enabled: bool,
+    /// Parser-owned append-only storage for speculative recognition output.
+    /// Each public interpreted-rule entry clears lengths while retaining
+    /// bounded backing capacities for parser reuse.
+    recognition_arena: RecognitionArena,
+    last_recognition_arena_root: NodeSeqId,
+    last_recognition_arena_diagnostics: DiagnosticSeqId,
 }
 
 /// Rollback marker for speculative generated parser paths.
@@ -1105,275 +1112,675 @@ pub struct GeneratedDiagnosticsCheckpoint {
     syntax_errors: usize,
 }
 
+/// Storage and reachability counters for the most recent interpreted-rule
+/// recognition arena.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct RecognitionArenaStats {
+    pub total_nodes: usize,
+    pub live_nodes: usize,
+    pub dead_nodes: usize,
+    pub node_capacity: usize,
+    pub total_links: usize,
+    pub live_links: usize,
+    pub dead_links: usize,
+    pub link_capacity: usize,
+    pub total_extras: usize,
+    pub live_extras: usize,
+    pub dead_extras: usize,
+    pub extra_capacity: usize,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct RuleContextFrame {
     rule_index: usize,
     invoking_state: isize,
 }
 
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct RecognizeOutcome {
     index: usize,
     consumed_eof: bool,
     alt_number: usize,
     member_values: BTreeMap<usize, i64>,
     return_values: BTreeMap<String, i64>,
-    diagnostics: Vec<ParserDiagnostic>,
+    diagnostics: DiagnosticSeqId,
     decisions: Vec<usize>,
     actions: Vec<ParserAction>,
-    nodes: Vec<RecognizedNode>,
+    nodes: NodeSeqId,
 }
 
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
-enum RecognizedNode {
-    Token {
-        index: usize,
-    },
-    ErrorToken {
-        index: usize,
-    },
-    MissingToken {
-        token_type: i32,
-        at_index: usize,
-        text: String,
-    },
-    Rule {
-        rule_index: usize,
-        invoking_state: isize,
-        alt_number: usize,
-        start_index: usize,
-        stop_index: Option<usize>,
-        return_values: BTreeMap<String, i64>,
-        children: Vec<Self>,
-    },
-    LeftRecursiveBoundary {
-        rule_index: usize,
-    },
-}
-
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct FastRecognizeOutcome {
     index: usize,
     consumed_eof: bool,
-    diagnostics: FastDiagnostics,
-    /// Speculative parse-tree fragment built up as the recognizer climbs.
-    /// The list is held as a persistent cons-list of `Rc`-wrapped nodes so
-    /// prepending while chaining recognition outcomes is `O(1)` and cloning
-    /// an outcome (memo lookup, dedup, or when fanning a child's tree out
-    /// to every follow outcome) only bumps a reference count rather than
-    /// deep-copying. On left-recursive grammars the unfolded list can carry
-    /// thousands of nodes per speculative path; without the persistent-list
-    /// shape recognition becomes super-linear in path length.
-    nodes: NodeList,
+    diagnostics: DiagnosticSeqId,
+    /// Head of the speculative parse-tree fragment in the parser-owned arena.
+    /// Cloning an outcome copies this compact ID; prepending appends one
+    /// `SeqLink` without allocating an individual node or list tail.
+    nodes: NodeSeqId,
 }
 
-#[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
-#[allow(clippy::box_collection)]
-struct FastDiagnostics(Option<Box<Vec<ParserDiagnostic>>>);
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+struct RecognizedNodeId(u32);
 
-impl FastDiagnostics {
-    const fn new() -> Self {
-        Self(None)
-    }
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+struct NodeSeqId(u32);
 
-    #[cfg(test)]
-    fn from_vec(diagnostics: Vec<ParserDiagnostic>) -> Self {
-        if diagnostics.is_empty() {
-            Self::new()
-        } else {
-            Self(Some(Box::new(diagnostics)))
-        }
-    }
+impl NodeSeqId {
+    const EMPTY: Self = Self(u32::MAX);
 
-    fn is_empty(&self) -> bool {
-        self.0
-            .as_ref()
-            .is_none_or(|diagnostics| diagnostics.is_empty())
-    }
-
-    fn as_slice(&self) -> &[ParserDiagnostic] {
-        self.0.as_deref().map_or(&[], Vec::as_slice)
-    }
-
-    fn insert(&mut self, index: usize, diagnostic: ParserDiagnostic) {
-        self.0
-            .get_or_insert_with(Box::default)
-            .insert(index, diagnostic);
-    }
-
-    fn append(&mut self, other: &mut Self) {
-        if other.is_empty() {
-            return;
-        }
-        self.0
-            .get_or_insert_with(Box::default)
-            .append(other.0.get_or_insert_with(Box::default));
-        if other.is_empty() {
-            other.0 = None;
-        }
+    const fn is_empty(self) -> bool {
+        self.0 == Self::EMPTY.0
     }
 }
 
-impl std::ops::Deref for FastDiagnostics {
-    type Target = [ParserDiagnostic];
-
-    fn deref(&self) -> &Self::Target {
-        self.as_slice()
+impl Default for NodeSeqId {
+    fn default() -> Self {
+        Self::EMPTY
     }
 }
 
-/// Persistent cons-list of fast-recognizer nodes. The list keeps nodes in the
-/// same head-first order as the original `Vec<FastRecognizedNode>` they
-/// replaced. Shared tails across speculative outcomes amortize the cost of
-/// chaining a child rule's nodes onto every follow outcome.
-///
-/// `One` is an inline single-element variant: most outcomes carry only one
-/// node (a single token or a single rule wrapper), so storing that node
-/// directly avoids allocating an `Rc<NodeList>` tail wrapper.
-#[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
-enum NodeList {
-    #[default]
-    Empty,
-    One(Rc<FastRecognizedNode>),
-    Cons {
-        head: Rc<FastRecognizedNode>,
-        tail: Rc<Self>,
-    },
-}
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+struct DiagnosticSeqId(u32);
 
-impl NodeList {
-    /// Creates an empty list.
-    const fn new() -> Self {
-        Self::Empty
-    }
+impl DiagnosticSeqId {
+    const EMPTY: Self = Self(u32::MAX);
 
-    /// Prepends `node` and returns the new list. Both shared tails and the
-    /// new head are reference-counted so this is `O(1)`.
-    fn cons(self, node: Rc<FastRecognizedNode>) -> Self {
-        match self {
-            Self::Empty => Self::One(node),
-            existing @ (Self::One(_) | Self::Cons { .. }) => Self::Cons {
-                head: node,
-                tail: Rc::new(existing),
-            },
-        }
-    }
-
-    /// In-place prepend that takes ownership of `self` via [`std::mem::take`]
-    /// so existing call sites can keep using `&mut` access.
-    fn prepend(&mut self, node: Rc<FastRecognizedNode>) {
-        let owned = std::mem::take(self);
-        *self = owned.cons(node);
-    }
-
-    /// Materializes the list into a `Vec` in head-first order. Used at the
-    /// boundaries that need random-access traversal (the public rule entry
-    /// when building the final parse tree, and
-    /// `fold_fast_left_recursive_boundaries`).
-    fn to_vec(&self) -> Vec<Rc<FastRecognizedNode>> {
-        let mut out = Vec::new();
-        let mut cursor = self;
-        loop {
-            match cursor {
-                Self::Empty => break,
-                Self::One(node) => {
-                    out.push(Rc::clone(node));
-                    break;
-                }
-                Self::Cons { head, tail } => {
-                    out.push(Rc::clone(head));
-                    cursor = tail.as_ref();
-                }
-            }
-        }
-        out
-    }
-
-    const fn iter(&self) -> NodeListIter<'_> {
-        NodeListIter { cursor: self }
-    }
-
-    fn len(&self) -> usize {
-        self.iter().count()
-    }
-
-    fn has_left_recursive_boundary(&self) -> bool {
-        self.iter()
-            .any(|node| fast_node_has_left_recursive_boundary(node.as_ref()))
-    }
-
-    fn has_explicit_token_node(&self) -> bool {
-        self.iter().any(|node| {
-            matches!(
-                node.as_ref(),
-                FastRecognizedNode::Token { .. }
-                    | FastRecognizedNode::ErrorToken { .. }
-                    | FastRecognizedNode::MissingToken { .. }
-            )
-        })
-    }
-
-    /// Builds a list from an already ordered vector.
-    fn from_vec(nodes: Vec<Rc<FastRecognizedNode>>) -> Self {
-        let mut list = Self::new();
-        for node in nodes.into_iter().rev() {
-            list.prepend(node);
-        }
-        list
+    const fn is_empty(self) -> bool {
+        self.0 == Self::EMPTY.0
     }
 }
 
-struct NodeListIter<'a> {
-    cursor: &'a NodeList,
-}
-
-impl<'a> Iterator for NodeListIter<'a> {
-    type Item = &'a Rc<FastRecognizedNode>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.cursor {
-            NodeList::Empty => None,
-            NodeList::One(node) => {
-                self.cursor = &NodeList::Empty;
-                Some(node)
-            }
-            NodeList::Cons { head, tail } => {
-                self.cursor = tail.as_ref();
-                Some(head)
-            }
-        }
+impl Default for DiagnosticSeqId {
+    fn default() -> Self {
+        Self::EMPTY
     }
 }
 
-/// Minimal parse-tree fragment retained by the fast recognizer so the public
-/// rule entry can build nested rule contexts without paying for
-/// action/decision bookkeeping.
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
-enum FastRecognizedNode {
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+struct RecognitionExtraId(u32);
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct SeqLink {
+    head: RecognizedNodeId,
+    tail: NodeSeqId,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct DiagnosticLink {
+    head: RecognitionExtraId,
+    tail: DiagnosticSeqId,
+}
+
+struct ArenaRuleSpec {
+    rule_index: usize,
+    invoking_state: isize,
+    alt_number: usize,
+    start_index: usize,
+    stop_index: Option<usize>,
+    return_values: BTreeMap<String, i64>,
+    children: NodeSeqId,
+}
+
+/// Compact speculative node record. Common records contain only IDs and
+/// scalars; missing-token text and generated return values live in `extras`.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum ArenaRecognizedNode {
     Token {
-        index: usize,
+        token: TokenId,
     },
     ErrorToken {
-        index: usize,
+        token: TokenId,
     },
     MissingToken {
-        token_type: i32,
-        at_index: usize,
-        text: String,
+        extra: RecognitionExtraId,
     },
     Rule {
-        rule_index: usize,
-        invoking_state: isize,
-        start_index: usize,
-        stop_index: Option<usize>,
-        children: NodeList,
+        rule_index: u32,
+        invoking_state: i32,
+        alt_number: u32,
+        start_index: u32,
+        stop_index: Option<u32>,
+        return_values: Option<RecognitionExtraId>,
+        children: NodeSeqId,
     },
     /// Marker emitted at a precedence-rule loop entry where ANTLR would call
     /// `pushNewRecursionContext`. Folded into a wrapper rule node before the
     /// public rule entry hands the tree to the caller.
     LeftRecursiveBoundary {
-        rule_index: usize,
+        rule_index: u32,
     },
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum RecognitionExtra {
+    MissingToken {
+        token_type: i32,
+        at_index: u32,
+        text: String,
+    },
+    ReturnValues(BTreeMap<String, i64>),
+    Diagnostic(ParserDiagnostic),
+}
+
+#[derive(Debug, Default)]
+struct RecognitionArena {
+    nodes: Vec<ArenaRecognizedNode>,
+    seq_links: Vec<SeqLink>,
+    diagnostic_links: Vec<DiagnosticLink>,
+    extras: Vec<RecognitionExtra>,
+}
+
+// Preserve normal parser reuse while preventing one pathological parse from
+// pinning an arbitrarily large arena for the parser's remaining lifetime.
+const MAX_RETAINED_RECOGNITION_NODES: usize = 131_072;
+const MAX_RETAINED_RECOGNITION_SEQUENCE_LINKS: usize = 262_144;
+const MAX_RETAINED_RECOGNITION_DIAGNOSTIC_LINKS: usize = 65_536;
+const MAX_RETAINED_RECOGNITION_EXTRAS: usize = 32_768;
+
+impl RecognitionArena {
+    fn reset(&mut self) {
+        reset_arena_vec(&mut self.nodes, MAX_RETAINED_RECOGNITION_NODES);
+        reset_arena_vec(&mut self.seq_links, MAX_RETAINED_RECOGNITION_SEQUENCE_LINKS);
+        reset_arena_vec(
+            &mut self.diagnostic_links,
+            MAX_RETAINED_RECOGNITION_DIAGNOSTIC_LINKS,
+        );
+        reset_arena_vec(&mut self.extras, MAX_RETAINED_RECOGNITION_EXTRAS);
+    }
+
+    fn push_node(&mut self, node: ArenaRecognizedNode) -> RecognizedNodeId {
+        let id = RecognizedNodeId(
+            u32::try_from(self.nodes.len()).expect("recognition node arena fits in u32"),
+        );
+        self.nodes.push(node);
+        id
+    }
+
+    fn push_extra(&mut self, extra: RecognitionExtra) -> RecognitionExtraId {
+        let id = RecognitionExtraId(
+            u32::try_from(self.extras.len()).expect("recognition extra arena fits in u32"),
+        );
+        self.extras.push(extra);
+        id
+    }
+
+    fn prepend(&mut self, tail: NodeSeqId, head: RecognizedNodeId) -> NodeSeqId {
+        let id = NodeSeqId(
+            u32::try_from(self.seq_links.len()).expect("node sequence arena fits in u32"),
+        );
+        self.seq_links.push(SeqLink { head, tail });
+        id
+    }
+
+    fn prepend_diagnostic(
+        &mut self,
+        tail: DiagnosticSeqId,
+        diagnostic: ParserDiagnostic,
+    ) -> DiagnosticSeqId {
+        let head = self.push_extra(RecognitionExtra::Diagnostic(diagnostic));
+        self.prepend_diagnostic_id(tail, head)
+    }
+
+    fn prepend_diagnostic_id(
+        &mut self,
+        tail: DiagnosticSeqId,
+        head: RecognitionExtraId,
+    ) -> DiagnosticSeqId {
+        let id = DiagnosticSeqId(
+            u32::try_from(self.diagnostic_links.len())
+                .expect("diagnostic sequence arena fits in u32"),
+        );
+        self.diagnostic_links.push(DiagnosticLink { head, tail });
+        id
+    }
+
+    fn concat_diagnostics(
+        &mut self,
+        prefix: DiagnosticSeqId,
+        mut suffix: DiagnosticSeqId,
+    ) -> DiagnosticSeqId {
+        if prefix.is_empty() {
+            return suffix;
+        }
+        if suffix.is_empty() {
+            return prefix;
+        }
+        let mut reversed = DiagnosticSeqId::EMPTY;
+        let mut cursor = prefix;
+        while let Some(link) = self.diagnostic_link(cursor) {
+            reversed = self.prepend_diagnostic_id(reversed, link.head);
+            cursor = link.tail;
+        }
+        while let Some(link) = self.diagnostic_link(reversed) {
+            suffix = self.prepend_diagnostic_id(suffix, link.head);
+            reversed = link.tail;
+        }
+        suffix
+    }
+
+    #[cfg(test)]
+    fn diagnostic_sequence(
+        &mut self,
+        diagnostics: impl IntoIterator<Item = ParserDiagnostic>,
+    ) -> DiagnosticSeqId {
+        let diagnostics = diagnostics.into_iter().collect::<Vec<_>>();
+        let mut sequence = DiagnosticSeqId::EMPTY;
+        for diagnostic in diagnostics.into_iter().rev() {
+            sequence = self.prepend_diagnostic(sequence, diagnostic);
+        }
+        sequence
+    }
+
+    fn node(&self, id: RecognizedNodeId) -> ArenaRecognizedNode {
+        self.nodes[id.0 as usize]
+    }
+
+    fn extra(&self, id: RecognitionExtraId) -> &RecognitionExtra {
+        &self.extras[id.0 as usize]
+    }
+
+    fn link(&self, id: NodeSeqId) -> Option<SeqLink> {
+        (!id.is_empty()).then(|| self.seq_links[id.0 as usize])
+    }
+
+    fn diagnostic_link(&self, id: DiagnosticSeqId) -> Option<DiagnosticLink> {
+        (!id.is_empty()).then(|| self.diagnostic_links[id.0 as usize])
+    }
+
+    const fn iter(&self, sequence: NodeSeqId) -> NodeSeqIter<'_> {
+        NodeSeqIter {
+            arena: self,
+            cursor: sequence,
+        }
+    }
+
+    const fn diagnostics(&self, sequence: DiagnosticSeqId) -> DiagnosticSeqIter<'_> {
+        DiagnosticSeqIter {
+            arena: self,
+            cursor: sequence,
+        }
+    }
+
+    fn diagnostics_len(&self, sequence: DiagnosticSeqId) -> usize {
+        self.diagnostics(sequence).count()
+    }
+
+    fn diagnostics_recovery_rank(&self, sequence: DiagnosticSeqId) -> usize {
+        self.diagnostics(sequence)
+            .filter(|diagnostic| {
+                diagnostic.message.starts_with("mismatched input ")
+                    && !diagnostic.message.starts_with("mismatched input '<EOF>' ")
+            })
+            .count()
+    }
+
+    fn compare_diagnostics(&self, left: DiagnosticSeqId, right: DiagnosticSeqId) -> Ordering {
+        self.diagnostics(left).cmp(self.diagnostics(right))
+    }
+
+    fn sequence_len(&self, sequence: NodeSeqId) -> usize {
+        self.iter(sequence).count()
+    }
+
+    fn sequence_has_left_recursive_boundary(&self, sequence: NodeSeqId) -> bool {
+        self.iter(sequence).any(|node| match self.node(node) {
+            ArenaRecognizedNode::LeftRecursiveBoundary { .. } => true,
+            ArenaRecognizedNode::Rule { children, .. } => {
+                self.sequence_has_left_recursive_boundary(children)
+            }
+            ArenaRecognizedNode::Token { .. }
+            | ArenaRecognizedNode::ErrorToken { .. }
+            | ArenaRecognizedNode::MissingToken { .. } => false,
+        })
+    }
+
+    fn sequence_has_direct_boundary(&self, sequence: NodeSeqId) -> bool {
+        self.iter(sequence).any(|node| {
+            matches!(
+                self.node(node),
+                ArenaRecognizedNode::LeftRecursiveBoundary { .. }
+            )
+        })
+    }
+
+    fn sequence_has_explicit_token(&self, sequence: NodeSeqId) -> bool {
+        self.iter(sequence).any(|node| {
+            matches!(
+                self.node(node),
+                ArenaRecognizedNode::Token { .. }
+                    | ArenaRecognizedNode::ErrorToken { .. }
+                    | ArenaRecognizedNode::MissingToken { .. }
+            )
+        })
+    }
+
+    fn node_start_index(&self, node: RecognizedNodeId) -> Option<usize> {
+        match self.node(node) {
+            ArenaRecognizedNode::Token { token } | ArenaRecognizedNode::ErrorToken { token } => {
+                Some(token.index())
+            }
+            ArenaRecognizedNode::MissingToken { extra } => {
+                let RecognitionExtra::MissingToken { at_index, .. } = self.extra(extra) else {
+                    unreachable!("missing-token node must reference missing-token extra");
+                };
+                Some(*at_index as usize)
+            }
+            ArenaRecognizedNode::Rule { start_index, .. } => Some(start_index as usize),
+            ArenaRecognizedNode::LeftRecursiveBoundary { .. } => None,
+        }
+    }
+
+    fn node_stop_index(&self, node: RecognizedNodeId) -> Option<usize> {
+        match self.node(node) {
+            ArenaRecognizedNode::Token { token } | ArenaRecognizedNode::ErrorToken { token } => {
+                Some(token.index())
+            }
+            ArenaRecognizedNode::MissingToken { extra } => {
+                let RecognitionExtra::MissingToken { at_index, .. } = self.extra(extra) else {
+                    unreachable!("missing-token node must reference missing-token extra");
+                };
+                (*at_index as usize).checked_sub(1)
+            }
+            ArenaRecognizedNode::Rule { stop_index, .. } => stop_index.map(|index| index as usize),
+            ArenaRecognizedNode::LeftRecursiveBoundary { .. } => None,
+        }
+    }
+
+    fn node_span(&self, node: RecognizedNodeId) -> Option<(usize, Option<usize>)> {
+        let start = self.node_start_index(node)?;
+        let stop = self.node_stop_index(node);
+        Some((start, stop))
+    }
+
+    fn sequence_start_index(&self, sequence: NodeSeqId) -> Option<usize> {
+        self.iter(sequence)
+            .find_map(|node| self.node_start_index(node))
+    }
+
+    fn sequence_stop_index(&self, sequence: NodeSeqId) -> Option<usize> {
+        let mut stop = None;
+        for node in self.iter(sequence) {
+            if let Some(index) = self.node_stop_index(node) {
+                stop = Some(index);
+            }
+        }
+        stop
+    }
+
+    fn sequence_needs_stable_tie(&self, sequence: NodeSeqId) -> bool {
+        self.iter(sequence)
+            .any(|node| self.node_needs_stable_tie(node))
+    }
+
+    fn node_needs_stable_tie(&self, node: RecognizedNodeId) -> bool {
+        match self.node(node) {
+            ArenaRecognizedNode::Token { .. }
+            | ArenaRecognizedNode::ErrorToken { .. }
+            | ArenaRecognizedNode::MissingToken { .. } => false,
+            ArenaRecognizedNode::LeftRecursiveBoundary { .. } => true,
+            ArenaRecognizedNode::Rule {
+                rule_index,
+                children,
+                ..
+            } => self.iter(children).any(|child| {
+                matches!(
+                    self.node(child),
+                    ArenaRecognizedNode::Rule {
+                        rule_index: child_rule,
+                        ..
+                    } if child_rule == rule_index
+                ) || self.node_needs_stable_tie(child)
+            }),
+        }
+    }
+
+    fn compare_sequences(&self, mut left: NodeSeqId, mut right: NodeSeqId) -> Ordering {
+        loop {
+            match (self.link(left), self.link(right)) {
+                (Some(left_link), Some(right_link)) => {
+                    let order = self.compare_nodes(left_link.head, right_link.head);
+                    if order != Ordering::Equal {
+                        return order;
+                    }
+                    left = left_link.tail;
+                    right = right_link.tail;
+                }
+                (None, None) => return Ordering::Equal,
+                (None, Some(_)) => return Ordering::Less,
+                (Some(_), None) => return Ordering::Greater,
+            }
+        }
+    }
+
+    fn compare_nodes(&self, left: RecognizedNodeId, right: RecognizedNodeId) -> Ordering {
+        let left = self.node(left);
+        let right = self.node(right);
+        match (left, right) {
+            (
+                ArenaRecognizedNode::Token { token: left },
+                ArenaRecognizedNode::Token { token: right },
+            )
+            | (
+                ArenaRecognizedNode::ErrorToken { token: left },
+                ArenaRecognizedNode::ErrorToken { token: right },
+            ) => left.cmp(&right),
+            (
+                ArenaRecognizedNode::MissingToken { extra: left },
+                ArenaRecognizedNode::MissingToken { extra: right },
+            ) => self.extra(left).cmp(self.extra(right)),
+            (
+                ArenaRecognizedNode::Rule {
+                    rule_index: left_rule,
+                    invoking_state: left_invoking,
+                    alt_number: left_alt,
+                    start_index: left_start,
+                    stop_index: left_stop,
+                    return_values: left_returns,
+                    children: left_children,
+                },
+                ArenaRecognizedNode::Rule {
+                    rule_index: right_rule,
+                    invoking_state: right_invoking,
+                    alt_number: right_alt,
+                    start_index: right_start,
+                    stop_index: right_stop,
+                    return_values: right_returns,
+                    children: right_children,
+                },
+            ) => (left_rule, left_invoking, left_alt, left_start, left_stop)
+                .cmp(&(
+                    right_rule,
+                    right_invoking,
+                    right_alt,
+                    right_start,
+                    right_stop,
+                ))
+                .then_with(|| {
+                    left_returns
+                        .map(|id| self.extra(id))
+                        .cmp(&right_returns.map(|id| self.extra(id)))
+                })
+                .then_with(|| self.compare_sequences(left_children, right_children)),
+            (
+                ArenaRecognizedNode::LeftRecursiveBoundary { rule_index: left },
+                ArenaRecognizedNode::LeftRecursiveBoundary { rule_index: right },
+            ) => left.cmp(&right),
+            (left, right) => recognition_node_kind(&left).cmp(&recognition_node_kind(&right)),
+        }
+    }
+
+    fn reverse_sequence(&mut self, mut sequence: NodeSeqId) -> NodeSeqId {
+        let mut reversed = NodeSeqId::EMPTY;
+        while let Some(link) = self.link(sequence) {
+            reversed = self.prepend(reversed, link.head);
+            sequence = link.tail;
+        }
+        reversed
+    }
+
+    fn fold_left_recursive_boundaries(&mut self, mut sequence: NodeSeqId) -> NodeSeqId {
+        if !self.sequence_has_direct_boundary(sequence) {
+            return sequence;
+        }
+        let mut reversed = NodeSeqId::EMPTY;
+        while let Some(link) = self.link(sequence) {
+            match self.node(link.head) {
+                ArenaRecognizedNode::LeftRecursiveBoundary { rule_index } => {
+                    if !reversed.is_empty() {
+                        let children = self.reverse_sequence(reversed);
+                        let start_index = self.sequence_start_index(children).unwrap_or_default();
+                        let stop_index = self.sequence_stop_index(children);
+                        let rule = self.push_node(ArenaRecognizedNode::Rule {
+                            rule_index,
+                            invoking_state: -1,
+                            alt_number: 0,
+                            start_index: u32::try_from(start_index)
+                                .expect("left-recursive start index fits in u32"),
+                            stop_index: stop_index.map(|index| {
+                                u32::try_from(index).expect("left-recursive stop index fits in u32")
+                            }),
+                            return_values: None,
+                            children,
+                        });
+                        reversed = self.prepend(NodeSeqId::EMPTY, rule);
+                    }
+                }
+                _ => {
+                    reversed = self.prepend(reversed, link.head);
+                }
+            }
+            sequence = link.tail;
+        }
+        self.reverse_sequence(reversed)
+    }
+
+    fn stats(&self, root: NodeSeqId, diagnostics: DiagnosticSeqId) -> RecognitionArenaStats {
+        let mut live_nodes = vec![false; self.nodes.len()];
+        let mut live_links = vec![false; self.seq_links.len()];
+        let mut live_diagnostic_links = vec![false; self.diagnostic_links.len()];
+        let mut live_extras = vec![false; self.extras.len()];
+        let mut pending = vec![root];
+        while let Some(mut sequence) = pending.pop() {
+            while let Some(link) = self.link(sequence) {
+                let link_index = sequence.0 as usize;
+                if live_links[link_index] {
+                    break;
+                }
+                live_links[link_index] = true;
+                let node_index = link.head.0 as usize;
+                if !live_nodes[node_index] {
+                    live_nodes[node_index] = true;
+                    match self.node(link.head) {
+                        ArenaRecognizedNode::MissingToken { extra } => {
+                            live_extras[extra.0 as usize] = true;
+                        }
+                        ArenaRecognizedNode::Rule {
+                            return_values,
+                            children,
+                            ..
+                        } => {
+                            if let Some(extra) = return_values {
+                                live_extras[extra.0 as usize] = true;
+                            }
+                            pending.push(children);
+                        }
+                        ArenaRecognizedNode::Token { .. }
+                        | ArenaRecognizedNode::ErrorToken { .. }
+                        | ArenaRecognizedNode::LeftRecursiveBoundary { .. } => {}
+                    }
+                }
+                sequence = link.tail;
+            }
+        }
+        let mut diagnostics = diagnostics;
+        while let Some(link) = self.diagnostic_link(diagnostics) {
+            let link_index = diagnostics.0 as usize;
+            if live_diagnostic_links[link_index] {
+                break;
+            }
+            live_diagnostic_links[link_index] = true;
+            live_extras[link.head.0 as usize] = true;
+            diagnostics = link.tail;
+        }
+        let live_node_count = live_nodes.into_iter().filter(|live| *live).count();
+        let live_link_count = live_links.into_iter().filter(|live| *live).count()
+            + live_diagnostic_links
+                .into_iter()
+                .filter(|live| *live)
+                .count();
+        let live_extra_count = live_extras.into_iter().filter(|live| *live).count();
+        let total_links = self.seq_links.len() + self.diagnostic_links.len();
+        RecognitionArenaStats {
+            total_nodes: self.nodes.len(),
+            live_nodes: live_node_count,
+            dead_nodes: self.nodes.len().saturating_sub(live_node_count),
+            node_capacity: self.nodes.capacity(),
+            total_links,
+            live_links: live_link_count,
+            dead_links: total_links.saturating_sub(live_link_count),
+            link_capacity: self.seq_links.capacity() + self.diagnostic_links.capacity(),
+            total_extras: self.extras.len(),
+            live_extras: live_extra_count,
+            dead_extras: self.extras.len().saturating_sub(live_extra_count),
+            extra_capacity: self.extras.capacity(),
+        }
+    }
+}
+
+fn reset_arena_vec<T>(storage: &mut Vec<T>, max_retained_capacity: usize) {
+    if storage.capacity() > max_retained_capacity {
+        *storage = Vec::new();
+    } else {
+        storage.clear();
+    }
+}
+
+const fn recognition_node_kind(node: &ArenaRecognizedNode) -> u8 {
+    match node {
+        ArenaRecognizedNode::Token { .. } => 0,
+        ArenaRecognizedNode::ErrorToken { .. } => 1,
+        ArenaRecognizedNode::MissingToken { .. } => 2,
+        ArenaRecognizedNode::Rule { .. } => 3,
+        ArenaRecognizedNode::LeftRecursiveBoundary { .. } => 4,
+    }
+}
+
+struct NodeSeqIter<'a> {
+    arena: &'a RecognitionArena,
+    cursor: NodeSeqId,
+}
+
+impl Iterator for NodeSeqIter<'_> {
+    type Item = RecognizedNodeId;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let link = self.arena.link(self.cursor)?;
+        self.cursor = link.tail;
+        Some(link.head)
+    }
+}
+
+struct DiagnosticSeqIter<'a> {
+    arena: &'a RecognitionArena,
+    cursor: DiagnosticSeqId,
+}
+
+impl<'a> Iterator for DiagnosticSeqIter<'a> {
+    type Item = &'a ParserDiagnostic;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let link = self.arena.diagnostic_link(self.cursor)?;
+        self.cursor = link.tail;
+        let RecognitionExtra::Diagnostic(diagnostic) = self.arena.extra(link.head) else {
+            unreachable!("diagnostic link must reference diagnostic extra");
+        };
+        Some(diagnostic)
+    }
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -2959,10 +3366,10 @@ fn stop_outcome(
         alt_number: rule_alt_number,
         member_values,
         return_values,
-        diagnostics: Vec::new(),
+        diagnostics: DiagnosticSeqId::EMPTY,
         decisions: Vec::new(),
         actions: Vec::new(),
-        nodes: Vec::new(),
+        nodes: NodeSeqId::EMPTY,
     }]
 }
 
@@ -3546,6 +3953,9 @@ where
             fast_first_set_prefilter: true,
             fast_recovery_enabled: true,
             fast_token_nodes_enabled: true,
+            recognition_arena: RecognitionArena::default(),
+            last_recognition_arena_root: NodeSeqId::EMPTY,
+            last_recognition_arena_diagnostics: DiagnosticSeqId::EMPTY,
         }
     }
 
@@ -3619,6 +4029,19 @@ where
     /// paths so far.
     pub const fn number_of_syntax_errors(&self) -> usize {
         self.syntax_errors
+    }
+
+    /// Computes reachability and retained-capacity counters for the most recent
+    /// interpreted-rule recognition arena.
+    ///
+    /// The reachability scan is linear in the arena size and is deferred until
+    /// this instrumentation method is called.
+    #[must_use]
+    pub fn recognition_arena_stats(&self) -> RecognitionArenaStats {
+        self.recognition_arena.stats(
+            self.last_recognition_arena_root,
+            self.last_recognition_arena_diagnostics,
+        )
     }
 
     /// Records a syntax error that generated parser code returns as fatal before
@@ -5061,6 +5484,7 @@ where
         let start_index = self.current_visible_index();
         self.clear_prediction_diagnostics();
         self.reset_per_parse_caches();
+        self.reset_recognition_arena();
         let mut decision_by_state = vec![None; atn.states().len()];
         for (decision, &state_number) in atn.decision_to_state().iter().enumerate() {
             if let Some(slot) = decision_by_state.get_mut(state_number) {
@@ -5134,6 +5558,7 @@ where
         let start_index = self.current_visible_index();
         self.clear_prediction_diagnostics();
         self.reset_per_parse_caches();
+        self.reset_recognition_arena();
         let caller_follow_state = self.pending_invoking_follow_state(atn);
         self.fast_recovery_enabled = false;
         self.fast_token_nodes_enabled = false;
@@ -5148,7 +5573,11 @@ where
         self.fast_token_nodes_enabled = true;
         let needs_tree_retry = matches!(
             &first_pass,
-            Ok((outcome, _)) if self.build_parse_trees && outcome.nodes.has_left_recursive_boundary()
+            Ok((outcome, _))
+                if self.build_parse_trees
+                    && self
+                        .recognition_arena
+                        .sequence_has_left_recursive_boundary(outcome.nodes)
         );
         let needs_retry = match &first_pass {
             // The FIRST-set prefilter trims speculative rule calls that can't
@@ -5176,14 +5605,14 @@ where
                     Err(_) => first_pass,
                 }
             } else {
-                select_better_top_outcome(first_pass, clean_retry)
+                select_better_top_outcome(first_pass, clean_retry, &self.recognition_arena)
             };
             let selected = if clean_selected.is_err()
                 || matches!(&clean_selected, Ok((outcome, _)) if !outcome.diagnostics.is_empty())
             {
                 self.fast_recovery_enabled = true;
                 let recovery_retry = self.fast_recognize_top(atn, top_request);
-                select_better_top_outcome(clean_selected, recovery_retry)
+                select_better_top_outcome(clean_selected, recovery_retry, &self.recognition_arena)
             } else {
                 clean_selected
             };
@@ -5198,15 +5627,15 @@ where
         } else {
             first_pass.expect("first_pass is Ok in the no-retry branch")
         };
-        self.record_syntax_errors(outcome.diagnostics.len());
+        self.record_syntax_errors(self.recognition_arena.diagnostics_len(outcome.diagnostics));
         report_parser_diagnostics(&self.prediction_diagnostics);
-        report_parser_diagnostics(&outcome.diagnostics);
+        report_parser_diagnostics(self.recognition_arena.diagnostics(outcome.diagnostics));
         report_token_source_errors(&self.input.drain_source_errors());
         let mut context = ParserRuleContext::with_child_capacity(
             rule_index,
             self.state(),
             if self.build_parse_trees {
-                outcome.nodes.len()
+                self.recognition_arena.sequence_len(outcome.nodes)
             } else {
                 0
             },
@@ -5218,41 +5647,32 @@ where
         if let Some(token) = stop_index.and_then(|token_index| self.token_id_at(token_index)) {
             self.set_context_stop(&mut context, token);
         }
+        let live_root = if self.build_parse_trees {
+            self.recognition_arena
+                .fold_left_recursive_boundaries(outcome.nodes)
+        } else {
+            outcome.nodes
+        };
         if self.build_parse_trees {
-            if outcome.nodes.has_left_recursive_boundary() {
-                let folded = fold_fast_left_recursive_boundaries(outcome.nodes.to_vec());
-                if folded.iter().any(|node| {
-                    matches!(
-                        node.as_ref(),
-                        FastRecognizedNode::Token { .. }
-                            | FastRecognizedNode::ErrorToken { .. }
-                            | FastRecognizedNode::MissingToken { .. }
-                    )
-                }) {
-                    for node in &folded {
-                        context.add_child(self.fast_recognized_node_tree(node.as_ref())?);
-                    }
-                } else {
-                    self.add_fast_implicit_token_children(
-                        &mut context,
-                        start_index,
-                        stop_index,
-                        &folded,
-                    )?;
-                }
-            } else if outcome.nodes.has_explicit_token_node() {
-                for node in outcome.nodes.iter() {
-                    context.add_child(self.fast_recognized_node_tree(node.as_ref())?);
+            if self
+                .recognition_arena
+                .sequence_has_explicit_token(live_root)
+            {
+                let mut cursor = live_root;
+                while let Some(link) = self.recognition_arena.link(cursor) {
+                    context.add_child(self.arena_recognized_node_tree(link.head, false)?);
+                    cursor = link.tail;
                 }
             } else {
-                self.add_fast_implicit_token_children_iter(
+                self.add_arena_implicit_token_children(
                     &mut context,
                     start_index,
                     stop_index,
-                    outcome.nodes.iter(),
+                    live_root,
                 )?;
             }
         }
+        self.finish_recognition_arena(live_root, outcome.diagnostics);
         self.input.seek(outcome.index);
 
         Ok(self.rule_node(context))
@@ -5267,20 +5687,9 @@ where
         }
     }
 
+    #[cfg(test)]
     fn caller_follow_token_info(&mut self, index: usize) -> (i32, bool, bool) {
-        // Generated callers own statement separators; leave them available when
-        // an interpreted child rule can either stop before or consume one.
-        let token_type = self.token_type_at(index);
-        let visible_channel = self.input.channel();
-        let token = self.token_at(index);
-        let is_boundary = token
-            .as_ref()
-            .and_then(Token::text)
-            .is_some_and(is_caller_follow_boundary_text);
-        let is_boundary_gap = token.as_ref().is_some_and(|token| {
-            token.channel() != visible_channel || is_caller_follow_boundary_gap_text(token.text())
-        });
-        (token_type, is_boundary, is_boundary_gap)
+        caller_follow_token_info_for_stream(&mut self.input, index)
     }
 
     /// Runs the fast recognizer once from the rule's start state and returns
@@ -5336,88 +5745,95 @@ where
         }
         let caller_follow =
             caller_follow_state.map(|state| self.cached_state_expected_token_set(atn, state));
+        let arena = &self.recognition_arena;
+        let input = &mut self.input;
         match select_best_fast_outcome(
             outcomes.into_iter(),
             self.prediction_mode,
             caller_follow.as_deref(),
-            |index| self.caller_follow_token_info(index),
+            |index| caller_follow_token_info_for_stream(input, index),
+            arena,
         ) {
             Some(outcome) => Ok((outcome, expected)),
             None => Err(expected),
         }
     }
 
-    /// Converts a recognized fast-recognizer node into a public parse-tree
-    /// node, mirroring [`Self::recognized_node_tree`] for the slow path.
-    fn fast_recognized_node_tree(
+    /// Converts one arena record into the current public recursive tree.
+    ///
+    /// The speculative representation remains flat and index-addressed; this
+    /// is the single compatibility boundary that #84 replaces with direct flat
+    /// CST handoff.
+    fn arena_recognized_node_tree(
         &mut self,
-        node: &FastRecognizedNode,
+        node_id: RecognizedNodeId,
+        track_alt_numbers: bool,
     ) -> Result<ParseTree, AntlrError> {
+        let node = self.recognition_arena.node(node_id);
         match node {
-            FastRecognizedNode::Token { index } => {
-                let token = self
-                    .input
-                    .get_id(*index)
-                    .ok_or_else(|| AntlrError::ParserError {
-                        line: 0,
-                        column: 0,
-                        message: format!("missing token at index {index}"),
-                    })?;
-                Ok(self.terminal_tree(token))
-            }
-            FastRecognizedNode::ErrorToken { index } => {
-                let token = self
-                    .input
-                    .get_id(*index)
-                    .ok_or_else(|| AntlrError::ParserError {
-                        line: 0,
-                        column: 0,
-                        message: format!("missing error token at index {index}"),
-                    })?;
-                Ok(self.error_tree(token))
-            }
-            FastRecognizedNode::MissingToken {
-                token_type,
-                at_index,
-                text,
-            } => {
+            ArenaRecognizedNode::Token { token } => Ok(self.terminal_tree(token)),
+            ArenaRecognizedNode::ErrorToken { token } => Ok(self.error_tree(token)),
+            ArenaRecognizedNode::MissingToken { extra } => {
+                let (token_type, at_index, text) = match self.recognition_arena.extra(extra) {
+                    RecognitionExtra::MissingToken {
+                        token_type,
+                        at_index,
+                        text,
+                    } => (*token_type, *at_index as usize, text.clone()),
+                    RecognitionExtra::ReturnValues(_) | RecognitionExtra::Diagnostic(_) => {
+                        unreachable!("missing-token node must reference missing-token extra")
+                    }
+                };
                 let (line, column) = self
-                    .token_at(*at_index)
+                    .token_at(at_index)
                     .map_or((0, 0), |token| (token.line(), token.column()));
-                let token = self.insert_synthetic_token(*token_type, text.clone(), line, column)?;
+                let token = self.insert_synthetic_token(token_type, text, line, column)?;
                 Ok(self.error_tree(token))
             }
-            FastRecognizedNode::Rule {
+            ArenaRecognizedNode::Rule {
                 rule_index,
                 invoking_state,
+                alt_number,
                 start_index,
                 stop_index,
+                return_values,
                 children,
             } => {
                 let mut context = ParserRuleContext::with_child_capacity(
-                    *rule_index,
-                    *invoking_state,
-                    children.len(),
+                    rule_index as usize,
+                    invoking_state as isize,
+                    self.recognition_arena.sequence_len(children),
                 );
-                if let Some(token) = self.token_id_at(*start_index) {
+                if track_alt_numbers {
+                    context.set_alt_number(alt_number as usize);
+                }
+                if let Some(extra) = return_values {
+                    let RecognitionExtra::ReturnValues(values) =
+                        self.recognition_arena.extra(extra)
+                    else {
+                        unreachable!("rule node must reference return-values extra");
+                    };
+                    for (name, value) in values {
+                        context.set_int_return(name.clone(), *value);
+                    }
+                }
+                if let Some(token) = self.token_id_at(start_index as usize) {
                     self.set_context_start(&mut context, token);
                 }
-                if let Some(token) = stop_index.and_then(|index| self.token_id_at(index)) {
+                if let Some(token) = stop_index.and_then(|index| self.token_id_at(index as usize)) {
                     self.set_context_stop(&mut context, token);
                 }
-                if children.has_left_recursive_boundary() {
-                    let folded = fold_fast_left_recursive_boundaries(children.to_vec());
-                    for child in &folded {
-                        context.add_child(self.fast_recognized_node_tree(child.as_ref())?);
-                    }
-                } else {
-                    for child in children.iter() {
-                        context.add_child(self.fast_recognized_node_tree(child.as_ref())?);
-                    }
+                let mut cursor = self
+                    .recognition_arena
+                    .fold_left_recursive_boundaries(children);
+                while let Some(link) = self.recognition_arena.link(cursor) {
+                    context
+                        .add_child(self.arena_recognized_node_tree(link.head, track_alt_numbers)?);
+                    cursor = link.tail;
                 }
                 Ok(self.rule_node(context))
             }
-            FastRecognizedNode::LeftRecursiveBoundary { rule_index } => {
+            ArenaRecognizedNode::LeftRecursiveBoundary { rule_index } => {
                 Err(AntlrError::Unsupported(format!(
                     "unfolded left-recursive boundary for rule {rule_index}"
                 )))
@@ -5425,88 +5841,65 @@ where
         }
     }
 
-    fn fast_recognized_node_tree_with_implicit_tokens(
+    fn arena_recognized_node_tree_with_implicit_tokens(
         &mut self,
-        node: &FastRecognizedNode,
+        node_id: RecognizedNodeId,
     ) -> Result<ParseTree, AntlrError> {
+        let node = self.recognition_arena.node(node_id);
         match node {
-            FastRecognizedNode::Rule {
+            ArenaRecognizedNode::Rule {
                 rule_index,
                 invoking_state,
                 start_index,
                 stop_index,
                 children,
+                ..
             } => {
                 let mut context = ParserRuleContext::with_child_capacity(
-                    *rule_index,
-                    *invoking_state,
-                    children.len(),
+                    rule_index as usize,
+                    invoking_state as isize,
+                    self.recognition_arena.sequence_len(children),
                 );
-                if let Some(token) = self.token_id_at(*start_index) {
+                if let Some(token) = self.token_id_at(start_index as usize) {
                     self.set_context_start(&mut context, token);
                 }
-                if let Some(token) = stop_index.and_then(|index| self.token_id_at(index)) {
+                if let Some(token) = stop_index.and_then(|index| self.token_id_at(index as usize)) {
                     self.set_context_stop(&mut context, token);
                 }
-                if children.has_left_recursive_boundary() {
-                    let folded = fold_fast_left_recursive_boundaries(children.to_vec());
-                    self.add_fast_implicit_token_children(
-                        &mut context,
-                        *start_index,
-                        *stop_index,
-                        &folded,
-                    )?;
-                } else {
-                    self.add_fast_implicit_token_children_iter(
-                        &mut context,
-                        *start_index,
-                        *stop_index,
-                        children.iter(),
-                    )?;
-                }
+                let children = self
+                    .recognition_arena
+                    .fold_left_recursive_boundaries(children);
+                self.add_arena_implicit_token_children(
+                    &mut context,
+                    start_index as usize,
+                    stop_index.map(|index| index as usize),
+                    children,
+                )?;
                 Ok(self.rule_node(context))
             }
-            _ => self.fast_recognized_node_tree(node),
+            _ => self.arena_recognized_node_tree(node_id, false),
         }
     }
 
-    fn add_fast_implicit_token_children(
+    fn add_arena_implicit_token_children(
         &mut self,
         context: &mut ParserRuleContext,
         start_index: usize,
         stop_index: Option<usize>,
-        children: &[Rc<FastRecognizedNode>],
-    ) -> Result<(), AntlrError> {
-        self.add_fast_implicit_token_children_iter(
-            context,
-            start_index,
-            stop_index,
-            children.iter(),
-        )
-    }
-
-    fn add_fast_implicit_token_children_iter<'a>(
-        &mut self,
-        context: &mut ParserRuleContext,
-        start_index: usize,
-        stop_index: Option<usize>,
-        children: impl IntoIterator<Item = &'a Rc<FastRecognizedNode>>,
+        mut children: NodeSeqId,
     ) -> Result<(), AntlrError> {
         let mut cursor = Some(start_index);
-        for child in children {
-            if let Some((child_start, child_stop)) = fast_recognized_node_span(child.as_ref()) {
+        while let Some(link) = self.recognition_arena.link(children) {
+            if let Some((child_start, child_stop)) = self.recognition_arena.node_span(link.head) {
                 self.add_visible_terminals_before(context, &mut cursor, child_start)?;
-                context.add_child(
-                    self.fast_recognized_node_tree_with_implicit_tokens(child.as_ref())?,
-                );
+                context.add_child(self.arena_recognized_node_tree_with_implicit_tokens(link.head)?);
                 if let Some(child_stop) = child_stop {
                     cursor = self.next_visible_after_token(child_stop);
                 }
             } else {
-                context.add_child(
-                    self.fast_recognized_node_tree_with_implicit_tokens(child.as_ref())?,
-                );
+                context.add_child(self.arena_recognized_node_tree_with_implicit_tokens(link.head)?);
             }
+            children = link.tail;
         }
         if let Some(stop) = stop_index {
             self.add_visible_terminals_through(context, cursor, stop)?;
@@ -5691,6 +6084,7 @@ where
         let start_index = self.current_visible_index();
         self.clear_prediction_diagnostics();
         self.reset_per_parse_caches();
+        self.reset_recognition_arena();
         let init_action_rules = init_action_rules.iter().copied().collect::<BTreeSet<_>>();
         let invoking_state = self.pending_invoking_states.pop();
         let local_int_arg = invoking_state
@@ -5743,16 +6137,20 @@ where
         // Recognition recorded no unresolved coordinate of its own; merge the
         // parent's prior hits back so its public entry can still surface them.
         self.restore_prior_unknown_predicate_hits(prior_unknown_predicate_hits);
-        let Some(outcome) = select_best_outcome(outcomes.into_iter(), self.prediction_mode) else {
+        let Some(outcome) = select_best_outcome(
+            outcomes.into_iter(),
+            self.prediction_mode,
+            &self.recognition_arena,
+        ) else {
             let error = self.recognition_error(rule_index, start_index, &expected);
             self.record_syntax_errors(1);
             report_token_source_errors(&self.input.drain_source_errors());
             return Err(error);
         };
 
-        self.record_syntax_errors(outcome.diagnostics.len());
+        self.record_syntax_errors(self.recognition_arena.diagnostics_len(outcome.diagnostics));
         report_parser_diagnostics(&self.prediction_diagnostics);
-        report_parser_diagnostics(&outcome.diagnostics);
+        report_parser_diagnostics(self.recognition_arena.diagnostics(outcome.diagnostics));
         report_token_source_errors(&self.input.drain_source_errors());
         let mut actions = outcome.actions;
         if init_action_rules.contains(&rule_index) {
@@ -5775,12 +6173,20 @@ where
         if let Some(token) = self.rule_stop_token_id(outcome.index, outcome.consumed_eof) {
             self.set_context_stop(&mut context, token);
         }
+        let live_root = if self.build_parse_trees {
+            self.recognition_arena
+                .fold_left_recursive_boundaries(outcome.nodes)
+        } else {
+            outcome.nodes
+        };
         if self.build_parse_trees {
-            let nodes = fold_left_recursive_boundaries(outcome.nodes);
-            for node in &nodes {
-                context.add_child(self.recognized_node_tree(node, track_alt_numbers)?);
+            let mut nodes = live_root;
+            while let Some(link) = self.recognition_arena.link(nodes) {
+                context.add_child(self.arena_recognized_node_tree(link.head, track_alt_numbers)?);
+                nodes = link.tail;
             }
         }
+        self.finish_recognition_arena(live_root, outcome.diagnostics);
         self.input.seek(outcome.index);
 
         Ok((self.rule_node(context), actions))
@@ -5912,16 +6318,22 @@ where
             }
             next_index = after;
         }
+        let mut nodes = NodeSeqId::EMPTY;
+        let error = self.arena_token_node(error_index, true);
+        self.arena_prepend(&mut nodes, error);
+        let diagnostics = self
+            .recognition_arena
+            .prepend_diagnostic(DiagnosticSeqId::EMPTY, diagnostic);
         Some(RecognizeOutcome {
             index: next_index,
             consumed_eof: false,
             alt_number: 0,
             member_values,
             return_values: BTreeMap::new(),
-            diagnostics: vec![diagnostic],
+            diagnostics,
             decisions: Vec::new(),
             actions: Vec::new(),
-            nodes: vec![RecognizedNode::ErrorToken { index: error_index }],
+            nodes,
         })
     }
 
@@ -6126,14 +6538,14 @@ where
         .into_iter()
         .map(|mut outcome| {
             outcome.consumed_eof |= next_symbol == TOKEN_EOF;
-            outcome.diagnostics.insert(0, diagnostic.clone());
+            outcome.diagnostics = self
+                .recognition_arena
+                .prepend_diagnostic(outcome.diagnostics, diagnostic.clone());
             if self.fast_token_nodes_enabled {
-                outcome
-                    .nodes
-                    .prepend(Rc::new(FastRecognizedNode::Token { index: next_index }));
-                outcome
-                    .nodes
-                    .prepend(Rc::new(FastRecognizedNode::ErrorToken { index }));
+                let token = self.arena_token_node(next_index, false);
+                self.arena_prepend(&mut outcome.nodes, token);
+                let error = self.arena_token_node(index, true);
+                self.arena_prepend(&mut outcome.nodes, error);
             }
             outcome
         })
@@ -6196,14 +6608,11 @@ where
         )
         .into_iter()
         .map(|mut outcome| {
-            outcome.diagnostics.insert(0, diagnostic.clone());
-            outcome
-                .nodes
-                .prepend(Rc::new(FastRecognizedNode::MissingToken {
-                    token_type,
-                    at_index: index,
-                    text: text.clone(),
-                }));
+            outcome.diagnostics = self
+                .recognition_arena
+                .prepend_diagnostic(outcome.diagnostics, diagnostic.clone());
+            let missing = self.arena_missing_token_node(token_type, index, text.clone());
+            self.arena_prepend(&mut outcome.nodes, missing);
             outcome
         })
         .collect()
@@ -6238,11 +6647,12 @@ where
         self.recognize_state_fast(atn, request, visiting, memo, expected)
             .into_iter()
             .map(|mut outcome| {
-                outcome.diagnostics.insert(0, diagnostic.clone());
+                outcome.diagnostics = self
+                    .recognition_arena
+                    .prepend_diagnostic(outcome.diagnostics, diagnostic.clone());
                 for index in skipped.iter().rev() {
-                    outcome
-                        .nodes
-                        .prepend(Rc::new(FastRecognizedNode::ErrorToken { index: *index }));
+                    let error = self.arena_token_node(*index, true);
+                    self.arena_prepend(&mut outcome.nodes, error);
                 }
                 outcome
             })
@@ -6278,13 +6688,13 @@ where
             }
             next_index = after;
         }
-        let mut diagnostics = FastDiagnostics::new();
-        diagnostics.insert(0, diagnostic);
-        let mut nodes = NodeList::new();
+        let diagnostics = self
+            .recognition_arena
+            .prepend_diagnostic(DiagnosticSeqId::EMPTY, diagnostic);
+        let mut nodes = NodeSeqId::EMPTY;
         if self.fast_token_nodes_enabled {
-            nodes.prepend(Rc::new(FastRecognizedNode::ErrorToken {
-                index: error_index,
-            }));
+            let error = self.arena_token_node(error_index, true);
+            self.arena_prepend(&mut nodes, error);
         }
         Some(FastRecognizeOutcome {
             index: next_index,
@@ -6363,18 +6773,17 @@ where
                 return Vec::new();
             }
             if state_number == stop_state {
-                let mut nodes = NodeList::new();
+                let mut nodes = NodeSeqId::EMPTY;
                 if self.fast_token_nodes_enabled {
                     for token_index in inline_consumed_tokens.iter().rev() {
-                        nodes.prepend(Rc::new(FastRecognizedNode::Token {
-                            index: *token_index,
-                        }));
+                        let token = self.arena_token_node(*token_index, false);
+                        self.arena_prepend(&mut nodes, token);
                     }
                 }
                 return vec![FastRecognizeOutcome {
                     index,
                     consumed_eof: inline_consumed_eof,
-                    diagnostics: FastDiagnostics::new(),
+                    diagnostics: DiagnosticSeqId::EMPTY,
                     nodes,
                 }];
             }
@@ -6510,9 +6919,8 @@ where
                             }
                             if self.fast_token_nodes_enabled {
                                 for token_index in inline_tokens.iter().rev() {
-                                    outcome.nodes.prepend(Rc::new(FastRecognizedNode::Token {
-                                        index: *token_index,
-                                    }));
+                                    let token = self.arena_token_node(*token_index, false);
+                                    self.arena_prepend(&mut outcome.nodes, token);
                                 }
                             }
                             outcome
@@ -6684,9 +7092,8 @@ where
                         .into_iter()
                         .map(|mut outcome| {
                             if let Some(rule_index) = boundary {
-                                outcome.nodes.prepend(Rc::new(
-                                    FastRecognizedNode::LeftRecursiveBoundary { rule_index },
-                                ));
+                                let boundary = self.arena_boundary_node(rule_index);
+                                self.arena_prepend(&mut outcome.nodes, boundary);
                             }
                             outcome
                         }),
@@ -6719,9 +7126,8 @@ where
                             .into_iter()
                             .map(|mut outcome| {
                                 if let Some(rule_index) = boundary {
-                                    outcome.nodes.prepend(Rc::new(
-                                        FastRecognizedNode::LeftRecursiveBoundary { rule_index },
-                                    ));
+                                    let boundary = self.arena_boundary_node(rule_index);
+                                    self.arena_prepend(&mut outcome.nodes, boundary);
                                 }
                                 outcome
                             }),
@@ -6841,11 +7247,15 @@ where
                         if follow_outcomes.is_empty() {
                             continue;
                         }
-                        let child_node = Rc::new(FastRecognizedNode::Rule {
+                        let child_stop_index =
+                            self.rule_stop_token_index(child_index, child_consumed_eof);
+                        let child_node = self.arena_rule_node(ArenaRuleSpec {
                             rule_index: *rule_index,
                             invoking_state: invoking_state_number(state_number),
+                            alt_number: 0,
                             start_index: index,
-                            stop_index: self.rule_stop_token_index(child_index, child_consumed_eof),
+                            stop_index: child_stop_index,
+                            return_values: BTreeMap::new(),
                             children: child.nodes,
                         });
                         let child_diags_empty = child_diagnostics.is_empty();
@@ -6854,11 +7264,11 @@ where
                             // Skip the prepend dance when there's nothing to
                             // merge from the child — common case in pass 1.
                             if !child_diags_empty {
-                                let mut diagnostics = child_diagnostics.clone();
-                                diagnostics.append(&mut outcome.diagnostics);
-                                outcome.diagnostics = diagnostics;
+                                outcome.diagnostics = self
+                                    .recognition_arena
+                                    .concat_diagnostics(child_diagnostics, outcome.diagnostics);
                             }
-                            outcome.nodes.prepend(Rc::clone(&child_node));
+                            self.arena_prepend(&mut outcome.nodes, child_node);
                             outcome
                         }));
                     }
@@ -6896,9 +7306,8 @@ where
                             .map(|mut outcome| {
                                 outcome.consumed_eof |= symbol == TOKEN_EOF;
                                 if self.fast_token_nodes_enabled {
-                                    outcome
-                                        .nodes
-                                        .prepend(Rc::new(FastRecognizedNode::Token { index }));
+                                    let token = self.arena_token_node(index, false);
+                                    self.arena_prepend(&mut outcome.nodes, token);
                                 }
                                 outcome
                             }),
@@ -7016,7 +7425,7 @@ where
             discard_recovered_fast_outcomes_if_clean_path_exists(&mut outcomes);
         }
         if self.fast_recovery_enabled {
-            dedupe_fast_outcomes(&mut outcomes);
+            dedupe_fast_outcomes(&mut outcomes, &self.recognition_arena);
         } else {
             dedupe_clean_fast_outcomes(&mut outcomes);
         }
@@ -7037,15 +7446,14 @@ where
         // Apply inline pending state to each outcome before returning.
         // Tokens consumed inline by the loop-collapse don't appear in the
         // recursive recognizer's output, so we need to prepend them here.
-        let apply_inline_pending = |mut outcome: FastRecognizeOutcome| -> FastRecognizeOutcome {
+        let mut apply_inline_pending = |mut outcome: FastRecognizeOutcome| -> FastRecognizeOutcome {
             if inline_consumed_eof {
                 outcome.consumed_eof = true;
             }
             if !inline_consumed_tokens.is_empty() {
                 for token_index in inline_consumed_tokens.iter().rev() {
-                    outcome.nodes.prepend(Rc::new(FastRecognizedNode::Token {
-                        index: *token_index,
-                    }));
+                    let token = self.arena_token_node(*token_index, false);
+                    self.arena_prepend(&mut outcome.nodes, token);
                 }
             }
             outcome
@@ -7068,7 +7476,11 @@ where
             let stored: Rc<[FastRecognizeOutcome]> = Rc::from(outcomes);
             memo.insert(key, Rc::clone(&stored));
             if inline_pending {
-                return stored.iter().cloned().map(apply_inline_pending).collect();
+                return stored
+                    .iter()
+                    .cloned()
+                    .map(&mut apply_inline_pending)
+                    .collect();
             }
             return stored.to_vec();
         }
@@ -7159,13 +7571,13 @@ where
         .into_iter()
         .map(|mut outcome| {
             outcome.consumed_eof |= next_symbol == TOKEN_EOF;
-            outcome.diagnostics.insert(0, diagnostic.clone());
-            outcome
-                .nodes
-                .insert(0, RecognizedNode::Token { index: next_index });
-            outcome
-                .nodes
-                .insert(0, RecognizedNode::ErrorToken { index });
+            outcome.diagnostics = self
+                .recognition_arena
+                .prepend_diagnostic(outcome.diagnostics, diagnostic.clone());
+            let token = self.arena_token_node(next_index, false);
+            self.arena_prepend(&mut outcome.nodes, token);
+            let error = self.arena_token_node(index, true);
+            self.arena_prepend(&mut outcome.nodes, error);
             outcome
         })
         .collect()
@@ -7201,11 +7613,12 @@ where
         self.recognize_state(atn, request, visiting, memo, expected)
             .into_iter()
             .map(|mut outcome| {
-                outcome.diagnostics.insert(0, diagnostic.clone());
+                outcome.diagnostics = self
+                    .recognition_arena
+                    .prepend_diagnostic(outcome.diagnostics, diagnostic.clone());
                 for index in skipped.iter().rev() {
-                    outcome
-                        .nodes
-                        .insert(0, RecognizedNode::ErrorToken { index: *index });
+                    let error = self.arena_token_node(*index, true);
+                    self.arena_prepend(&mut outcome.nodes, error);
                 }
                 outcome
             })
@@ -7284,10 +7697,11 @@ where
         .into_iter()
         .map(|mut outcome| {
             prepend_decision(&mut outcome, decision);
-            outcome.diagnostics.insert(0, diagnostic.clone());
-            outcome
-                .nodes
-                .insert(0, RecognizedNode::ErrorToken { index: error_index });
+            outcome.diagnostics = self
+                .recognition_arena
+                .prepend_diagnostic(outcome.diagnostics, diagnostic.clone());
+            let error = self.arena_token_node(error_index, true);
+            self.arena_prepend(&mut outcome.nodes, error);
             outcome
         })
         .collect()
@@ -7296,7 +7710,7 @@ where
     /// Stops the current rule at EOF after a nested failure, matching ANTLR's
     /// behavior of unwinding instead of inserting caller tokens at EOF.
     fn eof_consuming_failure_fallback(
-        &self,
+        &mut self,
         fallback: ConsumingFailureFallback<'_>,
         expected: &ExpectedTokens,
     ) -> Vec<RecognizeOutcome> {
@@ -7306,16 +7720,19 @@ where
         }
         let diagnostic =
             self.eof_rule_recovery_diagnostic(request.index, &fallback.expected_symbols, expected);
+        let diagnostics = self
+            .recognition_arena
+            .prepend_diagnostic(DiagnosticSeqId::EMPTY, diagnostic);
         vec![RecognizeOutcome {
             index: request.index,
             consumed_eof: request.consumed_eof,
             alt_number: request.rule_alt_number,
             member_values: request.member_values,
             return_values: request.return_values,
-            diagnostics: vec![diagnostic],
+            diagnostics,
             decisions: Vec::new(),
             actions: Vec::new(),
-            nodes: Vec::new(),
+            nodes: NodeSeqId::EMPTY,
         }]
     }
 
@@ -7397,15 +7814,11 @@ where
         )
         .into_iter()
         .map(|mut outcome| {
-            outcome.diagnostics.insert(0, diagnostic.clone());
-            outcome.nodes.insert(
-                0,
-                RecognizedNode::MissingToken {
-                    token_type,
-                    at_index: index,
-                    text: text.clone(),
-                },
-            );
+            outcome.diagnostics = self
+                .recognition_arena
+                .prepend_diagnostic(outcome.diagnostics, diagnostic.clone());
+            let missing = self.arena_missing_token_node(token_type, index, text.clone());
+            self.arena_prepend(&mut outcome.nodes, missing);
             outcome
         })
         .collect()
@@ -7578,10 +7991,8 @@ where
                             .map(|mut outcome| {
                                 prepend_decision(&mut outcome, decision);
                                 if let Some(rule_index) = left_recursive_boundary {
-                                    outcome.nodes.insert(
-                                        0,
-                                        RecognizedNode::LeftRecursiveBoundary { rule_index },
-                                    );
+                                    let boundary = self.arena_boundary_node(rule_index);
+                                    self.arena_prepend(&mut outcome.nodes, boundary);
                                 }
                                 outcome
                             }),
@@ -7723,15 +8134,20 @@ where
                         preserve_child_expected,
                     );
                     for child in children {
-                        let child_node = RecognizedNode::Rule {
+                        let child_stop_index =
+                            self.rule_stop_token_index(child.index, child.consumed_eof);
+                        let child_nodes = self
+                            .recognition_arena
+                            .fold_left_recursive_boundaries(child.nodes);
+                        let child_node = self.arena_rule_node(ArenaRuleSpec {
                             rule_index: *rule_index,
                             invoking_state: invoking_state_number(state_number),
                             alt_number: child.alt_number,
                             start_index: index,
-                            stop_index: self.rule_stop_token_index(child.index, child.consumed_eof),
+                            stop_index: child_stop_index,
                             return_values: child.return_values.clone(),
-                            children: fold_left_recursive_boundaries(child.nodes.clone()),
-                        };
+                            children: child_nodes,
+                        });
                         outcomes.extend(
                             self.recognize_state(
                                 atn,
@@ -7765,9 +8181,9 @@ where
                             .into_iter()
                             .map(|mut outcome| {
                                 outcome.consumed_eof |= child.consumed_eof;
-                                let mut diagnostics = child.diagnostics.clone();
-                                diagnostics.append(&mut outcome.diagnostics);
-                                outcome.diagnostics = diagnostics;
+                                outcome.diagnostics = self
+                                    .recognition_arena
+                                    .concat_diagnostics(child.diagnostics, outcome.diagnostics);
                                 let mut decisions = child.decisions.clone();
                                 decisions.append(&mut outcome.decisions);
                                 outcome.decisions = decisions;
@@ -7785,7 +8201,7 @@ where
                                 }
                                 actions.append(&mut outcome.actions);
                                 outcome.actions = actions;
-                                outcome.nodes.insert(0, child_node.clone());
+                                self.arena_prepend(&mut outcome.nodes, child_node);
                                 outcome
                             }),
                         );
@@ -7833,7 +8249,8 @@ where
                             .map(|mut outcome| {
                                 prepend_decision(&mut outcome, decision);
                                 outcome.consumed_eof |= symbol == TOKEN_EOF;
-                                outcome.nodes.insert(0, RecognizedNode::Token { index });
+                                let token = self.arena_token_node(index, false);
+                                self.arena_prepend(&mut outcome.nodes, token);
                                 outcome
                             }),
                         );
@@ -7920,9 +8337,9 @@ where
             self.prediction_mode,
             PredictionMode::Ll | PredictionMode::LlExactAmbigDetection
         ) {
-            discard_recovered_outcomes_if_clean_path_exists(&mut outcomes);
+            discard_recovered_outcomes_if_clean_path_exists(&mut outcomes, &self.recognition_arena);
         }
-        dedupe_outcomes(&mut outcomes);
+        dedupe_outcomes(&mut outcomes, &self.recognition_arena);
         memo.insert(key, outcomes.clone());
         outcomes
     }
@@ -8005,9 +8422,8 @@ where
         .map(|mut outcome| {
             prepend_decision(&mut outcome, step.decision);
             if let Some(rule_index) = step.left_recursive_boundary {
-                outcome
-                    .nodes
-                    .insert(0, RecognizedNode::LeftRecursiveBoundary { rule_index });
+                let boundary = self.arena_boundary_node(rule_index);
+                self.arena_prepend(&mut outcome.nodes, boundary);
             }
             if let Some(action) = action {
                 outcome.actions.insert(0, action);
@@ -8310,6 +8726,102 @@ where
         self.input.get_id(index)
     }
 
+    fn arena_token_node(&mut self, index: usize, error: bool) -> RecognizedNodeId {
+        let token = self
+            .token_id_at(index)
+            .expect("recognized token index must exist in the token store");
+        let node = if error {
+            ArenaRecognizedNode::ErrorToken { token }
+        } else {
+            ArenaRecognizedNode::Token { token }
+        };
+        self.recognition_arena.push_node(node)
+    }
+
+    fn arena_missing_token_node(
+        &mut self,
+        token_type: i32,
+        at_index: usize,
+        text: String,
+    ) -> RecognizedNodeId {
+        let extra = self
+            .recognition_arena
+            .push_extra(RecognitionExtra::MissingToken {
+                token_type,
+                at_index: u32::try_from(at_index).expect("missing-token stream index fits in u32"),
+                text,
+            });
+        self.recognition_arena
+            .push_node(ArenaRecognizedNode::MissingToken { extra })
+    }
+
+    fn arena_rule_node(&mut self, spec: ArenaRuleSpec) -> RecognizedNodeId {
+        let ArenaRuleSpec {
+            rule_index,
+            invoking_state,
+            alt_number,
+            start_index,
+            stop_index,
+            return_values,
+            children,
+        } = spec;
+        let return_values = (!return_values.is_empty()).then(|| {
+            self.recognition_arena
+                .push_extra(RecognitionExtra::ReturnValues(return_values))
+        });
+        self.recognition_arena.push_node(ArenaRecognizedNode::Rule {
+            rule_index: u32::try_from(rule_index).expect("rule index fits in u32"),
+            invoking_state: i32::try_from(invoking_state).expect("invoking state fits in i32"),
+            alt_number: u32::try_from(alt_number).expect("alternative number fits in u32"),
+            start_index: u32::try_from(start_index).expect("rule start index fits in u32"),
+            stop_index: stop_index
+                .map(|index| u32::try_from(index).expect("rule stop index fits in u32")),
+            return_values,
+            children,
+        })
+    }
+
+    fn arena_boundary_node(&mut self, rule_index: usize) -> RecognizedNodeId {
+        self.recognition_arena
+            .push_node(ArenaRecognizedNode::LeftRecursiveBoundary {
+                rule_index: u32::try_from(rule_index).expect("rule index fits in u32"),
+            })
+    }
+
+    fn arena_prepend(&mut self, sequence: &mut NodeSeqId, node: RecognizedNodeId) {
+        *sequence = self.recognition_arena.prepend(*sequence, node);
+    }
+
+    fn finish_recognition_arena(&mut self, root: NodeSeqId, diagnostics: DiagnosticSeqId) {
+        self.last_recognition_arena_root = root;
+        self.last_recognition_arena_diagnostics = diagnostics;
+        #[cfg(feature = "perf-counters")]
+        if std::env::var("ANTLR_PERF_DUMP").is_ok() {
+            let stats = self.recognition_arena_stats();
+            #[allow(clippy::print_stderr)]
+            {
+                eprintln!("perf recognition_nodes_total={}", stats.total_nodes);
+                eprintln!("perf recognition_nodes_live={}", stats.live_nodes);
+                eprintln!("perf recognition_nodes_dead={}", stats.dead_nodes);
+                eprintln!("perf recognition_nodes_capacity={}", stats.node_capacity);
+                eprintln!("perf recognition_links_total={}", stats.total_links);
+                eprintln!("perf recognition_links_live={}", stats.live_links);
+                eprintln!("perf recognition_links_dead={}", stats.dead_links);
+                eprintln!("perf recognition_links_capacity={}", stats.link_capacity);
+                eprintln!("perf recognition_extras_total={}", stats.total_extras);
+                eprintln!("perf recognition_extras_live={}", stats.live_extras);
+                eprintln!("perf recognition_extras_dead={}", stats.dead_extras);
+                eprintln!("perf recognition_extras_capacity={}", stats.extra_capacity);
+            }
+        }
+    }
+
+    fn reset_recognition_arena(&mut self) {
+        self.recognition_arena.reset();
+        self.last_recognition_arena_root = NodeSeqId::EMPTY;
+        self.last_recognition_arena_diagnostics = DiagnosticSeqId::EMPTY;
+    }
+
     /// Normalizes the current token-stream cursor to the next parser-visible
     /// token before capturing a rule start boundary.
     fn current_visible_index(&mut self) -> usize {
@@ -8458,27 +8970,32 @@ where
             self.token_at(index).as_ref(),
             format!("rule {rule_name} {message}"),
         );
-        let mut nodes = Vec::new();
+        let mut reversed_nodes = NodeSeqId::EMPTY;
         let mut next_index = index;
         loop {
             let symbol = self.token_type_at(next_index);
             if symbol == TOKEN_EOF {
                 break;
             }
-            nodes.push(RecognizedNode::ErrorToken { index: next_index });
+            let error = self.arena_token_node(next_index, true);
+            self.arena_prepend(&mut reversed_nodes, error);
             let after = self.consume_index(next_index, symbol);
             if after == next_index {
                 break;
             }
             next_index = after;
         }
+        let nodes = self.recognition_arena.reverse_sequence(reversed_nodes);
+        let diagnostics = self
+            .recognition_arena
+            .prepend_diagnostic(DiagnosticSeqId::EMPTY, diagnostic);
         RecognizeOutcome {
             index: next_index,
             consumed_eof: false,
             alt_number: rule_alt_number,
             member_values,
             return_values,
-            diagnostics: vec![diagnostic],
+            diagnostics,
             decisions: Vec::new(),
             actions: Vec::new(),
             nodes,
@@ -9046,79 +9563,6 @@ where
     pub fn token_display_at(&self, index: usize) -> Option<String> {
         self.token_at(index).map(|token| format!("{token}"))
     }
-
-    /// Converts a recognized internal node into a public parse-tree node.
-    fn recognized_node_tree(
-        &mut self,
-        node: &RecognizedNode,
-        track_alt_numbers: bool,
-    ) -> Result<ParseTree, AntlrError> {
-        match node {
-            RecognizedNode::Token { index } => {
-                let token = self
-                    .input
-                    .get_id(*index)
-                    .ok_or_else(|| AntlrError::ParserError {
-                        line: 0,
-                        column: 0,
-                        message: format!("missing token at index {index}"),
-                    })?;
-                Ok(self.terminal_tree(token))
-            }
-            RecognizedNode::ErrorToken { index } => {
-                let token = self
-                    .input
-                    .get_id(*index)
-                    .ok_or_else(|| AntlrError::ParserError {
-                        line: 0,
-                        column: 0,
-                        message: format!("missing error token at index {index}"),
-                    })?;
-                Ok(self.error_tree(token))
-            }
-            RecognizedNode::MissingToken {
-                token_type,
-                at_index,
-                text,
-            } => {
-                let (line, column) = self
-                    .token_at(*at_index)
-                    .map_or((0, 0), |token| (token.line(), token.column()));
-                let token = self.insert_synthetic_token(*token_type, text.clone(), line, column)?;
-                Ok(self.error_tree(token))
-            }
-            RecognizedNode::Rule {
-                rule_index,
-                invoking_state,
-                alt_number,
-                start_index,
-                stop_index,
-                return_values,
-                children,
-            } => {
-                let mut context = ParserRuleContext::new(*rule_index, *invoking_state);
-                if track_alt_numbers {
-                    context.set_alt_number(*alt_number);
-                }
-                for (name, value) in return_values {
-                    context.set_int_return(name.clone(), *value);
-                }
-                if let Some(token) = self.token_id_at(*start_index) {
-                    self.set_context_start(&mut context, token);
-                }
-                if let Some(token) = stop_index.and_then(|index| self.token_id_at(index)) {
-                    self.set_context_stop(&mut context, token);
-                }
-                for child in children {
-                    context.add_child(self.recognized_node_tree(child, track_alt_numbers)?);
-                }
-                Ok(self.rule_node(context))
-            }
-            RecognizedNode::LeftRecursiveBoundary { rule_index } => Err(AntlrError::Unsupported(
-                format!("unfolded left-recursive boundary for rule {rule_index}"),
-            )),
-        }
-    }
 }
 
 impl<S, H> DirectAdaptiveParser<'_, '_, S, H>
@@ -9423,151 +9867,6 @@ const fn next_alt_number(
     current_alt_number
 }
 
-/// Folds boundary markers emitted at precedence-loop entries into nested rule
-/// nodes, matching ANTLR's recursive-context parse-tree shape.
-fn fold_left_recursive_boundaries(nodes: Vec<RecognizedNode>) -> Vec<RecognizedNode> {
-    let mut folded = Vec::new();
-    for node in nodes {
-        match node {
-            RecognizedNode::LeftRecursiveBoundary { rule_index } => {
-                if !folded.is_empty() {
-                    let children = std::mem::take(&mut folded);
-                    let start_index = recognized_nodes_start_index(&children).unwrap_or_default();
-                    let stop_index = recognized_nodes_stop_index(&children);
-                    folded.push(RecognizedNode::Rule {
-                        rule_index,
-                        invoking_state: -1,
-                        alt_number: 0,
-                        start_index,
-                        stop_index,
-                        return_values: BTreeMap::new(),
-                        children,
-                    });
-                }
-            }
-            node => folded.push(node),
-        }
-    }
-    folded
-}
-
-/// Mirrors [`fold_left_recursive_boundaries`] for [`FastRecognizedNode`].
-fn fold_fast_left_recursive_boundaries(
-    nodes: Vec<Rc<FastRecognizedNode>>,
-) -> Vec<Rc<FastRecognizedNode>> {
-    // Most rule invocations have no left-recursive boundaries, so skip the
-    // fold work entirely when none are present. The boundary marker is only
-    // emitted at precedence-rule loop entries, which are rare relative to
-    // every rule call the recognizer fans out.
-    if !nodes.iter().any(|node| {
-        matches!(
-            node.as_ref(),
-            FastRecognizedNode::LeftRecursiveBoundary { .. }
-        )
-    }) {
-        return nodes;
-    }
-    let mut folded: Vec<Rc<FastRecognizedNode>> = Vec::with_capacity(nodes.len());
-    for node in nodes {
-        match node.as_ref() {
-            FastRecognizedNode::LeftRecursiveBoundary { rule_index } => {
-                if !folded.is_empty() {
-                    let children = std::mem::take(&mut folded);
-                    let start_index =
-                        fast_recognized_nodes_start_index(&children).unwrap_or_default();
-                    let stop_index = fast_recognized_nodes_stop_index(&children);
-                    folded.push(Rc::new(FastRecognizedNode::Rule {
-                        rule_index: *rule_index,
-                        invoking_state: -1,
-                        start_index,
-                        stop_index,
-                        children: NodeList::from_vec(children),
-                    }));
-                }
-            }
-            _ => folded.push(node),
-        }
-    }
-    folded
-}
-
-fn fast_node_has_left_recursive_boundary(node: &FastRecognizedNode) -> bool {
-    match node {
-        FastRecognizedNode::LeftRecursiveBoundary { .. } => true,
-        FastRecognizedNode::Rule { children, .. } => children.has_left_recursive_boundary(),
-        FastRecognizedNode::Token { .. }
-        | FastRecognizedNode::ErrorToken { .. }
-        | FastRecognizedNode::MissingToken { .. } => false,
-    }
-}
-
-fn fast_recognized_nodes_start_index(nodes: &[Rc<FastRecognizedNode>]) -> Option<usize> {
-    nodes
-        .iter()
-        .find_map(|node| fast_recognized_node_start_index(node.as_ref()))
-}
-
-const fn fast_recognized_node_start_index(node: &FastRecognizedNode) -> Option<usize> {
-    match node {
-        FastRecognizedNode::Token { index } | FastRecognizedNode::ErrorToken { index } => {
-            Some(*index)
-        }
-        FastRecognizedNode::MissingToken { at_index, .. } => Some(*at_index),
-        FastRecognizedNode::Rule { start_index, .. } => Some(*start_index),
-        FastRecognizedNode::LeftRecursiveBoundary { .. } => None,
-    }
-}
-
-const fn fast_recognized_node_span(node: &FastRecognizedNode) -> Option<(usize, Option<usize>)> {
-    match node {
-        FastRecognizedNode::Token { index } | FastRecognizedNode::ErrorToken { index } => {
-            Some((*index, Some(*index)))
-        }
-        FastRecognizedNode::MissingToken { at_index, .. } => Some((*at_index, None)),
-        FastRecognizedNode::Rule {
-            start_index,
-            stop_index,
-            ..
-        } => Some((*start_index, *stop_index)),
-        FastRecognizedNode::LeftRecursiveBoundary { .. } => None,
-    }
-}
-
-fn fast_recognized_nodes_stop_index(nodes: &[Rc<FastRecognizedNode>]) -> Option<usize> {
-    nodes
-        .iter()
-        .rev()
-        .find_map(|node| fast_recognized_node_stop_index(node.as_ref()))
-}
-
-const fn fast_recognized_node_stop_index(node: &FastRecognizedNode) -> Option<usize> {
-    match node {
-        FastRecognizedNode::Token { index } | FastRecognizedNode::ErrorToken { index } => {
-            Some(*index)
-        }
-        FastRecognizedNode::MissingToken { at_index, .. } => at_index.checked_sub(1),
-        FastRecognizedNode::Rule { stop_index, .. } => *stop_index,
-        FastRecognizedNode::LeftRecursiveBoundary { .. } => None,
-    }
-}
-
-fn recognized_nodes_start_index(nodes: &[RecognizedNode]) -> Option<usize> {
-    nodes.iter().find_map(recognized_node_start_index)
-}
-
-const fn recognized_node_start_index(node: &RecognizedNode) -> Option<usize> {
-    match node {
-        RecognizedNode::Token { index } | RecognizedNode::ErrorToken { index } => Some(*index),
-        RecognizedNode::MissingToken { at_index, .. } => Some(*at_index),
-        RecognizedNode::Rule { start_index, .. } => Some(*start_index),
-        RecognizedNode::LeftRecursiveBoundary { .. } => None,
-    }
-}
-
-fn recognized_nodes_stop_index(nodes: &[RecognizedNode]) -> Option<usize> {
-    nodes.iter().rev().find_map(recognized_node_stop_index)
-}
-
 /// Converts an ATN state number into the signed invoking-state slot used by
 /// ANTLR parse-tree contexts, saturating only for impossible platform widths.
 fn invoking_state_number(state_number: usize) -> isize {
@@ -9576,15 +9875,6 @@ fn invoking_state_number(state_number: usize) -> isize {
 
 fn direct_precedence(precedence: i32) -> usize {
     usize::try_from(precedence.max(0)).unwrap_or_default()
-}
-
-const fn recognized_node_stop_index(node: &RecognizedNode) -> Option<usize> {
-    match node {
-        RecognizedNode::Token { index } | RecognizedNode::ErrorToken { index } => Some(*index),
-        RecognizedNode::MissingToken { at_index, .. } => at_index.checked_sub(1),
-        RecognizedNode::Rule { stop_index, .. } => *stop_index,
-        RecognizedNode::LeftRecursiveBoundary { .. } => None,
-    }
 }
 
 fn token_input_display(token: &impl Token) -> String {
@@ -9615,7 +9905,7 @@ fn diagnostic_for_token<T: Token>(token: Option<T>, message: String) -> ParserDi
 
 /// Emits parser diagnostics for the selected recovered parse path.
 #[allow(clippy::print_stderr)]
-fn report_parser_diagnostics(diagnostics: &[ParserDiagnostic]) {
+fn report_parser_diagnostics<'a>(diagnostics: impl IntoIterator<Item = &'a ParserDiagnostic>) {
     for diagnostic in diagnostics {
         eprintln!(
             "line {}:{} {}",
@@ -9684,6 +9974,28 @@ fn expected_symbol_display(symbol: i32, vocabulary: &Vocabulary) -> String {
     vocabulary.display_name(symbol)
 }
 
+fn caller_follow_token_info_for_stream<S: TokenSource>(
+    input: &mut CommonTokenStream<S>,
+    index: usize,
+) -> (i32, bool, bool) {
+    // Generated callers own statement separators; leave them available when
+    // an interpreted child rule can either stop before or consume one.
+    if index >= FAST_RECOGNIZER_DEFERRED_FILL_AT && !input.is_filled() {
+        input.fill();
+    }
+    let token_type = input.token_type_at_index(index);
+    let visible_channel = input.channel();
+    let token = input.get(index);
+    let is_boundary = token
+        .as_ref()
+        .and_then(Token::text)
+        .is_some_and(is_caller_follow_boundary_text);
+    let is_boundary_gap = token.as_ref().is_some_and(|token| {
+        token.channel() != visible_channel || is_caller_follow_boundary_gap_text(token.text())
+    });
+    (token_type, is_boundary, is_boundary_gap)
+}
+
 fn is_caller_follow_boundary_text(text: &str) -> bool {
     text.chars().any(|ch| ch == ';' || ch == '\n')
         && text.chars().all(|ch| ch.is_whitespace() || ch == ';')
@@ -9715,10 +10027,11 @@ fn state_is_left_recursive_rule(atn: &Atn, state: &AtnState) -> bool {
 fn select_better_top_outcome(
     first: Result<(FastRecognizeOutcome, ExpectedTokens), ExpectedTokens>,
     second: Result<(FastRecognizeOutcome, ExpectedTokens), ExpectedTokens>,
+    arena: &RecognitionArena,
 ) -> Result<(FastRecognizeOutcome, ExpectedTokens), ExpectedTokens> {
     match (first, second) {
         (Ok(first), Ok(second)) => {
-            if first.0.diagnostics.is_empty() {
+            if arena.diagnostics(first.0.diagnostics).next().is_none() {
                 Ok(first)
             } else {
                 Ok(second)
@@ -9740,6 +10053,7 @@ fn select_best_fast_outcome(
     prediction_mode: PredictionMode,
     caller_follow: Option<&TokenBitSet>,
     mut token_info_at: impl FnMut(usize) -> (i32, bool, bool),
+    arena: &RecognitionArena,
 ) -> Option<FastRecognizeOutcome> {
     let mut best = None;
     let mut best_caller_follow = None;
@@ -9773,9 +10087,10 @@ fn select_best_fast_outcome(
         let better = match prediction_mode {
             PredictionMode::Ll | PredictionMode::LlExactAmbigDetection => outcome_is_better(
                 outcome_position,
-                &outcome.diagnostics,
+                outcome.diagnostics,
                 best_position,
-                &existing.diagnostics,
+                existing.diagnostics,
+                arena,
             ),
             PredictionMode::Sll => outcome.index > existing.index,
         };
@@ -9802,11 +10117,12 @@ fn select_best_fast_outcome(
 fn select_best_outcome(
     outcomes: impl Iterator<Item = RecognizeOutcome>,
     prediction_mode: PredictionMode,
+    arena: &RecognitionArena,
 ) -> Option<RecognizeOutcome> {
     let outcomes = outcomes.collect::<Vec<_>>();
     let prefer_first_tie = outcomes
         .iter()
-        .any(|outcome| nodes_need_stable_tie(&outcome.nodes));
+        .any(|outcome| arena.sequence_needs_stable_tie(outcome.nodes));
     outcomes.into_iter().reduce(|best, outcome| {
         let outcome_position = (outcome.index, outcome.consumed_eof);
         let best_position = (best.index, best.consumed_eof);
@@ -9814,14 +10130,16 @@ fn select_best_outcome(
             PredictionMode::Ll | PredictionMode::LlExactAmbigDetection => {
                 outcome_is_better(
                     outcome_position,
-                    &outcome.diagnostics,
+                    outcome.diagnostics,
                     best_position,
-                    &best.diagnostics,
+                    best.diagnostics,
+                    arena,
                 ) || (!prefer_first_tie
                     && outcome_position == best_position
-                    && outcome.diagnostics.len() == best.diagnostics.len()
-                    && diagnostic_recovery_rank(&outcome.diagnostics)
-                        == diagnostic_recovery_rank(&best.diagnostics)
+                    && arena.diagnostics_len(outcome.diagnostics)
+                        == arena.diagnostics_len(best.diagnostics)
+                    && arena.diagnostics_recovery_rank(outcome.diagnostics)
+                        == arena.diagnostics_recovery_rank(best.diagnostics)
                     && (outcome.decisions < best.decisions
                         || (outcome.decisions == best.decisions && outcome.actions > best.actions)))
             }
@@ -9833,9 +10151,10 @@ fn select_best_outcome(
                             || (outcome.decisions == best.decisions
                                 && outcome_is_better(
                                     outcome_position,
-                                    &outcome.diagnostics,
+                                    outcome.diagnostics,
                                     best_position,
-                                    &best.diagnostics,
+                                    best.diagnostics,
+                                    arena,
                                 ))))
             }
         };
@@ -10006,28 +10325,19 @@ fn prepend_decision(outcome: &mut RecognizeOutcome, decision: Option<usize>) {
 
 fn outcome_is_better(
     outcome_position: (usize, bool),
-    outcome_diagnostics: &[ParserDiagnostic],
+    outcome_diagnostics: DiagnosticSeqId,
     best_position: (usize, bool),
-    best_diagnostics: &[ParserDiagnostic],
+    best_diagnostics: DiagnosticSeqId,
+    arena: &RecognitionArena,
 ) -> bool {
+    let outcome_len = arena.diagnostics_len(outcome_diagnostics);
+    let best_len = arena.diagnostics_len(best_diagnostics);
     outcome_position > best_position
         || (outcome_position == best_position
-            && (outcome_diagnostics.len() < best_diagnostics.len()
-                || (outcome_diagnostics.len() == best_diagnostics.len()
-                    && diagnostic_recovery_rank(outcome_diagnostics)
-                        < diagnostic_recovery_rank(best_diagnostics))))
-}
-
-/// Ranks concrete recovery repairs ahead of generic non-EOF mismatch fallbacks
-/// when speculative paths otherwise consume the same input.
-fn diagnostic_recovery_rank(diagnostics: &[ParserDiagnostic]) -> usize {
-    diagnostics
-        .iter()
-        .filter(|diagnostic| {
-            diagnostic.message.starts_with("mismatched input ")
-                && !diagnostic.message.starts_with("mismatched input '<EOF>' ")
-        })
-        .count()
+            && (outcome_len < best_len
+                || (outcome_len == best_len
+                    && arena.diagnostics_recovery_rank(outcome_diagnostics)
+                        < arena.diagnostics_recovery_rank(best_diagnostics))))
 }
 
 fn discard_recovered_fast_outcomes_if_clean_path_exists(outcomes: &mut Vec<FastRecognizeOutcome>) {
@@ -10039,8 +10349,14 @@ fn discard_recovered_fast_outcomes_if_clean_path_exists(outcomes: &mut Vec<FastR
     }
 }
 
-fn discard_recovered_outcomes_if_clean_path_exists(outcomes: &mut Vec<RecognizeOutcome>) {
-    if outcomes.iter().any(outcome_has_rule_failure_diagnostic) {
+fn discard_recovered_outcomes_if_clean_path_exists(
+    outcomes: &mut Vec<RecognizeOutcome>,
+    arena: &RecognitionArena,
+) {
+    if outcomes
+        .iter()
+        .any(|outcome| outcome_has_rule_failure_diagnostic(outcome, arena))
+    {
         return;
     }
     if outcomes
@@ -10053,39 +10369,13 @@ fn discard_recovered_outcomes_if_clean_path_exists(outcomes: &mut Vec<RecognizeO
 
 /// Reports whether a recovered outcome came from an explicit predicate
 /// fail-option and therefore should compete with shorter clean loop exits.
-fn outcome_has_rule_failure_diagnostic(outcome: &RecognizeOutcome) -> bool {
-    outcome
-        .diagnostics
-        .iter()
+fn outcome_has_rule_failure_diagnostic(
+    outcome: &RecognizeOutcome,
+    arena: &RecognitionArena,
+) -> bool {
+    arena
+        .diagnostics(outcome.diagnostics)
         .any(|diagnostic| diagnostic.message.starts_with("rule "))
-}
-
-/// Reports whether a candidate contains recursive tree structure where ANTLR's
-/// first viable candidate preserves the correct left-recursive context shape.
-fn nodes_need_stable_tie(nodes: &[RecognizedNode]) -> bool {
-    nodes.iter().any(node_needs_stable_tie)
-}
-
-fn node_needs_stable_tie(node: &RecognizedNode) -> bool {
-    match node {
-        RecognizedNode::Token { .. }
-        | RecognizedNode::ErrorToken { .. }
-        | RecognizedNode::MissingToken { .. } => false,
-        RecognizedNode::LeftRecursiveBoundary { .. } => true,
-        RecognizedNode::Rule {
-            rule_index,
-            children,
-            ..
-        } => children.iter().any(|child| {
-            matches!(
-                child,
-                RecognizedNode::Rule {
-                    rule_index: child_rule,
-                    ..
-                } if child_rule == rule_index
-            ) || node_needs_stable_tie(child)
-        }),
-    }
 }
 
 /// Removes equivalent endpoints before memoizing a state result while
@@ -10101,7 +10391,7 @@ fn node_needs_stable_tie(node: &RecognizedNode) -> bool {
 /// greedy alternative selection: serialized ATNs put greedy `*`/`+` loop-back
 /// transitions before loop-exit, so the first-discovered outcome carries the
 /// greedy parse-tree fragment.
-fn dedupe_fast_outcomes(outcomes: &mut Vec<FastRecognizeOutcome>) {
+fn dedupe_fast_outcomes(outcomes: &mut Vec<FastRecognizeOutcome>, arena: &RecognitionArena) {
     if outcomes.len() < 2 {
         return;
     }
@@ -10110,8 +10400,8 @@ fn dedupe_fast_outcomes(outcomes: &mut Vec<FastRecognizeOutcome>) {
         seen.insert((
             outcome.index,
             outcome.consumed_eof,
-            outcome.diagnostics.len(),
-            diagnostic_recovery_rank(&outcome.diagnostics),
+            arena.diagnostics_len(outcome.diagnostics),
+            arena.diagnostics_recovery_rank(outcome.diagnostics),
         ))
     });
 }
@@ -10156,10 +10446,29 @@ fn dedupe_clean_fast_outcomes(outcomes: &mut Vec<FastRecognizeOutcome>) {
     });
 }
 
-/// Sorts and removes equivalent endpoints, including their action traces.
-fn dedupe_outcomes(outcomes: &mut Vec<RecognizeOutcome>) {
-    outcomes.sort_unstable();
-    outcomes.dedup();
+/// Sorts and removes equivalent endpoints, including action traces and the
+/// arena-backed node sequence's structural contents.
+fn dedupe_outcomes(outcomes: &mut Vec<RecognizeOutcome>, arena: &RecognitionArena) {
+    outcomes.sort_unstable_by(|left, right| compare_recognize_outcomes(left, right, arena));
+    outcomes
+        .dedup_by(|left, right| compare_recognize_outcomes(left, right, arena) == Ordering::Equal);
+}
+
+fn compare_recognize_outcomes(
+    left: &RecognizeOutcome,
+    right: &RecognizeOutcome,
+    arena: &RecognitionArena,
+) -> Ordering {
+    left.index
+        .cmp(&right.index)
+        .then_with(|| left.consumed_eof.cmp(&right.consumed_eof))
+        .then_with(|| left.alt_number.cmp(&right.alt_number))
+        .then_with(|| left.member_values.cmp(&right.member_values))
+        .then_with(|| left.return_values.cmp(&right.return_values))
+        .then_with(|| arena.compare_diagnostics(left.diagnostics, right.diagnostics))
+        .then_with(|| left.decisions.cmp(&right.decisions))
+        .then_with(|| left.actions.cmp(&right.actions))
+        .then_with(|| arena.compare_sequences(left.nodes, right.nodes))
 }
 
 impl<S, H> Recognizer for BaseParser<S, H>
@@ -10222,6 +10531,7 @@ mod tests {
     use crate::token::{HIDDEN_CHANNEL, Token, TokenId, TokenSink, TokenSpec, TokenStoreError};
     use crate::token_stream::CommonTokenStream;
     use crate::vocabulary::Vocabulary;
+    use std::mem::size_of;
 
     #[test]
     fn fx_hasher_write_matches_typed_methods_for_full_words() {
@@ -13019,21 +13329,22 @@ mod tests {
 
     #[test]
     fn fast_outcome_selection_respects_sll_tie_order() {
+        let mut arena = RecognitionArena::default();
         let first = FastRecognizeOutcome {
             index: 1,
             consumed_eof: false,
-            diagnostics: FastDiagnostics::from_vec(vec![ParserDiagnostic {
+            diagnostics: arena.diagnostic_sequence([ParserDiagnostic {
                 line: 1,
                 column: 0,
                 message: "mismatched input 'x'".to_owned(),
             }]),
-            nodes: NodeList::new(),
+            nodes: NodeSeqId::EMPTY,
         };
         let second = FastRecognizeOutcome {
             index: first.index,
             consumed_eof: first.consumed_eof,
-            diagnostics: FastDiagnostics::new(),
-            nodes: NodeList::new(),
+            diagnostics: DiagnosticSeqId::EMPTY,
+            nodes: NodeSeqId::EMPTY,
         };
 
         let selected = select_best_fast_outcome(
@@ -13041,20 +13352,22 @@ mod tests {
             PredictionMode::Sll,
             None,
             |_| panic!("caller-follow token probe should not run"),
+            &arena,
         )
         .expect("one outcome should be selected");
-        assert_eq!(selected.diagnostics.len(), 1);
+        assert_eq!(arena.diagnostics_len(selected.diagnostics), 1);
         let eof_second = FastRecognizeOutcome {
             index: second.index,
             consumed_eof: true,
-            diagnostics: FastDiagnostics::new(),
-            nodes: NodeList::new(),
+            diagnostics: DiagnosticSeqId::EMPTY,
+            nodes: NodeSeqId::EMPTY,
         };
         let selected = select_best_fast_outcome(
             [first.clone(), eof_second].into_iter(),
             PredictionMode::Sll,
             None,
             |_| panic!("caller-follow token probe should not run"),
+            &arena,
         )
         .expect("one outcome should be selected");
         assert!(!selected.consumed_eof);
@@ -13063,6 +13376,7 @@ mod tests {
             PredictionMode::Ll,
             None,
             |_| panic!("caller-follow token probe should not run"),
+            &arena,
         )
         .expect("one outcome should be selected");
         assert!(selected.diagnostics.is_empty());
@@ -13070,61 +13384,74 @@ mod tests {
 
     #[test]
     fn recovery_fast_outcome_dedupe_uses_selection_rank() {
+        let mut arena = RecognitionArena::default();
         let first = FastRecognizeOutcome {
             index: 3,
             consumed_eof: false,
-            diagnostics: FastDiagnostics::from_vec(vec![ParserDiagnostic {
+            diagnostics: arena.diagnostic_sequence([ParserDiagnostic {
                 line: 1,
                 column: 0,
                 message: "mismatched input 'x' expecting 'a'".to_owned(),
             }]),
-            nodes: NodeList::new(),
+            nodes: NodeSeqId::EMPTY,
         };
         let same_rank = FastRecognizeOutcome {
             index: first.index,
             consumed_eof: first.consumed_eof,
-            diagnostics: FastDiagnostics::from_vec(vec![ParserDiagnostic {
+            diagnostics: arena.diagnostic_sequence([ParserDiagnostic {
                 line: 1,
                 column: 0,
                 message: "mismatched input 'x' expecting 'b'".to_owned(),
             }]),
-            nodes: NodeList::new(),
+            nodes: NodeSeqId::EMPTY,
         };
         let better_rank = FastRecognizeOutcome {
             index: first.index,
             consumed_eof: first.consumed_eof,
-            diagnostics: FastDiagnostics::from_vec(vec![ParserDiagnostic {
+            diagnostics: arena.diagnostic_sequence([ParserDiagnostic {
                 line: 1,
                 column: 0,
                 message: "missing 'a' at 'x'".to_owned(),
             }]),
-            nodes: NodeList::new(),
+            nodes: NodeSeqId::EMPTY,
         };
         let mut outcomes = vec![first, same_rank, better_rank];
 
-        dedupe_fast_outcomes(&mut outcomes);
+        dedupe_fast_outcomes(&mut outcomes, &arena);
 
         assert_eq!(outcomes.len(), 2);
         assert_eq!(
-            outcomes[0].diagnostics[0].message,
+            arena
+                .diagnostics(outcomes[0].diagnostics)
+                .next()
+                .expect("first diagnostic")
+                .message,
             "mismatched input 'x' expecting 'a'"
         );
-        assert_eq!(outcomes[1].diagnostics[0].message, "missing 'a' at 'x'");
+        assert_eq!(
+            arena
+                .diagnostics(outcomes[1].diagnostics)
+                .next()
+                .expect("second diagnostic")
+                .message,
+            "missing 'a' at 'x'"
+        );
     }
 
     #[test]
     fn fast_outcome_selection_prefers_generated_caller_follow() {
+        let arena = RecognitionArena::default();
         let earlier = FastRecognizeOutcome {
             index: 7,
             consumed_eof: false,
-            diagnostics: FastDiagnostics::new(),
-            nodes: NodeList::new(),
+            diagnostics: DiagnosticSeqId::EMPTY,
+            nodes: NodeSeqId::EMPTY,
         };
         let later = FastRecognizeOutcome {
             index: 8,
             consumed_eof: false,
-            diagnostics: FastDiagnostics::new(),
-            nodes: NodeList::new(),
+            diagnostics: DiagnosticSeqId::EMPTY,
+            nodes: NodeSeqId::EMPTY,
         };
         let mut follow = TokenBitSet::default();
         follow.insert(5);
@@ -13134,6 +13461,7 @@ mod tests {
             PredictionMode::Ll,
             Some(&follow),
             |index| (if index == 7 { 5 } else { TOKEN_EOF }, index == 7, true),
+            &arena,
         )
         .expect("one outcome should be selected");
         assert_eq!(selected.index, 7);
@@ -13143,6 +13471,7 @@ mod tests {
             PredictionMode::Ll,
             Some(&follow),
             |index| (if index == 7 { 5 } else { TOKEN_EOF }, false, true),
+            &arena,
         )
         .expect("one outcome should be selected");
         assert_eq!(selected.index, 8);
@@ -13150,8 +13479,8 @@ mod tests {
         let indented_next_statement = FastRecognizeOutcome {
             index: 9,
             consumed_eof: false,
-            diagnostics: FastDiagnostics::new(),
-            nodes: NodeList::new(),
+            diagnostics: DiagnosticSeqId::EMPTY,
+            nodes: NodeSeqId::EMPTY,
         };
         let selected = select_best_fast_outcome(
             [indented_next_statement, earlier.clone()].into_iter(),
@@ -13166,6 +13495,7 @@ mod tests {
                     is_boundary_gap,
                 )
             },
+            &arena,
         )
         .expect("one outcome should be selected");
         assert_eq!(selected.index, 7);
@@ -13173,8 +13503,8 @@ mod tests {
         let continuation = FastRecognizeOutcome {
             index: 10,
             consumed_eof: false,
-            diagnostics: FastDiagnostics::new(),
-            nodes: NodeList::new(),
+            diagnostics: DiagnosticSeqId::EMPTY,
+            nodes: NodeSeqId::EMPTY,
         };
         let selected = select_best_fast_outcome(
             [continuation, earlier.clone()].into_iter(),
@@ -13188,6 +13518,7 @@ mod tests {
                     is_boundary,
                 )
             },
+            &arena,
         )
         .expect("one outcome should be selected");
         assert_eq!(selected.index, 10);
@@ -13197,6 +13528,7 @@ mod tests {
             PredictionMode::Sll,
             Some(&follow),
             |_| panic!("caller-follow token probe should not run in SLL mode"),
+            &arena,
         )
         .expect("one outcome should be selected");
         assert_eq!(selected.index, 8);
@@ -13337,64 +13669,233 @@ mod tests {
 
     #[test]
     fn folds_left_recursive_boundary_into_rule_node() {
-        let nodes = fold_left_recursive_boundaries(vec![
-            RecognizedNode::Token { index: 0 },
-            RecognizedNode::LeftRecursiveBoundary { rule_index: 1 },
-            RecognizedNode::Token { index: 1 },
-        ]);
+        let mut arena = RecognitionArena::default();
+        let first = arena.push_node(ArenaRecognizedNode::Token {
+            token: TokenId::try_from(0).expect("test token ID"),
+        });
+        let boundary =
+            arena.push_node(ArenaRecognizedNode::LeftRecursiveBoundary { rule_index: 1 });
+        let second = arena.push_node(ArenaRecognizedNode::Token {
+            token: TokenId::try_from(1).expect("test token ID"),
+        });
+        let mut nodes = NodeSeqId::EMPTY;
+        for node in [first, boundary, second].into_iter().rev() {
+            nodes = arena.prepend(nodes, node);
+        }
 
+        let folded = arena.fold_left_recursive_boundaries(nodes);
+        let folded_nodes = arena.iter(folded).collect::<Vec<_>>();
+
+        assert_eq!(folded_nodes.len(), 2);
+        let ArenaRecognizedNode::Rule {
+            rule_index,
+            invoking_state,
+            start_index,
+            stop_index,
+            children,
+            ..
+        } = arena.node(folded_nodes[0])
+        else {
+            panic!("first folded node should be a rule");
+        };
+        assert_eq!(rule_index, 1);
+        assert_eq!(invoking_state, -1);
+        assert_eq!(start_index, 0);
+        assert_eq!(stop_index, Some(0));
+        assert_eq!(arena.iter(children).collect::<Vec<_>>(), [first]);
+        assert_eq!(arena.node(folded_nodes[1]), arena.node(second));
+
+        let stats = arena.stats(folded, DiagnosticSeqId::EMPTY);
         assert_eq!(
-            nodes,
-            vec![
-                RecognizedNode::Rule {
-                    rule_index: 1,
-                    invoking_state: -1,
-                    alt_number: 0,
-                    start_index: 0,
-                    stop_index: Some(0),
-                    return_values: BTreeMap::new(),
-                    children: vec![RecognizedNode::Token { index: 0 }],
-                },
-                RecognizedNode::Token { index: 1 },
-            ]
+            (stats.total_nodes, stats.live_nodes, stats.dead_nodes),
+            (4, 3, 1)
+        );
+        assert_eq!(
+            (stats.total_links, stats.live_links, stats.dead_links),
+            (9, 3, 6)
         );
     }
 
     #[test]
+    fn recognition_arena_reports_live_dead_and_retained_capacity() {
+        let mut arena = RecognitionArena::default();
+        let token = arena.push_node(ArenaRecognizedNode::Token {
+            token: TokenId::try_from(0).expect("test token ID"),
+        });
+        let extra = arena.push_extra(RecognitionExtra::MissingToken {
+            token_type: 2,
+            at_index: 1,
+            text: "<missing X>".to_owned(),
+        });
+        let missing = arena.push_node(ArenaRecognizedNode::MissingToken { extra });
+        let discarded = arena.push_node(ArenaRecognizedNode::ErrorToken {
+            token: TokenId::try_from(1).expect("test token ID"),
+        });
+        let mut live = NodeSeqId::EMPTY;
+        live = arena.prepend(live, missing);
+        live = arena.prepend(live, token);
+        let _discarded_sequence = arena.prepend(NodeSeqId::EMPTY, discarded);
+        let live_diagnostics = arena.diagnostic_sequence([ParserDiagnostic {
+            line: 1,
+            column: 0,
+            message: "missing X".to_owned(),
+        }]);
+        let _discarded_diagnostics = arena.diagnostic_sequence([ParserDiagnostic {
+            line: 1,
+            column: 1,
+            message: "discarded".to_owned(),
+        }]);
+
+        let stats = arena.stats(live, live_diagnostics);
+
+        assert_eq!(
+            (stats.total_nodes, stats.live_nodes, stats.dead_nodes),
+            (3, 2, 1)
+        );
+        assert_eq!(
+            (stats.total_links, stats.live_links, stats.dead_links),
+            (5, 3, 2)
+        );
+        assert_eq!(
+            (stats.total_extras, stats.live_extras, stats.dead_extras),
+            (3, 2, 1)
+        );
+        assert!(size_of::<SeqLink>() <= 8);
+        assert!(size_of::<DiagnosticLink>() <= 8);
+        assert!(size_of::<FastRecognizeOutcome>() <= 24);
+        let capacities = (
+            stats.node_capacity,
+            stats.link_capacity,
+            stats.extra_capacity,
+        );
+
+        arena.reset();
+        let reset = arena.stats(NodeSeqId::EMPTY, DiagnosticSeqId::EMPTY);
+        assert_eq!(
+            (reset.total_nodes, reset.total_links, reset.total_extras),
+            (0, 0, 0)
+        );
+        assert_eq!(
+            (
+                reset.node_capacity,
+                reset.link_capacity,
+                reset.extra_capacity,
+            ),
+            capacities
+        );
+    }
+
+    #[test]
+    fn parser_computes_recognition_arena_stats_on_demand() {
+        let mut parser = mini_parser(Vec::new());
+        let live = parser
+            .recognition_arena
+            .push_node(ArenaRecognizedNode::Token {
+                token: TokenId::try_from(0).expect("test token ID"),
+            });
+        let discarded = parser
+            .recognition_arena
+            .push_node(ArenaRecognizedNode::ErrorToken {
+                token: TokenId::try_from(1).expect("test token ID"),
+            });
+        let live_root = parser.recognition_arena.prepend(NodeSeqId::EMPTY, live);
+        let _discarded_root = parser
+            .recognition_arena
+            .prepend(NodeSeqId::EMPTY, discarded);
+        parser.finish_recognition_arena(live_root, DiagnosticSeqId::EMPTY);
+
+        let stats = parser.recognition_arena_stats();
+
+        assert_eq!(
+            (stats.total_nodes, stats.live_nodes, stats.dead_nodes),
+            (2, 1, 1)
+        );
+        assert_eq!(
+            (stats.total_links, stats.live_links, stats.dead_links),
+            (2, 1, 1)
+        );
+    }
+
+    #[test]
+    fn recognition_arena_drops_capacity_above_retention_limit() {
+        let mut storage = Vec::<u8>::with_capacity(4);
+        storage.extend([1, 2, 3]);
+
+        reset_arena_vec(&mut storage, 3);
+
+        assert!(storage.is_empty());
+        assert_eq!(storage.capacity(), 0);
+    }
+
+    #[test]
+    fn recognition_arena_concatenates_diagnostics_in_source_order() {
+        let mut arena = RecognitionArena::default();
+        let prefix = arena.diagnostic_sequence([
+            ParserDiagnostic {
+                line: 1,
+                column: 0,
+                message: "first".to_owned(),
+            },
+            ParserDiagnostic {
+                line: 1,
+                column: 1,
+                message: "second".to_owned(),
+            },
+        ]);
+        let suffix = arena.diagnostic_sequence([ParserDiagnostic {
+            line: 1,
+            column: 2,
+            message: "third".to_owned(),
+        }]);
+        let extras_before = arena.extras.len();
+
+        let combined = arena.concat_diagnostics(prefix, suffix);
+        let messages = arena
+            .diagnostics(combined)
+            .map(|diagnostic| diagnostic.message.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(messages, ["first", "second", "third"]);
+        assert_eq!(arena.extras.len(), extras_before);
+    }
+
+    #[test]
     fn outcome_ties_keep_later_non_recursive_alternative() {
+        let arena = RecognitionArena::default();
         let first = RecognizeOutcome {
             index: 1,
             consumed_eof: false,
             alt_number: 0,
             member_values: BTreeMap::new(),
             return_values: BTreeMap::new(),
-            diagnostics: Vec::new(),
+            diagnostics: DiagnosticSeqId::EMPTY,
             decisions: Vec::new(),
             actions: vec![ParserAction::new(1, 0, 0, None)],
-            nodes: vec![RecognizedNode::Token { index: 0 }],
+            nodes: NodeSeqId::EMPTY,
         };
         let second = RecognizeOutcome {
             actions: vec![ParserAction::new(2, 0, 0, None)],
             ..first.clone()
         };
 
-        let selected = select_best_outcome([first, second].into_iter(), PredictionMode::Ll)
+        let selected = select_best_outcome([first, second].into_iter(), PredictionMode::Ll, &arena)
             .expect("one outcome should be selected");
         assert_eq!(selected.actions[0].source_state(), 2);
     }
 
     #[test]
     fn outcome_ties_prefer_more_actions_for_non_recursive_paths() {
+        let arena = RecognitionArena::default();
         let first = RecognizeOutcome {
             index: 1,
             consumed_eof: false,
             alt_number: 0,
             member_values: BTreeMap::new(),
             return_values: BTreeMap::new(),
-            diagnostics: Vec::new(),
+            diagnostics: DiagnosticSeqId::EMPTY,
             decisions: Vec::new(),
             actions: vec![ParserAction::new(1, 0, 0, None)],
-            nodes: vec![RecognizedNode::Token { index: 0 }],
+            nodes: NodeSeqId::EMPTY,
         };
         let second = RecognizeOutcome {
             actions: vec![
@@ -13404,26 +13905,27 @@ mod tests {
             ..first.clone()
         };
 
-        let selected = select_best_outcome([second, first].into_iter(), PredictionMode::Ll)
+        let selected = select_best_outcome([second, first].into_iter(), PredictionMode::Ll, &arena)
             .expect("one outcome should be selected");
         assert_eq!(selected.actions.len(), 2);
     }
 
     #[test]
     fn outcome_ties_prefer_later_action_stop_for_greedy_optional_paths() {
+        let arena = RecognitionArena::default();
         let first = RecognizeOutcome {
             index: 7,
             consumed_eof: false,
             alt_number: 0,
             member_values: BTreeMap::new(),
             return_values: BTreeMap::new(),
-            diagnostics: Vec::new(),
+            diagnostics: DiagnosticSeqId::EMPTY,
             decisions: vec![1, 0],
             actions: vec![
                 ParserAction::new(23, 2, 2, Some(4)),
                 ParserAction::new(23, 2, 0, Some(6)),
             ],
-            nodes: vec![RecognizedNode::Token { index: 0 }],
+            nodes: NodeSeqId::EMPTY,
         };
         let second = RecognizeOutcome {
             decisions: vec![0, 1],
@@ -13434,40 +13936,48 @@ mod tests {
             ..first.clone()
         };
 
-        let selected = select_best_outcome([first, second].into_iter(), PredictionMode::Ll)
+        let selected = select_best_outcome([first, second].into_iter(), PredictionMode::Ll, &arena)
             .expect("one outcome should be selected");
         assert_eq!(selected.actions[0].stop_index(), Some(6));
     }
 
     #[test]
     fn outcome_ties_keep_first_recursive_tree_shape() {
-        let recursive_nodes = vec![RecognizedNode::Rule {
+        let mut arena = RecognitionArena::default();
+        let token = arena.push_node(ArenaRecognizedNode::Token {
+            token: TokenId::try_from(0).expect("test token ID"),
+        });
+        let token_children = arena.prepend(NodeSeqId::EMPTY, token);
+        let inner = arena.push_node(ArenaRecognizedNode::Rule {
             rule_index: 1,
             invoking_state: -1,
             alt_number: 0,
             start_index: 0,
             stop_index: Some(0),
-            return_values: BTreeMap::new(),
-            children: vec![RecognizedNode::Rule {
-                rule_index: 1,
-                invoking_state: -1,
-                alt_number: 0,
-                start_index: 0,
-                stop_index: Some(0),
-                return_values: BTreeMap::new(),
-                children: vec![RecognizedNode::Token { index: 0 }],
-            }],
-        }];
+            return_values: None,
+            children: token_children,
+        });
+        let inner_children = arena.prepend(NodeSeqId::EMPTY, inner);
+        let outer = arena.push_node(ArenaRecognizedNode::Rule {
+            rule_index: 1,
+            invoking_state: -1,
+            alt_number: 0,
+            start_index: 0,
+            stop_index: Some(0),
+            return_values: None,
+            children: inner_children,
+        });
+        let recursive_nodes = arena.prepend(NodeSeqId::EMPTY, outer);
         let first = RecognizeOutcome {
             index: 1,
             consumed_eof: false,
             alt_number: 0,
             member_values: BTreeMap::new(),
             return_values: BTreeMap::new(),
-            diagnostics: Vec::new(),
+            diagnostics: DiagnosticSeqId::EMPTY,
             decisions: Vec::new(),
             actions: vec![ParserAction::new(1, 0, 0, None)],
-            nodes: recursive_nodes.clone(),
+            nodes: recursive_nodes,
         };
         let second = RecognizeOutcome {
             index: 1,
@@ -13475,45 +13985,50 @@ mod tests {
             alt_number: 0,
             member_values: BTreeMap::new(),
             return_values: BTreeMap::new(),
-            diagnostics: Vec::new(),
+            diagnostics: DiagnosticSeqId::EMPTY,
             decisions: Vec::new(),
             actions: vec![ParserAction::new(2, 0, 0, None)],
             nodes: recursive_nodes,
         };
 
-        let selected = select_best_outcome([first, second].into_iter(), PredictionMode::Ll)
+        let selected = select_best_outcome([first, second].into_iter(), PredictionMode::Ll, &arena)
             .expect("one outcome should be selected");
         assert_eq!(selected.actions[0].source_state(), 1);
     }
 
     #[test]
     fn sll_outcome_selection_keeps_earlier_recovered_alt() {
+        let mut arena = RecognitionArena::default();
+        let recovered_diagnostics = arena.diagnostic_sequence([ParserDiagnostic {
+            line: 1,
+            column: 3,
+            message: "missing 'Y' at '<EOF>'".to_owned(),
+        }]);
         let first_alt = RecognizeOutcome {
             index: 2,
             consumed_eof: true,
             alt_number: 0,
             member_values: BTreeMap::new(),
             return_values: BTreeMap::new(),
-            diagnostics: vec![ParserDiagnostic {
-                line: 1,
-                column: 3,
-                message: "missing 'Y' at '<EOF>'".to_owned(),
-            }],
+            diagnostics: recovered_diagnostics,
             decisions: vec![0],
             actions: vec![ParserAction::new(1, 0, 0, None)],
-            nodes: vec![RecognizedNode::Token { index: 0 }],
+            nodes: NodeSeqId::EMPTY,
         };
         let second_alt = RecognizeOutcome {
-            diagnostics: Vec::new(),
+            diagnostics: DiagnosticSeqId::EMPTY,
             decisions: vec![1],
             actions: vec![ParserAction::new(2, 0, 0, None)],
             ..first_alt.clone()
         };
 
-        let selected =
-            select_best_outcome([second_alt, first_alt].into_iter(), PredictionMode::Sll)
-                .expect("one outcome should be selected");
-        assert_eq!(selected.diagnostics.len(), 1);
+        let selected = select_best_outcome(
+            [second_alt, first_alt].into_iter(),
+            PredictionMode::Sll,
+            &arena,
+        )
+        .expect("one outcome should be selected");
+        assert_eq!(arena.diagnostics_len(selected.diagnostics), 1);
         assert_eq!(selected.decisions, [0]);
     }
 }

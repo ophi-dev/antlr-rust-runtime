@@ -457,6 +457,30 @@ group (**> 1.0** means Rust is faster than Go; **< 1.0** means slower):
 | C#       | 4        | ~1.7× faster            |
 | Trino SQL| 5        | ~2.5× faster            |
 
+### Recognition arena results
+
+Issue [#83](https://github.com/ophi-dev/antlr-rust-runtime/issues/83)
+replaces the interpreted parser's speculative `Rc` node lists with compact IDs
+in a parser-owned arena. To isolate that path from generated-parser
+optimizations, the benchmark harness routed each Kotlin entry rule directly
+through ATN interpretation and built the full CST. These are same-machine
+results against `c068688db` on an Apple M3 Pro:
+
+| Fixture | Baseline avg | Arena avg | Time | Allocations / parse | Allocated bytes / parse |
+|---------|-------------:|----------:|-----:|--------------------:|------------------------:|
+| `jetbrains-kotlin-lazy-bodies-test.kt` | 3.166 ms | 2.498 ms | -21.1% | 44,842 → 35,558 (-20.7%) | 20.39 MB → 18.85 MB (-7.5%) |
+| `kotlinx-coroutines-flow-limit.kt` | 3.407 ms | 2.544 ms | -25.3% | 45,005 → 38,552 (-14.3%) | 19.02 MB → 18.00 MB (-5.3%) |
+| `ktor-openapi-describe-route-test.kt` | 27.670 ms | 16.686 ms | -39.7% | 355,148 → 266,315 (-25.0%) | 60.22 MB → 45.82 MB (-23.9%) |
+| `ktor-openapi-security-scheme-inference-test.kt` | 14.577 ms | 9.462 ms | -35.1% | 210,051 → 164,095 (-21.9%) | 38.75 MB → 30.96 MB (-20.1%) |
+
+Timings are averages from 100 measured parses after 10 warmups. Allocation
+figures come from a separate counting-allocator run of 100 measured parses
+after five warmups. On the largest fixture, maximum RSS fell from 37.29 MB to
+32.83 MB (-12.0%) and macOS peak memory footprint fell from 34.87 MB to
+30.44 MB (-12.7%). Arena instrumentation on the 4.8 KB lazy-bodies fixture
+reported 4,876 appended nodes / 1,667 live nodes and 9,191 appended links /
+1,667 live links.
+
 Rust is faster than Go on average in all four language groups, with
 Kotlin leading dramatically (expression-ladder memoization in the generated
 walker). Lexer DFAs are compiled at generation time and embedded in the
