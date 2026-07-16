@@ -132,7 +132,7 @@ use generated::json_lexer::JsonLexer;
 fn main() -> Result<(), antlr4_runtime::AntlrError> {
     let parsed = json::parse(r#"{"a":1}"#, JsonLexer::new, Json::json)?;
 
-    println!("{}", parsed.tree().text(parsed.tokens()));
+    println!("{}", parsed.tree().text());
     Ok(())
 }
 ```
@@ -152,10 +152,14 @@ fn main() -> Result<(), antlr4_runtime::AntlrError> {
         result: tree,
         parser,
     } = output;
-    let tokens = parser.into_token_store();
+    let parsed = parser.into_parsed_file(tree);
 
-    println!("{} errors across {} tokens", syntax_errors, tokens.len());
-    println!("{}", tree.text(&tokens));
+    println!(
+        "{} errors across {} tokens",
+        syntax_errors,
+        parsed.tokens().len()
+    );
+    println!("{}", parsed.tree().text());
     Ok(())
 }
 ```
@@ -174,7 +178,7 @@ fn main() -> Result<(), antlr4_runtime::AntlrError> {
     let mut parser = Json::new(tokens);
     let tree = parser.json()?;
 
-    println!("{}", tree.text(parser.token_store()));
+    println!("{}", parser.node(tree).text());
     Ok(())
 }
 ```
