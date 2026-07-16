@@ -782,8 +782,8 @@ impl<'tree> RuleNodeView<'tree> {
 
     pub fn invocation_states(self) -> impl Iterator<Item = isize> + 'tree {
         std::iter::successors(Some(self), |rule| rule.node.parent()?.as_rule())
+            .take_while(|rule| rule.node.parent().is_some() && rule.invoking_state() >= 0)
             .map(Self::invoking_state)
-            .take_while(|state| *state >= 0)
     }
 
     #[must_use]
@@ -1407,6 +1407,37 @@ mod tests {
         ParseTreeWalker::walk(&mut listener, parsed.tree())
             .expect("test listener should accept every node");
         assert_eq!(listener.0, ["enter0", "a", "enter1", "b", "exit1", "exit0"]);
+    }
+
+    #[test]
+    fn invocation_states_exclude_a_nonnegative_root_frame() {
+        let tokens = TokenStore::new(None, "");
+        let mut storage = ParseTreeStorage::new();
+        let grandchild = storage.finish_rule(ParserRuleContext::new(2, 13));
+        let mut child = ParserRuleContext::new(1, 7);
+        storage.add_child(&mut child, grandchild);
+        let child = storage.finish_rule(child);
+        let mut root = ParserRuleContext::new(0, 4);
+        storage.add_child(&mut root, child);
+        let root = storage.finish_rule(root);
+        let parsed = ParsedFile::new(tokens, storage, root);
+
+        let root = parsed
+            .node(root)
+            .and_then(Node::as_rule)
+            .expect("root rule should be stored");
+        let child = parsed
+            .node(child)
+            .and_then(Node::as_rule)
+            .expect("child rule should be stored");
+        let grandchild = parsed
+            .node(grandchild)
+            .and_then(Node::as_rule)
+            .expect("grandchild rule should be stored");
+
+        assert_eq!(root.invocation_states().collect::<Vec<_>>(), []);
+        assert_eq!(child.invocation_states().collect::<Vec<_>>(), [7]);
+        assert_eq!(grandchild.invocation_states().collect::<Vec<_>>(), [13, 7]);
     }
 
     #[test]
