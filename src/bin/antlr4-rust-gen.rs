@@ -5287,7 +5287,7 @@ fn render_generated_adaptive_prediction_with_indent(
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "{nested}let __prediction_context = __simulator.intern_prediction_context(self.base.prediction_context_return_states(atn()));"
+        "{nested}let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));"
     )
     .expect("writing to a string cannot fail");
     writeln!(
@@ -5526,7 +5526,7 @@ fn render_generated_left_recursive_loop(
         .expect("writing to a string cannot fail");
         writeln!(
             out,
-            "{pad}        let __prediction_context = __simulator.intern_prediction_context(self.base.prediction_context_return_states(atn()));"
+            "{pad}        let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));"
         )
         .expect("writing to a string cannot fail");
         writeln!(
@@ -5598,7 +5598,7 @@ fn render_generated_left_recursive_loop(
         .expect("writing to a string cannot fail");
         writeln!(
             out,
-            "{pad}            let __prediction_context = __simulator.intern_prediction_context(self.base.prediction_context_return_states(atn()));"
+            "{pad}            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));"
         )
         .expect("writing to a string cannot fail");
         writeln!(
@@ -7430,6 +7430,14 @@ where
     #[must_use]
     pub const fn parse_tree_storage(&self) -> &antlr4_runtime::ParseTreeStorage {{
         self.base.parse_tree_storage()
+    }}
+
+    #[must_use]
+    pub fn prediction_context_stats(&self) -> antlr4_runtime::PredictionContextStats {{
+        self.simulator.as_ref().map_or_else(
+            antlr4_runtime::PredictionContextStats::default,
+            antlr4_runtime::ParserAtnSimulator::prediction_context_stats,
+        )
     }}
 
     #[must_use]
@@ -10788,7 +10796,7 @@ atn:
         assert!(rendered.contains("adaptive_predict_stream_info_sll_probe(0, 0"));
         assert!(rendered.contains("adaptive_predict_stream_info_with_context(0, 0"));
         assert!(rendered.contains(
-            "intern_prediction_context(self.base.prediction_context_return_states(atn()))"
+            "intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()))"
         ));
         assert!(!rendered.contains("self.base.prediction_context(atn())"));
 

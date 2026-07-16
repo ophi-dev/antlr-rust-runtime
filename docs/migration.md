@@ -36,7 +36,8 @@ directly in a shared arena and array payloads use shared parent and return-state
 pools. Each `ParserAtnSimulator` owns that arena together with its learned
 parser DFAs, and remaps context IDs before combining independently learned
 stores. `prediction_context_stats()` exposes arena allocation and interner
-totals for measurement.
+totals, retained capacities, workspace usage, and outer-context cache activity
+for measurement.
 
 Token IDs cover indices through `u32::MAX`. Source scalar/byte offsets, line
 numbers, and columns are limited to `u32::MAX - 1` (4,294,967,294);

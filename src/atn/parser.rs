@@ -19,11 +19,20 @@ pub struct ParserAtnSimulator<'a> {
     atn: &'a Atn,
     store: PredictionStore,
     workspace: PredictionWorkspace,
+    outer_context_cache: Option<CachedOuterContext>,
+    outer_context_cache_hits: usize,
+    outer_context_cache_misses: usize,
     shared_cache_key: Option<usize>,
     /// Java's `LL_EXACT_AMBIG_DETECTION`: the full-context loop keeps
     /// consuming past "resolves to one viable alt" conflicts until every
     /// `(state, context)` subset conflicts over the same alt set.
     exact_ambig_detection: bool,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct CachedOuterContext {
+    rule_context_version: usize,
+    context: ContextId,
 }
 
 #[derive(Debug, Default)]
@@ -379,6 +388,9 @@ impl<'a> ParserAtnSimulator<'a> {
             atn,
             store: PredictionStore::new(atn),
             workspace: PredictionWorkspace::default(),
+            outer_context_cache: None,
+            outer_context_cache_hits: 0,
+            outer_context_cache_misses: 0,
             shared_cache_key: None,
             exact_ambig_detection: false,
         }
@@ -448,6 +460,9 @@ impl<'a> ParserAtnSimulator<'a> {
             atn,
             store,
             workspace: PredictionWorkspace::default(),
+            outer_context_cache: None,
+            outer_context_cache_hits: 0,
+            outer_context_cache_misses: 0,
             shared_cache_key: Some(key),
             exact_ambig_detection: false,
         }
@@ -460,19 +475,39 @@ impl<'a> ParserAtnSimulator<'a> {
     /// Returns compact prediction-context allocation and interning totals for
     /// this simulator's learned store.
     pub fn prediction_context_stats(&self) -> PredictionContextStats {
-        self.store.contexts.stats()
+        let mut stats = self.store.contexts.stats();
+        stats.retained_bytes += self.workspace.retained_bytes();
+        stats.workspace_merge_cache_entries = self.workspace.merge_cache_len();
+        stats.workspace_merge_cache_capacity = self.workspace.merge_cache_capacity();
+        stats.workspace_entry_capacity = self.workspace.entry_capacity();
+        stats.outer_context_cache_hits = self.outer_context_cache_hits;
+        stats.outer_context_cache_misses = self.outer_context_cache_misses;
+        stats
     }
 
     /// Interns a generated parser's outer call stack in this simulator's
-    /// context arena. Return states must be supplied outermost to innermost.
+    /// context arena. Return states must be supplied outermost to innermost,
+    /// and `rule_context_version` must change whenever that stack changes.
     pub fn intern_prediction_context(
         &mut self,
+        rule_context_version: usize,
         return_states: impl IntoIterator<Item = usize>,
     ) -> ContextId {
+        if let Some(cached) = self.outer_context_cache
+            && cached.rule_context_version == rule_context_version
+        {
+            self.outer_context_cache_hits = self.outer_context_cache_hits.saturating_add(1);
+            return cached.context;
+        }
+        self.outer_context_cache_misses = self.outer_context_cache_misses.saturating_add(1);
         let mut context = EMPTY_CONTEXT;
         for return_state in return_states {
             context = self.store.contexts.singleton(context, return_state);
         }
+        self.outer_context_cache = Some(CachedOuterContext {
+            rule_context_version,
+            context,
+        });
         context
     }
 
@@ -1684,6 +1719,42 @@ mod tests {
         assert_ne!(imported.context, local_context);
         assert_eq!(shared.contexts.return_state(imported.context, 0), Some(7));
         imported.assert_store(&shared.contexts);
+    }
+
+    #[test]
+    fn outer_context_cache_invalidates_with_rule_context_version() {
+        let atn = two_token_decision_atn();
+        let mut simulator = ParserAtnSimulator::new(&atn);
+
+        let first = simulator.intern_prediction_context(1, [7]);
+        let cached = simulator.intern_prediction_context(1, [99]);
+        let refreshed = simulator.intern_prediction_context(2, [99]);
+
+        assert_eq!(cached, first);
+        assert_ne!(refreshed, first);
+        assert_eq!(
+            simulator.store.contexts.return_state(refreshed, 0),
+            Some(99)
+        );
+        let stats = simulator.prediction_context_stats();
+        assert_eq!(stats.outer_context_cache_hits, 1);
+        assert_eq!(stats.outer_context_cache_misses, 2);
+    }
+
+    #[test]
+    fn outer_context_cache_is_simulator_local() {
+        let atn = two_token_decision_atn();
+        let mut first = ParserAtnSimulator::new(&atn);
+        let mut second = ParserAtnSimulator::new(&atn);
+
+        let first_context = first.intern_prediction_context(1, [7]);
+        let second_context = second.intern_prediction_context(1, [99]);
+
+        assert_eq!(first.store.contexts.return_state(first_context, 0), Some(7));
+        assert_eq!(
+            second.store.contexts.return_state(second_context, 0),
+            Some(99)
+        );
     }
 
     #[test]

@@ -73,6 +73,25 @@ Use `--rust-generated-only` for Adaptive LL delivery evidence so the Rust
 generator fails if any parser rule lacks a generated body and the Rust runner
 fails if a generated parser path falls back to the interpreter.
 
+## Prediction Memory Counters
+
+Set `ANTLR_PERF_DUMP=1` to build the Rust runner with prediction counters and
+print context-store measurements:
+
+```bash
+ANTLR_PERF_DUMP=1 python3 tools/parse-bench/run.py \
+  --languages csharp \
+  --runtimes rust-antlr \
+  --iters 10 \
+  --warmups 2 \
+  --rust-generated-only
+```
+
+The dump includes canonical context counts, pooled and retained bytes, arena
+and workspace capacities, merge-cache activity, and outer-context cache
+hits/misses. Store statistics are collected in a separate untimed parse after
+the benchmark loop, so walking the arena does not affect reported timings.
+
 ## PR Watchdog
 
 For CI, run the benchmark on the base checkout and the PR checkout on the same

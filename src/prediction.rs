@@ -94,6 +94,18 @@ pub struct PredictionContextStats {
     pub array_entries: usize,
     pub interner_hits: usize,
     pub pooled_bytes: usize,
+    /// Element storage implied by retained capacities, excluding allocator and
+    /// hash-table control metadata.
+    pub retained_bytes: usize,
+    pub context_capacity: usize,
+    pub array_parent_capacity: usize,
+    pub array_return_state_capacity: usize,
+    pub interner_capacity: usize,
+    pub workspace_merge_cache_entries: usize,
+    pub workspace_merge_cache_capacity: usize,
+    pub workspace_entry_capacity: usize,
+    pub outer_context_cache_hits: usize,
+    pub outer_context_cache_misses: usize,
 }
 
 /// Canonical compact storage paired with one learned parser DFA store.
@@ -164,6 +176,20 @@ impl ContextArena {
                 + self.array_parents.len() * size_of::<ContextId>()
                 + self.array_return_states.len() * size_of::<u32>()
                 + self.interner_next.len() * size_of::<Option<ContextId>>(),
+            retained_bytes: self.records.capacity() * size_of::<ContextRecord>()
+                + self.array_parents.capacity() * size_of::<ContextId>()
+                + self.array_return_states.capacity() * size_of::<u32>()
+                + self.interner_heads.capacity() * size_of::<(u64, ContextId)>()
+                + self.interner_next.capacity() * size_of::<Option<ContextId>>(),
+            context_capacity: self.records.capacity(),
+            array_parent_capacity: self.array_parents.capacity(),
+            array_return_state_capacity: self.array_return_states.capacity(),
+            interner_capacity: self.interner_heads.capacity(),
+            workspace_merge_cache_entries: 0,
+            workspace_merge_cache_capacity: 0,
+            workspace_entry_capacity: 0,
+            outer_context_cache_hits: 0,
+            outer_context_cache_misses: 0,
         }
     }
 
@@ -686,6 +712,23 @@ impl PredictionWorkspace {
         } else {
             self.entries.clear();
         }
+    }
+
+    pub(crate) fn merge_cache_capacity(&self) -> usize {
+        self.merge_cache.capacity()
+    }
+
+    pub(crate) fn merge_cache_len(&self) -> usize {
+        self.merge_cache.len()
+    }
+
+    pub(crate) const fn entry_capacity(&self) -> usize {
+        self.entries.capacity()
+    }
+
+    pub(crate) fn retained_bytes(&self) -> usize {
+        self.merge_cache.capacity() * size_of::<(MergeKey, ContextId)>()
+            + self.entries.capacity() * size_of::<(ContextId, u32)>()
     }
 }
 
@@ -1223,10 +1266,14 @@ mod tests {
     fn workspace_drops_pathological_capacity() {
         let mut workspace = PredictionWorkspace::default();
         workspace
+            .merge_cache
+            .reserve(MAX_RETAINED_MERGE_CACHE_ENTRIES.saturating_mul(2));
+        workspace
             .entries
             .reserve(MAX_RETAINED_CONTEXT_ENTRIES.saturating_mul(2));
         workspace.reset();
 
+        assert!(workspace.merge_cache.capacity() <= MAX_RETAINED_MERGE_CACHE_ENTRIES);
         assert!(workspace.entries.capacity() <= MAX_RETAINED_CONTEXT_ENTRIES);
     }
 }

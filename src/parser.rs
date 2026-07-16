@@ -4706,6 +4706,14 @@ where
         })
     }
 
+    /// Returns a generation that changes whenever the active rule stack changes.
+    ///
+    /// A parser ATN simulator uses this to reuse an interned outer prediction
+    /// context while generated predictions remain in the same rule context.
+    pub const fn rule_context_version(&self) -> usize {
+        self.rule_context_version
+    }
+
     const fn advance_rule_context_version(&mut self) {
         self.rule_context_version = self.rule_context_version.wrapping_add(1);
     }
@@ -12070,13 +12078,16 @@ mod tests {
             },
         ];
 
+        let initial_version = parser.rule_context_version();
         let first: Vec<_> = parser.prediction_context_return_states(&atn).collect();
         let second: Vec<_> = parser.prediction_context_return_states(&atn).collect();
         assert_eq!(first, second);
+        assert_eq!(parser.rule_context_version(), initial_version);
 
         parser.exit_rule();
         let after_pop: Vec<_> = parser.prediction_context_return_states(&atn).collect();
         assert_ne!(first, after_pop);
+        assert_ne!(parser.rule_context_version(), initial_version);
     }
 
     #[test]
