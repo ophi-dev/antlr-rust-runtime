@@ -5282,12 +5282,12 @@ fn render_generated_adaptive_prediction_with_indent(
     let nested = format!("{pad}{}", "    ".repeat(extra_indent));
     writeln!(
         out,
-        "{nested}let __prediction_context = self.base.prediction_context(atn());"
+        "{nested}let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));"
     )
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "{nested}let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));"
+        "{nested}let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));"
     )
     .expect("writing to a string cannot fail");
     writeln!(
@@ -5297,7 +5297,7 @@ fn render_generated_adaptive_prediction_with_indent(
     .expect("writing to a string cannot fail");
     writeln!(
         out,
-        "{nested}__simulator.adaptive_predict_stream_info_with_context({decision}, 0, self.base.input(), &__prediction_context)"
+        "{nested}__simulator.adaptive_predict_stream_info_with_context({decision}, 0, self.base.input(), __prediction_context)"
     )
     .expect("writing to a string cannot fail");
     writeln!(out, "{nested}    .map_err(|__error| match __error {{")
@@ -5521,12 +5521,12 @@ fn render_generated_left_recursive_loop(
             .expect("writing to a string cannot fail");
         writeln!(
             out,
-            "{pad}        let __prediction_context = self.base.prediction_context(atn());"
+            "{pad}        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));"
         )
         .expect("writing to a string cannot fail");
         writeln!(
             out,
-            "{pad}        let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));"
+            "{pad}        let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));"
         )
         .expect("writing to a string cannot fail");
         writeln!(
@@ -5536,7 +5536,7 @@ fn render_generated_left_recursive_loop(
         .expect("writing to a string cannot fail");
         writeln!(
             out,
-            "{pad}        __simulator.adaptive_predict_stream_info_with_context({decision}, __prediction_precedence, self.base.input(), &__prediction_context)"
+            "{pad}        __simulator.adaptive_predict_stream_info_with_context({decision}, __prediction_precedence, self.base.input(), __prediction_context)"
         )
         .expect("writing to a string cannot fail");
         writeln!(out, "{pad}    }} {{").expect("writing to a string cannot fail");
@@ -5593,12 +5593,12 @@ fn render_generated_left_recursive_loop(
         .expect("writing to a string cannot fail");
         writeln!(
             out,
-            "{pad}            let __prediction_context = self.base.prediction_context(atn());"
+            "{pad}            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));"
         )
         .expect("writing to a string cannot fail");
         writeln!(
             out,
-            "{pad}            let __simulator = self.simulator.get_or_insert_with(|| antlr4_runtime::ParserAtnSimulator::new_shared(atn()));"
+            "{pad}            let __prediction_context = __simulator.intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()));"
         )
         .expect("writing to a string cannot fail");
         writeln!(
@@ -5608,7 +5608,7 @@ fn render_generated_left_recursive_loop(
         .expect("writing to a string cannot fail");
         writeln!(
             out,
-            "{pad}            match __simulator.adaptive_predict_stream_info_with_context({decision}, __prediction_precedence, self.base.input(), &__prediction_context) {{"
+            "{pad}            match __simulator.adaptive_predict_stream_info_with_context({decision}, __prediction_precedence, self.base.input(), __prediction_context) {{"
         )
         .expect("writing to a string cannot fail");
         writeln!(
@@ -7430,6 +7430,14 @@ where
     #[must_use]
     pub const fn parse_tree_storage(&self) -> &antlr4_runtime::ParseTreeStorage {{
         self.base.parse_tree_storage()
+    }}
+
+    #[must_use]
+    pub fn prediction_context_stats(&self) -> antlr4_runtime::PredictionContextStats {{
+        self.simulator.as_ref().map_or_else(
+            antlr4_runtime::PredictionContextStats::default,
+            antlr4_runtime::ParserAtnSimulator::prediction_context_stats,
+        )
     }}
 
     #[must_use]
@@ -10787,6 +10795,10 @@ atn:
         // stage 2 re-runs with the real context only when full context is needed.
         assert!(rendered.contains("adaptive_predict_stream_info_sll_probe(0, 0"));
         assert!(rendered.contains("adaptive_predict_stream_info_with_context(0, 0"));
+        assert!(rendered.contains(
+            "intern_prediction_context(self.base.rule_context_version(), self.base.prediction_context_return_states(atn()))"
+        ));
+        assert!(!rendered.contains("self.base.prediction_context(atn())"));
 
         let rendered_with_alt_numbers =
             render_generated_rule_dispatch(&[Some(body)], &[], &BTreeMap::new(), true);

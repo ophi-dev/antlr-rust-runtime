@@ -197,38 +197,6 @@ grammar's documentation. Calling the wrong rule can still recover and return a
 parse tree with error nodes, so check parser diagnostics when adding a new input
 form.
 
-## Token and Tree API Migration
-
-The compact token and flat CST stores are breaking runtime/generator changes.
-Regenerate all generated lexers and parsers with the matching
-`antlr4-rust-gen`; code generated against the pointer-owned token or recursive
-tree APIs does not compile against this runtime.
-
-`CommonToken`, `TokenRef`, and token factories are removed. Custom token sources
-now append a `TokenSpec` directly to the supplied `TokenSink` and return its
-`TokenId`. Buffered-token consumers use borrowing `TokenView` values from
-`get`, `lt`, or the `tokens()` iterator. Custom `CharStream` implementations
-should provide `source_text()` when the complete UTF-8 input can be shared;
-otherwise token text is stored explicitly in the sparse side pool.
-
-`CommonTokenStream` owns its `TokenStore` directly. `BaseParser` owns one
-`ParseTreeStorage`: nodes are addressed by `NodeId`, every rule child list is a
-range in one shared edge pool, and terminal/error records contain only
-`TokenId`. `Node`, `RuleNodeView`, and terminal/error views borrow the stores;
-there is no recursive `ParserRuleContext` ownership graph or legacy materializer.
-
-Generated `parse()` returns `ParsedFile`, which owns the token store, flat CST,
-and root ID. Access the root through `tree()`, inspect storage metrics through
-`storage().stats()`, or resolve another ID through `node()`. Direct rule calls
-return `NodeId`; use `parser.node(id)` while the parser is alive, or consume the
-parser with `into_parsed_file(id)`.
-
-Token IDs cover indices through `u32::MAX`. Source scalar/byte offsets, line
-numbers, and columns are limited to `u32::MAX - 1` (4,294,967,294);
-`u32::MAX` is reserved for ANTLR's synthetic `-1` boundary. All conversions are
-checked. Use `CommonTokenStream::try_new` or `try_with_channel` to handle limit
-errors; `new` and `with_channel` panic with the same error.
-
 ## Technical Notes
 
 - Pure Rust runtime implementation.
@@ -259,6 +227,7 @@ The runtime contains:
   for constructs a finite DFA cannot represent (semantic predicates,
   recursive lexer rules)
 - parser ATN rule recognition with backtracking over token stream indices
+- canonical `ContextId` prediction graphs pooled with learned parser DFA state
 - `antlr4-rust-gen`, a Rust generator that consumes ANTLR `.interp` metadata and
   emits Rust modules
 - `antlr4-runtime-testsuite`, a harness for running upstream ANTLR
@@ -462,10 +431,10 @@ group (**> 1.0** means Rust is faster than Go; **< 1.0** means slower):
 
 | Language | Fixtures | Rust vs Go (parse time) |
 |----------|---------:|-------------------------|
-| Kotlin   | 4        | 24.541x                 |
-| Java     | 4        | 2.877x                  |
-| C#       | 4        | 2.092x                  |
-| Trino SQL| 5        | 3.495x                  |
+| Kotlin   | 4        | 24.968x                 |
+| Java     | 4        | 3.055x                  |
+| C#       | 4        | 2.206x                  |
+| Trino SQL | 5       | 3.412x                  |
 
 ## Useful Information
 

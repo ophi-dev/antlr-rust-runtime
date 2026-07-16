@@ -390,6 +390,10 @@ def write_rust_runner(work_dir: Path, specs: list[LanguageSpec]) -> Path:
         f'        "{spec.name}" => parse_{spec.name}(&src).map_err(|err| err.to_string())?,'
         for spec in specs
     )
+    stats_arms = "\n".join(
+        f'        "{spec.name}" => prediction_context_stats_{spec.name}(&src).map_err(|err| err.to_string())?,'
+        for spec in specs
+    )
     functions = "\n\n".join(rust_parse_function(spec) for spec in specs)
     (runner / "src" / "main.rs").write_text(
         f"""#![allow(clippy::print_stdout)]
@@ -442,6 +446,7 @@ fn run_main() -> Result<(), String> {{
     }}
     let src = fs::read_to_string(&input)
         .map_err(|err| format!("failed to read {{}}: {{err}}", input.display()))?;
+    let collect_stats = env::var_os("ANTLR_PERF_DUMP").is_some();
 
     for _ in 0..warmups {{
         parse_once(&language, &src)?;
@@ -461,13 +466,20 @@ fn run_main() -> Result<(), String> {{
     let avg_ns = total_ns / iters as u128;
     println!("min_ns={{min_ns}} avg_ns={{avg_ns}}");
     #[cfg(feature = "perf-counters")]
-    if env::var_os("ANTLR_PERF_DUMP").is_some() {{
+    if collect_stats {{
         antlr4_runtime::dump_prediction_perf_counters();
+    }}
+    if collect_stats {{
+        let stats = prediction_context_stats_once(&language, &src)?;
+        dump_prediction_context_stats(stats);
     }}
     Ok(())
 }}
 
-fn parse_once(language: &str, src: &str) -> Result<(), String> {{
+fn parse_once(
+    language: &str,
+    src: &str,
+) -> Result<(), String> {{
     match language {{
 {arms}
         other => return Err(format!("unsupported language: {{other}}")),
@@ -475,11 +487,41 @@ fn parse_once(language: &str, src: &str) -> Result<(), String> {{
     Ok(())
 }}
 
+fn prediction_context_stats_once(
+    language: &str,
+    src: &str,
+) -> Result<antlr4_runtime::PredictionContextStats, String> {{
+    let stats = match language {{
+{stats_arms}
+        other => return Err(format!("unsupported language: {{other}}")),
+    }};
+    Ok(stats)
+}}
+
 fn parse_usize(value: Option<String>, flag: &str) -> Result<usize, String> {{
     let value = value.ok_or_else(|| format!("missing value for {{flag}}"))?;
     value
         .parse::<usize>()
         .map_err(|err| format!("invalid {{flag}} value {{value}}: {{err}}"))
+}}
+
+fn dump_prediction_context_stats(stats: antlr4_runtime::PredictionContextStats) {{
+    eprintln!("perf context_store.contexts_created={{}}", stats.contexts_created);
+    eprintln!("perf context_store.singleton_contexts={{}}", stats.singleton_contexts);
+    eprintln!("perf context_store.array_contexts={{}}", stats.array_contexts);
+    eprintln!("perf context_store.array_entries={{}}", stats.array_entries);
+    eprintln!("perf context_store.interner_hits={{}}", stats.interner_hits);
+    eprintln!("perf context_store.pooled_bytes={{}}", stats.pooled_bytes);
+    eprintln!("perf context_store.retained_bytes={{}}", stats.retained_bytes);
+    eprintln!("perf context_store.context_capacity={{}}", stats.context_capacity);
+    eprintln!("perf context_store.array_parent_capacity={{}}", stats.array_parent_capacity);
+    eprintln!("perf context_store.array_return_state_capacity={{}}", stats.array_return_state_capacity);
+    eprintln!("perf context_store.interner_capacity={{}}", stats.interner_capacity);
+    eprintln!("perf context_store.workspace_merge_cache_entries={{}}", stats.workspace_merge_cache_entries);
+    eprintln!("perf context_store.workspace_merge_cache_capacity={{}}", stats.workspace_merge_cache_capacity);
+    eprintln!("perf context_store.workspace_entry_capacity={{}}", stats.workspace_entry_capacity);
+    eprintln!("perf context_store.outer_context_cache_hits={{}}", stats.outer_context_cache_hits);
+    eprintln!("perf context_store.outer_context_cache_misses={{}}", stats.outer_context_cache_misses);
 }}
 """
     )
@@ -494,6 +536,18 @@ def rust_parse_function(spec: LanguageSpec) -> str:
     let tree = parser.{spec.rust_entry}()?;
     black_box(&tree);
     Ok(())
+}}
+
+fn prediction_context_stats_{spec.name}(
+    src: &str,
+) -> Result<antlr4_runtime::PredictionContextStats, antlr4_runtime::AntlrError> {{
+    let lexer = generated::{spec.rust_lexer_module}::{spec.rust_lexer_type}::new(InputStream::new(src));
+    let tokens = CommonTokenStream::new(lexer);
+    let mut parser = generated::{spec.rust_parser_module}::{spec.rust_parser_type}::new(tokens);
+    let tree = parser.{spec.rust_entry}()?;
+    let stats = parser.prediction_context_stats();
+    black_box(&tree);
+    Ok(stats)
 }}"""
 
 
@@ -945,6 +999,8 @@ def measure_fixture(
         ]
     )
     completed = run(cmd, env=env, quiet=True)
+    if runtime == "rust-antlr" and os.environ.get("ANTLR_PERF_DUMP") and completed.stderr:
+        print(completed.stderr, file=sys.stderr, end="")
     match = RUNNER_OUTPUT.search(completed.stdout)
     if match is None:
         raise SystemExit(

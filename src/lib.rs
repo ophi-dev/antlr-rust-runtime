@@ -33,9 +33,7 @@ pub use parser::{
 };
 #[cfg(feature = "perf-counters")]
 pub use perf::{dump as dump_prediction_perf_counters, reset as reset_prediction_perf_counters};
-pub use prediction::{
-    AtnConfig, AtnConfigSet, PredictionContext, PredictionContextMergeCache, SemanticContext,
-};
+pub use prediction::{ContextId, PredictionContextStats, SemanticContext};
 pub use recognizer::{Recognizer, RecognizerData};
 pub use token::{
     DEFAULT_CHANNEL, HIDDEN_CHANNEL, INVALID_TOKEN_TYPE, MAX_TOKEN_OFFSET, TOKEN_EOF, Token,

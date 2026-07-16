@@ -30,12 +30,9 @@ struct Counters {
     context_merge_cache_misses: u64,
     context_merge_uncached: u64,
     context_cache_calls: u64,
-    context_cache_empty: u64,
     context_cache_hits: u64,
     context_cache_misses: u64,
     context_cache_inserts: u64,
-    context_cache_visited_total: u64,
-    context_cache_visited_max: u64,
     decisions: BTreeMap<usize, DecisionCounters>,
 }
 
@@ -181,12 +178,6 @@ pub(crate) fn record_context_cache_call() {
     });
 }
 
-pub(crate) fn record_context_cache_empty() {
-    with_counters(|counters| {
-        counters.context_cache_empty = counters.context_cache_empty.saturating_add(1);
-    });
-}
-
 pub(crate) fn record_context_cache_hit() {
     with_counters(|counters| {
         counters.context_cache_hits = counters.context_cache_hits.saturating_add(1);
@@ -202,16 +193,6 @@ pub(crate) fn record_context_cache_miss() {
 pub(crate) fn record_context_cache_insert() {
     with_counters(|counters| {
         counters.context_cache_inserts = counters.context_cache_inserts.saturating_add(1);
-    });
-}
-
-pub(crate) fn record_context_cache_visited(visited_contexts: usize) {
-    with_counters(|counters| {
-        add_len(
-            &mut counters.context_cache_visited_total,
-            &mut counters.context_cache_visited_max,
-            visited_contexts,
-        );
     });
 }
 
@@ -250,7 +231,7 @@ fn dump_decisions(counters: &Counters) {
     }
 }
 
-const fn totals(counters: &Counters) -> [(&'static str, u64); 29] {
+const fn totals(counters: &Counters) -> [(&'static str, u64); 26] {
     [
         ("prediction.adaptive_calls", counters.adaptive_calls),
         (
@@ -293,18 +274,9 @@ const fn totals(counters: &Counters) -> [(&'static str, u64); 29] {
         ),
         ("context_merge.uncached", counters.context_merge_uncached),
         ("context_cache.calls", counters.context_cache_calls),
-        ("context_cache.empty", counters.context_cache_empty),
         ("context_cache.hits", counters.context_cache_hits),
         ("context_cache.misses", counters.context_cache_misses),
         ("context_cache.inserts", counters.context_cache_inserts),
-        (
-            "context_cache.visited_total",
-            counters.context_cache_visited_total,
-        ),
-        (
-            "context_cache.visited_max",
-            counters.context_cache_visited_max,
-        ),
     ]
 }
 

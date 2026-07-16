@@ -22,5 +22,11 @@
   payloads now live in one parser-owned, index-addressed recognition arena.
   `RecognitionArenaStats` reports total/live/dead records and retained
   capacities for the latest interpreted rule parse.
+- Recursive `Rc<PredictionContext>` graphs and the exported
+  `PredictionContext`/`AtnConfig` compatibility API are removed. Prediction
+  contexts are canonical `ContextId` values in pooled storage owned together
+  with learned parser DFAs; overlapping stores remap IDs before DFA union.
+- `ParserAtnSimulator::prediction_context_stats()` reports context creation,
+  singleton/array distribution, pooled entries and bytes, and interner hits.
 - Generated lexers and parsers must be regenerated with the matching
   `antlr4-rust-gen` release.

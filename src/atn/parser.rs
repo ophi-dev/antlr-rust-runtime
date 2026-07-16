@@ -2,34 +2,56 @@ use crate::atn::{Atn, AtnState, AtnStateKind, Transition};
 use crate::dfa::{Dfa, DfaState};
 use crate::int_stream::IntStream;
 use crate::prediction::{
-    AtnConfig, AtnConfigSet, EMPTY_RETURN_STATE, PredictionContext, PredictionContextCache,
-    PredictionContextMergeCache, PredictionFxHasher, SemanticContext, all_subsets_conflict,
-    all_subsets_equal, conflicting_alt_subsets, has_sll_conflict_terminating_prediction,
-    single_viable_alt,
+    AtnConfig, AtnConfigSet, ContextArena, ContextId, EMPTY_CONTEXT, EMPTY_RETURN_STATE,
+    PredictionContextStats, PredictionFxHasher, PredictionWorkspace, SemanticContext,
+    all_subsets_conflict, all_subsets_equal, conflicting_alt_subsets,
+    has_sll_conflict_terminating_prediction, single_viable_alt,
 };
 use crate::token::TOKEN_EOF;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::hash::BuildHasherDefault;
-use std::rc::Rc;
 
 type FxHashSet<T> = HashSet<T, BuildHasherDefault<PredictionFxHasher>>;
 
 #[derive(Debug)]
 pub struct ParserAtnSimulator<'a> {
     atn: &'a Atn,
-    decision_to_dfa: Vec<Dfa>,
+    store: PredictionStore,
+    workspace: PredictionWorkspace,
+    outer_context_cache: Option<CachedOuterContext>,
+    outer_context_cache_hits: usize,
+    outer_context_cache_misses: usize,
     shared_cache_key: Option<usize>,
-    context_cache: Rc<RefCell<PredictionContextCache>>,
     /// Java's `LL_EXACT_AMBIG_DETECTION`: the full-context loop keeps
     /// consuming past "resolves to one viable alt" conflicts until every
     /// `(state, context)` subset conflicts over the same alt set.
     exact_ambig_detection: bool,
 }
 
+#[derive(Clone, Copy, Debug)]
+struct CachedOuterContext {
+    rule_context_version: usize,
+    context: ContextId,
+}
+
+#[derive(Debug, Default)]
+struct PredictionStore {
+    contexts: ContextArena,
+    decision_to_dfa: Vec<Dfa>,
+}
+
+impl PredictionStore {
+    fn new(atn: &Atn) -> Self {
+        Self {
+            contexts: ContextArena::new(),
+            decision_to_dfa: initial_decision_dfas(atn),
+        }
+    }
+}
+
 thread_local! {
-    static SHARED_DECISION_DFAS: RefCell<HashMap<usize, Vec<Dfa>>> = RefCell::new(HashMap::new());
-    static SHARED_CONTEXT_CACHES: RefCell<HashMap<usize, Rc<RefCell<PredictionContextCache>>>> =
+    static SHARED_PREDICTION_STORES: RefCell<HashMap<usize, PredictionStore>> =
         RefCell::new(HashMap::new());
 }
 
@@ -61,22 +83,22 @@ pub enum ParserAtnPredictionDiagnosticKind {
 }
 
 #[derive(Clone, Copy)]
-struct PredictionCheck<'a> {
+struct PredictionCheck {
     decision: usize,
     decision_state: usize,
     state_number: usize,
     start_index: usize,
     precedence: i32,
-    outer_context: &'a Rc<PredictionContext>,
+    outer_context: ContextId,
     force_full_context_retry: bool,
     sll_probe_only: bool,
 }
 
 #[derive(Clone, Copy)]
-struct AdaptivePredictRequest<'a> {
+struct AdaptivePredictRequest {
     decision: usize,
     precedence: usize,
-    outer_context: &'a Rc<PredictionContext>,
+    outer_context: ContextId,
     force_full_context_retry: bool,
     /// When set, the SLL walk stops at the first full-context-requiring conflict
     /// and returns the SLL prediction (carrying `requires_full_context = true`)
@@ -139,7 +161,7 @@ fn full_context_prediction(
 struct ClosureConfigKey {
     state: usize,
     alt: usize,
-    context: Rc<PredictionContext>,
+    context: ContextId,
     semantic_context: SemanticContext,
     precedence_filter_suppressed: bool,
 }
@@ -149,7 +171,7 @@ impl From<&AtnConfig> for ClosureConfigKey {
         Self {
             state: config.state,
             alt: config.alt,
-            context: Rc::clone(&config.context),
+            context: config.context,
             semantic_context: config.semantic_context.clone(),
             precedence_filter_suppressed: config.precedence_filter_suppressed,
         }
@@ -263,6 +285,18 @@ fn union_decision_dfas(shared: &mut Vec<Dfa>, local: Vec<Dfa>) {
     }
 }
 
+fn union_prediction_stores(
+    shared: &mut PredictionStore,
+    mut local: PredictionStore,
+    workspace: &mut PredictionWorkspace,
+) {
+    let remap = shared.contexts.import_all(&local.contexts, workspace);
+    for dfa in &mut local.decision_to_dfa {
+        dfa.remap_contexts(&remap, &shared.contexts);
+    }
+    union_decision_dfas(&mut shared.decision_to_dfa, local.decision_to_dfa);
+}
+
 fn union_decision_dfa(shared: &mut Dfa, local: Dfa) {
     if shared.is_precedence_dfa() != local.is_precedence_dfa() {
         // A mode flip resets the tables (`set_precedence_dfa`), so the two are
@@ -281,8 +315,7 @@ fn union_decision_dfa(shared: &mut Dfa, local: Dfa) {
         let number = shared
             .state_number_for_configs(&state.configs)
             .unwrap_or_else(|| {
-                let mut missing = state.clone();
-                missing.edges = Vec::new();
+                let missing = state.clone_without_edges();
                 shared.insert_state(missing)
             });
         renumber.push(number);
@@ -337,13 +370,13 @@ impl Drop for ParserAtnSimulator<'_> {
         // simulator for the same ATN was created while this one was alive
         // (that one started cold and checked its copy in first) — then union
         // the two by config-set identity so neither side's learning is lost.
-        let dfas = std::mem::take(&mut self.decision_to_dfa);
-        SHARED_DECISION_DFAS.with(|cache| {
+        let store = std::mem::take(&mut self.store);
+        SHARED_PREDICTION_STORES.with(|cache| {
             let mut cache = cache.borrow_mut();
             if let Some(shared) = cache.get_mut(&key) {
-                union_decision_dfas(shared, dfas);
+                union_prediction_stores(shared, store, &mut self.workspace);
             } else {
-                cache.insert(key, dfas);
+                cache.insert(key, store);
             }
         });
     }
@@ -353,9 +386,12 @@ impl<'a> ParserAtnSimulator<'a> {
     pub fn new(atn: &'a Atn) -> Self {
         Self {
             atn,
-            decision_to_dfa: initial_decision_dfas(atn),
+            store: PredictionStore::new(atn),
+            workspace: PredictionWorkspace::default(),
+            outer_context_cache: None,
+            outer_context_cache_hits: 0,
+            outer_context_cache_misses: 0,
             shared_cache_key: None,
-            context_cache: Rc::new(RefCell::new(PredictionContextCache::new())),
             exact_ambig_detection: false,
         }
     }
@@ -378,7 +414,7 @@ impl<'a> ParserAtnSimulator<'a> {
     /// cloning a warm DFA per parser instance costs O(learned states) — ~10%
     /// of a small parse. A second simulator created for the same ATN while one
     /// is alive finds the slot empty and starts cold; the drop-time check-in
-    /// then keeps whichever tables learned more.
+    /// then remaps its context IDs and unions both independently learned stores.
     /// Renders every non-empty learned decision DFA in the format of Java's
     /// `Parser.dumpDFA()` / `DFASerializer` — `Decision N:` headers followed
     /// by `s0-'else'->:s1^=>1` edge lines — which the runtime testsuite's
@@ -387,7 +423,7 @@ impl<'a> ParserAtnSimulator<'a> {
         use std::fmt::Write as _;
         let mut out = String::new();
         let mut seen_one = false;
-        for dfa in &self.decision_to_dfa {
+        for dfa in &self.store.decision_to_dfa {
             if dfa.states().is_empty() {
                 continue;
             }
@@ -417,28 +453,62 @@ impl<'a> ParserAtnSimulator<'a> {
     pub fn new_shared(atn: &'static Atn) -> Self {
         let ptr: *const Atn = atn;
         let key = ptr as usize;
-        let decision_to_dfa = SHARED_DECISION_DFAS
+        let store = SHARED_PREDICTION_STORES
             .with(|cache| cache.borrow_mut().remove(&key))
-            .unwrap_or_else(|| initial_decision_dfas(atn));
-        let context_cache = SHARED_CONTEXT_CACHES.with(|cache| {
-            Rc::clone(
-                cache
-                    .borrow_mut()
-                    .entry(key)
-                    .or_insert_with(|| Rc::new(RefCell::new(PredictionContextCache::new()))),
-            )
-        });
+            .unwrap_or_else(|| PredictionStore::new(atn));
         Self {
             atn,
-            decision_to_dfa,
+            store,
+            workspace: PredictionWorkspace::default(),
+            outer_context_cache: None,
+            outer_context_cache_hits: 0,
+            outer_context_cache_misses: 0,
             shared_cache_key: Some(key),
-            context_cache,
             exact_ambig_detection: false,
         }
     }
 
     pub fn decision_dfas(&self) -> &[Dfa] {
-        &self.decision_to_dfa
+        &self.store.decision_to_dfa
+    }
+
+    /// Returns compact prediction-context allocation and interning totals for
+    /// this simulator's learned store.
+    pub fn prediction_context_stats(&self) -> PredictionContextStats {
+        let mut stats = self.store.contexts.stats();
+        stats.retained_bytes += self.workspace.retained_bytes();
+        stats.workspace_merge_cache_entries = self.workspace.merge_cache_len();
+        stats.workspace_merge_cache_capacity = self.workspace.merge_cache_capacity();
+        stats.workspace_entry_capacity = self.workspace.entry_capacity();
+        stats.outer_context_cache_hits = self.outer_context_cache_hits;
+        stats.outer_context_cache_misses = self.outer_context_cache_misses;
+        stats
+    }
+
+    /// Interns a generated parser's outer call stack in this simulator's
+    /// context arena. Return states must be supplied outermost to innermost,
+    /// and `rule_context_version` must change whenever that stack changes.
+    pub fn intern_prediction_context(
+        &mut self,
+        rule_context_version: usize,
+        return_states: impl IntoIterator<Item = usize>,
+    ) -> ContextId {
+        if let Some(cached) = self.outer_context_cache
+            && cached.rule_context_version == rule_context_version
+        {
+            self.outer_context_cache_hits = self.outer_context_cache_hits.saturating_add(1);
+            return cached.context;
+        }
+        self.outer_context_cache_misses = self.outer_context_cache_misses.saturating_add(1);
+        let mut context = EMPTY_CONTEXT;
+        for return_state in return_states {
+            context = self.store.contexts.singleton(context, return_state);
+        }
+        self.outer_context_cache = Some(CachedOuterContext {
+            rule_context_version,
+            context,
+        });
+        context
     }
 
     pub fn adaptive_predict(
@@ -473,21 +543,22 @@ impl<'a> ParserAtnSimulator<'a> {
         precedence: usize,
         input: &mut T,
     ) -> Result<ParserAtnPrediction, ParserAtnSimulatorError> {
-        let empty = PredictionContext::empty();
         let marker = input.mark();
         let index = input.index();
-        let mut merge_cache = PredictionContextMergeCache::new();
+        let mut workspace = std::mem::take(&mut self.workspace);
+        workspace.reset();
         let result = self.adaptive_predict_stream_inner(
             AdaptivePredictRequest {
                 decision,
                 precedence,
-                outer_context: &empty,
+                outer_context: EMPTY_CONTEXT,
                 force_full_context_retry: false,
                 sll_probe_only: false,
             },
             input,
-            &mut merge_cache,
+            &mut workspace,
         );
+        self.workspace = workspace;
         input.seek(index);
         input.release(marker);
         result
@@ -508,21 +579,22 @@ impl<'a> ParserAtnSimulator<'a> {
         precedence: usize,
         input: &mut T,
     ) -> Result<ParserAtnPrediction, ParserAtnSimulatorError> {
-        let empty = PredictionContext::empty();
         let marker = input.mark();
         let index = input.index();
-        let mut merge_cache = PredictionContextMergeCache::new();
+        let mut workspace = std::mem::take(&mut self.workspace);
+        workspace.reset();
         let result = self.adaptive_predict_stream_inner(
             AdaptivePredictRequest {
                 decision,
                 precedence,
-                outer_context: &empty,
+                outer_context: EMPTY_CONTEXT,
                 force_full_context_retry: false,
                 sll_probe_only: true,
             },
             input,
-            &mut merge_cache,
+            &mut workspace,
         );
+        self.workspace = workspace;
         input.seek(index);
         input.release(marker);
         result
@@ -533,11 +605,13 @@ impl<'a> ParserAtnSimulator<'a> {
         decision: usize,
         precedence: usize,
         input: &mut T,
-        outer_context: &Rc<PredictionContext>,
+        outer_context: ContextId,
     ) -> Result<ParserAtnPrediction, ParserAtnSimulatorError> {
+        self.store.contexts.assert_valid(outer_context);
         let marker = input.mark();
         let index = input.index();
-        let mut merge_cache = PredictionContextMergeCache::new();
+        let mut workspace = std::mem::take(&mut self.workspace);
+        workspace.reset();
         let result = self.adaptive_predict_stream_inner(
             AdaptivePredictRequest {
                 decision,
@@ -547,8 +621,9 @@ impl<'a> ParserAtnSimulator<'a> {
                 sll_probe_only: false,
             },
             input,
-            &mut merge_cache,
+            &mut workspace,
         );
+        self.workspace = workspace;
         input.seek(index);
         input.release(marker);
         result
@@ -576,9 +651,9 @@ impl<'a> ParserAtnSimulator<'a> {
 
     fn adaptive_predict_stream_inner<T: IntStream>(
         &mut self,
-        request: AdaptivePredictRequest<'_>,
+        request: AdaptivePredictRequest,
         input: &mut T,
-        merge_cache: &mut PredictionContextMergeCache,
+        merge_cache: &mut PredictionWorkspace,
     ) -> Result<ParserAtnPrediction, ParserAtnSimulatorError> {
         let AdaptivePredictRequest {
             decision,
@@ -620,6 +695,7 @@ impl<'a> ParserAtnSimulator<'a> {
         loop {
             let symbol = input.la(1);
             if let Some(target) = self
+                .store
                 .decision_to_dfa
                 .get(decision)
                 .and_then(|dfa| dfa.state(state_number))
@@ -628,6 +704,7 @@ impl<'a> ParserAtnSimulator<'a> {
                 state_number = target;
             } else {
                 let configs = self
+                    .store
                     .decision_to_dfa
                     .get(decision)
                     .and_then(|dfa| dfa.state(state_number))
@@ -681,6 +758,7 @@ impl<'a> ParserAtnSimulator<'a> {
                 // exit the loop cleanly instead of reporting a spurious
                 // "no viable alternative at input '<EOF>'".
                 if let Some(configs) = self
+                    .store
                     .decision_to_dfa
                     .get(decision)
                     .and_then(|dfa| dfa.state(state_number))
@@ -701,10 +779,10 @@ impl<'a> ParserAtnSimulator<'a> {
     }
 
     fn prediction_or_full_context<T: IntStream>(
-        &self,
+        &mut self,
         input: &mut T,
-        check: PredictionCheck<'_>,
-        merge_cache: &mut PredictionContextMergeCache,
+        check: PredictionCheck,
+        merge_cache: &mut PredictionWorkspace,
     ) -> Result<Option<ParserAtnPrediction>, ParserAtnSimulatorError> {
         let PredictionCheck {
             decision,
@@ -716,7 +794,7 @@ impl<'a> ParserAtnSimulator<'a> {
             force_full_context_retry,
             sll_probe_only,
         } = check;
-        if outer_context.is_empty()
+        if self.store.contexts.is_empty(outer_context)
             && let Some(prediction) =
                 self.non_greedy_exit_prediction(decision, decision_state, state_number)
         {
@@ -794,6 +872,7 @@ impl<'a> ParserAtnSimulator<'a> {
             return None;
         }
         let configs = &self
+            .store
             .decision_to_dfa
             .get(decision)?
             .state(state_number)?
@@ -805,7 +884,7 @@ impl<'a> ParserAtnSimulator<'a> {
                 self.atn
                     .state(config.state)
                     .is_some_and(AtnState::is_rule_stop)
-                    && config.context.has_empty_path()
+                    && self.store.contexts.has_empty_path(config.context)
             })
             .map(|config| config.alt)
             .min()?;
@@ -822,16 +901,16 @@ impl<'a> ParserAtnSimulator<'a> {
         decision: usize,
         decision_state: usize,
         precedence: i32,
-        merge_cache: &mut PredictionContextMergeCache,
+        merge_cache: &mut PredictionWorkspace,
     ) -> Result<usize, ParserAtnSimulatorError> {
-        if self.decision_to_dfa[decision].is_precedence_dfa() {
+        if self.store.decision_to_dfa[decision].is_precedence_dfa() {
             let precedence_key = usize::try_from(precedence.max(0)).unwrap_or_default();
             if let Some(start) =
-                self.decision_to_dfa[decision].precedence_start_state(precedence_key)
+                self.store.decision_to_dfa[decision].precedence_start_state(precedence_key)
             {
                 return Ok(start);
             }
-        } else if let Some(start) = self.decision_to_dfa[decision].start_state() {
+        } else if let Some(start) = self.store.decision_to_dfa[decision].start_state() {
             return Ok(start);
         }
         let decision_state = self
@@ -840,53 +919,50 @@ impl<'a> ParserAtnSimulator<'a> {
             .ok_or(ParserAtnSimulatorError::MissingAtnState(decision_state))?;
         let configs = self.compute_start_state(decision_state, precedence, merge_cache);
         let state_number = self.add_dfa_state(decision, DfaState::new(configs));
-        if self.decision_to_dfa[decision].is_precedence_dfa() {
+        if self.store.decision_to_dfa[decision].is_precedence_dfa() {
             let precedence_key = usize::try_from(precedence.max(0)).unwrap_or_default();
-            self.decision_to_dfa[decision].set_precedence_start_state(precedence_key, state_number);
+            self.store.decision_to_dfa[decision]
+                .set_precedence_start_state(precedence_key, state_number);
         } else {
-            self.decision_to_dfa[decision].set_start_state(state_number);
+            self.store.decision_to_dfa[decision].set_start_state(state_number);
         }
         Ok(state_number)
     }
 
-    fn add_dfa_state(&mut self, decision: usize, mut state: DfaState) -> usize {
+    fn add_dfa_state(&mut self, decision: usize, state: DfaState) -> usize {
         if state.configs.is_readonly() {
-            return self.decision_to_dfa[decision].add_state(state);
+            return self.store.decision_to_dfa[decision].add_state(state);
         }
         if let Some(existing) =
-            self.decision_to_dfa[decision].state_number_for_configs(&state.configs)
+            self.store.decision_to_dfa[decision].state_number_for_configs(&state.configs)
         {
             return existing;
         }
-        state
-            .configs
-            .optimize_contexts(&mut self.context_cache.borrow_mut());
-        self.decision_to_dfa[decision].insert_state(state)
+        self.store.decision_to_dfa[decision].insert_state(state)
     }
 
     fn compute_start_state(
-        &self,
+        &mut self,
         decision_state: &AtnState,
         precedence: i32,
-        merge_cache: &mut PredictionContextMergeCache,
+        merge_cache: &mut PredictionWorkspace,
     ) -> AtnConfigSet {
-        let empty = PredictionContext::empty();
         self.compute_start_state_with_context(
             decision_state,
             false,
-            &empty,
+            EMPTY_CONTEXT,
             precedence,
             merge_cache,
         )
     }
 
     fn compute_start_state_with_context(
-        &self,
+        &mut self,
         decision_state: &AtnState,
         full_context: bool,
-        initial_context: &Rc<PredictionContext>,
+        initial_context: ContextId,
         precedence: i32,
-        merge_cache: &mut PredictionContextMergeCache,
+        merge_cache: &mut PredictionWorkspace,
     ) -> AtnConfigSet {
         let mut configs = AtnConfigSet::new_full_context(full_context);
         let mut scratch = ClosureScratch::default();
@@ -897,19 +973,24 @@ impl<'a> ParserAtnSimulator<'a> {
         };
         for (index, transition) in decision_state.transitions.iter().enumerate() {
             let alt = index + 1;
-            let config = AtnConfig::new(transition.target(), alt, Rc::clone(initial_context));
+            let config = AtnConfig::new(
+                transition.target(),
+                alt,
+                initial_context,
+                &self.store.contexts,
+            );
             self.closure(config, &mut configs, merge_cache, &mut scratch, params);
         }
         configs
     }
 
     fn adaptive_predict_full_context<T: IntStream>(
-        &self,
+        &mut self,
         decision_state: usize,
         input: &mut T,
         precedence: i32,
-        outer_context: &Rc<PredictionContext>,
-        merge_cache: &mut PredictionContextMergeCache,
+        outer_context: ContextId,
+        merge_cache: &mut PredictionWorkspace,
     ) -> Result<FullContextPrediction, ParserAtnSimulatorError> {
         let decision_state = self
             .atn
@@ -1017,7 +1098,7 @@ impl<'a> ParserAtnSimulator<'a> {
         configs: &AtnConfigSet,
         symbol: i32,
         precedence: i32,
-        merge_cache: &mut PredictionContextMergeCache,
+        merge_cache: &mut PredictionWorkspace,
     ) -> Result<usize, ParserAtnSimulatorError> {
         let mut reach = self.compute_reach_set(configs, symbol, false, precedence, merge_cache);
         if reach.is_empty() {
@@ -1030,7 +1111,7 @@ impl<'a> ParserAtnSimulator<'a> {
                     && configs_have_semantic_context_for_alt(&dfa_state.configs, prediction);
                 let target_state = self.add_dfa_state(edge.decision, dfa_state);
                 if let Some(source) =
-                    self.decision_to_dfa[edge.decision].state_mut(edge.source_state)
+                    self.store.decision_to_dfa[edge.decision].state_mut(edge.source_state)
                 {
                     source.add_edge(symbol, target_state);
                 }
@@ -1075,19 +1156,20 @@ impl<'a> ParserAtnSimulator<'a> {
                 && configs_have_semantic_context_for_alt(&dfa_state.configs, prediction);
         }
         let target_state = self.add_dfa_state(edge.decision, dfa_state);
-        if let Some(source) = self.decision_to_dfa[edge.decision].state_mut(edge.source_state) {
+        if let Some(source) = self.store.decision_to_dfa[edge.decision].state_mut(edge.source_state)
+        {
             source.add_edge(symbol, target_state);
         }
         Ok(target_state)
     }
 
     fn compute_reach_set(
-        &self,
+        &mut self,
         configs: &AtnConfigSet,
         symbol: i32,
         full_context: bool,
         precedence: i32,
-        merge_cache: &mut PredictionContextMergeCache,
+        merge_cache: &mut PredictionWorkspace,
     ) -> AtnConfigSet {
         let mut intermediate = AtnConfigSet::new_full_context(full_context);
         let mut skipped_stop_states = Vec::new();
@@ -1103,15 +1185,9 @@ impl<'a> ParserAtnSimulator<'a> {
             }
             for transition in &state.transitions {
                 if transition.matches(symbol, 1, self.atn.max_token_type()) {
-                    let target = AtnConfig {
-                        state: transition.target(),
-                        alt: config.alt,
-                        context: Rc::clone(&config.context),
-                        semantic_context: config.semantic_context.clone(),
-                        reaches_into_outer_context: config.reaches_into_outer_context,
-                        precedence_filter_suppressed: config.precedence_filter_suppressed,
-                    };
-                    intermediate.add_with_merge_cache(target, Some(merge_cache));
+                    let target =
+                        config.moved_to(transition.target(), config.context, &self.store.contexts);
+                    intermediate.add(target, &mut self.store.contexts, merge_cache);
                 }
             }
         }
@@ -1141,7 +1217,7 @@ impl<'a> ParserAtnSimulator<'a> {
         }
         if !full_context || !self.configs_contain_rule_stop(&reach) {
             for config in skipped_stop_states {
-                reach.add_with_merge_cache(config, Some(merge_cache));
+                reach.add(config, &mut self.store.contexts, merge_cache);
             }
         }
         #[cfg(feature = "perf-counters")]
@@ -1150,12 +1226,12 @@ impl<'a> ParserAtnSimulator<'a> {
     }
 
     fn close_intermediate_reach_set(
-        &self,
+        &mut self,
         intermediate: AtnConfigSet,
         full_context: bool,
         precedence: i32,
         symbol: i32,
-        merge_cache: &mut PredictionContextMergeCache,
+        merge_cache: &mut PredictionWorkspace,
     ) -> AtnConfigSet {
         let mut reach = AtnConfigSet::new_full_context(full_context);
         let mut scratch = ClosureScratch::default();
@@ -1182,16 +1258,16 @@ impl<'a> ParserAtnSimulator<'a> {
                         .atn
                         .state(config.state)
                         .is_some_and(AtnState::is_rule_stop)
-                        && config.context.has_empty_path()
+                        && self.store.contexts.has_empty_path(config.context)
             })
             .map(|config| config.alt)
             .min()
     }
 
     fn rule_stop_configs(
-        &self,
+        &mut self,
         configs: AtnConfigSet,
-        merge_cache: &mut PredictionContextMergeCache,
+        merge_cache: &mut PredictionWorkspace,
     ) -> AtnConfigSet {
         if configs.configs().iter().all(|config| {
             self.atn
@@ -1206,7 +1282,7 @@ impl<'a> ParserAtnSimulator<'a> {
                 .state(config.state)
                 .is_some_and(AtnState::is_rule_stop)
         }) {
-            result.add_with_merge_cache(config.clone(), Some(merge_cache));
+            result.add(config.clone(), &mut self.store.contexts, merge_cache);
         }
         result
     }
@@ -1228,10 +1304,10 @@ impl<'a> ParserAtnSimulator<'a> {
     }
 
     fn closure(
-        &self,
+        &mut self,
         config: AtnConfig,
         configs: &mut AtnConfigSet,
-        merge_cache: &mut PredictionContextMergeCache,
+        merge_cache: &mut PredictionWorkspace,
         scratch: &mut ClosureScratch,
         params: ClosureParams,
     ) {
@@ -1265,11 +1341,16 @@ impl<'a> ParserAtnSimulator<'a> {
             let epsilon_only = !state.transitions.is_empty()
                 && state.transitions.iter().all(Transition::is_epsilon);
             if !epsilon_only {
-                configs.add_with_merge_cache(config.clone(), Some(merge_cache));
+                configs.add(config.clone(), &mut self.store.contexts, merge_cache);
             }
             for (index, transition) in state.transitions.iter().enumerate() {
                 if index == 0
-                    && can_drop_left_recursive_loop_entry_edge(self.atn, state, &config.context)
+                    && can_drop_left_recursive_loop_entry_edge(
+                        self.atn,
+                        state,
+                        &self.store.contexts,
+                        config.context,
+                    )
                 {
                     continue;
                 }
@@ -1296,14 +1377,7 @@ impl<'a> ParserAtnSimulator<'a> {
                     && transition.matches(TOKEN_EOF, 1, self.atn.max_token_type())
                 {
                     scratch.stack.push((
-                        AtnConfig {
-                            state: transition.target(),
-                            alt: config.alt,
-                            context: Rc::clone(&config.context),
-                            semantic_context: config.semantic_context.clone(),
-                            reaches_into_outer_context: config.reaches_into_outer_context,
-                            precedence_filter_suppressed: config.precedence_filter_suppressed,
-                        },
+                        config.moved_to(transition.target(), config.context, &self.store.contexts),
                         collect_predicates,
                     ));
                 }
@@ -1314,54 +1388,48 @@ impl<'a> ParserAtnSimulator<'a> {
     }
 
     fn closure_at_rule_stop(
-        &self,
+        &mut self,
         config: AtnConfig,
         collect_predicates: bool,
         configs: &mut AtnConfigSet,
-        merge_cache: &mut PredictionContextMergeCache,
+        merge_cache: &mut PredictionWorkspace,
         stack: &mut Vec<(AtnConfig, bool)>,
     ) -> bool {
-        if config.context.is_empty() {
+        if self.store.contexts.is_empty(config.context) {
             if configs.full_context() {
-                configs.add_with_merge_cache(config, Some(merge_cache));
+                configs.add(config, &mut self.store.contexts, merge_cache);
                 return true;
             }
             return false;
         }
         let mut handled_all_paths = true;
-        for index in 0..config.context.len() {
-            let Some(return_state) = config.context.return_state(index) else {
+        for index in 0..self.store.contexts.len(config.context) {
+            let Some(return_state) = self.store.contexts.return_state(config.context, index) else {
                 continue;
             };
             if return_state == EMPTY_RETURN_STATE {
                 if configs.full_context() {
                     let mut empty_context_config = config.clone();
-                    empty_context_config.context = PredictionContext::empty();
-                    configs.add_with_merge_cache(empty_context_config, Some(merge_cache));
+                    empty_context_config.set_context(EMPTY_CONTEXT, &self.store.contexts);
+                    configs.add(empty_context_config, &mut self.store.contexts, merge_cache);
                 } else {
                     handled_all_paths = false;
                 }
                 continue;
             }
-            let parent = config
-                .context
-                .parent(index)
-                .unwrap_or_else(PredictionContext::empty);
-            let next = AtnConfig {
-                state: return_state,
-                alt: config.alt,
-                context: parent,
-                semantic_context: config.semantic_context.clone(),
-                reaches_into_outer_context: config.reaches_into_outer_context,
-                precedence_filter_suppressed: config.precedence_filter_suppressed,
-            };
+            let parent = self
+                .store
+                .contexts
+                .parent(config.context, index)
+                .unwrap_or(EMPTY_CONTEXT);
+            let next = config.moved_to(return_state, parent, &self.store.contexts);
             stack.push((next, collect_predicates));
         }
         handled_all_paths
     }
 
     fn epsilon_target_config(
-        &self,
+        &mut self,
         config: &AtnConfig,
         transition: &Transition,
         precedence: i32,
@@ -1398,18 +1466,13 @@ impl<'a> ParserAtnSimulator<'a> {
         };
         let context = match transition {
             Transition::Rule { follow_state, .. } => {
-                PredictionContext::singleton(Rc::clone(&config.context), *follow_state)
+                self.store.contexts.singleton(config.context, *follow_state)
             }
-            _ => Rc::clone(&config.context),
+            _ => config.context,
         };
-        Some(AtnConfig {
-            state: transition.target(),
-            alt: config.alt,
-            context,
-            semantic_context,
-            reaches_into_outer_context: config.reaches_into_outer_context,
-            precedence_filter_suppressed: config.precedence_filter_suppressed,
-        })
+        let mut target = config.moved_to(transition.target(), context, &self.store.contexts);
+        target.semantic_context = semantic_context;
+        Some(target)
     }
 
     fn dfa_prediction_info(
@@ -1417,7 +1480,8 @@ impl<'a> ParserAtnSimulator<'a> {
         decision: usize,
         state_number: usize,
     ) -> Option<DfaPredictionInfo> {
-        self.decision_to_dfa
+        self.store
+            .decision_to_dfa
             .get(decision)
             .and_then(|dfa| dfa.state(state_number))
             .and_then(|state| {
@@ -1452,20 +1516,21 @@ impl<'a> ParserAtnSimulator<'a> {
 pub(crate) fn can_drop_left_recursive_loop_entry_edge(
     atn: &Atn,
     state: &AtnState,
-    context: &PredictionContext,
+    contexts: &ContextArena,
+    context: ContextId,
 ) -> bool {
     if state.kind != AtnStateKind::StarLoopEntry
         || !state.precedence_rule_decision
-        || context.is_empty()
-        || context.has_empty_path()
+        || contexts.is_empty(context)
+        || contexts.has_empty_path(context)
     {
         return false;
     }
     let Some(rule_index) = state.rule_index else {
         return false;
     };
-    for index in 0..context.len() {
-        let Some(return_state_number) = context.return_state(index) else {
+    for index in 0..contexts.len(context) {
+        let Some(return_state_number) = contexts.return_state(context, index) else {
             return false;
         };
         let Some(return_state) = atn.state(return_state_number) else {
@@ -1483,9 +1548,9 @@ pub(crate) fn can_drop_left_recursive_loop_entry_edge(
     else {
         return false;
     };
-    for index in 0..context.len() {
-        let return_state_number = context
-            .return_state(index)
+    for index in 0..contexts.len(context) {
+        let return_state_number = contexts
+            .return_state(context, index)
             .expect("return state checked above");
         let return_state = atn
             .state(return_state_number)
@@ -1564,21 +1629,35 @@ mod tests {
 
     #[test]
     fn union_decision_dfa_preserves_disjoint_coverage() {
-        fn configs(atn_state: usize) -> AtnConfigSet {
+        fn configs(
+            atn_state: usize,
+            arena: &mut ContextArena,
+            workspace: &mut PredictionWorkspace,
+        ) -> AtnConfigSet {
             let mut set = AtnConfigSet::new();
-            set.add(AtnConfig::new(atn_state, 1, PredictionContext::empty()));
+            set.add(
+                AtnConfig::new(atn_state, 1, EMPTY_CONTEXT, arena),
+                arena,
+                workspace,
+            );
             set
         }
-        fn state(atn_state: usize) -> DfaState {
-            DfaState::new(configs(atn_state))
+        fn state(
+            atn_state: usize,
+            arena: &mut ContextArena,
+            workspace: &mut PredictionWorkspace,
+        ) -> DfaState {
+            DfaState::new(configs(atn_state, arena, workspace))
         }
+        let mut arena = ContextArena::new();
+        let mut workspace = PredictionWorkspace::default();
 
         // Two DFAs that evolved independently from the same grammar: equal
         // state/edge counts, but disjoint transitions and different state
         // numbering for the shared successor.
         let mut shared = Dfa::with_max_token_type(0, 0, 8);
-        let shared_root = shared.add_state(state(10));
-        let shared_a = shared.add_state(state(11));
+        let shared_root = shared.add_state(state(10, &mut arena, &mut workspace));
+        let shared_a = shared.add_state(state(11, &mut arena, &mut workspace));
         shared
             .state_mut(shared_root)
             .expect("shared root")
@@ -1586,8 +1665,8 @@ mod tests {
         shared.set_start_state(shared_root);
 
         let mut local = Dfa::with_max_token_type(0, 0, 8);
-        let local_b = local.add_state(state(12));
-        let local_root = local.add_state(state(10));
+        let local_b = local.add_state(state(12, &mut arena, &mut workspace));
+        let local_root = local.add_state(state(10, &mut arena, &mut workspace));
         local
             .state_mut(local_root)
             .expect("local root")
@@ -1601,13 +1680,81 @@ mod tests {
         let root = shared.state(shared_root).expect("root");
         assert_eq!(root.edge(1), Some(shared_a));
         let merged_b = shared
-            .state_number_for_configs(&configs(12))
+            .state_number_for_configs(&configs(12, &mut arena, &mut workspace))
             .expect("local-only state adopted");
         assert_eq!(root.edge(2), Some(merged_b));
         assert_eq!(shared.states().len(), 3);
         // Start-state gaps fill from local; incumbents are kept.
         assert_eq!(shared.start_state(), Some(shared_root));
         assert_eq!(shared.precedence_start_state(3), Some(shared_root));
+    }
+
+    #[test]
+    fn union_prediction_stores_remaps_context_ids_before_dfa_union() {
+        let atn = two_token_decision_atn();
+        let mut shared = PredictionStore::new(&atn);
+        let mut local = PredictionStore::new(&atn);
+        let mut workspace = PredictionWorkspace::default();
+
+        let distracting = shared.contexts.singleton(EMPTY_CONTEXT, 99);
+        let local_context = local.contexts.singleton(EMPTY_CONTEXT, 7);
+        assert_eq!(distracting, local_context, "both stores allocate ID 1");
+
+        let mut configs = AtnConfigSet::new();
+        configs.add(
+            AtnConfig::new(42, 1, local_context, &local.contexts),
+            &mut local.contexts,
+            &mut workspace,
+        );
+        local.decision_to_dfa[0].add_state(DfaState::new(configs));
+
+        union_prediction_stores(&mut shared, local, &mut workspace);
+
+        let imported = shared.decision_to_dfa[0]
+            .states()
+            .iter()
+            .flat_map(|state| state.configs.configs())
+            .find(|config| config.state == 42)
+            .expect("local DFA config imported");
+        assert_ne!(imported.context, local_context);
+        assert_eq!(shared.contexts.return_state(imported.context, 0), Some(7));
+        imported.assert_store(&shared.contexts);
+    }
+
+    #[test]
+    fn outer_context_cache_invalidates_with_rule_context_version() {
+        let atn = two_token_decision_atn();
+        let mut simulator = ParserAtnSimulator::new(&atn);
+
+        let first = simulator.intern_prediction_context(1, [7]);
+        let cached = simulator.intern_prediction_context(1, [99]);
+        let refreshed = simulator.intern_prediction_context(2, [99]);
+
+        assert_eq!(cached, first);
+        assert_ne!(refreshed, first);
+        assert_eq!(
+            simulator.store.contexts.return_state(refreshed, 0),
+            Some(99)
+        );
+        let stats = simulator.prediction_context_stats();
+        assert_eq!(stats.outer_context_cache_hits, 1);
+        assert_eq!(stats.outer_context_cache_misses, 2);
+    }
+
+    #[test]
+    fn outer_context_cache_is_simulator_local() {
+        let atn = two_token_decision_atn();
+        let mut first = ParserAtnSimulator::new(&atn);
+        let mut second = ParserAtnSimulator::new(&atn);
+
+        let first_context = first.intern_prediction_context(1, [7]);
+        let second_context = second.intern_prediction_context(1, [99]);
+
+        assert_eq!(first.store.contexts.return_state(first_context, 0), Some(7));
+        assert_eq!(
+            second.store.contexts.return_state(second_context, 0),
+            Some(99)
+        );
     }
 
     #[test]
@@ -1780,35 +1927,41 @@ mod tests {
     fn context_prediction_reports_context_sensitivity_for_dfa_conflict() {
         let atn = two_token_decision_atn();
         let mut simulator = ParserAtnSimulator::new(&atn);
-        let empty = PredictionContext::empty();
+        let mut workspace = PredictionWorkspace::default();
         let mut start_configs = AtnConfigSet::new();
-        start_configs.add(AtnConfig::new(2, 1, Rc::clone(&empty)));
-        let start = simulator.decision_to_dfa[0].add_state(DfaState::new(start_configs));
-        simulator.decision_to_dfa[0].set_start_state(start);
+        start_configs.add(
+            AtnConfig::new(2, 1, EMPTY_CONTEXT, &simulator.store.contexts),
+            &mut simulator.store.contexts,
+            &mut workspace,
+        );
+        let start = simulator.store.decision_to_dfa[0].add_state(DfaState::new(start_configs));
+        simulator.store.decision_to_dfa[0].set_start_state(start);
 
         let mut accept_configs = AtnConfigSet::new();
         accept_configs.add(
-            AtnConfig::new(3, 1, Rc::clone(&empty)).with_semantic_context(
+            AtnConfig::new(3, 1, EMPTY_CONTEXT, &simulator.store.contexts).with_semantic_context(
                 SemanticContext::Predicate {
                     rule_index: 0,
                     pred_index: 0,
                     context_dependent: false,
                 },
             ),
+            &mut simulator.store.contexts,
+            &mut workspace,
         );
         let mut accept_state = DfaState::new(accept_configs);
         accept_state.mark_accept(1);
         accept_state.requires_full_context = true;
         accept_state.conflicting_alts = vec![1, 2];
-        let accept = simulator.decision_to_dfa[0].add_state(accept_state);
-        simulator.decision_to_dfa[0]
+        let accept = simulator.store.decision_to_dfa[0].add_state(accept_state);
+        simulator.store.decision_to_dfa[0]
             .state_mut(start)
             .expect("start state")
             .add_edge(1, accept);
 
         let mut input = VecIntStream::new(vec![1, 3, TOKEN_EOF]);
         let prediction = simulator
-            .adaptive_predict_stream_info_with_context(0, 0, &mut input, &empty)
+            .adaptive_predict_stream_info_with_context(0, 0, &mut input, EMPTY_CONTEXT)
             .expect("prediction");
 
         assert_eq!(
@@ -1833,12 +1986,19 @@ mod tests {
     #[test]
     fn full_context_reach_prefers_longer_match_over_skipped_stop_state() {
         let atn = prefix_alt_decision_atn();
-        let simulator = ParserAtnSimulator::new(&atn);
-        let empty = PredictionContext::empty();
+        let mut simulator = ParserAtnSimulator::new(&atn);
         let mut configs = AtnConfigSet::new_full_context(true);
-        configs.add(AtnConfig::new(2, 1, Rc::clone(&empty)));
-        configs.add(AtnConfig::new(1, 2, empty));
-        let mut merge_cache = PredictionContextMergeCache::new();
+        let mut merge_cache = PredictionWorkspace::default();
+        configs.add(
+            AtnConfig::new(2, 1, EMPTY_CONTEXT, &simulator.store.contexts),
+            &mut simulator.store.contexts,
+            &mut merge_cache,
+        );
+        configs.add(
+            AtnConfig::new(1, 2, EMPTY_CONTEXT, &simulator.store.contexts),
+            &mut simulator.store.contexts,
+            &mut merge_cache,
+        );
 
         let reach = simulator.compute_reach_set(&configs, 2, true, 0, &mut merge_cache);
 
@@ -1862,12 +2022,13 @@ mod tests {
                 label: 1,
             });
 
-        let simulator = ParserAtnSimulator::new(&atn);
+        let mut simulator = ParserAtnSimulator::new(&atn);
         let mut configs = AtnConfigSet::new_full_context(false);
-        let mut merge_cache = PredictionContextMergeCache::new();
+        let mut merge_cache = PredictionWorkspace::default();
         let mut scratch = ClosureScratch::default();
+        let config = AtnConfig::new(0, 2, EMPTY_CONTEXT, &simulator.store.contexts);
         simulator.closure(
-            AtnConfig::new(0, 2, PredictionContext::empty()),
+            config,
             &mut configs,
             &mut merge_cache,
             &mut scratch,
@@ -1890,12 +2051,12 @@ mod tests {
         let mut atn = Atn::new(AtnType::Parser, 1);
         add_state(&mut atn, 0, AtnStateKind::Basic);
         add_state(&mut atn, 1, AtnStateKind::Basic);
-        let simulator = ParserAtnSimulator::new(&atn);
+        let mut simulator = ParserAtnSimulator::new(&atn);
         let transition = Transition::Precedence {
             target: 1,
             precedence: 2,
         };
-        let config = AtnConfig::new(0, 1, PredictionContext::empty());
+        let config = AtnConfig::new(0, 1, EMPTY_CONTEXT, &simulator.store.contexts);
 
         let sll_start = simulator
             .epsilon_target_config(&config, &transition, 1, true, false)
@@ -1958,12 +2119,13 @@ mod tests {
                 label: 1,
             });
 
-        let simulator = ParserAtnSimulator::new(&atn);
+        let mut simulator = ParserAtnSimulator::new(&atn);
         let mut configs = AtnConfigSet::new();
-        let mut merge_cache = PredictionContextMergeCache::new();
+        let mut merge_cache = PredictionWorkspace::default();
         let mut scratch = ClosureScratch::default();
+        let config = AtnConfig::new(0, 1, EMPTY_CONTEXT, &simulator.store.contexts);
         simulator.closure(
-            AtnConfig::new(0, 1, PredictionContext::empty()),
+            config,
             &mut configs,
             &mut merge_cache,
             &mut scratch,
@@ -1989,9 +2151,10 @@ mod tests {
         // Control: the SAME predicate reached WITHOUT an intervening action edge
         // IS collected (so the assertion above is about the action edge, not a
         // blanket failure to collect predicates).
+        let direct_config = AtnConfig::new(1, 1, EMPTY_CONTEXT, &simulator.store.contexts);
         let direct = simulator
             .epsilon_target_config(
-                &AtnConfig::new(1, 1, PredictionContext::empty()),
+                &direct_config,
                 &Transition::Predicate {
                     target: 2,
                     rule_index: 0,
@@ -2025,11 +2188,14 @@ mod tests {
             .expect("state 1")
             .add_transition(Transition::Epsilon { target: 2 });
 
-        let simulator = ParserAtnSimulator::new(&atn);
-        let empty = PredictionContext::empty();
+        let mut simulator = ParserAtnSimulator::new(&atn);
         let mut configs = AtnConfigSet::new_full_context(false);
-        configs.add(AtnConfig::new(0, 1, empty));
-        let mut merge_cache = PredictionContextMergeCache::new();
+        let mut merge_cache = PredictionWorkspace::default();
+        configs.add(
+            AtnConfig::new(0, 1, EMPTY_CONTEXT, &simulator.store.contexts),
+            &mut simulator.store.contexts,
+            &mut merge_cache,
+        );
 
         let reach = simulator.compute_reach_set(&configs, 7, false, 0, &mut merge_cache);
 
@@ -2039,16 +2205,25 @@ mod tests {
 
     #[test]
     fn semantic_context_flag_is_scoped_to_predicted_alt() {
-        let empty = PredictionContext::empty();
+        let mut arena = ContextArena::new();
+        let mut workspace = PredictionWorkspace::default();
         let mut configs = AtnConfigSet::new();
-        configs.add(AtnConfig::new(1, 1, Rc::clone(&empty)));
-        configs.add(AtnConfig::new(2, 2, empty).with_semantic_context(
-            SemanticContext::Predicate {
-                rule_index: 0,
-                pred_index: 0,
-                context_dependent: false,
-            },
-        ));
+        configs.add(
+            AtnConfig::new(1, 1, EMPTY_CONTEXT, &arena),
+            &mut arena,
+            &mut workspace,
+        );
+        configs.add(
+            AtnConfig::new(2, 2, EMPTY_CONTEXT, &arena).with_semantic_context(
+                SemanticContext::Predicate {
+                    rule_index: 0,
+                    pred_index: 0,
+                    context_dependent: false,
+                },
+            ),
+            &mut arena,
+            &mut workspace,
+        );
 
         assert!(!configs_have_semantic_context_for_alt(&configs, 1));
         assert!(configs_have_semantic_context_for_alt(&configs, 2));
@@ -2066,23 +2241,27 @@ mod tests {
     fn left_recursive_loop_entry_drop_requires_same_rule_return() {
         let atn = left_recursive_loop_entry_atn();
         let loop_entry = atn.state(1).expect("loop entry");
-        let same_rule_context = PredictionContext::singleton(PredictionContext::empty(), 4);
-        let other_rule_context = PredictionContext::singleton(PredictionContext::empty(), 5);
+        let mut contexts = ContextArena::new();
+        let same_rule_context = contexts.singleton(EMPTY_CONTEXT, 4);
+        let other_rule_context = contexts.singleton(EMPTY_CONTEXT, 5);
 
         assert!(can_drop_left_recursive_loop_entry_edge(
             &atn,
             loop_entry,
-            &same_rule_context
+            &contexts,
+            same_rule_context
         ));
         assert!(!can_drop_left_recursive_loop_entry_edge(
             &atn,
             loop_entry,
-            &other_rule_context
+            &contexts,
+            other_rule_context
         ));
         assert!(!can_drop_left_recursive_loop_entry_edge(
             &atn,
             loop_entry,
-            &PredictionContext::empty()
+            &contexts,
+            EMPTY_CONTEXT
         ));
     }
 
