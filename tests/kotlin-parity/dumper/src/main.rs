@@ -15,7 +15,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
 
-use antlr4_runtime::{ParseTree, TokenStore};
+use antlr4_runtime::{Node, NodeKind};
 
 mod generated {
     #![allow(dead_code, unused_imports, unreachable_pub, unused_qualifications)]
@@ -44,28 +44,36 @@ impl EntryRule {
 
 fn dump<S: AsRef<str>>(
     out: &mut dyn Write,
-    tree: &ParseTree,
-    tokens: &TokenStore,
+    tree: Node<'_>,
     rule_names: &[S],
     depth: usize,
 ) -> io::Result<()> {
     let pad = "  ".repeat(depth);
-    match tree {
-        ParseTree::Rule(rl) => {
+    match tree.kind() {
+        NodeKind::Rule => {
+            let rule = tree.as_rule().expect("rule node kind checked");
             let name = rule_names
-                .get(rl.context().rule_index())
+                .get(rule.rule_index())
                 .map_or("<?>", |name| name.as_ref());
             writeln!(
                 out,
                 "{pad}Rule({name}, children={})",
-                rl.context().children().len()
+                rule.child_count()
             )?;
-            for c in rl.context().children() {
-                dump(out, c, tokens, rule_names, depth + 1)?;
+            for child in rule.children() {
+                dump(out, child, rule_names, depth + 1)?;
             }
         }
-        ParseTree::Terminal(t) => writeln!(out, "{pad}Term({:?})", t.text(tokens))?,
-        ParseTree::Error(e) => writeln!(out, "{pad}Err({:?})", e.text(tokens))?,
+        NodeKind::Terminal => writeln!(
+            out,
+            "{pad}Term({:?})",
+            tree.as_terminal().expect("terminal node kind checked").text()
+        )?,
+        NodeKind::Error => writeln!(
+            out,
+            "{pad}Err({:?})",
+            tree.as_error().expect("error node kind checked").text()
+        )?,
     }
     Ok(())
 }
@@ -178,7 +186,6 @@ fn main() -> ExitCode {
     if let Err(err) = dump(
         sink.as_mut(),
         parsed.tree(),
-        parsed.tokens(),
         &rule_names,
         0,
     ) {

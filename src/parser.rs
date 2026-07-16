@@ -84,11 +84,15 @@ use crate::prediction::{EMPTY_RETURN_STATE, PredictionContext};
 use crate::recognizer::{Recognizer, RecognizerData};
 use crate::semir::{self, AStmt, ArithOp, CmpOp, ExprId, HookId, PExpr, SemIr, StmtId};
 use crate::token::{
-    TOKEN_EOF, Token, TokenId, TokenSource, TokenSourceError, TokenSpec, TokenView,
+    TOKEN_EOF, Token, TokenId, TokenSource, TokenSourceError, TokenSpec, TokenStore, TokenView,
 };
 use crate::token_stream::CommonTokenStream;
-use crate::tree::{ErrorNode, ParseTree, ParserRuleContext, RuleNode, TerminalNode};
+use crate::tree::{
+    Node, NodeId, ParseTreeCheckpoint, ParseTreeStorage, ParsedFile, ParserRuleContext,
+};
 use crate::vocabulary::Vocabulary;
+
+type ParseTree = NodeId;
 
 /// Upper bound for the recursive metadata recognizer before it treats a path as
 /// non-viable. Long expression-regression descriptors legitimately walk tens
@@ -320,11 +324,12 @@ where
     S: TokenSource,
 {
     input: &'a mut CommonTokenStream<S>,
+    tree_storage: &'a ParseTreeStorage,
     rule_index: usize,
     coordinate_index: usize,
     rule_name: Option<String>,
     context: Option<&'a ParserRuleContext>,
-    tree: Option<&'a ParseTree>,
+    tree: Option<ParseTree>,
     local_int_arg: Option<(usize, i64)>,
     member_values: &'a BTreeMap<usize, i64>,
     action: Option<ParserAction>,
@@ -410,11 +415,30 @@ where
         self.context
     }
 
+    /// Flat tree storage containing completed children visible to this hook.
+    #[must_use]
+    pub const fn parse_tree_storage(&self) -> &'a ParseTreeStorage {
+        self.tree_storage
+    }
+
+    /// Canonical token store used by completed flat-tree nodes.
+    #[must_use]
+    pub const fn token_store(&self) -> &TokenStore {
+        self.input.token_store()
+    }
+
+    /// Completed parse-tree root ID passed to a replayed action hook.
+    #[must_use]
+    pub const fn tree_id(&self) -> Option<NodeId> {
+        self.tree
+    }
+
     /// Completed parse tree passed to an action hook, if the action is being
     /// replayed after recognition.
     #[must_use]
-    pub const fn tree(&self) -> Option<&'a ParseTree> {
+    pub fn tree(&self) -> Option<Node<'_>> {
         self.tree
+            .and_then(|id| self.tree_storage.node(self.input.token_store(), id))
     }
 
     /// Integer local argument visible to this predicate coordinate.
@@ -992,6 +1016,7 @@ const LEFT_RECURSIVE_CALLER_OVERLAP_CACHE_SIZE: usize = 16;
 #[derive(Debug)]
 pub struct BaseParser<S, H = NoSemanticHooks> {
     input: CommonTokenStream<S>,
+    tree: ParseTreeStorage,
     data: RecognizerData,
     semantic_hooks: H,
     build_parse_trees: bool,
@@ -1110,6 +1135,7 @@ pub struct BaseParser<S, H = NoSemanticHooks> {
 pub struct GeneratedDiagnosticsCheckpoint {
     diagnostics_len: usize,
     syntax_errors: usize,
+    tree: ParseTreeCheckpoint,
 }
 
 /// Storage and reachability counters for the most recent interpreted-rule
@@ -3651,6 +3677,7 @@ where
     H: SemanticHooks,
 {
     input: &'a mut CommonTokenStream<S>,
+    tree_storage: &'a ParseTreeStorage,
     semantic_hooks: &'a mut H,
     rule_index: usize,
     coordinate_index: usize,
@@ -3696,12 +3723,10 @@ where
 
     fn ctx_rule_text(&self, rule_index: usize) -> Option<String> {
         self.context.and_then(|context| {
-            context.children().iter().find_map(|child| match child {
-                ParseTree::Rule(rule) if rule.context().rule_index() == rule_index => {
-                    Some(child.text(self.input.token_store()))
-                }
-                ParseTree::Rule(_) | ParseTree::Terminal(_) | ParseTree::Error(_) => None,
-            })
+            context
+                .child_rules(self.tree_storage, self.input.token_store(), rule_index)
+                .next()
+                .map(crate::tree::RuleNodeView::text)
         })
     }
 
@@ -3728,6 +3753,7 @@ where
     fn hook(&mut self, _hook: HookId) -> bool {
         let mut ctx = ParserSemCtx {
             input: &mut *self.input,
+            tree_storage: self.tree_storage,
             rule_index: self.rule_index,
             coordinate_index: self.coordinate_index,
             rule_name: self.rule_name.map(str::to_owned),
@@ -3915,6 +3941,7 @@ where
     ) -> Self {
         Self {
             input,
+            tree: ParseTreeStorage::new(),
             data,
             semantic_hooks,
             build_parse_trees: true,
@@ -4009,8 +4036,22 @@ where
 
     /// Returns the canonical token store referenced by parse trees.
     #[must_use]
-    pub const fn token_store(&self) -> &crate::token::TokenStore {
+    pub const fn token_store(&self) -> &TokenStore {
         self.input.token_store()
+    }
+
+    /// Returns the flat CST storage populated by completed rules.
+    #[must_use]
+    pub const fn parse_tree_storage(&self) -> &ParseTreeStorage {
+        &self.tree
+    }
+
+    /// Resolves a compact parse-tree ID into a borrowing node view.
+    #[must_use]
+    pub fn node(&self, id: NodeId) -> Node<'_> {
+        self.tree
+            .node(self.input.token_store(), id)
+            .expect("parser-produced node ID should remain valid")
     }
 
     /// Consumes this parser and returns its token stream.
@@ -4021,8 +4062,14 @@ where
 
     /// Consumes this parser and returns its canonical token store.
     #[must_use]
-    pub fn into_token_store(self) -> crate::token::TokenStore {
+    pub fn into_token_store(self) -> TokenStore {
         self.input.into_token_store()
+    }
+
+    /// Consumes the parser and pairs its token store and flat CST with `root`.
+    #[must_use]
+    pub fn into_parsed_file(self, root: NodeId) -> ParsedFile {
+        ParsedFile::new(self.input.into_token_store(), self.tree, root)
     }
 
     /// Returns the number of parser syntax errors recorded by committed parse
@@ -4066,6 +4113,7 @@ where
         GeneratedDiagnosticsCheckpoint {
             diagnostics_len: self.generated_parser_diagnostics.len(),
             syntax_errors: self.syntax_errors,
+            tree: self.tree.checkpoint(),
         }
     }
 
@@ -4075,6 +4123,7 @@ where
             .truncate(marker.diagnostics_len);
         self.syntax_errors = marker.syntax_errors;
         self.generated_sync_expected = None;
+        self.tree.rollback(marker.tree);
     }
 
     /// Emits diagnostics recorded by committed generated parser recovery.
@@ -4261,12 +4310,20 @@ where
         self.input.token_store().token_type(id).unwrap_or(TOKEN_EOF)
     }
 
-    const fn terminal_tree(&self, id: TokenId) -> ParseTree {
-        ParseTree::Terminal(TerminalNode::from_id(id))
+    fn terminal_tree(&mut self, id: TokenId) -> ParseTree {
+        if self.build_parse_trees {
+            self.tree.terminal(id)
+        } else {
+            NodeId::placeholder()
+        }
     }
 
-    const fn error_tree(&self, id: TokenId) -> ParseTree {
-        ParseTree::Error(ErrorNode::from_id(id))
+    fn error_tree(&mut self, id: TokenId) -> ParseTree {
+        if self.build_parse_trees {
+            self.tree.error(id)
+        } else {
+            NodeId::placeholder()
+        }
     }
 
     const fn set_context_start(&self, context: &mut ParserRuleContext, id: TokenId) {
@@ -4599,8 +4656,12 @@ where
         format!("{{{values}}}")
     }
 
-    pub const fn rule_node(&self, context: ParserRuleContext) -> ParseTree {
-        ParseTree::Rule(RuleNode::new(context))
+    pub fn rule_node(&mut self, context: ParserRuleContext) -> ParseTree {
+        if self.build_parse_trees {
+            self.tree.finish_rule(context)
+        } else {
+            NodeId::placeholder()
+        }
     }
 
     /// Enters a generated parser rule and returns the context object the
@@ -4685,11 +4746,17 @@ where
     /// enabled. The match is recorded on the context either way (via `add_child`,
     /// or `note_matched_child` when trees are off) so generated recovery can tell
     /// whether the rule has matched anything yet without depending on `children`.
-    pub fn add_parse_child(&self, context: &mut ParserRuleContext, child: ParseTree) {
+    pub fn add_parse_child(&mut self, context: &mut ParserRuleContext, child: ParseTree) {
         if self.build_parse_trees {
-            context.add_child(child);
+            self.tree.add_child(context, child);
         } else {
             context.note_matched_child();
+        }
+    }
+
+    fn release_tree_scratch_if_idle(&mut self) {
+        if self.rule_context_stack.is_empty() {
+            self.tree.release_scratch();
         }
     }
 
@@ -4699,8 +4766,10 @@ where
         if let Some(token) = stop_index.and_then(|index| self.token_id_at(index)) {
             self.set_context_stop(&mut context, token);
         }
+        let node = self.rule_node(context);
         self.exit_rule();
-        self.rule_node(context)
+        self.release_tree_scratch_if_idle();
+        node
     }
 
     /// Recovers a generated rule catch block after a committed mismatch.
@@ -4728,7 +4797,8 @@ where
                 break;
             };
             self.consume();
-            self.add_parse_child(context, self.error_tree(token));
+            let child = self.error_tree(token);
+            self.add_parse_child(context, child);
         }
         self.record_syntax_errors(1);
     }
@@ -4786,8 +4856,10 @@ where
         if let Some(token) = stop_index.and_then(|index| self.token_id_at(index)) {
             self.set_context_stop(&mut context, token);
         }
+        let node = self.rule_node(context);
         self.unroll_recursion_context();
-        self.rule_node(context)
+        self.release_tree_scratch_if_idle();
+        node
     }
 
     /// Enters a generated left-recursive rule at `precedence`.
@@ -4834,7 +4906,8 @@ where
         }
         let previous = std::mem::replace(current, replacement);
         if self.build_parse_trees {
-            current.add_child(self.rule_node(previous));
+            let previous = self.rule_node(previous);
+            self.tree.add_child(current, previous);
         }
     }
 
@@ -5433,20 +5506,16 @@ where
     ///
     /// Generated parsers call this for action source states that were present
     /// in the ATN but not translated into a built-in Rust action template.
-    pub fn parser_action_hook(&mut self, action: ParserAction, tree: &ParseTree) -> bool {
+    pub fn parser_action_hook(&mut self, action: ParserAction, tree: ParseTree) -> bool {
         let rule_index = action.rule_index();
         let rule_name = self.rule_names().get(rule_index).cloned();
-        let context = match tree {
-            ParseTree::Rule(rule) if rule.context().rule_index() == rule_index => {
-                Some(rule.context())
-            }
-            ParseTree::Rule(_) | ParseTree::Terminal(_) | ParseTree::Error(_) => None,
-        };
+        let context = None;
         let input = &mut self.input;
         let semantic_hooks = &mut self.semantic_hooks;
         let member_values = &self.int_members;
         let mut ctx = ParserSemCtx {
             input,
+            tree_storage: &self.tree,
             rule_index,
             coordinate_index: usize::MAX,
             rule_name,
@@ -5485,6 +5554,7 @@ where
         self.clear_prediction_diagnostics();
         self.reset_per_parse_caches();
         self.reset_recognition_arena();
+        let tree_checkpoint = self.tree.checkpoint();
         let mut decision_by_state = vec![None; atn.states().len()];
         for (decision, &state_number) in atn.decision_to_state().iter().enumerate() {
             if let Some(slot) = decision_by_state.get_mut(state_number) {
@@ -5504,10 +5574,12 @@ where
         match result {
             Ok(tree) => {
                 report_token_source_errors(&self.input.drain_source_errors());
+                self.release_tree_scratch_if_idle();
                 Ok(tree)
             }
             Err(DirectAdaptiveParseControl::Fallback(reason)) => {
                 let _ = reason;
+                self.tree.rollback(tree_checkpoint);
                 self.input.seek(start_index);
                 self.parse_atn_rule(atn, rule_index)
             }
@@ -5660,7 +5732,8 @@ where
             {
                 let mut cursor = live_root;
                 while let Some(link) = self.recognition_arena.link(cursor) {
-                    context.add_child(self.arena_recognized_node_tree(link.head, false)?);
+                    let child = self.arena_recognized_node_tree(link.head, false)?;
+                    self.tree.add_child(&mut context, child);
                     cursor = link.tail;
                 }
             } else {
@@ -5675,7 +5748,9 @@ where
         self.finish_recognition_arena(live_root, outcome.diagnostics);
         self.input.seek(outcome.index);
 
-        Ok(self.rule_node(context))
+        let tree = self.rule_node(context);
+        self.release_tree_scratch_if_idle();
+        Ok(tree)
     }
 
     fn pending_invoking_follow_state(&self, atn: &Atn) -> Option<usize> {
@@ -5759,11 +5834,7 @@ where
         }
     }
 
-    /// Converts one arena record into the current public recursive tree.
-    ///
-    /// The speculative representation remains flat and index-addressed; this
-    /// is the single compatibility boundary that #84 replaces with direct flat
-    /// CST handoff.
+    /// Converts one speculative arena record into the flat public CST.
     fn arena_recognized_node_tree(
         &mut self,
         node_id: RecognizedNodeId,
@@ -5827,8 +5898,8 @@ where
                     .recognition_arena
                     .fold_left_recursive_boundaries(children);
                 while let Some(link) = self.recognition_arena.link(cursor) {
-                    context
-                        .add_child(self.arena_recognized_node_tree(link.head, track_alt_numbers)?);
+                    let child = self.arena_recognized_node_tree(link.head, track_alt_numbers)?;
+                    self.tree.add_child(&mut context, child);
                     cursor = link.tail;
                 }
                 Ok(self.rule_node(context))
@@ -5892,12 +5963,14 @@ where
         while let Some(link) = self.recognition_arena.link(children) {
             if let Some((child_start, child_stop)) = self.recognition_arena.node_span(link.head) {
                 self.add_visible_terminals_before(context, &mut cursor, child_start)?;
-                context.add_child(self.arena_recognized_node_tree_with_implicit_tokens(link.head)?);
+                let child = self.arena_recognized_node_tree_with_implicit_tokens(link.head)?;
+                self.tree.add_child(context, child);
                 if let Some(child_stop) = child_stop {
                     cursor = self.next_visible_after_token(child_stop);
                 }
             } else {
-                context.add_child(self.arena_recognized_node_tree_with_implicit_tokens(link.head)?);
+                let child = self.arena_recognized_node_tree_with_implicit_tokens(link.head)?;
+                self.tree.add_child(context, child);
             }
             children = link.tail;
         }
@@ -5940,7 +6013,8 @@ where
                     message: format!("missing token at index {index}"),
                 })?;
             let is_eof = self.token_type_for_id(token) == TOKEN_EOF;
-            context.add_child(self.terminal_tree(token));
+            let child = self.terminal_tree(token);
+            self.tree.add_child(context, child);
             if is_eof {
                 return Ok(None);
             }
@@ -6182,14 +6256,17 @@ where
         if self.build_parse_trees {
             let mut nodes = live_root;
             while let Some(link) = self.recognition_arena.link(nodes) {
-                context.add_child(self.arena_recognized_node_tree(link.head, track_alt_numbers)?);
+                let child = self.arena_recognized_node_tree(link.head, track_alt_numbers)?;
+                self.tree.add_child(&mut context, child);
                 nodes = link.tail;
             }
         }
         self.finish_recognition_arena(live_root, outcome.diagnostics);
         self.input.seek(outcome.index);
 
-        Ok((self.rule_node(context), actions))
+        let tree = self.rule_node(context);
+        self.release_tree_scratch_if_idle();
+        Ok((tree, actions))
     }
 
     /// Temporary parser entry used by generated parser methods while the parser
@@ -6204,13 +6281,16 @@ where
             let token_type = self.la(1);
             let child = self.match_token(token_type)?;
             if self.build_parse_trees {
-                context.add_child(child);
+                self.tree.add_child(&mut context, child);
             }
         }
         if self.build_parse_trees {
-            context.add_child(self.match_eof()?);
+            let child = self.match_eof()?;
+            self.tree.add_child(&mut context, child);
         }
-        Ok(self.rule_node(context))
+        let tree = self.rule_node(context);
+        self.release_tree_scratch_if_idle();
+        Ok(tree)
     }
 
     /// Builds the parser error reported when no ATN path can reach the active
@@ -8901,13 +8981,15 @@ where
     #[must_use]
     pub fn after_action_stop_index_for_tree(
         &mut self,
-        tree: &ParseTree,
+        tree: ParseTree,
         current_index: usize,
     ) -> Option<usize> {
-        if let ParseTree::Rule(rule) = tree {
-            if let Some(stop) = rule.context().stop_id() {
-                return Some(stop.index());
-            }
+        if let Some(stop) = self
+            .node(tree)
+            .as_rule()
+            .and_then(crate::tree::RuleNodeView::stop_id)
+        {
+            return Some(stop.index());
         }
         self.after_action_stop_index(current_index)
     }
@@ -8922,15 +9004,17 @@ where
     /// pre-rule cursor still points at. Falls back to `fallback_index` only when
     /// the tree carries no rule start.
     #[must_use]
-    pub const fn after_action_start_index_for_tree(
+    pub fn after_action_start_index_for_tree(
         &self,
-        tree: &ParseTree,
+        tree: ParseTree,
         fallback_index: usize,
     ) -> usize {
-        if let ParseTree::Rule(rule) = tree {
-            if let Some(start) = rule.context().start_id() {
-                return start.index();
-            }
+        if let Some(start) = self
+            .node(tree)
+            .as_rule()
+            .and_then(crate::tree::RuleNodeView::start_id)
+        {
+            return start.index();
         }
         fallback_index
     }
@@ -9022,6 +9106,7 @@ where
         let semantic_hooks = &mut self.semantic_hooks;
         let mut ctx = ParserSemCtx {
             input,
+            tree_storage: &self.tree,
             rule_index,
             coordinate_index: pred_index,
             rule_name,
@@ -9131,6 +9216,7 @@ where
         let unknown_predicate_policy = self.unknown_predicate_policy;
         let mut ctx = ParserSemIrCtx {
             input: &mut self.input,
+            tree_storage: &self.tree,
             semantic_hooks: &mut self.semantic_hooks,
             rule_index: request.rule_index,
             coordinate_index: request.pred_index,
@@ -9227,12 +9313,10 @@ where
             }
             ParserPredicate::ContextChildRuleTextNotEquals { rule_index, text } => context
                 .and_then(|context| {
-                    context.children().iter().find_map(|child| match child {
-                        ParseTree::Rule(rule) if rule.context().rule_index() == *rule_index => {
-                            Some(child.text(self.input.token_store()))
-                        }
-                        ParseTree::Rule(_) | ParseTree::Terminal(_) | ParseTree::Error(_) => None,
-                    })
+                    context
+                        .child_rules(&self.tree, self.input.token_store(), *rule_index)
+                        .next()
+                        .map(crate::tree::RuleNodeView::text)
                 })
                 .is_none_or(|actual| actual != *text),
             ParserPredicate::LocalIntEquals { value } => {
@@ -9559,6 +9643,18 @@ where
             .collect()
     }
 
+    /// Invoking-state chain for the active rule context, current rule first.
+    ///
+    /// The root frame is excluded, matching Java's `RuleContext.toString()`.
+    pub fn active_invocation_states(&self) -> Vec<isize> {
+        self.rule_context_stack
+            .iter()
+            .skip(1)
+            .rev()
+            .map(|frame| frame.invoking_state)
+            .collect()
+    }
+
     /// Formats a buffered token in ANTLR's diagnostic token display form.
     pub fn token_display_at(&self, index: usize) -> Option<String> {
         self.token_at(index).map(|token| format!("{token}"))
@@ -9588,7 +9684,10 @@ where
                 DirectAdaptiveFallback::MissingAtn,
             ))?;
         let start_index = self.parser.current_visible_index();
-        let mut children = Vec::new();
+        let mut context = ParserRuleContext::new(rule_index, invoking_state);
+        if let Some(token) = self.parser.token_id_at(start_index) {
+            self.parser.set_context_start(&mut context, token);
+        }
         let mut state_number = start_state;
         let mut consumed_eof = false;
         while state_number != stop_state {
@@ -9626,7 +9725,7 @@ where
                         rule_precedence,
                     )?;
                     if self.parser.build_parse_trees {
-                        children.push(child);
+                        self.parser.tree.add_child(&mut context, child);
                     }
                     state_number = follow_state;
                 }
@@ -9638,7 +9737,7 @@ where
                     let (matched_eof, child) = self.consume_transition(&transition)?;
                     consumed_eof |= matched_eof;
                     if let Some(child) = child {
-                        children.push(child);
+                        self.parser.tree.add_child(&mut context, child);
                     }
                     state_number = transition.target();
                 }
@@ -9655,28 +9754,11 @@ where
             }
         }
 
-        let mut context = ParserRuleContext::with_child_capacity(
-            rule_index,
-            invoking_state,
-            if self.parser.build_parse_trees {
-                children.len()
-            } else {
-                0
-            },
-        );
-        if let Some(token) = self.parser.token_id_at(start_index) {
-            self.parser.set_context_start(&mut context, token);
-        }
         let stop_index = self
             .parser
             .rule_stop_token_index(self.parser.input.index(), consumed_eof);
         if let Some(token) = stop_index.and_then(|index| self.parser.token_id_at(index)) {
             self.parser.set_context_stop(&mut context, token);
-        }
-        if self.parser.build_parse_trees {
-            for child in children {
-                context.add_child(child);
-            }
         }
         Ok(self.parser.rule_node(context))
     }
@@ -10530,6 +10612,7 @@ mod tests {
     use crate::atn::serialized::{AtnDeserializer, SerializedAtn};
     use crate::token::{HIDDEN_CHANNEL, Token, TokenId, TokenSink, TokenSpec, TokenStoreError};
     use crate::token_stream::CommonTokenStream;
+    use crate::tree::{NodeKind, ParseTreeStats};
     use crate::vocabulary::Vocabulary;
     use std::mem::size_of;
 
@@ -10649,10 +10732,6 @@ mod tests {
         fn stop_byte(&self) -> usize {
             self.spec.stop_byte
         }
-    }
-
-    fn test_terminal(token: &TestToken) -> TerminalNode {
-        TerminalNode::from_id(token.id)
     }
 
     #[derive(Debug)]
@@ -11482,7 +11561,7 @@ mod tests {
             .sync_decision(&atn, 1, true, false)
             .expect("single extraneous token recovers");
         assert_eq!(children.len(), 1);
-        assert!(matches!(children[0], ParseTree::Error(_)));
+        assert_eq!(single.node(children[0]).kind(), NodeKind::Error);
         assert_eq!(single.number_of_syntax_errors(), 1);
         // Exactly one token consumed (the cursor now sits on `b`).
         assert_eq!(single.la(1), 2);
@@ -11627,7 +11706,7 @@ mod tests {
             .sync_decision(&atn, 5, true, false)
             .expect("single token before EOF recovers");
         assert_eq!(children.len(), 1);
-        assert!(matches!(children[0], ParseTree::Error(_)));
+        assert_eq!(parser.node(children[0]).kind(), NodeKind::Error);
         assert_eq!(parser.number_of_syntax_errors(), 1);
         assert_eq!(
             parser.la(1),
@@ -11689,7 +11768,11 @@ mod tests {
             .sync_decision(&atn, 5, false, true)
             .expect("loop-back multi-token deletion recovers onto EOF");
         assert_eq!(children.len(), 2, "both `c`s deleted as error nodes");
-        assert!(children.iter().all(|c| matches!(c, ParseTree::Error(_))));
+        assert!(
+            children
+                .iter()
+                .all(|child| parser.node(*child).kind() == NodeKind::Error)
+        );
         assert_eq!(parser.number_of_syntax_errors(), 1);
         assert_eq!(parser.la(1), TOKEN_EOF, "EOF left for the rule's EOF match");
     }
@@ -11857,7 +11940,7 @@ mod tests {
         );
         let mut parser = BaseParser::new(CommonTokenStream::new(source), data);
         let matched = parser.match_token(1).expect("token 1 should match");
-        assert_eq!(matched.text(parser.token_store()), "x");
+        assert_eq!(parser.node(matched).text(), "x");
         assert!(parser.match_token(1).is_err());
     }
 
@@ -11871,7 +11954,7 @@ mod tests {
         let matched = parser
             .match_set(&[(1, 1), (3, 4)])
             .expect("token set should match");
-        assert_eq!(matched.text(parser.token_store()), "x");
+        assert_eq!(parser.node(matched).text(), "x");
         assert!(parser.match_not_set(&[(1, 1)], 1, 4).is_err());
     }
 
@@ -11913,6 +11996,28 @@ mod tests {
     }
 
     #[test]
+    fn active_invocation_states_exclude_the_root_frame() {
+        let mut parser = mini_parser(vec![TestToken::eof("parser-test", 1, 1, 1)]);
+
+        let _root = parser.enter_rule(0, 0);
+        assert!(parser.active_invocation_states().is_empty());
+
+        let marker = parser.push_invoking_state(6);
+        let _child = parser.enter_rule(2, 1);
+        parser.discard_invoking_state(marker);
+        assert_eq!(parser.active_invocation_states(), [6]);
+
+        let marker = parser.push_invoking_state(13);
+        let _grandchild = parser.enter_rule(4, 2);
+        parser.discard_invoking_state(marker);
+        assert_eq!(parser.active_invocation_states(), [13, 6]);
+
+        parser.exit_rule();
+        parser.exit_rule();
+        parser.exit_rule();
+    }
+
+    #[test]
     fn parser_predicates_support_token_adjacency() {
         let mut parser = mini_parser(vec![
             TestToken::new(1).with_text("=").with_span(0, 0),
@@ -11949,10 +12054,10 @@ mod tests {
         ]);
         let mut context = ParserRuleContext::new(1, 0);
         let mut child_context = ParserRuleContext::new(2, 0);
-        child_context.add_child(ParseTree::Terminal(test_terminal(
-            &TestToken::new(1).with_text("var"),
-        )));
-        context.add_child(ParseTree::Rule(RuleNode::new(child_context)));
+        let terminal = parser.terminal_tree(TokenId::try_from(0).expect("test token ID"));
+        parser.tree.add_child(&mut child_context, terminal);
+        let child = parser.rule_node(child_context);
+        parser.tree.add_child(&mut context, child);
         let predicates = [(
             1,
             0,
@@ -12061,14 +12166,11 @@ mod tests {
             .expect("generated match should insert missing token");
 
         assert_eq!(node.children().len(), 1);
-        assert_eq!(
-            node.children()[0].text(parser.token_store()),
-            "<missing 'Y'>"
-        );
+        assert_eq!(parser.node(node.children()[0]).text(), "<missing 'Y'>");
         assert_eq!(
             node.clone()
                 .into_child_iter()
-                .map(|child| child.text(parser.token_store()))
+                .map(|child| parser.node(child).text())
                 .collect::<Vec<_>>(),
             ["<missing 'Y'>"]
         );
@@ -12115,12 +12217,12 @@ mod tests {
             .expect("generated match should delete the extraneous token");
 
         assert_eq!(node.children().len(), 2);
-        assert!(matches!(node.children()[0], ParseTree::Error(_)));
-        assert_eq!(node.children()[0].text(parser.token_store()), "z");
-        assert_eq!(node.children()[1].text(parser.token_store()), "y");
+        assert_eq!(parser.node(node.children()[0]).kind(), NodeKind::Error);
+        assert_eq!(parser.node(node.children()[0]).text(), "z");
+        assert_eq!(parser.node(node.children()[1]).text(), "y");
         assert_eq!(
             node.into_child_iter()
-                .map(|child| child.text(parser.token_store()))
+                .map(|child| parser.node(child).text())
                 .collect::<Vec<_>>(),
             ["z", "y"]
         );
@@ -12155,7 +12257,7 @@ mod tests {
 
         assert_eq!(
             node.into_child_iter()
-                .map(|child| child.text(parser.token_store()))
+                .map(|child| parser.node(child).text())
                 .collect::<Vec<_>>(),
             ["y"]
         );
@@ -12355,8 +12457,9 @@ mod tests {
         assert_eq!(node.children().len(), 1);
         assert!(!node.consumed_eof());
         assert!(
-            node.children()[0]
-                .text(parser.token_store())
+            parser
+                .node(node.children()[0])
+                .text()
                 .starts_with("<missing")
         );
         assert_eq!(parser.la(1), TOKEN_EOF);
@@ -12409,7 +12512,7 @@ mod tests {
 
         assert_eq!(parser.la(1), TOKEN_EOF);
         assert_eq!(
-            tree.to_string_tree_with_names(&["s", "a"], parser.token_store()),
+            parser.node(tree).to_string_tree_with_names(&["s", "a"]),
             "(a z)"
         );
         assert_eq!(parser.number_of_syntax_errors(), 1);
@@ -12540,7 +12643,7 @@ mod tests {
             TestToken::eof("parser-test", 1, 1, 1),
         ]);
         let matched = parser.match_wildcard().expect("wildcard");
-        assert_eq!(matched.text(parser.token_store()), "x");
+        assert_eq!(parser.node(matched).text(), "x");
         assert!(parser.match_wildcard().is_err());
     }
 
@@ -12556,18 +12659,53 @@ mod tests {
         parser.set_build_parse_trees(false);
         let mut ctx = ParserRuleContext::new(0, 0);
         assert!(!ctx.has_matched_child());
-        parser.add_parse_child(&mut ctx, ParseTree::Terminal(test_terminal(&token)));
+        let child = parser.terminal_tree(token.id);
+        parser.add_parse_child(&mut ctx, child);
         // Tree building is off, so no child is stored...
-        assert!(ctx.children().is_empty());
+        assert_eq!(ctx.child_count(), 0);
+        assert_eq!(parser.parse_tree_storage().node_count(), 0);
         // ...but the match is recorded, so the context is no longer "empty".
         assert!(ctx.has_matched_child());
 
         // With tree building on, the child is stored and the match is recorded.
         parser.set_build_parse_trees(true);
         let mut ctx = ParserRuleContext::new(0, 0);
-        parser.add_parse_child(&mut ctx, ParseTree::Terminal(test_terminal(&token)));
-        assert_eq!(ctx.children().len(), 1);
+        let child = parser.terminal_tree(token.id);
+        parser.add_parse_child(&mut ctx, child);
+        assert_eq!(ctx.child_count(), 1);
         assert!(ctx.has_matched_child());
+    }
+
+    #[test]
+    fn disabled_tree_building_does_not_grow_flat_storage() {
+        let mut parser = mini_parser(vec![
+            TestToken::new(1).with_text("x"),
+            TestToken::new(1).with_text("y"),
+            TestToken::eof("parser-test", 2, 1, 2),
+        ]);
+        parser.set_build_parse_trees(false);
+        let mut context = ParserRuleContext::new(0, -1);
+
+        for _ in 0..2 {
+            let child = parser.match_token(1).expect("token should match");
+            parser.add_parse_child(&mut context, child);
+        }
+        let current = parser.input.lt_id(1).expect("EOF token");
+        let error = parser.error_tree(current);
+        parser.add_parse_child(&mut context, error);
+        let root = parser.rule_node(context);
+
+        assert_eq!(
+            parser.parse_tree_storage().stats(),
+            ParseTreeStats::default()
+        );
+        assert!(
+            parser
+                .parse_tree_storage()
+                .node(parser.token_store(), root)
+                .is_none(),
+            "the no-tree sentinel must not resolve to stored data"
+        );
     }
 
     #[test]
@@ -12581,10 +12719,12 @@ mod tests {
         let tree = parser
             .parse_atn_rule(&atn, 0)
             .expect("artificial parser rule should parse");
-        assert_eq!(tree.text(parser.token_store()), "x<EOF>");
+        assert_eq!(parser.node(tree).text(), "x<EOF>");
         assert_eq!(parser.number_of_syntax_errors(), 0);
         assert_eq!(
-            tree.first_rule_stop(0, parser.token_store())
+            parser
+                .node(tree)
+                .first_rule_stop(0)
                 .expect("rule should stop at EOF")
                 .token_type(),
             TOKEN_EOF
@@ -12599,7 +12739,9 @@ mod tests {
             .expect("runtime-option parser rule should parse");
         assert!(actions.is_empty());
         assert_eq!(
-            tree.first_rule_stop(0, parser.token_store())
+            parser
+                .node(tree)
+                .first_rule_stop(0)
                 .expect("rule should stop at EOF")
                 .token_type(),
             TOKEN_EOF
@@ -12618,7 +12760,7 @@ mod tests {
             .parse_atn_rule_with_runtime_options(&atn, 0, ParserRuntimeOptions::default())
             .expect("no-op parser action should not force action replay");
 
-        assert_eq!(tree.text(parser.token_store()), "x<EOF>");
+        assert_eq!(parser.node(tree).text(), "x<EOF>");
         assert!(
             actions.is_empty(),
             "action_index=None transitions are ANTLR metadata, not replay actions"
@@ -12637,7 +12779,7 @@ mod tests {
         let tree = parser
             .parse_atn_rule(&atn, 0)
             .expect("artificial parser rule should parse");
-        assert_eq!(tree.text(parser.token_store()), "x<EOF>");
+        assert_eq!(parser.node(tree).text(), "x<EOF>");
 
         let stream = parser.token_stream();
         let source_index_after_parse = stream.token_source().index;
@@ -12673,7 +12815,9 @@ mod tests {
 
         assert_eq!(parser.number_of_syntax_errors(), 1);
         assert_eq!(
-            tree.first_error_token(parser.token_store())
+            parser
+                .node(tree)
+                .first_error_token()
                 .expect("recovery should embed an error token")
                 .text(),
             "y"
@@ -12709,7 +12853,7 @@ mod tests {
             .parse_atn_rule_adaptive_or_fallback(&atn, &mut simulator, 0)
             .expect("direct adaptive rule should parse");
 
-        assert_eq!(tree.text(parser.token_store()), "y");
+        assert_eq!(parser.node(tree).text(), "y");
         assert_eq!(parser.input.index(), 1);
     }
 
@@ -12727,8 +12871,12 @@ mod tests {
             .parse_atn_rule_adaptive_or_fallback(&atn, &mut simulator, 0)
             .expect("fallback recognizer should parse");
 
-        assert_eq!(tree.text(parser.token_store()), "xy");
+        assert_eq!(parser.node(tree).text(), "xy");
         assert_eq!(parser.input.index(), 2);
+        let stats = parser.parse_tree_storage().stats();
+        assert_eq!(stats.nodes, parser.node(tree).descendants().count());
+        assert_eq!(stats.edges, stats.nodes.saturating_sub(1));
+        assert_eq!(stats.scratch_links, 0);
     }
 
     #[test]
@@ -12744,7 +12892,7 @@ mod tests {
             .parse_atn_rule_with_runtime_options(&atn, 0, ParserRuntimeOptions::default())
             .expect("unknown predicate should pass under the default policy");
 
-        assert_eq!(tree.text(parser.token_store()), "xy");
+        assert_eq!(parser.node(tree).text(), "xy");
         assert_eq!(parser.number_of_syntax_errors(), 0);
     }
 
@@ -12874,6 +13022,7 @@ mod tests {
     struct RecordingHooks {
         predicates: Vec<(usize, usize, usize, Option<String>)>,
         actions: Vec<(usize, String, Option<String>)>,
+        action_trees: Vec<Option<String>>,
     }
 
     impl SemanticHooks for RecordingHooks {
@@ -12904,6 +13053,7 @@ mod tests {
                 ctx.action_text(),
                 ctx.rule_name().map(str::to_owned),
             ));
+            self.action_trees.push(ctx.tree().map(Node::text));
             true
         }
     }
@@ -12956,7 +13106,7 @@ mod tests {
             )
             .expect("hook supplies the missing predicate result");
 
-        assert_eq!(tree.text(parser.token_store()), "xy");
+        assert_eq!(parser.node(tree).text(), "xy");
         assert_eq!(
             parser.semantic_hooks.predicates,
             vec![(1, 0, 0, Some("y".to_owned()))]
@@ -13002,10 +13152,14 @@ mod tests {
             .parse_atn_rule_with_runtime_options(&atn, 0, ParserRuntimeOptions::default())
             .expect("rule parses before action hook is tested");
 
-        assert!(parser.parser_action_hook(ParserAction::new(42, 0, 0, Some(0)), &tree));
+        assert!(parser.parser_action_hook(ParserAction::new(42, 0, 0, Some(0)), tree));
         assert_eq!(
             parser.semantic_hooks.actions,
             vec![(42, "x".to_owned(), Some("s".to_owned()))]
+        );
+        assert_eq!(
+            parser.semantic_hooks.action_trees,
+            [Some("x<EOF>".to_owned())]
         );
     }
 
@@ -13016,10 +13170,10 @@ mod tests {
         // Error policy, so a `hook`-disposed action is not silently dropped.
         let mut parser = mini_parser_with_hooks(vec![TestToken::eof("t", 0, 1, 0)], DecliningHooks);
         parser.set_unknown_predicate_policy(UnknownSemanticPolicy::Error);
-        let tree = ParseTree::Rule(RuleNode::new(ParserRuleContext::new(0, -1)));
+        let tree = parser.rule_node(ParserRuleContext::new(0, -1));
 
         // DecliningHooks::action returns false (unhandled).
-        assert!(!parser.parser_action_hook(ParserAction::new(42, 0, 0, Some(0)), &tree));
+        assert!(!parser.parser_action_hook(ParserAction::new(42, 0, 0, Some(0)), tree));
 
         let error = parser
             .take_unknown_semantic_error()
@@ -13035,8 +13189,8 @@ mod tests {
         // Under the default (assume-true) policy the same miss is not recorded.
         let mut lenient =
             mini_parser_with_hooks(vec![TestToken::eof("t", 0, 1, 0)], DecliningHooks);
-        let tree = ParseTree::Rule(RuleNode::new(ParserRuleContext::new(0, -1)));
-        assert!(!lenient.parser_action_hook(ParserAction::new(42, 0, 0, Some(0)), &tree));
+        let tree = lenient.rule_node(ParserRuleContext::new(0, -1));
+        assert!(!lenient.parser_action_hook(ParserAction::new(42, 0, 0, Some(0)), tree));
         assert!(lenient.take_unknown_semantic_error().is_none());
     }
 
@@ -13061,7 +13215,7 @@ mod tests {
             )
             .expect("a predicate covered by the table is not an unknown coordinate");
 
-        assert_eq!(tree.text(parser.token_store()), "xy");
+        assert_eq!(parser.node(tree).text(), "xy");
     }
 
     /// Hooks that decline (`None`) must fall through to the configured policy
@@ -13113,7 +13267,7 @@ mod tests {
             )
             .expect("a declined SemIR hook must pass under assume-true");
 
-        assert_eq!(tree.text(parser.token_store()), "xy");
+        assert_eq!(parser.node(tree).text(), "xy");
     }
 
     #[test]
@@ -13231,12 +13385,11 @@ mod tests {
         let tree = parser
             .parse_atn_rule(&atn, 0)
             .expect("artificial parser rule should parse");
-        let Some(ParseTree::Rule(rule)) = tree.first_rule(0) else {
+        let Some(rule) = parser.node(tree).first_rule(0).and_then(Node::as_rule) else {
             panic!("rule node should be present");
         };
         assert_eq!(
-            rule.context()
-                .start(parser.token_store())
+            rule.start()
                 .expect("rule should have a start token")
                 .token_type(),
             1
@@ -13282,14 +13435,14 @@ mod tests {
             &mut ctx,
             parser.token_id_at(0).expect("ID token should be buffered"),
         );
-        let tree = ParseTree::Rule(RuleNode::new(ctx));
+        let tree = parser.rule_node(ctx);
 
         let current_index = parser.input.index();
         // Cursor-only inference would wrongly pick EOF (the parked cursor)...
         assert_eq!(parser.after_action_stop_index(current_index), Some(1));
         // ...but the tree-aware helper follows the rule context stop (ID).
         assert_eq!(
-            parser.after_action_stop_index_for_tree(&tree, current_index),
+            parser.after_action_stop_index_for_tree(tree, current_index),
             Some(0)
         );
     }
@@ -13300,7 +13453,7 @@ mod tests {
         // start (set by `enter_rule`) is the first visible token, not the raw cursor
         // that may still point at the hidden prefix. The @after start must follow
         // the context start so `$start`/`$text` excludes the hidden prefix.
-        let parser = mini_parser(vec![
+        let mut parser = mini_parser(vec![
             TestToken::new(9)
                 .with_text(" ")
                 .with_channel(HIDDEN_CHANNEL),
@@ -13316,15 +13469,15 @@ mod tests {
             &mut ctx,
             parser.token_id_at(2).expect("ID token should be buffered"),
         );
-        let tree = ParseTree::Rule(RuleNode::new(ctx));
+        let tree = parser.rule_node(ctx);
 
         // The raw fallback (pre-rule cursor) would be 0 (the hidden prefix)...
         // ...but the tree-aware helper follows the rule context start (index 2).
-        assert_eq!(parser.after_action_start_index_for_tree(&tree, 0), 2);
+        assert_eq!(parser.after_action_start_index_for_tree(tree, 0), 2);
 
         // With no rule start recorded, it falls back to the provided index.
-        let empty = ParseTree::Rule(RuleNode::new(ParserRuleContext::new(0, 0)));
-        assert_eq!(parser.after_action_start_index_for_tree(&empty, 7), 7);
+        let empty = parser.rule_node(ParserRuleContext::new(0, 0));
+        assert_eq!(parser.after_action_start_index_for_tree(empty, 7), 7);
     }
 
     #[test]

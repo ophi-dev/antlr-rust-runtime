@@ -31,10 +31,10 @@
  *   - Parser "members" are injected as an `impl` block on the generated parser
  *     via `@parser::members`; helpers are called `self.foo()` / `self.pred(v)`.
  *   - The generated listener trait is `TListener` with snake_case
- *     `enter_x`/`exit_x` and a defaulted `visit_terminal`; a test listener is a
- *     unit struct implementing it, walked by `ParseTreeWalker::walk`.
- *   - Downcasting a base `ParserRuleContext` to a labeled-alt / concrete
- *     context uses `.downcast_ref::<TContext>().unwrap()`.
+ *     `enter_x`/`exit_x` and defaulted terminal/error-node visitors; a test
+ *     listener is a unit struct implementing it, walked by `ParseTreeWalker::walk`.
+ *   - Casts from an active `ParserRuleContext` to a labeled-alt / concrete
+ *     borrowing view use the generated `__active_context_view` adapter.
  */
 
 writeln(s) ::= <<writeln!(self.output(), "{}", <s>);>>
@@ -55,7 +55,7 @@ Not(v) ::= "!<v>"
 // target that renders a real assertion receives uncompilable Java syntax.
 Assert(s) ::= ""
 
-Cast(t,v) ::= "(<v>).downcast_ref::\<<t>>(self.base.token_store()).unwrap()"
+Cast(t,v) ::= "__active_context_view::\<<t>>(<v>, self.base.active_invocation_states(), self.base.parse_tree_storage(), self.base.token_store()).unwrap()"
 
 // Rust has no `&str + &str` operator, and descriptors chain Append/AppendStr
 // with bare string literals on the left (`"(" + $ID.text + …` in Java terms),
@@ -280,7 +280,7 @@ impl TListener for LeafListener {
 
 WalkListener(s) ::= <<
 let mut listener = LeafListener::default();
-ParseTreeWalker::walk(&mut listener, <s>, self.base.token_store());
+ParseTreeWalker::walk_with_invocation_states(&mut listener, <s>, self.base.active_invocation_states());
 >>
 
 // Java needs a custom context superclass because its default RuleContext does
@@ -379,9 +379,9 @@ impl TListener for LeafListener {
 
 DeclareContextListGettersFunction() ::= <<
 fn foo() {
-    let s: Option\<Rc\<SContext>\> = None;
-    let _a: Vec\<Rc\<AContext>\> = s.as_ref().unwrap().a_all();
-    let _b: Vec\<Rc\<BContext>\> = s.as_ref().unwrap().b_all();
+    let s: Option\<SContext\> = None;
+    let _a: Vec\<AContext\> = s.as_ref().unwrap().a_all();
+    let _b: Vec\<BContext\> = s.as_ref().unwrap().b_all();
 }
 >>
 

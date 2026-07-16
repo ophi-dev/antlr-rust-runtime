@@ -132,7 +132,7 @@ use generated::json_lexer::JsonLexer;
 fn main() -> Result<(), antlr4_runtime::AntlrError> {
     let parsed = json::parse(r#"{"a":1}"#, JsonLexer::new, Json::json)?;
 
-    println!("{}", parsed.tree().text(parsed.tokens()));
+    println!("{}", parsed.tree().text());
     Ok(())
 }
 ```
@@ -152,10 +152,14 @@ fn main() -> Result<(), antlr4_runtime::AntlrError> {
         result: tree,
         parser,
     } = output;
-    let tokens = parser.into_token_store();
+    let parsed = parser.into_parsed_file(tree);
 
-    println!("{} errors across {} tokens", syntax_errors, tokens.len());
-    println!("{}", tree.text(&tokens));
+    println!(
+        "{} errors across {} tokens",
+        syntax_errors,
+        parsed.tokens().len()
+    );
+    println!("{}", parsed.tree().text());
     Ok(())
 }
 ```
@@ -174,7 +178,7 @@ fn main() -> Result<(), antlr4_runtime::AntlrError> {
     let mut parser = Json::new(tokens);
     let tree = parser.json()?;
 
-    println!("{}", tree.text(parser.token_store()));
+    println!("{}", parser.node(tree).text());
     Ok(())
 }
 ```
@@ -193,11 +197,12 @@ grammar's documentation. Calling the wrong rule can still recover and return a
 parse tree with error nodes, so check parser diagnostics when adding a new input
 form.
 
-## Token API Migration
+## Token and Tree API Migration
 
-The compact token store is a breaking runtime/generator change. Regenerate all
-generated lexers and parsers with the matching `antlr4-rust-gen`; code generated
-against the pointer-owned token API does not compile against this runtime.
+The compact token and flat CST stores are breaking runtime/generator changes.
+Regenerate all generated lexers and parsers with the matching
+`antlr4-rust-gen`; code generated against the pointer-owned token or recursive
+tree APIs does not compile against this runtime.
 
 `CommonToken`, `TokenRef`, and token factories are removed. Custom token sources
 now append a `TokenSpec` directly to the supplied `TokenSink` and return its
@@ -206,12 +211,17 @@ now append a `TokenSpec` directly to the supplied `TokenSink` and return its
 should provide `source_text()` when the complete UTF-8 input can be shared;
 otherwise token text is stored explicitly in the sparse side pool.
 
-`CommonTokenStream` owns its `TokenStore` directly. Parse-tree nodes contain
-only `TokenId` values, so token-dependent tree methods take `&TokenStore`.
-Generated `parse()` returns `ParsedFile<R>`, which owns both the token store and
-entry-rule result. Access them through `tokens()` and `tree()`. Direct rule calls
-can resolve their returned tree through `parser.token_store()` while the parser
-is alive, or consume the parser with `into_token_store()`.
+`CommonTokenStream` owns its `TokenStore` directly. `BaseParser` owns one
+`ParseTreeStorage`: nodes are addressed by `NodeId`, every rule child list is a
+range in one shared edge pool, and terminal/error records contain only
+`TokenId`. `Node`, `RuleNodeView`, and terminal/error views borrow the stores;
+there is no recursive `ParserRuleContext` ownership graph or legacy materializer.
+
+Generated `parse()` returns `ParsedFile`, which owns the token store, flat CST,
+and root ID. Access the root through `tree()`, inspect storage metrics through
+`storage().stats()`, or resolve another ID through `node()`. Direct rule calls
+return `NodeId`; use `parser.node(id)` while the parser is alive, or consume the
+parser with `into_parsed_file(id)`.
 
 Token IDs cover indices through `u32::MAX`. Source scalar/byte offsets, line
 numbers, and columns are limited to `u32::MAX - 1` (4,294,967,294);
@@ -452,46 +462,10 @@ group (**> 1.0** means Rust is faster than Go; **< 1.0** means slower):
 
 | Language | Fixtures | Rust vs Go (parse time) |
 |----------|---------:|-------------------------|
-| Kotlin   | 4        | ~18.6× faster           |
-| Java     | 4        | ~2.7× faster            |
-| C#       | 4        | ~1.7× faster            |
-| Trino SQL| 5        | ~2.5× faster            |
-
-### Recognition arena results
-
-Issue [#83](https://github.com/ophi-dev/antlr-rust-runtime/issues/83)
-replaces the interpreted parser's speculative `Rc` node lists with compact IDs
-in a parser-owned arena. To isolate that path from generated-parser
-optimizations, the benchmark harness routed each Kotlin entry rule directly
-through ATN interpretation and built the full CST. These are same-machine
-results against `c068688db` on an Apple M3 Pro:
-
-| Fixture | Baseline avg | Arena avg | Time | Allocations / parse | Allocated bytes / parse |
-|---------|-------------:|----------:|-----:|--------------------:|------------------------:|
-| `jetbrains-kotlin-lazy-bodies-test.kt` | 3.166 ms | 2.498 ms | -21.1% | 44,842 → 35,558 (-20.7%) | 20.39 MB → 18.85 MB (-7.5%) |
-| `kotlinx-coroutines-flow-limit.kt` | 3.407 ms | 2.544 ms | -25.3% | 45,005 → 38,552 (-14.3%) | 19.02 MB → 18.00 MB (-5.3%) |
-| `ktor-openapi-describe-route-test.kt` | 27.670 ms | 16.686 ms | -39.7% | 355,148 → 266,315 (-25.0%) | 60.22 MB → 45.82 MB (-23.9%) |
-| `ktor-openapi-security-scheme-inference-test.kt` | 14.577 ms | 9.462 ms | -35.1% | 210,051 → 164,095 (-21.9%) | 38.75 MB → 30.96 MB (-20.1%) |
-
-Timings are averages from 100 measured parses after 10 warmups. Allocation
-figures come from a separate counting-allocator run of 100 measured parses
-after five warmups. On the largest fixture, maximum RSS fell from 37.29 MB to
-32.83 MB (-12.0%) and macOS peak memory footprint fell from 34.87 MB to
-30.44 MB (-12.7%). Arena instrumentation on the 4.8 KB lazy-bodies fixture
-reported 4,876 appended nodes / 1,667 live nodes and 9,191 appended links /
-1,667 live links.
-
-Rust is faster than Go on average in all four language groups, with
-Kotlin leading dramatically (expression-ladder memoization in the generated
-walker). Lexer DFAs are compiled at generation time and embedded in the
-generated lexer, so tokenization needs no warmup at all; learned parser
-decision DFAs are shared across parser instances, so repeated parses of the
-same grammar — the common case for a CLI tool or language server — skip
-relearning entirely. Shared grammar-level lookahead caches likewise amortize
-left-recursive loop prediction across parses. Numbers are warm-parse minimums
-from 10 measured iterations after two warmups on an Apple M3 Pro and are
-indicative — re-run the benchmark on your own hardware for authoritative
-figures.
+| Kotlin   | 4        | 24.541x                 |
+| Java     | 4        | 2.877x                  |
+| C#       | 4        | 2.092x                  |
+| Trino SQL| 5        | 3.495x                  |
 
 ## Useful Information
 
