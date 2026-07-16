@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use antlr4_runtime::{
-    CommonTokenStream, InputStream, ParseTree, Parser, TOKEN_EOF, Token, TokenStore,
+    CommonTokenStream, InputStream, Node, NodeKind, Parser, TOKEN_EOF, Token,
 };
 
 #[allow(dead_code, unused_imports, unreachable_pub, unused_qualifications)]
@@ -25,28 +25,36 @@ use javascript_parser_base::JavaScriptParserBase;
 
 fn dump_tree<S: AsRef<str>>(
     out: &mut dyn Write,
-    tree: &ParseTree,
-    tokens: &TokenStore,
+    tree: Node<'_>,
     rule_names: &[S],
     depth: usize,
 ) -> io::Result<()> {
     let pad = "  ".repeat(depth);
-    match tree {
-        ParseTree::Rule(rule) => {
+    match tree.kind() {
+        NodeKind::Rule => {
+            let rule = tree.as_rule().expect("rule node kind checked");
             let name = rule_names
-                .get(rule.context().rule_index())
+                .get(rule.rule_index())
                 .map_or("<?>", AsRef::as_ref);
             writeln!(
                 out,
                 "{pad}Rule({name}, children={})",
-                rule.context().children().len()
+                rule.child_count()
             )?;
-            for child in rule.context().children() {
-                dump_tree(out, child, tokens, rule_names, depth + 1)?;
+            for child in rule.children() {
+                dump_tree(out, child, rule_names, depth + 1)?;
             }
         }
-        ParseTree::Terminal(token) => writeln!(out, "{pad}Term({:?})", token.text(tokens))?,
-        ParseTree::Error(token) => writeln!(out, "{pad}Err({:?})", token.text(tokens))?,
+        NodeKind::Terminal => writeln!(
+            out,
+            "{pad}Term({:?})",
+            tree.as_terminal().expect("terminal node kind checked").text()
+        )?,
+        NodeKind::Error => writeln!(
+            out,
+            "{pad}Err({:?})",
+            tree.as_error().expect("error node kind checked").text()
+        )?,
     }
     Ok(())
 }
@@ -126,8 +134,7 @@ fn main() -> ExitCode {
     }
     if let Err(error) = dump_tree(
         &mut io::stdout().lock(),
-        &tree,
-        parser.token_store(),
+        parser.node(tree),
         java_script_parser::rule_names(),
         0,
     ) {

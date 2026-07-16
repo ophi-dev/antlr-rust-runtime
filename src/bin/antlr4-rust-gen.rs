@@ -5790,7 +5790,7 @@ fn render_parser_parse_rule_fallback(
     if has_action_dispatch {
         writeln!(
             out,
-            "for action in actions {{ self.run_action(action, &tree); }}"
+            "for action in actions {{ self.run_action(action, tree); }}"
         )
         .expect("writing to a string cannot fail");
     } else {
@@ -5825,8 +5825,11 @@ fn render_parser(
 const GENERATED_PARSER_RESERVED_RULE_METHODS: &[&str] = &[
     "token_stream",
     "token_store",
+    "parse_tree_storage",
+    "node",
     "into_token_stream",
     "into_token_store",
+    "into_parsed_file",
 ];
 
 fn parser_public_rule_method_names(rule_names: &[String]) -> Vec<String> {
@@ -6536,8 +6539,8 @@ fn embedded_rule_call_args(
 /// * one `<Rule>Context` view per parser rule (plus one per labeled
 ///   alternative) with positional child accessors (`ctx.e(0)` /
 ///   `ctx.e_all()`, `ctx.INT(0)` / `ctx.INT_all()`), `child_count()`,
-///   `start()`, public attribute fields, and a `FromRuleContext` impl backing
-///   `$ctx.downcast_ref::<XContext>(tokens)`;
+///   `start()`, public attribute fields, and a `FromRuleNode` impl backing
+///   `ctx.downcast_ref::<XContext>()`;
 /// * the `<Grammar>Listener` trait with defaulted `enter_/exit_<rule>` (and
 ///   per-labeled-alternative) callbacks plus `visit_terminal`;
 /// * a module-local `ParseTreeWalker` whose bridge dispatches the runtime
@@ -6567,28 +6570,53 @@ fn render_embedded_context_types(
         r#"#[allow(dead_code)]
 #[derive(Clone)]
 pub struct TerminalNode<'a> {
-    __node: RuntimeTerminalNode,
-    __tokens: &'a antlr4_runtime::TokenStore,
+    __node: RuntimeTerminalNode<'a>,
 }
 
 #[allow(dead_code)]
 impl<'a> TerminalNode<'a> {
-    fn new(node: RuntimeTerminalNode, tokens: &'a antlr4_runtime::TokenStore) -> Self {
-        Self {
-            __node: node,
-            __tokens: tokens,
-        }
+    fn new(node: RuntimeTerminalNode<'a>) -> Self {
+        Self { __node: node }
     }
 
     pub fn symbol(&self) -> antlr4_runtime::TokenView<'a> {
-        self.__node.symbol(self.__tokens)
+        self.__node.symbol()
     }
 }
 
 impl std::fmt::Display for TerminalNode<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.__node.text(self.__tokens))
+        f.write_str(self.__node.text())
     }
+}
+
+#[allow(dead_code)]
+#[derive(Clone)]
+enum __GeneratedRuleContext<'a> {
+    Stored(RuleNodeView<'a>),
+    Active {
+        context: &'a antlr4_runtime::ParserRuleContext,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    },
+}
+
+#[allow(dead_code)]
+trait __FromActiveRuleContext<'a>: Sized {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self>;
+}
+
+#[allow(dead_code)]
+fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
+    context: &'a antlr4_runtime::ParserRuleContext,
+    storage: &'a antlr4_runtime::ParseTreeStorage,
+    tokens: &'a antlr4_runtime::TokenStore,
+) -> Option<T> {
+    T::__from_active(context, storage, tokens)
 }
 
 "#,
@@ -6621,16 +6649,16 @@ impl std::fmt::Display for TerminalNode<'_> {
         }
         let _ = writeln!(
             out,
-            "#[allow(non_camel_case_types, dead_code)]\n#[derive(Clone)]\npub struct {view_name}<'a> {{\n    __node: ParserRuleContext,\n    __tokens: &'a antlr4_runtime::TokenStore,\n    __chain: Vec<isize>,\n{fields}}}\n"
+            "#[allow(non_camel_case_types, dead_code)]\n#[derive(Clone)]\npub struct {view_name}<'a> {{\n    __node: __GeneratedRuleContext<'a>,\n{fields}}}\n"
         );
         let _ = writeln!(
             out,
-            "impl<'a> FromRuleContext<'a> for {view_name}<'a> {{\n    fn from_rule_context(context: &ParserRuleContext, tokens: &'a antlr4_runtime::TokenStore) -> Option<Self> {{\n        if context.rule_index() != {rule_index} {{ return None; }}\n        Some(Self::__from_node_with_chain(context, tokens, Vec::new()))\n    }}\n}}\n"
+            "impl<'a> FromRuleNode<'a> for {view_name}<'a> {{\n    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {{\n        if node.rule_index() != {rule_index} {{ return None; }}\n        Some(Self::__from_node(node))\n    }}\n}}\n\nimpl<'a> __FromActiveRuleContext<'a> for {view_name}<'a> {{\n    fn __from_active(\n        context: &'a antlr4_runtime::ParserRuleContext,\n        storage: &'a antlr4_runtime::ParseTreeStorage,\n        tokens: &'a antlr4_runtime::TokenStore,\n    ) -> Option<Self> {{\n        if context.rule_index() != {rule_index} {{ return None; }}\n        let __default = {attrs_struct}::default();\n        let __attrs = context.generated_attrs::<{attrs_struct}>().unwrap_or(&__default);\n        Some(Self {{\n            __node: __GeneratedRuleContext::Active {{ context, storage, tokens }},\n{field_inits}        }})\n    }}\n}}\n"
         );
         let mut accessors = String::new();
         let _ = writeln!(
             accessors,
-            "    fn __from_node_with_chain(node: &ParserRuleContext, tokens: &'a antlr4_runtime::TokenStore, mut chain: Vec<isize>) -> Self {{\n        chain.insert(0, node.invoking_state());\n        let __default = {attrs_struct}::default();\n        let __attrs = node.generated_attrs::<{attrs_struct}>().unwrap_or(&__default);\n        Self {{\n            __node: node.clone(),\n            __tokens: tokens,\n            __chain: chain,\n{field_inits}        }}\n    }}\n"
+            "    fn __from_node(node: RuleNodeView<'a>) -> Self {{\n        let __default = {attrs_struct}::default();\n        let __attrs = node.generated_attrs::<{attrs_struct}>().unwrap_or(&__default);\n        Self {{\n            __node: __GeneratedRuleContext::Stored(node),\n{field_inits}        }}\n    }}\n"
         );
         // A grammar rule claiming a built-in helper's name (`start`,
         // `child_count`) takes the accessor slot; the built-in yields.
@@ -6643,13 +6671,13 @@ impl std::fmt::Display for TerminalNode<'_> {
         if !rule_claims("child_count") {
             let _ = writeln!(
                 accessors,
-                "    pub fn child_count(&self) -> usize {{ self.__node.child_count() }}"
+                "    pub fn child_count(&self) -> usize {{\n        match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.child_count(),\n            __GeneratedRuleContext::Active {{ context, .. }} => context.child_count(),\n        }}\n    }}"
             );
         }
         if !rule_claims("start") {
             let _ = writeln!(
                 accessors,
-                "    pub fn start(&self) -> __GeneratedTokenView {{ __GeneratedTokenView {{ text: self.__node.start(self.__tokens).map(|token| token.text().to_owned()).unwrap_or_default() }} }}"
+                "    pub fn start(&self) -> __GeneratedTokenView {{\n        let token = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.start(),\n            __GeneratedRuleContext::Active {{ context, tokens, .. }} => context.start(tokens),\n        }};\n        __GeneratedTokenView {{ text: token.map(|token| token.text().to_owned()).unwrap_or_default() }}\n    }}"
             );
         }
         for (child_index, child) in model.rules.iter().enumerate() {
@@ -6657,13 +6685,13 @@ impl std::fmt::Display for TerminalNode<'_> {
             let child_view = format!("{}Context", rust_type_name(&child.name));
             let _ = writeln!(
                 accessors,
-                "    pub fn {method}(&self, index: usize) -> Rc<{child_view}<'a>> {{ let node = self.__node.child_rules({child_index}).nth(index).expect(\"missing rule child\"); Rc::new({child_view}::__from_node_with_chain(node, self.__tokens, self.__chain.clone())) }}\n    pub fn {method}_all(&self) -> Vec<Rc<{child_view}<'a>>> {{ self.__node.child_rules({child_index}).map(|node| Rc::new({child_view}::__from_node_with_chain(node, self.__tokens, self.__chain.clone()))).collect() }}"
+                "    pub fn {method}(&self, index: usize) -> {child_view}<'a> {{\n        let node = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.child_rules({child_index}).nth(index),\n            __GeneratedRuleContext::Active {{ context, storage, tokens }} => context.child_rules(storage, tokens, {child_index}).nth(index),\n        }}.expect(\"missing rule child\");\n        {child_view}::__from_node(node)\n    }}\n    pub fn {method}_all(&self) -> Vec<{child_view}<'a>> {{\n        let nodes: Vec<_> = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.child_rules({child_index}).collect(),\n            __GeneratedRuleContext::Active {{ context, storage, tokens }} => context.child_rules(storage, tokens, {child_index}).collect(),\n        }};\n        nodes.into_iter().map({child_view}::__from_node).collect()\n    }}"
             );
         }
         for (token_name, token_type) in &token_accessors {
             let _ = writeln!(
                 accessors,
-                "    #[allow(non_snake_case)]\n    pub fn {token_name}(&self, index: usize) -> Rc<TerminalNode<'a>> {{ let node = self.__node.child_tokens({token_type}, self.__tokens).nth(index).expect(\"missing token child\"); Rc::new(TerminalNode::new(node.clone(), self.__tokens)) }}\n    #[allow(non_snake_case)]\n    pub fn {token_name}_all(&self) -> Vec<Rc<TerminalNode<'a>>> {{ self.__node.child_tokens({token_type}, self.__tokens).map(|node| Rc::new(TerminalNode::new(node.clone(), self.__tokens))).collect() }}"
+                "    #[allow(non_snake_case)]\n    pub fn {token_name}(&self, index: usize) -> TerminalNode<'a> {{\n        let node = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.child_tokens({token_type}).nth(index),\n            __GeneratedRuleContext::Active {{ context, storage, tokens }} => context.child_tokens(storage, tokens, {token_type}).nth(index),\n        }}.expect(\"missing token child\");\n        TerminalNode::new(node)\n    }}\n    #[allow(non_snake_case)]\n    pub fn {token_name}_all(&self) -> Vec<TerminalNode<'a>> {{\n        let nodes: Vec<_> = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.child_tokens({token_type}).collect(),\n            __GeneratedRuleContext::Active {{ context, storage, tokens }} => context.child_tokens(storage, tokens, {token_type}).collect(),\n        }};\n        nodes.into_iter().map(TerminalNode::new).collect()\n    }}"
             );
         }
         let _ = writeln!(
@@ -6674,7 +6702,7 @@ impl std::fmt::Display for TerminalNode<'_> {
         // this context to the root, the root's sentinel excluded.
         let _ = writeln!(
             out,
-            "impl std::fmt::Display for {view_name}<'_> {{\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{\n        let chain: Vec<String> = self.__chain.iter().take(self.__chain.len().saturating_sub(1)).map(|state| state.to_string()).collect();\n        write!(f, \"[{{}}]\", chain.join(\" \"))\n    }}\n}}\n"
+            "impl std::fmt::Display for {view_name}<'_> {{\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{\n        let chain: Vec<String> = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.invocation_states().map(|state| state.to_string()).collect(),\n            __GeneratedRuleContext::Active {{ .. }} => Vec::new(),\n        }};\n        write!(f, \"[{{}}]\", chain.join(\" \"))\n    }}\n}}\n"
         );
     }
 
@@ -6731,7 +6759,7 @@ impl std::fmt::Display for TerminalNode<'_> {
             if !has_labels {
                 let (method, view) = &names[0];
                 return format!(
-                    "                self.0.{phase}_{method}(&{view}::__from_node_with_chain(context, tokens, self.1.clone()));\n"
+                    "                self.0.{phase}_{method}(&{view}::__from_node(context));\n"
                 );
             }
             let mut out = String::new();
@@ -6749,7 +6777,7 @@ impl std::fmt::Display for TerminalNode<'_> {
                     let primary_view = format!("{}Context", rust_type_name(primary));
                     let _ = writeln!(
                         out,
-                        "                if context.child_rule_trees({rule_index}).next().is_some() {{ self.0.{phase}_{op_method}(&{op_view}::__from_node_with_chain(context, tokens, self.1.clone())); }} else {{ self.0.{phase}_{primary_method}(&{primary_view}::__from_node_with_chain(context, tokens, self.1.clone())); }}"
+                        "                if context.child_rule_trees({rule_index}).next().is_some() {{ self.0.{phase}_{op_method}(&{op_view}::__from_node(context)); }} else {{ self.0.{phase}_{primary_method}(&{primary_view}::__from_node(context)); }}"
                     );
                 }
                 _ => {
@@ -6758,7 +6786,7 @@ impl std::fmt::Display for TerminalNode<'_> {
                     let (method, view) = &names[0];
                     let _ = writeln!(
                         out,
-                        "                self.0.{phase}_{method}(&{view}::__from_node_with_chain(context, tokens, self.1.clone()));"
+                        "                self.0.{phase}_{method}(&{view}::__from_node(context));"
                     );
                 }
             }
@@ -6781,34 +6809,30 @@ impl std::fmt::Display for TerminalNode<'_> {
     );
 
     // Bridge + module-local walker (shadows the runtime walker so rendered
-    // `ParseTreeWalker::walk(&mut listener, tree, tokens)` dispatches typed
+    // `ParseTreeWalker::walk(&mut listener, tree)` dispatches typed
     // callbacks.
     let _ = writeln!(
         out,
         r#"#[allow(dead_code)]
-struct __ListenerBridge<'a, T: {listener_trait}>(&'a mut T, Vec<isize>);
+struct __ListenerBridge<'a, T: {listener_trait}>(&'a mut T);
 
 impl<T: {listener_trait}> antlr4_runtime::ParseTreeListener for __ListenerBridge<'_, T> {{
-    fn enter_every_rule(&mut self, context: &ParserRuleContext, tokens: &antlr4_runtime::TokenStore) -> Result<(), antlr4_runtime::AntlrError> {{
-        self.1.insert(0, context.invoking_state());
+    fn enter_every_rule(&mut self, context: RuleNodeView<'_>) -> Result<(), antlr4_runtime::AntlrError> {{
         match context.rule_index() {{
 {enter_arms}            _ => {{}}
         }}
         Ok(())
     }}
 
-    fn exit_every_rule(&mut self, context: &ParserRuleContext, tokens: &antlr4_runtime::TokenStore) -> Result<(), antlr4_runtime::AntlrError> {{
+    fn exit_every_rule(&mut self, context: RuleNodeView<'_>) -> Result<(), antlr4_runtime::AntlrError> {{
         match context.rule_index() {{
 {exit_arms}            _ => {{}}
-        }}
-        if !self.1.is_empty() {{
-            self.1.remove(0);
         }}
         Ok(())
     }}
 
-    fn visit_terminal(&mut self, node: &RuntimeTerminalNode, tokens: &antlr4_runtime::TokenStore) -> Result<(), antlr4_runtime::AntlrError> {{
-        self.0.visit_terminal(&TerminalNode::new(node.clone(), tokens));
+    fn visit_terminal(&mut self, node: RuntimeTerminalNode<'_>) -> Result<(), antlr4_runtime::AntlrError> {{
+        self.0.visit_terminal(&TerminalNode::new(node));
         Ok(())
     }}
 }}
@@ -6818,9 +6842,9 @@ pub struct ParseTreeWalker;
 
 #[allow(dead_code)]
 impl ParseTreeWalker {{
-    pub fn walk<T: {listener_trait}>(listener: &mut T, tree: &antlr4_runtime::ParseTree, tokens: &antlr4_runtime::TokenStore) {{
-        let mut bridge = __ListenerBridge(listener, Vec::new());
-        let _ = antlr4_runtime::ParseTreeWalker::walk(&mut bridge, tree, tokens);
+    pub fn walk<T: {listener_trait}>(listener: &mut T, tree: antlr4_runtime::Node<'_>) {{
+        let mut bridge = __ListenerBridge(listener);
+        let _ = antlr4_runtime::ParseTreeWalker::walk(&mut bridge, tree);
     }}
 }}
 "#
@@ -6831,7 +6855,17 @@ impl ParseTreeWalker {{
 /// Post-translation cleanups shared by all embedded bodies: `TParser::NL`
 /// becomes `Self::NL` so token constants resolve inside the generic impl.
 fn post_process_embedded(_original: &str, translated: &str, type_name: &str) -> String {
-    replace_all(translated, &format!("{type_name}::"), "Self::")
+    let translated = replace_all(translated, &format!("{type_name}::"), "Self::");
+    let translated = replace_all(
+        &translated,
+        "(&__ctx).to_string_tree(Some(self), self.base.token_store())",
+        "(&__ctx).to_string_tree(Some(self), self.base.parse_tree_storage(), self.base.token_store())",
+    );
+    replace_all(
+        &translated,
+        "(&__ctx).to_string_tree(Some(self))",
+        "(&__ctx).to_string_tree(Some(self), self.base.parse_tree_storage(), self.base.token_store())",
+    )
 }
 
 /// Plain substring replacement (`str::replace` is a disallowed method here).
@@ -7242,7 +7276,7 @@ fn render_parser_with_options(
     let generated_footer = GENERATED_MODULE_FOOTER;
 
     let embedded_imports = if options.embedded {
-        "#[allow(unused_imports)]\nuse std::io::Write as _;\n#[allow(unused_imports)]\nuse std::rc::Rc;\n#[allow(unused_imports)]\nuse antlr4_runtime::{{java_style_list, PredictionMode, BailErrorStrategy, TerminalNode as RuntimeTerminalNode, ParserRuleContext, FromRuleContext, Token as _}};\n"
+        "#[allow(unused_imports)]\nuse std::io::Write as _;\n#[allow(unused_imports)]\nuse antlr4_runtime::{{java_style_list, PredictionMode, BailErrorStrategy, TerminalNodeView as RuntimeTerminalNode, RuleNodeView, FromRuleNode, Token as _}};\n"
     } else {
         ""
     };
@@ -7349,6 +7383,16 @@ where
     }}
 
     #[must_use]
+    pub const fn parse_tree_storage(&self) -> &antlr4_runtime::ParseTreeStorage {{
+        self.base.parse_tree_storage()
+    }}
+
+    #[must_use]
+    pub fn node(&self, id: antlr4_runtime::NodeId) -> antlr4_runtime::Node<'_> {{
+        self.base.node(id)
+    }}
+
+    #[must_use]
     pub fn into_token_stream(self) -> CommonTokenStream<L> {{
         self.base.into_token_stream()
     }}
@@ -7356,6 +7400,11 @@ where
     #[must_use]
     pub fn into_token_store(self) -> antlr4_runtime::TokenStore {{
         self.base.into_token_store()
+    }}
+
+    #[must_use]
+    pub fn into_parsed_file(self, root: antlr4_runtime::NodeId) -> antlr4_runtime::ParsedFile {{
+        self.base.into_parsed_file(root)
     }}
 
     #[allow(dead_code)]
@@ -9352,7 +9401,7 @@ fn parser_action_assume_overridden(
 
 fn render_parser_action_method(has_action_states: bool, noop_states: &BTreeSet<usize>) -> String {
     if !has_action_states {
-        return "    fn run_action(&mut self, _action: antlr4_runtime::ParserAction, _tree: &antlr4_runtime::ParseTree) {}\n"
+        return "    fn run_action(&mut self, _action: antlr4_runtime::ParserAction, _tree: antlr4_runtime::ParseTree) {}\n"
             .to_owned();
     }
     let mut arms = String::new();
@@ -9361,7 +9410,7 @@ fn render_parser_action_method(has_action_states: bool, noop_states: &BTreeSet<u
     }
     arms.push_str("            _ => { let _ = self.base.parser_action_hook(action, _tree); }\n");
     format!(
-        "    fn run_action(&mut self, action: antlr4_runtime::ParserAction, _tree: &antlr4_runtime::ParseTree) {{\n        match action.source_state() {{\n{arms}        }}\n    }}\n"
+        "    fn run_action(&mut self, action: antlr4_runtime::ParserAction, _tree: antlr4_runtime::ParseTree) {{\n        match action.source_state() {{\n{arms}        }}\n    }}\n"
     )
 }
 
@@ -10312,18 +10361,18 @@ where
 /// Pass the generated lexer constructor and a parser entry rule, for example
 /// `parse(src, MyGrammarLexer::new, {type_name}::file)`.
 ///
-/// The returned [`antlr4_runtime::ParsedFile`] owns both the entry-rule result
-/// and the canonical token store referenced by any parse tree in that result.
+/// The returned [`antlr4_runtime::ParsedFile`] owns the canonical token store,
+/// flat CST storage, and entry-rule root.
 /// Use [`parse_with_parser`] instead when the caller also needs parser
 /// diagnostics after the entry rule runs.
-pub fn parse<L: TokenSource, R>(
+pub fn parse<L: TokenSource>(
     input: impl AsRef<str>,
     lexer: impl FnOnce(antlr4_runtime::InputStream) -> L,
-    entry: impl FnOnce(&mut {type_name}<L>) -> Result<R, antlr4_runtime::AntlrError>,
-) -> Result<antlr4_runtime::ParsedFile<R>, antlr4_runtime::AntlrError>
+    entry: impl FnOnce(&mut {type_name}<L>) -> Result<antlr4_runtime::NodeId, antlr4_runtime::AntlrError>,
+) -> Result<antlr4_runtime::ParsedFile, antlr4_runtime::AntlrError>
 {{
     let {output_type_name} {{ result, parser }} = parse_with_parser(input, lexer, entry)?;
-    Ok(antlr4_runtime::ParsedFile::new(parser.into_token_store(), result))
+    Ok(parser.into_parsed_file(result))
 }}
 
 /// Parses UTF-8 text like [`parse`] while returning the parser after the entry
@@ -11619,7 +11668,7 @@ atn:
         assert!(fallback.contains(
             "parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence"
         ));
-        assert!(fallback.contains("for action in actions { self.run_action(action, &tree); }"));
+        assert!(fallback.contains("for action in actions { self.run_action(action, tree); }"));
         assert!(fallback.contains("Ok(tree)"));
     }
 
@@ -11850,7 +11899,7 @@ s : ;
         assert!(rendered.contains("pub struct TParserParseOutput<R, L>"));
         assert!(rendered.contains("pub result: R,"));
         assert!(rendered.contains("pub parser: TParser<L>,"));
-        assert!(rendered.contains("pub fn parse<L: TokenSource, R>("));
+        assert!(rendered.contains("pub fn parse<L: TokenSource>("));
         assert!(rendered.contains("pub fn parse_with_parser<L: TokenSource, R>("));
         assert!(
             !rendered
@@ -11867,10 +11916,7 @@ s : ;
         assert!(rendered.contains(
             "let TParserParseOutput { result, parser } = parse_with_parser(input, lexer, entry)?;"
         ));
-        assert!(
-            rendered
-                .contains("Ok(antlr4_runtime::ParsedFile::new(parser.into_token_store(), result))")
-        );
+        assert!(rendered.contains("Ok(parser.into_parsed_file(result))"));
         assert!(rendered.contains("pub fn new(input: CommonTokenStream<L>) -> Self"));
         assert!(
             rendered.contains("pub fn with_hooks(input: CommonTokenStream<L>, hooks: H) -> Self")
