@@ -6619,6 +6619,7 @@ enum __GeneratedRuleContext<'a> {
     Stored(RuleNodeView<'a>),
     Active {
         context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
     },
@@ -6628,6 +6629,7 @@ enum __GeneratedRuleContext<'a> {
 trait __FromActiveRuleContext<'a>: Sized {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
     ) -> Option<Self>;
@@ -6636,10 +6638,11 @@ trait __FromActiveRuleContext<'a>: Sized {
 #[allow(dead_code)]
 fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
     context: &'a antlr4_runtime::ParserRuleContext,
+    invocation_states: Vec<isize>,
     storage: &'a antlr4_runtime::ParseTreeStorage,
     tokens: &'a antlr4_runtime::TokenStore,
 ) -> Option<T> {
-    T::__from_active(context, storage, tokens)
+    T::__from_active(context, invocation_states, storage, tokens)
 }
 
 "#,
@@ -6676,7 +6679,7 @@ fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
         );
         let _ = writeln!(
             out,
-            "impl<'a> FromRuleNode<'a> for {view_name}<'a> {{\n    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {{\n        if node.rule_index() != {rule_index} {{ return None; }}\n        Some(Self::__from_node(node))\n    }}\n}}\n\nimpl<'a> __FromActiveRuleContext<'a> for {view_name}<'a> {{\n    fn __from_active(\n        context: &'a antlr4_runtime::ParserRuleContext,\n        storage: &'a antlr4_runtime::ParseTreeStorage,\n        tokens: &'a antlr4_runtime::TokenStore,\n    ) -> Option<Self> {{\n        if context.rule_index() != {rule_index} {{ return None; }}\n        let __default = {attrs_struct}::default();\n        let __attrs = context.generated_attrs::<{attrs_struct}>().unwrap_or(&__default);\n        Some(Self {{\n            __node: __GeneratedRuleContext::Active {{ context, storage, tokens }},\n{field_inits}        }})\n    }}\n}}\n"
+            "impl<'a> FromRuleNode<'a> for {view_name}<'a> {{\n    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {{\n        if node.rule_index() != {rule_index} {{ return None; }}\n        Some(Self::__from_node(node))\n    }}\n}}\n\nimpl<'a> __FromActiveRuleContext<'a> for {view_name}<'a> {{\n    fn __from_active(\n        context: &'a antlr4_runtime::ParserRuleContext,\n        invocation_states: Vec<isize>,\n        storage: &'a antlr4_runtime::ParseTreeStorage,\n        tokens: &'a antlr4_runtime::TokenStore,\n    ) -> Option<Self> {{\n        if context.rule_index() != {rule_index} {{ return None; }}\n        let __default = {attrs_struct}::default();\n        let __attrs = context.generated_attrs::<{attrs_struct}>().unwrap_or(&__default);\n        Some(Self {{\n            __node: __GeneratedRuleContext::Active {{ context, invocation_states, storage, tokens }},\n{field_inits}        }})\n    }}\n}}\n"
         );
         let mut accessors = String::new();
         let _ = writeln!(
@@ -6708,13 +6711,13 @@ fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
             let child_view = format!("{}Context", rust_type_name(&child.name));
             let _ = writeln!(
                 accessors,
-                "    pub fn {method}(&self, index: usize) -> {child_view}<'a> {{\n        let node = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.child_rules({child_index}).nth(index),\n            __GeneratedRuleContext::Active {{ context, storage, tokens }} => context.child_rules(storage, tokens, {child_index}).nth(index),\n        }}.expect(\"missing rule child\");\n        {child_view}::__from_node(node)\n    }}\n    pub fn {method}_all(&self) -> Vec<{child_view}<'a>> {{\n        let nodes: Vec<_> = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.child_rules({child_index}).collect(),\n            __GeneratedRuleContext::Active {{ context, storage, tokens }} => context.child_rules(storage, tokens, {child_index}).collect(),\n        }};\n        nodes.into_iter().map({child_view}::__from_node).collect()\n    }}"
+                "    pub fn {method}(&self, index: usize) -> {child_view}<'a> {{\n        let node = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.child_rules({child_index}).nth(index),\n            __GeneratedRuleContext::Active {{ context, storage, tokens, .. }} => context.child_rules(storage, tokens, {child_index}).nth(index),\n        }}.expect(\"missing rule child\");\n        {child_view}::__from_node(node)\n    }}\n    pub fn {method}_all(&self) -> Vec<{child_view}<'a>> {{\n        let nodes: Vec<_> = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.child_rules({child_index}).collect(),\n            __GeneratedRuleContext::Active {{ context, storage, tokens, .. }} => context.child_rules(storage, tokens, {child_index}).collect(),\n        }};\n        nodes.into_iter().map({child_view}::__from_node).collect()\n    }}"
             );
         }
         for (token_name, token_type) in &token_accessors {
             let _ = writeln!(
                 accessors,
-                "    #[allow(non_snake_case)]\n    pub fn {token_name}(&self, index: usize) -> TerminalNode<'a> {{\n        let node = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.child_tokens({token_type}).nth(index),\n            __GeneratedRuleContext::Active {{ context, storage, tokens }} => context.child_tokens(storage, tokens, {token_type}).nth(index),\n        }}.expect(\"missing token child\");\n        TerminalNode::new(node)\n    }}\n    #[allow(non_snake_case)]\n    pub fn {token_name}_all(&self) -> Vec<TerminalNode<'a>> {{\n        let nodes: Vec<_> = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.child_tokens({token_type}).collect(),\n            __GeneratedRuleContext::Active {{ context, storage, tokens }} => context.child_tokens(storage, tokens, {token_type}).collect(),\n        }};\n        nodes.into_iter().map(TerminalNode::new).collect()\n    }}"
+                "    #[allow(non_snake_case)]\n    pub fn {token_name}(&self, index: usize) -> TerminalNode<'a> {{\n        let node = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.child_tokens({token_type}).nth(index),\n            __GeneratedRuleContext::Active {{ context, storage, tokens, .. }} => context.child_tokens(storage, tokens, {token_type}).nth(index),\n        }}.expect(\"missing token child\");\n        TerminalNode::new(node)\n    }}\n    #[allow(non_snake_case)]\n    pub fn {token_name}_all(&self) -> Vec<TerminalNode<'a>> {{\n        let nodes: Vec<_> = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.child_tokens({token_type}).collect(),\n            __GeneratedRuleContext::Active {{ context, storage, tokens, .. }} => context.child_tokens(storage, tokens, {token_type}).collect(),\n        }};\n        nodes.into_iter().map(TerminalNode::new).collect()\n    }}"
             );
         }
         let _ = writeln!(
@@ -6725,7 +6728,7 @@ fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
         // this context to the root, the root's sentinel excluded.
         let _ = writeln!(
             out,
-            "impl std::fmt::Display for {view_name}<'_> {{\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{\n        let chain: Vec<String> = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.invocation_states().map(|state| state.to_string()).collect(),\n            __GeneratedRuleContext::Active {{ .. }} => Vec::new(),\n        }};\n        write!(f, \"[{{}}]\", chain.join(\" \"))\n    }}\n}}\n"
+            "impl std::fmt::Display for {view_name}<'_> {{\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{\n        let chain: Vec<String> = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.invocation_states().map(|state| state.to_string()).collect(),\n            __GeneratedRuleContext::Active {{ invocation_states, .. }} => invocation_states.iter().map(|state| state.to_string()).collect(),\n        }};\n        write!(f, \"[{{}}]\", chain.join(\" \"))\n    }}\n}}\n"
         );
     }
 
@@ -11808,6 +11811,29 @@ atn:
                 .contains("fn visit_error_node(&mut self, node: RuntimeErrorNode<'_>) -> Result<")
         );
         assert!(rendered.contains("self.0.visit_error_node(&ErrorNode::new(node));"));
+    }
+
+    #[test]
+    fn embedded_active_context_preserves_invocation_states() {
+        let rendered = render_parser_with_options(
+            "TParser",
+            &minimal_parser_data(),
+            Some("parser grammar T; s : ;"),
+            ParserRenderOptions {
+                embedded: true,
+                ..ParserRenderOptions::default()
+            },
+        )
+        .expect("embedded parser should render");
+
+        assert!(rendered.contains("invocation_states: Vec<isize>"));
+        assert!(rendered.contains(
+            "__GeneratedRuleContext::Active { invocation_states, .. } => invocation_states.iter()"
+        ));
+        assert!(
+            !rendered.contains("__GeneratedRuleContext::Active { .. } => Vec::new()"),
+            "active contexts must preserve their invoking-state chain"
+        );
     }
 
     #[test]

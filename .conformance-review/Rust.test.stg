@@ -55,7 +55,7 @@ Not(v) ::= "!<v>"
 // target that renders a real assertion receives uncompilable Java syntax.
 Assert(s) ::= ""
 
-Cast(t,v) ::= "__active_context_view::\<<t>>(<v>, self.base.parse_tree_storage(), self.base.token_store()).unwrap()"
+Cast(t,v) ::= "__active_context_view::\<<t>>(<v>, self.base.active_invocation_states(), self.base.parse_tree_storage(), self.base.token_store()).unwrap()"
 
 // Rust has no `&str + &str` operator, and descriptors chain Append/AppendStr
 // with bare string literals on the left (`"(" + $ID.text + …` in Java terms),

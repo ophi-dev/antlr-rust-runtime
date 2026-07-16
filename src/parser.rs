@@ -9643,6 +9643,18 @@ where
             .collect()
     }
 
+    /// Invoking-state chain for the active rule context, current rule first.
+    ///
+    /// The root frame is excluded, matching Java's `RuleContext.toString()`.
+    pub fn active_invocation_states(&self) -> Vec<isize> {
+        self.rule_context_stack
+            .iter()
+            .skip(1)
+            .rev()
+            .map(|frame| frame.invoking_state)
+            .collect()
+    }
+
     /// Formats a buffered token in ANTLR's diagnostic token display form.
     pub fn token_display_at(&self, index: usize) -> Option<String> {
         self.token_at(index).map(|token| format!("{token}"))
@@ -11981,6 +11993,28 @@ mod tests {
 
         parser.exit_rule();
         assert!(parser.rule_context_stack.is_empty());
+    }
+
+    #[test]
+    fn active_invocation_states_exclude_the_root_frame() {
+        let mut parser = mini_parser(vec![TestToken::eof("parser-test", 1, 1, 1)]);
+
+        let _root = parser.enter_rule(0, 0);
+        assert!(parser.active_invocation_states().is_empty());
+
+        let marker = parser.push_invoking_state(6);
+        let _child = parser.enter_rule(2, 1);
+        parser.discard_invoking_state(marker);
+        assert_eq!(parser.active_invocation_states(), [6]);
+
+        let marker = parser.push_invoking_state(13);
+        let _grandchild = parser.enter_rule(4, 2);
+        parser.discard_invoking_state(marker);
+        assert_eq!(parser.active_invocation_states(), [13, 6]);
+
+        parser.exit_rule();
+        parser.exit_rule();
+        parser.exit_rule();
     }
 
     #[test]
