@@ -955,12 +955,9 @@ impl AtnConfigSet {
     pub(crate) fn set_readonly(&mut self, readonly: bool) {
         self.readonly = readonly;
         if readonly {
-            self.config_index.clear();
+            self.config_index = FxHashMap::default();
+            self.conflicting_alts.clear();
         }
-    }
-
-    pub(crate) const fn is_readonly(&self) -> bool {
-        self.readonly
     }
 
     pub(crate) const fn full_context(&self) -> bool {
@@ -1014,6 +1011,20 @@ impl AtnConfigSet {
                 self.config_index.insert(AtnConfigKey::from(config), index);
             }
         }
+    }
+
+    pub(crate) fn fingerprint(&self) -> u64 {
+        let mut hasher = PredictionFxHasher::default();
+        self.configs.hash(&mut hasher);
+        self.full_context.hash(&mut hasher);
+        self.has_semantic_context.hash(&mut hasher);
+        self.dips_into_outer_context.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    pub(crate) fn retained_bytes(&self) -> usize {
+        self.configs.capacity() * size_of::<AtnConfig>()
+            + self.config_index.capacity() * size_of::<(AtnConfigKey, usize)>()
     }
 }
 

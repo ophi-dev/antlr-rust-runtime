@@ -391,7 +391,7 @@ def write_rust_runner(work_dir: Path, specs: list[LanguageSpec]) -> Path:
         for spec in specs
     )
     stats_arms = "\n".join(
-        f'        "{spec.name}" => prediction_context_stats_{spec.name}(&src).map_err(|err| err.to_string())?,'
+        f'        "{spec.name}" => prediction_stats_{spec.name}(&src).map_err(|err| err.to_string())?,'
         for spec in specs
     )
     functions = "\n\n".join(rust_parse_function(spec) for spec in specs)
@@ -470,8 +470,9 @@ fn run_main() -> Result<(), String> {{
         antlr4_runtime::dump_prediction_perf_counters();
     }}
     if collect_stats {{
-        let stats = prediction_context_stats_once(&language, &src)?;
-        dump_prediction_context_stats(stats);
+        let (context_stats, dfa_stats) = prediction_stats_once(&language, &src)?;
+        dump_prediction_context_stats(context_stats);
+        dump_parser_dfa_stats(dfa_stats);
     }}
     Ok(())
 }}
@@ -487,10 +488,10 @@ fn parse_once(
     Ok(())
 }}
 
-fn prediction_context_stats_once(
+fn prediction_stats_once(
     language: &str,
     src: &str,
-) -> Result<antlr4_runtime::PredictionContextStats, String> {{
+) -> Result<(antlr4_runtime::PredictionContextStats, antlr4_runtime::ParserDfaStats), String> {{
     let stats = match language {{
 {stats_arms}
         other => return Err(format!("unsupported language: {{other}}")),
@@ -523,6 +524,44 @@ fn dump_prediction_context_stats(stats: antlr4_runtime::PredictionContextStats) 
     eprintln!("perf context_store.outer_context_cache_hits={{}}", stats.outer_context_cache_hits);
     eprintln!("perf context_store.outer_context_cache_misses={{}}", stats.outer_context_cache_misses);
 }}
+
+fn dump_parser_dfa_stats(stats: antlr4_runtime::ParserDfaStats) {{
+    eprintln!("perf dfa_store.states={{}}", stats.states);
+    eprintln!("perf dfa_store.transitions={{}}", stats.transitions);
+    eprintln!("perf dfa_store.max_row_width={{}}", stats.max_row_width);
+    eprintln!("perf dfa_store.dense_rows={{}}", stats.dense_rows);
+    eprintln!("perf dfa_store.sparse_rows={{}}", stats.sparse_rows);
+    eprintln!("perf dfa_store.empty_rows={{}}", stats.empty_rows);
+    eprintln!("perf dfa_store.dense_slots={{}}", stats.dense_slots);
+    eprintln!("perf dfa_store.sparse_entries={{}}", stats.sparse_entries);
+    eprintln!("perf dfa_store.row_width.le_64={{}}", stats.row_width_histogram[0]);
+    eprintln!("perf dfa_store.row_width.le_128={{}}", stats.row_width_histogram[1]);
+    eprintln!("perf dfa_store.row_width.le_256={{}}", stats.row_width_histogram[2]);
+    eprintln!("perf dfa_store.row_width.le_512={{}}", stats.row_width_histogram[3]);
+    eprintln!("perf dfa_store.row_width.gt_512={{}}", stats.row_width_histogram[4]);
+    eprintln!("perf dfa_store.populated_edges.0={{}}", stats.populated_edge_histogram[0]);
+    eprintln!("perf dfa_store.populated_edges.1={{}}", stats.populated_edge_histogram[1]);
+    eprintln!("perf dfa_store.populated_edges.2_3={{}}", stats.populated_edge_histogram[2]);
+    eprintln!("perf dfa_store.populated_edges.4_7={{}}", stats.populated_edge_histogram[3]);
+    eprintln!("perf dfa_store.populated_edges.8_15={{}}", stats.populated_edge_histogram[4]);
+    eprintln!("perf dfa_store.populated_edges.ge_16={{}}", stats.populated_edge_histogram[5]);
+    eprintln!("perf dfa_store.edge_density.empty={{}}", stats.edge_density_histogram[0]);
+    eprintln!("perf dfa_store.edge_density.le_1_pct={{}}", stats.edge_density_histogram[1]);
+    eprintln!("perf dfa_store.edge_density.le_5_pct={{}}", stats.edge_density_histogram[2]);
+    eprintln!("perf dfa_store.edge_density.le_12_5_pct={{}}", stats.edge_density_histogram[3]);
+    eprintln!("perf dfa_store.edge_density.le_25_pct={{}}", stats.edge_density_histogram[4]);
+    eprintln!("perf dfa_store.edge_density.gt_25_pct={{}}", stats.edge_density_histogram[5]);
+    eprintln!("perf dfa_store.hot_bytes={{}}", stats.hot_bytes);
+    eprintln!("perf dfa_store.cold_bytes={{}}", stats.cold_bytes);
+    if stats.states > 0 {{
+        eprintln!("perf dfa_store.hot_bytes_per_state={{}}", stats.hot_bytes / stats.states);
+        eprintln!("perf dfa_store.cold_bytes_per_state={{}}", stats.cold_bytes / stats.states);
+    }}
+    eprintln!("perf dfa_store.states_created={{}}", stats.states_created);
+    eprintln!("perf dfa_store.states_deduplicated={{}}", stats.states_deduplicated);
+    eprintln!("perf dfa_store.fingerprint_candidates={{}}", stats.fingerprint_candidates);
+    eprintln!("perf dfa_store.fingerprint_collisions={{}}", stats.fingerprint_collisions);
+}}
 """
     )
     return runner
@@ -538,14 +577,14 @@ def rust_parse_function(spec: LanguageSpec) -> str:
     Ok(())
 }}
 
-fn prediction_context_stats_{spec.name}(
+fn prediction_stats_{spec.name}(
     src: &str,
-) -> Result<antlr4_runtime::PredictionContextStats, antlr4_runtime::AntlrError> {{
+) -> Result<(antlr4_runtime::PredictionContextStats, antlr4_runtime::ParserDfaStats), antlr4_runtime::AntlrError> {{
     let lexer = generated::{spec.rust_lexer_module}::{spec.rust_lexer_type}::new(InputStream::new(src));
     let tokens = CommonTokenStream::new(lexer);
     let mut parser = generated::{spec.rust_parser_module}::{spec.rust_parser_type}::new(tokens);
     let tree = parser.{spec.rust_entry}()?;
-    let stats = parser.prediction_context_stats();
+    let stats = (parser.prediction_context_stats(), parser.parser_dfa_stats());
     black_box(&tree);
     Ok(stats)
 }}"""

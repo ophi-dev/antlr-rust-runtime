@@ -26,7 +26,13 @@
   `PredictionContext`/`AtnConfig` compatibility API are removed. Prediction
   contexts are canonical `ContextId` values in pooled storage owned together
   with learned parser DFAs; overlapping stores remap IDs before DFA union.
+- Learned parser DFAs now use compact `DfaStateId` values, pooled dense/sparse
+  edge rows, aligned hot accept tables, and a separate cold config store.
+  Public `Dfa`/`DfaState` fields are removed in favor of opaque `ParserDfa`
+  diagnostics and borrowing state views.
 - `ParserAtnSimulator::prediction_context_stats()` reports context creation,
   singleton/array distribution, pooled entries and bytes, and interner hits.
+- `ParserAtnSimulator::parser_dfa_stats()` reports edge density, hot/cold
+  retained bytes, and fingerprint-interner activity.
 - Generated lexers and parsers must be regenerated with the matching
   `antlr4-rust-gen` release.

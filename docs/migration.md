@@ -39,6 +39,18 @@ stores. `prediction_context_stats()` exposes arena allocation and interner
 totals, retained capacities, workspace usage, and outer-context cache activity
 for measurement.
 
+Learned parser DFAs are also opaque, compact stores. `Dfa` and the mutable
+field-oriented `DfaState` API are removed. Use `ParserDfa::state_count`,
+`ParserDfa::states`, `ParserDfa::transitions`, and borrowing
+`ParserDfaStateView` values for diagnostics. State and transition targets are
+identified by `DfaStateId`; ATN configuration sets remain internal cold data.
+`ParserAtnSimulator::parser_dfa_stats()` reports dense/sparse row distribution,
+hot/cold retained bytes, and state-interner measurements.
+
+Regenerate parsers with the matching `antlr4-rust-gen` release. Parsers
+generated against the removed DFA and prediction-context APIs are not source
+compatible with this runtime.
+
 Token IDs cover indices through `u32::MAX`. Source scalar/byte offsets, line
 numbers, and columns are limited to `u32::MAX - 1` (4,294,967,294);
 `u32::MAX` is reserved for ANTLR's synthetic `-1` boundary. All conversions are

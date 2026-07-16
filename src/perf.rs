@@ -33,6 +33,20 @@ struct Counters {
     context_cache_hits: u64,
     context_cache_misses: u64,
     context_cache_inserts: u64,
+    dfa_edge_lookups: u64,
+    dfa_edge_hits: u64,
+    dfa_edge_misses: u64,
+    dfa_atn_fallbacks: u64,
+    dfa_states_created: u64,
+    dfa_states_deduplicated: u64,
+    dfa_fingerprint_candidates: u64,
+    dfa_fingerprint_collisions: u64,
+    dfa_cache_imports: u64,
+    dfa_cache_import_nanos: u64,
+    dfa_cache_import_states: u64,
+    dfa_cache_publications: u64,
+    dfa_cache_publication_nanos: u64,
+    dfa_cache_publication_states: u64,
     decisions: BTreeMap<usize, DecisionCounters>,
 }
 
@@ -196,6 +210,66 @@ pub(crate) fn record_context_cache_insert() {
     });
 }
 
+pub(crate) fn record_dfa_edge_lookup(hit: bool) {
+    with_counters(|counters| {
+        counters.dfa_edge_lookups = counters.dfa_edge_lookups.saturating_add(1);
+        if hit {
+            counters.dfa_edge_hits = counters.dfa_edge_hits.saturating_add(1);
+        } else {
+            counters.dfa_edge_misses = counters.dfa_edge_misses.saturating_add(1);
+            counters.dfa_atn_fallbacks = counters.dfa_atn_fallbacks.saturating_add(1);
+        }
+    });
+}
+
+pub(crate) fn record_dfa_state_created() {
+    with_counters(|counters| {
+        counters.dfa_states_created = counters.dfa_states_created.saturating_add(1);
+    });
+}
+
+pub(crate) fn record_dfa_state_deduplicated() {
+    with_counters(|counters| {
+        counters.dfa_states_deduplicated = counters.dfa_states_deduplicated.saturating_add(1);
+    });
+}
+
+pub(crate) fn record_dfa_fingerprint_candidate() {
+    with_counters(|counters| {
+        counters.dfa_fingerprint_candidates = counters.dfa_fingerprint_candidates.saturating_add(1);
+    });
+}
+
+pub(crate) fn record_dfa_fingerprint_collision() {
+    with_counters(|counters| {
+        counters.dfa_fingerprint_collisions = counters.dfa_fingerprint_collisions.saturating_add(1);
+    });
+}
+
+pub(crate) fn record_dfa_cache_import(nanos: u128, states: usize) {
+    with_counters(|counters| {
+        counters.dfa_cache_imports = counters.dfa_cache_imports.saturating_add(1);
+        counters.dfa_cache_import_nanos = counters
+            .dfa_cache_import_nanos
+            .saturating_add(u64::try_from(nanos).unwrap_or(u64::MAX));
+        counters.dfa_cache_import_states = counters
+            .dfa_cache_import_states
+            .saturating_add(u64::try_from(states).unwrap_or(u64::MAX));
+    });
+}
+
+pub(crate) fn record_dfa_cache_publication(nanos: u128, states: usize) {
+    with_counters(|counters| {
+        counters.dfa_cache_publications = counters.dfa_cache_publications.saturating_add(1);
+        counters.dfa_cache_publication_nanos = counters
+            .dfa_cache_publication_nanos
+            .saturating_add(u64::try_from(nanos).unwrap_or(u64::MAX));
+        counters.dfa_cache_publication_states = counters
+            .dfa_cache_publication_states
+            .saturating_add(u64::try_from(states).unwrap_or(u64::MAX));
+    });
+}
+
 pub fn reset() {
     COUNTERS.with(|counters| *counters.borrow_mut() = Counters::default());
 }
@@ -231,7 +305,7 @@ fn dump_decisions(counters: &Counters) {
     }
 }
 
-const fn totals(counters: &Counters) -> [(&'static str, u64); 26] {
+const fn totals(counters: &Counters) -> [(&'static str, u64); 40] {
     [
         ("prediction.adaptive_calls", counters.adaptive_calls),
         (
@@ -277,6 +351,32 @@ const fn totals(counters: &Counters) -> [(&'static str, u64); 26] {
         ("context_cache.hits", counters.context_cache_hits),
         ("context_cache.misses", counters.context_cache_misses),
         ("context_cache.inserts", counters.context_cache_inserts),
+        ("dfa.edge_lookups", counters.dfa_edge_lookups),
+        ("dfa.warm_hits", counters.dfa_edge_hits),
+        ("dfa.warm_misses", counters.dfa_edge_misses),
+        ("dfa.atn_fallbacks", counters.dfa_atn_fallbacks),
+        ("dfa.states_created", counters.dfa_states_created),
+        ("dfa.states_deduplicated", counters.dfa_states_deduplicated),
+        (
+            "dfa.fingerprint_candidates",
+            counters.dfa_fingerprint_candidates,
+        ),
+        (
+            "dfa.fingerprint_collisions",
+            counters.dfa_fingerprint_collisions,
+        ),
+        ("dfa_cache.imports", counters.dfa_cache_imports),
+        ("dfa_cache.import_nanos", counters.dfa_cache_import_nanos),
+        ("dfa_cache.import_states", counters.dfa_cache_import_states),
+        ("dfa_cache.publications", counters.dfa_cache_publications),
+        (
+            "dfa_cache.publication_nanos",
+            counters.dfa_cache_publication_nanos,
+        ),
+        (
+            "dfa_cache.publication_states",
+            counters.dfa_cache_publication_states,
+        ),
     ]
 }
 
