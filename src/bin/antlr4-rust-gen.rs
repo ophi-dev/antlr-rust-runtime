@@ -7878,6 +7878,12 @@ fn lexer_action_templates(
     }
     let templates =
         extract_lexer_action_templates_with_patterns(grammar_source, &data.rule_names, patterns)?;
+    // With no source-side lexer action blocks there is nothing to align
+    // positionally. Leave every ATN coordinate uncovered so the selected
+    // semantic policy and semantics manifest account for them.
+    if templates.is_empty() {
+        return Ok(Vec::new());
+    }
     if actions.len() == templates.len() {
         reject_unsupported_lexer_action_templates(&templates, allow_unsupported_only)?;
         return Ok(actions.into_iter().zip(templates).collect());
@@ -13428,6 +13434,108 @@ ID: [a-z]+ { customJava(); };
     }
 
     #[test]
+    fn zero_lexer_action_templates_defer_every_coordinate_to_policy() {
+        let data = custom_action_lexer_data();
+        let parser_only_grammar = "parser grammar P;\ns : A ;\n";
+
+        let actions = lexer_action_templates(
+            &data,
+            parser_only_grammar,
+            false,
+            &SemPatternFile::default(),
+        )
+        .expect("zero matched templates should defer instead of aborting generation");
+        assert!(actions.is_empty());
+
+        let entries = collect_lexer_semantics(
+            &data,
+            Some(parser_only_grammar),
+            false,
+            SemUnknownPolicy::AssumeTrue,
+            &SemPatternFile::default(),
+        )
+        .expect("deferred actions should remain inventoried");
+        assert_eq!(entries.len(), 2);
+        assert_eq!(
+            entries
+                .iter()
+                .map(|entry| (
+                    entry.rule_name.as_deref(),
+                    entry.rule_index,
+                    entry.index,
+                    entry.disposition,
+                ))
+                .collect::<Vec<_>>(),
+            [
+                (Some("A"), Some(0), Some(0), SemanticsDisposition::Ignored,),
+                (Some("B"), Some(1), Some(1), SemanticsDisposition::Ignored,),
+            ]
+        );
+        let manifest = render_semantics_manifest(
+            SemUnknownPolicy::AssumeTrue,
+            &[("lexer", "L".to_owned(), entries)],
+        );
+        assert_eq!(manifest.matches("\"kind\": \"lexer-action\"").count(), 2);
+
+        let hooked_entries = collect_lexer_semantics(
+            &data,
+            Some(parser_only_grammar),
+            false,
+            SemUnknownPolicy::Hook,
+            &SemPatternFile::default(),
+        )
+        .expect("hook policy should collect deferred actions");
+        assert!(hooked_entries.iter().all(|entry| {
+            entry.disposition == SemanticsDisposition::Hooked && entry.template.is_none()
+        }));
+        let hooked_module = render_lexer(
+            "L",
+            &data,
+            Some(parser_only_grammar),
+            false,
+            SemUnknownPolicy::Hook,
+            &SemPatternFile::default(),
+            false,
+        )
+        .expect("hook policy should generate a lexer");
+        assert!(hooked_module.contains("next_token_compiled_with_semantic_dispatch"));
+
+        let strict_entries = collect_lexer_semantics(
+            &data,
+            Some(parser_only_grammar),
+            false,
+            SemUnknownPolicy::Error,
+            &SemPatternFile::default(),
+        )
+        .expect("strict policy should inventory before failing");
+        let error = enforce_sem_unknown(SemUnknownPolicy::Error, &strict_entries)
+            .expect_err("strict policy should reject both deferred actions");
+        assert!(
+            error
+                .to_string()
+                .contains("2 semantic coordinate(s) have no Rust implementation")
+        );
+    }
+
+    #[test]
+    fn partial_lexer_action_template_matches_still_fail() {
+        let grammar = "lexer grammar L;\nA : 'a' { popMode(); };\n";
+
+        let error = lexer_action_templates(
+            &custom_action_lexer_data(),
+            grammar,
+            true,
+            &SemPatternFile::default(),
+        )
+        .expect_err("one template cannot be safely aligned with two ATN actions");
+
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains(
+            "lexer ATN has 2 custom action(s), but grammar source yielded 1 lexer action template(s)"
+        ));
+    }
+
+    #[test]
     fn lexer_action_diagnostic_summary_truncates_on_char_boundary() {
         let body = format!("{}\u{00e9} tail", "a".repeat(95));
 
@@ -14192,6 +14300,26 @@ ID: [a-z]+ { customJava(); };
                 1, // decisions
                 0, // mode start decision
                 0, // lexer actions
+            ],
+        }
+    }
+
+    /// Lexer `.interp` fixture for:
+    /// `A : 'a' { customJava(); }; B : 'b' { customJava(); };`.
+    #[rustfmt::skip]
+    fn custom_action_lexer_data() -> InterpData {
+        InterpData {
+            literal_names: vec![None, Some("'a'".to_owned()), Some("'b'".to_owned())],
+            symbolic_names: vec![None, Some("A".to_owned()), Some("B".to_owned())],
+            rule_names: vec!["A".to_owned(), "B".to_owned()],
+            channel_names: vec!["DEFAULT_TOKEN_CHANNEL".to_owned(), "HIDDEN".to_owned()],
+            mode_names: vec!["DEFAULT_MODE".to_owned()],
+            atn: vec![
+                4, 0, 2, 11, 6, -1, 2, 0, 7, 0, 2, 1, 7, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1,
+                1, 1, 0, 0, 2, 1, 1, 3, 2, 1, 0, 0, 10, 0, 1, 1, 0, 0, 0, 0, 3, 1, 0, 0,
+                0, 1, 5, 1, 0, 0, 0, 3, 8, 1, 0, 0, 0, 5, 6, 5, 97, 0, 0, 6, 7, 6, 0, 0,
+                0, 7, 2, 1, 0, 0, 0, 8, 9, 5, 98, 0, 0, 9, 10, 6, 1, 1, 0, 10, 4, 1, 0, 0,
+                0, 1, 0, 2, 1, 0, 0, 1, 1, 1,
             ],
         }
     }
