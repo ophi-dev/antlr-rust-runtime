@@ -956,7 +956,7 @@ def prepare_work(
     runtimes: set[str],
 ) -> dict[str, Path]:
     work_dir = args.work_dir
-    clear_work_dir(work_dir)
+    clear_work_dir(work_dir, args.runtime_root)
     work_dir.mkdir(parents=True, exist_ok=True)
 
     rust_runner = write_rust_runner(
@@ -1042,13 +1042,18 @@ def prepare_work(
     return runners
 
 
-def clear_work_dir(work_dir: Path) -> None:
+def clear_work_dir(work_dir: Path, runtime_root: Path) -> None:
     if not work_dir.exists():
         return
     if not work_dir.is_dir():
         raise SystemExit(f"Refusing to delete non-directory work path: {work_dir}")
     if work_dir == ROOT or work_dir in ROOT.parents:
         raise SystemExit(f"Refusing to delete project root or parent directory: {work_dir}")
+    if work_dir == runtime_root or work_dir in runtime_root.parents:
+        raise SystemExit(
+            "Refusing to delete work directory containing the runtime checkout: "
+            f"{work_dir} (runtime root: {runtime_root})"
+        )
     shutil.rmtree(work_dir)
 
 
