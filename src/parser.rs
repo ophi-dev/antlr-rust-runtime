@@ -1228,10 +1228,28 @@ struct FastRecognizeOutcome {
     index: usize,
     consumed_eof: bool,
     diagnostics: DiagnosticSeqId,
+    deferred_nodes: Option<Rc<FastDeferredNodes>>,
     /// Head of the speculative parse-tree fragment in the parser-owned arena.
     /// Cloning an outcome copies this compact ID; prepending appends one
     /// `SeqLink` without allocating an individual node or list tail.
     nodes: NodeSeqId,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum FastDeferredNodes {
+    Fragment(NodeSeqId),
+    Rule(Rc<FastDeferredRule>),
+    Concat { prefix: Rc<Self>, suffix: Rc<Self> },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct FastDeferredRule {
+    rule_index: usize,
+    invoking_state: isize,
+    start_index: usize,
+    stop_index: Option<usize>,
+    deferred_children: Option<Rc<FastDeferredNodes>>,
+    children: NodeSeqId,
 }
 
 #[repr(transparent)]
@@ -3610,6 +3628,101 @@ struct FastRecognizeScratch<'a, 'b> {
     expected: &'b mut ExpectedTokens,
 }
 
+#[derive(Clone, Copy, Debug)]
+struct FastRepetitionShape {
+    enter_target: usize,
+    exit_target: usize,
+    body_stop_state: usize,
+    enter_transition_index: usize,
+    exit_transition_index: usize,
+}
+
+#[derive(Clone, Debug)]
+struct FastRepetitionPath {
+    index: usize,
+    deferred_nodes: Option<Rc<FastDeferredNodes>>,
+    diagnostics: DiagnosticSeqId,
+    consumed_eof: bool,
+}
+
+enum FastRepetitionWork {
+    Enter(FastRepetitionPath),
+    Exit(FastRepetitionPath),
+}
+
+fn deferred_node_fragment(nodes: NodeSeqId) -> Option<Rc<FastDeferredNodes>> {
+    (!nodes.is_empty()).then(|| Rc::new(FastDeferredNodes::Fragment(nodes)))
+}
+
+fn concat_deferred_nodes(
+    prefix: Option<Rc<FastDeferredNodes>>,
+    suffix: Option<Rc<FastDeferredNodes>>,
+) -> Option<Rc<FastDeferredNodes>> {
+    match (prefix, suffix) {
+        (None, suffix) => suffix,
+        (prefix, None) => prefix,
+        (Some(prefix), Some(suffix)) => Some(Rc::new(FastDeferredNodes::Concat { prefix, suffix })),
+    }
+}
+
+fn fast_repetition_shape(atn: &Atn, state: AtnState<'_>) -> Option<FastRepetitionShape> {
+    if state.precedence_rule_decision()
+        || !matches!(
+            state.kind(),
+            AtnStateKind::StarLoopEntry | AtnStateKind::PlusLoopBack
+        )
+        || state.transitions().len() != 2
+    {
+        return None;
+    }
+    let mut enter = None;
+    let mut exit = None;
+    for (index, transition) in state.transitions().iter().enumerate() {
+        if transition.kind() != ParserTransitionKind::Epsilon {
+            return None;
+        }
+        let target = transition.target();
+        if atn
+            .state(target)
+            .is_some_and(|target_state| target_state.kind() == AtnStateKind::LoopEnd)
+        {
+            if exit.replace((index, target)).is_some() {
+                return None;
+            }
+        } else if enter.replace((index, target)).is_some() {
+            return None;
+        }
+    }
+    let (enter_transition_index, enter_target) = enter?;
+    let (exit_transition_index, exit_target) = exit?;
+    let body_stop_state = if state.kind() == AtnStateKind::StarLoopEntry {
+        atn.state(exit_target)?.loop_back_state()?
+    } else {
+        state.state_number()
+    };
+    Some(FastRepetitionShape {
+        enter_target,
+        exit_target,
+        body_stop_state,
+        enter_transition_index,
+        exit_transition_index,
+    })
+}
+
+fn push_fast_repetition_work(
+    work: &mut Vec<FastRepetitionWork>,
+    shape: FastRepetitionShape,
+    path: FastRepetitionPath,
+) {
+    if shape.enter_transition_index < shape.exit_transition_index {
+        work.push(FastRepetitionWork::Exit(path.clone()));
+        work.push(FastRepetitionWork::Enter(path));
+    } else {
+        work.push(FastRepetitionWork::Enter(path.clone()));
+        work.push(FastRepetitionWork::Exit(path));
+    }
+}
+
 /// Memo key for the fast recognizer. `recovery_symbols` must come from
 /// `intern_recovery_symbols` or `empty_recovery_symbols` before it reaches this
 /// key, so equal sets share one allocation and the key can store that
@@ -5912,16 +6025,22 @@ where
         }
         let caller_follow =
             caller_follow_state.map(|state| self.cached_state_expected_token_set(atn, state));
-        let arena = &self.recognition_arena;
-        let input = &mut self.input;
-        match select_best_fast_outcome(
-            outcomes.into_iter(),
-            self.prediction_mode,
-            caller_follow.as_deref(),
-            |index| caller_follow_token_info_for_stream(input, index),
-            arena,
-        ) {
-            Some(outcome) => Ok((outcome, expected)),
+        let selected = {
+            let arena = &self.recognition_arena;
+            let input = &mut self.input;
+            select_best_fast_outcome(
+                outcomes.into_iter(),
+                self.prediction_mode,
+                caller_follow.as_deref(),
+                |index| caller_follow_token_info_for_stream(input, index),
+                arena,
+            )
+        };
+        match selected {
+            Some(mut outcome) => {
+                self.materialize_fast_outcome_nodes(&mut outcome);
+                Ok((outcome, expected))
+            }
             None => Err(expected),
         }
     }
@@ -6735,9 +6854,9 @@ where
                 .prepend_diagnostic(outcome.diagnostics, diagnostic.clone());
             if self.fast_token_nodes_enabled {
                 let token = self.arena_token_node(next_index, false);
-                self.arena_prepend(&mut outcome.nodes, token);
+                self.defer_fast_outcome_node(&mut outcome, token);
                 let error = self.arena_token_node(index, true);
-                self.arena_prepend(&mut outcome.nodes, error);
+                self.defer_fast_outcome_node(&mut outcome, error);
             }
             outcome
         })
@@ -6808,7 +6927,7 @@ where
                 .recognition_arena
                 .prepend_diagnostic(outcome.diagnostics, diagnostic.clone());
             let missing = self.arena_missing_token_node(token_type, index, text.clone());
-            self.arena_prepend(&mut outcome.nodes, missing);
+            self.defer_fast_outcome_node(&mut outcome, missing);
             outcome
         })
         .collect()
@@ -6858,7 +6977,7 @@ where
                 .prepend_diagnostic(outcome.diagnostics, diagnostic.clone());
             for index in skipped.iter().rev() {
                 let error = self.arena_token_node(*index, true);
-                self.arena_prepend(&mut outcome.nodes, error);
+                self.defer_fast_outcome_node(&mut outcome, error);
             }
             outcome
         })
@@ -6906,6 +7025,7 @@ where
             index: next_index,
             consumed_eof: false,
             diagnostics,
+            deferred_nodes: None,
             nodes,
         })
     }
@@ -6928,6 +7048,198 @@ where
         self.fast_child_rule_failure_recovery(rule_index, start_index, &sync_symbols, expected)
             .into_iter()
             .collect()
+    }
+
+    fn defer_fast_outcome_node(
+        &mut self,
+        outcome: &mut FastRecognizeOutcome,
+        node: RecognizedNodeId,
+    ) {
+        if outcome.deferred_nodes.is_none() {
+            self.arena_prepend(&mut outcome.nodes, node);
+            return;
+        }
+        let fragment = self.recognition_arena.prepend(NodeSeqId::EMPTY, node);
+        outcome.deferred_nodes = concat_deferred_nodes(
+            deferred_node_fragment(fragment),
+            outcome.deferred_nodes.take(),
+        );
+    }
+
+    fn materialize_fast_deferred_nodes(
+        &mut self,
+        root: Option<Rc<FastDeferredNodes>>,
+        mut suffix: NodeSeqId,
+    ) -> NodeSeqId {
+        enum PendingNode {
+            Existing(RecognizedNodeId),
+            Rule(Rc<FastDeferredRule>),
+        }
+
+        let Some(root) = root else {
+            return suffix;
+        };
+        let mut pending = vec![root];
+        let mut nodes = Vec::new();
+        while let Some(deferred) = pending.pop() {
+            match deferred.as_ref() {
+                FastDeferredNodes::Fragment(sequence) => {
+                    nodes.extend(
+                        self.recognition_arena
+                            .iter(*sequence)
+                            .map(PendingNode::Existing),
+                    );
+                }
+                FastDeferredNodes::Rule(rule) => {
+                    nodes.push(PendingNode::Rule(Rc::clone(rule)));
+                }
+                FastDeferredNodes::Concat { prefix, suffix } => {
+                    pending.push(Rc::clone(suffix));
+                    pending.push(Rc::clone(prefix));
+                }
+            }
+        }
+        for node in nodes.into_iter().rev() {
+            let node = match node {
+                PendingNode::Existing(node) => node,
+                PendingNode::Rule(rule) => {
+                    let children = self.materialize_fast_deferred_nodes(
+                        rule.deferred_children.clone(),
+                        rule.children,
+                    );
+                    self.arena_rule_node(ArenaRuleSpec {
+                        rule_index: rule.rule_index,
+                        invoking_state: rule.invoking_state,
+                        alt_number: 0,
+                        start_index: rule.start_index,
+                        stop_index: rule.stop_index,
+                        return_values: BTreeMap::new(),
+                        children,
+                    })
+                }
+            };
+            self.arena_prepend(&mut suffix, node);
+        }
+        suffix
+    }
+
+    fn materialize_fast_outcome_nodes(&mut self, outcome: &mut FastRecognizeOutcome) {
+        outcome.nodes =
+            self.materialize_fast_deferred_nodes(outcome.deferred_nodes.take(), outcome.nodes);
+    }
+
+    /// Walks one ordinary `*`/`+` repetition at a time so input length grows
+    /// heap work instead of the native call stack.
+    fn recognize_repetition_fast(
+        &mut self,
+        atn: &Atn,
+        request: &FastRecognizeRequest,
+        shape: FastRepetitionShape,
+        scratch: FastRecognizeScratch<'_, '_>,
+    ) -> Vec<FastRecognizeOutcome> {
+        let FastRecognizeScratch {
+            predicate_context,
+            visiting,
+            memo,
+            expected,
+        } = scratch;
+        let mut work = Vec::with_capacity(16);
+        push_fast_repetition_work(
+            &mut work,
+            shape,
+            FastRepetitionPath {
+                index: request.index,
+                deferred_nodes: None,
+                diagnostics: DiagnosticSeqId::EMPTY,
+                consumed_eof: false,
+            },
+        );
+        let mut outcomes = Vec::new();
+        while let Some(item) = work.pop() {
+            match item {
+                FastRepetitionWork::Enter(path) => {
+                    let body_outcomes = self.recognize_state_fast(
+                        atn,
+                        FastRecognizeRequest {
+                            state_number: shape.enter_target,
+                            stop_state: shape.body_stop_state,
+                            index: path.index,
+                            rule_start_index: request.rule_start_index,
+                            decision_start_index: request.decision_start_index,
+                            precedence: request.precedence,
+                            depth: request.depth.saturating_add(1),
+                            recovery_symbols: Rc::clone(&request.recovery_symbols),
+                            recovery_state: request.recovery_state,
+                        },
+                        FastRecognizeScratch {
+                            predicate_context,
+                            visiting: &mut *visiting,
+                            memo: &mut *memo,
+                            expected: &mut *expected,
+                        },
+                    );
+                    for mut body in body_outcomes.into_iter().rev() {
+                        // ANTLR rejects nullable repetition bodies. Keep the
+                        // interpreter bounded for malformed or recovered ATNs
+                        // by mirroring the existing same-coordinate cycle cut.
+                        if body.index <= path.index {
+                            continue;
+                        }
+                        let body_nodes = concat_deferred_nodes(
+                            body.deferred_nodes.take(),
+                            deferred_node_fragment(body.nodes),
+                        );
+                        let next_path = FastRepetitionPath {
+                            index: body.index,
+                            deferred_nodes: concat_deferred_nodes(
+                                path.deferred_nodes.clone(),
+                                body_nodes,
+                            ),
+                            diagnostics: self
+                                .recognition_arena
+                                .concat_diagnostics(path.diagnostics, body.diagnostics),
+                            consumed_eof: path.consumed_eof || body.consumed_eof,
+                        };
+                        push_fast_repetition_work(&mut work, shape, next_path);
+                    }
+                }
+                FastRepetitionWork::Exit(path) => {
+                    let suffixes = self.recognize_state_fast(
+                        atn,
+                        FastRecognizeRequest {
+                            state_number: shape.exit_target,
+                            stop_state: request.stop_state,
+                            index: path.index,
+                            rule_start_index: request.rule_start_index,
+                            decision_start_index: request.decision_start_index,
+                            precedence: request.precedence,
+                            depth: request.depth.saturating_add(1),
+                            recovery_symbols: Rc::clone(&request.recovery_symbols),
+                            recovery_state: request.recovery_state,
+                        },
+                        FastRecognizeScratch {
+                            predicate_context,
+                            visiting: &mut *visiting,
+                            memo: &mut *memo,
+                            expected: &mut *expected,
+                        },
+                    );
+                    for mut outcome in suffixes {
+                        outcome.deferred_nodes = concat_deferred_nodes(
+                            path.deferred_nodes.clone(),
+                            outcome.deferred_nodes.take(),
+                        );
+                        outcome.diagnostics = self
+                            .recognition_arena
+                            .concat_diagnostics(path.diagnostics, outcome.diagnostics);
+                        outcome.consumed_eof |= path.consumed_eof;
+                        outcomes.push(outcome);
+                    }
+                }
+            }
+        }
+        dedupe_clean_fast_outcomes(&mut outcomes);
+        outcomes
     }
 
     /// Attempts to reach `stop_state` from `state_number` without committing
@@ -6995,6 +7307,7 @@ where
                     index,
                     consumed_eof: inline_consumed_eof,
                     diagnostics: DiagnosticSeqId::EMPTY,
+                    deferred_nodes: None,
                     nodes,
                 }];
             }
@@ -7088,6 +7401,43 @@ where
         };
         let transitions = state.transitions();
         let transition_count = transitions.len();
+        if !self.fast_recovery_enabled
+            && let Some(shape) = fast_repetition_shape(atn, state)
+        {
+            let mut outcomes = self.recognize_repetition_fast(
+                atn,
+                &FastRecognizeRequest {
+                    state_number,
+                    stop_state,
+                    index,
+                    rule_start_index,
+                    decision_start_index,
+                    precedence,
+                    depth,
+                    recovery_symbols: Rc::clone(&recovery_symbols),
+                    recovery_state,
+                },
+                shape,
+                FastRecognizeScratch {
+                    predicate_context,
+                    visiting: &mut *visiting,
+                    memo: &mut *memo,
+                    expected: &mut *expected,
+                },
+            );
+            if inline_pending {
+                for outcome in &mut outcomes {
+                    outcome.consumed_eof |= inline_consumed_eof;
+                    if self.fast_token_nodes_enabled {
+                        for token_index in inline_consumed_tokens.iter().rev() {
+                            let token = self.arena_token_node(*token_index, false);
+                            self.defer_fast_outcome_node(outcome, token);
+                        }
+                    }
+                }
+            }
+            return outcomes;
+        }
         let memo_lookup_enabled = self.fast_recovery_enabled || transition_count > 1;
         // In pass 1 (`fast_recovery_enabled == false`) the recovery-related
         // fields and the rule/decision boundary indices are pure plumbing —
@@ -7144,7 +7494,7 @@ where
                             if self.fast_token_nodes_enabled {
                                 for token_index in inline_tokens.iter().rev() {
                                     let token = self.arena_token_node(*token_index, false);
-                                    self.arena_prepend(&mut outcome.nodes, token);
+                                    self.defer_fast_outcome_node(&mut outcome, token);
                                 }
                             }
                             outcome
@@ -7327,7 +7677,7 @@ where
                         .map(|mut outcome| {
                             if let Some(rule_index) = boundary {
                                 let boundary = self.arena_boundary_node(rule_index);
-                                self.arena_prepend(&mut outcome.nodes, boundary);
+                                self.defer_fast_outcome_node(&mut outcome, boundary);
                             }
                             outcome
                         }),
@@ -7363,7 +7713,7 @@ where
                             .map(|mut outcome| {
                                 if let Some(rule_index) = boundary {
                                     let boundary = self.arena_boundary_node(rule_index);
-                                    self.arena_prepend(&mut outcome.nodes, boundary);
+                                    self.defer_fast_outcome_node(&mut outcome, boundary);
                                 }
                                 outcome
                             }),
@@ -7401,7 +7751,7 @@ where
                             .map(|mut outcome| {
                                 if let Some(rule_index) = boundary {
                                     let boundary = self.arena_boundary_node(rule_index);
-                                    self.arena_prepend(&mut outcome.nodes, boundary);
+                                    self.defer_fast_outcome_node(&mut outcome, boundary);
                                 }
                                 outcome
                             }),
@@ -7495,7 +7845,7 @@ where
                             *expected = expected_before_child;
                         }
                     }
-                    for child in children {
+                    for mut child in children {
                         let child_index = child.index;
                         let child_consumed_eof = child.consumed_eof;
                         let child_diagnostics = child.diagnostics;
@@ -7525,15 +7875,15 @@ where
                         }
                         let child_stop_index =
                             self.rule_stop_token_index(child_index, child_consumed_eof);
-                        let child_node = self.arena_rule_node(ArenaRuleSpec {
-                            rule_index,
-                            invoking_state: invoking_state_number(state_number),
-                            alt_number: 0,
-                            start_index: index,
-                            stop_index: child_stop_index,
-                            return_values: BTreeMap::new(),
-                            children: child.nodes,
-                        });
+                        let child_node =
+                            Rc::new(FastDeferredNodes::Rule(Rc::new(FastDeferredRule {
+                                rule_index,
+                                invoking_state: invoking_state_number(state_number),
+                                start_index: index,
+                                stop_index: child_stop_index,
+                                deferred_children: child.deferred_nodes.take(),
+                                children: child.nodes,
+                            })));
                         let child_diags_empty = child_diagnostics.is_empty();
                         outcomes.extend(follow_outcomes.into_iter().map(|mut outcome| {
                             outcome.consumed_eof |= child_consumed_eof;
@@ -7544,7 +7894,10 @@ where
                                     .recognition_arena
                                     .concat_diagnostics(child_diagnostics, outcome.diagnostics);
                             }
-                            self.arena_prepend(&mut outcome.nodes, child_node);
+                            outcome.deferred_nodes = concat_deferred_nodes(
+                                Some(Rc::clone(&child_node)),
+                                outcome.deferred_nodes.take(),
+                            );
                             outcome
                         }));
                     }
@@ -7586,7 +7939,7 @@ where
                                 outcome.consumed_eof |= symbol == TOKEN_EOF;
                                 if self.fast_token_nodes_enabled {
                                     let token = self.arena_token_node(index, false);
-                                    self.arena_prepend(&mut outcome.nodes, token);
+                                    self.defer_fast_outcome_node(&mut outcome, token);
                                 }
                                 outcome
                             }),
@@ -7735,7 +8088,7 @@ where
             if !inline_consumed_tokens.is_empty() {
                 for token_index in inline_consumed_tokens.iter().rev() {
                     let token = self.arena_token_node(*token_index, false);
-                    self.arena_prepend(&mut outcome.nodes, token);
+                    self.defer_fast_outcome_node(&mut outcome, token);
                 }
             }
             outcome
@@ -11035,6 +11388,146 @@ mod tests {
         builder.finish().expect("valid packed parser ATN")
     }
 
+    fn ordinary_star_loop_atn() -> Atn {
+        let mut atn = ParserAtnBuilder::new(2);
+        for (state_number, kind, rule_index) in [
+            (0, AtnStateKind::RuleStart, 0),
+            (1, AtnStateKind::StarLoopEntry, 0),
+            (2, AtnStateKind::Basic, 0),
+            (3, AtnStateKind::StarLoopBack, 0),
+            (4, AtnStateKind::LoopEnd, 0),
+            (5, AtnStateKind::Basic, 0),
+            (6, AtnStateKind::RuleStop, 0),
+            (7, AtnStateKind::RuleStart, 1),
+            (8, AtnStateKind::Basic, 1),
+            (9, AtnStateKind::RuleStop, 1),
+        ] {
+            assert_eq!(
+                atn.add_state(kind, Some(rule_index))
+                    .expect("state")
+                    .index(),
+                state_number
+            );
+        }
+        atn.set_rule_to_start_state(vec![0, 7])
+            .expect("rule start states");
+        atn.set_rule_to_stop_state(vec![6, 9])
+            .expect("rule stop states");
+        atn.add_decision_state(1).expect("decision state");
+        atn.set_loop_back_state(4, 3).expect("loop back state");
+        atn.add_transition(0, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("transition");
+        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 2 })
+            .expect("transition");
+        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 4 })
+            .expect("transition");
+        atn.add_transition(
+            2,
+            ParserTransitionSpec::Rule {
+                target: 7,
+                rule_index: 1,
+                follow_state: 3,
+                precedence: 0,
+            },
+        )
+        .expect("transition");
+        atn.add_transition(3, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("transition");
+        atn.add_transition(4, ParserTransitionSpec::Epsilon { target: 5 })
+            .expect("transition");
+        atn.add_transition(
+            5,
+            ParserTransitionSpec::Atom {
+                target: 6,
+                label: TOKEN_EOF,
+            },
+        )
+        .expect("transition");
+        atn.add_transition(7, ParserTransitionSpec::Epsilon { target: 8 })
+            .expect("transition");
+        atn.add_transition(
+            8,
+            ParserTransitionSpec::Atom {
+                target: 9,
+                label: 1,
+            },
+        )
+        .expect("transition");
+        finish_atn(atn)
+    }
+
+    fn ordinary_plus_loop_atn() -> Atn {
+        let mut atn = ParserAtnBuilder::new(2);
+        for (state_number, kind, rule_index) in [
+            (0, AtnStateKind::RuleStart, 0),
+            (1, AtnStateKind::Basic, 0),
+            (2, AtnStateKind::PlusLoopBack, 0),
+            (3, AtnStateKind::LoopEnd, 0),
+            (4, AtnStateKind::Basic, 0),
+            (5, AtnStateKind::RuleStop, 0),
+            (6, AtnStateKind::RuleStart, 1),
+            (7, AtnStateKind::Basic, 1),
+            (8, AtnStateKind::RuleStop, 1),
+        ] {
+            assert_eq!(
+                atn.add_state(kind, Some(rule_index))
+                    .expect("state")
+                    .index(),
+                state_number
+            );
+        }
+        atn.set_rule_to_start_state(vec![0, 6])
+            .expect("rule start states");
+        atn.set_rule_to_stop_state(vec![5, 8])
+            .expect("rule stop states");
+        atn.add_decision_state(2).expect("decision state");
+        atn.add_transition(0, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("transition");
+        atn.add_transition(
+            1,
+            ParserTransitionSpec::Rule {
+                target: 6,
+                rule_index: 1,
+                follow_state: 2,
+                precedence: 0,
+            },
+        )
+        .expect("transition");
+        atn.add_transition(2, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("transition");
+        atn.add_transition(2, ParserTransitionSpec::Epsilon { target: 3 })
+            .expect("transition");
+        atn.add_transition(3, ParserTransitionSpec::Epsilon { target: 4 })
+            .expect("transition");
+        atn.add_transition(
+            4,
+            ParserTransitionSpec::Atom {
+                target: 5,
+                label: TOKEN_EOF,
+            },
+        )
+        .expect("transition");
+        atn.add_transition(6, ParserTransitionSpec::Epsilon { target: 7 })
+            .expect("transition");
+        atn.add_transition(
+            7,
+            ParserTransitionSpec::Atom {
+                target: 8,
+                label: 1,
+            },
+        )
+        .expect("transition");
+        finish_atn(atn)
+    }
+
+    fn repeated_x_tokens(count: usize) -> Vec<TestToken> {
+        let mut tokens = (0..count)
+            .map(|_| TestToken::new(1).with_text("x"))
+            .collect::<Vec<_>>();
+        tokens.push(TestToken::eof("parser-test", count, 1, count));
+        tokens
+    }
+
     fn left_recursive_loop_with_caller_follow_atn(caller_symbol: i32) -> Atn {
         let mut atn = ParserAtnBuilder::new(2);
         assert_eq!(
@@ -13209,6 +13702,93 @@ mod tests {
     }
 
     #[test]
+    fn ordinary_repetition_builds_tree_in_input_order() {
+        for atn in [ordinary_star_loop_atn(), ordinary_plus_loop_atn()] {
+            let mut parser = mini_parser(repeated_x_tokens(3));
+            let tree = parser
+                .parse_atn_rule(&atn, 0)
+                .expect("ordinary repetition should parse");
+
+            let root = parser
+                .node(tree)
+                .as_rule()
+                .expect("entry result should be a rule");
+            let body_rules = root.child_rules(1).collect::<Vec<_>>();
+            assert_eq!(root.text(), "xxx<EOF>");
+            assert_eq!(body_rules.len(), 3);
+            assert_eq!(
+                body_rules
+                    .iter()
+                    .map(|rule| rule.start_id().expect("body start").index())
+                    .collect::<Vec<_>>(),
+                [0, 1, 2]
+            );
+            assert_eq!(
+                body_rules
+                    .iter()
+                    .map(|rule| rule.stop_id().expect("body stop").index())
+                    .collect::<Vec<_>>(),
+                [0, 1, 2]
+            );
+            assert_eq!(parser.number_of_syntax_errors(), 0);
+        }
+    }
+
+    #[test]
+    fn long_ordinary_repetition_does_not_consume_native_stack() {
+        const REPETITIONS: usize = 20_000;
+
+        for atn in [ordinary_star_loop_atn(), ordinary_plus_loop_atn()] {
+            let mut parser = mini_parser(repeated_x_tokens(REPETITIONS));
+            parser.set_build_parse_trees(false);
+            parser
+                .parse_atn_rule(&atn, 0)
+                .expect("long ordinary repetition should parse");
+
+            assert_eq!(parser.input.index(), REPETITIONS);
+            assert_eq!(parser.number_of_syntax_errors(), 0);
+        }
+    }
+
+    #[test]
+    fn long_rule_repetition_materializes_tree_with_linear_arena_growth() {
+        const REPETITIONS: usize = 2_000;
+        let expected_text = format!("{}<EOF>", "x".repeat(REPETITIONS));
+
+        for atn in [ordinary_star_loop_atn(), ordinary_plus_loop_atn()] {
+            let mut parser = mini_parser(repeated_x_tokens(REPETITIONS));
+            let tree = parser
+                .parse_atn_rule(&atn, 0)
+                .expect("long rule repetition should parse");
+
+            let root = parser
+                .node(tree)
+                .as_rule()
+                .expect("entry result should be a rule");
+            assert_eq!(root.text(), expected_text);
+            assert_eq!(root.child_rules(1).count(), REPETITIONS);
+            let first_body = root.child_rules(1).next().expect("first body rule");
+            let last_body = root.child_rules(1).next_back().expect("last body rule");
+            assert_eq!(first_body.start_id().expect("first body start").index(), 0);
+            assert_eq!(
+                last_body.stop_id().expect("last body stop").index(),
+                REPETITIONS - 1
+            );
+
+            let stats = parser.recognition_arena_stats();
+            assert_eq!(
+                (stats.total_nodes, stats.live_nodes, stats.dead_nodes),
+                (REPETITIONS, REPETITIONS, 0)
+            );
+            assert_eq!(
+                (stats.total_links, stats.live_links, stats.dead_links),
+                (REPETITIONS, REPETITIONS, 0)
+            );
+            assert_eq!(parser.number_of_syntax_errors(), 0);
+        }
+    }
+
+    #[test]
     fn single_outcome_memo_probe_selects_sparse_or_promote_mode() {
         let key = |state_number| FastRecognizeKey {
             state_number,
@@ -14260,12 +14840,14 @@ mod tests {
                 column: 0,
                 message: "mismatched input 'x'".to_owned(),
             }]),
+            deferred_nodes: None,
             nodes: NodeSeqId::EMPTY,
         };
         let second = FastRecognizeOutcome {
             index: first.index,
             consumed_eof: first.consumed_eof,
             diagnostics: DiagnosticSeqId::EMPTY,
+            deferred_nodes: None,
             nodes: NodeSeqId::EMPTY,
         };
 
@@ -14282,6 +14864,7 @@ mod tests {
             index: second.index,
             consumed_eof: true,
             diagnostics: DiagnosticSeqId::EMPTY,
+            deferred_nodes: None,
             nodes: NodeSeqId::EMPTY,
         };
         let selected = select_best_fast_outcome(
@@ -14315,6 +14898,7 @@ mod tests {
                 column: 0,
                 message: "mismatched input 'x' expecting 'a'".to_owned(),
             }]),
+            deferred_nodes: None,
             nodes: NodeSeqId::EMPTY,
         };
         let same_rank = FastRecognizeOutcome {
@@ -14325,6 +14909,7 @@ mod tests {
                 column: 0,
                 message: "mismatched input 'x' expecting 'b'".to_owned(),
             }]),
+            deferred_nodes: None,
             nodes: NodeSeqId::EMPTY,
         };
         let better_rank = FastRecognizeOutcome {
@@ -14335,6 +14920,7 @@ mod tests {
                 column: 0,
                 message: "missing 'a' at 'x'".to_owned(),
             }]),
+            deferred_nodes: None,
             nodes: NodeSeqId::EMPTY,
         };
         let mut outcomes = vec![first, same_rank, better_rank];
@@ -14367,12 +14953,14 @@ mod tests {
             index: 7,
             consumed_eof: false,
             diagnostics: DiagnosticSeqId::EMPTY,
+            deferred_nodes: None,
             nodes: NodeSeqId::EMPTY,
         };
         let later = FastRecognizeOutcome {
             index: 8,
             consumed_eof: false,
             diagnostics: DiagnosticSeqId::EMPTY,
+            deferred_nodes: None,
             nodes: NodeSeqId::EMPTY,
         };
         let mut follow = TokenBitSet::default();
@@ -14402,6 +14990,7 @@ mod tests {
             index: 9,
             consumed_eof: false,
             diagnostics: DiagnosticSeqId::EMPTY,
+            deferred_nodes: None,
             nodes: NodeSeqId::EMPTY,
         };
         let selected = select_best_fast_outcome(
@@ -14426,6 +15015,7 @@ mod tests {
             index: 10,
             consumed_eof: false,
             diagnostics: DiagnosticSeqId::EMPTY,
+            deferred_nodes: None,
             nodes: NodeSeqId::EMPTY,
         };
         let selected = select_best_fast_outcome(
@@ -14684,7 +15274,7 @@ mod tests {
         );
         assert!(size_of::<SeqLink>() <= 8);
         assert!(size_of::<DiagnosticLink>() <= 8);
-        assert!(size_of::<FastRecognizeOutcome>() <= 24);
+        assert!(size_of::<FastRecognizeOutcome>() <= 32);
         let capacities = (
             stats.node_capacity,
             stats.link_capacity,
