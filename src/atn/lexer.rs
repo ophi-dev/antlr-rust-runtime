@@ -8,8 +8,8 @@ use crate::char_stream::{CharStream, TextInterval};
 use crate::int_stream::EOF;
 use crate::lexer::{
     BaseLexer, Lexer, LexerCustomAction, LexerDfaActionKey, LexerDfaCachedAccept,
-    LexerDfaCachedState, LexerDfaCachedTransition, LexerDfaConfigKey, LexerDfaKey, LexerPredicate,
-    LexerSemCtx,
+    LexerDfaCachedState, LexerDfaCachedTransition, LexerDfaConfigKey, LexerDfaKey,
+    LexerLifecycleCtx, LexerPredicate, LexerSemCtx,
 };
 use crate::parser::{SemanticHooks, UnknownSemanticPolicy};
 use crate::prediction::PredictionFxHasher;
@@ -145,9 +145,9 @@ where
 /// Runs one lexer-token match and lets generated code adjust the final accept
 /// position before the token is emitted.
 ///
-/// ANTLR target templates such as `PositionAdjustingLexer` use this to accept
-/// a long disambiguating token path but emit only the prefix, leaving the
-/// remaining characters for the next token.
+/// Generated lexer extensions use this to accept a long disambiguating token
+/// path but emit only a prefix, leaving the remaining characters for the next
+/// token.
 pub fn next_token_with_accept_adjuster<I, E>(
     lexer: &mut BaseLexer<I>,
     sink: &mut TokenSink<'_>,
@@ -212,7 +212,9 @@ where
         atn,
         &mut custom_action,
         &mut semantic_predicate,
+        &mut |_| {},
         &mut accept_adjuster,
+        &mut |_, _| {},
         LexerMatchStrategy {
             compiled: None,
             use_cache: false,
@@ -271,6 +273,38 @@ where
         .lexer_sempred(&mut ctx, predicate.rule_index(), predicate.pred_index())
 }
 
+fn dispatch_lexer_before_token_hook<I, H>(hooks: &RefCell<&mut H>, lexer: &mut BaseLexer<I>)
+where
+    I: CharStream,
+    H: SemanticHooks,
+{
+    let mut ctx = LexerLifecycleCtx::new(lexer, None);
+    hooks.borrow_mut().lexer_before_token(&mut ctx);
+}
+
+fn dispatch_lexer_after_accept_hook<I, H>(
+    hooks: &RefCell<&mut H>,
+    lexer: &mut BaseLexer<I>,
+    accept_position: usize,
+) where
+    I: CharStream,
+    H: SemanticHooks,
+{
+    let mut ctx = LexerLifecycleCtx::new(lexer, Some(accept_position));
+    hooks.borrow_mut().lexer_after_accept(&mut ctx);
+}
+
+/// Resets a base lexer and its caller-owned lifecycle state for reuse.
+pub fn reset_with_semantic_hooks<I, H>(lexer: &mut BaseLexer<I>, hooks: &mut H)
+where
+    I: CharStream,
+    H: SemanticHooks,
+{
+    lexer.reset();
+    let mut ctx = LexerLifecycleCtx::new(lexer, None);
+    hooks.lexer_reset(&mut ctx);
+}
+
 /// Runs one lexer-token match with a shared [`SemanticHooks`] object.
 ///
 /// This is the trait-based facade over the historical lexer closure hooks.
@@ -288,15 +322,25 @@ where
     H: SemanticHooks,
 {
     let hooks = RefCell::new(hooks);
-    let token = next_token_with_hooks(
+    let token = next_token_with_hooks_impl(
         lexer,
         sink,
         atn,
-        |lexer, action| {
+        &mut |lexer, action| {
             let _ = dispatch_lexer_action_hook(&hooks, lexer, action);
         },
-        |lexer, predicate| dispatch_lexer_predicate_hook(&hooks, lexer, predicate).unwrap_or(true),
-        |_, _, _| {},
+        &mut |lexer, predicate| {
+            dispatch_lexer_predicate_hook(&hooks, lexer, predicate).unwrap_or(true)
+        },
+        &mut |lexer| dispatch_lexer_before_token_hook(&hooks, lexer),
+        &mut |_, _, _| {},
+        &mut |lexer, accept_position| {
+            dispatch_lexer_after_accept_hook(&hooks, lexer, accept_position);
+        },
+        LexerMatchStrategy {
+            compiled: None,
+            use_cache: false,
+        },
     );
     let token = token?;
     hooks.borrow_mut().lexer_token_emitted(
@@ -326,7 +370,9 @@ where
         atn,
         &mut |_, _| {},
         &mut |_, _| true,
+        &mut |_| {},
         &mut |_, _, _| {},
+        &mut |_, _| {},
         LexerMatchStrategy {
             compiled: Some(dfa),
             use_cache: true,
@@ -361,7 +407,9 @@ where
         atn,
         &mut custom_action,
         &mut semantic_predicate,
+        &mut |_| {},
         &mut accept_adjuster,
+        &mut |_, _| {},
         LexerMatchStrategy {
             compiled: Some(dfa),
             use_cache: false,
@@ -383,16 +431,25 @@ where
     H: SemanticHooks,
 {
     let hooks = RefCell::new(hooks);
-    let token = next_token_compiled_with_hooks(
+    let token = next_token_with_hooks_impl(
         lexer,
         sink,
         atn,
-        dfa,
-        |lexer, action| {
+        &mut |lexer, action| {
             let _ = dispatch_lexer_action_hook(&hooks, lexer, action);
         },
-        |lexer, predicate| dispatch_lexer_predicate_hook(&hooks, lexer, predicate).unwrap_or(true),
-        |_, _, _| {},
+        &mut |lexer, predicate| {
+            dispatch_lexer_predicate_hook(&hooks, lexer, predicate).unwrap_or(true)
+        },
+        &mut |lexer| dispatch_lexer_before_token_hook(&hooks, lexer),
+        &mut |_, _, _| {},
+        &mut |lexer, accept_position| {
+            dispatch_lexer_after_accept_hook(&hooks, lexer, accept_position);
+        },
+        LexerMatchStrategy {
+            compiled: Some(dfa),
+            use_cache: false,
+        },
     );
     let token = token?;
     hooks.borrow_mut().lexer_token_emitted(
@@ -418,7 +475,7 @@ pub fn next_token_with_semantic_dispatch<I, H, A, P, E>(
     mut generated_action: A,
     mut generated_predicate: P,
     unknown_policy: UnknownSemanticPolicy,
-    accept_adjuster: E,
+    mut accept_adjuster: E,
 ) -> Result<TokenId, TokenStoreError>
 where
     I: CharStream,
@@ -428,11 +485,11 @@ where
     E: FnMut(&mut BaseLexer<I>, i32, usize),
 {
     let hooks = RefCell::new(hooks);
-    let token = next_token_with_hooks(
+    let token = next_token_with_hooks_impl(
         lexer,
         sink,
         atn,
-        |lexer, action| {
+        &mut |lexer, action| {
             if !generated_action(lexer, action)
                 && !dispatch_lexer_action_hook(&hooks, lexer, action)
                 && unknown_policy == UnknownSemanticPolicy::Error
@@ -444,7 +501,7 @@ where
                 lexer.record_semantic_error(true, rule, index);
             }
         },
-        |lexer, predicate| {
+        &mut |lexer, predicate| {
             generated_predicate(lexer, predicate)
                 .or_else(|| dispatch_lexer_predicate_hook(&hooks, lexer, predicate))
                 .unwrap_or_else(|| match unknown_policy {
@@ -460,7 +517,15 @@ where
                     }
                 })
         },
-        accept_adjuster,
+        &mut |lexer| dispatch_lexer_before_token_hook(&hooks, lexer),
+        &mut accept_adjuster,
+        &mut |lexer, accept_position| {
+            dispatch_lexer_after_accept_hook(&hooks, lexer, accept_position);
+        },
+        LexerMatchStrategy {
+            compiled: None,
+            use_cache: false,
+        },
     );
     let token = token?;
     hooks.borrow_mut().lexer_token_emitted(
@@ -481,7 +546,7 @@ pub fn next_token_compiled_with_semantic_dispatch<I, H, A, P, E>(
     mut generated_action: A,
     mut generated_predicate: P,
     unknown_policy: UnknownSemanticPolicy,
-    accept_adjuster: E,
+    mut accept_adjuster: E,
 ) -> Result<TokenId, TokenStoreError>
 where
     I: CharStream,
@@ -491,12 +556,11 @@ where
     E: FnMut(&mut BaseLexer<I>, i32, usize),
 {
     let hooks = RefCell::new(hooks);
-    let token = next_token_compiled_with_hooks(
+    let token = next_token_with_hooks_impl(
         lexer,
         sink,
         atn,
-        dfa,
-        |lexer, action| {
+        &mut |lexer, action| {
             if !generated_action(lexer, action)
                 && !dispatch_lexer_action_hook(&hooks, lexer, action)
                 && unknown_policy == UnknownSemanticPolicy::Error
@@ -508,7 +572,7 @@ where
                 lexer.record_semantic_error(true, rule, index);
             }
         },
-        |lexer, predicate| {
+        &mut |lexer, predicate| {
             generated_predicate(lexer, predicate)
                 .or_else(|| dispatch_lexer_predicate_hook(&hooks, lexer, predicate))
                 .unwrap_or_else(|| match unknown_policy {
@@ -524,7 +588,15 @@ where
                     }
                 })
         },
-        accept_adjuster,
+        &mut |lexer| dispatch_lexer_before_token_hook(&hooks, lexer),
+        &mut accept_adjuster,
+        &mut |lexer, accept_position| {
+            dispatch_lexer_after_accept_hook(&hooks, lexer, accept_position);
+        },
+        LexerMatchStrategy {
+            compiled: Some(dfa),
+            use_cache: false,
+        },
     );
     let token = token?;
     hooks.borrow_mut().lexer_token_emitted(
@@ -554,7 +626,9 @@ where
         atn,
         &mut custom_action,
         &mut semantic_predicate,
+        &mut |_| {},
         &mut accept_adjuster,
+        &mut |_, _| {},
         LexerMatchStrategy {
             compiled: None,
             use_cache: true,
@@ -601,27 +675,34 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-fn next_token_with_hooks_impl<I, A, P, E>(
+fn next_token_with_hooks_impl<I, A, P, B, E, L>(
     lexer: &mut BaseLexer<I>,
     sink: &mut TokenSink<'_>,
     atn: &LexerAtn,
     custom_action: &mut A,
     semantic_predicate: &mut P,
+    before_token: &mut B,
     accept_adjuster: &mut E,
+    after_accept: &mut L,
     strategy: LexerMatchStrategy<'_>,
 ) -> Result<TokenId, TokenStoreError>
 where
     I: CharStream,
     A: FnMut(&mut BaseLexer<I>, LexerCustomAction),
     P: FnMut(&BaseLexer<I>, LexerPredicate) -> bool,
+    B: FnMut(&mut BaseLexer<I>),
     E: FnMut(&mut BaseLexer<I>, i32, usize),
+    L: FnMut(&mut BaseLexer<I>, usize),
 {
-    if let Some(token) = lexer.emit_pending_token(sink)? {
-        return Ok(token);
-    }
-
     let mut continuing_more = false;
     loop {
+        before_token(lexer);
+        if !continuing_more {
+            if let Some(token) = lexer.emit_pending_token(sink)? {
+                return Ok(token);
+            }
+        }
+
         if lexer.hit_eof() {
             return lexer.emit_eof_or_pending(sink);
         }
@@ -681,6 +762,20 @@ where
             }
         }
 
+        let action_token_type = lexer.token_type();
+        if action_token_type == crate::lexer::SKIP || action_token_type == crate::lexer::MORE {
+            after_accept(lexer, accept.position);
+            let lifecycle_token_type = lexer.token_type();
+            if lifecycle_token_type != crate::lexer::SKIP
+                && lifecycle_token_type != crate::lexer::MORE
+            {
+                accept_adjuster(lexer, lifecycle_token_type, accept.position);
+            }
+        } else {
+            accept_adjuster(lexer, action_token_type, accept.position);
+            after_accept(lexer, accept.position);
+        }
+
         let token_type = lexer.token_type();
         if token_type == crate::lexer::SKIP || token_type == crate::lexer::MORE {
             if accept.consumed_eof || lexer.input().index() != accept.position {
@@ -689,8 +784,6 @@ where
             continuing_more = token_type == crate::lexer::MORE;
             continue;
         }
-
-        accept_adjuster(lexer, token_type, accept.position);
         let emit_position = lexer.input().index();
         let hit_eof = if accept.consumed_eof || emit_position != accept.position {
             refresh_hit_eof(lexer)
@@ -1632,6 +1725,120 @@ mod tests {
         atn
     }
 
+    fn lifecycle_rewind_atn() -> LexerAtn {
+        let mut atn = LexerAtn::new(2);
+        for (state_number, kind, rule_index) in [
+            (0, AtnStateKind::TokenStart, None),
+            (1, AtnStateKind::RuleStart, Some(0)),
+            (2, AtnStateKind::Basic, Some(0)),
+            (3, AtnStateKind::RuleStop, Some(0)),
+            (4, AtnStateKind::RuleStart, Some(1)),
+            (5, AtnStateKind::RuleStop, Some(1)),
+        ] {
+            let mut state = LexerAtnState::new(state_number, kind);
+            if let Some(rule_index) = rule_index {
+                state = state.with_rule_index(rule_index);
+            }
+            atn.add_state(state);
+        }
+        atn.state_mut(0)
+            .expect("token start")
+            .add_transition(LexerTransition::Epsilon { target: 1 });
+        atn.state_mut(0)
+            .expect("token start")
+            .add_transition(LexerTransition::Epsilon { target: 4 });
+        atn.state_mut(1)
+            .expect("long rule start")
+            .add_transition(LexerTransition::Atom {
+                target: 2,
+                label: 'a' as i32,
+            });
+        atn.state_mut(2)
+            .expect("long rule body")
+            .add_transition(LexerTransition::Atom {
+                target: 3,
+                label: 'b' as i32,
+            });
+        atn.state_mut(4)
+            .expect("suffix rule start")
+            .add_transition(LexerTransition::Atom {
+                target: 5,
+                label: 'b' as i32,
+            });
+        atn.set_rule_to_start_state(vec![1, 4]);
+        atn.set_rule_to_stop_state(vec![3, 5]);
+        atn.set_rule_to_token_type(vec![1, 2]);
+        atn.add_mode_start_state(0);
+        atn.add_decision_state(0);
+        atn
+    }
+
+    fn custom_control_action_atn(control_action: LexerAction) -> LexerAtn {
+        let mut atn = LexerAtn::new(8);
+        for (state_number, kind, rule_index) in [
+            (0, AtnStateKind::TokenStart, None),
+            (1, AtnStateKind::RuleStart, Some(0)),
+            (2, AtnStateKind::Basic, Some(0)),
+            (3, AtnStateKind::Basic, Some(0)),
+            (4, AtnStateKind::RuleStop, Some(0)),
+            (5, AtnStateKind::RuleStart, Some(1)),
+            (6, AtnStateKind::RuleStop, Some(1)),
+        ] {
+            let mut state = LexerAtnState::new(state_number, kind);
+            if let Some(rule_index) = rule_index {
+                state = state.with_rule_index(rule_index);
+            }
+            atn.add_state(state);
+        }
+        atn.state_mut(0)
+            .expect("token start")
+            .add_transition(LexerTransition::Epsilon { target: 1 });
+        atn.state_mut(0)
+            .expect("token start")
+            .add_transition(LexerTransition::Epsilon { target: 5 });
+        atn.state_mut(1)
+            .expect("first rule start")
+            .add_transition(LexerTransition::Atom {
+                target: 2,
+                label: 'a' as i32,
+            });
+        atn.state_mut(2)
+            .expect("custom action")
+            .add_transition(LexerTransition::Action {
+                target: 3,
+                rule_index: 0,
+                action_index: Some(0),
+                context_dependent: false,
+            });
+        atn.state_mut(3)
+            .expect("control action")
+            .add_transition(LexerTransition::Action {
+                target: 4,
+                rule_index: 0,
+                action_index: Some(1),
+                context_dependent: false,
+            });
+        atn.state_mut(5)
+            .expect("suffix rule start")
+            .add_transition(LexerTransition::Atom {
+                target: 6,
+                label: 'b' as i32,
+            });
+        atn.set_rule_to_start_state(vec![1, 5]);
+        atn.set_rule_to_stop_state(vec![4, 6]);
+        atn.set_rule_to_token_type(vec![1, 2]);
+        atn.add_mode_start_state(0);
+        atn.add_decision_state(0);
+        atn.set_lexer_actions(vec![
+            LexerAction::Custom {
+                rule_index: 0,
+                action_index: 0,
+            },
+            control_action,
+        ]);
+        atn
+    }
+
     fn lex_one<I: CharStream>(lexer: &mut BaseLexer<I>, atn: &LexerAtn) -> TokenSnapshot {
         let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
         let mut sink = TokenSink::new(&mut store);
@@ -1647,6 +1854,7 @@ mod tests {
 
     #[derive(Debug, Default)]
     struct FunctionTokenHooks {
+        accepted: Vec<(i32, i32, String)>,
         emitted: Vec<(i32, i32, String)>,
     }
 
@@ -1667,6 +1875,14 @@ mod tests {
             assert_eq!(ctx.la(1), '(' as i32);
             assert!(ctx.set_type(7));
             true
+        }
+
+        fn lexer_after_accept<I>(&mut self, ctx: &mut LexerLifecycleCtx<'_, I>)
+        where
+            I: CharStream,
+        {
+            self.accepted
+                .push((ctx.token_type(), ctx.channel(), ctx.token_text()));
         }
 
         fn lexer_token_emitted(&mut self, token: TokenView<'_>) {
@@ -1697,15 +1913,24 @@ mod tests {
         assert_eq!(token.channel(), HIDDEN_CHANNEL);
         assert_eq!(token.text(), "count \t");
         assert_eq!(lexer.la(1), '(' as i32);
+        assert_eq!(hooks.accepted, [(7, HIDDEN_CHANNEL, "count \t".to_owned())]);
         assert_eq!(hooks.emitted, [(7, HIDDEN_CHANNEL, "count \t".to_owned())]);
     }
 
     #[derive(Debug, Default)]
     struct DotSplitHooks {
+        before_pending_counts: Vec<usize>,
         emitted_types: Vec<i32>,
     }
 
     impl SemanticHooks for DotSplitHooks {
+        fn lexer_before_token<I>(&mut self, ctx: &mut LexerLifecycleCtx<'_, I>)
+        where
+            I: CharStream,
+        {
+            self.before_pending_counts.push(ctx.pending_token_count());
+        }
+
         fn lexer_action<I>(
             &mut self,
             ctx: &mut LexerSemCtx<'_, I>,
@@ -1781,6 +2006,7 @@ mod tests {
             sink.view(eof).expect("EOF token should exist").token_type(),
             TOKEN_EOF
         );
+        assert_eq!(hooks.before_pending_counts, [0, 1, 0]);
         assert_eq!(hooks.emitted_types, [1, 2, TOKEN_EOF]);
     }
 
@@ -1835,6 +2061,433 @@ mod tests {
             TOKEN_EOF
         );
         assert_eq!(hooks.action_count, 1);
+    }
+
+    #[derive(Debug, Default)]
+    struct LifecycleRecordingHooks {
+        events: Vec<String>,
+    }
+
+    impl SemanticHooks for LifecycleRecordingHooks {
+        fn lexer_before_token<I>(&mut self, ctx: &mut LexerLifecycleCtx<'_, I>)
+        where
+            I: CharStream,
+        {
+            self.events.push(format!(
+                "before:{}:{}",
+                ctx.input_position(),
+                ctx.pending_token_count()
+            ));
+        }
+
+        fn lexer_after_accept<I>(&mut self, ctx: &mut LexerLifecycleCtx<'_, I>)
+        where
+            I: CharStream,
+        {
+            self.events.push(format!(
+                "accept:{}:{}",
+                ctx.token_type(),
+                ctx.accepted_text().expect("accepted callback has text")
+            ));
+            if ctx.token_type() == 1 {
+                ctx.reset_accept_position(ctx.token_start() + 1);
+            }
+        }
+
+        fn lexer_token_emitted(&mut self, token: TokenView<'_>) {
+            self.events
+                .push(format!("emit:{}:{}", token.token_type(), token.text()));
+        }
+    }
+
+    fn lifecycle_tokens(compiled: bool) -> (Vec<(i32, String)>, Vec<String>) {
+        let atn = lifecycle_rewind_atn();
+        let dfa = CompiledLexerDfa::compile(&atn);
+        let mut lexer = BaseLexer::new(InputStream::new("ab"), recognizer_data());
+        let mut hooks = LifecycleRecordingHooks::default();
+        let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
+        let mut sink = TokenSink::new(&mut store);
+        let mut ids = Vec::new();
+        for _ in 0..3 {
+            let id = if compiled {
+                next_token_compiled_with_semantic_hooks(
+                    &mut lexer, &mut sink, &atn, &dfa, &mut hooks,
+                )
+            } else {
+                next_token_with_semantic_hooks(&mut lexer, &mut sink, &atn, &mut hooks)
+            }
+            .expect("lifecycle token should fit");
+            ids.push(id);
+        }
+        let tokens = ids
+            .into_iter()
+            .map(|id| {
+                let token = sink.view(id).expect("lifecycle token should exist");
+                (token.token_type(), token.text().to_owned())
+            })
+            .collect();
+        (tokens, hooks.events)
+    }
+
+    #[test]
+    fn lifecycle_post_accept_runs_without_actions_and_matches_compiled_order() {
+        let interpreted = lifecycle_tokens(false);
+        let compiled = lifecycle_tokens(true);
+
+        assert_eq!(interpreted, compiled);
+        assert_eq!(
+            interpreted.0,
+            [
+                (1, "a".to_owned()),
+                (2, "b".to_owned()),
+                (TOKEN_EOF, "<EOF>".to_owned()),
+            ]
+        );
+        assert_eq!(
+            interpreted.1,
+            [
+                "before:0:0",
+                "accept:1:ab",
+                "emit:1:a",
+                "before:1:0",
+                "accept:2:b",
+                "emit:2:b",
+                "before:2:0",
+                "emit:-1:<EOF>",
+            ]
+        );
+    }
+
+    #[derive(Debug, Default)]
+    struct MoreAfterAcceptHooks {
+        events: Vec<String>,
+    }
+
+    impl SemanticHooks for MoreAfterAcceptHooks {
+        fn lexer_before_token<I>(&mut self, ctx: &mut LexerLifecycleCtx<'_, I>)
+        where
+            I: CharStream,
+        {
+            self.events.push(format!("before:{}", ctx.input_position()));
+        }
+
+        fn lexer_after_accept<I>(&mut self, ctx: &mut LexerLifecycleCtx<'_, I>)
+        where
+            I: CharStream,
+        {
+            self.events.push(format!(
+                "accept:{}:{}",
+                ctx.token_type(),
+                ctx.accepted_text().expect("accepted callback has text")
+            ));
+            if ctx.token_type() == 1 {
+                ctx.more();
+            }
+        }
+
+        fn lexer_token_emitted(&mut self, token: TokenView<'_>) {
+            self.events
+                .push(format!("emit:{}:{}", token.token_type(), token.text()));
+        }
+    }
+
+    fn lifecycle_more_token(compiled: bool) -> ((i32, String), Vec<String>) {
+        let atn = lifecycle_rewind_atn();
+        let dfa = CompiledLexerDfa::compile(&atn);
+        let mut lexer = BaseLexer::new(InputStream::new("abb"), recognizer_data());
+        let mut hooks = MoreAfterAcceptHooks::default();
+        let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
+        let mut sink = TokenSink::new(&mut store);
+        let id = if compiled {
+            next_token_compiled_with_semantic_hooks(&mut lexer, &mut sink, &atn, &dfa, &mut hooks)
+        } else {
+            next_token_with_semantic_hooks(&mut lexer, &mut sink, &atn, &mut hooks)
+        }
+        .expect("combined lifecycle token should fit");
+        let token = sink
+            .view(id)
+            .expect("combined lifecycle token should exist");
+        ((token.token_type(), token.text().to_owned()), hooks.events)
+    }
+
+    #[test]
+    fn lifecycle_post_accept_more_composes_with_the_next_match() {
+        let interpreted = lifecycle_more_token(false);
+        let compiled = lifecycle_more_token(true);
+
+        assert_eq!(interpreted, compiled);
+        assert_eq!(interpreted.0, (2, "abb".to_owned()));
+        assert_eq!(
+            interpreted.1,
+            [
+                "before:0",
+                "accept:1:ab",
+                "before:2",
+                "accept:2:abb",
+                "emit:2:abb",
+            ]
+        );
+    }
+
+    #[derive(Debug, Default)]
+    struct QueueDuringMoreHooks {
+        before: Vec<(usize, usize)>,
+    }
+
+    type QueuedMoreToken = (i32, usize, usize, String);
+    type BeforeTokenState = (usize, usize);
+
+    impl SemanticHooks for QueueDuringMoreHooks {
+        fn lexer_before_token<I>(&mut self, ctx: &mut LexerLifecycleCtx<'_, I>)
+        where
+            I: CharStream,
+        {
+            self.before
+                .push((ctx.input_position(), ctx.pending_token_count()));
+        }
+
+        fn lexer_action<I>(
+            &mut self,
+            ctx: &mut LexerSemCtx<'_, I>,
+            _action: LexerCustomAction,
+        ) -> bool
+        where
+            I: CharStream,
+        {
+            assert_eq!(ctx.text_so_far(), "a");
+            assert!(ctx.enqueue_token(7, ctx.token_start()));
+            true
+        }
+    }
+
+    fn queued_more_tokens(compiled: bool) -> (Vec<QueuedMoreToken>, Vec<BeforeTokenState>) {
+        let atn = custom_control_action_atn(LexerAction::More);
+        let dfa = CompiledLexerDfa::compile(&atn);
+        let mut lexer = BaseLexer::new(InputStream::new("ab"), recognizer_data());
+        let mut hooks = QueueDuringMoreHooks::default();
+        let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
+        let mut sink = TokenSink::new(&mut store);
+        let mut ids = Vec::new();
+        for _ in 0..2 {
+            let id = if compiled {
+                next_token_compiled_with_semantic_hooks(
+                    &mut lexer, &mut sink, &atn, &dfa, &mut hooks,
+                )
+            } else {
+                next_token_with_semantic_hooks(&mut lexer, &mut sink, &atn, &mut hooks)
+            }
+            .expect("queued MORE token should fit");
+            ids.push(id);
+        }
+        let tokens = ids
+            .into_iter()
+            .map(|id| {
+                let token = sink.view(id).expect("queued MORE token should exist");
+                (
+                    token.token_type(),
+                    token.start(),
+                    token.stop(),
+                    token.text().to_owned(),
+                )
+            })
+            .collect();
+        (tokens, hooks.before)
+    }
+
+    #[test]
+    fn queued_token_waits_for_more_chain_to_finish() {
+        let interpreted = queued_more_tokens(false);
+        let compiled = queued_more_tokens(true);
+
+        assert_eq!(interpreted, compiled);
+        assert_eq!(
+            interpreted.0,
+            [(7, 0, 0, "a".to_owned()), (2, 0, 1, "ab".to_owned()),]
+        );
+        assert_eq!(interpreted.1, [(0, 0), (1, 1), (2, 1)]);
+    }
+
+    #[derive(Debug, Default)]
+    struct OverrideControlActionHooks {
+        events: Vec<String>,
+    }
+
+    impl SemanticHooks for OverrideControlActionHooks {
+        fn lexer_action<I>(
+            &mut self,
+            ctx: &mut LexerSemCtx<'_, I>,
+            _action: LexerCustomAction,
+        ) -> bool
+        where
+            I: CharStream,
+        {
+            self.events.push(format!("action:{}", ctx.text_so_far()));
+            true
+        }
+
+        fn lexer_after_accept<I>(&mut self, ctx: &mut LexerLifecycleCtx<'_, I>)
+        where
+            I: CharStream,
+        {
+            self.events.push(format!(
+                "accept:{}:{}",
+                ctx.token_type(),
+                ctx.accepted_text().expect("accepted callback has text")
+            ));
+            if ctx.token_type() == crate::lexer::SKIP || ctx.token_type() == crate::lexer::MORE {
+                ctx.set_type(8);
+            }
+        }
+
+        fn lexer_token_emitted(&mut self, token: TokenView<'_>) {
+            self.events
+                .push(format!("emit:{}:{}", token.token_type(), token.text()));
+        }
+    }
+
+    fn overridden_control_action_tokens(
+        control_action: LexerAction,
+        compiled: bool,
+    ) -> (Vec<(i32, String)>, Vec<String>) {
+        let atn = custom_control_action_atn(control_action);
+        let dfa = CompiledLexerDfa::compile(&atn);
+        let mut lexer = BaseLexer::new(InputStream::new("ab"), recognizer_data());
+        let mut hooks = OverrideControlActionHooks::default();
+        let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
+        let mut sink = TokenSink::new(&mut store);
+        let mut ids = Vec::new();
+        for _ in 0..3 {
+            let id = if compiled {
+                next_token_compiled_with_semantic_hooks(
+                    &mut lexer, &mut sink, &atn, &dfa, &mut hooks,
+                )
+            } else {
+                next_token_with_semantic_hooks(&mut lexer, &mut sink, &atn, &mut hooks)
+            }
+            .expect("overridden control-action token should fit");
+            ids.push(id);
+        }
+        let tokens = ids
+            .into_iter()
+            .map(|id| {
+                let token = sink
+                    .view(id)
+                    .expect("overridden control-action token should exist");
+                (token.token_type(), token.text().to_owned())
+            })
+            .collect();
+        (tokens, hooks.events)
+    }
+
+    #[test]
+    fn lifecycle_post_accept_can_override_skip_and_more_actions() {
+        for (control_action, control_type) in [
+            (LexerAction::Skip, crate::lexer::SKIP),
+            (LexerAction::More, crate::lexer::MORE),
+        ] {
+            let interpreted = overridden_control_action_tokens(control_action.clone(), false);
+            let compiled = overridden_control_action_tokens(control_action, true);
+
+            assert_eq!(interpreted, compiled);
+            assert_eq!(
+                interpreted.0,
+                [
+                    (8, "a".to_owned()),
+                    (2, "b".to_owned()),
+                    (TOKEN_EOF, "<EOF>".to_owned()),
+                ]
+            );
+            assert_eq!(
+                interpreted.1,
+                [
+                    "action:a".to_owned(),
+                    format!("accept:{control_type}:a"),
+                    "emit:8:a".to_owned(),
+                    "accept:2:b".to_owned(),
+                    "emit:2:b".to_owned(),
+                    "emit:-1:<EOF>".to_owned(),
+                ]
+            );
+        }
+    }
+
+    #[derive(Debug, Default)]
+    struct ResettableSplitHooks {
+        transient: bool,
+        reset_count: usize,
+    }
+
+    impl SemanticHooks for ResettableSplitHooks {
+        fn lexer_action<I>(
+            &mut self,
+            ctx: &mut LexerSemCtx<'_, I>,
+            _action: LexerCustomAction,
+        ) -> bool
+        where
+            I: CharStream,
+        {
+            let start = ctx.token_start();
+            assert!(ctx.enqueue_token(1, start));
+            assert!(ctx.set_token_start(start + 1));
+            self.transient = true;
+            true
+        }
+
+        fn lexer_reset<I>(&mut self, ctx: &mut LexerLifecycleCtx<'_, I>)
+        where
+            I: CharStream,
+        {
+            assert_eq!(ctx.input_position(), 0);
+            assert_eq!(ctx.pending_token_count(), 0);
+            assert_eq!(ctx.mode(), crate::lexer::DEFAULT_MODE);
+            assert_eq!(ctx.token_type(), INVALID_TOKEN_TYPE);
+            assert_eq!(ctx.channel(), DEFAULT_CHANNEL);
+            assert_eq!((ctx.line(), ctx.column()), (1, 0));
+            assert_eq!(ctx.token_start(), 0);
+            self.transient = false;
+            self.reset_count += 1;
+        }
+    }
+
+    #[test]
+    fn lifecycle_reset_clears_pending_tokens_and_extension_state() {
+        let atn = trailing_action_atn(
+            &['.', 'x'],
+            2,
+            vec![LexerAction::Custom {
+                rule_index: 0,
+                action_index: 0,
+            }],
+        );
+        let dfa = CompiledLexerDfa::compile(&atn);
+        let mut lexer = BaseLexer::new(InputStream::new(".x"), recognizer_data());
+        let mut hooks = ResettableSplitHooks::default();
+        let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
+        let mut sink = TokenSink::new(&mut store);
+
+        let first =
+            next_token_compiled_with_semantic_hooks(&mut lexer, &mut sink, &atn, &dfa, &mut hooks)
+                .expect("queued prefix should fit");
+        assert_eq!(sink.view(first).expect("prefix exists").text(), ".");
+        assert!(hooks.transient);
+
+        lexer.push_mode(7);
+        lexer.set_channel(HIDDEN_CHANNEL);
+        lexer.set_hit_eof(true);
+        reset_with_semantic_hooks(&mut lexer, &mut hooks);
+        assert!(!hooks.transient);
+        assert_eq!(hooks.reset_count, 1);
+
+        let after_reset =
+            next_token_compiled_with_semantic_hooks(&mut lexer, &mut sink, &atn, &dfa, &mut hooks)
+                .expect("prefix after reset should fit");
+        assert_eq!(
+            sink.view(after_reset)
+                .expect("post-reset prefix exists")
+                .text(),
+            ".",
+            "the stale queued suffix must not survive reset"
+        );
     }
 
     #[test]

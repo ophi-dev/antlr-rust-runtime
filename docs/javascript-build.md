@@ -60,6 +60,7 @@ cargo run --locked --release --bin antlr4-rust-gen -- \
   --lexer "$BUILD/interp/JavaScriptLexer.interp" \
   --grammar "$GRAMMAR/JavaScriptLexer.g4" \
   --sem-patterns patterns/javascript.toml \
+  --option-hook superClass=JavaScriptLexerBase \
   --sem-unknown error \
   --require-full-semantics \
   --out-dir "$BUILD/lexer"
@@ -68,6 +69,7 @@ cargo run --locked --release --bin antlr4-rust-gen -- \
   --parser "$BUILD/interp/JavaScriptParser.interp" \
   --grammar "$GRAMMAR/JavaScriptParser.g4" \
   --sem-patterns patterns/javascript.toml \
+  --option-hook superClass=JavaScriptParserBase \
   --sem-unknown error \
   --require-full-semantics \
   --out-dir "$BUILD/parser"
@@ -77,6 +79,8 @@ This deliberately does not use `--allow-unsupported-lexer-actions`: every
 authored coordinate is translated or routed to a typed Rust hook. It also does
 not use `--require-generated-parser`; rules outside the current direct compiler
 use the faithful runtime ATN interpreter, including the same semantic hooks.
+The `--option-hook` acknowledgements record that the checked-in Rust base-hook
+modules supply the grammars' superclass behavior.
 
 Copy these files into an application crate:
 

@@ -205,8 +205,8 @@ form.
   compilation of serialized parser ATNs into packed runtime tables.
 - Supports lexer and parser execution through generated Rust wrappers.
 - Supports real split lexer/parser grammars, including Kotlin smoke builds.
-- Passes every supported upstream ANTLR runtime-testsuite descriptor discovered
-  by the harness: `356 passed, 0 failed, 1 skipped, 356 run`.
+- Passes every upstream ANTLR runtime-testsuite descriptor discovered by the
+  harness: `357 passed, 0 failed, 0 skipped, 357 run`.
 - Licensed under BSD-3-Clause for compatibility with ANTLR's runtime licensing
   pattern and downstream open-source applications.
 
@@ -267,6 +267,22 @@ arbitrary grammar-embedded snippets. The boundary is:
   grammar-author source, is a runtime no-op, and is exempt from the `error`
   gate — only actions the author actually wrote in the grammar can fail it.
 
+When `--grammar` is present, the same manifest inventories top-level grammar
+options. Options already represented by ANTLR metadata (`tokenVocab` and
+`caseInsensitive`) are recorded without a warning. Target extension options
+such as `superClass` and `contextSuperClass` warn because the Rust backend
+cannot inherit their target-language implementation automatically. If
+caller-owned Rust hooks provide that behavior, acknowledge the exact option:
+
+```bash
+antlr4-rust-gen --lexer L.interp --grammar L.g4 \
+    --option-hook superClass=MyLexerBase --out-dir src/generated
+```
+
+Acknowledged options have the `hooked` disposition. Unacknowledged target
+options have the `unsupported` disposition and make
+`--require-full-semantics` fail.
+
 Unknown coordinates are governed by `--sem-unknown`:
 
 ```bash
@@ -312,6 +328,16 @@ mutators. Actions can also queue a prefix token and advance the current token
 start, allowing one lexer match to return multiple tokens while each
 `TokenSource::next_token` call still appends exactly one token.
 
+Lexer behavior that has no ATN action/predicate coordinate uses
+`LexerLifecycleCtx`. A hook may implement `lexer_before_token`,
+`lexer_after_accept`, `lexer_reset`, and the existing
+`lexer_token_emitted` observer. The post-accept callback runs after portable
+and custom actions but before the token span is emitted, including for rules
+with no semantic transition. Generated lexers expose `reset()` to clear
+runtime-owned pending tokens and invoke extension-owned cleanup. Lexers built
+with `new()` retain the direct compiled-DFA path; `with_hooks()` opts into the
+lifecycle dispatch path.
+
 Generated lexers also own optional hook state and emit typed lexer adapters
 when a semantic pattern maps lexer helper calls to hooks. The official
 grammars-v4 JavaScript and TypeScript grammars are complete examples, including
@@ -319,8 +345,9 @@ checked-in Rust lexer/parser base modules and strict build commands; see
 [`docs/javascript-build.md`](docs/javascript-build.md) and
 [`docs/typescript-build.md`](docs/typescript-build.md).
 
-Use `--require-full-semantics` in CI when every coordinate must be either
-translated or explicitly hooked; policy fallbacks fail generation.
+Use `--require-full-semantics` in CI when every coordinate and target extension
+option must be either translated, metadata-backed, or explicitly hooked;
+policy fallbacks and unsupported options fail generation.
 
 #### Embedded target-language actions are not portable — including in official ANTLR
 
