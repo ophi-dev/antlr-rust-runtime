@@ -306,7 +306,11 @@ adapter (`MyParserHooks` plus `MyParserTypedHooks<T>`) that maps stable
 manifest coordinates to named Rust methods. Lexer callers can use
 `LexerSemCtx` with `atn::lexer::next_token_with_semantic_hooks` or the
 compiled-DFA variant to route lexer predicates/actions through the same
-`SemanticHooks` trait.
+`SemanticHooks` trait. On the committed action path, `LexerSemCtx` exposes the
+pending token type/channel, character lookahead and consumption, and mode
+mutators. Actions can also queue a prefix token and advance the current token
+start, allowing one lexer match to return multiple tokens while each
+`TokenSource::next_token` call still appends exactly one token.
 
 Generated lexers also own optional hook state and emit typed lexer adapters
 when a semantic pattern maps lexer helper calls to hooks. The official

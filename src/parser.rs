@@ -548,11 +548,11 @@ pub trait SemanticHooks {
     /// the hook handled the action.
     ///
     /// The action runs post-accept, so `ctx` carries a mutable lexer borrow: a
-    /// hook may change lexer state — [`LexerSemCtx::push_mode`],
-    /// [`LexerSemCtx::pop_mode`], [`LexerSemCtx::set_mode`] — just like the
-    /// closure-based `custom_action` API. (The speculative predicate context in
-    /// [`Self::lexer_sempred`] is a shared borrow, so those mutators are inert
-    /// there.)
+    /// hook may change lexer state, including [`LexerSemCtx::set_type`],
+    /// [`LexerSemCtx::set_channel`], mode changes, input consumption, and
+    /// queued prefix tokens, just like the closure-based `custom_action` API.
+    /// (The speculative predicate context in [`Self::lexer_sempred`] is a shared
+    /// borrow, so those mutators are inert there.)
     fn lexer_action<I>(&mut self, ctx: &mut LexerSemCtx<'_, I>, action: LexerCustomAction) -> bool
     where
         I: CharStream,

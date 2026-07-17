@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::hash::BuildHasherDefault;
 use std::rc::Rc;
 
@@ -8,7 +8,10 @@ use crate::char_stream::{CharStream, TextInterval};
 use crate::int_stream::EOF;
 use crate::prediction::PredictionFxHasher;
 use crate::recognizer::{Recognizer, RecognizerData};
-use crate::token::{TokenId, TokenSink, TokenSourceError, TokenSpec, TokenStoreError};
+use crate::token::{
+    DEFAULT_CHANNEL, INVALID_TOKEN_TYPE, TokenId, TokenSink, TokenSourceError, TokenSpec,
+    TokenStoreError,
+};
 
 #[allow(clippy::disallowed_types)]
 type FxHashMap<K, V> = HashMap<K, V, BuildHasherDefault<PredictionFxHasher>>;
@@ -96,7 +99,7 @@ impl LexerPredicate {
 /// Lexer reference held by [`LexerSemCtx`]. A semantic *predicate* is evaluated
 /// speculatively and gets a shared borrow; a *custom action* runs on the
 /// committed path and gets a mutable borrow so a hook can change lexer state
-/// (mode stack), matching the closure-based `custom_action` API.
+/// and pending token emission, matching the closure-based `custom_action` API.
 #[derive(Debug)]
 enum LexerRef<'a, I>
 where
@@ -149,7 +152,7 @@ where
     }
 
     /// Builds a context with a mutable lexer borrow, for a custom-action hook
-    /// that may change lexer state (mode stack). See [`Self::push_mode`] etc.
+    /// that may change lexer and pending-token state.
     pub(crate) const fn new_mut(
         lexer: &'a mut BaseLexer<I>,
         rule_index: usize,
@@ -212,6 +215,133 @@ where
         self.lexer.get().token_text_until(self.position)
     }
 
+    /// Character at a one-based lookahead/lookbehind offset.
+    ///
+    /// Predicates read relative to their speculative ATN coordinate. Actions
+    /// read relative to the committed input cursor, including characters
+    /// consumed by an earlier action.
+    pub fn la(&mut self, offset: isize) -> i32 {
+        match &mut self.lexer {
+            LexerRef::Shared(lexer) => lexer.lookahead_at(self.position, offset),
+            LexerRef::Mut(lexer) => lexer.input_mut().la(offset),
+        }
+    }
+
+    /// Absolute source index where the current token begins.
+    #[must_use]
+    pub const fn token_start(&self) -> usize {
+        self.lexer.get().token_start()
+    }
+
+    /// Pending type of the token being matched.
+    #[must_use]
+    pub const fn token_type(&self) -> i32 {
+        self.lexer.get().token_type()
+    }
+
+    /// Pending channel of the token being matched.
+    #[must_use]
+    pub const fn channel(&self) -> i32 {
+        self.lexer.get().channel()
+    }
+
+    /// Sets the pending emitted token type. Action context only; see
+    /// [`Self::set_mode`] for the return value.
+    pub const fn set_type(&mut self, token_type: i32) -> bool {
+        match &mut self.lexer {
+            LexerRef::Mut(lexer) => {
+                lexer.set_type(token_type);
+                true
+            }
+            LexerRef::Shared(_) => false,
+        }
+    }
+
+    /// Sets the pending emitted token channel. Action context only; see
+    /// [`Self::set_mode`] for the return value.
+    pub const fn set_channel(&mut self, channel: i32) -> bool {
+        match &mut self.lexer {
+            LexerRef::Mut(lexer) => {
+                lexer.set_channel(channel);
+                true
+            }
+            LexerRef::Shared(_) => false,
+        }
+    }
+
+    /// Consumes one input character and updates source position tracking.
+    /// Action context only; returns whether the operation was available.
+    pub fn consume(&mut self) -> bool {
+        match &mut self.lexer {
+            LexerRef::Mut(lexer) => {
+                lexer.consume_char();
+                true
+            }
+            LexerRef::Shared(_) => false,
+        }
+    }
+
+    /// Marks the current match as skipped. Action context only.
+    pub const fn skip(&mut self) -> bool {
+        self.set_type(SKIP)
+    }
+
+    /// Extends the current token with another lexer-rule match. Action context
+    /// only.
+    pub const fn more(&mut self) -> bool {
+        self.set_type(MORE)
+    }
+
+    /// Repositions the committed accept cursor. Action context only.
+    pub fn reset_accept_position(&mut self, index: usize) -> bool {
+        match &mut self.lexer {
+            LexerRef::Mut(lexer) => {
+                lexer.reset_accept_position(index);
+                true
+            }
+            LexerRef::Shared(_) => false,
+        }
+    }
+
+    /// Moves the current token start forward within the committed match.
+    ///
+    /// This is used after queueing a prefix token so automatic emission covers
+    /// only the remaining suffix. Returns `false` for predicate contexts or an
+    /// index outside the current token span.
+    pub fn set_token_start(&mut self, index: usize) -> bool {
+        match &mut self.lexer {
+            LexerRef::Mut(lexer) => lexer.set_token_start(index),
+            LexerRef::Shared(_) => false,
+        }
+    }
+
+    /// Queues an additional token on the current channel.
+    ///
+    /// The queued token spans the current token start through `stop`
+    /// (inclusive) and is returned before the match's automatically emitted
+    /// token. Action context only.
+    pub fn enqueue_token(&mut self, token_type: i32, stop: usize) -> bool {
+        let channel = self.channel();
+        self.enqueue_token_with_channel(token_type, channel, stop)
+    }
+
+    /// Queues an additional token on an explicit channel. See
+    /// [`Self::enqueue_token`].
+    pub fn enqueue_token_with_channel(
+        &mut self,
+        token_type: i32,
+        channel: i32,
+        stop: usize,
+    ) -> bool {
+        match &mut self.lexer {
+            LexerRef::Mut(lexer) => {
+                lexer.enqueue_token(token_type, channel, stop, None);
+                true
+            }
+            LexerRef::Shared(_) => false,
+        }
+    }
+
     /// Sets the current lexer mode. Available only from a custom-action hook
     /// (the mutable-borrow context); a no-op with a warning path for the
     /// speculative predicate context, where mutating lexer state is invalid.
@@ -265,6 +395,8 @@ pub struct BaseLexer<I> {
     has_source_text: bool,
     mode: i32,
     mode_stack: Vec<i32>,
+    token_type: i32,
+    channel: i32,
     token_start: usize,
     token_start_line: usize,
     token_start_column: usize,
@@ -274,6 +406,7 @@ pub struct BaseLexer<I> {
     force_interpreted: bool,
     errors: RefCell<Vec<TokenSourceError>>,
     semantic_error_coordinates: RefCell<BTreeSet<(u8, usize, usize, usize)>>,
+    pending_tokens: VecDeque<TokenSpec>,
     dfa_cache: Rc<RefCell<LexerDfaCache>>,
 }
 
@@ -416,6 +549,8 @@ where
             has_source_text,
             mode: DEFAULT_MODE,
             mode_stack: Vec::new(),
+            token_type: INVALID_TOKEN_TYPE,
+            channel: DEFAULT_CHANNEL,
             token_start: 0,
             token_start_line: 1,
             token_start_column: 0,
@@ -425,6 +560,7 @@ where
             force_interpreted: false,
             errors: RefCell::new(Vec::new()),
             semantic_error_coordinates: RefCell::new(BTreeSet::new()),
+            pending_tokens: VecDeque::new(),
             dfa_cache: Rc::new(RefCell::new(LexerDfaCache::default())),
         }
     }
@@ -459,6 +595,8 @@ where
     /// being matched.
     pub fn begin_token(&mut self) {
         self.semantic_error_coordinates.get_mut().clear();
+        self.token_type = INVALID_TOKEN_TYPE;
+        self.channel = DEFAULT_CHANNEL;
         self.token_start = self.input.index();
         self.token_start_line = self.line;
         self.token_start_column = self.column;
@@ -477,6 +615,64 @@ where
     /// Returns the source column captured at the start of the current token.
     pub const fn token_start_column(&self) -> usize {
         self.token_start_column
+    }
+
+    /// Returns the pending type of the token being matched.
+    pub const fn token_type(&self) -> i32 {
+        self.token_type
+    }
+
+    /// Overrides the pending type of the token being matched.
+    pub const fn set_type(&mut self, token_type: i32) {
+        self.token_type = token_type;
+    }
+
+    /// Returns the pending channel of the token being matched.
+    pub const fn channel(&self) -> i32 {
+        self.channel
+    }
+
+    /// Overrides the pending channel of the token being matched.
+    pub const fn set_channel(&mut self, channel: i32) {
+        self.channel = channel;
+    }
+
+    /// Marks the current match as skipped.
+    pub const fn skip(&mut self) {
+        self.set_type(SKIP);
+    }
+
+    /// Extends the current token with another lexer-rule match.
+    pub const fn more(&mut self) {
+        self.set_type(MORE);
+    }
+
+    /// Reads a character at a one-based lookahead/lookbehind offset from the
+    /// committed input cursor without moving it.
+    pub fn la(&mut self, offset: isize) -> i32 {
+        self.input.la(offset)
+    }
+
+    fn lookahead_at(&self, position: usize, offset: isize) -> i32 {
+        if offset == 0 {
+            return 0;
+        }
+        let absolute = if offset > 0 {
+            position.checked_add((offset - 1).cast_unsigned())
+        } else {
+            offset
+                .checked_neg()
+                .and_then(|distance| usize::try_from(distance).ok())
+                .and_then(|distance| position.checked_sub(distance))
+        };
+        let Some(index) = absolute.filter(|index| *index < self.input.size()) else {
+            return EOF;
+        };
+        self.input
+            .text(TextInterval::new(index, index))
+            .chars()
+            .next()
+            .map_or(EOF, |ch| u32::from(ch).cast_signed())
     }
 
     /// Consumes one character from the input stream and updates lexer line and
@@ -515,6 +711,22 @@ where
         }
     }
 
+    /// Moves the current token start forward within the consumed input span.
+    ///
+    /// Source line and column are advanced with the start, so a subsequently
+    /// emitted suffix token carries the same coordinates it would have had if
+    /// lexed independently.
+    pub fn set_token_start(&mut self, index: usize) -> bool {
+        if index < self.token_start || index > self.input.index() {
+            return false;
+        }
+        let (line, column) = self.position_at(index);
+        self.token_start = index;
+        self.token_start_line = line;
+        self.token_start_column = column;
+        true
+    }
+
     /// Builds a token spanning from the current token start to the character
     /// before the input cursor.
     ///
@@ -546,6 +758,16 @@ where
         stop: usize,
         text: Option<String>,
     ) -> Result<TokenId, TokenStoreError> {
+        sink.push(self.token_spec_with_stop(token_type, channel, stop, text))
+    }
+
+    fn token_spec_with_stop(
+        &self,
+        token_type: i32,
+        channel: i32,
+        stop: usize,
+        text: Option<String>,
+    ) -> TokenSpec {
         let text = text.or_else(|| {
             if stop == usize::MAX {
                 Some("<EOF>".to_owned())
@@ -571,7 +793,7 @@ where
         let (start_byte, stop_byte) = source_interval
             .or_else(|| self.token_byte_span(stop))
             .unwrap_or((self.token_start, self.token_start));
-        sink.push(TokenSpec {
+        TokenSpec {
             token_type,
             channel,
             start: self.token_start,
@@ -582,7 +804,56 @@ where
             column: self.token_start_column,
             text,
             source_backed: source_interval.is_some(),
-        })
+        }
+    }
+
+    /// Queues an additional token to be returned before the current match's
+    /// automatic token.
+    ///
+    /// The token spans the current token start through `stop` (inclusive).
+    /// `text = None` keeps the token source-backed when the input supports it.
+    pub fn enqueue_token(
+        &mut self,
+        token_type: i32,
+        channel: i32,
+        stop: usize,
+        text: Option<String>,
+    ) {
+        let token = self.token_spec_with_stop(token_type, channel, stop, text);
+        self.pending_tokens.push_back(token);
+    }
+
+    pub(crate) fn emit_pending_token(
+        &mut self,
+        sink: &mut TokenSink<'_>,
+    ) -> Result<Option<TokenId>, TokenStoreError> {
+        self.pending_tokens
+            .pop_front()
+            .map(|token| sink.push(token))
+            .transpose()
+    }
+
+    pub(crate) fn emit_or_enqueue_with_stop(
+        &mut self,
+        sink: &mut TokenSink<'_>,
+        stop: usize,
+        text: Option<String>,
+    ) -> Result<TokenId, TokenStoreError> {
+        let token = self.token_spec_with_stop(self.token_type, self.channel, stop, text);
+        self.emit_or_enqueue(sink, token)
+    }
+
+    fn emit_or_enqueue(
+        &mut self,
+        sink: &mut TokenSink<'_>,
+        token: TokenSpec,
+    ) -> Result<TokenId, TokenStoreError> {
+        if self.pending_tokens.is_empty() {
+            return sink.push(token);
+        }
+        self.pending_tokens.push_back(token);
+        self.emit_pending_token(sink)?
+            .ok_or_else(|| unreachable!("the pending-token queue was just populated"))
     }
 
     /// Returns the current token text from the token start through the input
@@ -609,9 +880,14 @@ where
     /// Computes the zero-based source column at an absolute input position
     /// reached during prediction of the current token.
     pub fn column_at(&self, position: usize) -> usize {
+        self.position_at(position).1
+    }
+
+    fn position_at(&self, position: usize) -> (usize, usize) {
+        let mut line = self.token_start_line;
         let mut column = self.token_start_column;
         if position <= self.token_start {
-            return column;
+            return (line, column);
         }
         for ch in self
             .input
@@ -619,23 +895,31 @@ where
             .chars()
         {
             if ch == '\n' {
+                line += 1;
                 column = 0;
             } else {
                 column += 1;
             }
         }
-        column
+        (line, column)
     }
 
     /// Builds the synthetic EOF token at the current input cursor.
     pub fn eof_token(&self, sink: &mut TokenSink<'_>) -> Result<TokenId, TokenStoreError> {
+        sink.push(self.eof_token_spec())
+    }
+
+    pub(crate) fn emit_eof_or_pending(
+        &mut self,
+        sink: &mut TokenSink<'_>,
+    ) -> Result<TokenId, TokenStoreError> {
+        let token = self.eof_token_spec();
+        self.emit_or_enqueue(sink, token)
+    }
+
+    fn eof_token_spec(&self) -> TokenSpec {
         let byte_offset = self.eof_byte_offset().unwrap_or_else(|| self.input.index());
-        sink.push(TokenSpec::eof(
-            self.input.index(),
-            byte_offset,
-            self.line,
-            self.column,
-        ))
+        TokenSpec::eof(self.input.index(), byte_offset, self.line, self.column)
     }
 
     fn eof_byte_offset(&self) -> Option<usize> {
