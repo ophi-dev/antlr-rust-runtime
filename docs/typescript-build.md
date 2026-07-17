@@ -57,6 +57,7 @@ cargo run --locked --release --bin antlr4-rust-gen -- \
   --lexer "$BUILD/interp/TypeScriptLexer.interp" \
   --grammar "$GRAMMAR/TypeScriptLexer.g4" \
   --sem-patterns patterns/javascript.toml \
+  --option-hook superClass=TypeScriptLexerBase \
   --sem-unknown error \
   --require-full-semantics \
   --out-dir "$BUILD/lexer"
@@ -65,6 +66,7 @@ cargo run --locked --release --bin antlr4-rust-gen -- \
   --parser "$BUILD/interp/TypeScriptParser.interp" \
   --grammar "$GRAMMAR/TypeScriptParser.g4" \
   --sem-patterns patterns/javascript.toml \
+  --option-hook superClass=TypeScriptParserBase \
   --sem-unknown error \
   --require-full-semantics \
   --out-dir "$BUILD/parser"
@@ -74,6 +76,8 @@ Every authored action and predicate is either translated or routed to a typed
 hook. Do not pass `--allow-unsupported-lexer-actions`: the TypeScript base needs
 all template, brace, strict-mode, regex, and token-lookaround helpers to retain
 the official grammar's behavior.
+The `--option-hook` acknowledgements record that those Rust hooks supply the
+otherwise target-specific superclass behavior.
 
 Copy these files into an application crate:
 

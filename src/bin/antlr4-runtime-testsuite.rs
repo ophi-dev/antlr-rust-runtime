@@ -733,9 +733,6 @@ fn unsupported_reason(descriptor: &Descriptor) -> Option<&'static str> {
     if !descriptor.flags.is_empty() && !runtime_flags_supported(descriptor) {
         return Some("diagnostic/profile/DFA flags are not implemented in the Rust harness yet");
     }
-    if descriptor.id() == "LexerExec/PositionAdjustingLexer" {
-        return Some("lexer subclass method overrides are not supported yet");
-    }
     if descriptor.is_parser() || descriptor.is_lexer() {
         return None;
     }
@@ -1073,6 +1070,9 @@ fn smoke_main(descriptor: &Descriptor) -> String {
     if descriptor.is_parser() {
         return parser_smoke_main(descriptor);
     }
+    if descriptor.id() == "LexerExec/PositionAdjustingLexer" {
+        return position_adjusting_lexer_smoke_main(descriptor);
+    }
     let module_name = module_name(&descriptor.grammar_name);
     let type_name = rust_type_name(&descriptor.grammar_name);
     let show_dfa = descriptor.flags.trim() == "showDFA";
@@ -1091,6 +1091,68 @@ fn smoke_main(descriptor: &Descriptor) -> String {
     };
     format!(
         "pub mod generated {{\n    pub mod {module_name};\n}}\n\nuse antlr4_runtime::{{CommonTokenStream, InputStream{token_source_import}}};\nuse generated::{module_name}::{type_name};\n\nfn main() {{\n    {lexer_binding} = {type_name}::new(InputStream::new(\"{}\"));\n{force_interpreted}    let mut tokens = CommonTokenStream::new(lexer);\n    tokens.fill();\n    for error in tokens.drain_source_errors() {{\n        eprintln!(\"line {{}}:{{}} {{}}\", error.line, error.column, error.message);\n    }}\n    for token in tokens.tokens() {{\n        println!(\"{{token}}\");\n    }}\n{dfa_dump}}}\n",
+        rust_string(&descriptor.input)
+    )
+}
+
+/// Supplies the descriptor's target-specific superclass behavior through the
+/// public, grammar-agnostic lexer lifecycle contract.
+fn position_adjusting_lexer_smoke_main(descriptor: &Descriptor) -> String {
+    let module_name = module_name(&descriptor.grammar_name);
+    let type_name = rust_type_name(&descriptor.grammar_name);
+    format!(
+        r#"pub mod generated {{
+    pub mod {module_name};
+}}
+
+use antlr4_runtime::{{
+    CharStream, CommonTokenStream, InputStream, LexerLifecycleCtx, SemanticHooks,
+}};
+use generated::{module_name}::{{LABEL, TOKENS, {type_name}}};
+
+#[derive(Clone, Copy, Debug, Default)]
+struct PositionAdjustingHooks;
+
+impl SemanticHooks for PositionAdjustingHooks {{
+    fn lexer_after_accept<I>(&mut self, ctx: &mut LexerLifecycleCtx<'_, I>)
+    where
+        I: CharStream,
+    {{
+        let prefix_length = match ctx.token_type() {{
+            TOKENS => "tokens".chars().count(),
+            LABEL => ctx
+                .accepted_text()
+                .expect("post-accept callback has accepted text")
+                .chars()
+                .take_while(|ch| ch.is_alphanumeric() || *ch == '_')
+                .count(),
+            _ => return,
+        }};
+        let target = ctx.token_start().saturating_add(prefix_length);
+        if ctx
+            .accept_position()
+            .is_some_and(|accept_position| accept_position > target)
+        {{
+            ctx.reset_accept_position(target);
+        }}
+    }}
+}}
+
+fn main() {{
+    let lexer = {type_name}::with_hooks(
+        InputStream::new("{}"),
+        PositionAdjustingHooks,
+    );
+    let mut tokens = CommonTokenStream::new(lexer);
+    tokens.fill();
+    for error in tokens.drain_source_errors() {{
+        eprintln!("line {{}}:{{}} {{}}", error.line, error.column, error.message);
+    }}
+    for token in tokens.tokens() {{
+        println!("{{token}}");
+    }}
+}}
+"#,
         rust_string(&descriptor.input)
     )
 }

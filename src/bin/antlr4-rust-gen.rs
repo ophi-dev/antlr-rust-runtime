@@ -60,7 +60,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     while let Some(arg) = args_iter.next() {
         match arg.as_str() {
             "--lexer" | "--parser" | "--lexer-name" | "--parser-name" | "--grammar"
-            | "--out-dir" | "--sem-patterns" | "--actions" | "--sem-unknown" => {
+            | "--out-dir" | "--sem-patterns" | "--actions" | "--sem-unknown" | "--option-hook" => {
                 let _ = args_iter.next();
             }
             "--help" | "-h" => {
@@ -79,6 +79,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .as_deref()
         .map(fs::read_to_string)
         .transpose()?;
+    let grammar_options = grammar_source
+        .as_deref()
+        .map(|source| collect_grammar_options(source, &args.option_hooks))
+        .transpose()?
+        .unwrap_or_default();
+    emit_grammar_option_warnings(&grammar_options)?;
+    enforce_require_full_options(args.require_full_semantics, &grammar_options)?;
     let mut manifest_grammars: Vec<(&'static str, String, Vec<SemanticsEntry>)> = Vec::new();
 
     if let Some(lexer) = args.lexer {
@@ -154,7 +161,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         manifest_grammars.push(("parser", grammar_name, entries));
     }
 
-    write_semantics_manifest(&args.out_dir, args.sem_unknown, &manifest_grammars)?;
+    write_semantics_manifest(
+        &args.out_dir,
+        args.sem_unknown,
+        &grammar_options,
+        &manifest_grammars,
+    )?;
     Ok(())
 }
 
@@ -287,6 +299,59 @@ impl SemanticsDisposition {
             Self::Ignored => "ignored",
             Self::Synthetic => "synthetic",
         }
+    }
+}
+
+/// How the Rust backend treats one top-level ANTLR grammar option.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum GrammarOptionDisposition {
+    /// The ANTLR tool encoded the option's behavior into `.interp` metadata.
+    Metadata,
+    /// The option affects the upstream tool invocation, not Rust runtime
+    /// behavior.
+    ToolHandled,
+    /// Caller-owned Rust hooks explicitly provide the target behavior.
+    Hooked,
+    /// The option is legal ANTLR syntax but its target behavior is not
+    /// automatically implemented by the Rust backend.
+    Unsupported,
+}
+
+impl GrammarOptionDisposition {
+    const fn manifest_name(self) -> &'static str {
+        match self {
+            Self::Metadata => "metadata",
+            Self::ToolHandled => "tool-handled",
+            Self::Hooked => "hooked",
+            Self::Unsupported => "unsupported",
+        }
+    }
+}
+
+/// One source-level grammar option inventoried from `--grammar`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct GrammarOptionEntry {
+    key: String,
+    value: String,
+    line: usize,
+    column: usize,
+    disposition: GrammarOptionDisposition,
+}
+
+impl GrammarOptionEntry {
+    fn assignment(&self) -> String {
+        format!("{}={}", self.key, self.value)
+    }
+
+    fn describe_unsupported(&self) -> String {
+        format!(
+            "unsupported grammar option: {} at {}:{} is accepted by ANTLR but is not \
+             automatically implemented by antlr4-rust-gen; target-specific behavior may be \
+             missing (see #98)",
+            self.assignment(),
+            self.line,
+            self.column
+        )
     }
 }
 
@@ -816,6 +881,66 @@ fn enforce_require_full_semantics(require: bool, entries: &[SemanticsEntry]) -> 
     Err(io::Error::new(io::ErrorKind::InvalidData, message))
 }
 
+fn emit_grammar_option_warnings(entries: &[GrammarOptionEntry]) -> io::Result<()> {
+    let mut stderr = io::stderr().lock();
+    for entry in entries
+        .iter()
+        .filter(|entry| entry.disposition == GrammarOptionDisposition::Unsupported)
+    {
+        writeln!(stderr, "warning: {}", entry.describe_unsupported())?;
+    }
+    Ok(())
+}
+
+fn enforce_require_full_options(require: bool, entries: &[GrammarOptionEntry]) -> io::Result<()> {
+    if !require {
+        return Ok(());
+    }
+    let unsupported = entries
+        .iter()
+        .filter(|entry| entry.disposition == GrammarOptionDisposition::Unsupported)
+        .collect::<Vec<_>>();
+    if unsupported.is_empty() {
+        return Ok(());
+    }
+    let mut message = String::new();
+    for entry in &unsupported {
+        message.push_str(&entry.describe_unsupported());
+        message.push('\n');
+    }
+    let _ = write!(
+        message,
+        "--require-full-semantics: {} grammar option(s) require caller-owned target behavior; \
+         acknowledge implemented behavior with --option-hook KEY=VALUE",
+        unsupported.len()
+    );
+    Err(io::Error::new(io::ErrorKind::InvalidData, message))
+}
+
+fn normalize_option_hook(value: &str) -> Result<String, String> {
+    let Some((key, option_value)) = value.split_once('=') else {
+        return Err(format!(
+            "--option-hook requires KEY=VALUE; got {value:?}\n\n{}",
+            usage()
+        ));
+    };
+    let key = key.trim();
+    let option_value = option_value.trim();
+    let mut key_chars = key.chars();
+    if !key_chars
+        .next()
+        .is_some_and(|ch| ch == '_' || ch.is_ascii_alphabetic())
+        || !key_chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+        || option_value.is_empty()
+    {
+        return Err(format!(
+            "--option-hook requires KEY=VALUE; got {value:?}\n\n{}",
+            usage()
+        ));
+    }
+    Ok(format!("{key}={option_value}"))
+}
+
 /// Inventories every custom-action and predicate coordinate in a lexer
 /// `.interp`, mirroring the pairing rules `render_lexer` uses so manifest
 /// dispositions match what the generated module will do.
@@ -1162,34 +1287,199 @@ fn line_column(source: &str, offset: usize) -> (usize, usize) {
     (line, column)
 }
 
+/// Inventories top-level `options { ... }` assignments from grammar source.
+///
+/// Rule-level options are excluded by requiring `options` to be the first
+/// identifier after the previous grammar statement boundary.
+fn collect_grammar_options(
+    source: &str,
+    option_hooks: &BTreeSet<String>,
+) -> io::Result<Vec<GrammarOptionEntry>> {
+    let mut entries = Vec::new();
+    let mut offset = 0;
+    while let Some(open_brace) = templates::find_significant_open_brace(source, offset) {
+        let close_brace = matching_grammar_block(source, open_brace).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("unterminated grammar block at byte {open_brace}"),
+            )
+        })?;
+        offset = close_brace + 1;
+        if !is_options_block(source, open_brace) {
+            continue;
+        }
+        let statement_start = statement_start_before(source, open_brace);
+        if rule_header_start_identifier(&source[statement_start..open_brace]) != Some("options") {
+            continue;
+        }
+        collect_grammar_option_block(
+            source,
+            open_brace + 1,
+            close_brace,
+            option_hooks,
+            &mut entries,
+        );
+    }
+    Ok(entries)
+}
+
+fn matching_grammar_block(source: &str, open_brace: usize) -> Option<usize> {
+    let mut cursor = templates::GrammarSourceCursor::new(source, open_brace + 1);
+    let mut nested = 0_usize;
+    while let Some((index, ch)) = cursor.next_significant() {
+        match ch {
+            '{' => nested += 1,
+            '}' if nested == 0 => return Some(index),
+            '}' => nested -= 1,
+            _ => {}
+        }
+    }
+    None
+}
+
+fn collect_grammar_option_block(
+    source: &str,
+    body_start: usize,
+    body_stop: usize,
+    option_hooks: &BTreeSet<String>,
+    entries: &mut Vec<GrammarOptionEntry>,
+) {
+    let body = &source[body_start..body_stop];
+    let mut cursor = templates::GrammarSourceCursor::new(body, 0);
+    let mut assignment_start = 0;
+    while let Some((index, ch)) = cursor.next_significant() {
+        if ch == ';' {
+            collect_grammar_option_assignment(
+                source,
+                body_start,
+                &body[assignment_start..index],
+                assignment_start,
+                option_hooks,
+                entries,
+            );
+            assignment_start = index + 1;
+        }
+    }
+    collect_grammar_option_assignment(
+        source,
+        body_start,
+        &body[assignment_start..],
+        assignment_start,
+        option_hooks,
+        entries,
+    );
+}
+
+fn collect_grammar_option_assignment(
+    source: &str,
+    body_start: usize,
+    assignment: &str,
+    assignment_offset: usize,
+    option_hooks: &BTreeSet<String>,
+    entries: &mut Vec<GrammarOptionEntry>,
+) {
+    let mut cursor = templates::GrammarSourceCursor::new(assignment, 0);
+    let mut first = None;
+    while let Some((index, ch)) = cursor.next_significant() {
+        if !ch.is_ascii_whitespace() {
+            first = Some((index, ch));
+            break;
+        }
+    }
+    let Some((key_start, first)) = first else {
+        return;
+    };
+    if first != '_' && !first.is_ascii_alphabetic() {
+        return;
+    }
+    let mut key_stop = key_start + first.len_utf8();
+    while assignment[key_stop..]
+        .chars()
+        .next()
+        .is_some_and(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+    {
+        key_stop += assignment[key_stop..]
+            .chars()
+            .next()
+            .map_or(0, char::len_utf8);
+    }
+    cursor.seek(key_stop);
+    let mut equals = None;
+    while let Some((index, ch)) = cursor.next_significant() {
+        if ch == '=' {
+            equals = Some(index);
+            break;
+        }
+    }
+    let Some(equals) = equals else {
+        return;
+    };
+    let key = assignment[key_start..key_stop].to_owned();
+    let value = assignment[equals + 1..].trim().to_owned();
+    if value.is_empty() {
+        return;
+    }
+    let absolute_key = body_start + assignment_offset + key_start;
+    let (line, column) = line_column(source, absolute_key);
+    let assignment = format!("{key}={value}");
+    let disposition = match key.as_str() {
+        "tokenVocab" | "caseInsensitive" => GrammarOptionDisposition::Metadata,
+        "language" => GrammarOptionDisposition::ToolHandled,
+        _ if option_hooks.contains(&assignment) => GrammarOptionDisposition::Hooked,
+        _ => GrammarOptionDisposition::Unsupported,
+    };
+    entries.push(GrammarOptionEntry {
+        key,
+        value,
+        line,
+        column,
+        disposition,
+    });
+}
+
 /// Writes the `semantics.json` compatibility manifest next to the generated
 /// modules. The manifest lists every semantic coordinate and how generation
 /// disposed of it, making the supported/unsupported boundary inspectable.
 fn write_semantics_manifest(
     out_dir: &Path,
     policy: SemUnknownPolicy,
+    options: &[GrammarOptionEntry],
     grammars: &[(&'static str, String, Vec<SemanticsEntry>)],
 ) -> io::Result<()> {
     fs::write(
         out_dir.join("semantics.json"),
-        render_semantics_manifest(policy, grammars),
+        render_semantics_manifest(policy, options, grammars),
     )
 }
 
 fn render_semantics_manifest(
     policy: SemUnknownPolicy,
+    options: &[GrammarOptionEntry],
     grammars: &[(&'static str, String, Vec<SemanticsEntry>)],
 ) -> String {
     const DEPRECATION_NOTE: &str = "unknown coordinates currently default to assume-true; \
                                     a future minor release changes the default to error";
     let mut out = String::new();
-    out.push_str("{\n  \"version\": 1,\n");
+    out.push_str("{\n  \"version\": 2,\n");
     let _ = writeln!(
         out,
         "  \"policy\": {},",
         json_string(policy.manifest_name())
     );
     let _ = writeln!(out, "  \"note\": {},", json_string(DEPRECATION_NOTE));
+    out.push_str("  \"options\": [");
+    for (position, option) in options.iter().enumerate() {
+        if position > 0 {
+            out.push(',');
+        }
+        out.push_str("\n    ");
+        write_grammar_option_entry(&mut out, option);
+    }
+    if options.is_empty() {
+        out.push_str("],\n");
+    } else {
+        out.push_str("\n  ],\n");
+    }
     out.push_str("  \"grammars\": [");
     for (grammar_position, (kind, name, entries)) in grammars.iter().enumerate() {
         if grammar_position > 0 {
@@ -1218,6 +1508,20 @@ fn render_semantics_manifest(
         out.push_str("\n  ]\n}\n");
     }
     out
+}
+
+fn write_grammar_option_entry(out: &mut String, entry: &GrammarOptionEntry) {
+    out.push('{');
+    let _ = write!(out, "\"name\": {}", json_string(&entry.key));
+    let _ = write!(out, ", \"value\": {}", json_string(&entry.value));
+    let _ = write!(out, ", \"line\": {}", entry.line);
+    let _ = write!(out, ", \"column\": {}", entry.column);
+    let _ = write!(
+        out,
+        ", \"disposition\": {}",
+        json_string(entry.disposition.manifest_name())
+    );
+    out.push('}');
 }
 
 fn write_semantics_entry(out: &mut String, entry: &SemanticsEntry) {
@@ -1560,6 +1864,7 @@ struct Args {
     sem_unknown: SemUnknownPolicy,
     sem_patterns: SemPatternFile,
     require_full_semantics: bool,
+    option_hooks: BTreeSet<String>,
     /// `--actions embedded`: the grammar contains real Rust action/predicate
     /// bodies (rendered through a `.test.stg`); splice them verbatim after
     /// `$`-attribute translation instead of recognizing template markup.
@@ -1587,6 +1892,7 @@ impl Args {
         let mut sem_unknown = SemUnknownPolicy::default();
         let mut sem_patterns = SemPatternFile::default();
         let mut require_full_semantics = false;
+        let mut option_hooks = BTreeSet::new();
 
         let mut iter = env::args().skip(1);
         while let Some(arg) = iter.next() {
@@ -1605,6 +1911,10 @@ impl Args {
                             .map_err(|error| format!("failed to load --sem-patterns: {error}"))?;
                 }
                 "--require-full-semantics" => require_full_semantics = true,
+                "--option-hook" => {
+                    let value = next_arg(&mut iter, "--option-hook")?;
+                    option_hooks.insert(normalize_option_hook(&value)?);
+                }
                 "--actions" => {
                     let value = next_arg(&mut iter, "--actions")?;
                     match value.as_str() {
@@ -1645,6 +1955,7 @@ impl Args {
             sem_unknown,
             sem_patterns,
             require_full_semantics,
+            option_hooks,
             embedded_actions,
         })
     }
@@ -1673,7 +1984,8 @@ Options:
   --sem-unknown error|hook|assume-true|assume-false
                                    Choose unsupported semantic predicate policy
   --sem-patterns FILE              Load semantic helper patterns
-  --require-full-semantics         Fail if any semantic coordinate is unsupported
+  --option-hook KEY=VALUE          Acknowledge an option implemented by caller hooks
+  --require-full-semantics         Fail if any semantic coordinate or option is unsupported
   -h, --help                       Print this help"
         .to_owned()
 }
@@ -1907,8 +2219,6 @@ fn render_lexer(
     let unknown_predicates_assume_false = sem_unknown == SemUnknownPolicy::AssumeFalse
         && predicates.is_empty()
         && !lexer_predicate_transitions(data)?.is_empty();
-    let adjusts_accept_position =
-        template_grammar_source.is_some_and(uses_position_adjusting_lexer);
     let lexer_dfa_data = compiled_lexer_dfa_words(data);
     let lexer_typed_hook_mappings = if embedded {
         Vec::new()
@@ -1959,11 +2269,6 @@ fn render_lexer(
     } else {
         render_lexer_predicate_method(&predicates, sem_unknown)
     };
-    let accept_adjust_method = if adjusts_accept_position {
-        render_position_adjusting_lexer_methods()
-    } else {
-        String::new()
-    };
     let has_predicate_dispatch = if embedded {
         !embedded_lexer_predicates.is_empty()
     } else {
@@ -1976,30 +2281,22 @@ fn render_lexer(
             "antlr4_runtime::UnknownSemanticPolicy::Error"
         }
     };
+    let semantic_action = if has_action_dispatch {
+        "Self::run_action"
+    } else {
+        "|_, _| false"
+    };
+    let semantic_predicate = if has_predicate_dispatch {
+        "Self::run_predicate"
+    } else {
+        "|_, _| None"
+    };
+    let lifecycle_next_token_call = format!(
+        "antlr4_runtime::atn::lexer::next_token_compiled_with_semantic_dispatch(&mut self.base, sink, atn(), lexer_dfa(), &mut self.hooks, {semantic_action}, {semantic_predicate}, {lexer_unknown_policy}, |_, _, _| {{}})"
+    );
     let next_token_call = if has_semantic_hooks {
-        let action = if has_action_dispatch {
-            "Self::run_action"
-        } else {
-            "|_, _| false"
-        };
-        let predicate = if has_predicate_dispatch {
-            "Self::run_predicate"
-        } else {
-            "|_, _| None"
-        };
-        let adjuster = if adjusts_accept_position {
-            "Self::adjust_accept_position"
-        } else {
-            "|_, _, _| {}"
-        };
-        format!(
-            "antlr4_runtime::atn::lexer::next_token_compiled_with_semantic_dispatch(&mut self.base, sink, atn(), lexer_dfa(), &mut self.hooks, {action}, {predicate}, {lexer_unknown_policy}, {adjuster})"
-        )
-    } else if !has_action_dispatch
-        && !has_predicate_dispatch
-        && !adjusts_accept_position
-        && !unknown_predicates_assume_false
-    {
+        lifecycle_next_token_call.clone()
+    } else if !has_action_dispatch && !has_predicate_dispatch && !unknown_predicates_assume_false {
         "antlr4_runtime::atn::lexer::next_token_compiled(&mut self.base, sink, atn(), lexer_dfa())"
             .to_owned()
     } else {
@@ -2015,13 +2312,15 @@ fn render_lexer(
         } else {
             "|_, _| true"
         };
-        let adjuster = if adjusts_accept_position {
-            "Self::adjust_accept_position"
-        } else {
-            "|_, _, _| {}"
-        };
         format!(
-            "antlr4_runtime::atn::lexer::next_token_compiled_with_hooks(&mut self.base, sink, atn(), lexer_dfa(), {action}, {predicate}, {adjuster})"
+            "antlr4_runtime::atn::lexer::next_token_compiled_with_hooks(&mut self.base, sink, atn(), lexer_dfa(), {action}, {predicate}, |_, _, _| {{}})"
+        )
+    };
+    let next_token_call = if has_semantic_hooks {
+        next_token_call
+    } else {
+        format!(
+            "if H::ENABLES_LEXER_LIFECYCLE {{\n            {lifecycle_next_token_call}\n        }} else {{\n            {next_token_call}\n        }}"
         )
     };
     let generated_header = GENERATED_MODULE_HEADER;
@@ -2114,9 +2413,20 @@ where
         self.base.set_force_interpreted(force_interpreted);
     }}
 
+    /// Resets this lexer and any caller-owned lifecycle state for reuse.
+    pub fn reset(&mut self) {{
+        if H::ENABLES_LEXER_LIFECYCLE {{
+            antlr4_runtime::atn::lexer::reset_with_semantic_hooks(
+                &mut self.base,
+                &mut self.hooks,
+            );
+        }} else {{
+            self.base.reset();
+        }}
+    }}
+
 {action_method}
 {predicate_method}
-{accept_adjust_method}
 }}
 
 {typed_lexer_constructor}
@@ -8622,10 +8932,6 @@ fn uses_alt_number_contexts(source: &str) -> bool {
     source.contains("<TreeNodeWithAltNumField") || source.contains("contextSuperClass")
 }
 
-fn uses_position_adjusting_lexer(source: &str) -> bool {
-    source.contains("<PositionAdjustingLexer()")
-}
-
 /// Reads the rule name at the *start* of a rule header, i.e. the first
 /// identifier after skipping leading `@name {...}` clauses, comments, and
 /// `<...>` templates, and an optional `fragment` keyword. Stops before rule
@@ -9286,57 +9592,6 @@ fn literal_rule_arg_calls(
         .into_iter()
         .map(|(_, rule_index, value)| (rule_index, value))
         .collect()
-}
-
-/// Emits the helper methods for ANTLR's `PositionAdjustingLexer` runtime-test
-/// target template.
-///
-/// The template accepts a longer lexer path for keywords and labels, then emits
-/// only the keyword or identifier prefix. Resetting the accept position leaves
-/// delimiters such as `{`, `=`, and `+=` available for the next token.
-fn render_position_adjusting_lexer_methods() -> String {
-    r#"
-    fn adjust_accept_position(base: &mut BaseLexer<I>, token_type: i32, accept_position: usize) {
-        match token_type {
-            TOKENS => Self::adjust_accept_position_for_keyword(base, accept_position, "tokens"),
-            LABEL => Self::adjust_accept_position_for_identifier(base, accept_position),
-            _ => {}
-        }
-    }
-
-    fn adjust_accept_position_for_identifier(base: &mut BaseLexer<I>, accept_position: usize) {
-        let identifier_length = base
-            .token_text_until(accept_position)
-            .chars()
-            .take_while(|ch| ch.is_ascii_alphanumeric() || *ch == '_')
-            .count();
-        Self::reset_accept_position_after_prefix(base, accept_position, identifier_length);
-    }
-
-    fn adjust_accept_position_for_keyword(
-        base: &mut BaseLexer<I>,
-        accept_position: usize,
-        keyword: &str,
-    ) {
-        Self::reset_accept_position_after_prefix(
-            base,
-            accept_position,
-            keyword.chars().count(),
-        );
-    }
-
-    fn reset_accept_position_after_prefix(
-        base: &mut BaseLexer<I>,
-        accept_position: usize,
-        prefix_length: usize,
-    ) {
-        let target = base.token_start().saturating_add(prefix_length);
-        if accept_position > target {
-            base.reset_accept_position(target);
-        }
-    }
-"#
-    .to_owned()
 }
 
 /// Emits the generated lexer action dispatcher for grammar-specific custom
@@ -13473,6 +13728,7 @@ ID: [a-z]+ { customJava(); };
         );
         let manifest = render_semantics_manifest(
             SemUnknownPolicy::AssumeTrue,
+            &[],
             &[("lexer", "L".to_owned(), entries)],
         );
         assert_eq!(manifest.matches("\"kind\": \"lexer-action\"").count(), 2);
@@ -15095,10 +15351,12 @@ ID : [a-z]+ ;\n";
         .expect("collection should succeed");
         let manifest = render_semantics_manifest(
             SemUnknownPolicy::AssumeTrue,
+            &[],
             &[("parser", "SParser".to_owned(), entries)],
         );
 
-        assert!(manifest.contains("\"version\": 1"));
+        assert!(manifest.contains("\"version\": 2"));
+        assert!(manifest.contains("\"options\": []"));
         assert!(manifest.contains("\"policy\": \"assume-true\""));
         assert!(manifest.contains("\"kind\": \"parser\""));
         assert!(manifest.contains("\"name\": \"SParser\""));
@@ -15166,6 +15424,7 @@ ID : [a-z]+ ;\n";
     fn semantics_manifest_renders_empty_inventory() {
         let manifest = render_semantics_manifest(
             SemUnknownPolicy::AssumeTrue,
+            &[],
             &[("parser", "SParser".to_owned(), Vec::new())],
         );
 
@@ -15632,6 +15891,10 @@ ID : [a-z]+ ;\n";
         .expect("lexer should render");
 
         assert!(module.contains("next_token_compiled(&mut self.base, sink, atn(), lexer_dfa())"));
+        assert!(module.contains("if H::ENABLES_LEXER_LIFECYCLE"));
+        assert!(module.contains("next_token_compiled_with_semantic_dispatch"));
+        assert!(module.contains("pub fn reset(&mut self)"));
+        assert!(module.contains("reset_with_semantic_hooks"));
         assert!(module.contains(
             "fn next_token(&mut self, sink: &mut TokenSink<'_>) -> Result<TokenId, TokenStoreError>"
         ));
@@ -15640,6 +15903,103 @@ ID : [a-z]+ ;\n";
         ));
         assert!(!module.contains("CommonToken"));
         assert!(!module.contains("TokenFactory"));
+    }
+
+    #[test]
+    fn grammar_options_inventory_distinguishes_metadata_and_target_behavior() {
+        let source = "\
+lexer grammar L;
+options {
+  tokenVocab = Shared;
+  caseInsensitive = true;
+  superClass = BaseLexer;
+}
+A options { caseInsensitive = false; } : 'a';
+";
+        let options_open = templates::find_significant_open_brace(source, 0)
+            .expect("grammar options block should be structurally visible");
+        assert!(is_options_block(source, options_open));
+        let statement_start = statement_start_before(source, options_open);
+        assert_eq!(
+            rule_header_start_identifier(&source[statement_start..options_open]),
+            Some("options")
+        );
+
+        let options = collect_grammar_options(source, &BTreeSet::new())
+            .expect("top-level grammar options should parse");
+
+        assert_eq!(
+            options,
+            [
+                GrammarOptionEntry {
+                    key: "tokenVocab".to_owned(),
+                    value: "Shared".to_owned(),
+                    line: 3,
+                    column: 2,
+                    disposition: GrammarOptionDisposition::Metadata,
+                },
+                GrammarOptionEntry {
+                    key: "caseInsensitive".to_owned(),
+                    value: "true".to_owned(),
+                    line: 4,
+                    column: 2,
+                    disposition: GrammarOptionDisposition::Metadata,
+                },
+                GrammarOptionEntry {
+                    key: "superClass".to_owned(),
+                    value: "BaseLexer".to_owned(),
+                    line: 5,
+                    column: 2,
+                    disposition: GrammarOptionDisposition::Unsupported,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn grammar_option_hook_acknowledgement_satisfies_strict_mode() {
+        let source = "lexer grammar L;\noptions { superClass = BaseLexer; }\nA: 'a';\n";
+        let hooks = BTreeSet::from(["superClass=BaseLexer".to_owned()]);
+        let options =
+            collect_grammar_options(source, &hooks).expect("acknowledged option should parse");
+
+        assert_eq!(options.len(), 1);
+        assert_eq!(options[0].disposition, GrammarOptionDisposition::Hooked);
+        enforce_require_full_options(true, &options)
+            .expect("hooked options are explicitly implemented");
+
+        let manifest = render_semantics_manifest(SemUnknownPolicy::AssumeTrue, &options, &[]);
+        assert!(manifest.contains("\"name\": \"superClass\""));
+        assert!(manifest.contains("\"value\": \"BaseLexer\""));
+        assert!(manifest.contains("\"disposition\": \"hooked\""));
+    }
+
+    #[test]
+    fn strict_mode_rejects_unacknowledged_target_options() {
+        let source = "parser grammar P;\noptions { contextSuperClass = RuleNode; }\ns: EOF;\n";
+        let options = collect_grammar_options(source, &BTreeSet::new())
+            .expect("unsupported option should still be inventoried");
+
+        let error = enforce_require_full_options(true, &options)
+            .expect_err("strict mode should reject an unsupported target option");
+        assert!(
+            error
+                .to_string()
+                .contains("unsupported grammar option: contextSuperClass=RuleNode at 2:10")
+        );
+        assert!(error.to_string().contains("--option-hook KEY=VALUE"));
+    }
+
+    #[test]
+    fn option_hook_requires_an_exact_assignment() {
+        assert_eq!(
+            normalize_option_hook(" superClass = BaseLexer ")
+                .expect("valid hook assignment should normalize"),
+            "superClass=BaseLexer"
+        );
+        assert!(normalize_option_hook("superClass").is_err());
+        assert!(normalize_option_hook("=BaseLexer").is_err());
+        assert!(normalize_option_hook("superClass=").is_err());
     }
 
     #[test]

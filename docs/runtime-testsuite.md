@@ -92,7 +92,7 @@ Supported now:
 - lexer DFA dump output for the predicate-sensitive `SemPredEvalLexer`
   `showDFA` fixtures,
 - lexer accept-position adjustment for the upstream `PositionAdjustingLexer`
-  target template,
+  through the same generic post-accept lifecycle hook available to callers,
 - parser `@init {<BuildParseTrees()>}` and `notBuildParseTree` descriptors,
 - parser `predictionMode=LL` and `predictionMode=SLL` descriptors modeled by
   the metadata recognizer,

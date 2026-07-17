@@ -381,6 +381,184 @@ where
     }
 }
 
+/// Mutable lexer state exposed at lifecycle boundaries that have no ATN
+/// semantic coordinate.
+///
+/// The context is used before a token request starts matching, after an
+/// accepted path has applied its actions but before emission, and while a
+/// lexer is reset for reuse. [`Self::accept_position`] is present only at the
+/// post-accept boundary.
+#[derive(Debug)]
+pub struct LexerLifecycleCtx<'a, I>
+where
+    I: CharStream,
+{
+    lexer: &'a mut BaseLexer<I>,
+    accept_position: Option<usize>,
+}
+
+impl<'a, I> LexerLifecycleCtx<'a, I>
+where
+    I: CharStream,
+{
+    pub(crate) const fn new(lexer: &'a mut BaseLexer<I>, accept_position: Option<usize>) -> Self {
+        Self {
+            lexer,
+            accept_position,
+        }
+    }
+
+    /// Original input boundary selected by the accepted ATN path.
+    ///
+    /// A post-accept hook may move the committed cursor away from this
+    /// boundary with [`Self::reset_accept_position`].
+    #[must_use]
+    pub const fn accept_position(&self) -> Option<usize> {
+        self.accept_position
+    }
+
+    /// Current committed input position.
+    #[must_use]
+    pub fn input_position(&self) -> usize {
+        self.lexer.input().index()
+    }
+
+    /// Current lexer mode.
+    #[must_use]
+    pub const fn mode(&self) -> i32 {
+        self.lexer.mode
+    }
+
+    /// Current source line.
+    #[must_use]
+    pub const fn line(&self) -> usize {
+        self.lexer.line()
+    }
+
+    /// Current source column.
+    #[must_use]
+    pub const fn column(&self) -> usize {
+        self.lexer.column()
+    }
+
+    /// Absolute source index where the current token begins.
+    #[must_use]
+    pub const fn token_start(&self) -> usize {
+        self.lexer.token_start()
+    }
+
+    /// Source line captured at the current token start.
+    #[must_use]
+    pub const fn token_start_line(&self) -> usize {
+        self.lexer.token_start_line()
+    }
+
+    /// Source column captured at the current token start.
+    #[must_use]
+    pub const fn token_start_column(&self) -> usize {
+        self.lexer.token_start_column()
+    }
+
+    /// Pending type of the token being matched.
+    #[must_use]
+    pub const fn token_type(&self) -> i32 {
+        self.lexer.token_type()
+    }
+
+    /// Pending channel of the token being matched.
+    #[must_use]
+    pub const fn channel(&self) -> i32 {
+        self.lexer.channel()
+    }
+
+    /// Number of tokens waiting to be returned before another ATN match.
+    #[must_use]
+    pub fn pending_token_count(&self) -> usize {
+        self.lexer.pending_tokens.len()
+    }
+
+    /// Text from the current token start through the committed input cursor.
+    #[must_use]
+    pub fn token_text(&self) -> String {
+        self.lexer.token_text()
+    }
+
+    /// Text selected by the original accepted ATN path.
+    ///
+    /// Returns `None` outside the post-accept callback.
+    #[must_use]
+    pub fn accepted_text(&self) -> Option<String> {
+        self.accept_position
+            .map(|position| self.lexer.token_text_until(position))
+    }
+
+    /// Character at a one-based lookahead/lookbehind offset from the
+    /// committed input cursor.
+    pub fn la(&mut self, offset: isize) -> i32 {
+        self.lexer.la(offset)
+    }
+
+    /// Consumes one input character and updates source position tracking.
+    pub fn consume(&mut self) {
+        self.lexer.consume_char();
+    }
+
+    /// Overrides the pending emitted token type.
+    pub const fn set_type(&mut self, token_type: i32) {
+        self.lexer.set_type(token_type);
+    }
+
+    /// Overrides the pending emitted token channel.
+    pub const fn set_channel(&mut self, channel: i32) {
+        self.lexer.set_channel(channel);
+    }
+
+    /// Marks the current match as skipped.
+    pub const fn skip(&mut self) {
+        self.lexer.skip();
+    }
+
+    /// Extends the current token with another lexer-rule match.
+    pub const fn more(&mut self) {
+        self.lexer.more();
+    }
+
+    /// Repositions the committed accept cursor.
+    pub fn reset_accept_position(&mut self, index: usize) {
+        self.lexer.reset_accept_position(index);
+    }
+
+    /// Moves the current token start forward within the committed match.
+    pub fn set_token_start(&mut self, index: usize) -> bool {
+        self.lexer.set_token_start(index)
+    }
+
+    /// Queues an additional token on the current channel.
+    pub fn enqueue_token(&mut self, token_type: i32, stop: usize) {
+        self.enqueue_token_with_channel(token_type, self.channel(), stop);
+    }
+
+    /// Queues an additional token on an explicit channel.
+    pub fn enqueue_token_with_channel(&mut self, token_type: i32, channel: i32, stop: usize) {
+        self.lexer.enqueue_token(token_type, channel, stop, None);
+    }
+
+    /// Sets the current lexer mode.
+    pub fn set_mode(&mut self, mode: i32) {
+        self.lexer.set_mode(mode);
+    }
+
+    /// Pushes the current mode and switches to `mode`.
+    pub fn push_mode(&mut self, mode: i32) {
+        self.lexer.push_mode(mode);
+    }
+
+    /// Pops the mode stack, restoring the previous mode.
+    pub fn pop_mode(&mut self) -> Option<i32> {
+        self.lexer.pop_mode()
+    }
+}
+
 pub trait Lexer: Recognizer {
     fn mode(&self) -> i32;
     fn set_mode(&mut self, mode: i32);
@@ -563,6 +741,29 @@ where
             pending_tokens: VecDeque::new(),
             dfa_cache: Rc::new(RefCell::new(LexerDfaCache::default())),
         }
+    }
+
+    /// Resets runtime-owned lexer state so this instance can consume its input
+    /// again from the beginning.
+    ///
+    /// Learned DFA tables and configuration such as forced interpretation are
+    /// retained. Token-production state, diagnostics, pending tokens, modes,
+    /// and source position are cleared.
+    pub fn reset(&mut self) {
+        self.input.seek(0);
+        self.mode = DEFAULT_MODE;
+        self.mode_stack.clear();
+        self.token_type = INVALID_TOKEN_TYPE;
+        self.channel = DEFAULT_CHANNEL;
+        self.token_start = 0;
+        self.token_start_line = 1;
+        self.token_start_column = 0;
+        self.line = 1;
+        self.column = 0;
+        self.hit_eof = false;
+        self.errors.get_mut().clear();
+        self.semantic_error_coordinates.get_mut().clear();
+        self.pending_tokens.clear();
     }
 
     /// Switches this lexer to the thread-shared learned DFA for `atn`.

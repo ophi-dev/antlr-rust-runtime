@@ -24,7 +24,9 @@ pub use dfa::{DfaStateId, DfaTransition, ParserDfa, ParserDfaStateView, ParserDf
 pub use errors::{AntlrError, ConsoleErrorListener, ErrorListener};
 pub use generated::{GeneratedLexer, GeneratedParser, GrammarMetadata};
 pub use int_stream::{EOF, IntStream, UNKNOWN_SOURCE_NAME};
-pub use lexer::{BaseLexer, Lexer, LexerCustomAction, LexerMode, LexerPredicate, LexerSemCtx};
+pub use lexer::{
+    BaseLexer, Lexer, LexerCustomAction, LexerLifecycleCtx, LexerMode, LexerPredicate, LexerSemCtx,
+};
 pub use parser::{
     BailErrorStrategy, BaseParser, ExpectedTokenSet, NoSemanticHooks, Parser, ParserAction,
     ParserMemberAction, ParserPredicate, ParserReturnAction, ParserRuleArg, ParserRuntimeOptions,

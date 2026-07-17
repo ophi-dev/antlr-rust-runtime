@@ -160,110 +160,12 @@ fn Property(&self) -> bool {
 
 ParserPropertyCall(p, call) ::= "<p>.<call>"
 
-PositionAdjustingLexerDef() ::= <<
-struct PositionAdjustingLexerATNSimulator {
-    base: LexerATNSimulator,
-}
+// The Rust conformance harness supplies this behavior through
+// SemanticHooks::lexer_after_accept, exercising the public lifecycle contract
+// instead of injecting a target-specific superclass.
+PositionAdjustingLexerDef() ::= ""
 
-impl PositionAdjustingLexerATNSimulator {
-    fn new(
-        atn: Arc\<ATN>,
-        decision_to_dfa: Arc\<Vec\<DFA>\>,
-        shared_context_cache: Arc\<PredictionContextCache>,
-    ) -> Self {
-        Self {
-            base: LexerATNSimulator::new(atn, decision_to_dfa, shared_context_cache),
-        }
-    }
-
-    fn reset_accept_position(
-        &mut self,
-        input: &mut dyn CharStream,
-        index: isize,
-        line: isize,
-        char_position_in_line: isize,
-    ) {
-        input.seek(index);
-        self.base.set_line(line);
-        self.base.set_char_position_in_line(char_position_in_line);
-        self.base.consume(input);
-    }
-}
->>
-
-PositionAdjustingLexer() ::= <<
-
-fn next_token(&mut self) -> Box\<dyn Token> {
-    if !self.interpreter().is::\<PositionAdjustingLexerATNSimulator>() {
-        let sim = PositionAdjustingLexerATNSimulator::new(
-            self.atn(),
-            self.decision_to_dfa(),
-            self.shared_context_cache(),
-        );
-        self.set_interpreter(Box::new(sim));
-    }
-    self.base_next_token()
-}
-
-fn emit(&mut self) -> Box\<dyn Token> {
-    match self.token_type() {
-        Self::TOKENS => {
-            self.handle_accept_position_for_keyword("tokens");
-        }
-        Self::LABEL => {
-            self.handle_accept_position_for_identifier();
-        }
-        _ => {}
-    }
-    self.base_emit()
-}
-
-fn handle_accept_position_for_identifier(&mut self) -> bool {
-    let token_text = self.text();
-    let mut identifier_length = 0usize;
-    let chars: Vec\<char> = token_text.chars().collect();
-    while identifier_length \< chars.len() && Self::is_identifier_char(chars[identifier_length]) {
-        identifier_length += 1;
-    }
-
-    let identifier_length = identifier_length as isize;
-    if self.input().index() > self.token_start_char_index() + identifier_length {
-        let offset = identifier_length - 1;
-        let (input, index, line, column) = (
-            self.input_mut(),
-            self.token_start_char_index() + offset,
-            self.token_start_line(),
-            self.token_start_char_position_in_line() + offset,
-        );
-        self.interpreter_as::\<PositionAdjustingLexerATNSimulator>()
-            .reset_accept_position(input, index, line, column);
-        return true;
-    }
-    false
-}
-
-fn handle_accept_position_for_keyword(&mut self, keyword: &str) -> bool {
-    let keyword_len = keyword.chars().count() as isize;
-    if self.input().index() > self.token_start_char_index() + keyword_len {
-        let offset = keyword_len - 1;
-        let (input, index, line, column) = (
-            self.input_mut(),
-            self.token_start_char_index() + offset,
-            self.token_start_line(),
-            self.token_start_char_position_in_line() + offset,
-        );
-        self.interpreter_as::\<PositionAdjustingLexerATNSimulator>()
-            .reset_accept_position(input, index, line, column);
-        return true;
-    }
-    false
-}
-
-fn is_identifier_char(c: char) -> bool {
-    c.is_alphanumeric() || c == '_'
-}
-
->>
+PositionAdjustingLexer() ::= ""
 
 BasicListener(X) ::= <<
 @parser::members {

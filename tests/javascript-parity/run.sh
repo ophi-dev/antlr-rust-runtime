@@ -58,6 +58,7 @@ cargo run --quiet --locked --release --manifest-path "$REPO_ROOT/Cargo.toml" \
     --lexer "$WORK_DIR/interp/JavaScriptLexer.interp" \
     --grammar "$WORK_DIR/grammar/JavaScriptLexer.g4" \
     --sem-patterns "$REPO_ROOT/patterns/javascript.toml" \
+    --option-hook superClass=JavaScriptLexerBase \
     --sem-unknown error --require-full-semantics \
     --out-dir "$WORK_DIR/rust-lexer"
 cargo run --quiet --locked --release --manifest-path "$REPO_ROOT/Cargo.toml" \
@@ -65,6 +66,7 @@ cargo run --quiet --locked --release --manifest-path "$REPO_ROOT/Cargo.toml" \
     --parser "$WORK_DIR/interp/JavaScriptParser.interp" \
     --grammar "$WORK_DIR/grammar/JavaScriptParser.g4" \
     --sem-patterns "$REPO_ROOT/patterns/javascript.toml" \
+    --option-hook superClass=JavaScriptParserBase \
     --sem-unknown error --require-full-semantics \
     --out-dir "$WORK_DIR/rust-parser"
 

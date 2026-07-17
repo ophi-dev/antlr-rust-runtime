@@ -85,7 +85,7 @@ use crate::atn::parser_atn::{ParserAtnBuilder, ParserTransitionSpec};
 use crate::char_stream::CharStream;
 use crate::errors::AntlrError;
 use crate::int_stream::IntStream;
-use crate::lexer::{LexerCustomAction, LexerSemCtx};
+use crate::lexer::{LexerCustomAction, LexerLifecycleCtx, LexerSemCtx};
 use crate::recognizer::{Recognizer, RecognizerData};
 use crate::semir::{self, AStmt, ArithOp, CmpOp, ExprId, HookId, PExpr, SemIr, StmtId};
 use crate::token::{
@@ -502,6 +502,14 @@ where
 /// to the configured [`UnknownSemanticPolicy`]. Predicate hooks may run during
 /// speculative prediction and must be replay-safe.
 pub trait SemanticHooks {
+    /// Whether generated lexers should route lifecycle callbacks through this
+    /// hook object.
+    ///
+    /// User hook implementations opt in by default. [`NoSemanticHooks`]
+    /// overrides this to keep generated lexers on the direct no-extension
+    /// token path.
+    const ENABLES_LEXER_LIFECYCLE: bool = true;
+
     /// Whether this hook object may observe parser predicate transitions.
     ///
     /// Custom hooks default to conservative predicate handling so the fast
@@ -561,6 +569,40 @@ pub trait SemanticHooks {
         false
     }
 
+    /// Runs after runtime-owned lexer state has been reset for reuse.
+    ///
+    /// Implementations should clear extension-owned transient state here.
+    fn lexer_reset<I>(&mut self, ctx: &mut LexerLifecycleCtx<'_, I>)
+    where
+        I: CharStream,
+    {
+        let _ = ctx;
+    }
+
+    /// Runs before the runtime returns a queued token or starts a new ATN
+    /// token match.
+    ///
+    /// The callback also runs between internal `skip`/`more` matches, so it
+    /// observes every point where another ATN match may start.
+    fn lexer_before_token<I>(&mut self, ctx: &mut LexerLifecycleCtx<'_, I>)
+    where
+        I: CharStream,
+    {
+        let _ = ctx;
+    }
+
+    /// Runs after the accepted path's portable and custom actions, but before
+    /// the token span is finalized and emitted.
+    ///
+    /// This callback has no synthetic ATN coordinate. It therefore also runs
+    /// for accepted rules that contain no action or predicate.
+    fn lexer_after_accept<I>(&mut self, ctx: &mut LexerLifecycleCtx<'_, I>)
+    where
+        I: CharStream,
+    {
+        let _ = ctx;
+    }
+
     /// Observes a token after committed lexer actions and portable commands
     /// have run and the token has been emitted, immediately before it is
     /// returned to the token stream.
@@ -578,6 +620,8 @@ pub trait SemanticHooks {
 pub struct NoSemanticHooks;
 
 impl SemanticHooks for NoSemanticHooks {
+    const ENABLES_LEXER_LIFECYCLE: bool = false;
+
     fn observes_parser_predicates(&self) -> bool {
         false
     }
