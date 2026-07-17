@@ -24,7 +24,7 @@ use crate::atn::lexer::{
     LexerConfig, best_accept, epsilon_closure, lexer_action_belongs_to_accept, prune_after_accepts,
     set_config_state,
 };
-use crate::atn::{Atn, Transition};
+use crate::atn::{LexerAtn, LexerTransition};
 use crate::int_stream::EOF;
 use crate::lexer::{LexerDfaActionKey, LexerDfaConfigKey, LexerDfaKey};
 use crate::prediction::PredictionFxHasher;
@@ -115,7 +115,7 @@ pub(super) struct CompiledLexerActionTrace {
 impl CompiledLexerDfa {
     /// Compiles every lexer mode of `atn` that has no semantic predicates and
     /// fits the state budget; the rest stay interpreter-matched.
-    pub fn compile(atn: &Atn) -> Self {
+    pub fn compile(atn: &LexerAtn) -> Self {
         let mut dfa = Self {
             mode_starts: Vec::new(),
             states: Vec::new(),
@@ -170,7 +170,7 @@ impl CompiledLexerDfa {
             .get(self.states[usize::from(state)].accept as usize)
     }
 
-    /// Transition target for a non-EOF symbol, or [`DEAD_STATE`].
+    /// `LexerTransition` target for a non-EOF symbol, or [`DEAD_STATE`].
     pub(super) fn char_target(&self, state: u16, symbol: i32) -> u16 {
         let compiled = &self.states[usize::from(state)];
         let code_point = symbol.cast_unsigned();
@@ -192,7 +192,7 @@ impl CompiledLexerDfa {
         }
     }
 
-    /// Transition target for the EOF symbol, or [`DEAD_STATE`].
+    /// `LexerTransition` target for the EOF symbol, or [`DEAD_STATE`].
     pub(super) fn eof_target(&self, state: u16) -> u16 {
         self.states[usize::from(state)].eof_target
     }
@@ -501,7 +501,7 @@ impl ModeBuild {
     /// state when the (input-offset-normalized) identity is new.
     /// [`ESCAPE_STATE`] means the state budget is exhausted and the edge must
     /// hand the token to the interpreter.
-    fn intern(&mut self, atn: &Atn, configs: Vec<LexerConfig>, step: usize) -> u16 {
+    fn intern(&mut self, atn: &LexerAtn, configs: Vec<LexerConfig>, step: usize) -> u16 {
         let key = LexerDfaKey::new(
             configs
                 .iter()
@@ -555,7 +555,11 @@ fn relative_config_key(config: &LexerConfig, step: usize) -> LexerDfaConfigKey {
 
 /// Computes the accept metadata for a DFA state from its config set, using
 /// the interpreter's own rule-priority selection.
-fn compiled_accept(atn: &Atn, configs: &[LexerConfig], step: usize) -> Option<CompiledLexerAccept> {
+fn compiled_accept(
+    atn: &LexerAtn,
+    configs: &[LexerConfig],
+    step: usize,
+) -> Option<CompiledLexerAccept> {
     let accept = best_accept(atn, configs)?;
     debug_assert!(
         accept.position == step,
@@ -579,7 +583,7 @@ fn compiled_accept(atn: &Atn, configs: &[LexerConfig], step: usize) -> Option<Co
 /// Runs subset construction for one mode; `None` leaves the whole mode to the
 /// interpreter (only when its very first closure already escapes).
 fn build_mode(
-    atn: &Atn,
+    atn: &LexerAtn,
     mode: usize,
     dfa: &mut CompiledLexerDfa,
     pools: &mut RowPools,
@@ -618,7 +622,7 @@ fn build_mode(
 /// `None` means the closure crossed a semantic predicate (which only the
 /// interpreter can evaluate) or entered a recursive lexer rule (nested
 /// comments never determinize), so the edge must escape.
-fn closed_configs(atn: &Atn, moved: Vec<LexerConfig>) -> Option<Vec<LexerConfig>> {
+fn closed_configs(atn: &LexerAtn, moved: Vec<LexerConfig>) -> Option<Vec<LexerConfig>> {
     let closure = epsilon_closure(atn, moved, &mut |_| true);
     if closure.has_semantic_context {
         return None;
@@ -644,7 +648,7 @@ fn closed_configs(atn: &Atn, moved: Vec<LexerConfig>) -> Option<Vec<LexerConfig>
 /// commands belong to itself, not the enclosing rule). Carrying them into
 /// DFA-state identity would mint a fresh state per input offset — rules that
 /// loop over comment/whitespace references would never determinize.
-fn prune_dead_action_traces(atn: &Atn, config: &mut LexerConfig) {
+fn prune_dead_action_traces(atn: &LexerAtn, config: &mut LexerConfig) {
     let Some(accept_rule) = config.alt_rule_index else {
         return;
     };
@@ -668,7 +672,7 @@ fn has_recursive_stack(config: &LexerConfig) -> bool {
 }
 
 /// Computes every outgoing edge of one interned DFA state.
-fn expand_state(atn: &Atn, build: &mut ModeBuild, local: usize) -> StateRows {
+fn expand_state(atn: &LexerAtn, build: &mut ModeBuild, local: usize) -> StateRows {
     let configs = build.configs[local].clone();
     let step = build.steps[local];
     let entries = consuming_entries(atn, &configs);
@@ -711,7 +715,10 @@ fn expand_state(atn: &Atn, build: &mut ModeBuild, local: usize) -> StateRows {
 }
 
 /// Lists each config's consuming transitions in the interpreter's move order.
-fn consuming_entries<'a>(atn: &'a Atn, configs: &[LexerConfig]) -> Vec<(usize, &'a Transition)> {
+fn consuming_entries<'a>(
+    atn: &'a LexerAtn,
+    configs: &[LexerConfig],
+) -> Vec<(usize, &'a LexerTransition)> {
     let mut entries = Vec::new();
     for (config_index, config) in configs.iter().enumerate() {
         let Some(state) = atn.state(config.state) else {
@@ -767,7 +774,7 @@ fn segment_mask_matrix(
 
 /// Materializes the code-point intervals a transition consumes, clamped to
 /// the valid character range (EOF is handled separately).
-fn transition_char_intervals(transition: &Transition) -> Vec<(i32, i32)> {
+fn transition_char_intervals(transition: &LexerTransition) -> Vec<(i32, i32)> {
     let mut intervals = Vec::new();
     let mut push_clamped = |low: i32, high: i32| {
         let low = low.max(MIN_CHAR_VALUE);
@@ -777,14 +784,14 @@ fn transition_char_intervals(transition: &Transition) -> Vec<(i32, i32)> {
         }
     };
     match transition {
-        Transition::Atom { label, .. } => push_clamped(*label, *label),
-        Transition::Range { start, stop, .. } => push_clamped(*start, *stop),
-        Transition::Set { set, .. } => {
+        LexerTransition::Atom { label, .. } => push_clamped(*label, *label),
+        LexerTransition::Range { start, stop, .. } => push_clamped(*start, *stop),
+        LexerTransition::Set { set, .. } => {
             for &(low, high) in set.ranges() {
                 push_clamped(low, high);
             }
         }
-        Transition::NotSet { set, .. } => {
+        LexerTransition::NotSet { set, .. } => {
             // `NotSet` matches the complement within the character range;
             // `IntervalSet` ranges are sorted and coalesced.
             let mut next = MIN_CHAR_VALUE;
@@ -796,7 +803,7 @@ fn transition_char_intervals(transition: &Transition) -> Vec<(i32, i32)> {
             }
             push_clamped(next, MAX_CHAR_VALUE);
         }
-        Transition::Wildcard { .. } => push_clamped(MIN_CHAR_VALUE, MAX_CHAR_VALUE),
+        LexerTransition::Wildcard { .. } => push_clamped(MIN_CHAR_VALUE, MAX_CHAR_VALUE),
         _ => {}
     }
     intervals
@@ -805,11 +812,11 @@ fn transition_char_intervals(transition: &Transition) -> Vec<(i32, i32)> {
 /// Advances the masked entries by one character and interns the result;
 /// closures that escape compile as [`ESCAPE_STATE`] edges.
 fn move_target(
-    atn: &Atn,
+    atn: &LexerAtn,
     build: &mut ModeBuild,
     configs: &[LexerConfig],
     step: usize,
-    entries: &[(usize, &Transition)],
+    entries: &[(usize, &LexerTransition)],
     mask: &[u64],
 ) -> u16 {
     let mut moved = Vec::new();
@@ -834,11 +841,11 @@ fn move_target(
 /// Advances the EOF-matching entries; EOF consumes no character, so the input
 /// offset stays put and the moved configs record `consumed_eof`.
 fn eof_move(
-    atn: &Atn,
+    atn: &LexerAtn,
     build: &mut ModeBuild,
     configs: &[LexerConfig],
     step: usize,
-    entries: &[(usize, &Transition)],
+    entries: &[(usize, &LexerTransition)],
 ) -> u16 {
     let mut moved = Vec::new();
     for (config_index, transition) in entries {
@@ -928,7 +935,7 @@ mod tests {
 
     fn compiled_token(
         lexer: &mut BaseLexer<InputStream>,
-        atn: &Atn,
+        atn: &LexerAtn,
         dfa: &CompiledLexerDfa,
     ) -> TokenSnapshot {
         let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
@@ -941,7 +948,7 @@ mod tests {
         }
     }
 
-    fn interpreted_token(lexer: &mut BaseLexer<InputStream>, atn: &Atn) -> TokenSnapshot {
+    fn interpreted_token(lexer: &mut BaseLexer<InputStream>, atn: &LexerAtn) -> TokenSnapshot {
         let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
         let mut sink = TokenSink::new(&mut store);
         let id = next_token(lexer, &mut sink, atn).expect("test token should fit");
@@ -970,7 +977,7 @@ mod tests {
     // explodes it to one integer per line (the cast/path elements defeat the
     // packed-list tactic) and destroys the mapping to the ANTLR ATN layout.
     #[rustfmt::skip]
-    fn two_rule_atn(with_predicate: bool) -> Atn {
+    fn two_rule_atn(with_predicate: bool) -> LexerAtn {
         let epsilon_or_predicate = if with_predicate { 4 } else { 1 };
         AtnDeserializer::new(&SerializedAtn::from_i32(&[
             4, 0, 2, // version, lexer, max token type
@@ -1014,7 +1021,7 @@ mod tests {
     // `two_rule_atn`). Pure literals keep rustfmt's packed layout today, but a
     // single cast/path element would explode it, so pin it defensively.
     #[rustfmt::skip]
-    fn wide_range_atn() -> Atn {
+    fn wide_range_atn() -> LexerAtn {
         AtnDeserializer::new(&SerializedAtn::from_i32(&[
             4, 0, 1, // version, lexer, max token type
             5, // states

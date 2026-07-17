@@ -1,3 +1,4 @@
+use crate::atn::parser_atn::ParserAtn;
 use crate::atn::serialized::SerializedAtn;
 use crate::vocabulary::Vocabulary;
 
@@ -75,6 +76,9 @@ pub trait GeneratedLexer {
 
 pub trait GeneratedParser {
     fn metadata() -> &'static GrammarMetadata;
+
+    /// Borrows the validated packed ATN embedded by the matching generator.
+    fn parser_atn() -> &'static ParserAtn;
 }
 
 #[cfg(test)]

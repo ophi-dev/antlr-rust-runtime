@@ -201,7 +201,8 @@ form.
 
 - Pure Rust runtime implementation.
 - Written from scratch as a clean-room implementation.
-- Supports ANTLR serialized ATN deserialization.
+- Supports ANTLR serialized lexer ATN deserialization and generator-side
+  compilation of serialized parser ATNs into packed runtime tables.
 - Supports lexer and parser execution through generated Rust wrappers.
 - Supports real split lexer/parser grammars, including Kotlin smoke builds.
 - Passes every supported upstream ANTLR runtime-testsuite descriptor discovered
@@ -219,14 +220,15 @@ The runtime contains:
 - `Vocabulary`
 - recognizer metadata and error listener plumbing
 - parse tree node types, rule contexts, terminal nodes, error nodes, and walkers
-- ANTLR v4 serialized ATN deserialization
+- ANTLR v4 serialized lexer ATN deserialization
 - lexer ATN recognition with longest-match/rule-priority behavior and lexer
   actions
 - ahead-of-time compiled lexer DFA tables, built by `antlr4-rust-gen` and
   embedded in generated lexers, with per-token escape to ATN interpretation
   for constructs a finite DFA cannot represent (semantic predicates,
   recursive lexer rules)
-- parser ATN rule recognition with backtracking over token stream indices
+- versioned, packed parser ATN tables embedded directly in generated parsers,
+  with rule recognition over borrowing state/transition views
 - canonical `ContextId` prediction graphs pooled with learned parser DFA state
 - `antlr4-rust-gen`, a Rust generator that consumes ANTLR `.interp` metadata and
   emits Rust modules
@@ -431,10 +433,10 @@ group (**> 1.0** means Rust is faster than Go; **< 1.0** means slower):
 
 | Language | Fixtures | Rust vs Go (parse time) |
 |----------|---------:|-------------------------|
-| Kotlin   | 4        | 25.705x                 |
-| Java     | 4        | 3.115x                  |
-| C#       | 4        | 2.238x                  |
-| Trino SQL | 5       | 3.522x                  |
+| Kotlin   | 4        | 24.924x                 |
+| Java     | 4        | 3.088x                  |
+| C#       | 4        | 2.199x                  |
+| Trino SQL | 5       | 3.390x                  |
 
 ## Useful Information
 
