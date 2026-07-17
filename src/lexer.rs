@@ -3,7 +3,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::hash::BuildHasherDefault;
 use std::rc::Rc;
 
-use crate::atn::Atn;
+use crate::atn::LexerAtn;
 use crate::char_stream::{CharStream, TextInterval};
 use crate::int_stream::EOF;
 use crate::prediction::PredictionFxHasher;
@@ -433,14 +433,14 @@ where
     ///
     /// Generated lexers create a fresh instance per parse; without sharing,
     /// every instance relearns the same DFA through ATN simulation. The shared
-    /// cache is keyed by the generated lexer's `&'static Atn` identity and
+    /// cache is keyed by the generated lexer's `&'static LexerAtn` identity and
     /// holds only input-independent data, so it stays valid across inputs.
     /// The `showDFA` edge trace lives in the cache too, so it reports the
     /// accumulated DFA — the same view the reference runtimes print from
     /// their static shared DFA.
     #[must_use]
-    pub fn with_shared_dfa(mut self, atn: &'static Atn) -> Self {
-        let ptr: *const Atn = atn;
+    pub fn with_shared_dfa(mut self, atn: &'static LexerAtn) -> Self {
+        let ptr: *const LexerAtn = atn;
         let key = ptr as usize;
         self.dfa_cache = SHARED_LEXER_DFA_CACHES
             .with(|caches| Rc::clone(caches.borrow_mut().entry(key).or_insert_with(Rc::default)));

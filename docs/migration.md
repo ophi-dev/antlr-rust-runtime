@@ -47,9 +47,32 @@ identified by `DfaStateId`; ATN configuration sets remain internal cold data.
 `ParserAtnSimulator::parser_dfa_stats()` reports dense/sparse row distribution,
 hot/cold retained bytes, and state-interner measurements.
 
-Regenerate parsers with the matching `antlr4-rust-gen` release. Parsers
-generated against the removed DFA and prediction-context APIs are not source
-compatible with this runtime.
+## Packed Parser ATNs
+
+Parser ATNs now use `ParserAtn`, a validated packed word stream with checked
+compact IDs, contiguous transition ranges, and pooled interval data. Generated
+parsers embed this versioned stream directly and borrow it without rebuilding
+an object graph. `ParserAtn::from_static` rejects bad magic, byte order,
+versions, section lengths, offsets, and indices; it never falls back to the old
+representation.
+
+The old parser-facing `Atn`, `AtnState`, and `Transition` graph APIs are
+removed. The graph retained for lexer simulation is now explicitly named
+`LexerAtn`, `LexerAtnState`, and `LexerTransition`. Borrow parser diagnostics
+through `ParserAtnState`, `ParserTransition`, and their iterators instead of
+materializing owned records.
+
+Parser `GrammarMetadata::serialized_atn()` is empty because the generated
+module carries `PARSER_ATN_DATA` as its single parser-ATN artifact. Code that
+needs parser ATN diagnostics must use the module's `parser_atn()` function (or
+`GeneratedParser::parser_atn()`) and the runtime borrowing views rather than
+re-deserializing metadata.
+
+Regenerate lexers and parsers with the matching `antlr4-rust-gen` release.
+Older generated parsers do not contain the packed parser format and are
+intentionally source- and data-incompatible with this runtime. A format
+mismatch reports both the generated version and the runtime-supported range;
+there is no compatibility repacker.
 
 Token IDs cover indices through `u32::MAX`. Source scalar/byte offsets, line
 numbers, and columns are limited to `u32::MAX - 1` (4,294,967,294);

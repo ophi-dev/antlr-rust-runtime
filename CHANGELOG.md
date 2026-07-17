@@ -30,9 +30,15 @@
   edge rows, aligned hot accept tables, and a separate cold config store.
   Public `Dfa`/`DfaState` fields are removed in favor of opaque `ParserDfa`
   diagnostics and borrowing state views.
+- Parser ATNs are versioned packed word streams with compact state/transition
+  IDs, contiguous transition ranges, and pooled interval data. The parser
+  object graph and its public `Atn`/`AtnState`/`Transition` types are removed;
+  the remaining lexer graph is explicitly named `LexerAtn`,
+  `LexerAtnState`, and `LexerTransition`.
 - `ParserAtnSimulator::prediction_context_stats()` reports context creation,
   singleton/array distribution, pooled entries and bytes, and interner hits.
 - `ParserAtnSimulator::parser_dfa_stats()` reports edge density, hot/cold
   retained bytes, and fingerprint-interner activity.
 - Generated lexers and parsers must be regenerated with the matching
-  `antlr4-rust-gen` release.
+  `antlr4-rust-gen` release. Older generated parsers do not contain the packed
+  parser format and are intentionally incompatible.

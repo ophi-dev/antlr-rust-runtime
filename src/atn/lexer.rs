@@ -3,7 +3,7 @@ use std::collections::{BTreeSet, HashSet};
 use std::hash::BuildHasherDefault;
 
 use crate::atn::lexer_dfa::{CompiledLexerAccept, CompiledLexerDfa, DEAD_STATE, ESCAPE_STATE};
-use crate::atn::{Atn, AtnStateKind, LexerAction, Transition};
+use crate::atn::{AtnStateKind, LexerAction, LexerAtn, LexerTransition};
 use crate::char_stream::{CharStream, TextInterval};
 use crate::int_stream::EOF;
 use crate::lexer::{
@@ -125,7 +125,7 @@ struct ClosureState {
 pub fn next_token<I>(
     lexer: &mut BaseLexer<I>,
     sink: &mut TokenSink<'_>,
-    atn: &Atn,
+    atn: &LexerAtn,
 ) -> Result<TokenId, TokenStoreError>
 where
     I: CharStream,
@@ -142,7 +142,7 @@ where
 pub fn next_token_with_actions<I, A>(
     lexer: &mut BaseLexer<I>,
     sink: &mut TokenSink<'_>,
-    atn: &Atn,
+    atn: &LexerAtn,
     custom_action: A,
 ) -> Result<TokenId, TokenStoreError>
 where
@@ -161,7 +161,7 @@ where
 pub fn next_token_with_accept_adjuster<I, E>(
     lexer: &mut BaseLexer<I>,
     sink: &mut TokenSink<'_>,
-    atn: &Atn,
+    atn: &LexerAtn,
     accept_adjuster: E,
 ) -> Result<TokenId, TokenStoreError>
 where
@@ -178,7 +178,7 @@ where
 pub fn next_token_with_actions_and_predicates<I, A, P>(
     lexer: &mut BaseLexer<I>,
     sink: &mut TokenSink<'_>,
-    atn: &Atn,
+    atn: &LexerAtn,
     mut custom_action: A,
     mut semantic_predicate: P,
 ) -> Result<TokenId, TokenStoreError>
@@ -205,7 +205,7 @@ where
 pub fn next_token_with_hooks<I, A, P, E>(
     lexer: &mut BaseLexer<I>,
     sink: &mut TokenSink<'_>,
-    atn: &Atn,
+    atn: &LexerAtn,
     mut custom_action: A,
     mut semantic_predicate: P,
     mut accept_adjuster: E,
@@ -290,7 +290,7 @@ where
 pub fn next_token_with_semantic_hooks<I, H>(
     lexer: &mut BaseLexer<I>,
     sink: &mut TokenSink<'_>,
-    atn: &Atn,
+    atn: &LexerAtn,
     hooks: &mut H,
 ) -> Result<TokenId, TokenStoreError>
 where
@@ -324,7 +324,7 @@ where
 pub fn next_token_compiled<I>(
     lexer: &mut BaseLexer<I>,
     sink: &mut TokenSink<'_>,
-    atn: &Atn,
+    atn: &LexerAtn,
     dfa: &CompiledLexerDfa,
 ) -> Result<TokenId, TokenStoreError>
 where
@@ -353,7 +353,7 @@ where
 pub fn next_token_compiled_with_hooks<I, A, P, E>(
     lexer: &mut BaseLexer<I>,
     sink: &mut TokenSink<'_>,
-    atn: &Atn,
+    atn: &LexerAtn,
     dfa: &CompiledLexerDfa,
     mut custom_action: A,
     mut semantic_predicate: P,
@@ -384,7 +384,7 @@ where
 pub fn next_token_compiled_with_semantic_hooks<I, H>(
     lexer: &mut BaseLexer<I>,
     sink: &mut TokenSink<'_>,
-    atn: &Atn,
+    atn: &LexerAtn,
     dfa: &CompiledLexerDfa,
     hooks: &mut H,
 ) -> Result<TokenId, TokenStoreError>
@@ -423,7 +423,7 @@ where
 pub fn next_token_with_semantic_dispatch<I, H, A, P, E>(
     lexer: &mut BaseLexer<I>,
     sink: &mut TokenSink<'_>,
-    atn: &Atn,
+    atn: &LexerAtn,
     hooks: &mut H,
     mut generated_action: A,
     mut generated_predicate: P,
@@ -485,7 +485,7 @@ where
 pub fn next_token_compiled_with_semantic_dispatch<I, H, A, P, E>(
     lexer: &mut BaseLexer<I>,
     sink: &mut TokenSink<'_>,
-    atn: &Atn,
+    atn: &LexerAtn,
     dfa: &CompiledLexerDfa,
     hooks: &mut H,
     mut generated_action: A,
@@ -547,7 +547,7 @@ where
 fn next_token_with_cache<I, A, P, E>(
     lexer: &mut BaseLexer<I>,
     sink: &mut TokenSink<'_>,
-    atn: &Atn,
+    atn: &LexerAtn,
     mut custom_action: A,
     mut semantic_predicate: P,
     mut accept_adjuster: E,
@@ -586,7 +586,7 @@ struct LexerMatchStrategy<'a> {
 /// Dispatches one token match to the strategy's backend.
 fn match_token_with_strategy<I, P>(
     lexer: &mut BaseLexer<I>,
-    atn: &Atn,
+    atn: &LexerAtn,
     mode: i32,
     start: usize,
     semantic_predicate: &mut P,
@@ -614,7 +614,7 @@ where
 fn next_token_with_hooks_impl<I, A, P, E>(
     lexer: &mut BaseLexer<I>,
     sink: &mut TokenSink<'_>,
-    atn: &Atn,
+    atn: &LexerAtn,
     custom_action: &mut A,
     semantic_predicate: &mut P,
     accept_adjuster: &mut E,
@@ -719,7 +719,7 @@ where
 /// the token. Fragment-rule actions remain eligible because fragments have no
 /// token type of their own.
 pub(super) fn lexer_action_belongs_to_accept(
-    atn: &Atn,
+    atn: &LexerAtn,
     accept_rule: usize,
     action_rule: usize,
 ) -> bool {
@@ -741,7 +741,7 @@ pub(super) fn lexer_action_belongs_to_accept(
 /// supplies matching semantics shared by all generated grammars.
 fn match_token<I, P>(
     lexer: &mut BaseLexer<I>,
-    atn: &Atn,
+    atn: &LexerAtn,
     mode: i32,
     start: usize,
     semantic_predicate: &mut P,
@@ -844,7 +844,7 @@ where
 
 fn match_token_cached<I, P>(
     lexer: &mut BaseLexer<I>,
-    atn: &Atn,
+    atn: &LexerAtn,
     mode: i32,
     start: usize,
     semantic_predicate: &mut P,
@@ -1060,7 +1060,7 @@ fn record_compiled_accept(
 
 fn cached_mode_start_state<I, P>(
     lexer: &BaseLexer<I>,
-    atn: &Atn,
+    atn: &LexerAtn,
     mode: i32,
     start: usize,
     semantic_predicate: &mut P,
@@ -1105,7 +1105,7 @@ where
 
 fn cache_dfa_state<I>(
     lexer: &BaseLexer<I>,
-    atn: &Atn,
+    atn: &LexerAtn,
     active: &[LexerConfig],
     has_semantic_context: bool,
     token_start: usize,
@@ -1176,7 +1176,7 @@ fn cached_accept_state(
 /// fragment rules and nested lexer constructs compile to rule transitions in the
 /// serialized ATN.
 pub(super) fn epsilon_closure<P>(
-    atn: &Atn,
+    atn: &LexerAtn,
     configs: impl IntoIterator<Item = LexerConfig>,
     semantic_predicate: &mut P,
 ) -> ClosureResult
@@ -1206,7 +1206,7 @@ where
 /// loop path before the exit path, while non-greedy entries serialize the exit
 /// path first. The later accept-pruning step relies on this order.
 fn close_config<P>(
-    atn: &Atn,
+    atn: &LexerAtn,
     config: LexerConfig,
     closure: &mut ClosureState,
     semantic_predicate: &mut P,
@@ -1234,13 +1234,13 @@ fn close_config<P>(
 
     for transition in &state.transitions {
         match transition {
-            Transition::Epsilon { target } => {
+            LexerTransition::Epsilon { target } => {
                 let mut next = config.clone();
                 set_config_state(atn, &mut next, *target);
                 next.passed_non_greedy |= state.non_greedy;
                 close_config(atn, next, closure, semantic_predicate);
             }
-            Transition::Rule {
+            LexerTransition::Rule {
                 target,
                 follow_state,
                 ..
@@ -1251,7 +1251,7 @@ fn close_config<P>(
                 next.stack.push(*follow_state);
                 close_config(atn, next, closure, semantic_predicate);
             }
-            Transition::Predicate {
+            LexerTransition::Predicate {
                 target,
                 rule_index,
                 pred_index,
@@ -1269,13 +1269,13 @@ fn close_config<P>(
                     close_config(atn, next, closure, semantic_predicate);
                 }
             }
-            Transition::Precedence { target, .. } => {
+            LexerTransition::Precedence { target, .. } => {
                 let mut next = config.clone();
                 set_config_state(atn, &mut next, *target);
                 next.passed_non_greedy |= state.non_greedy;
                 close_config(atn, next, closure, semantic_predicate);
             }
-            Transition::Action {
+            LexerTransition::Action {
                 target,
                 action_index,
                 rule_index,
@@ -1293,11 +1293,11 @@ fn close_config<P>(
                 }
                 close_config(atn, next, closure, semantic_predicate);
             }
-            Transition::Atom { .. }
-            | Transition::Range { .. }
-            | Transition::Set { .. }
-            | Transition::NotSet { .. }
-            | Transition::Wildcard { .. } => {}
+            LexerTransition::Atom { .. }
+            | LexerTransition::Range { .. }
+            | LexerTransition::Set { .. }
+            | LexerTransition::NotSet { .. }
+            | LexerTransition::Wildcard { .. } => {}
         }
     }
 
@@ -1317,7 +1317,7 @@ fn close_config<P>(
 /// Once such a path reaches the rule stop state, later same-rule configs should
 /// not continue to grow into a longer token. Greedy decisions still need all
 /// paths to remain available so longest-match selection can win.
-pub(super) fn prune_after_accepts(atn: &Atn, configs: Vec<LexerConfig>) -> Vec<LexerConfig> {
+pub(super) fn prune_after_accepts(atn: &LexerAtn, configs: Vec<LexerConfig>) -> Vec<LexerConfig> {
     let mut accepted_rules = BTreeSet::new();
     let mut pruned = Vec::with_capacity(configs.len());
     for config in configs {
@@ -1331,7 +1331,7 @@ pub(super) fn prune_after_accepts(atn: &Atn, configs: Vec<LexerConfig>) -> Vec<L
         let is_top_level_accept = config.stack.is_empty()
             && atn
                 .state(config.state)
-                .is_some_and(crate::atn::AtnState::is_rule_stop);
+                .is_some_and(crate::atn::LexerAtnState::is_rule_stop);
         if is_top_level_accept && config.passed_non_greedy {
             accepted_rules.insert(rule_index);
         }
@@ -1345,7 +1345,7 @@ pub(super) fn prune_after_accepts(atn: &Atn, configs: Vec<LexerConfig>) -> Vec<L
 /// ANTLR lexer priority is encoded by rule order. `match_token` already handles
 /// longest-match selection across input positions; within a single position the
 /// lower rule index wins.
-pub(super) fn best_accept(atn: &Atn, configs: &[LexerConfig]) -> Option<AcceptState> {
+pub(super) fn best_accept(atn: &LexerAtn, configs: &[LexerConfig]) -> Option<AcceptState> {
     configs
         .iter()
         .filter_map(|config| {
@@ -1364,7 +1364,7 @@ pub(super) fn best_accept(atn: &Atn, configs: &[LexerConfig]) -> Option<AcceptSt
 }
 
 /// Returns the token type predicted by an accepting lexer config set, if any.
-fn accept_prediction(atn: &Atn, configs: &[LexerConfig]) -> Option<i32> {
+fn accept_prediction(atn: &LexerAtn, configs: &[LexerConfig]) -> Option<i32> {
     best_accept(atn, configs)
         .and_then(|accept| atn.rule_to_token_type().get(accept.rule_index).copied())
 }
@@ -1445,7 +1445,7 @@ fn cached_configs_to_configs(
 
 /// Moves a lexer config to `state_number` and records the top-level lexer rule
 /// once the config leaves a mode start state.
-pub(super) fn set_config_state(atn: &Atn, config: &mut LexerConfig, state_number: usize) {
+pub(super) fn set_config_state(atn: &LexerAtn, config: &mut LexerConfig, state_number: usize) {
     config.state = state_number;
     if config.alt_rule_index.is_none() {
         config.alt_rule_index = atn.state(state_number).and_then(|state| state.rule_index);
@@ -1494,7 +1494,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::atn::AtnType;
     use crate::atn::serialized::{AtnDeserializer, SerializedAtn};
     use crate::char_stream::InputStream;
     use crate::recognizer::RecognizerData;
@@ -1509,7 +1508,7 @@ mod tests {
         text: String,
     }
 
-    fn lex_one<I: CharStream>(lexer: &mut BaseLexer<I>, atn: &Atn) -> TokenSnapshot {
+    fn lex_one<I: CharStream>(lexer: &mut BaseLexer<I>, atn: &LexerAtn) -> TokenSnapshot {
         let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
         let mut sink = TokenSink::new(&mut store);
         let id = next_token(lexer, &mut sink, atn).expect("test token should fit");
@@ -1524,7 +1523,7 @@ mod tests {
 
     #[test]
     fn predicate_sensitive_lexer_state_is_not_replay_cached() {
-        let atn = Atn::new(AtnType::Lexer, 1);
+        let atn = LexerAtn::new(1);
         let data = RecognizerData::new(
             "T",
             Vocabulary::new([None, Some("T")], [None, Some("T")], [None::<&str>, None]),

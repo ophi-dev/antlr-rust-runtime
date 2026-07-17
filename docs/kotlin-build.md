@@ -35,7 +35,9 @@ This emits:
 - `kotlin_lexer.rs`
 - `kotlin_parser.rs`
 
-The generated lexer and parser cache a deserialized ATN with `OnceLock` and delegate recognition to `antlr4_runtime`.
+The generated lexer caches its deserialized lexer ATN with `OnceLock`. The
+generated parser embeds a versioned packed parser ATN, validates it once without
+rebuilding an object graph, and delegates recognition to `antlr4_runtime`.
 
 ## Choose the Kotlin Entry Rule
 

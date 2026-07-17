@@ -1,33 +1,25 @@
-//! Abstract Transition Network structures shared by generated lexers and
+//! Abstract Transition Network structures used by generated lexers and
 //! parsers.
 //!
-//! ANTLR serializes grammars into an ATN. Generated Rust code stores that
-//! serialized data in static metadata, while the runtime deserializes it into
-//! these compact Rust structures for simulation.
+//! Lexers deserialize ANTLR metadata into a graph because lexer simulation
+//! still mutates and inspects that shape. Parsers use the packed,
+//! index-addressed [`parser_atn::ParserAtn`] representation instead.
 
 pub mod lexer;
 pub mod lexer_dfa;
 pub mod parser;
+pub mod parser_atn;
 pub mod serialized;
 
-/// Distinguishes lexer ATNs from parser ATNs in serialized grammar metadata.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum AtnType {
-    Lexer,
-    Parser,
-}
-
-/// Deserialized ANTLR Abstract Transition Network.
+/// Deserialized lexer Abstract Transition Network.
 ///
 /// The structure keeps the state graph plus ANTLR side tables such as
-/// rule-to-start, rule-to-token, mode-to-start, decisions, and lexer actions.
-/// The side tables are part of the runtime contract because generated grammars
-/// should only need to provide metadata; simulation stays in this crate.
+/// rule-to-start, rule-to-token, mode-to-start, decisions, and actions. Parser
+/// ATNs never use this object-graph representation.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Atn {
-    grammar_type: AtnType,
+pub struct LexerAtn {
     max_token_type: i32,
-    states: Vec<AtnState>,
+    states: Vec<LexerAtnState>,
     rule_to_start_state: Vec<usize>,
     rule_to_stop_state: Vec<usize>,
     rule_to_token_type: Vec<i32>,
@@ -36,12 +28,11 @@ pub struct Atn {
     lexer_actions: Vec<LexerAction>,
 }
 
-impl Atn {
-    /// Creates an empty ATN with the grammar kind and maximum token type read
-    /// from the serialized header.
-    pub const fn new(grammar_type: AtnType, max_token_type: i32) -> Self {
+impl LexerAtn {
+    /// Creates an empty lexer ATN with the maximum token type read from the
+    /// serialized header.
+    pub const fn new(max_token_type: i32) -> Self {
         Self {
-            grammar_type,
             max_token_type,
             states: Vec::new(),
             rule_to_start_state: Vec::new(),
@@ -53,29 +44,25 @@ impl Atn {
         }
     }
 
-    pub const fn grammar_type(&self) -> AtnType {
-        self.grammar_type
-    }
-
     pub const fn max_token_type(&self) -> i32 {
         self.max_token_type
     }
 
-    pub fn states(&self) -> &[AtnState] {
+    pub fn states(&self) -> &[LexerAtnState] {
         &self.states
     }
 
-    pub fn state(&self, state_number: usize) -> Option<&AtnState> {
+    pub fn state(&self, state_number: usize) -> Option<&LexerAtnState> {
         self.states.get(state_number)
     }
 
-    pub fn state_mut(&mut self, state_number: usize) -> Option<&mut AtnState> {
+    pub fn state_mut(&mut self, state_number: usize) -> Option<&mut LexerAtnState> {
         self.states.get_mut(state_number)
     }
 
     /// Appends a state and returns the state number assigned by insertion
     /// order.
-    pub fn add_state(&mut self, state: AtnState) -> usize {
+    pub fn add_state(&mut self, state: LexerAtnState) -> usize {
         let index = self.states.len();
         self.states.push(state);
         index
@@ -137,7 +124,7 @@ impl Atn {
 /// representation stores those links as state numbers so the graph remains easy
 /// to clone and serialize in tests.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct AtnState {
+pub struct LexerAtnState {
     pub state_number: usize,
     pub rule_index: Option<usize>,
     pub kind: AtnStateKind,
@@ -146,10 +133,10 @@ pub struct AtnState {
     pub non_greedy: bool,
     pub precedence_rule_decision: bool,
     pub left_recursive_rule: bool,
-    pub transitions: Vec<Transition>,
+    pub transitions: Vec<LexerTransition>,
 }
 
-impl AtnState {
+impl LexerAtnState {
     /// Creates an ATN state with no rule index and no outgoing transitions.
     pub const fn new(state_number: usize, kind: AtnStateKind) -> Self {
         Self {
@@ -175,7 +162,7 @@ impl AtnState {
     ///
     /// Transition order matters for alternatives and lexer priority, so the
     /// runtime preserves the order emitted by ANTLR.
-    pub fn add_transition(&mut self, transition: Transition) {
+    pub fn add_transition(&mut self, transition: LexerTransition) {
         self.transitions.push(transition);
     }
 
@@ -208,7 +195,7 @@ pub enum AtnStateKind {
 /// the current input symbol against an atom, range, set, negated set, or
 /// wildcard.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Transition {
+pub enum LexerTransition {
     Epsilon {
         target: usize,
     },
@@ -256,7 +243,7 @@ pub enum Transition {
     },
 }
 
-impl Transition {
+impl LexerTransition {
     /// Returns the target state number for this transition.
     pub const fn target(&self) -> usize {
         match self {

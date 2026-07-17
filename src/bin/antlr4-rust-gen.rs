@@ -7,8 +7,11 @@ use std::ops::AddAssign;
 use std::path::{Path, PathBuf};
 
 use antlr4_runtime::atn::lexer_dfa::CompiledLexerDfa;
+use antlr4_runtime::atn::parser_atn::{
+    ParserAtn, ParserAtnState, ParserTransition, ParserTransitionData,
+};
 use antlr4_runtime::atn::serialized::{AtnDeserializer, SerializedAtn};
-use antlr4_runtime::atn::{Atn, AtnStateKind, LexerAction, Transition};
+use antlr4_runtime::atn::{AtnStateKind, LexerAction, LexerTransition};
 use antlr4_runtime::token::TOKEN_EOF;
 
 #[path = "../bin_support/embedded.rs"]
@@ -947,7 +950,7 @@ fn collect_parser_semantics(
         .transpose()?
         .unwrap_or_default();
 
-    let predicate_coordinates = lexer_predicate_transitions(data)?;
+    let predicate_coordinates = parser_predicate_transitions(data)?;
     if !predicate_coordinates.is_empty() {
         let templates = grammar_source
             .map(|source| parser_predicate_templates(data, source, patterns))
@@ -2028,7 +2031,7 @@ fn render_lexer(
         r#"{generated_header}use antlr4_runtime::char_stream::CharStream;
 use antlr4_runtime::recognizer::RecognizerData;
 use antlr4_runtime::token::{{TokenId, TokenSink, TokenSource, TokenStoreError}};
-use antlr4_runtime::atn::Atn;
+use antlr4_runtime::atn::LexerAtn;
 use antlr4_runtime::atn::lexer_dfa::CompiledLexerDfa;
 use antlr4_runtime::atn::serialized::AtnDeserializer;
 use antlr4_runtime::{{BaseLexer, GeneratedLexer, GrammarMetadata, Lexer, Recognizer}};
@@ -2038,10 +2041,10 @@ use std::sync::OnceLock;
 {metadata}
 {typed_hook_adapter}
 
-static ATN_CELL: OnceLock<Atn> = OnceLock::new();
+static ATN_CELL: OnceLock<LexerAtn> = OnceLock::new();
 
 /// Deserializes and caches the grammar ATN for all lexer instances.
-fn atn() -> &'static Atn {{
+fn atn() -> &'static LexerAtn {{
     ATN_CELL.get_or_init(|| {{
         let serialized = metadata().serialized_atn();
         AtnDeserializer::new(&serialized)
@@ -2420,7 +2423,7 @@ struct GeneratedStepRenderContext<'a> {
 }
 
 struct GeneratedParserCompileContext<'a> {
-    atn: &'a Atn,
+    atn: &'a ParserAtn,
     decision_by_state: &'a [Option<usize>],
     rule_args: &'a [(usize, usize, RuleArgTemplate)],
     inline_action_states: &'a BTreeSet<usize>,
@@ -2508,7 +2511,7 @@ fn parser_generated_rules(
     require_generated_callees: bool,
 ) -> io::Result<Vec<Option<GeneratedParserRule>>> {
     let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
-        .deserialize()
+        .deserialize_parser()
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     let decision_by_state = decision_by_state(&atn);
     let context = GeneratedParserCompileContext {
@@ -2662,7 +2665,7 @@ fn parser_rule_callers_reaching(
         return Ok(BTreeSet::new());
     }
     let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
-        .deserialize()
+        .deserialize_parser()
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     Ok(atn_rule_callers_reaching(
         &atn,
@@ -2672,7 +2675,7 @@ fn parser_rule_callers_reaching(
 }
 
 fn atn_rule_callers_reaching(
-    atn: &Atn,
+    atn: &ParserAtn,
     target_rules: &BTreeSet<usize>,
     rule_count: usize,
 ) -> BTreeSet<usize> {
@@ -2680,16 +2683,17 @@ fn atn_rule_callers_reaching(
     loop {
         let mut changed = false;
         for state in atn.states() {
-            let Some(caller_rule) = state.rule_index.filter(|index| *index < rule_count) else {
+            let Some(caller_rule) = state.rule_index().filter(|index| *index < rule_count) else {
                 continue;
             };
             if reaching.contains(&caller_rule) {
                 continue;
             }
-            let calls_reaching_rule = state.transitions.iter().any(|transition| {
+            let calls_reaching_rule = state.transitions().iter().any(|transition| {
                 matches!(
-                    transition,
-                    Transition::Rule { rule_index, .. } if reaching.contains(rule_index)
+                    transition.data(),
+                    ParserTransitionData::Rule { rule_index, .. }
+                        if reaching.contains(&rule_index)
                 )
             });
             if calls_reaching_rule {
@@ -3010,9 +3014,9 @@ fn generated_steps_call_disabled_rule(steps: &[GeneratedParserStep], enabled: &[
     })
 }
 
-fn decision_by_state(atn: &Atn) -> Vec<Option<usize>> {
-    let mut decision_by_state = vec![None; atn.states().len()];
-    for (decision, &state_number) in atn.decision_to_state().iter().enumerate() {
+fn decision_by_state(atn: &ParserAtn) -> Vec<Option<usize>> {
+    let mut decision_by_state = vec![None; atn.state_count()];
+    for (decision, state_number) in atn.decision_to_state().iter().enumerate() {
         if let Some(slot) = decision_by_state.get_mut(state_number) {
             *slot = Some(decision);
         }
@@ -3035,10 +3039,10 @@ struct GeneratedFirstSetCtx {
 
 fn generated_decision_fast_path<'a>(
     context: &GeneratedParserCompileContext<'_>,
-    state: &antlr4_runtime::atn::AtnState,
+    state: ParserAtnState<'_>,
     alts: impl IntoIterator<Item = (usize, &'a [GeneratedParserStep])>,
 ) -> Option<GeneratedDecisionFastPath> {
-    if state.precedence_rule_decision || state.non_greedy {
+    if state.precedence_rule_decision() || state.non_greedy() {
         return None;
     }
     let mut first_ctx = GeneratedFirstSetCtx::default();
@@ -3080,7 +3084,7 @@ fn generated_decision_fast_path<'a>(
 }
 
 fn generated_steps_first_set(
-    atn: &Atn,
+    atn: &ParserAtn,
     steps: &[GeneratedParserStep],
     ctx: &mut GeneratedFirstSetCtx,
 ) -> GeneratedLookSet {
@@ -3115,10 +3119,10 @@ fn generated_steps_first_set(
                 return first;
             }
             GeneratedParserStep::CallRule { rule_index, .. } => {
-                let Some(start) = atn.rule_to_start_state().get(*rule_index).copied() else {
+                let Some(start) = atn.rule_to_start_state().get(*rule_index) else {
                     return GeneratedLookSet::default();
                 };
-                let Some(stop) = atn.rule_to_stop_state().get(*rule_index).copied() else {
+                let Some(stop) = atn.rule_to_stop_state().get(*rule_index) else {
                     return GeneratedLookSet::default();
                 };
                 let child = generated_rule_first_set(atn, start, stop, ctx);
@@ -3151,7 +3155,7 @@ fn generated_steps_first_set(
 }
 
 fn generated_alt_steps_first_set(
-    atn: &Atn,
+    atn: &ParserAtn,
     alts: &[Vec<GeneratedParserStep>],
     ctx: &mut GeneratedFirstSetCtx,
 ) -> GeneratedLookSet {
@@ -3165,7 +3169,7 @@ fn generated_alt_steps_first_set(
 }
 
 fn generated_rule_first_set(
-    atn: &Atn,
+    atn: &ParserAtn,
     state_number: usize,
     rule_stop_state: usize,
     ctx: &mut GeneratedFirstSetCtx,
@@ -3197,7 +3201,7 @@ fn generated_rule_first_set(
 }
 
 fn generated_rule_first_set_inner(
-    atn: &Atn,
+    atn: &ParserAtn,
     state_number: usize,
     rule_stop_state: usize,
     ctx: &mut GeneratedFirstSetCtx,
@@ -3214,38 +3218,38 @@ fn generated_rule_first_set_inner(
     let Some(state) = atn.state(state_number) else {
         return;
     };
-    for transition in &state.transitions {
+    for transition in state.transitions() {
         let symbols = generated_transition_symbols(transition, atn.max_token_type());
         if !symbols.is_empty() {
             first.symbols.extend(symbols);
             continue;
         }
-        match transition {
-            Transition::Epsilon { target }
-            | Transition::Action { target, .. }
-            | Transition::Predicate { target, .. }
-            | Transition::Precedence { target, .. } => {
-                generated_rule_first_set_inner(atn, *target, rule_stop_state, ctx, visited, first);
+        match transition.data() {
+            ParserTransitionData::Epsilon { target }
+            | ParserTransitionData::Action { target, .. }
+            | ParserTransitionData::Predicate { target, .. }
+            | ParserTransitionData::Precedence { target, .. } => {
+                generated_rule_first_set_inner(atn, target, rule_stop_state, ctx, visited, first);
             }
-            Transition::Rule {
+            ParserTransitionData::Rule {
                 target,
                 rule_index,
                 follow_state,
                 ..
             } => {
-                let Some(child_stop) = atn.rule_to_stop_state().get(*rule_index).copied() else {
+                let Some(child_stop) = atn.rule_to_stop_state().get(rule_index) else {
                     continue;
                 };
-                let child_key = (*target, child_stop);
+                let child_key = (target, child_stop);
                 if ctx.in_progress.contains(&child_key) && !ctx.cache.contains_key(&child_key) {
                     ctx.hit_cycle = true;
                 }
-                let child = generated_rule_first_set(atn, *target, child_stop, ctx);
+                let child = generated_rule_first_set(atn, target, child_stop, ctx);
                 first.symbols.extend(child.symbols);
                 if child.nullable {
                     generated_rule_first_set_inner(
                         atn,
-                        *follow_state,
+                        follow_state,
                         rule_stop_state,
                         ctx,
                         visited,
@@ -3253,40 +3257,43 @@ fn generated_rule_first_set_inner(
                     );
                 }
             }
-            Transition::Atom { .. }
-            | Transition::Range { .. }
-            | Transition::Set { .. }
-            | Transition::NotSet { .. }
-            | Transition::Wildcard { .. } => {}
+            ParserTransitionData::Atom { .. }
+            | ParserTransitionData::Range { .. }
+            | ParserTransitionData::Set { .. }
+            | ParserTransitionData::NotSet { .. }
+            | ParserTransitionData::Wildcard { .. } => {}
         }
     }
 }
 
-fn generated_transition_symbols(transition: &Transition, max_token_type: i32) -> BTreeSet<i32> {
+fn generated_transition_symbols(
+    transition: ParserTransition<'_>,
+    max_token_type: i32,
+) -> BTreeSet<i32> {
     let mut symbols = BTreeSet::new();
-    match transition {
-        Transition::Atom { label, .. } => {
-            symbols.insert(*label);
+    match transition.data() {
+        ParserTransitionData::Atom { label, .. } => {
+            symbols.insert(label);
         }
-        Transition::Range { start, stop, .. } => {
-            symbols.extend(*start..=*stop);
+        ParserTransitionData::Range { start, stop, .. } => {
+            symbols.extend(start..=stop);
         }
-        Transition::Set { set, .. } => {
+        ParserTransitionData::Set { set, .. } => {
             for (start, stop) in set.ranges() {
-                symbols.extend(*start..=*stop);
+                symbols.extend(start..=stop);
             }
         }
-        Transition::NotSet { set, .. } => {
+        ParserTransitionData::NotSet { set, .. } => {
             symbols.extend((1..=max_token_type).filter(|symbol| !set.contains(*symbol)));
         }
-        Transition::Wildcard { .. } => {
+        ParserTransitionData::Wildcard { .. } => {
             symbols.extend(1..=max_token_type);
         }
-        Transition::Epsilon { .. }
-        | Transition::Rule { .. }
-        | Transition::Predicate { .. }
-        | Transition::Action { .. }
-        | Transition::Precedence { .. } => {}
+        ParserTransitionData::Epsilon { .. }
+        | ParserTransitionData::Rule { .. }
+        | ParserTransitionData::Predicate { .. }
+        | ParserTransitionData::Action { .. }
+        | ParserTransitionData::Precedence { .. } => {}
     }
     symbols
 }
@@ -3302,26 +3309,26 @@ fn symbols_to_ranges(symbols: BTreeSet<i32>) -> Vec<(i32, i32)> {
     ranges
 }
 
-const fn state_tracks_alt_number(state: &antlr4_runtime::atn::AtnState) -> bool {
+fn state_tracks_alt_number(state: ParserAtnState<'_>) -> bool {
     matches!(
-        state.kind,
+        state.kind(),
         AtnStateKind::Basic
             | AtnStateKind::BlockStart
             | AtnStateKind::PlusBlockStart
             | AtnStateKind::StarBlockStart
             | AtnStateKind::StarLoopEntry
-    ) && !state.precedence_rule_decision
-        && state.transitions.len() > 1
+    ) && !state.precedence_rule_decision()
+        && state.transitions().len() > 1
 }
 
 fn compile_generated_parser_rule(
     context: &GeneratedParserCompileContext<'_>,
     rule_index: usize,
 ) -> Option<GeneratedParserRule> {
-    let entry_state = context.atn.rule_to_start_state().get(rule_index).copied()?;
-    let stop_state = context.atn.rule_to_stop_state().get(rule_index).copied()?;
+    let entry_state = context.atn.rule_to_start_state().get(rule_index)?;
+    let stop_state = context.atn.rule_to_stop_state().get(rule_index)?;
     let start = context.atn.state(entry_state)?;
-    if start.left_recursive_rule {
+    if start.left_recursive_rule() {
         return compile_generated_left_recursive_parser_rule(
             context,
             rule_index,
@@ -3380,11 +3387,11 @@ fn find_left_recursive_loop_entry(
     context: &GeneratedParserCompileContext<'_>,
     rule_index: usize,
 ) -> Option<usize> {
-    context.atn.states().iter().find_map(|state| {
-        (state.rule_index == Some(rule_index)
-            && state.kind == AtnStateKind::StarLoopEntry
-            && state.precedence_rule_decision)
-            .then_some(state.state_number)
+    context.atn.states().find_map(|state| {
+        (state.rule_index() == Some(rule_index)
+            && state.kind() == AtnStateKind::StarLoopEntry
+            && state.precedence_rule_decision())
+        .then_some(state.state_number())
     })
 }
 
@@ -3392,17 +3399,17 @@ fn compile_generated_left_recursive_loop(
     context: &GeneratedParserCompileContext<'_>,
     rule_index: usize,
     entry_state: usize,
-    state: &antlr4_runtime::atn::AtnState,
+    state: ParserAtnState<'_>,
     decision: usize,
 ) -> Option<(GeneratedParserStep, usize)> {
     let mut enter = None;
     let mut exit = None;
-    for (index, transition) in state.transitions.iter().enumerate() {
+    for (index, transition) in state.transitions().iter().enumerate() {
         let alt = index + 1;
         let target = transition.target();
         let target_state = context.atn.state(target)?;
-        if target_state.kind == AtnStateKind::LoopEnd {
-            exit = Some((alt, transition, target, target_state.loop_back_state?));
+        if target_state.kind() == AtnStateKind::LoopEnd {
+            exit = Some((alt, transition, target, target_state.loop_back_state()?));
         } else {
             enter = Some((alt, transition));
         }
@@ -3411,7 +3418,7 @@ fn compile_generated_left_recursive_loop(
     let (enter_alt, enter_transition) = enter?;
     let (exit_alt, exit_transition, exit_target, loop_back_state) = exit?;
     let (enter_step, enter_target) = compile_generated_parser_transition(
-        state.state_number,
+        state.state_number(),
         context.rule_args,
         enter_transition,
         generated_action_state_sets(context),
@@ -3430,7 +3437,7 @@ fn compile_generated_left_recursive_loop(
     }
 
     let (exit_step, _) = compile_generated_parser_transition(
-        state.state_number,
+        state.state_number(),
         context.rule_args,
         exit_transition,
         generated_action_state_sets(context),
@@ -3442,7 +3449,7 @@ fn compile_generated_left_recursive_loop(
 
     Some((
         GeneratedParserStep::LeftRecursiveLoop {
-            state: state.state_number,
+            state: state.state_number(),
             decision,
             enter_alt,
             exit_alt,
@@ -3476,8 +3483,8 @@ fn compile_generated_parser_path(
     {
         compile_generated_parser_decision_state(context, state, decision, stop_state, visited)?
     } else {
-        let transition = state.transitions.first()?;
-        if state.transitions.len() != 1 {
+        let transition = state.transitions().first()?;
+        if state.transitions().len() != 1 {
             return None;
         }
         let (step, target) = compile_generated_parser_transition(
@@ -3499,12 +3506,12 @@ fn compile_generated_parser_path(
 
 fn compile_generated_parser_decision_state(
     context: &GeneratedParserCompileContext<'_>,
-    state: &antlr4_runtime::atn::AtnState,
+    state: ParserAtnState<'_>,
     decision: usize,
     stop_state: usize,
     visited: &mut BTreeSet<usize>,
 ) -> Option<Vec<GeneratedParserStep>> {
-    match state.kind {
+    match state.kind() {
         AtnStateKind::BlockStart | AtnStateKind::PlusBlockStart | AtnStateKind::StarBlockStart => {
             compile_generated_parser_block_decision(context, state, decision, stop_state, visited)
         }
@@ -3520,16 +3527,16 @@ fn compile_generated_parser_decision_state(
 
 fn compile_generated_parser_block_decision(
     context: &GeneratedParserCompileContext<'_>,
-    state: &antlr4_runtime::atn::AtnState,
+    state: ParserAtnState<'_>,
     decision: usize,
     stop_state: usize,
     visited: &mut BTreeSet<usize>,
 ) -> Option<Vec<GeneratedParserStep>> {
-    let end_state = state.end_state?;
-    let mut alts = Vec::with_capacity(state.transitions.len());
-    for transition in &state.transitions {
+    let end_state = state.end_state()?;
+    let mut alts = Vec::with_capacity(state.transitions().len());
+    for transition in state.transitions() {
         let (step, target) = compile_generated_parser_transition(
-            state.state_number,
+            state.state_number(),
             context.rule_args,
             transition,
             generated_action_state_sets(context),
@@ -3547,11 +3554,11 @@ fn compile_generated_parser_block_decision(
     }
 
     let mut steps = vec![GeneratedParserStep::Decision {
-        state: state.state_number,
+        state: state.state_number(),
         decision,
         track_alt_number: state_tracks_alt_number(state),
         allow_semantic_context: alts.iter().any(|alt| steps_contain_predicate(alt)),
-        force_context: state.non_greedy,
+        force_context: state.non_greedy(),
         fast_path: generated_decision_fast_path(
             context,
             state,
@@ -3569,20 +3576,20 @@ fn compile_generated_parser_block_decision(
 
 fn compile_generated_parser_star_loop(
     context: &GeneratedParserCompileContext<'_>,
-    state: &antlr4_runtime::atn::AtnState,
+    state: ParserAtnState<'_>,
     decision: usize,
     stop_state: usize,
     visited: &mut BTreeSet<usize>,
 ) -> Option<Vec<GeneratedParserStep>> {
     let mut enter = None;
     let mut exit = None;
-    for (index, transition) in state.transitions.iter().enumerate() {
+    for (index, transition) in state.transitions().iter().enumerate() {
         let alt = index + 1;
         let target = transition.target();
         let target_state = context.atn.state(target)?;
-        let target_kind = target_state.kind;
+        let target_kind = target_state.kind();
         if target_kind == AtnStateKind::LoopEnd {
-            exit = Some((alt, transition, target_state.loop_back_state?));
+            exit = Some((alt, transition, target_state.loop_back_state()?));
         } else {
             enter = Some((alt, transition));
         }
@@ -3591,7 +3598,7 @@ fn compile_generated_parser_star_loop(
     let (enter_alt, enter_transition) = enter?;
     let (exit_alt, exit_transition, loop_back_state) = exit?;
     let (enter_step, enter_target) = compile_generated_parser_transition(
-        state.state_number,
+        state.state_number(),
         context.rule_args,
         enter_transition,
         generated_action_state_sets(context),
@@ -3610,7 +3617,7 @@ fn compile_generated_parser_star_loop(
     }
 
     let (exit_step, exit_target) = compile_generated_parser_transition(
-        state.state_number,
+        state.state_number(),
         context.rule_args,
         exit_transition,
         generated_action_state_sets(context),
@@ -3621,13 +3628,13 @@ fn compile_generated_parser_star_loop(
     }
 
     let mut steps = vec![GeneratedParserStep::StarLoop {
-        state: state.state_number,
+        state: state.state_number(),
         decision,
         enter_alt,
         exit_alt,
         track_alt_number: state_tracks_alt_number(state),
         allow_semantic_context: steps_contain_predicate(&body),
-        force_context: state.non_greedy,
+        force_context: state.non_greedy(),
         plus_loop: false,
         fast_path: None,
         body,
@@ -3643,18 +3650,18 @@ fn compile_generated_parser_star_loop(
 
 fn compile_generated_parser_plus_loop(
     context: &GeneratedParserCompileContext<'_>,
-    state: &antlr4_runtime::atn::AtnState,
+    state: ParserAtnState<'_>,
     decision: usize,
     stop_state: usize,
     visited: &mut BTreeSet<usize>,
 ) -> Option<Vec<GeneratedParserStep>> {
     let mut enter = None;
     let mut exit = None;
-    for (index, transition) in state.transitions.iter().enumerate() {
+    for (index, transition) in state.transitions().iter().enumerate() {
         let alt = index + 1;
         let target = transition.target();
         let target_state = context.atn.state(target)?;
-        if target_state.kind == AtnStateKind::LoopEnd {
+        if target_state.kind() == AtnStateKind::LoopEnd {
             exit = Some((alt, transition));
         } else {
             enter = Some((alt, transition));
@@ -3663,7 +3670,7 @@ fn compile_generated_parser_plus_loop(
 
     let (enter_alt, enter_transition) = enter?;
     let (enter_step, enter_target) = compile_generated_parser_transition(
-        state.state_number,
+        state.state_number(),
         context.rule_args,
         enter_transition,
         generated_action_state_sets(context),
@@ -3674,7 +3681,7 @@ fn compile_generated_parser_plus_loop(
     body.extend(compile_generated_parser_path(
         context,
         enter_target,
-        state.state_number,
+        state.state_number(),
         &mut body_visited,
     )?);
     if !steps_may_consume(&body) {
@@ -3683,7 +3690,7 @@ fn compile_generated_parser_plus_loop(
 
     let (exit_alt, exit_transition) = exit?;
     let (exit_step, exit_target) = compile_generated_parser_transition(
-        state.state_number,
+        state.state_number(),
         context.rule_args,
         exit_transition,
         generated_action_state_sets(context),
@@ -3694,13 +3701,13 @@ fn compile_generated_parser_plus_loop(
     }
 
     let mut steps = vec![GeneratedParserStep::StarLoop {
-        state: state.state_number,
+        state: state.state_number(),
         decision,
         enter_alt,
         exit_alt,
         track_alt_number: state_tracks_alt_number(state),
         allow_semantic_context: steps_contain_predicate(&body),
-        force_context: state.non_greedy,
+        force_context: state.non_greedy(),
         plus_loop: true,
         fast_path: None,
         body,
@@ -3811,51 +3818,51 @@ fn generated_rule_call_precedence(
 fn compile_generated_parser_transition(
     source_state: usize,
     rule_args: &[(usize, usize, RuleArgTemplate)],
-    transition: &Transition,
+    transition: ParserTransition<'_>,
     action_states: ActionStateSets<'_>,
     predicate_coordinates: PredicateCoordinateSets<'_>,
 ) -> Option<(Option<GeneratedParserStep>, usize)> {
-    match transition {
-        Transition::Epsilon { target } => Some((None, *target)),
-        Transition::Atom { target, label } => Some((
+    match transition.data() {
+        ParserTransitionData::Epsilon { target } => Some((None, target)),
+        ParserTransitionData::Atom { target, label } => Some((
             Some(GeneratedParserStep::MatchToken {
-                token_type: *label,
-                follow_state: *target,
+                token_type: label,
+                follow_state: target,
             }),
-            *target,
+            target,
         )),
-        Transition::Range {
+        ParserTransitionData::Range {
             target,
             start,
             stop,
         } => Some((
             Some(GeneratedParserStep::MatchSet {
-                intervals: vec![(*start, *stop)],
-                follow_state: *target,
+                intervals: vec![(start, stop)],
+                follow_state: target,
             }),
-            *target,
+            target,
         )),
-        Transition::Set { target, set } => Some((
+        ParserTransitionData::Set { target, set } => Some((
             Some(GeneratedParserStep::MatchSet {
-                intervals: set.ranges().to_vec(),
-                follow_state: *target,
+                intervals: set.ranges().collect(),
+                follow_state: target,
             }),
-            *target,
+            target,
         )),
-        Transition::NotSet { target, set } => Some((
+        ParserTransitionData::NotSet { target, set } => Some((
             Some(GeneratedParserStep::MatchNotSet {
-                intervals: set.ranges().to_vec(),
-                follow_state: *target,
+                intervals: set.ranges().collect(),
+                follow_state: target,
             }),
-            *target,
+            target,
         )),
-        Transition::Wildcard { target } => Some((
+        ParserTransitionData::Wildcard { target } => Some((
             Some(GeneratedParserStep::MatchWildcard {
-                follow_state: *target,
+                follow_state: target,
             }),
-            *target,
+            target,
         )),
-        Transition::Rule {
+        ParserTransitionData::Rule {
             rule_index,
             follow_state,
             precedence,
@@ -3863,62 +3870,62 @@ fn compile_generated_parser_transition(
         } => Some((
             Some(GeneratedParserStep::CallRule {
                 source_state,
-                rule_index: *rule_index,
+                rule_index,
                 precedence: generated_rule_call_precedence(
                     rule_args,
                     source_state,
-                    *rule_index,
-                    *precedence,
+                    rule_index,
+                    precedence,
                 )?,
             }),
-            *follow_state,
+            follow_state,
         )),
-        Transition::Action {
+        ParserTransitionData::Action {
             target, rule_index, ..
         } if action_states.generated.contains(&source_state) => Some((
             Some(GeneratedParserStep::Action {
                 source_state,
-                rule_index: *rule_index,
+                rule_index,
             }),
-            *target,
+            target,
         )),
-        Transition::Action {
+        ParserTransitionData::Action {
             target,
             action_index: None,
             ..
-        } if !action_states.all.contains(&source_state) => Some((None, *target)),
-        Transition::Predicate {
+        } if !action_states.all.contains(&source_state) => Some((None, target)),
+        ParserTransitionData::Predicate {
             target,
             rule_index,
             pred_index,
             ..
         } if predicate_coordinates
             .generated
-            .contains(&(*rule_index, *pred_index)) =>
+            .contains(&(rule_index, pred_index)) =>
         {
             Some((
                 Some(GeneratedParserStep::Predicate {
-                    rule_index: *rule_index,
-                    pred_index: *pred_index,
+                    rule_index,
+                    pred_index,
                 }),
-                *target,
+                target,
             ))
         }
-        Transition::Predicate {
+        ParserTransitionData::Predicate {
             rule_index,
             pred_index,
             ..
         } if predicate_coordinates
             .all
-            .contains(&(*rule_index, *pred_index)) =>
+            .contains(&(rule_index, pred_index)) =>
         {
             None
         }
-        Transition::Predicate { target, .. } => Some((None, *target)),
-        Transition::Precedence { target, precedence } => {
-            Some((Some(GeneratedParserStep::Precedence(*precedence)), *target))
+        ParserTransitionData::Predicate { target, .. } => Some((None, target)),
+        ParserTransitionData::Precedence { target, precedence } => {
+            Some((Some(GeneratedParserStep::Precedence(precedence)), target))
         }
-        Transition::Action { .. } => None,
+        ParserTransitionData::Action { .. } => None,
     }
 }
 
@@ -6026,7 +6033,7 @@ fn build_portable_local_data(
         out.required_generated_rules.insert(slot.rule_index);
     }
 
-    let coordinates = lexer_predicate_transitions(data)?;
+    let coordinates = parser_predicate_transitions(data)?;
     let mut predicate_index = 0;
     let mut offset = 0;
     while let Some(block) = next_predicate_action_block(source, offset) {
@@ -6093,10 +6100,10 @@ struct DecisionAltLook {
 /// output therefore only match Java when the generated routing agrees.
 fn tool_decision_analysis(data: &InterpData) -> io::Result<ToolDecisionAnalysis> {
     let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
-        .deserialize()
+        .deserialize_parser()
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     let mut analysis = ToolDecisionAnalysis::default();
-    for (decision, &state_number) in atn.decision_to_state().iter().enumerate() {
+    for (decision, state_number) in atn.decision_to_state().iter().enumerate() {
         let Some(state) = atn.state(state_number) else {
             continue;
         };
@@ -6104,12 +6111,12 @@ fn tool_decision_analysis(data: &InterpData) -> io::Result<ToolDecisionAnalysis>
         // precedence decisions, disjoint LOOK or not — Java always emits
         // `adaptivePredict` for them (a token switch would make a
         // non-greedy loop greedy).
-        if state.non_greedy || state.precedence_rule_decision {
+        if state.non_greedy() || state.precedence_rule_decision() {
             analysis.adaptive_decisions.insert(decision);
             continue;
         }
         let looks: Vec<DecisionAltLook> = state
-            .transitions
+            .transitions()
             .iter()
             .map(|transition| {
                 let mut look = DecisionAltLook::default();
@@ -6179,7 +6186,7 @@ fn decision_alt_looks_disjoint(looks: &[DecisionAltLook]) -> bool {
 }
 
 struct DecisionLookWalk<'a> {
-    atn: &'a Atn,
+    atn: &'a ParserAtn,
     /// Java's `lookBusy`: (state, calling context) pairs already expanded.
     busy: BTreeSet<(usize, Vec<usize>)>,
     /// Java's `calledRuleStack`: rules on the walk's invocation path, the
@@ -6200,47 +6207,49 @@ impl DecisionLookWalk<'_> {
         let Some(state) = self.atn.state(state_number) else {
             return;
         };
-        if state.kind == AtnStateKind::RuleStop {
+        if state.kind() == AtnStateKind::RuleStop {
             if let Some(return_state) = ctx.pop() {
                 let cleared = state
-                    .rule_index
+                    .rule_index()
                     .map(|rule| std::mem::replace(&mut self.called_rules[rule], false));
                 self.walk(return_state, ctx, look);
-                if let (Some(rule), Some(flag)) = (state.rule_index, cleared) {
+                if let (Some(rule), Some(flag)) = (state.rule_index(), cleared) {
                     self.called_rules[rule] = flag;
                 }
                 ctx.push(return_state);
                 return;
             }
-            if state.transitions.is_empty() {
+            if state.transitions().is_empty() {
                 // The walk escaped through a stop state with no call sites —
                 // the start rule's end, where the only lookahead is EOF.
                 look.symbols.insert(TOKEN_EOF);
                 return;
             }
         }
-        for transition in &state.transitions {
-            match transition {
-                Transition::Rule {
+        for transition in state.transitions() {
+            match transition.data() {
+                ParserTransitionData::Rule {
                     target,
                     rule_index,
                     follow_state,
                     ..
                 } => {
-                    if self.called_rules.get(*rule_index).copied().unwrap_or(true) {
+                    if self.called_rules.get(rule_index).copied().unwrap_or(true) {
                         continue;
                     }
-                    self.called_rules[*rule_index] = true;
-                    ctx.push(*follow_state);
-                    self.walk(*target, ctx, look);
+                    self.called_rules[rule_index] = true;
+                    ctx.push(follow_state);
+                    self.walk(target, ctx, look);
                     ctx.pop();
-                    self.called_rules[*rule_index] = false;
+                    self.called_rules[rule_index] = false;
                 }
-                Transition::Predicate { .. } | Transition::Precedence { .. } => {
+                ParserTransitionData::Predicate { .. }
+                | ParserTransitionData::Precedence { .. } => {
                     look.hit_pred = true;
                 }
-                Transition::Epsilon { target } | Transition::Action { target, .. } => {
-                    self.walk(*target, ctx, look);
+                ParserTransitionData::Epsilon { target }
+                | ParserTransitionData::Action { target, .. } => {
+                    self.walk(target, ctx, look);
                 }
                 _ => {
                     // Terminal edge: enumerate the vocabulary through the
@@ -6314,7 +6323,7 @@ fn build_embedded_parser_data(
     }
 
     // Predicates: same source walk/coordinate pairing as non-embedded mode.
-    let coordinates = lexer_predicate_transitions(data)?;
+    let coordinates = parser_predicate_transitions(data)?;
     let mut predicate_index = 0;
     let mut pred_offset = 0;
     while let Some(block) = next_predicate_action_block(source, pred_offset) {
@@ -6508,13 +6517,13 @@ fn embedded_rule_call_args(
     calls.sort_by_key(|(start, _, _)| *start);
 
     let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
-        .deserialize()
+        .deserialize_parser()
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     let mut rule_transitions = Vec::new();
     for state in atn.states() {
-        for transition in &state.transitions {
-            if let Transition::Rule { rule_index, .. } = transition {
-                rule_transitions.push((state.state_number, *rule_index));
+        for transition in state.transitions() {
+            if let ParserTransitionData::Rule { rule_index, .. } = transition.data() {
+                rule_transitions.push((state.state_number(), rule_index));
             }
         }
     }
@@ -7096,7 +7105,13 @@ fn render_parser_with_options(
     let empty_patterns = SemPatternFile::default();
     let patterns = options.patterns.unwrap_or(&empty_patterns);
     let type_name = rust_type_name(grammar_name);
-    let metadata = render_metadata(grammar_name, data);
+    let metadata = render_parser_metadata(grammar_name, data);
+    let parser_atn_data = render_u32_slice(
+        AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
+            .deserialize_parser()
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?
+            .packed_words(),
+    );
     let token_constants = render_token_constants(data);
     let rule_constants = render_rule_constants(data);
     // Embedded mode: the grammar carries real Rust action/predicate bodies
@@ -7186,7 +7201,7 @@ fn render_parser_with_options(
     // inventory is read from the ATN even without grammar source.
     let predicate_coordinates =
         if grammar_source.is_some() || options.sem_unknown != SemUnknownPolicy::AssumeTrue {
-            lexer_predicate_transitions(data)?
+            parser_predicate_transitions(data)?
         } else {
             Vec::new()
         }
@@ -7329,8 +7344,7 @@ fn render_parser_with_options(
         r#"{generated_header}use antlr4_runtime::recognizer::RecognizerData;
 use antlr4_runtime::token::TokenSource;
 use antlr4_runtime::token_stream::CommonTokenStream;
-use antlr4_runtime::atn::Atn;
-use antlr4_runtime::atn::serialized::AtnDeserializer;
+use antlr4_runtime::atn::parser_atn::ParserAtn;
 use antlr4_runtime::{{BaseParser, GeneratedParser, GrammarMetadata, Parser, Recognizer}};
 use std::sync::OnceLock;
 {embedded_imports}
@@ -7343,16 +7357,20 @@ use std::sync::OnceLock;
 {embedded_attrs_structs}
 {embedded_module_items}
 
-static ATN_CELL: OnceLock<Atn> = OnceLock::new();
+static PARSER_ATN_DATA: &[u32] = &{parser_atn_data};
+static ATN_CELL: OnceLock<ParserAtn> = OnceLock::new();
 
-/// Deserializes and caches the grammar ATN for all parser instances.
-fn atn() -> &'static Atn {{
+/// Validates and caches the packed grammar ATN for all parser instances.
+fn atn() -> &'static ParserAtn {{
     ATN_CELL.get_or_init(|| {{
-        let serialized = metadata().serialized_atn();
-        AtnDeserializer::new(&serialized)
-            .deserialize()
-            .expect("generated parser contains a valid ANTLR serialized ATN")
+        ParserAtn::from_static(PARSER_ATN_DATA)
+            .unwrap_or_else(|error| panic!("generated parser ATN is incompatible with this runtime: {{error}}"))
     }})
+}}
+
+/// Borrows the validated packed parser ATN embedded in this module.
+pub fn parser_atn() -> &'static ParserAtn {{
+    atn()
 }}
 
 {parse_convenience}
@@ -7585,6 +7603,10 @@ where
 {{
     fn metadata() -> &'static GrammarMetadata {{
         metadata()
+    }}
+
+    fn parser_atn() -> &'static ParserAtn {{
+        parser_atn()
     }}
 }}
 
@@ -8105,7 +8127,7 @@ fn parser_predicate_templates_from_overrides(
     patterns: &SemPatternFile,
 ) -> io::Result<Vec<((usize, usize), PredicateTemplate)>> {
     let mut mapped = Vec::new();
-    for (rule_index, pred_index) in lexer_predicate_transitions(data)? {
+    for (rule_index, pred_index) in parser_predicate_transitions(data)? {
         if let Some(Some(template)) = patterns.coordinate_predicate_template(
             SemanticsKind::ParserPredicate,
             data.rule_names.get(rule_index).map(String::as_str),
@@ -8122,7 +8144,7 @@ fn parser_predicate_templates(
     grammar_source: &str,
     patterns: &SemPatternFile,
 ) -> io::Result<Vec<((usize, usize), PredicateTemplate)>> {
-    let predicates = lexer_predicate_transitions(data)?;
+    let predicates = parser_predicate_transitions(data)?;
     let mut mapped = Vec::new();
     let mut offset = 0;
     let mut predicate_index = 0;
@@ -8956,7 +8978,7 @@ fn lexer_predicate_transitions(data: &InterpData) -> io::Result<Vec<(usize, usiz
     let mut predicates = Vec::new();
     for state in atn.states() {
         for transition in &state.transitions {
-            if let Transition::Predicate {
+            if let LexerTransition::Predicate {
                 rule_index,
                 pred_index,
                 ..
@@ -8969,19 +8991,40 @@ fn lexer_predicate_transitions(data: &InterpData) -> io::Result<Vec<(usize, usiz
     Ok(predicates)
 }
 
+/// Reads the packed parser ATN to locate semantic predicate coordinates.
+fn parser_predicate_transitions(data: &InterpData) -> io::Result<Vec<(usize, usize)>> {
+    let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
+        .deserialize_parser()
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    let mut predicates = Vec::new();
+    for state in atn.states() {
+        for transition in state.transitions() {
+            if let ParserTransitionData::Predicate {
+                rule_index,
+                pred_index,
+                ..
+            } = transition.data()
+            {
+                predicates.push((rule_index, pred_index));
+            }
+        }
+    }
+    Ok(predicates)
+}
+
 /// Reads the parser ATN to locate action-transition source states.
 fn parser_action_states(data: &InterpData) -> io::Result<Vec<usize>> {
     let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
-        .deserialize()
+        .deserialize_parser()
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     let mut states = Vec::new();
     for state in atn.states() {
         if state
-            .transitions
+            .transitions()
             .iter()
-            .any(|transition| matches!(transition, Transition::Action { .. }))
+            .any(|transition| matches!(transition.data(), ParserTransitionData::Action { .. }))
         {
-            states.push(state.state_number);
+            states.push(state.state_number());
         }
     }
     Ok(states)
@@ -8990,13 +9033,13 @@ fn parser_action_states(data: &InterpData) -> io::Result<Vec<usize>> {
 /// Reads the parser ATN action transitions keyed by source state.
 fn parser_action_state_rules(data: &InterpData) -> io::Result<BTreeMap<usize, usize>> {
     let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
-        .deserialize()
+        .deserialize_parser()
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     let mut states = BTreeMap::new();
     for state in atn.states() {
-        for transition in &state.transitions {
-            if let Transition::Action { rule_index, .. } = transition {
-                states.insert(state.state_number, *rule_index);
+        for transition in state.transitions() {
+            if let ParserTransitionData::Action { rule_index, .. } = transition.data() {
+                states.insert(state.state_number(), rule_index);
             }
         }
     }
@@ -9140,13 +9183,13 @@ fn parser_rule_args(
         return Ok(Vec::new());
     }
     let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
-        .deserialize()
+        .deserialize_parser()
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     let mut rule_transitions = Vec::new();
     for state in atn.states() {
-        for transition in &state.transitions {
-            if let Transition::Rule { rule_index, .. } = transition {
-                rule_transitions.push((state.state_number, *rule_index));
+        for transition in state.transitions() {
+            if let ParserTransitionData::Rule { rule_index, .. } = transition.data() {
+                rule_transitions.push((state.state_number(), rule_index));
             }
         }
     }
@@ -9477,7 +9520,7 @@ fn render_parser_action_method(has_action_states: bool, noop_states: &BTreeSet<u
 
 fn likely_parser_entry_rule_indices(data: &InterpData) -> io::Result<Vec<usize>> {
     let atn = AtnDeserializer::new(&SerializedAtn::from_i32(&data.atn))
-        .deserialize()
+        .deserialize_parser()
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     Ok(likely_parser_entry_rule_indices_from_atn(
         &atn,
@@ -9485,17 +9528,17 @@ fn likely_parser_entry_rule_indices(data: &InterpData) -> io::Result<Vec<usize>>
     ))
 }
 
-fn likely_parser_entry_rule_indices_from_atn(atn: &Atn, rule_count: usize) -> Vec<usize> {
+fn likely_parser_entry_rule_indices_from_atn(atn: &ParserAtn, rule_count: usize) -> Vec<usize> {
     let mut called_by_other_rule = vec![false; rule_count];
     for state in atn.states() {
-        for transition in &state.transitions {
-            let Transition::Rule { rule_index, .. } = transition else {
+        for transition in state.transitions() {
+            let ParserTransitionData::Rule { rule_index, .. } = transition.data() else {
                 continue;
             };
-            if *rule_index >= rule_count || state.rule_index == Some(*rule_index) {
+            if rule_index >= rule_count || state.rule_index() == Some(rule_index) {
                 continue;
             }
-            called_by_other_rule[*rule_index] = true;
+            called_by_other_rule[rule_index] = true;
         }
     }
     called_by_other_rule
@@ -9572,6 +9615,20 @@ fn render_parser_rustdoc(
 
 /// Renders static grammar metadata shared by generated lexers and parsers.
 fn render_metadata(grammar_name: &str, data: &InterpData) -> String {
+    render_metadata_with_atn(grammar_name, data, &data.atn)
+}
+
+/// Parser modules carry the versioned packed ATN separately, so retaining the
+/// legacy serialized integer stream in metadata would duplicate the artifact.
+fn render_parser_metadata(grammar_name: &str, data: &InterpData) -> String {
+    render_metadata_with_atn(grammar_name, data, &[])
+}
+
+fn render_metadata_with_atn(
+    grammar_name: &str,
+    data: &InterpData,
+    serialized_atn: &[i32],
+) -> String {
     format!(
         "pub static METADATA: GrammarMetadata = GrammarMetadata::new(\n    \"{}\",\n    &{},\n    &{},\n    &{},\n    &{},\n    &{},\n    &{},\n    &{},\n);\n\npub fn metadata() -> &'static GrammarMetadata {{\n    &METADATA\n}}\n\npub fn rule_names() -> &'static [&'static str] {{\n    METADATA.rule_names()\n}}\n",
         rust_string(grammar_name),
@@ -9581,7 +9638,7 @@ fn render_metadata(grammar_name: &str, data: &InterpData) -> String {
         render_empty_option_str_slice(max_len(&data.literal_names, &data.symbolic_names)),
         render_str_slice(&data.channel_names),
         render_str_slice(&data.mode_names),
-        render_i32_slice(&data.atn)
+        render_i32_slice(serialized_atn)
     )
 }
 
@@ -9652,6 +9709,16 @@ fn render_i32_slice(values: &[i32]) -> String {
     let items = values
         .iter()
         .map(i32::to_string)
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("[{items}]")
+}
+
+/// Renders a versioned packed parser ATN word stream.
+fn render_u32_slice(values: &[u32]) -> String {
+    let items = values
+        .iter()
+        .map(u32::to_string)
         .collect::<Vec<_>>()
         .join(", ");
     format!("[{items}]")
@@ -9941,7 +10008,7 @@ fn parser_typed_hook_mappings(
     let Some(grammar_source) = grammar_source else {
         return Ok(Vec::new());
     };
-    let coordinates = lexer_predicate_transitions(data)?;
+    let coordinates = parser_predicate_transitions(data)?;
     let mut mappings = Vec::new();
     let mut offset = 0;
     let mut predicate_index = 0;
@@ -10495,7 +10562,7 @@ fn grammar_name_from_path(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use antlr4_runtime::atn::{AtnState, AtnType, IntervalSet};
+    use antlr4_runtime::atn::parser_atn::{ParserAtnBuilder, ParserTransitionSpec};
 
     #[test]
     fn parses_interp_sections() {
@@ -10605,6 +10672,21 @@ atn:
     }
 
     #[test]
+    fn generated_parser_embeds_only_versioned_packed_atn_data() {
+        let rendered =
+            render_parser("TParser", &minimal_parser_data(), None).expect("parser should render");
+
+        assert!(rendered.contains("static PARSER_ATN_DATA: &[u32]"));
+        assert!(rendered.contains("static ATN_CELL: OnceLock<ParserAtn>"));
+        assert!(rendered.contains("ParserAtn::from_static(PARSER_ATN_DATA)"));
+        assert!(rendered.contains("generated parser ATN is incompatible with this runtime"));
+        assert!(rendered.contains("pub fn parser_atn() -> &'static ParserAtn"));
+        assert!(rendered.contains("fn parser_atn() -> &'static ParserAtn"));
+        assert!(!rendered.contains("AtnDeserializer"));
+        assert!(!rendered.contains("SerializedAtn"));
+    }
+
+    #[test]
     fn parser_rule_method_names_reserve_token_stream_accessors() {
         let rule_names = vec![
             "tokenStream".to_owned(),
@@ -10628,7 +10710,7 @@ atn:
     fn generated_modules_start_with_file_level_header() {
         let lexer = render_lexer(
             "TLexer",
-            &minimal_parser_data(),
+            &predicate_lexer_data(),
             None,
             false,
             SemUnknownPolicy::default(),
@@ -10660,7 +10742,7 @@ atn:
     }
 
     fn compile_test_parser_rule(
-        atn: &Atn,
+        atn: &ParserAtn,
         rule_index: usize,
         inline_action_states: &BTreeSet<usize>,
     ) -> Option<GeneratedParserRule> {
@@ -10680,6 +10762,40 @@ atn:
             generated_predicate_coordinates: &generated_predicate_coordinates,
         };
         compile_generated_parser_rule(&context, rule_index)
+    }
+
+    fn finish_atn(builder: ParserAtnBuilder) -> ParserAtn {
+        builder.finish().expect("valid packed parser ATN")
+    }
+
+    fn transition_atn(
+        make_transition: impl FnOnce(&mut ParserAtnBuilder) -> ParserTransitionSpec,
+    ) -> ParserAtn {
+        let mut builder = ParserAtnBuilder::new(10);
+        for _ in 0..10 {
+            builder
+                .add_state(AtnStateKind::Basic, Some(0))
+                .expect("state");
+        }
+        builder
+            .set_rule_to_start_state(vec![0, 0, 0])
+            .expect("rule start states");
+        builder
+            .set_rule_to_stop_state(vec![9, 9, 9])
+            .expect("rule stop states");
+        let transition = make_transition(&mut builder);
+        builder
+            .add_transition(0, transition)
+            .expect("test transition");
+        finish_atn(builder)
+    }
+
+    fn only_transition(atn: &ParserAtn) -> ParserTransition<'_> {
+        atn.state(0)
+            .expect("transition source")
+            .transitions()
+            .first()
+            .expect("test transition")
     }
 
     fn mt(token_type: i32, follow_state: usize) -> GeneratedParserStep {
@@ -11272,16 +11388,17 @@ atn:
 
     #[test]
     fn compiles_token_set_transitions() {
-        let range = Transition::Range {
+        let range_atn = transition_atn(|_| ParserTransitionSpec::Range {
             target: 7,
             start: 2,
             stop: 4,
-        };
+        });
+        let range = only_transition(&range_atn);
         assert_eq!(
             compile_generated_parser_transition(
                 3,
                 &[],
-                &range,
+                range,
                 ActionStateSets {
                     all: &BTreeSet::new(),
                     generated: &BTreeSet::new(),
@@ -11295,15 +11412,16 @@ atn:
             Some((Some(ms(vec![(2, 4)], 7)), 7))
         );
 
-        let mut set = IntervalSet::new();
-        set.add(1);
-        set.add_range(5, 6);
-        let set_transition = Transition::Set { target: 8, set };
+        let set_atn = transition_atn(|builder| {
+            let set = builder.add_interval_set([(1, 1), (5, 6)]).expect("set");
+            ParserTransitionSpec::Set { target: 8, set }
+        });
+        let set_transition = only_transition(&set_atn);
         assert_eq!(
             compile_generated_parser_transition(
                 3,
                 &[],
-                &set_transition,
+                set_transition,
                 ActionStateSets {
                     all: &BTreeSet::new(),
                     generated: &BTreeSet::new(),
@@ -11317,17 +11435,16 @@ atn:
             Some((Some(ms(vec![(1, 1), (5, 6)], 8)), 8))
         );
 
-        let mut not_set = IntervalSet::new();
-        not_set.add(1);
-        let not_set_transition = Transition::NotSet {
-            target: 9,
-            set: not_set,
-        };
+        let not_set_atn = transition_atn(|builder| {
+            let set = builder.add_interval_set([(1, 1)]).expect("set");
+            ParserTransitionSpec::NotSet { target: 9, set }
+        });
+        let not_set_transition = only_transition(&not_set_atn);
         assert_eq!(
             compile_generated_parser_transition(
                 3,
                 &[],
-                &not_set_transition,
+                not_set_transition,
                 ActionStateSets {
                     all: &BTreeSet::new(),
                     generated: &BTreeSet::new(),
@@ -11344,17 +11461,18 @@ atn:
 
     #[test]
     fn compiles_generated_action_transitions_only_for_allowed_states() {
-        let action = Transition::Action {
+        let action_atn = transition_atn(|_| ParserTransitionSpec::Action {
             target: 8,
             rule_index: 2,
             action_index: Some(0),
             context_dependent: false,
-        };
+        });
+        let action = only_transition(&action_atn);
         assert_eq!(
             compile_generated_parser_transition(
                 4,
                 &[],
-                &action,
+                action,
                 ActionStateSets {
                     all: &BTreeSet::new(),
                     generated: &BTreeSet::new(),
@@ -11374,7 +11492,7 @@ atn:
             compile_generated_parser_transition(
                 4,
                 &[],
-                &action,
+                action,
                 ActionStateSets {
                     all: &BTreeSet::new(),
                     generated: &generated_action_states,
@@ -11397,18 +11515,19 @@ atn:
 
     #[test]
     fn compiles_rule_call_precedence_from_rule_args() {
-        let rule = Transition::Rule {
+        let rule_atn = transition_atn(|_| ParserTransitionSpec::Rule {
             target: 1,
             rule_index: 2,
             follow_state: 8,
             precedence: 0,
-        };
+        });
+        let rule = only_transition(&rule_atn);
 
         assert_eq!(
             compile_generated_parser_transition(
                 4,
                 &[(4, 2, RuleArgTemplate::Literal(6))],
-                &rule,
+                rule,
                 ActionStateSets {
                     all: &BTreeSet::new(),
                     generated: &BTreeSet::new(),
@@ -11433,7 +11552,7 @@ atn:
             compile_generated_parser_transition(
                 4,
                 &[(4, 2, RuleArgTemplate::InheritLocal)],
-                &rule,
+                rule,
                 ActionStateSets {
                     all: &BTreeSet::new(),
                     generated: &BTreeSet::new(),
@@ -11495,17 +11614,18 @@ atn:
 
     #[test]
     fn compiles_synthetic_noop_action_transitions_as_epsilon() {
-        let action = Transition::Action {
+        let action_atn = transition_atn(|_| ParserTransitionSpec::Action {
             target: 8,
             rule_index: 2,
             action_index: None,
             context_dependent: false,
-        };
+        });
+        let action = only_transition(&action_atn);
         assert_eq!(
             compile_generated_parser_transition(
                 4,
                 &[],
-                &action,
+                action,
                 ActionStateSets {
                     all: &BTreeSet::new(),
                     generated: &BTreeSet::new(),
@@ -11522,19 +11642,20 @@ atn:
 
     #[test]
     fn rejects_known_non_inline_noop_action_transitions() {
-        let action = Transition::Action {
+        let action_atn = transition_atn(|_| ParserTransitionSpec::Action {
             target: 8,
             rule_index: 2,
             action_index: None,
             context_dependent: false,
-        };
+        });
+        let action = only_transition(&action_atn);
         let mut action_states = BTreeSet::new();
         action_states.insert(4);
         assert_eq!(
             compile_generated_parser_transition(
                 4,
                 &[],
-                &action,
+                action,
                 ActionStateSets {
                     all: &action_states,
                     generated: &BTreeSet::new(),
@@ -11551,18 +11672,19 @@ atn:
 
     #[test]
     fn compiles_parser_predicates_as_viable_when_no_metadata_is_active() {
-        let predicate = Transition::Predicate {
+        let predicate_atn = transition_atn(|_| ParserTransitionSpec::Predicate {
             target: 8,
             rule_index: 2,
             pred_index: 1,
             context_dependent: false,
-        };
+        });
+        let predicate = only_transition(&predicate_atn);
 
         assert_eq!(
             compile_generated_parser_transition(
                 4,
                 &[],
-                &predicate,
+                predicate,
                 ActionStateSets {
                     all: &BTreeSet::new(),
                     generated: &BTreeSet::new(),
@@ -11579,12 +11701,13 @@ atn:
 
     #[test]
     fn compiles_generated_parser_predicate_transitions() {
-        let predicate = Transition::Predicate {
+        let predicate_atn = transition_atn(|_| ParserTransitionSpec::Predicate {
             target: 8,
             rule_index: 2,
             pred_index: 1,
             context_dependent: false,
-        };
+        });
+        let predicate = only_transition(&predicate_atn);
         let mut predicates = BTreeSet::new();
         predicates.insert((2, 1));
         let generated_predicates = predicates.clone();
@@ -11593,7 +11716,7 @@ atn:
             compile_generated_parser_transition(
                 4,
                 &[],
-                &predicate,
+                predicate,
                 ActionStateSets {
                     all: &BTreeSet::new(),
                     generated: &BTreeSet::new(),
@@ -11698,12 +11821,13 @@ atn:
 
     #[test]
     fn rejects_known_parser_predicates_without_generated_metadata() {
-        let predicate = Transition::Predicate {
+        let predicate_atn = transition_atn(|_| ParserTransitionSpec::Predicate {
             target: 8,
             rule_index: 2,
             pred_index: 1,
             context_dependent: false,
-        };
+        });
+        let predicate = only_transition(&predicate_atn);
         let mut predicates = BTreeSet::new();
         predicates.insert((2, 1));
 
@@ -11711,7 +11835,7 @@ atn:
             compile_generated_parser_transition(
                 4,
                 &[],
-                &predicate,
+                predicate,
                 ActionStateSets {
                     all: &BTreeSet::new(),
                     generated: &BTreeSet::new(),
@@ -13312,333 +13436,600 @@ ID: [a-z]+ { customJava(); };
         assert_eq!(summary, format!("{}...", "a".repeat(95)));
     }
 
-    fn linear_rule_atn() -> Atn {
-        let mut atn = Atn::new(AtnType::Parser, 2);
-        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
-        atn.add_state(AtnState::new(1, AtnStateKind::Basic).with_rule_index(0));
-        atn.add_state(AtnState::new(2, AtnStateKind::Basic).with_rule_index(0));
-        atn.add_state(AtnState::new(3, AtnStateKind::RuleStop).with_rule_index(0));
-        atn.state_mut(0)
-            .expect("state 0")
-            .add_transition(Transition::Epsilon { target: 1 });
-        atn.state_mut(1)
-            .expect("state 1")
-            .add_transition(Transition::Atom {
+    fn linear_rule_atn() -> ParserAtn {
+        let mut atn = ParserAtnBuilder::new(2);
+        assert_eq!(
+            atn.add_state(AtnStateKind::RuleStart, Some(0))
+                .expect("state")
+                .index(),
+            0
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::Basic, Some(0))
+                .expect("state")
+                .index(),
+            1
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::Basic, Some(0))
+                .expect("state")
+                .index(),
+            2
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::RuleStop, Some(0))
+                .expect("state")
+                .index(),
+            3
+        );
+        atn.add_transition(0, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("transition");
+        atn.add_transition(
+            1,
+            ParserTransitionSpec::Atom {
                 target: 2,
                 label: 1,
-            });
-        atn.state_mut(2)
-            .expect("state 2")
-            .add_transition(Transition::Atom {
+            },
+        )
+        .expect("transition");
+        atn.add_transition(
+            2,
+            ParserTransitionSpec::Atom {
                 target: 3,
                 label: TOKEN_EOF,
-            });
-        atn.set_rule_to_start_state(vec![0]);
-        atn.set_rule_to_stop_state(vec![3]);
-        atn
+            },
+        )
+        .expect("transition");
+        atn.set_rule_to_start_state(vec![0])
+            .expect("rule start states");
+        atn.set_rule_to_stop_state(vec![3])
+            .expect("rule stop states");
+        finish_atn(atn)
     }
 
-    fn block_decision_atn() -> Atn {
-        let mut atn = Atn::new(AtnType::Parser, 2);
-        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
-        let mut decision = AtnState::new(1, AtnStateKind::BlockStart).with_rule_index(0);
-        decision.end_state = Some(4);
-        atn.add_state(decision);
-        atn.add_state(AtnState::new(2, AtnStateKind::Basic).with_rule_index(0));
-        atn.add_state(AtnState::new(3, AtnStateKind::Basic).with_rule_index(0));
-        atn.add_state(AtnState::new(4, AtnStateKind::BlockEnd).with_rule_index(0));
-        atn.add_state(AtnState::new(5, AtnStateKind::RuleStop).with_rule_index(0));
-        atn.state_mut(0)
-            .expect("state 0")
-            .add_transition(Transition::Epsilon { target: 1 });
-        atn.state_mut(1)
-            .expect("state 1")
-            .add_transition(Transition::Epsilon { target: 2 });
-        atn.state_mut(1)
-            .expect("state 1")
-            .add_transition(Transition::Epsilon { target: 3 });
-        atn.state_mut(2)
-            .expect("state 2")
-            .add_transition(Transition::Atom {
+    fn block_decision_atn() -> ParserAtn {
+        let mut atn = ParserAtnBuilder::new(2);
+        assert_eq!(
+            atn.add_state(AtnStateKind::RuleStart, Some(0))
+                .expect("state")
+                .index(),
+            0
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::BlockStart, Some(0))
+                .expect("state")
+                .index(),
+            1
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::Basic, Some(0))
+                .expect("state")
+                .index(),
+            2
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::Basic, Some(0))
+                .expect("state")
+                .index(),
+            3
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::BlockEnd, Some(0))
+                .expect("state")
+                .index(),
+            4
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::RuleStop, Some(0))
+                .expect("state")
+                .index(),
+            5
+        );
+        atn.set_end_state(1, 4).expect("block end state");
+        atn.add_transition(0, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("transition");
+        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 2 })
+            .expect("transition");
+        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 3 })
+            .expect("transition");
+        atn.add_transition(
+            2,
+            ParserTransitionSpec::Atom {
                 target: 4,
                 label: 1,
-            });
-        atn.state_mut(3)
-            .expect("state 3")
-            .add_transition(Transition::Atom {
+            },
+        )
+        .expect("transition");
+        atn.add_transition(
+            3,
+            ParserTransitionSpec::Atom {
                 target: 4,
                 label: 2,
-            });
-        atn.state_mut(4)
-            .expect("state 4")
-            .add_transition(Transition::Epsilon { target: 5 });
-        atn.add_decision_state(1);
-        atn.set_rule_to_start_state(vec![0]);
-        atn.set_rule_to_stop_state(vec![5]);
-        atn
+            },
+        )
+        .expect("transition");
+        atn.add_transition(4, ParserTransitionSpec::Epsilon { target: 5 })
+            .expect("transition");
+        atn.add_decision_state(1).expect("decision state");
+        atn.set_rule_to_start_state(vec![0])
+            .expect("rule start states");
+        atn.set_rule_to_stop_state(vec![5])
+            .expect("rule stop states");
+        finish_atn(atn)
     }
 
-    fn star_loop_atn() -> Atn {
-        let mut atn = Atn::new(AtnType::Parser, 2);
-        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
-        atn.add_state(AtnState::new(1, AtnStateKind::StarLoopEntry).with_rule_index(0));
-        atn.add_state(AtnState::new(2, AtnStateKind::Basic).with_rule_index(0));
-        let mut loop_end = AtnState::new(3, AtnStateKind::LoopEnd).with_rule_index(0);
-        loop_end.loop_back_state = Some(4);
-        atn.add_state(loop_end);
-        atn.add_state(AtnState::new(4, AtnStateKind::StarLoopBack).with_rule_index(0));
-        atn.add_state(AtnState::new(5, AtnStateKind::RuleStop).with_rule_index(0));
-        atn.state_mut(0)
-            .expect("state 0")
-            .add_transition(Transition::Epsilon { target: 1 });
-        atn.state_mut(1)
-            .expect("state 1")
-            .add_transition(Transition::Epsilon { target: 2 });
-        atn.state_mut(1)
-            .expect("state 1")
-            .add_transition(Transition::Epsilon { target: 3 });
-        atn.state_mut(2)
-            .expect("state 2")
-            .add_transition(Transition::Atom {
+    fn star_loop_atn() -> ParserAtn {
+        let mut atn = ParserAtnBuilder::new(2);
+        assert_eq!(
+            atn.add_state(AtnStateKind::RuleStart, Some(0))
+                .expect("state")
+                .index(),
+            0
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::StarLoopEntry, Some(0))
+                .expect("state")
+                .index(),
+            1
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::Basic, Some(0))
+                .expect("state")
+                .index(),
+            2
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::LoopEnd, Some(0))
+                .expect("state")
+                .index(),
+            3
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::StarLoopBack, Some(0))
+                .expect("state")
+                .index(),
+            4
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::RuleStop, Some(0))
+                .expect("state")
+                .index(),
+            5
+        );
+        atn.set_loop_back_state(3, 4).expect("loop back state");
+        atn.add_transition(0, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("transition");
+        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 2 })
+            .expect("transition");
+        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 3 })
+            .expect("transition");
+        atn.add_transition(
+            2,
+            ParserTransitionSpec::Atom {
                 target: 4,
                 label: 1,
-            });
-        atn.state_mut(4)
-            .expect("state 4")
-            .add_transition(Transition::Epsilon { target: 1 });
-        atn.state_mut(3)
-            .expect("state 3")
-            .add_transition(Transition::Epsilon { target: 5 });
-        atn.add_decision_state(1);
-        atn.set_rule_to_start_state(vec![0]);
-        atn.set_rule_to_stop_state(vec![5]);
-        atn
+            },
+        )
+        .expect("transition");
+        atn.add_transition(4, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("transition");
+        atn.add_transition(3, ParserTransitionSpec::Epsilon { target: 5 })
+            .expect("transition");
+        atn.add_decision_state(1).expect("decision state");
+        atn.set_rule_to_start_state(vec![0])
+            .expect("rule start states");
+        atn.set_rule_to_stop_state(vec![5])
+            .expect("rule stop states");
+        finish_atn(atn)
     }
 
-    fn plus_loop_atn() -> Atn {
-        let mut atn = Atn::new(AtnType::Parser, 2);
-        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
-        let mut plus_start = AtnState::new(1, AtnStateKind::PlusBlockStart).with_rule_index(0);
-        plus_start.end_state = Some(3);
-        atn.add_state(plus_start);
-        atn.add_state(AtnState::new(2, AtnStateKind::Basic).with_rule_index(0));
-        atn.add_state(AtnState::new(3, AtnStateKind::BlockEnd).with_rule_index(0));
-        atn.add_state(AtnState::new(4, AtnStateKind::PlusLoopBack).with_rule_index(0));
-        let mut loop_end = AtnState::new(5, AtnStateKind::LoopEnd).with_rule_index(0);
-        loop_end.loop_back_state = Some(4);
-        atn.add_state(loop_end);
-        atn.add_state(AtnState::new(6, AtnStateKind::RuleStop).with_rule_index(0));
-        atn.state_mut(0)
-            .expect("state 0")
-            .add_transition(Transition::Epsilon { target: 1 });
-        atn.state_mut(1)
-            .expect("state 1")
-            .add_transition(Transition::Epsilon { target: 2 });
-        atn.state_mut(2)
-            .expect("state 2")
-            .add_transition(Transition::Atom {
+    fn plus_loop_atn() -> ParserAtn {
+        let mut atn = ParserAtnBuilder::new(2);
+        assert_eq!(
+            atn.add_state(AtnStateKind::RuleStart, Some(0))
+                .expect("state")
+                .index(),
+            0
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::PlusBlockStart, Some(0))
+                .expect("state")
+                .index(),
+            1
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::Basic, Some(0))
+                .expect("state")
+                .index(),
+            2
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::BlockEnd, Some(0))
+                .expect("state")
+                .index(),
+            3
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::PlusLoopBack, Some(0))
+                .expect("state")
+                .index(),
+            4
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::LoopEnd, Some(0))
+                .expect("state")
+                .index(),
+            5
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::RuleStop, Some(0))
+                .expect("state")
+                .index(),
+            6
+        );
+        atn.set_end_state(1, 3).expect("block end state");
+        atn.set_loop_back_state(5, 4).expect("loop back state");
+        atn.add_transition(0, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("transition");
+        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 2 })
+            .expect("transition");
+        atn.add_transition(
+            2,
+            ParserTransitionSpec::Atom {
                 target: 3,
                 label: 1,
-            });
-        atn.state_mut(3)
-            .expect("state 3")
-            .add_transition(Transition::Epsilon { target: 4 });
-        atn.state_mut(4)
-            .expect("state 4")
-            .add_transition(Transition::Epsilon { target: 1 });
-        atn.state_mut(4)
-            .expect("state 4")
-            .add_transition(Transition::Epsilon { target: 5 });
-        atn.state_mut(5)
-            .expect("state 5")
-            .add_transition(Transition::Epsilon { target: 6 });
-        atn.add_decision_state(4);
-        atn.set_rule_to_start_state(vec![0]);
-        atn.set_rule_to_stop_state(vec![6]);
-        atn
+            },
+        )
+        .expect("transition");
+        atn.add_transition(3, ParserTransitionSpec::Epsilon { target: 4 })
+            .expect("transition");
+        atn.add_transition(4, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("transition");
+        atn.add_transition(4, ParserTransitionSpec::Epsilon { target: 5 })
+            .expect("transition");
+        atn.add_transition(5, ParserTransitionSpec::Epsilon { target: 6 })
+            .expect("transition");
+        atn.add_decision_state(4).expect("decision state");
+        atn.set_rule_to_start_state(vec![0])
+            .expect("rule start states");
+        atn.set_rule_to_stop_state(vec![6])
+            .expect("rule stop states");
+        finish_atn(atn)
     }
 
-    fn plus_block_decision_atn() -> Atn {
-        let mut atn = Atn::new(AtnType::Parser, 2);
-        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
-        let mut plus_start = AtnState::new(1, AtnStateKind::PlusBlockStart).with_rule_index(0);
-        plus_start.end_state = Some(4);
-        atn.add_state(plus_start);
-        atn.add_state(AtnState::new(2, AtnStateKind::Basic).with_rule_index(0));
-        atn.add_state(AtnState::new(3, AtnStateKind::Basic).with_rule_index(0));
-        atn.add_state(AtnState::new(4, AtnStateKind::BlockEnd).with_rule_index(0));
-        atn.add_state(AtnState::new(5, AtnStateKind::PlusLoopBack).with_rule_index(0));
-        let mut loop_end = AtnState::new(6, AtnStateKind::LoopEnd).with_rule_index(0);
-        loop_end.loop_back_state = Some(5);
-        atn.add_state(loop_end);
-        atn.add_state(AtnState::new(7, AtnStateKind::RuleStop).with_rule_index(0));
-        atn.state_mut(0)
-            .expect("state 0")
-            .add_transition(Transition::Epsilon { target: 1 });
-        atn.state_mut(1)
-            .expect("state 1")
-            .add_transition(Transition::Epsilon { target: 2 });
-        atn.state_mut(1)
-            .expect("state 1")
-            .add_transition(Transition::Epsilon { target: 3 });
-        atn.state_mut(2)
-            .expect("state 2")
-            .add_transition(Transition::Atom {
+    fn plus_block_decision_atn() -> ParserAtn {
+        let mut atn = ParserAtnBuilder::new(2);
+        assert_eq!(
+            atn.add_state(AtnStateKind::RuleStart, Some(0))
+                .expect("state")
+                .index(),
+            0
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::PlusBlockStart, Some(0))
+                .expect("state")
+                .index(),
+            1
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::Basic, Some(0))
+                .expect("state")
+                .index(),
+            2
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::Basic, Some(0))
+                .expect("state")
+                .index(),
+            3
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::BlockEnd, Some(0))
+                .expect("state")
+                .index(),
+            4
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::PlusLoopBack, Some(0))
+                .expect("state")
+                .index(),
+            5
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::LoopEnd, Some(0))
+                .expect("state")
+                .index(),
+            6
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::RuleStop, Some(0))
+                .expect("state")
+                .index(),
+            7
+        );
+        atn.set_end_state(1, 4).expect("block end state");
+        atn.set_loop_back_state(6, 5).expect("loop back state");
+        atn.add_transition(0, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("transition");
+        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 2 })
+            .expect("transition");
+        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 3 })
+            .expect("transition");
+        atn.add_transition(
+            2,
+            ParserTransitionSpec::Atom {
                 target: 4,
                 label: 1,
-            });
-        atn.state_mut(3)
-            .expect("state 3")
-            .add_transition(Transition::Atom {
+            },
+        )
+        .expect("transition");
+        atn.add_transition(
+            3,
+            ParserTransitionSpec::Atom {
                 target: 4,
                 label: 2,
-            });
-        atn.state_mut(4)
-            .expect("state 4")
-            .add_transition(Transition::Epsilon { target: 5 });
-        atn.state_mut(5)
-            .expect("state 5")
-            .add_transition(Transition::Epsilon { target: 1 });
-        atn.state_mut(5)
-            .expect("state 5")
-            .add_transition(Transition::Epsilon { target: 6 });
-        atn.state_mut(6)
-            .expect("state 6")
-            .add_transition(Transition::Epsilon { target: 7 });
-        atn.add_decision_state(1);
-        atn.add_decision_state(5);
-        atn.set_rule_to_start_state(vec![0]);
-        atn.set_rule_to_stop_state(vec![7]);
-        atn
+            },
+        )
+        .expect("transition");
+        atn.add_transition(4, ParserTransitionSpec::Epsilon { target: 5 })
+            .expect("transition");
+        atn.add_transition(5, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("transition");
+        atn.add_transition(5, ParserTransitionSpec::Epsilon { target: 6 })
+            .expect("transition");
+        atn.add_transition(6, ParserTransitionSpec::Epsilon { target: 7 })
+            .expect("transition");
+        atn.add_decision_state(1).expect("decision state");
+        atn.add_decision_state(5).expect("decision state");
+        atn.set_rule_to_start_state(vec![0])
+            .expect("rule start states");
+        atn.set_rule_to_stop_state(vec![7])
+            .expect("rule stop states");
+        finish_atn(atn)
     }
 
-    fn left_recursive_rule_atn() -> Atn {
-        let mut atn = Atn::new(AtnType::Parser, 2);
-        let mut start = AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0);
-        start.left_recursive_rule = true;
-        atn.add_state(start);
-        atn.add_state(AtnState::new(1, AtnStateKind::Basic).with_rule_index(0));
-        let mut loop_entry = AtnState::new(2, AtnStateKind::StarLoopEntry).with_rule_index(0);
-        loop_entry.precedence_rule_decision = true;
-        atn.add_state(loop_entry);
-        let mut block_start = AtnState::new(3, AtnStateKind::StarBlockStart).with_rule_index(0);
-        block_start.end_state = Some(6);
-        atn.add_state(block_start);
-        atn.add_state(AtnState::new(4, AtnStateKind::Basic).with_rule_index(0));
-        atn.add_state(AtnState::new(5, AtnStateKind::Basic).with_rule_index(0));
-        atn.add_state(AtnState::new(6, AtnStateKind::BlockEnd).with_rule_index(0));
-        let mut loop_end = AtnState::new(7, AtnStateKind::LoopEnd).with_rule_index(0);
-        loop_end.loop_back_state = Some(8);
-        atn.add_state(loop_end);
-        atn.add_state(AtnState::new(8, AtnStateKind::StarLoopBack).with_rule_index(0));
-        atn.add_state(AtnState::new(9, AtnStateKind::RuleStop).with_rule_index(0));
-        atn.add_state(AtnState::new(10, AtnStateKind::Basic).with_rule_index(0));
-        atn.state_mut(0)
-            .expect("state 0")
-            .add_transition(Transition::Epsilon { target: 1 });
-        atn.state_mut(1)
-            .expect("state 1")
-            .add_transition(Transition::Atom {
+    fn left_recursive_rule_atn() -> ParserAtn {
+        let mut atn = ParserAtnBuilder::new(2);
+        assert_eq!(
+            atn.add_state(AtnStateKind::RuleStart, Some(0))
+                .expect("state")
+                .index(),
+            0
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::Basic, Some(0))
+                .expect("state")
+                .index(),
+            1
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::StarLoopEntry, Some(0))
+                .expect("state")
+                .index(),
+            2
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::StarBlockStart, Some(0))
+                .expect("state")
+                .index(),
+            3
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::Basic, Some(0))
+                .expect("state")
+                .index(),
+            4
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::Basic, Some(0))
+                .expect("state")
+                .index(),
+            5
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::BlockEnd, Some(0))
+                .expect("state")
+                .index(),
+            6
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::LoopEnd, Some(0))
+                .expect("state")
+                .index(),
+            7
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::StarLoopBack, Some(0))
+                .expect("state")
+                .index(),
+            8
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::RuleStop, Some(0))
+                .expect("state")
+                .index(),
+            9
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::Basic, Some(0))
+                .expect("state")
+                .index(),
+            10
+        );
+        atn.set_left_recursive_rule(0)
+            .expect("left-recursive rule start");
+        atn.set_precedence_rule_decision(2)
+            .expect("precedence decision");
+        atn.set_end_state(3, 6).expect("block end state");
+        atn.set_loop_back_state(7, 8).expect("loop back state");
+        atn.add_transition(0, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("transition");
+        atn.add_transition(
+            1,
+            ParserTransitionSpec::Atom {
                 target: 2,
                 label: 1,
-            });
-        atn.state_mut(2)
-            .expect("state 2")
-            .add_transition(Transition::Epsilon { target: 3 });
-        atn.state_mut(2)
-            .expect("state 2")
-            .add_transition(Transition::Epsilon { target: 7 });
-        atn.state_mut(3)
-            .expect("state 3")
-            .add_transition(Transition::Epsilon { target: 4 });
-        atn.state_mut(4)
-            .expect("state 4")
-            .add_transition(Transition::Precedence {
+            },
+        )
+        .expect("transition");
+        atn.add_transition(2, ParserTransitionSpec::Epsilon { target: 3 })
+            .expect("transition");
+        atn.add_transition(2, ParserTransitionSpec::Epsilon { target: 7 })
+            .expect("transition");
+        atn.add_transition(3, ParserTransitionSpec::Epsilon { target: 4 })
+            .expect("transition");
+        atn.add_transition(
+            4,
+            ParserTransitionSpec::Precedence {
                 target: 5,
                 precedence: 2,
-            });
-        atn.state_mut(5)
-            .expect("state 5")
-            .add_transition(Transition::Atom {
+            },
+        )
+        .expect("transition");
+        atn.add_transition(
+            5,
+            ParserTransitionSpec::Atom {
                 target: 10,
                 label: 2,
-            });
-        atn.state_mut(10)
-            .expect("state 10")
-            .add_transition(Transition::Rule {
+            },
+        )
+        .expect("transition");
+        atn.add_transition(
+            10,
+            ParserTransitionSpec::Rule {
                 target: 0,
                 rule_index: 0,
                 follow_state: 6,
                 precedence: 3,
-            });
-        atn.state_mut(6)
-            .expect("state 6")
-            .add_transition(Transition::Epsilon { target: 8 });
-        atn.state_mut(8)
-            .expect("state 8")
-            .add_transition(Transition::Epsilon { target: 2 });
-        atn.state_mut(7)
-            .expect("state 7")
-            .add_transition(Transition::Epsilon { target: 9 });
-        atn.add_decision_state(2);
-        atn.add_decision_state(3);
-        atn.set_rule_to_start_state(vec![0]);
-        atn.set_rule_to_stop_state(vec![9]);
-        atn
+            },
+        )
+        .expect("transition");
+        atn.add_transition(6, ParserTransitionSpec::Epsilon { target: 8 })
+            .expect("transition");
+        atn.add_transition(8, ParserTransitionSpec::Epsilon { target: 2 })
+            .expect("transition");
+        atn.add_transition(7, ParserTransitionSpec::Epsilon { target: 9 })
+            .expect("transition");
+        atn.add_decision_state(2).expect("decision state");
+        atn.add_decision_state(3).expect("decision state");
+        atn.set_rule_to_start_state(vec![0])
+            .expect("rule start states");
+        atn.set_rule_to_stop_state(vec![9])
+            .expect("rule stop states");
+        finish_atn(atn)
     }
 
-    fn entry_candidate_atn() -> Atn {
-        let mut atn = Atn::new(AtnType::Parser, 2);
-        atn.add_state(AtnState::new(0, AtnStateKind::RuleStart).with_rule_index(0));
-        atn.add_state(AtnState::new(1, AtnStateKind::RuleStop).with_rule_index(0));
-        atn.add_state(AtnState::new(2, AtnStateKind::Basic).with_rule_index(0));
-        atn.add_state(AtnState::new(3, AtnStateKind::RuleStart).with_rule_index(1));
-        atn.add_state(AtnState::new(4, AtnStateKind::RuleStop).with_rule_index(1));
-        atn.add_state(AtnState::new(5, AtnStateKind::RuleStart).with_rule_index(2));
-        atn.add_state(AtnState::new(6, AtnStateKind::RuleStop).with_rule_index(2));
-        atn.add_state(AtnState::new(7, AtnStateKind::Basic).with_rule_index(2));
-        atn.add_state(AtnState::new(8, AtnStateKind::RuleStart).with_rule_index(3));
-        atn.add_state(AtnState::new(9, AtnStateKind::RuleStop).with_rule_index(3));
-        atn.add_state(AtnState::new(10, AtnStateKind::Basic).with_rule_index(3));
-        atn.state_mut(0)
-            .expect("state 0")
-            .add_transition(Transition::Rule {
+    fn entry_candidate_atn() -> ParserAtn {
+        let mut atn = ParserAtnBuilder::new(2);
+        assert_eq!(
+            atn.add_state(AtnStateKind::RuleStart, Some(0))
+                .expect("state")
+                .index(),
+            0
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::RuleStop, Some(0))
+                .expect("state")
+                .index(),
+            1
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::Basic, Some(0))
+                .expect("state")
+                .index(),
+            2
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::RuleStart, Some(1))
+                .expect("state")
+                .index(),
+            3
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::RuleStop, Some(1))
+                .expect("state")
+                .index(),
+            4
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::RuleStart, Some(2))
+                .expect("state")
+                .index(),
+            5
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::RuleStop, Some(2))
+                .expect("state")
+                .index(),
+            6
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::Basic, Some(2))
+                .expect("state")
+                .index(),
+            7
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::RuleStart, Some(3))
+                .expect("state")
+                .index(),
+            8
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::RuleStop, Some(3))
+                .expect("state")
+                .index(),
+            9
+        );
+        assert_eq!(
+            atn.add_state(AtnStateKind::Basic, Some(3))
+                .expect("state")
+                .index(),
+            10
+        );
+        atn.add_transition(
+            0,
+            ParserTransitionSpec::Rule {
                 target: 3,
                 rule_index: 1,
                 follow_state: 2,
                 precedence: 0,
-            });
-        atn.state_mut(2)
-            .expect("state 2")
-            .add_transition(Transition::Epsilon { target: 1 });
-        atn.state_mut(3)
-            .expect("state 3")
-            .add_transition(Transition::Epsilon { target: 4 });
-        atn.state_mut(5)
-            .expect("state 5")
-            .add_transition(Transition::Rule {
+            },
+        )
+        .expect("transition");
+        atn.add_transition(2, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("transition");
+        atn.add_transition(3, ParserTransitionSpec::Epsilon { target: 4 })
+            .expect("transition");
+        atn.add_transition(
+            5,
+            ParserTransitionSpec::Rule {
                 target: 3,
                 rule_index: 1,
                 follow_state: 7,
                 precedence: 0,
-            });
-        atn.state_mut(7)
-            .expect("state 7")
-            .add_transition(Transition::Epsilon { target: 6 });
-        atn.state_mut(8)
-            .expect("state 8")
-            .add_transition(Transition::Rule {
+            },
+        )
+        .expect("transition");
+        atn.add_transition(7, ParserTransitionSpec::Epsilon { target: 6 })
+            .expect("transition");
+        atn.add_transition(
+            8,
+            ParserTransitionSpec::Rule {
                 target: 8,
                 rule_index: 3,
                 follow_state: 10,
                 precedence: 0,
-            });
-        atn.state_mut(10)
-            .expect("state 10")
-            .add_transition(Transition::Epsilon { target: 9 });
-        atn.set_rule_to_start_state(vec![0, 3, 5, 8]);
-        atn.set_rule_to_stop_state(vec![1, 4, 6, 9]);
-        atn
+            },
+        )
+        .expect("transition");
+        atn.add_transition(10, ParserTransitionSpec::Epsilon { target: 9 })
+            .expect("transition");
+        atn.set_rule_to_start_state(vec![0, 3, 5, 8])
+            .expect("rule start states");
+        atn.set_rule_to_stop_state(vec![1, 4, 6, 9])
+            .expect("rule stop states");
+        finish_atn(atn)
     }
 
     fn minimal_parser_data() -> InterpData {
@@ -13765,6 +14156,42 @@ ID: [a-z]+ { customJava(); };
                 1, 2, 5, 1, 0, 0, // atom A
                 2, 3, 1, 0, 0, 0, // epsilon
                 0, // decisions
+            ],
+        }
+    }
+
+    /// Lexer `.interp` fixture with one semantic-predicate transition at
+    /// coordinate `(rule 0, pred 0)`.
+    fn predicate_lexer_data() -> InterpData {
+        InterpData {
+            literal_names: vec![None, Some("'a'".to_owned())],
+            symbolic_names: vec![None, Some("A".to_owned())],
+            rule_names: vec!["A".to_owned()],
+            channel_names: vec!["DEFAULT_TOKEN_CHANNEL".to_owned()],
+            mode_names: vec!["DEFAULT_MODE".to_owned()],
+            atn: vec![
+                4, 0, 1, // version, lexer grammar, max token type
+                5, // states
+                6, -1, // state 0: mode token start
+                2, 0, // state 1: rule start
+                1, 0, // state 2: predicate source
+                1, 0, // state 3: token source
+                7, 0, // state 4: rule stop
+                0, // non-greedy states
+                0, // precedence states
+                1, // rules
+                1, 1, // rule 0 start and token type
+                1, // modes
+                0, // mode 0 start
+                0, // sets
+                4, // transitions
+                0, 1, 1, 0, 0, 0, // epsilon to rule start
+                1, 2, 4, 0, 0, 0, // predicate rule 0 pred 0
+                2, 3, 5, 1, 0, 0, // atom A
+                3, 4, 1, 0, 0, 0, // epsilon to stop
+                1, // decisions
+                0, // mode start decision
+                0, // lexer actions
             ],
         }
     }
@@ -14895,7 +15322,7 @@ ID : [a-z]+ ;\n";
     fn lexer_assume_false_policy_renders_failing_predicate_hook() {
         let module = render_lexer(
             "SLexer",
-            &predicate_parser_data(),
+            &predicate_lexer_data(),
             None,
             false,
             SemUnknownPolicy::AssumeFalse,
@@ -14916,7 +15343,7 @@ ID : [a-z]+ ;\n";
         .expect("pattern file parses");
         let module = render_lexer(
             "SLexer",
-            &predicate_parser_data(),
+            &predicate_lexer_data(),
             None,
             false,
             SemUnknownPolicy::AssumeTrue,
@@ -14941,7 +15368,7 @@ ID : [a-z]+ ;\n";
         .expect("pattern file parses");
         let module = render_lexer(
             "SLexer",
-            &predicate_parser_data(),
+            &predicate_lexer_data(),
             None,
             false,
             SemUnknownPolicy::AssumeTrue,
@@ -14997,7 +15424,7 @@ ID : [a-z]+ ;\n";
     fn lexer_hook_policy_routes_uncovered_predicates_to_owned_hooks() {
         let module = render_lexer(
             "SLexer",
-            &predicate_parser_data(),
+            &predicate_lexer_data(),
             None,
             false,
             SemUnknownPolicy::Hook,
@@ -15067,7 +15494,7 @@ ID : [a-z]+ ;\n";
     fn lexer_default_policy_keeps_compiled_token_path() {
         let module = render_lexer(
             "SLexer",
-            &predicate_parser_data(),
+            &predicate_lexer_data(),
             None,
             false,
             SemUnknownPolicy::AssumeTrue,
