@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Performance
+
+- Compiled lexers read in-memory ASCII directly from their static DFA tables
+  and commit accepted spans in bulk. Optional `CharStream` fast paths preserve
+  scalar fallback behavior for custom streams and Unicode input.
+
 ### Breaking
 
 - Buffered tokens now live once in a compact `TokenStore` and are addressed by

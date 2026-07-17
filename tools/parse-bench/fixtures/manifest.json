@@ -2,6 +2,22 @@
   "fixtures": [
     {
       "language": "kotlin",
+      "path": "kotlin/lexer-ascii-stress.kt",
+      "source": "repository synthetic benchmark",
+      "license": "BSD-3-Clause",
+      "description": "Lex-only ASCII stress input with long identifiers, strings, comments, whitespace, and punctuation-heavy expressions.",
+      "phases": ["lex"]
+    },
+    {
+      "language": "kotlin",
+      "path": "kotlin/lexer-unicode-fallback.kt",
+      "source": "repository synthetic benchmark",
+      "license": "BSD-3-Clause",
+      "description": "Lex-only mixed-script input that forces Unicode scalar-index fallback across the complete stream.",
+      "phases": ["lex"]
+    },
+    {
+      "language": "kotlin",
       "path": "kotlin/jetbrains-kotlin-lazy-bodies-test.kt",
       "source": "https://github.com/JetBrains/kotlin/blob/2e7e1fd40b1ff862f4b574b17c2034e441179958/analysis/low-level-api-fir/low-level-api-fir-compiler-tests/testFixtures/org/jetbrains/kotlin/analysis/low/level/api/fir/AbstractLLLazyBodiesCalculatorTest.kt",
       "license": "Apache-2.0",

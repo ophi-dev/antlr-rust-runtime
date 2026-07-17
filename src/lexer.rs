@@ -869,6 +869,9 @@ where
         let Some(index) = absolute.filter(|index| *index < self.input.size()) else {
             return EOF;
         };
+        if let Some(symbol) = self.input.symbol_at(index) {
+            return symbol;
+        }
         self.input
             .text(TextInterval::new(index, index))
             .chars()
@@ -896,6 +899,35 @@ where
         }
     }
 
+    /// Commits a predicted input span while keeping the current line and column
+    /// as the coordinates at `start`.
+    pub(crate) fn commit_position(&mut self, start: usize, target: usize) {
+        self.reposition_from(start, self.line, self.column, target);
+    }
+
+    fn reposition_from(&mut self, start: usize, line: usize, column: usize, target: usize) {
+        let start = start.min(self.input.size());
+        let target = target.max(start).min(self.input.size());
+        if let Some(summary) = self.input.position_summary(start, target) {
+            self.input.seek(target);
+            (self.line, self.column) = summary.apply(line, column);
+            #[cfg(feature = "perf-counters")]
+            crate::perf::record_lexer_bulk_commit(target - start);
+            return;
+        }
+
+        self.input.seek(start);
+        self.line = line;
+        self.column = column;
+        #[cfg(feature = "perf-counters")]
+        let before = self.input.index();
+        while self.input.index() < target && self.input.la(1) != EOF {
+            self.consume_char();
+        }
+        #[cfg(feature = "perf-counters")]
+        crate::perf::record_lexer_scalar_replay(self.input.index().saturating_sub(before));
+    }
+
     /// Rewinds or advances the input cursor to a token accept boundary.
     ///
     /// Some generated lexers intentionally accept a longer path to disambiguate
@@ -904,12 +936,12 @@ where
     /// position consistent after moving the cursor backwards.
     pub fn reset_accept_position(&mut self, index: usize) {
         let target = index.max(self.token_start);
-        self.input.seek(self.token_start);
-        self.line = self.token_start_line;
-        self.column = self.token_start_column;
-        while self.input.index() < target && self.input.la(1) != EOF {
-            self.consume_char();
-        }
+        self.reposition_from(
+            self.token_start,
+            self.token_start_line,
+            self.token_start_column,
+            target,
+        );
     }
 
     /// Moves the current token start forward within the consumed input span.
@@ -1089,6 +1121,9 @@ where
         let mut column = self.token_start_column;
         if position <= self.token_start {
             return (line, column);
+        }
+        if let Some(summary) = self.input.position_summary(self.token_start, position) {
+            return summary.apply(line, column);
         }
         for ch in self
             .input
@@ -1540,6 +1575,48 @@ mod tests {
 
         assert_eq!(token.text(), "β");
         assert_eq!(token.byte_span(), 0..2);
+    }
+
+    #[test]
+    fn position_commits_and_rewinds_preserve_line_and_column() {
+        let data = RecognizerData::new(
+            "T",
+            Vocabulary::new(
+                std::iter::empty::<Option<&str>>(),
+                std::iter::empty::<Option<&str>>(),
+                std::iter::empty::<Option<&str>>(),
+            ),
+        );
+        let mut lexer = BaseLexer::new(InputStream::new("ab\nγd"), data);
+        lexer.begin_token();
+
+        lexer.commit_position(0, 5);
+        assert_eq!(lexer.input().index(), 5);
+        assert_eq!((lexer.line(), lexer.column()), (2, 2));
+        assert_eq!(lexer.column_at(2), 2);
+        assert_eq!(lexer.column_at(4), 1);
+
+        lexer.reset_accept_position(3);
+        assert_eq!(lexer.input().index(), 3);
+        assert_eq!((lexer.line(), lexer.column()), (2, 0));
+    }
+
+    #[test]
+    fn custom_stream_position_commit_replays_without_fast_path_methods() {
+        let data = RecognizerData::new(
+            "T",
+            Vocabulary::new(
+                std::iter::empty::<Option<&str>>(),
+                std::iter::empty::<Option<&str>>(),
+                std::iter::empty::<Option<&str>>(),
+            ),
+        );
+        let mut lexer = BaseLexer::new(UnsharedInput(InputStream::new("a\nb")), data);
+        lexer.begin_token();
+
+        lexer.commit_position(0, 3);
+        assert_eq!(lexer.input().index(), 3);
+        assert_eq!((lexer.line(), lexer.column()), (2, 1));
     }
 
     #[test]

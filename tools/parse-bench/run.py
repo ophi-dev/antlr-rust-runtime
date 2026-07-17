@@ -117,6 +117,7 @@ LANGUAGES: dict[str, LanguageSpec] = {
 }
 
 RUNTIMES = ("rust-antlr", "python-antlr", "go-antlr", "tree-sitter")
+PHASES = ("parse", "lex")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -126,6 +127,7 @@ class Fixture:
     source: str
     license: str
     description: str
+    phases: tuple[str, ...] = ("parse", "lex")
 
     @property
     def name(self) -> str:
@@ -194,12 +196,13 @@ def require_path(path: Path, label: str) -> None:
         raise SystemExit(f"{label} does not exist: {path}")
 
 
-def load_fixtures(languages: set[str]) -> list[Fixture]:
+def load_fixtures(languages: set[str], phase: str) -> list[Fixture]:
     manifest = json.loads((FIXTURE_ROOT / "manifest.json").read_text())
     fixtures = []
     for item in manifest["fixtures"]:
         language = str(item["language"])
-        if language not in languages:
+        phases = tuple(str(value) for value in item.get("phases", PHASES))
+        if language not in languages or phase not in phases:
             continue
         fixture = Fixture(
             language=language,
@@ -207,6 +210,7 @@ def load_fixtures(languages: set[str]) -> list[Fixture]:
             source=str(item["source"]),
             license=str(item["license"]),
             description=str(item["description"]),
+            phases=phases,
         )
         require_path(fixture.abs_path, f"fixture {fixture.path}")
         fixtures.append(fixture)
@@ -324,6 +328,7 @@ def generate_rust_modules(
     interp_dir: Path,
     rust_generated_dir: Path,
     require_generated_parser: bool,
+    runtime_root: Path,
 ) -> None:
     common = [
         "cargo",
@@ -331,7 +336,7 @@ def generate_rust_modules(
         "--quiet",
         "--release",
         "--manifest-path",
-        str(ROOT / "Cargo.toml"),
+        str(runtime_root / "Cargo.toml"),
         "--bin",
         "antlr4-rust-gen",
         "--",
@@ -360,28 +365,39 @@ def generate_rust_modules(
     run(parser_cmd)
 
 
-def write_rust_runner(work_dir: Path, specs: list[LanguageSpec]) -> Path:
+def write_rust_runner(
+    work_dir: Path,
+    specs: list[LanguageSpec],
+    runtime_root: Path,
+    rust_thin_lto: bool,
+) -> Path:
     runner = work_dir / "rust-runner"
     generated = runner / "src" / "generated"
     generated.mkdir(parents=True, exist_ok=True)
-    (runner / "Cargo.toml").write_text(
-        "\n".join(
+    manifest = [
+        "[package]",
+        'name = "parse-bench-rust-runner"',
+        'version = "0.0.0"',
+        'edition = "2024"',
+        "",
+        "[features]",
+        "default = []",
+        'perf-counters = ["antlr-rust-runtime/perf-counters"]',
+        "",
+        "[dependencies]",
+        f'antlr-rust-runtime = {{ path = "{runtime_root}" }}',
+        "",
+    ]
+    if rust_thin_lto:
+        manifest.extend(
             [
-                "[package]",
-                'name = "parse-bench-rust-runner"',
-                'version = "0.0.0"',
-                'edition = "2024"',
-                "",
-                "[features]",
-                "default = []",
-                'perf-counters = ["antlr-rust-runtime/perf-counters"]',
-                "",
-                "[dependencies]",
-                f'antlr-rust-runtime = {{ path = "{ROOT}" }}',
+                "[profile.release]",
+                'lto = "thin"',
+                "codegen-units = 1",
                 "",
             ]
         )
-    )
+    (runner / "Cargo.toml").write_text("\n".join(manifest))
     modules = "\n".join(
         f"    pub mod {spec.rust_lexer_module};\n    pub mod {spec.rust_parser_module};"
         for spec in specs
@@ -390,6 +406,7 @@ def write_rust_runner(work_dir: Path, specs: list[LanguageSpec]) -> Path:
         f'        "{spec.name}" => parse_{spec.name}(&src).map_err(|err| err.to_string())?,'
         for spec in specs
     )
+    lex_arms = "\n".join(f'        "{spec.name}" => lex_{spec.name}(&src)?,' for spec in specs)
     stats_arms = "\n".join(
         f'        "{spec.name}" => prediction_stats_{spec.name}(&src).map_err(|err| err.to_string())?,'
         for spec in specs
@@ -428,12 +445,14 @@ fn run_main() -> Result<(), String> {{
     let mut args = env::args().skip(1);
     let mut language: Option<String> = None;
     let mut input: Option<PathBuf> = None;
+    let mut phase = "parse".to_owned();
     let mut iters = 1_usize;
     let mut warmups = 0_usize;
     while let Some(arg) = args.next() {{
         match arg.as_str() {{
             "--language" => language = args.next(),
             "--input" => input = args.next().map(PathBuf::from),
+            "--phase" => phase = args.next().ok_or("missing value for --phase")?,
             "--iters" => iters = parse_usize(args.next(), "--iters")?,
             "--warmups" => warmups = parse_usize(args.next(), "--warmups")?,
             other => return Err(format!("unknown argument: {{other}}")),
@@ -444,12 +463,15 @@ fn run_main() -> Result<(), String> {{
     if iters == 0 {{
         return Err("--iters must be greater than 0".to_owned());
     }}
+    if phase != "parse" && phase != "lex" {{
+        return Err(format!("unsupported phase: {{phase}}"));
+    }}
     let src = fs::read_to_string(&input)
         .map_err(|err| format!("failed to read {{}}: {{err}}", input.display()))?;
     let collect_stats = env::var_os("ANTLR_PERF_DUMP").is_some();
 
     for _ in 0..warmups {{
-        parse_once(&language, &src)?;
+        run_once(&phase, &language, &src)?;
     }}
     #[cfg(feature = "perf-counters")]
     antlr4_runtime::reset_prediction_perf_counters();
@@ -458,7 +480,7 @@ fn run_main() -> Result<(), String> {{
     let mut total_ns = 0_u128;
     for _ in 0..iters {{
         let started = Instant::now();
-        parse_once(&language, &src)?;
+        run_once(&phase, &language, &src)?;
         let elapsed = started.elapsed().as_nanos();
         min_ns = min_ns.min(elapsed);
         total_ns += elapsed;
@@ -469,7 +491,7 @@ fn run_main() -> Result<(), String> {{
     if collect_stats {{
         antlr4_runtime::dump_prediction_perf_counters();
     }}
-    if collect_stats {{
+    if collect_stats && phase == "parse" {{
         let (context_stats, dfa_stats) = prediction_stats_once(&language, &src)?;
         dump_prediction_context_stats(context_stats);
         dump_parser_dfa_stats(dfa_stats);
@@ -486,6 +508,22 @@ fn parse_once(
         other => return Err(format!("unsupported language: {{other}}")),
     }}
     Ok(())
+}}
+
+fn lex_once(language: &str, src: &str) -> Result<(), String> {{
+    match language {{
+{lex_arms}
+        other => return Err(format!("unsupported language: {{other}}")),
+    }}
+    Ok(())
+}}
+
+fn run_once(phase: &str, language: &str, src: &str) -> Result<(), String> {{
+    match phase {{
+        "parse" => parse_once(language, src),
+        "lex" => lex_once(language, src),
+        other => Err(format!("unsupported phase: {{other}}")),
+    }}
 }}
 
 fn prediction_stats_once(
@@ -568,7 +606,14 @@ fn dump_parser_dfa_stats(stats: antlr4_runtime::ParserDfaStats) {{
 
 
 def rust_parse_function(spec: LanguageSpec) -> str:
-    return f"""fn parse_{spec.name}(src: &str) -> Result<(), antlr4_runtime::AntlrError> {{
+    return f"""fn lex_{spec.name}(src: &str) -> Result<(), String> {{
+    let lexer = generated::{spec.rust_lexer_module}::{spec.rust_lexer_type}::new(InputStream::new(src));
+    let tokens = CommonTokenStream::new(lexer);
+    black_box(tokens.token_count());
+    Ok(())
+}}
+
+fn parse_{spec.name}(src: &str) -> Result<(), antlr4_runtime::AntlrError> {{
     let lexer = generated::{spec.rust_lexer_module}::{spec.rust_lexer_type}::new(InputStream::new(src));
     let tokens = CommonTokenStream::new(lexer);
     let mut parser = generated::{spec.rust_parser_module}::{spec.rust_parser_type}::new(tokens);
@@ -911,10 +956,15 @@ def prepare_work(
     runtimes: set[str],
 ) -> dict[str, Path]:
     work_dir = args.work_dir
-    clear_work_dir(work_dir)
+    clear_work_dir(work_dir, args.runtime_root)
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    rust_runner = write_rust_runner(work_dir, specs)
+    rust_runner = write_rust_runner(
+        work_dir,
+        specs,
+        args.runtime_root,
+        args.rust_thin_lto,
+    )
     rust_generated = rust_runner / "src" / "generated"
     py_gen = work_dir / "python-gen"
     go_runner = write_go_runner(work_dir, specs)
@@ -933,6 +983,7 @@ def prepare_work(
                 interp_dir,
                 rust_generated,
                 args.rust_generated_only,
+                args.runtime_root,
             )
 
         if "python-antlr" in runtimes:
@@ -963,10 +1014,22 @@ def prepare_work(
 
     runners: dict[str, Path] = {}
     if "rust-antlr" in runtimes:
-        rust_build_cmd = ["cargo", "build", "--quiet", "--release", "--manifest-path", str(rust_runner / "Cargo.toml")]
+        rust_build_cmd = [
+            "cargo",
+            "build",
+            "--quiet",
+            "--release",
+            "--manifest-path",
+            str(rust_runner / "Cargo.toml"),
+        ]
         if os.environ.get("ANTLR_PERF_DUMP"):
             rust_build_cmd.extend(["--features", "perf-counters"])
-        run(rust_build_cmd)
+        rust_build_env = None
+        if args.rust_native:
+            rust_build_env = os.environ.copy()
+            rustflags = rust_build_env.get("RUSTFLAGS", "")
+            rust_build_env["RUSTFLAGS"] = f"{rustflags} -C target-cpu=native".strip()
+        run(rust_build_cmd, env=rust_build_env)
         runners["rust-antlr"] = rust_runner / "target" / "release" / "parse-bench-rust-runner"
     if "python-antlr" in runtimes:
         runners["python-antlr"] = write_python_antlr_runner(work_dir, specs, py_gen)
@@ -979,13 +1042,18 @@ def prepare_work(
     return runners
 
 
-def clear_work_dir(work_dir: Path) -> None:
+def clear_work_dir(work_dir: Path, runtime_root: Path) -> None:
     if not work_dir.exists():
         return
     if not work_dir.is_dir():
         raise SystemExit(f"Refusing to delete non-directory work path: {work_dir}")
     if work_dir == ROOT or work_dir in ROOT.parents:
         raise SystemExit(f"Refusing to delete project root or parent directory: {work_dir}")
+    if work_dir == runtime_root or work_dir in runtime_root.parents:
+        raise SystemExit(
+            "Refusing to delete work directory containing the runtime checkout: "
+            f"{work_dir} (runtime root: {runtime_root})"
+        )
     shutil.rmtree(work_dir)
 
 
@@ -1031,6 +1099,12 @@ def measure_fixture(
             fixture.language,
             "--input",
             str(fixture.abs_path),
+        ]
+    )
+    if runtime == "rust-antlr":
+        cmd.extend(["--phase", args.phase])
+    cmd.extend(
+        [
             "--iters",
             str(args.iters),
             "--warmups",
@@ -1101,8 +1175,12 @@ def write_json(results: list[Measurement], args: argparse.Namespace) -> None:
         "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "iters": args.iters,
         "warmups": args.warmups,
+        "phase": args.phase,
         "rust_generated_only": args.rust_generated_only,
-        "repo": str(ROOT),
+        "repo": str(args.runtime_root),
+        "repo_commit": git_rev(args.runtime_root),
+        "rust_native": args.rust_native,
+        "rust_thin_lto": args.rust_thin_lto,
         "grammars_v4": {
             "path": str(args.grammars_v4),
             "commit": git_rev(args.grammars_v4),
@@ -1122,10 +1200,14 @@ def write_markdown(results: list[Measurement], args: argparse.Namespace) -> None
         if result.runtime == "rust-antlr"
     }
     lines = [
-        "# Parse Benchmark",
+        f"# {args.phase.title()} Benchmark",
         "",
         f"- Iterations: `{args.iters}`",
         f"- Warmups: `{args.warmups}`",
+        f"- Phase: `{args.phase}`",
+        f"- Runtime checkout: `{git_rev(args.runtime_root) or args.runtime_root}`",
+        f"- Native CPU: `{'yes' if args.rust_native else 'no'}`",
+        f"- ThinLTO / one codegen unit: `{'yes' if args.rust_thin_lto else 'no'}`",
         f"- Rust generated-only: `{'yes' if args.rust_generated_only else 'no'}`",
         f"- grammars-v4: `{git_rev(args.grammars_v4) or args.grammars_v4}`",
         "",
@@ -1172,10 +1254,32 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=Path(os.environ.get("GRAMMARS_V4", DEFAULT_GRAMMARS_V4)),
     )
+    parser.add_argument(
+        "--runtime-root",
+        type=Path,
+        default=ROOT,
+        help="Runtime checkout to generate and link into the Rust benchmark runner.",
+    )
     parser.add_argument("--work-dir", type=Path, default=ROOT / "target" / "parse-bench")
     parser.add_argument("--python", default=os.environ.get("PYTHON", sys.executable))
     parser.add_argument("--languages", default="kotlin,csharp,java")
     parser.add_argument("--runtimes", default="rust-antlr,python-antlr,go-antlr,tree-sitter")
+    parser.add_argument(
+        "--phase",
+        choices=PHASES,
+        default="parse",
+        help="Measure complete parsing or lexing/token buffering only.",
+    )
+    parser.add_argument(
+        "--rust-native",
+        action="store_true",
+        help="Build the Rust runner with -C target-cpu=native.",
+    )
+    parser.add_argument(
+        "--rust-thin-lto",
+        action="store_true",
+        help="Build the Rust runner with ThinLTO and one codegen unit.",
+    )
     parser.add_argument("--iters", type=int, default=10)
     parser.add_argument("--warmups", type=int, default=2)
     parser.add_argument("--quick", action="store_true", help="Use 3 timed iterations and 1 warmup.")
@@ -1196,6 +1300,7 @@ def parse_args() -> argparse.Namespace:
 def normalize_paths(args: argparse.Namespace) -> None:
     args.antlr_jar = args.antlr_jar.expanduser().resolve()
     args.grammars_v4 = args.grammars_v4.expanduser().resolve()
+    args.runtime_root = args.runtime_root.expanduser().resolve()
     args.work_dir = args.work_dir.expanduser().resolve()
     if args.json is not None:
         args.json = args.json.expanduser().resolve()
@@ -1216,10 +1321,13 @@ def main() -> int:
 
     languages = parse_csv(args.languages, LANGUAGES, "language")
     runtimes = set(parse_csv(args.runtimes, RUNTIMES, "runtime"))
+    if args.phase == "lex" and runtimes != {"rust-antlr"}:
+        raise SystemExit("--phase lex currently requires --runtimes rust-antlr")
     specs = [LANGUAGES[name] for name in languages]
-    fixtures = load_fixtures(set(languages))
+    fixtures = load_fixtures(set(languages), args.phase)
     require_path(args.antlr_jar, "ANTLR jar")
     require_path(args.grammars_v4, "grammars-v4 checkout")
+    require_path(args.runtime_root / "Cargo.toml", "runtime Cargo manifest")
     ensure_python_dependencies(args.python, runtimes)
 
     runners = prepare_work(args, specs, runtimes)
