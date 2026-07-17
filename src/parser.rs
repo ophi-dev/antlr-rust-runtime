@@ -594,6 +594,9 @@ pub trait SemanticHooks {
     /// Runs after the accepted path's portable and custom actions, but before
     /// the token span is finalized and emitted.
     ///
+    /// Accepted paths that selected `skip` or `more` are included, and the hook
+    /// may observe or override that pending token type.
+    ///
     /// This callback has no synthetic ATN coordinate. It therefore also runs
     /// for accepted rules that contain no action or predicate.
     fn lexer_after_accept<I>(&mut self, ctx: &mut LexerLifecycleCtx<'_, I>)
