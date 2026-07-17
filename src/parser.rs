@@ -1136,6 +1136,10 @@ pub struct BaseParser<S, H = NoSemanticHooks> {
     /// turns the question into a hashmap probe instead of re-scanning
     /// the decision's per-transition FIRST sets every visit.
     ll1_decision_cache: FxHashMap<(usize, i32), Option<usize>>,
+    /// Predicate results shared by the fast recognizer's clean and recovery
+    /// attempts. The eligible fast path keeps every runtime-provided input
+    /// fixed, and custom predicate hooks are required to be replay-safe.
+    fast_predicate_cache: FxHashMap<(usize, usize, usize), bool>,
     /// Per-parse cache for whether an ATN state can reach itself without
     /// consuming input. Only those states need the recursive recognizer's
     /// `(state, token-index)` cycle guard.
@@ -3482,6 +3486,30 @@ fn atn_has_predicate_transitions(atn: &Atn) -> bool {
     })
 }
 
+/// Reports whether predicates are the only observable semantics the fast
+/// recognizer must preserve. Without path-local actions, arguments, or return
+/// state, repeated evaluation at one coordinate and input index receives the
+/// same runtime context.
+fn can_use_fast_predicate_recognizer(atn: &Atn, options: &ParserRuntimeOptions<'_>) -> bool {
+    options.init_action_rules.is_empty()
+        && !options.track_alt_numbers
+        && options
+            .predicates
+            .iter()
+            .all(|(_, _, predicate)| predicate.failure_message().is_none())
+        && options.semantics.is_none_or(|semantics| {
+            semantics.actions.is_empty()
+                && semantics
+                    .predicates
+                    .iter()
+                    .all(|predicate| predicate.failure_message.is_none())
+        })
+        && options.rule_args.is_empty()
+        && options.member_actions.is_empty()
+        && options.return_actions.is_empty()
+        && !atn_has_observable_action_transitions(atn)
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct RecognizeRequest<'a> {
     state_number: usize,
@@ -3566,6 +3594,20 @@ struct FastRecognizeTopRequest {
     start_index: usize,
     precedence: i32,
     caller_follow_state: Option<usize>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct FastPredicateContext<'a> {
+    predicates: &'a [(usize, usize, ParserPredicate)],
+    semantics: Option<&'a ParserSemantics>,
+    member_values: &'a BTreeMap<usize, i64>,
+}
+
+struct FastRecognizeScratch<'a, 'b> {
+    predicate_context: Option<FastPredicateContext<'a>>,
+    visiting: &'b mut FxHashSet<FastRecognizeKey>,
+    memo: &'b mut FxHashMap<FastRecognizeKey, Rc<[FastRecognizeOutcome]>>,
+    expected: &'b mut ExpectedTokens,
 }
 
 /// Memo key for the fast recognizer. `recovery_symbols` must come from
@@ -4022,6 +4064,7 @@ where
             recovery_symbols_intern: FxHashMap::default(),
             decision_lookahead_cache: FxHashMap::default(),
             ll1_decision_cache: FxHashMap::default(),
+            fast_predicate_cache: FxHashMap::default(),
             empty_cycle_cache: Vec::new(),
             single_outcome_memo_mode: SingleOutcomeMemoMode::Probe,
             single_outcome_probe_seen: FxHashSet::default(),
@@ -5639,6 +5682,16 @@ where
         rule_index: usize,
         precedence: i32,
     ) -> Result<ParseTree, AntlrError> {
+        self.parse_atn_rule_with_precedence_inner(atn, rule_index, precedence, None)
+    }
+
+    fn parse_atn_rule_with_precedence_inner(
+        &mut self,
+        atn: &Atn,
+        rule_index: usize,
+        precedence: i32,
+        predicate_context: Option<FastPredicateContext<'_>>,
+    ) -> Result<ParseTree, AntlrError> {
         let start_state = atn.rule_to_start_state().get(rule_index).ok_or_else(|| {
             AntlrError::Unsupported(format!("rule {rule_index} has no start state"))
         })?;
@@ -5664,7 +5717,7 @@ where
             precedence,
             caller_follow_state,
         };
-        let first_pass = self.fast_recognize_top(atn, top_request);
+        let first_pass = self.fast_recognize_top(atn, top_request, predicate_context);
         self.fast_token_nodes_enabled = true;
         let needs_tree_retry = matches!(
             &first_pass,
@@ -5693,7 +5746,7 @@ where
         let (outcome, _expected) = if needs_retry {
             self.fast_first_set_prefilter = false;
             self.fast_recovery_enabled = false;
-            let clean_retry = self.fast_recognize_top(atn, top_request);
+            let clean_retry = self.fast_recognize_top(atn, top_request, predicate_context);
             let clean_selected = if needs_tree_retry {
                 match clean_retry {
                     ok @ Ok(_) => ok,
@@ -5706,7 +5759,7 @@ where
                 || matches!(&clean_selected, Ok((outcome, _)) if !outcome.diagnostics.is_empty())
             {
                 self.fast_recovery_enabled = true;
-                let recovery_retry = self.fast_recognize_top(atn, top_request);
+                let recovery_retry = self.fast_recognize_top(atn, top_request, predicate_context);
                 select_better_top_outcome(clean_selected, recovery_retry, &self.recognition_arena)
             } else {
                 clean_selected
@@ -5714,6 +5767,12 @@ where
             self.fast_first_set_prefilter = true;
             self.fast_recovery_enabled = true;
             selected.map_err(|expected| {
+                if predicate_context.is_some()
+                    && let Some(error) = self.unknown_semantic_error()
+                {
+                    report_token_source_errors(&self.input.drain_source_errors());
+                    return error;
+                }
                 let error = self.recognition_error(rule_index, start_index, &expected);
                 self.record_syntax_errors(1);
                 report_token_source_errors(&self.input.drain_source_errors());
@@ -5722,6 +5781,12 @@ where
         } else {
             first_pass.expect("first_pass is Ok in the no-retry branch")
         };
+        if predicate_context.is_some()
+            && let Some(error) = self.unknown_semantic_error()
+        {
+            report_token_source_errors(&self.input.drain_source_errors());
+            return Err(error);
+        }
         self.record_syntax_errors(self.recognition_arena.diagnostics_len(outcome.diagnostics));
         report_parser_diagnostics(&self.prediction_diagnostics);
         report_parser_diagnostics(self.recognition_arena.diagnostics(outcome.diagnostics));
@@ -5798,6 +5863,7 @@ where
         &mut self,
         atn: &Atn,
         request: FastRecognizeTopRequest,
+        predicate_context: Option<FastPredicateContext<'_>>,
     ) -> Result<(FastRecognizeOutcome, ExpectedTokens), ExpectedTokens> {
         let FastRecognizeTopRequest {
             start_state,
@@ -5832,9 +5898,12 @@ where
                 recovery_symbols: empty_recovery,
                 recovery_state: None,
             },
-            &mut visiting,
-            &mut memo,
-            &mut expected,
+            FastRecognizeScratch {
+                predicate_context,
+                visiting: &mut visiting,
+                memo: &mut memo,
+                expected: &mut expected,
+            },
         );
         #[cfg(feature = "perf-counters")]
         if std::env::var("ANTLR_PERF_DUMP").is_ok() {
@@ -6153,6 +6222,27 @@ where
             return self
                 .parse_atn_rule_with_precedence(atn, rule_index, precedence)
                 .map(|tree| (tree, Vec::new()));
+        }
+        if can_use_fast_predicate_recognizer(atn, &options) {
+            self.unknown_predicate_policy = unknown_predicate_policy;
+            let prior_unknown_predicate_hits = std::mem::take(&mut self.unknown_predicate_hits);
+            let member_values = self.int_members.clone();
+            let result = self
+                .parse_atn_rule_with_precedence_inner(
+                    atn,
+                    rule_index,
+                    precedence,
+                    Some(FastPredicateContext {
+                        predicates,
+                        semantics,
+                        member_values: &member_values,
+                    }),
+                )
+                .map(|tree| (tree, Vec::new()));
+            if self.unknown_predicate_hits.is_empty() && self.unhandled_action_hits.is_empty() {
+                self.restore_prior_unknown_predicate_hits(prior_unknown_predicate_hits);
+            }
+            return result;
         }
         self.unknown_predicate_policy = unknown_predicate_policy;
         // A generated parent may have already recorded unknown-predicate
@@ -6589,6 +6679,7 @@ where
     fn fast_single_token_deletion_recovery(
         &mut self,
         recovery: FastRecoveryRequest<'_, '_>,
+        predicate_context: Option<FastPredicateContext<'_>>,
     ) -> Vec<FastRecognizeOutcome> {
         let FastRecoveryRequest {
             atn,
@@ -6629,9 +6720,12 @@ where
                 recovery_symbols: empty_recovery,
                 recovery_state: None,
             },
-            visiting,
-            memo,
-            expected,
+            FastRecognizeScratch {
+                predicate_context,
+                visiting,
+                memo,
+                expected,
+            },
         )
         .into_iter()
         .map(|mut outcome| {
@@ -6656,6 +6750,7 @@ where
     fn fast_single_token_insertion_recovery(
         &mut self,
         recovery: FastRecoveryRequest<'_, '_>,
+        predicate_context: Option<FastPredicateContext<'_>>,
     ) -> Vec<FastRecognizeOutcome> {
         let FastRecoveryRequest {
             atn,
@@ -6700,9 +6795,12 @@ where
                 recovery_symbols: empty_recovery,
                 recovery_state: None,
             },
-            visiting,
-            memo,
-            expected,
+            FastRecognizeScratch {
+                predicate_context,
+                visiting,
+                memo,
+                expected,
+            },
         )
         .into_iter()
         .map(|mut outcome| {
@@ -6721,6 +6819,7 @@ where
     fn fast_current_token_deletion_recovery(
         &mut self,
         recovery: FastCurrentTokenDeletionRequest<'_, '_>,
+        predicate_context: Option<FastPredicateContext<'_>>,
     ) -> Vec<FastRecognizeOutcome> {
         let FastCurrentTokenDeletionRequest {
             atn,
@@ -6742,19 +6841,28 @@ where
         request.index = next_index;
         request.depth += 1;
         request.recovery_state = None;
-        self.recognize_state_fast(atn, request, visiting, memo, expected)
-            .into_iter()
-            .map(|mut outcome| {
-                outcome.diagnostics = self
-                    .recognition_arena
-                    .prepend_diagnostic(outcome.diagnostics, diagnostic.clone());
-                for index in skipped.iter().rev() {
-                    let error = self.arena_token_node(*index, true);
-                    self.arena_prepend(&mut outcome.nodes, error);
-                }
-                outcome
-            })
-            .collect()
+        self.recognize_state_fast(
+            atn,
+            request,
+            FastRecognizeScratch {
+                predicate_context,
+                visiting,
+                memo,
+                expected,
+            },
+        )
+        .into_iter()
+        .map(|mut outcome| {
+            outcome.diagnostics = self
+                .recognition_arena
+                .prepend_diagnostic(outcome.diagnostics, diagnostic.clone());
+            for index in skipped.iter().rev() {
+                let error = self.arena_token_node(*index, true);
+                self.arena_prepend(&mut outcome.nodes, error);
+            }
+            outcome
+        })
+        .collect()
     }
 
     /// Converts a failed child rule into a recovered fast-recognizer outcome so
@@ -6829,12 +6937,16 @@ where
         &mut self,
         atn: &Atn,
         request: FastRecognizeRequest,
-        visiting: &mut FxHashSet<FastRecognizeKey>,
-        memo: &mut FxHashMap<FastRecognizeKey, Rc<[FastRecognizeOutcome]>>,
-        expected: &mut ExpectedTokens,
+        scratch: FastRecognizeScratch<'_, '_>,
     ) -> Vec<FastRecognizeOutcome> {
         #[cfg(feature = "perf-counters")]
         perf_counters::inc(&perf_counters::RFS_CALLS, 1);
+        let FastRecognizeScratch {
+            predicate_context,
+            visiting,
+            memo,
+            expected,
+        } = scratch;
         let FastRecognizeRequest {
             mut state_number,
             stop_state,
@@ -6897,13 +7009,25 @@ where
                 let transition_kind = transition.kind();
                 let target = transition.target();
                 match transition_kind {
-                    ParserTransitionKind::Epsilon
-                    | ParserTransitionKind::Predicate
-                    | ParserTransitionKind::Action
+                    ParserTransitionKind::Epsilon | ParserTransitionKind::Action
                         if left_recursive_boundary(atn, state, target).is_none() =>
                     {
                         #[cfg(feature = "perf-counters")]
                         perf_counters::inc(&perf_counters::EPSILON_TRANSITIONS, 1);
+                        state_number = target;
+                        depth += 1;
+                        continue;
+                    }
+                    ParserTransitionKind::Predicate
+                        if left_recursive_boundary(atn, state, target).is_none() =>
+                    {
+                        #[cfg(feature = "perf-counters")]
+                        perf_counters::inc(&perf_counters::EPSILON_TRANSITIONS, 1);
+                        if !self.fast_parser_predicate_matches(predicate_context, transition, index)
+                        {
+                            record_predicate_no_viable(expected, decision_start_index, index);
+                            return Vec::new();
+                        }
                         state_number = target;
                         depth += 1;
                         continue;
@@ -7174,9 +7298,7 @@ where
             }
             let target = transition.target();
             match transition_kind {
-                ParserTransitionKind::Epsilon
-                | ParserTransitionKind::Predicate
-                | ParserTransitionKind::Action => {
+                ParserTransitionKind::Epsilon | ParserTransitionKind::Action => {
                     #[cfg(feature = "perf-counters")]
                     perf_counters::inc(&perf_counters::EPSILON_TRANSITIONS, 1);
                     let boundary = left_recursive_boundary(atn, state, target);
@@ -7194,9 +7316,12 @@ where
                                 recovery_symbols: Rc::clone(&epsilon_recovery_symbols),
                                 recovery_state: epsilon_recovery_state,
                             },
-                            visiting,
-                            memo,
-                            expected,
+                            FastRecognizeScratch {
+                                predicate_context,
+                                visiting,
+                                memo,
+                                expected,
+                            },
                         )
                         .into_iter()
                         .map(|mut outcome| {
@@ -7207,6 +7332,45 @@ where
                             outcome
                         }),
                     );
+                }
+                ParserTransitionKind::Predicate => {
+                    #[cfg(feature = "perf-counters")]
+                    perf_counters::inc(&perf_counters::EPSILON_TRANSITIONS, 1);
+                    if self.fast_parser_predicate_matches(predicate_context, transition, index) {
+                        let boundary = left_recursive_boundary(atn, state, target);
+                        outcomes.extend(
+                            self.recognize_state_fast(
+                                atn,
+                                FastRecognizeRequest {
+                                    state_number: target,
+                                    stop_state,
+                                    index,
+                                    rule_start_index,
+                                    decision_start_index: next_decision_start_index,
+                                    precedence,
+                                    depth: depth + 1,
+                                    recovery_symbols: Rc::clone(&epsilon_recovery_symbols),
+                                    recovery_state: epsilon_recovery_state,
+                                },
+                                FastRecognizeScratch {
+                                    predicate_context,
+                                    visiting,
+                                    memo,
+                                    expected,
+                                },
+                            )
+                            .into_iter()
+                            .map(|mut outcome| {
+                                if let Some(rule_index) = boundary {
+                                    let boundary = self.arena_boundary_node(rule_index);
+                                    self.arena_prepend(&mut outcome.nodes, boundary);
+                                }
+                                outcome
+                            }),
+                        );
+                    } else {
+                        record_predicate_no_viable(expected, next_decision_start_index, index);
+                    }
                 }
                 ParserTransitionKind::Precedence => {
                     let transition_precedence = packed_i32(transition.arg0());
@@ -7226,9 +7390,12 @@ where
                                     recovery_symbols: Rc::clone(&epsilon_recovery_symbols),
                                     recovery_state: epsilon_recovery_state,
                                 },
-                                visiting,
-                                memo,
-                                expected,
+                                FastRecognizeScratch {
+                                    predicate_context,
+                                    visiting,
+                                    memo,
+                                    expected,
+                                },
                             )
                             .into_iter()
                             .map(|mut outcome| {
@@ -7301,9 +7468,12 @@ where
                             recovery_symbols: Rc::clone(&epsilon_recovery_symbols),
                             recovery_state: epsilon_recovery_state,
                         },
-                        visiting,
-                        memo,
-                        expected,
+                        FastRecognizeScratch {
+                            predicate_context,
+                            visiting,
+                            memo,
+                            expected,
+                        },
                     );
                     if children.is_empty() && self.fast_recovery_enabled {
                         children = self.fast_child_rule_failure_recovery_outcomes(
@@ -7343,9 +7513,12 @@ where
                                 recovery_symbols: empty_recovery,
                                 recovery_state: None,
                             },
-                            visiting,
-                            memo,
-                            expected,
+                            FastRecognizeScratch {
+                                predicate_context,
+                                visiting,
+                                memo,
+                                expected,
+                            },
                         );
                         if follow_outcomes.is_empty() {
                             continue;
@@ -7401,9 +7574,12 @@ where
                                     recovery_symbols: empty_recovery,
                                     recovery_state: None,
                                 },
-                                visiting,
-                                memo,
-                                expected,
+                                FastRecognizeScratch {
+                                    predicate_context,
+                                    visiting,
+                                    memo,
+                                    expected,
+                                },
                             )
                             .into_iter()
                             .map(|mut outcome| {
@@ -7463,6 +7639,7 @@ where
                                     memo,
                                     expected,
                                 },
+                                predicate_context,
                             ));
                             if !state_is_left_recursive_rule(atn, state) {
                                 outcomes.extend(self.fast_single_token_insertion_recovery(
@@ -7486,6 +7663,7 @@ where
                                         memo,
                                         expected,
                                     },
+                                    predicate_context,
                                 ));
                             }
                             outcomes.extend(self.fast_current_token_deletion_recovery(
@@ -7507,6 +7685,7 @@ where
                                     memo,
                                     expected,
                                 },
+                                predicate_context,
                             ));
                         }
                     }
@@ -9258,6 +9437,35 @@ where
         semir::eval_pred(&semantics.ir, predicate.expr, &mut ctx)
     }
 
+    fn fast_parser_predicate_matches(
+        &mut self,
+        context: Option<FastPredicateContext<'_>>,
+        transition: ParserTransition<'_>,
+        index: usize,
+    ) -> bool {
+        let Some(context) = context else {
+            return true;
+        };
+        let rule_index = transition.arg0() as usize;
+        let pred_index = transition.arg1() as usize;
+        let key = (index, rule_index, pred_index);
+        if let Some(result) = self.fast_predicate_cache.get(&key) {
+            return *result;
+        }
+        let result = self.parser_predicate_matches(PredicateEval {
+            index,
+            rule_index,
+            pred_index,
+            predicates: context.predicates,
+            semantics: context.semantics,
+            context: None,
+            local_int_arg: None,
+            member_values: context.member_values,
+        });
+        self.fast_predicate_cache.insert(key, result);
+        result
+    }
+
     fn parser_predicate_matches(&mut self, eval: PredicateEval<'_>) -> bool {
         let PredicateEval {
             index,
@@ -9541,6 +9749,7 @@ where
         self.rule_first_set_cache.clear();
         self.decision_lookahead_cache.clear();
         self.ll1_decision_cache.clear();
+        self.fast_predicate_cache.clear();
         self.empty_cycle_cache.clear();
         self.rule_stop_reach_cache.clear();
         self.single_outcome_memo_mode = SingleOutcomeMemoMode::Probe;
@@ -12105,6 +12314,81 @@ mod tests {
         finish_atn(atn)
     }
 
+    fn predicate_gated_same_lookahead_atn(pred_indexes: [usize; 2]) -> Atn {
+        let mut atn = ParserAtnBuilder::new(1);
+        for (state_number, kind) in [
+            (0, AtnStateKind::RuleStart),
+            (1, AtnStateKind::BlockStart),
+            (2, AtnStateKind::Basic),
+            (3, AtnStateKind::Basic),
+            (4, AtnStateKind::Basic),
+            (5, AtnStateKind::Basic),
+            (6, AtnStateKind::BlockEnd),
+            (7, AtnStateKind::RuleStop),
+        ] {
+            assert_eq!(
+                atn.add_state(kind, Some(0)).expect("state").index(),
+                state_number
+            );
+        }
+        atn.set_rule_to_start_state(vec![0])
+            .expect("rule start states");
+        atn.set_rule_to_stop_state(vec![7])
+            .expect("rule stop states");
+        atn.add_decision_state(1).expect("decision state");
+        atn.add_transition(0, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("transition");
+        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 2 })
+            .expect("transition");
+        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 3 })
+            .expect("transition");
+        atn.add_transition(
+            2,
+            ParserTransitionSpec::Predicate {
+                target: 4,
+                rule_index: 0,
+                pred_index: pred_indexes[0],
+                context_dependent: false,
+            },
+        )
+        .expect("transition");
+        atn.add_transition(
+            3,
+            ParserTransitionSpec::Predicate {
+                target: 5,
+                rule_index: 0,
+                pred_index: pred_indexes[1],
+                context_dependent: false,
+            },
+        )
+        .expect("transition");
+        atn.add_transition(
+            4,
+            ParserTransitionSpec::Atom {
+                target: 6,
+                label: 1,
+            },
+        )
+        .expect("transition");
+        atn.add_transition(
+            5,
+            ParserTransitionSpec::Atom {
+                target: 6,
+                label: 1,
+            },
+        )
+        .expect("transition");
+        atn.add_transition(
+            6,
+            ParserTransitionSpec::Atom {
+                target: 7,
+                label: TOKEN_EOF,
+            },
+        )
+        .expect("transition");
+        finish_atn(atn)
+    }
+
     fn nested_nullable_context_atn() -> Atn {
         let mut atn = ParserAtnBuilder::new(1);
         for state_number in 0..=20 {
@@ -13021,9 +13305,12 @@ mod tests {
                 recovery_symbols: parser.empty_recovery_symbols(),
                 recovery_state: None,
             },
-            &mut visiting,
-            &mut memo,
-            &mut expected,
+            FastRecognizeScratch {
+                predicate_context: None,
+                visiting: &mut visiting,
+                memo: &mut memo,
+                expected: &mut expected,
+            },
         );
 
         assert!(outcomes.is_empty());
@@ -13292,6 +13579,34 @@ mod tests {
     }
 
     #[test]
+    fn predicate_gated_same_lookahead_uses_viable_alternative() {
+        let atn = predicate_gated_same_lookahead_atn([0, 1]);
+        let mut parser = mini_parser(vec![
+            TestToken::new(1).with_text("x"),
+            TestToken::eof("parser-test", 1, 1, 1),
+        ]);
+
+        let (tree, _) = parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    predicates: &[
+                        (0, 0, ParserPredicate::False),
+                        (0, 1, ParserPredicate::True),
+                    ],
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect("the second predicate-gated alternative should match");
+
+        assert_eq!(parser.node(tree).text(), "x<EOF>");
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+        assert_eq!(parser.fast_predicate_cache.get(&(0, 0, 0)), Some(&false));
+        assert_eq!(parser.fast_predicate_cache.get(&(0, 0, 1)), Some(&true));
+    }
+
+    #[test]
     fn nested_interpreted_parse_preserves_prior_unknown_predicate_hits() {
         // A generated parent may record an unknown-predicate coordinate, then
         // descend into an interpreted child. The child's interpreter entry must
@@ -13341,6 +13656,40 @@ mod tests {
         assert!(
             result.is_err(),
             "the only path is predicate-guarded, so assume-false must fail the parse"
+        );
+    }
+
+    #[test]
+    fn predicate_failure_message_keeps_semantic_recovery_path() {
+        let atn = predicate_after_token_atn();
+        let mut parser = mini_parser(vec![
+            TestToken::new(1).with_text("x"),
+            TestToken::new(2).with_text("y"),
+            TestToken::eof("parser-test", 2, 1, 2),
+        ]);
+
+        let (tree, _) = parser
+            .parse_atn_rule_with_runtime_options(
+                &atn,
+                0,
+                ParserRuntimeOptions {
+                    predicates: &[(
+                        0,
+                        0,
+                        ParserPredicate::FalseWithMessage {
+                            message: "predicate rejected input",
+                        },
+                    )],
+                    ..ParserRuntimeOptions::default()
+                },
+            )
+            .expect("failure-message predicates recover through the semantic interpreter");
+
+        assert_eq!(parser.node(tree).text(), "xy");
+        assert_eq!(parser.number_of_syntax_errors(), 1);
+        assert!(
+            parser.fast_predicate_cache.is_empty(),
+            "failure-message predicates need the semantic interpreter's recovery outcome"
         );
     }
 
@@ -13479,6 +13828,29 @@ mod tests {
     }
 
     #[test]
+    fn fast_predicate_cache_replays_hook_once_per_coordinate_and_input() {
+        let atn = predicate_gated_same_lookahead_atn([0, 0]);
+        let mut parser = mini_parser_with_hooks(
+            vec![
+                TestToken::new(1).with_text("x"),
+                TestToken::eof("parser-test", 1, 1, 1),
+            ],
+            RecordingHooks::default(),
+        );
+
+        let (tree, _) = parser
+            .parse_atn_rule_with_runtime_options(&atn, 0, ParserRuntimeOptions::default())
+            .expect("both alternatives share one replay-safe predicate result");
+
+        assert_eq!(parser.node(tree).text(), "x<EOF>");
+        assert_eq!(
+            parser.semantic_hooks.predicates,
+            vec![(0, 0, 0, Some("x".to_owned()))]
+        );
+        assert_eq!(parser.fast_predicate_cache.get(&(0, 0, 0)), Some(&true));
+    }
+
+    #[test]
     fn semantic_hook_handles_unknown_predicate_before_error_policy() {
         let atn = predicate_after_token_atn();
         let mut parser = mini_parser_with_hooks(
@@ -13506,6 +13878,7 @@ mod tests {
             parser.semantic_hooks.predicates,
             vec![(1, 0, 0, Some("y".to_owned()))]
         );
+        assert_eq!(parser.fast_predicate_cache.get(&(1, 0, 0)), Some(&true));
     }
 
     #[test]
@@ -13531,6 +13904,7 @@ mod tests {
             parser.semantic_hooks.predicates,
             vec![(1, 0, 0, Some("y".to_owned()))]
         );
+        assert_eq!(parser.fast_predicate_cache.get(&(1, 0, 0)), Some(&false));
     }
 
     #[test]
