@@ -1223,32 +1223,62 @@ struct RecognizeOutcome {
     nodes: NodeSeqId,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct FastRecognizeOutcome {
     index: usize,
     consumed_eof: bool,
     diagnostics: DiagnosticSeqId,
-    deferred_nodes: Option<Rc<FastDeferredNodes>>,
+    deferred_nodes: FastDeferredNodeId,
     /// Head of the speculative parse-tree fragment in the parser-owned arena.
-    /// Cloning an outcome copies this compact ID; prepending appends one
+    /// Copying an outcome copies this compact ID; prepending appends one
     /// `SeqLink` without allocating an individual node or list tail.
     nodes: NodeSeqId,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-enum FastDeferredNodes {
-    Fragment(NodeSeqId),
-    Rule(Rc<FastDeferredRule>),
-    Concat { prefix: Rc<Self>, suffix: Rc<Self> },
+/// Handle into the parser-owned deferred tree rope.
+///
+/// The sentinel keeps outcomes and repetition paths compact without an
+/// `Option` discriminant or per-node reference counting.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+struct FastDeferredNodeId(u32);
+
+impl FastDeferredNodeId {
+    const EMPTY: Self = Self(u32::MAX);
+
+    const fn is_empty(self) -> bool {
+        self.0 == Self::EMPTY.0
+    }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+impl Default for FastDeferredNodeId {
+    fn default() -> Self {
+        Self::EMPTY
+    }
+}
+
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+struct FastDeferredRuleId(u32);
+
+/// One immutable deferred-tree rope record in `RecognitionArena`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum FastDeferredNode {
+    Fragment(NodeSeqId),
+    Rule(FastDeferredRuleId),
+    Concat {
+        prefix: FastDeferredNodeId,
+        suffix: FastDeferredNodeId,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct FastDeferredRule {
-    rule_index: usize,
-    invoking_state: isize,
-    start_index: usize,
-    stop_index: Option<usize>,
-    deferred_children: Option<Rc<FastDeferredNodes>>,
+    rule_index: u32,
+    invoking_state: i32,
+    start_index: u32,
+    stop_index: Option<u32>,
+    deferred_children: FastDeferredNodeId,
     children: NodeSeqId,
 }
 
@@ -1365,6 +1395,8 @@ struct RecognitionArena {
     seq_links: Vec<SeqLink>,
     diagnostic_links: Vec<DiagnosticLink>,
     extras: Vec<RecognitionExtra>,
+    deferred_nodes: Vec<FastDeferredNode>,
+    deferred_rules: Vec<FastDeferredRule>,
 }
 
 // Preserve normal parser reuse while preventing one pathological parse from
@@ -1373,6 +1405,8 @@ const MAX_RETAINED_RECOGNITION_NODES: usize = 131_072;
 const MAX_RETAINED_RECOGNITION_SEQUENCE_LINKS: usize = 262_144;
 const MAX_RETAINED_RECOGNITION_DIAGNOSTIC_LINKS: usize = 65_536;
 const MAX_RETAINED_RECOGNITION_EXTRAS: usize = 32_768;
+const MAX_RETAINED_FAST_DEFERRED_NODES: usize = 262_144;
+const MAX_RETAINED_FAST_DEFERRED_RULES: usize = 131_072;
 
 impl RecognitionArena {
     fn reset(&mut self) {
@@ -1383,6 +1417,8 @@ impl RecognitionArena {
             MAX_RETAINED_RECOGNITION_DIAGNOSTIC_LINKS,
         );
         reset_arena_vec(&mut self.extras, MAX_RETAINED_RECOGNITION_EXTRAS);
+        reset_arena_vec(&mut self.deferred_nodes, MAX_RETAINED_FAST_DEFERRED_NODES);
+        reset_arena_vec(&mut self.deferred_rules, MAX_RETAINED_FAST_DEFERRED_RULES);
     }
 
     fn push_node(&mut self, node: ArenaRecognizedNode) -> RecognizedNodeId {
@@ -1407,6 +1443,57 @@ impl RecognitionArena {
         );
         self.seq_links.push(SeqLink { head, tail });
         id
+    }
+
+    fn push_deferred_node(&mut self, node: FastDeferredNode) -> FastDeferredNodeId {
+        let id = FastDeferredNodeId(
+            u32::try_from(self.deferred_nodes.len()).expect("deferred node arena fits in u32"),
+        );
+        self.deferred_nodes.push(node);
+        id
+    }
+
+    fn push_deferred_rule(&mut self, rule: FastDeferredRule) -> FastDeferredRuleId {
+        let id = FastDeferredRuleId(
+            u32::try_from(self.deferred_rules.len()).expect("deferred rule arena fits in u32"),
+        );
+        self.deferred_rules.push(rule);
+        id
+    }
+
+    fn deferred_fragment(&mut self, nodes: NodeSeqId) -> FastDeferredNodeId {
+        if nodes.is_empty() {
+            FastDeferredNodeId::EMPTY
+        } else {
+            self.push_deferred_node(FastDeferredNode::Fragment(nodes))
+        }
+    }
+
+    fn deferred_rule_node(&mut self, rule: FastDeferredRule) -> FastDeferredNodeId {
+        let rule = self.push_deferred_rule(rule);
+        self.push_deferred_node(FastDeferredNode::Rule(rule))
+    }
+
+    fn concat_deferred_nodes(
+        &mut self,
+        prefix: FastDeferredNodeId,
+        suffix: FastDeferredNodeId,
+    ) -> FastDeferredNodeId {
+        if prefix.is_empty() {
+            return suffix;
+        }
+        if suffix.is_empty() {
+            return prefix;
+        }
+        self.push_deferred_node(FastDeferredNode::Concat { prefix, suffix })
+    }
+
+    fn deferred_node(&self, id: FastDeferredNodeId) -> FastDeferredNode {
+        self.deferred_nodes[id.0 as usize]
+    }
+
+    fn deferred_rule(&self, id: FastDeferredRuleId) -> FastDeferredRule {
+        self.deferred_rules[id.0 as usize]
     }
 
     fn prepend_diagnostic(
@@ -3637,10 +3724,10 @@ struct FastRepetitionShape {
     exit_transition_index: usize,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 struct FastRepetitionPath {
     index: usize,
-    deferred_nodes: Option<Rc<FastDeferredNodes>>,
+    deferred_nodes: FastDeferredNodeId,
     diagnostics: DiagnosticSeqId,
     consumed_eof: bool,
 }
@@ -3648,21 +3735,6 @@ struct FastRepetitionPath {
 enum FastRepetitionWork {
     Enter(FastRepetitionPath),
     Exit(FastRepetitionPath),
-}
-
-fn deferred_node_fragment(nodes: NodeSeqId) -> Option<Rc<FastDeferredNodes>> {
-    (!nodes.is_empty()).then(|| Rc::new(FastDeferredNodes::Fragment(nodes)))
-}
-
-fn concat_deferred_nodes(
-    prefix: Option<Rc<FastDeferredNodes>>,
-    suffix: Option<Rc<FastDeferredNodes>>,
-) -> Option<Rc<FastDeferredNodes>> {
-    match (prefix, suffix) {
-        (None, suffix) => suffix,
-        (prefix, None) => prefix,
-        (Some(prefix), Some(suffix)) => Some(Rc::new(FastDeferredNodes::Concat { prefix, suffix })),
-    }
 }
 
 fn fast_repetition_shape(atn: &Atn, state: AtnState<'_>) -> Option<FastRepetitionShape> {
@@ -3715,10 +3787,10 @@ fn push_fast_repetition_work(
     path: FastRepetitionPath,
 ) {
     if shape.enter_transition_index < shape.exit_transition_index {
-        work.push(FastRepetitionWork::Exit(path.clone()));
+        work.push(FastRepetitionWork::Exit(path));
         work.push(FastRepetitionWork::Enter(path));
     } else {
-        work.push(FastRepetitionWork::Enter(path.clone()));
+        work.push(FastRepetitionWork::Enter(path));
         work.push(FastRepetitionWork::Exit(path));
     }
 }
@@ -7025,7 +7097,7 @@ where
             index: next_index,
             consumed_eof: false,
             diagnostics,
-            deferred_nodes: None,
+            deferred_nodes: FastDeferredNodeId::EMPTY,
             nodes,
         })
     }
@@ -7055,77 +7127,66 @@ where
         outcome: &mut FastRecognizeOutcome,
         node: RecognizedNodeId,
     ) {
-        if outcome.deferred_nodes.is_none() {
+        if outcome.deferred_nodes.is_empty() {
             self.arena_prepend(&mut outcome.nodes, node);
             return;
         }
         let fragment = self.recognition_arena.prepend(NodeSeqId::EMPTY, node);
-        outcome.deferred_nodes = concat_deferred_nodes(
-            deferred_node_fragment(fragment),
-            outcome.deferred_nodes.take(),
-        );
+        let fragment = self.recognition_arena.deferred_fragment(fragment);
+        outcome.deferred_nodes = self
+            .recognition_arena
+            .concat_deferred_nodes(fragment, outcome.deferred_nodes);
     }
 
     fn materialize_fast_deferred_nodes(
         &mut self,
-        root: Option<Rc<FastDeferredNodes>>,
+        root: FastDeferredNodeId,
         mut suffix: NodeSeqId,
     ) -> NodeSeqId {
-        enum PendingNode {
-            Existing(RecognizedNodeId),
-            Rule(Rc<FastDeferredRule>),
-        }
-
-        let Some(root) = root else {
+        if root.is_empty() {
             return suffix;
-        };
-        let mut pending = vec![root];
-        let mut nodes = Vec::new();
-        while let Some(deferred) = pending.pop() {
-            match deferred.as_ref() {
-                FastDeferredNodes::Fragment(sequence) => {
-                    nodes.extend(
-                        self.recognition_arena
-                            .iter(*sequence)
-                            .map(PendingNode::Existing),
-                    );
-                }
-                FastDeferredNodes::Rule(rule) => {
-                    nodes.push(PendingNode::Rule(Rc::clone(rule)));
-                }
-                FastDeferredNodes::Concat { prefix, suffix } => {
-                    pending.push(Rc::clone(suffix));
-                    pending.push(Rc::clone(prefix));
-                }
-            }
         }
-        for node in nodes.into_iter().rev() {
-            let node = match node {
-                PendingNode::Existing(node) => node,
-                PendingNode::Rule(rule) => {
-                    let children = self.materialize_fast_deferred_nodes(
-                        rule.deferred_children.clone(),
-                        rule.children,
-                    );
-                    self.arena_rule_node(ArenaRuleSpec {
+        let mut pending = vec![root];
+        let mut fragment_nodes = Vec::new();
+        while let Some(deferred) = pending.pop() {
+            match self.recognition_arena.deferred_node(deferred) {
+                FastDeferredNode::Fragment(sequence) => {
+                    fragment_nodes.clear();
+                    fragment_nodes.extend(self.recognition_arena.iter(sequence));
+                    while let Some(node) = fragment_nodes.pop() {
+                        self.arena_prepend(&mut suffix, node);
+                    }
+                }
+                FastDeferredNode::Rule(rule) => {
+                    let rule = self.recognition_arena.deferred_rule(rule);
+                    let children =
+                        self.materialize_fast_deferred_nodes(rule.deferred_children, rule.children);
+                    let node = self.recognition_arena.push_node(ArenaRecognizedNode::Rule {
                         rule_index: rule.rule_index,
                         invoking_state: rule.invoking_state,
                         alt_number: 0,
                         start_index: rule.start_index,
                         stop_index: rule.stop_index,
-                        return_values: BTreeMap::new(),
+                        return_values: None,
                         children,
-                    })
+                    });
+                    self.arena_prepend(&mut suffix, node);
                 }
-            };
-            self.arena_prepend(&mut suffix, node);
+                FastDeferredNode::Concat {
+                    prefix,
+                    suffix: deferred_suffix,
+                } => {
+                    pending.push(prefix);
+                    pending.push(deferred_suffix);
+                }
+            }
         }
         suffix
     }
 
     fn materialize_fast_outcome_nodes(&mut self, outcome: &mut FastRecognizeOutcome) {
-        outcome.nodes =
-            self.materialize_fast_deferred_nodes(outcome.deferred_nodes.take(), outcome.nodes);
+        let deferred_nodes = std::mem::take(&mut outcome.deferred_nodes);
+        outcome.nodes = self.materialize_fast_deferred_nodes(deferred_nodes, outcome.nodes);
     }
 
     /// Walks one ordinary `*`/`+` repetition at a time so input length grows
@@ -7149,7 +7210,7 @@ where
             shape,
             FastRepetitionPath {
                 index: request.index,
-                deferred_nodes: None,
+                deferred_nodes: FastDeferredNodeId::EMPTY,
                 diagnostics: DiagnosticSeqId::EMPTY,
                 consumed_eof: false,
             },
@@ -7178,23 +7239,23 @@ where
                             expected: &mut *expected,
                         },
                     );
-                    for mut body in body_outcomes.into_iter().rev() {
+                    for body in body_outcomes.into_iter().rev() {
                         // ANTLR rejects nullable repetition bodies. Keep the
                         // interpreter bounded for malformed or recovered ATNs
                         // by mirroring the existing same-coordinate cycle cut.
                         if body.index <= path.index {
                             continue;
                         }
-                        let body_nodes = concat_deferred_nodes(
-                            body.deferred_nodes.take(),
-                            deferred_node_fragment(body.nodes),
-                        );
+                        let body_fragment = self.recognition_arena.deferred_fragment(body.nodes);
+                        let body_nodes = self
+                            .recognition_arena
+                            .concat_deferred_nodes(body.deferred_nodes, body_fragment);
+                        let deferred_nodes = self
+                            .recognition_arena
+                            .concat_deferred_nodes(path.deferred_nodes, body_nodes);
                         let next_path = FastRepetitionPath {
                             index: body.index,
-                            deferred_nodes: concat_deferred_nodes(
-                                path.deferred_nodes.clone(),
-                                body_nodes,
-                            ),
+                            deferred_nodes,
                             diagnostics: self
                                 .recognition_arena
                                 .concat_diagnostics(path.diagnostics, body.diagnostics),
@@ -7225,10 +7286,9 @@ where
                         },
                     );
                     for mut outcome in suffixes {
-                        outcome.deferred_nodes = concat_deferred_nodes(
-                            path.deferred_nodes.clone(),
-                            outcome.deferred_nodes.take(),
-                        );
+                        outcome.deferred_nodes = self
+                            .recognition_arena
+                            .concat_deferred_nodes(path.deferred_nodes, outcome.deferred_nodes);
                         outcome.diagnostics = self
                             .recognition_arena
                             .concat_diagnostics(path.diagnostics, outcome.diagnostics);
@@ -7307,7 +7367,7 @@ where
                     index,
                     consumed_eof: inline_consumed_eof,
                     diagnostics: DiagnosticSeqId::EMPTY,
-                    deferred_nodes: None,
+                    deferred_nodes: FastDeferredNodeId::EMPTY,
                     nodes,
                 }];
             }
@@ -7486,7 +7546,7 @@ where
                     let inline_tokens = &inline_consumed_tokens;
                     return outcomes
                         .iter()
-                        .cloned()
+                        .copied()
                         .map(|mut outcome| {
                             if inline_eof {
                                 outcome.consumed_eof = true;
@@ -7845,7 +7905,7 @@ where
                             *expected = expected_before_child;
                         }
                     }
-                    for mut child in children {
+                    for child in children {
                         let child_index = child.index;
                         let child_consumed_eof = child.consumed_eof;
                         let child_diagnostics = child.diagnostics;
@@ -7876,14 +7936,19 @@ where
                         let child_stop_index =
                             self.rule_stop_token_index(child_index, child_consumed_eof);
                         let child_node =
-                            Rc::new(FastDeferredNodes::Rule(Rc::new(FastDeferredRule {
-                                rule_index,
-                                invoking_state: invoking_state_number(state_number),
-                                start_index: index,
-                                stop_index: child_stop_index,
-                                deferred_children: child.deferred_nodes.take(),
+                            self.recognition_arena.deferred_rule_node(FastDeferredRule {
+                                rule_index: u32::try_from(rule_index)
+                                    .expect("rule index fits in u32"),
+                                invoking_state: i32::try_from(invoking_state_number(state_number))
+                                    .expect("invoking state fits in i32"),
+                                start_index: u32::try_from(index)
+                                    .expect("rule start index fits in u32"),
+                                stop_index: child_stop_index.map(|stop_index| {
+                                    u32::try_from(stop_index).expect("rule stop index fits in u32")
+                                }),
+                                deferred_children: child.deferred_nodes,
                                 children: child.nodes,
-                            })));
+                            });
                         let child_diags_empty = child_diagnostics.is_empty();
                         outcomes.extend(follow_outcomes.into_iter().map(|mut outcome| {
                             outcome.consumed_eof |= child_consumed_eof;
@@ -7894,10 +7959,9 @@ where
                                     .recognition_arena
                                     .concat_diagnostics(child_diagnostics, outcome.diagnostics);
                             }
-                            outcome.deferred_nodes = concat_deferred_nodes(
-                                Some(Rc::clone(&child_node)),
-                                outcome.deferred_nodes.take(),
-                            );
+                            outcome.deferred_nodes = self
+                                .recognition_arena
+                                .concat_deferred_nodes(child_node, outcome.deferred_nodes);
                             outcome
                         }));
                     }
@@ -8113,7 +8177,7 @@ where
             if inline_pending {
                 return stored
                     .iter()
-                    .cloned()
+                    .copied()
                     .map(&mut apply_inline_pending)
                     .collect();
             }
@@ -10753,7 +10817,7 @@ fn select_best_fast_outcome(
                                 < (existing.index, existing.consumed_eof)
                         });
                 if replace {
-                    best_caller_follow = Some(outcome.clone());
+                    best_caller_follow = Some(outcome);
                 }
             }
         }
@@ -13784,6 +13848,11 @@ mod tests {
                 (stats.total_links, stats.live_links, stats.dead_links),
                 (REPETITIONS, REPETITIONS, 0)
             );
+            assert_eq!(parser.recognition_arena.deferred_rules.len(), REPETITIONS);
+            assert_eq!(
+                parser.recognition_arena.deferred_nodes.len(),
+                REPETITIONS * 2 - 1
+            );
             assert_eq!(parser.number_of_syntax_errors(), 0);
         }
     }
@@ -14840,19 +14909,19 @@ mod tests {
                 column: 0,
                 message: "mismatched input 'x'".to_owned(),
             }]),
-            deferred_nodes: None,
+            deferred_nodes: FastDeferredNodeId::EMPTY,
             nodes: NodeSeqId::EMPTY,
         };
         let second = FastRecognizeOutcome {
             index: first.index,
             consumed_eof: first.consumed_eof,
             diagnostics: DiagnosticSeqId::EMPTY,
-            deferred_nodes: None,
+            deferred_nodes: FastDeferredNodeId::EMPTY,
             nodes: NodeSeqId::EMPTY,
         };
 
         let selected = select_best_fast_outcome(
-            [first.clone(), second.clone()].into_iter(),
+            [first, second].into_iter(),
             PredictionMode::Sll,
             None,
             |_| panic!("caller-follow token probe should not run"),
@@ -14864,11 +14933,11 @@ mod tests {
             index: second.index,
             consumed_eof: true,
             diagnostics: DiagnosticSeqId::EMPTY,
-            deferred_nodes: None,
+            deferred_nodes: FastDeferredNodeId::EMPTY,
             nodes: NodeSeqId::EMPTY,
         };
         let selected = select_best_fast_outcome(
-            [first.clone(), eof_second].into_iter(),
+            [first, eof_second].into_iter(),
             PredictionMode::Sll,
             None,
             |_| panic!("caller-follow token probe should not run"),
@@ -14898,7 +14967,7 @@ mod tests {
                 column: 0,
                 message: "mismatched input 'x' expecting 'a'".to_owned(),
             }]),
-            deferred_nodes: None,
+            deferred_nodes: FastDeferredNodeId::EMPTY,
             nodes: NodeSeqId::EMPTY,
         };
         let same_rank = FastRecognizeOutcome {
@@ -14909,7 +14978,7 @@ mod tests {
                 column: 0,
                 message: "mismatched input 'x' expecting 'b'".to_owned(),
             }]),
-            deferred_nodes: None,
+            deferred_nodes: FastDeferredNodeId::EMPTY,
             nodes: NodeSeqId::EMPTY,
         };
         let better_rank = FastRecognizeOutcome {
@@ -14920,7 +14989,7 @@ mod tests {
                 column: 0,
                 message: "missing 'a' at 'x'".to_owned(),
             }]),
-            deferred_nodes: None,
+            deferred_nodes: FastDeferredNodeId::EMPTY,
             nodes: NodeSeqId::EMPTY,
         };
         let mut outcomes = vec![first, same_rank, better_rank];
@@ -14953,21 +15022,21 @@ mod tests {
             index: 7,
             consumed_eof: false,
             diagnostics: DiagnosticSeqId::EMPTY,
-            deferred_nodes: None,
+            deferred_nodes: FastDeferredNodeId::EMPTY,
             nodes: NodeSeqId::EMPTY,
         };
         let later = FastRecognizeOutcome {
             index: 8,
             consumed_eof: false,
             diagnostics: DiagnosticSeqId::EMPTY,
-            deferred_nodes: None,
+            deferred_nodes: FastDeferredNodeId::EMPTY,
             nodes: NodeSeqId::EMPTY,
         };
         let mut follow = TokenBitSet::default();
         follow.insert(5);
 
         let selected = select_best_fast_outcome(
-            [later.clone(), earlier.clone()].into_iter(),
+            [later, earlier].into_iter(),
             PredictionMode::Ll,
             Some(&follow),
             |index| (if index == 7 { 5 } else { TOKEN_EOF }, index == 7, true),
@@ -14977,7 +15046,7 @@ mod tests {
         assert_eq!(selected.index, 7);
 
         let selected = select_best_fast_outcome(
-            [later.clone(), earlier.clone()].into_iter(),
+            [later, earlier].into_iter(),
             PredictionMode::Ll,
             Some(&follow),
             |index| (if index == 7 { 5 } else { TOKEN_EOF }, false, true),
@@ -14990,11 +15059,11 @@ mod tests {
             index: 9,
             consumed_eof: false,
             diagnostics: DiagnosticSeqId::EMPTY,
-            deferred_nodes: None,
+            deferred_nodes: FastDeferredNodeId::EMPTY,
             nodes: NodeSeqId::EMPTY,
         };
         let selected = select_best_fast_outcome(
-            [indented_next_statement, earlier.clone()].into_iter(),
+            [indented_next_statement, earlier].into_iter(),
             PredictionMode::Ll,
             Some(&follow),
             |index| {
@@ -15015,11 +15084,11 @@ mod tests {
             index: 10,
             consumed_eof: false,
             diagnostics: DiagnosticSeqId::EMPTY,
-            deferred_nodes: None,
+            deferred_nodes: FastDeferredNodeId::EMPTY,
             nodes: NodeSeqId::EMPTY,
         };
         let selected = select_best_fast_outcome(
-            [continuation, earlier.clone()].into_iter(),
+            [continuation, earlier].into_iter(),
             PredictionMode::Ll,
             Some(&follow),
             |index| {
@@ -15257,6 +15326,15 @@ mod tests {
             column: 1,
             message: "discarded".to_owned(),
         }]);
+        let deferred_children = arena.deferred_fragment(live);
+        let _deferred_rule = arena.deferred_rule_node(FastDeferredRule {
+            rule_index: 0,
+            invoking_state: -1,
+            start_index: 0,
+            stop_index: Some(1),
+            deferred_children,
+            children: NodeSeqId::EMPTY,
+        });
 
         let stats = arena.stats(live, live_diagnostics);
 
@@ -15274,11 +15352,17 @@ mod tests {
         );
         assert!(size_of::<SeqLink>() <= 8);
         assert!(size_of::<DiagnosticLink>() <= 8);
-        assert!(size_of::<FastRecognizeOutcome>() <= 32);
+        assert!(size_of::<FastDeferredNode>() <= 12);
+        assert!(size_of::<FastDeferredRule>() <= 28);
+        assert!(size_of::<FastRecognizeOutcome>() <= 24);
         let capacities = (
             stats.node_capacity,
             stats.link_capacity,
             stats.extra_capacity,
+        );
+        let deferred_capacities = (
+            arena.deferred_nodes.capacity(),
+            arena.deferred_rules.capacity(),
         );
 
         arena.reset();
@@ -15294,6 +15378,15 @@ mod tests {
                 reset.extra_capacity,
             ),
             capacities
+        );
+        assert!(arena.deferred_nodes.is_empty());
+        assert!(arena.deferred_rules.is_empty());
+        assert_eq!(
+            (
+                arena.deferred_nodes.capacity(),
+                arena.deferred_rules.capacity(),
+            ),
+            deferred_capacities
         );
     }
 
