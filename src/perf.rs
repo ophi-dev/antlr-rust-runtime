@@ -1,4 +1,4 @@
-//! Lightweight counters for prediction performance investigations.
+//! Lightweight counters for lexer and prediction performance investigations.
 
 #![allow(clippy::missing_const_for_thread_local)]
 
@@ -47,6 +47,10 @@ struct Counters {
     dfa_cache_publications: u64,
     dfa_cache_publication_nanos: u64,
     dfa_cache_publication_states: u64,
+    lexer_direct_ascii_chars: u64,
+    lexer_generic_chars: u64,
+    lexer_scalar_replay_chars: u64,
+    lexer_bulk_committed_chars: u64,
     decisions: BTreeMap<usize, DecisionCounters>,
 }
 
@@ -270,6 +274,36 @@ pub(crate) fn record_dfa_cache_publication(nanos: u128, states: usize) {
     });
 }
 
+pub(crate) fn record_lexer_direct_ascii(count: usize) {
+    with_counters(|counters| {
+        counters.lexer_direct_ascii_chars = counters
+            .lexer_direct_ascii_chars
+            .saturating_add(u64::try_from(count).unwrap_or(u64::MAX));
+    });
+}
+
+pub(crate) fn record_lexer_generic_char() {
+    with_counters(|counters| {
+        counters.lexer_generic_chars = counters.lexer_generic_chars.saturating_add(1);
+    });
+}
+
+pub(crate) fn record_lexer_scalar_replay(count: usize) {
+    with_counters(|counters| {
+        counters.lexer_scalar_replay_chars = counters
+            .lexer_scalar_replay_chars
+            .saturating_add(u64::try_from(count).unwrap_or(u64::MAX));
+    });
+}
+
+pub(crate) fn record_lexer_bulk_commit(count: usize) {
+    with_counters(|counters| {
+        counters.lexer_bulk_committed_chars = counters
+            .lexer_bulk_committed_chars
+            .saturating_add(u64::try_from(count).unwrap_or(u64::MAX));
+    });
+}
+
 pub fn reset() {
     COUNTERS.with(|counters| *counters.borrow_mut() = Counters::default());
 }
@@ -305,7 +339,7 @@ fn dump_decisions(counters: &Counters) {
     }
 }
 
-const fn totals(counters: &Counters) -> [(&'static str, u64); 40] {
+const fn totals(counters: &Counters) -> [(&'static str, u64); 44] {
     [
         ("prediction.adaptive_calls", counters.adaptive_calls),
         (
@@ -377,7 +411,33 @@ const fn totals(counters: &Counters) -> [(&'static str, u64); 40] {
             "dfa_cache.publication_states",
             counters.dfa_cache_publication_states,
         ),
+        (
+            "lexer.direct_ascii_chars",
+            counters.lexer_direct_ascii_chars,
+        ),
+        ("lexer.generic_chars", counters.lexer_generic_chars),
+        (
+            "lexer.scalar_replay_chars",
+            counters.lexer_scalar_replay_chars,
+        ),
+        (
+            "lexer.bulk_committed_chars",
+            counters.lexer_bulk_committed_chars,
+        ),
     ]
+}
+
+#[cfg(test)]
+pub(crate) fn lexer_snapshot() -> [u64; 4] {
+    COUNTERS.with(|counters| {
+        let counters = counters.borrow();
+        [
+            counters.lexer_direct_ascii_chars,
+            counters.lexer_generic_chars,
+            counters.lexer_scalar_replay_chars,
+            counters.lexer_bulk_committed_chars,
+        ]
+    })
 }
 
 fn print_counter(name: &str, value: u64) {

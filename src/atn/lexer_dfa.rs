@@ -170,6 +170,13 @@ impl CompiledLexerDfa {
             .get(self.states[usize::from(state)].accept as usize)
     }
 
+    /// Target for one byte from a stream known to contain only ASCII.
+    pub(super) fn ascii_target(&self, state: u16, symbol: u8) -> u16 {
+        debug_assert!(symbol.is_ascii());
+        let compiled = &self.states[usize::from(state)];
+        self.ascii_rows[compiled.ascii_row as usize][usize::from(symbol)]
+    }
+
     /// `LexerTransition` target for a non-EOF symbol, or [`DEAD_STATE`].
     pub(super) fn char_target(&self, state: u16, symbol: i32) -> u16 {
         let compiled = &self.states[usize::from(state)];
@@ -921,7 +928,8 @@ mod tests {
     use super::*;
     use crate::atn::lexer::{next_token, next_token_compiled, next_token_compiled_with_hooks};
     use crate::atn::serialized::{AtnDeserializer, SerializedAtn};
-    use crate::char_stream::InputStream;
+    use crate::char_stream::{CharStream, InputStream, TextInterval};
+    use crate::int_stream::IntStream;
     use crate::lexer::BaseLexer;
     use crate::recognizer::RecognizerData;
     use crate::token::{TOKEN_EOF, Token, TokenSink, TokenStore};
@@ -931,13 +939,18 @@ mod tests {
     struct TokenSnapshot {
         token_type: i32,
         text: String,
+        line: usize,
+        column: usize,
     }
 
-    fn compiled_token(
-        lexer: &mut BaseLexer<InputStream>,
+    fn compiled_token<I>(
+        lexer: &mut BaseLexer<I>,
         atn: &LexerAtn,
         dfa: &CompiledLexerDfa,
-    ) -> TokenSnapshot {
+    ) -> TokenSnapshot
+    where
+        I: CharStream,
+    {
         let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
         let mut sink = TokenSink::new(&mut store);
         let id = next_token_compiled(lexer, &mut sink, atn, dfa).expect("test token should fit");
@@ -945,6 +958,8 @@ mod tests {
         TokenSnapshot {
             token_type: token.token_type(),
             text: token.text().to_owned(),
+            line: token.line(),
+            column: token.column(),
         }
     }
 
@@ -956,6 +971,44 @@ mod tests {
         TokenSnapshot {
             token_type: token.token_type(),
             text: token.text().to_owned(),
+            line: token.line(),
+            column: token.column(),
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    struct FallbackInput(InputStream);
+
+    impl IntStream for FallbackInput {
+        fn consume(&mut self) {
+            self.0.consume();
+        }
+
+        fn la(&mut self, offset: isize) -> i32 {
+            self.0.la(offset)
+        }
+
+        fn index(&self) -> usize {
+            self.0.index()
+        }
+
+        fn seek(&mut self, index: usize) {
+            self.0.seek(index);
+        }
+
+        fn size(&self) -> usize {
+            self.0.size()
+        }
+
+        fn source_name(&self) -> &str {
+            self.0.source_name()
+        }
+    }
+
+    // Deliberately implements none of the optional fast paths.
+    impl CharStream for FallbackInput {
+        fn text(&self, interval: TextInterval) -> String {
+            self.0.text(interval)
         }
     }
 
@@ -1101,6 +1154,58 @@ mod tests {
         assert_eq!(token.token_type, 1);
         assert_eq!(token.text, "ĀĂ");
         assert_eq!(compiled_token(&mut lexer, &atn, &dfa).token_type, TOKEN_EOF);
+    }
+
+    #[test]
+    fn compiled_dfa_keeps_custom_streams_on_the_compatible_fallback() {
+        let atn = two_rule_atn(false);
+        let dfa = CompiledLexerDfa::compile(&atn);
+        let mut lexer = BaseLexer::new(FallbackInput(InputStream::new(" ab")), recognizer_data());
+
+        let token = compiled_token(&mut lexer, &atn, &dfa);
+        assert_eq!(token.token_type, 1);
+        assert_eq!(token.text, "ab");
+        assert_eq!((token.line, token.column), (1, 1));
+        assert_eq!(lexer.input().index(), 3);
+    }
+
+    #[cfg(feature = "perf-counters")]
+    #[test]
+    fn lexer_counters_distinguish_ascii_unicode_and_replay_paths() {
+        let ascii_atn = two_rule_atn(false);
+        let ascii_dfa = CompiledLexerDfa::compile(&ascii_atn);
+        crate::perf::reset();
+        let mut ascii = BaseLexer::new(InputStream::new(" ab"), recognizer_data());
+        let token = compiled_token(&mut ascii, &ascii_atn, &ascii_dfa);
+        assert_eq!(token.text, "ab");
+        let [direct, generic, replay, bulk] = crate::perf::lexer_snapshot();
+        assert!(direct >= 3, "{direct}");
+        assert_eq!(generic, 0);
+        assert_eq!(replay, 0);
+        assert_eq!(bulk, 3);
+
+        let unicode_atn = wide_range_atn();
+        let unicode_dfa = CompiledLexerDfa::compile(&unicode_atn);
+        crate::perf::reset();
+        let mut unicode = BaseLexer::new(InputStream::new("ĀĂ"), recognizer_data());
+        let token = compiled_token(&mut unicode, &unicode_atn, &unicode_dfa);
+        assert_eq!(token.text, "ĀĂ");
+        let [direct, generic, replay, bulk] = crate::perf::lexer_snapshot();
+        assert_eq!(direct, 0);
+        assert!(generic >= 2, "{generic}");
+        assert_eq!(replay, 0);
+        assert_eq!(bulk, 2);
+
+        crate::perf::reset();
+        let mut fallback =
+            BaseLexer::new(FallbackInput(InputStream::new(" ab")), recognizer_data());
+        let token = compiled_token(&mut fallback, &ascii_atn, &ascii_dfa);
+        assert_eq!(token.text, "ab");
+        let [direct, generic, replay, bulk] = crate::perf::lexer_snapshot();
+        assert_eq!(direct, 0);
+        assert!(generic >= 3, "{generic}");
+        assert_eq!(replay, 3);
+        assert_eq!(bulk, 0);
     }
 
     #[test]

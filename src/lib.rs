@@ -19,7 +19,7 @@ pub mod tree;
 pub mod vocabulary;
 
 pub use atn::parser::{ParserAtnPrediction, ParserAtnSimulator, ParserAtnSimulatorError};
-pub use char_stream::{CharStream, InputStream, TextInterval};
+pub use char_stream::{CharStream, InputStream, PositionSummary, TextInterval};
 pub use dfa::{DfaStateId, DfaTransition, ParserDfa, ParserDfaStateView, ParserDfaStats};
 pub use errors::{AntlrError, ConsoleErrorListener, ErrorListener};
 pub use generated::{GeneratedLexer, GeneratedParser, GrammarMetadata};

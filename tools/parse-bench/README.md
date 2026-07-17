@@ -73,10 +73,47 @@ Use `--rust-generated-only` for Adaptive LL delivery evidence so the Rust
 generator fails if any parser rule lacks a generated body and the Rust runner
 fails if a generated parser path falls back to the interpreter.
 
+### Lex-only measurements
+
+Use `--phase lex` to time generated Rust lexing and token buffering without
+constructing a parser:
+
+```bash
+python3 tools/parse-bench/run.py \
+  --phase lex \
+  --languages kotlin,csharp,java,trino \
+  --runtimes rust-antlr \
+  --iters 20 \
+  --warmups 3
+```
+
+The source-derived fixtures cover ordinary Kotlin, C#, Java, and Trino input.
+Two lex-only Kotlin fixtures add concentrated ASCII coverage for long
+identifiers, strings, comments, whitespace, and punctuation, plus mixed-script
+coverage for the Unicode fallback.
+
+Use a detached checkout for same-machine baseline comparisons, and select the
+compiler-level configurations explicitly:
+
+```bash
+python3 tools/parse-bench/run.py \
+  --phase lex \
+  --runtimes rust-antlr \
+  --runtime-root /tmp/antlr-runtime-main \
+  --rust-native \
+  --rust-thin-lto
+```
+
+`--rust-native` adds `-C target-cpu=native`. `--rust-thin-lto` writes
+`lto = "thin"` and `codegen-units = 1` in the generated benchmark workspace,
+where Cargo profile settings control the final application and its
+dependencies.
+
 ## Prediction Memory Counters
 
-Set `ANTLR_PERF_DUMP=1` to build the Rust runner with prediction counters and
-print context-store measurements:
+Set `ANTLR_PERF_DUMP=1` to build the Rust runner with performance counters.
+Parse runs print prediction and context-store measurements; lex-only runs print
+lexer direct-ASCII, generic-character, scalar-replay, and bulk-commit counts:
 
 ```bash
 ANTLR_PERF_DUMP=1 python3 tools/parse-bench/run.py \

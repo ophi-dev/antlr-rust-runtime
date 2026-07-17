@@ -717,24 +717,19 @@ where
         let accept = match token_match {
             MatchResult::Accept(accept) => accept,
             MatchResult::NoViableAlt { stop } => {
-                lexer.input_mut().seek(start);
+                lexer.commit_position(start, start);
                 if lexer.input_mut().la(1) == EOF {
                     lexer.set_hit_eof(true);
                     return lexer.emit_eof_or_pending(sink);
                 }
                 record_token_recognition_error(lexer, start, stop);
-                while lexer.input().index() < stop {
-                    lexer.consume_char();
-                }
+                lexer.commit_position(start, stop);
                 continuing_more = false;
                 continue;
             }
         };
 
-        lexer.input_mut().seek(start);
-        while lexer.input().index() < accept.position {
-            lexer.consume_char();
-        }
+        lexer.commit_position(start, accept.position);
 
         let token_type = atn
             .rule_to_token_type()
@@ -1071,6 +1066,72 @@ const MAX_COMPILED_EOF_EDGES: u32 = 8;
 /// escape edge (semantic predicate, recursive lexer rule, state budget)
 /// returns `None`, and the caller re-matches the token with the interpreter.
 fn match_token_compiled<I>(
+    lexer: &mut BaseLexer<I>,
+    dfa: &CompiledLexerDfa,
+    start_state: u16,
+    start: usize,
+) -> Option<MatchResult>
+where
+    I: CharStream,
+{
+    if let Some(input) = lexer.input().contiguous_ascii() {
+        return match_token_compiled_ascii(input, dfa, start_state, start);
+    }
+    match_token_compiled_generic(lexer, dfa, start_state, start)
+}
+
+fn match_token_compiled_ascii(
+    input: &[u8],
+    dfa: &CompiledLexerDfa,
+    start_state: u16,
+    start: usize,
+) -> Option<MatchResult> {
+    let mut state = start_state;
+    let mut position = start;
+    let mut best: Option<AcceptState> = None;
+    let mut error_stop = start;
+    let mut eof_edges = 0_u32;
+    #[cfg(feature = "perf-counters")]
+    let mut direct_chars = 0;
+    let result = loop {
+        if let Some(accept) = dfa.accept(state) {
+            record_compiled_accept(accept, position, &mut best);
+        }
+        let (target, at_eof) = if position < input.len() {
+            let symbol = input[position];
+            #[cfg(feature = "perf-counters")]
+            {
+                direct_chars += 1;
+            }
+            error_stop = error_stop.max(position.saturating_add(1));
+            (dfa.ascii_target(state, symbol), false)
+        } else {
+            eof_edges += 1;
+            if eof_edges > MAX_COMPILED_EOF_EDGES {
+                break None;
+            }
+            (dfa.eof_target(state), true)
+        };
+        if target == DEAD_STATE {
+            break Some(best.map_or(
+                MatchResult::NoViableAlt { stop: error_stop },
+                MatchResult::Accept,
+            ));
+        }
+        if target == ESCAPE_STATE {
+            break None;
+        }
+        if !at_eof {
+            position += 1;
+        }
+        state = target;
+    };
+    #[cfg(feature = "perf-counters")]
+    crate::perf::record_lexer_direct_ascii(direct_chars);
+    result
+}
+
+fn match_token_compiled_generic<I>(
     lexer: &mut BaseLexer<I>,
     dfa: &CompiledLexerDfa,
     start_state: u16,
@@ -1570,14 +1631,21 @@ fn display_error_text(text: &str) -> String {
 
 /// Reads the Unicode scalar value at an absolute character-stream index.
 ///
-/// The interpreter explores many paths at different input offsets, so it seeks
-/// the shared input stream before each lookahead instead of cloning the stream.
+/// Streams with immutable random access avoid touching their committed cursor;
+/// custom streams retain the compatible seek-and-lookahead path.
 fn symbol_at<I>(lexer: &mut BaseLexer<I>, position: usize) -> i32
 where
     I: CharStream,
 {
-    lexer.input_mut().seek(position);
-    lexer.input_mut().la(1)
+    let symbol = lexer.input().symbol_at(position).unwrap_or_else(|| {
+        lexer.input_mut().seek(position);
+        lexer.input_mut().la(1)
+    });
+    #[cfg(feature = "perf-counters")]
+    if symbol != EOF {
+        crate::perf::record_lexer_generic_char();
+    }
+    symbol
 }
 
 #[cfg(test)]
