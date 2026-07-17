@@ -13,7 +13,7 @@ use crate::lexer::{
 };
 use crate::parser::{SemanticHooks, UnknownSemanticPolicy};
 use crate::prediction::PredictionFxHasher;
-use crate::token::{DEFAULT_CHANNEL, INVALID_TOKEN_TYPE, TokenId, TokenSink, TokenStoreError};
+use crate::token::{INVALID_TOKEN_TYPE, TokenId, TokenSink, TokenStoreError};
 
 #[allow(clippy::disallowed_types)]
 type FxHashSet<K> = HashSet<K, BuildHasherDefault<PredictionFxHasher>>;
@@ -63,46 +63,36 @@ pub(super) struct ClosureResult {
     pub(super) has_semantic_context: bool,
 }
 
-/// Mutable emission state produced by executing lexer actions for one token.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct LexerActionResult {
-    token_type: i32,
-    channel: i32,
-    skip: bool,
-    more: bool,
+/// Applies one deserialized lexer action to the shared in-progress token state.
+///
+/// Keeping type and channel on [`BaseLexer`] gives portable commands and custom
+/// hooks the same mutation surface, matching ANTLR's `Lexer._type` /
+/// `Lexer._channel` model.
+fn apply_lexer_action<I>(action: &LexerAction, lexer: &mut BaseLexer<I>)
+where
+    I: CharStream,
+{
+    match action {
+        LexerAction::Channel(channel) => lexer.set_channel(*channel),
+        LexerAction::Custom { .. } => {}
+        LexerAction::Mode(mode) => lexer.set_mode(*mode),
+        LexerAction::More => lexer.more(),
+        LexerAction::PopMode => {
+            lexer.pop_mode();
+        }
+        LexerAction::PushMode(mode) => lexer.push_mode(*mode),
+        LexerAction::Skip => lexer.skip(),
+        LexerAction::Type(token_type) => lexer.set_type(*token_type),
+    }
 }
 
-impl LexerActionResult {
-    /// Starts action execution with the token type chosen by the accepted rule
-    /// and the default channel.
-    const fn new(token_type: i32, channel: i32) -> Self {
-        Self {
-            token_type,
-            channel,
-            skip: false,
-            more: false,
-        }
-    }
-
-    /// Applies one deserialized lexer action to this token emission result and
-    /// to the lexer mode stack when the action changes modes.
-    fn apply<I>(&mut self, action: &LexerAction, lexer: &mut BaseLexer<I>)
-    where
-        I: CharStream,
-    {
-        match action {
-            LexerAction::Channel(channel) => self.channel = *channel,
-            LexerAction::Custom { .. } => {}
-            LexerAction::Mode(mode) => lexer.set_mode(*mode),
-            LexerAction::More => self.more = true,
-            LexerAction::PopMode => {
-                lexer.pop_mode();
-            }
-            LexerAction::PushMode(mode) => lexer.push_mode(*mode),
-            LexerAction::Skip => self.skip = true,
-            LexerAction::Type(token_type) => self.token_type = *token_type,
-        }
-    }
+fn refresh_hit_eof<I>(lexer: &mut BaseLexer<I>) -> bool
+where
+    I: CharStream,
+{
+    let hit_eof = lexer.input().index() >= lexer.input().size();
+    lexer.set_hit_eof(hit_eof);
+    hit_eof
 }
 
 /// Accumulates one epsilon-closure expansion, including whether predicate
@@ -626,10 +616,14 @@ where
     P: FnMut(&BaseLexer<I>, LexerPredicate) -> bool,
     E: FnMut(&mut BaseLexer<I>, i32, usize),
 {
+    if let Some(token) = lexer.emit_pending_token(sink)? {
+        return Ok(token);
+    }
+
     let mut continuing_more = false;
     loop {
         if lexer.hit_eof() {
-            return lexer.eof_token(sink);
+            return lexer.emit_eof_or_pending(sink);
         }
 
         if !continuing_more {
@@ -645,7 +639,7 @@ where
                 lexer.input_mut().seek(start);
                 if lexer.input_mut().la(1) == EOF {
                     lexer.set_hit_eof(true);
-                    return lexer.eof_token(sink);
+                    return lexer.emit_eof_or_pending(sink);
                 }
                 record_token_recognition_error(lexer, start, stop);
                 while lexer.input().index() < stop {
@@ -660,16 +654,13 @@ where
         while lexer.input().index() < accept.position {
             lexer.consume_char();
         }
-        if accept.consumed_eof {
-            lexer.set_hit_eof(true);
-        }
 
         let token_type = atn
             .rule_to_token_type()
             .get(accept.rule_index)
             .copied()
             .unwrap_or(INVALID_TOKEN_TYPE);
-        let mut result = LexerActionResult::new(token_type, DEFAULT_CHANNEL);
+        lexer.set_type(token_type);
         for trace in accept.actions {
             if !lexer_action_belongs_to_accept(atn, accept.rule_index, trace.rule_index) {
                 continue;
@@ -685,29 +676,34 @@ where
                             LexerCustomAction::new(*rule_index, *action_index, trace.position),
                         );
                     }
-                    other => result.apply(other, lexer),
+                    other => apply_lexer_action(other, lexer),
                 }
             }
         }
 
-        if result.skip {
-            continuing_more = false;
-            continue;
-        }
-        if result.more {
-            continuing_more = true;
+        let token_type = lexer.token_type();
+        if token_type == crate::lexer::SKIP || token_type == crate::lexer::MORE {
+            if accept.consumed_eof || lexer.input().index() != accept.position {
+                refresh_hit_eof(lexer);
+            }
+            continuing_more = token_type == crate::lexer::MORE;
             continue;
         }
 
-        accept_adjuster(lexer, result.token_type, accept.position);
+        accept_adjuster(lexer, token_type, accept.position);
         let emit_position = lexer.input().index();
+        let hit_eof = if accept.consumed_eof || emit_position != accept.position {
+            refresh_hit_eof(lexer)
+        } else {
+            false
+        };
         let stop = emit_position.checked_sub(1).unwrap_or(usize::MAX);
-        let text = if accept.consumed_eof && start == emit_position {
+        let text = if hit_eof && accept.consumed_eof && start == emit_position {
             Some("<EOF>".to_owned())
         } else {
             None
         };
-        return lexer.emit_with_stop(sink, result.token_type, result.channel, stop, text);
+        return lexer.emit_or_enqueue_with_stop(sink, stop, text);
     }
 }
 
@@ -1495,9 +1491,10 @@ where
 mod tests {
     use super::*;
     use crate::atn::serialized::{AtnDeserializer, SerializedAtn};
+    use crate::atn::{LexerAtnState, LexerTransition};
     use crate::char_stream::InputStream;
     use crate::recognizer::RecognizerData;
-    use crate::token::{TOKEN_EOF, Token, TokenStore};
+    use crate::token::{DEFAULT_CHANNEL, HIDDEN_CHANNEL, TOKEN_EOF, Token, TokenStore, TokenView};
     use crate::vocabulary::Vocabulary;
 
     #[derive(Debug)]
@@ -1506,6 +1503,133 @@ mod tests {
         start: usize,
         stop: usize,
         text: String,
+    }
+
+    fn recognizer_data() -> RecognizerData {
+        RecognizerData::new(
+            "T",
+            Vocabulary::new([None, Some("T")], [None, Some("T")], [None::<&str>, None]),
+        )
+    }
+
+    fn trailing_action_atn(
+        labels: &[char],
+        token_type: i32,
+        actions: Vec<LexerAction>,
+    ) -> LexerAtn {
+        assert!(!labels.is_empty());
+        let stop = labels.len() + actions.len() + 1;
+        let mut atn = LexerAtn::new(token_type);
+        for state in 0..=stop {
+            let kind = match state {
+                0 => AtnStateKind::TokenStart,
+                1 => AtnStateKind::RuleStart,
+                value if value == stop => AtnStateKind::RuleStop,
+                _ => AtnStateKind::Basic,
+            };
+            let state = if state == 0 {
+                LexerAtnState::new(state, kind)
+            } else {
+                LexerAtnState::new(state, kind).with_rule_index(0)
+            };
+            atn.add_state(state);
+        }
+        atn.state_mut(0)
+            .expect("token start")
+            .add_transition(LexerTransition::Epsilon { target: 1 });
+        for (index, label) in labels.iter().enumerate() {
+            atn.state_mut(index + 1)
+                .expect("label source")
+                .add_transition(LexerTransition::Atom {
+                    target: index + 2,
+                    label: u32::from(*label).cast_signed(),
+                });
+        }
+        for index in 0..actions.len() {
+            atn.state_mut(labels.len() + index + 1)
+                .expect("action source")
+                .add_transition(LexerTransition::Action {
+                    target: labels.len() + index + 2,
+                    rule_index: 0,
+                    action_index: Some(index),
+                    context_dependent: false,
+                });
+        }
+        atn.set_rule_to_start_state(vec![1]);
+        atn.set_rule_to_stop_state(vec![stop]);
+        atn.set_rule_to_token_type(vec![token_type]);
+        atn.add_mode_start_state(0);
+        atn.add_decision_state(0);
+        atn.set_lexer_actions(actions);
+        atn
+    }
+
+    fn eof_rewind_action_atn() -> LexerAtn {
+        let mut atn = LexerAtn::new(2);
+        for (state_number, kind, rule_index) in [
+            (0, AtnStateKind::TokenStart, None),
+            (1, AtnStateKind::RuleStart, Some(0)),
+            (2, AtnStateKind::Basic, Some(0)),
+            (3, AtnStateKind::Basic, Some(0)),
+            (4, AtnStateKind::Basic, Some(0)),
+            (5, AtnStateKind::RuleStop, Some(0)),
+            (6, AtnStateKind::RuleStart, Some(1)),
+            (7, AtnStateKind::RuleStop, Some(1)),
+        ] {
+            let mut state = LexerAtnState::new(state_number, kind);
+            if let Some(rule_index) = rule_index {
+                state = state.with_rule_index(rule_index);
+            }
+            atn.add_state(state);
+        }
+        atn.state_mut(0)
+            .expect("token start")
+            .add_transition(LexerTransition::Epsilon { target: 1 });
+        atn.state_mut(0)
+            .expect("token start")
+            .add_transition(LexerTransition::Epsilon { target: 6 });
+        atn.state_mut(1)
+            .expect("prefix rule start")
+            .add_transition(LexerTransition::Atom {
+                target: 2,
+                label: 'a' as i32,
+            });
+        atn.state_mut(2)
+            .expect("prefix rule body")
+            .add_transition(LexerTransition::Atom {
+                target: 3,
+                label: 'b' as i32,
+            });
+        atn.state_mut(3)
+            .expect("prefix rule EOF")
+            .add_transition(LexerTransition::Atom {
+                target: 4,
+                label: EOF,
+            });
+        atn.state_mut(4)
+            .expect("prefix rule action")
+            .add_transition(LexerTransition::Action {
+                target: 5,
+                rule_index: 0,
+                action_index: Some(0),
+                context_dependent: false,
+            });
+        atn.state_mut(6)
+            .expect("suffix rule start")
+            .add_transition(LexerTransition::Atom {
+                target: 7,
+                label: 'b' as i32,
+            });
+        atn.set_rule_to_start_state(vec![1, 6]);
+        atn.set_rule_to_stop_state(vec![5, 7]);
+        atn.set_rule_to_token_type(vec![1, 2]);
+        atn.add_mode_start_state(0);
+        atn.add_decision_state(0);
+        atn.set_lexer_actions(vec![LexerAction::Custom {
+            rule_index: 0,
+            action_index: 0,
+        }]);
+        atn
     }
 
     fn lex_one<I: CharStream>(lexer: &mut BaseLexer<I>, atn: &LexerAtn) -> TokenSnapshot {
@@ -1519,6 +1643,198 @@ mod tests {
             stop: token.stop(),
             text: token.text().to_owned(),
         }
+    }
+
+    #[derive(Debug, Default)]
+    struct FunctionTokenHooks {
+        emitted: Vec<(i32, i32, String)>,
+    }
+
+    impl SemanticHooks for FunctionTokenHooks {
+        fn lexer_action<I>(
+            &mut self,
+            ctx: &mut LexerSemCtx<'_, I>,
+            _action: LexerCustomAction,
+        ) -> bool
+        where
+            I: CharStream,
+        {
+            assert_eq!(ctx.text_so_far(), "count");
+            while matches!(ctx.la(1), value if value == ' ' as i32 || value == '\t' as i32) {
+                assert!(ctx.consume());
+                assert!(ctx.set_channel(HIDDEN_CHANNEL));
+            }
+            assert_eq!(ctx.la(1), '(' as i32);
+            assert!(ctx.set_type(7));
+            true
+        }
+
+        fn lexer_token_emitted(&mut self, token: TokenView<'_>) {
+            self.emitted
+                .push((token.token_type(), token.channel(), token.text().to_owned()));
+        }
+    }
+
+    #[test]
+    fn lexer_action_can_override_pending_type_and_channel() {
+        let atn = trailing_action_atn(
+            &['c', 'o', 'u', 'n', 't'],
+            1,
+            vec![LexerAction::Custom {
+                rule_index: 0,
+                action_index: 0,
+            }],
+        );
+        let mut lexer = BaseLexer::new(InputStream::new("count \t("), recognizer_data());
+        let mut hooks = FunctionTokenHooks::default();
+        let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
+        let mut sink = TokenSink::new(&mut store);
+
+        let id = next_token_with_semantic_hooks(&mut lexer, &mut sink, &atn, &mut hooks)
+            .expect("dynamic token should fit");
+        let token = sink.view(id).expect("dynamic token should exist");
+        assert_eq!(token.token_type(), 7);
+        assert_eq!(token.channel(), HIDDEN_CHANNEL);
+        assert_eq!(token.text(), "count \t");
+        assert_eq!(lexer.la(1), '(' as i32);
+        assert_eq!(hooks.emitted, [(7, HIDDEN_CHANNEL, "count \t".to_owned())]);
+    }
+
+    #[derive(Debug, Default)]
+    struct DotSplitHooks {
+        emitted_types: Vec<i32>,
+    }
+
+    impl SemanticHooks for DotSplitHooks {
+        fn lexer_action<I>(
+            &mut self,
+            ctx: &mut LexerSemCtx<'_, I>,
+            _action: LexerCustomAction,
+        ) -> bool
+        where
+            I: CharStream,
+        {
+            assert_eq!(ctx.text_so_far(), ".β");
+            let dot = ctx.token_start();
+            assert!(ctx.enqueue_token(1, dot));
+            assert!(ctx.set_token_start(dot + 1));
+            true
+        }
+
+        fn lexer_token_emitted(&mut self, token: TokenView<'_>) {
+            self.emitted_types.push(token.token_type());
+        }
+    }
+
+    #[test]
+    fn lexer_action_can_queue_prefix_before_automatic_token() {
+        let atn = trailing_action_atn(
+            &['.', 'β'],
+            3,
+            vec![
+                LexerAction::Custom {
+                    rule_index: 0,
+                    action_index: 0,
+                },
+                LexerAction::Type(2),
+            ],
+        );
+        let dfa = CompiledLexerDfa::compile(&atn);
+        let mut lexer = BaseLexer::new(InputStream::new(".β"), recognizer_data());
+        let mut hooks = DotSplitHooks::default();
+        let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
+        let mut sink = TokenSink::new(&mut store);
+
+        let dot =
+            next_token_compiled_with_semantic_hooks(&mut lexer, &mut sink, &atn, &dfa, &mut hooks)
+                .expect("dot token should fit");
+        assert_eq!(sink.token_count(), 1);
+        let identifier =
+            next_token_compiled_with_semantic_hooks(&mut lexer, &mut sink, &atn, &dfa, &mut hooks)
+                .expect("identifier token should fit");
+        assert_eq!(sink.token_count(), 2);
+        let eof =
+            next_token_compiled_with_semantic_hooks(&mut lexer, &mut sink, &atn, &dfa, &mut hooks)
+                .expect("EOF token should fit");
+        assert_eq!(sink.token_count(), 3);
+
+        let dot = sink.view(dot).expect("dot token should exist");
+        assert_eq!(dot.token_type(), 1);
+        assert_eq!(dot.channel(), DEFAULT_CHANNEL);
+        assert_eq!(dot.text(), ".");
+        assert_eq!(dot.start(), 0);
+        assert_eq!(dot.stop(), 0);
+        assert_eq!(dot.byte_span(), 0..1);
+        assert_eq!((dot.line(), dot.column()), (1, 0));
+
+        let identifier = sink
+            .view(identifier)
+            .expect("identifier token should exist");
+        assert_eq!(identifier.token_type(), 2);
+        assert_eq!(identifier.text(), "β");
+        assert_eq!(identifier.start(), 1);
+        assert_eq!(identifier.stop(), 1);
+        assert_eq!(identifier.byte_span(), 1..3);
+        assert_eq!((identifier.line(), identifier.column()), (1, 1));
+
+        assert_eq!(
+            sink.view(eof).expect("EOF token should exist").token_type(),
+            TOKEN_EOF
+        );
+        assert_eq!(hooks.emitted_types, [1, 2, TOKEN_EOF]);
+    }
+
+    #[derive(Debug, Default)]
+    struct RewindAtEofHooks {
+        action_count: usize,
+    }
+
+    impl SemanticHooks for RewindAtEofHooks {
+        fn lexer_action<I>(
+            &mut self,
+            ctx: &mut LexerSemCtx<'_, I>,
+            _action: LexerCustomAction,
+        ) -> bool
+        where
+            I: CharStream,
+        {
+            assert_eq!(ctx.la(1), EOF);
+            let suffix_start = ctx.token_start() + 1;
+            assert!(ctx.reset_accept_position(suffix_start));
+            self.action_count += 1;
+            true
+        }
+    }
+
+    #[test]
+    fn lexer_action_rewind_from_eof_preserves_suffix() {
+        let atn = eof_rewind_action_atn();
+        let dfa = CompiledLexerDfa::compile(&atn);
+        let mut lexer = BaseLexer::new(InputStream::new("ab"), recognizer_data());
+        let mut hooks = RewindAtEofHooks::default();
+        let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
+        let mut sink = TokenSink::new(&mut store);
+
+        let prefix =
+            next_token_compiled_with_semantic_hooks(&mut lexer, &mut sink, &atn, &dfa, &mut hooks)
+                .expect("prefix token should fit");
+        assert!(!lexer.hit_eof());
+        let suffix =
+            next_token_compiled_with_semantic_hooks(&mut lexer, &mut sink, &atn, &dfa, &mut hooks)
+                .expect("suffix token should fit");
+        let eof =
+            next_token_compiled_with_semantic_hooks(&mut lexer, &mut sink, &atn, &dfa, &mut hooks)
+                .expect("EOF token should fit");
+
+        let prefix = sink.view(prefix).expect("prefix token should exist");
+        assert_eq!((prefix.token_type(), prefix.text()), (1, "a"));
+        let suffix = sink.view(suffix).expect("suffix token should exist");
+        assert_eq!((suffix.token_type(), suffix.text()), (2, "b"));
+        assert_eq!(
+            sink.view(eof).expect("EOF token should exist").token_type(),
+            TOKEN_EOF
+        );
+        assert_eq!(hooks.action_count, 1);
     }
 
     #[test]
