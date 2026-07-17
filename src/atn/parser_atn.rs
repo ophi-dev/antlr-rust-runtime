@@ -1387,7 +1387,7 @@ impl ParserAtnBuilder {
     fn encode(&self, transition_ranges: &[(u32, u32)]) -> Result<Vec<u32>, ParserAtnError> {
         let layout = EncodedLayout::new(self)?;
         let mut words = vec![0; layout.total_len];
-        self.encode_header(&mut words, layout);
+        self.encode_header(&mut words, layout)?;
         self.encode_states(&mut words, layout.states, transition_ranges);
         self.encode_transitions(&mut words, layout.transitions);
         self.encode_sets(&mut words, layout.sets);
@@ -1398,26 +1398,35 @@ impl ParserAtnBuilder {
         Ok(words)
     }
 
-    fn encode_header(&self, words: &mut [u32], layout: EncodedLayout) {
+    fn encode_header(
+        &self,
+        words: &mut [u32],
+        layout: EncodedLayout,
+    ) -> Result<(), ParserAtnError> {
         words[HEADER_MAGIC] = PARSER_ATN_MAGIC;
         words[HEADER_VERSION] = PARSER_ATN_FORMAT_VERSION;
         words[HEADER_BYTE_ORDER] = PARSER_ATN_BYTE_ORDER;
-        words[HEADER_SIZE] = HEADER_WORDS as u32;
+        words[HEADER_SIZE] = compact_id("parser ATN header size", HEADER_WORDS)?;
         words[HEADER_MAX_TOKEN_TYPE] = pack_i32(self.max_token_type);
-        words[HEADER_STATE_COUNT] = self.states.len() as u32;
-        words[HEADER_TRANSITION_COUNT] = self.transitions.len() as u32;
-        words[HEADER_SET_COUNT] = self.interval_sets.len() as u32;
-        words[HEADER_INTERVAL_COUNT] = self.interval_ranges.len() as u32;
-        words[HEADER_DECISION_COUNT] = self.decisions.len() as u32;
-        words[HEADER_RULE_COUNT] = self.rule_starts.len() as u32;
-        write_section(words, HEADER_STATES_OFFSET, layout.states);
-        write_section(words, HEADER_TRANSITIONS_OFFSET, layout.transitions);
-        write_section(words, HEADER_SETS_OFFSET, layout.sets);
-        write_section(words, HEADER_INTERVALS_OFFSET, layout.intervals);
-        write_section(words, HEADER_DECISIONS_OFFSET, layout.decisions);
-        write_section(words, HEADER_RULE_STARTS_OFFSET, layout.rule_starts);
-        write_section(words, HEADER_RULE_STOPS_OFFSET, layout.rule_stops);
-        words[HEADER_TOTAL_LEN] = layout.total_len as u32;
+        words[HEADER_STATE_COUNT] = compact_id("parser ATN state count", self.states.len())?;
+        words[HEADER_TRANSITION_COUNT] =
+            compact_id("parser ATN transition count", self.transitions.len())?;
+        words[HEADER_SET_COUNT] =
+            compact_id("parser ATN interval-set count", self.interval_sets.len())?;
+        words[HEADER_INTERVAL_COUNT] =
+            compact_id("parser ATN interval count", self.interval_ranges.len())?;
+        words[HEADER_DECISION_COUNT] =
+            compact_id("parser ATN decision count", self.decisions.len())?;
+        words[HEADER_RULE_COUNT] = compact_id("parser ATN rule count", self.rule_starts.len())?;
+        write_section(words, HEADER_STATES_OFFSET, layout.states)?;
+        write_section(words, HEADER_TRANSITIONS_OFFSET, layout.transitions)?;
+        write_section(words, HEADER_SETS_OFFSET, layout.sets)?;
+        write_section(words, HEADER_INTERVALS_OFFSET, layout.intervals)?;
+        write_section(words, HEADER_DECISIONS_OFFSET, layout.decisions)?;
+        write_section(words, HEADER_RULE_STARTS_OFFSET, layout.rule_starts)?;
+        write_section(words, HEADER_RULE_STOPS_OFFSET, layout.rule_stops)?;
+        words[HEADER_TOTAL_LEN] = compact_id("packed parser ATN word", layout.total_len)?;
+        Ok(())
     }
 
     fn encode_states(&self, words: &mut [u32], section: Section, transition_ranges: &[(u32, u32)]) {
@@ -2129,9 +2138,14 @@ fn next_section(
     Ok(section)
 }
 
-fn write_section(words: &mut [u32], header_offset: usize, section: Section) {
-    words[header_offset] = section.offset as u32;
-    words[header_offset + 1] = section.len as u32;
+fn write_section(
+    words: &mut [u32],
+    header_offset: usize,
+    section: Section,
+) -> Result<(), ParserAtnError> {
+    words[header_offset] = compact_id("parser ATN section offset", section.offset)?;
+    words[header_offset + 1] = compact_id("parser ATN section length", section.len)?;
+    Ok(())
 }
 
 fn encode_ids(words: &mut [u32], section: Section, ids: &[AtnStateId]) {
@@ -2284,6 +2298,45 @@ mod tests {
                 found: 2,
                 minimum: 1,
                 maximum: 1,
+            })
+        );
+    }
+
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn header_encoding_rejects_values_outside_u32() {
+        let builder = ParserAtnBuilder::new(0);
+        let section = Section {
+            offset: HEADER_WORDS,
+            len: 0,
+        };
+        let mut layout = EncodedLayout {
+            states: section,
+            transitions: section,
+            sets: section,
+            intervals: section,
+            decisions: section,
+            rule_starts: section,
+            rule_stops: section,
+            total_len: usize::MAX,
+        };
+        let mut words = [0; HEADER_WORDS];
+
+        assert_eq!(
+            builder.encode_header(&mut words, layout),
+            Err(ParserAtnError::Overflow {
+                field: "packed parser ATN word",
+                value: usize::MAX,
+            })
+        );
+
+        layout.states.offset = usize::MAX;
+        layout.total_len = HEADER_WORDS;
+        assert_eq!(
+            builder.encode_header(&mut words, layout),
+            Err(ParserAtnError::Overflow {
+                field: "parser ATN section offset",
+                value: usize::MAX,
             })
         );
     }
