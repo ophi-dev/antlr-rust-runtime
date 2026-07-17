@@ -86,6 +86,15 @@ where
     }
 }
 
+fn refresh_hit_eof<I>(lexer: &mut BaseLexer<I>) -> bool
+where
+    I: CharStream,
+{
+    let hit_eof = lexer.input().index() >= lexer.input().size();
+    lexer.set_hit_eof(hit_eof);
+    hit_eof
+}
+
 /// Accumulates one epsilon-closure expansion, including whether predicate
 /// evaluation made the closure input-position-sensitive.
 struct ClosureState {
@@ -645,9 +654,6 @@ where
         while lexer.input().index() < accept.position {
             lexer.consume_char();
         }
-        if accept.consumed_eof {
-            lexer.set_hit_eof(true);
-        }
 
         let token_type = atn
             .rule_to_token_type()
@@ -675,19 +681,24 @@ where
             }
         }
 
-        if lexer.token_type() == crate::lexer::SKIP {
-            continuing_more = false;
-            continue;
-        }
-        if lexer.token_type() == crate::lexer::MORE {
-            continuing_more = true;
+        let token_type = lexer.token_type();
+        if token_type == crate::lexer::SKIP || token_type == crate::lexer::MORE {
+            if accept.consumed_eof || lexer.input().index() != accept.position {
+                refresh_hit_eof(lexer);
+            }
+            continuing_more = token_type == crate::lexer::MORE;
             continue;
         }
 
-        accept_adjuster(lexer, lexer.token_type(), accept.position);
+        accept_adjuster(lexer, token_type, accept.position);
         let emit_position = lexer.input().index();
+        let hit_eof = if accept.consumed_eof || emit_position != accept.position {
+            refresh_hit_eof(lexer)
+        } else {
+            false
+        };
         let stop = emit_position.checked_sub(1).unwrap_or(usize::MAX);
-        let text = if accept.consumed_eof && start == emit_position {
+        let text = if hit_eof && accept.consumed_eof && start == emit_position {
             Some("<EOF>".to_owned())
         } else {
             None
@@ -1553,6 +1564,74 @@ mod tests {
         atn
     }
 
+    fn eof_rewind_action_atn() -> LexerAtn {
+        let mut atn = LexerAtn::new(2);
+        for (state_number, kind, rule_index) in [
+            (0, AtnStateKind::TokenStart, None),
+            (1, AtnStateKind::RuleStart, Some(0)),
+            (2, AtnStateKind::Basic, Some(0)),
+            (3, AtnStateKind::Basic, Some(0)),
+            (4, AtnStateKind::Basic, Some(0)),
+            (5, AtnStateKind::RuleStop, Some(0)),
+            (6, AtnStateKind::RuleStart, Some(1)),
+            (7, AtnStateKind::RuleStop, Some(1)),
+        ] {
+            let mut state = LexerAtnState::new(state_number, kind);
+            if let Some(rule_index) = rule_index {
+                state = state.with_rule_index(rule_index);
+            }
+            atn.add_state(state);
+        }
+        atn.state_mut(0)
+            .expect("token start")
+            .add_transition(LexerTransition::Epsilon { target: 1 });
+        atn.state_mut(0)
+            .expect("token start")
+            .add_transition(LexerTransition::Epsilon { target: 6 });
+        atn.state_mut(1)
+            .expect("prefix rule start")
+            .add_transition(LexerTransition::Atom {
+                target: 2,
+                label: 'a' as i32,
+            });
+        atn.state_mut(2)
+            .expect("prefix rule body")
+            .add_transition(LexerTransition::Atom {
+                target: 3,
+                label: 'b' as i32,
+            });
+        atn.state_mut(3)
+            .expect("prefix rule EOF")
+            .add_transition(LexerTransition::Atom {
+                target: 4,
+                label: EOF,
+            });
+        atn.state_mut(4)
+            .expect("prefix rule action")
+            .add_transition(LexerTransition::Action {
+                target: 5,
+                rule_index: 0,
+                action_index: Some(0),
+                context_dependent: false,
+            });
+        atn.state_mut(6)
+            .expect("suffix rule start")
+            .add_transition(LexerTransition::Atom {
+                target: 7,
+                label: 'b' as i32,
+            });
+        atn.set_rule_to_start_state(vec![1, 6]);
+        atn.set_rule_to_stop_state(vec![5, 7]);
+        atn.set_rule_to_token_type(vec![1, 2]);
+        atn.add_mode_start_state(0);
+        atn.add_decision_state(0);
+        atn.set_lexer_actions(vec![LexerAction::Custom {
+            rule_index: 0,
+            action_index: 0,
+        }]);
+        atn
+    }
+
     fn lex_one<I: CharStream>(lexer: &mut BaseLexer<I>, atn: &LexerAtn) -> TokenSnapshot {
         let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
         let mut sink = TokenSink::new(&mut store);
@@ -1703,6 +1782,59 @@ mod tests {
             TOKEN_EOF
         );
         assert_eq!(hooks.emitted_types, [1, 2, TOKEN_EOF]);
+    }
+
+    #[derive(Debug, Default)]
+    struct RewindAtEofHooks {
+        action_count: usize,
+    }
+
+    impl SemanticHooks for RewindAtEofHooks {
+        fn lexer_action<I>(
+            &mut self,
+            ctx: &mut LexerSemCtx<'_, I>,
+            _action: LexerCustomAction,
+        ) -> bool
+        where
+            I: CharStream,
+        {
+            assert_eq!(ctx.la(1), EOF);
+            let suffix_start = ctx.token_start() + 1;
+            assert!(ctx.reset_accept_position(suffix_start));
+            self.action_count += 1;
+            true
+        }
+    }
+
+    #[test]
+    fn lexer_action_rewind_from_eof_preserves_suffix() {
+        let atn = eof_rewind_action_atn();
+        let dfa = CompiledLexerDfa::compile(&atn);
+        let mut lexer = BaseLexer::new(InputStream::new("ab"), recognizer_data());
+        let mut hooks = RewindAtEofHooks::default();
+        let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
+        let mut sink = TokenSink::new(&mut store);
+
+        let prefix =
+            next_token_compiled_with_semantic_hooks(&mut lexer, &mut sink, &atn, &dfa, &mut hooks)
+                .expect("prefix token should fit");
+        assert!(!lexer.hit_eof());
+        let suffix =
+            next_token_compiled_with_semantic_hooks(&mut lexer, &mut sink, &atn, &dfa, &mut hooks)
+                .expect("suffix token should fit");
+        let eof =
+            next_token_compiled_with_semantic_hooks(&mut lexer, &mut sink, &atn, &dfa, &mut hooks)
+                .expect("EOF token should fit");
+
+        let prefix = sink.view(prefix).expect("prefix token should exist");
+        assert_eq!((prefix.token_type(), prefix.text()), (1, "a"));
+        let suffix = sink.view(suffix).expect("suffix token should exist");
+        assert_eq!((suffix.token_type(), suffix.text()), (2, "b"));
+        assert_eq!(
+            sink.view(eof).expect("EOF token should exist").token_type(),
+            TOKEN_EOF
+        );
+        assert_eq!(hooks.action_count, 1);
     }
 
     #[test]
