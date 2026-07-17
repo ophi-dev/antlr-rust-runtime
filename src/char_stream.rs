@@ -236,12 +236,12 @@ impl CharStream for InputStream {
     }
 
     fn position_summary(&self, start: usize, end: usize) -> Option<PositionSummary> {
-        let len = self.data.len(&self.source);
-        let start = start.min(len);
-        let end = end.min(len);
         if start > end {
             return None;
         }
+        let len = self.data.len(&self.source);
+        let start = start.min(len);
+        let end = end.min(len);
 
         let mut summary = PositionSummary::default();
         let mut note = |is_newline| {
@@ -338,6 +338,7 @@ mod tests {
             Some(PositionSummary::default())
         );
         assert_eq!(ascii.position_summary(4, 2), None);
+        assert_eq!(ascii.position_summary(7, 6), None);
 
         let unicode = InputStream::new("aβ\nγ");
         assert_eq!(unicode.contiguous_ascii(), None);
