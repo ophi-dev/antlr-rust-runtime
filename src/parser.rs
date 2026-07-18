@@ -155,6 +155,12 @@ mod perf_counters {
         pub(super) static MEMO_INSERTED: Cell<u64> = const { Cell::new(0) };
         pub(super) static OUTCOMES_PUSHED: Cell<u64> = const { Cell::new(0) };
         pub(super) static OUTCOMES_CLONED: Cell<u64> = const { Cell::new(0) };
+        pub(super) static OUTCOME_DEDUPE_INPUTS: Cell<u64> = const { Cell::new(0) };
+        pub(super) static OUTCOME_DEDUPE_REMOVED: Cell<u64> = const { Cell::new(0) };
+        pub(super) static OUTCOME_DEDUPE_INLINE: Cell<u64> = const { Cell::new(0) };
+        pub(super) static OUTCOME_DEDUPE_DENSE: Cell<u64> = const { Cell::new(0) };
+        pub(super) static OUTCOME_DEDUPE_SPARSE: Cell<u64> = const { Cell::new(0) };
+        pub(super) static OUTCOME_DEDUPE_DENSE_WORDS: Cell<u64> = const { Cell::new(0) };
     }
     pub(super) fn inc(c: &'static std::thread::LocalKey<Cell<u64>>, n: u64) {
         c.with(|v| v.set(v.get() + n));
@@ -172,7 +178,7 @@ mod perf_counters {
         pub(super) static OUTCOMES_RETURN_1: Cell<u64> = const { Cell::new(0) };
         pub(super) static OUTCOMES_RETURN_N: Cell<u64> = const { Cell::new(0) };
     }
-    pub(super) fn snapshot() -> [(&'static str, u64); 18] {
+    pub(super) fn snapshot() -> [(&'static str, u64); 24] {
         [
             ("rfs_calls", RFS_CALLS.with(Cell::get)),
             ("rfs_memo_hits", RFS_MEMO_HITS.with(Cell::get)),
@@ -181,6 +187,27 @@ mod perf_counters {
             ("memo_inserted", MEMO_INSERTED.with(Cell::get)),
             ("outcomes_pushed", OUTCOMES_PUSHED.with(Cell::get)),
             ("outcomes_cloned", OUTCOMES_CLONED.with(Cell::get)),
+            (
+                "outcome_dedupe_inputs",
+                OUTCOME_DEDUPE_INPUTS.with(Cell::get),
+            ),
+            (
+                "outcome_dedupe_removed",
+                OUTCOME_DEDUPE_REMOVED.with(Cell::get),
+            ),
+            (
+                "outcome_dedupe_inline",
+                OUTCOME_DEDUPE_INLINE.with(Cell::get),
+            ),
+            ("outcome_dedupe_dense", OUTCOME_DEDUPE_DENSE.with(Cell::get)),
+            (
+                "outcome_dedupe_sparse",
+                OUTCOME_DEDUPE_SPARSE.with(Cell::get),
+            ),
+            (
+                "outcome_dedupe_dense_words",
+                OUTCOME_DEDUPE_DENSE_WORDS.with(Cell::get),
+            ),
             ("epsilon_transitions", EPSILON_TRANSITIONS.with(Cell::get)),
             ("rule_transitions", RULE_TRANSITIONS.with(Cell::get)),
             (
@@ -205,6 +232,12 @@ mod perf_counters {
         MEMO_INSERTED.with(|c| c.set(0));
         OUTCOMES_PUSHED.with(|c| c.set(0));
         OUTCOMES_CLONED.with(|c| c.set(0));
+        OUTCOME_DEDUPE_INPUTS.with(|c| c.set(0));
+        OUTCOME_DEDUPE_REMOVED.with(|c| c.set(0));
+        OUTCOME_DEDUPE_INLINE.with(|c| c.set(0));
+        OUTCOME_DEDUPE_DENSE.with(|c| c.set(0));
+        OUTCOME_DEDUPE_SPARSE.with(|c| c.set(0));
+        OUTCOME_DEDUPE_DENSE_WORDS.with(|c| c.set(0));
         EPSILON_TRANSITIONS.with(|c| c.set(0));
         RULE_TRANSITIONS.with(|c| c.set(0));
         ATOM_RANGE_TRANSITIONS.with(|c| c.set(0));
@@ -1150,6 +1183,8 @@ pub struct BaseParser<S, H = NoSemanticHooks> {
     single_outcome_probe_seen: FxHashSet<FastRecognizeKey>,
     single_outcome_probe_samples: usize,
     single_outcome_probe_repeats: usize,
+    /// Reusable direct-index/hash storage for clean speculative endpoints.
+    fast_outcome_dedup: FastOutcomeDedupScratch,
     /// Empty recovery-symbols singleton used as the default at rule entry and
     /// after token consumption.
     empty_recovery_symbols: Rc<BTreeSet<i32>>,
@@ -1233,6 +1268,13 @@ struct FastRecognizeOutcome {
     /// Copying an outcome copies this compact ID; prepending appends one
     /// `SeqLink` without allocating an individual node or list tail.
     nodes: NodeSeqId,
+}
+
+#[derive(Debug, Default)]
+struct FastOutcomeDedupScratch {
+    dense_words: Vec<u64>,
+    touched_dense_words: Vec<u32>,
+    sparse_keys: FxHashSet<(usize, bool)>,
 }
 
 /// Handle into the parser-owned deferred tree rope.
@@ -4548,6 +4590,7 @@ where
             single_outcome_probe_seen: FxHashSet::default(),
             single_outcome_probe_samples: 0,
             single_outcome_probe_repeats: 0,
+            fast_outcome_dedup: FastOutcomeDedupScratch::default(),
             empty_recovery_symbols: Rc::new(BTreeSet::new()),
             fast_first_set_prefilter: true,
             fast_recovery_enabled: true,
@@ -7675,7 +7718,7 @@ where
                 }
             }
         }
-        dedupe_clean_fast_outcomes(&mut outcomes);
+        dedupe_clean_fast_outcomes(&mut outcomes, &mut self.fast_outcome_dedup);
         outcomes
     }
 
@@ -8503,7 +8546,7 @@ where
         if self.fast_recovery_enabled {
             dedupe_fast_outcomes(&mut outcomes, &self.recognition_arena);
         } else {
-            dedupe_clean_fast_outcomes(&mut outcomes);
+            dedupe_clean_fast_outcomes(&mut outcomes, &mut self.fast_outcome_dedup);
         }
         // Skip memoization for single-transition states whose outcome is
         // unambiguous: they only get re-entered if the caller revisits the
@@ -11527,44 +11570,151 @@ fn dedupe_fast_outcomes(outcomes: &mut Vec<FastRecognizeOutcome>, arena: &Recogn
     });
 }
 
-fn dedupe_clean_fast_outcomes(outcomes: &mut Vec<FastRecognizeOutcome>) {
-    if outcomes.len() < 2 {
-        return;
+const FAST_OUTCOME_INLINE_KEYS: usize = 8;
+const FAST_OUTCOME_BITS_PER_WORD: usize = 64;
+const MAX_FAST_OUTCOME_DENSE_BYTES: usize = 64 * 1024;
+const MAX_RETAINED_FAST_OUTCOME_SPARSE_KEYS: usize = 65_536;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum FastOutcomeDedupStrategy {
+    Inline,
+    Dense,
+    Sparse,
+}
+
+impl FastOutcomeDedupScratch {
+    fn prepare_dense(&mut self, word_count: usize) {
+        while let Some(word_index) = self.touched_dense_words.pop() {
+            self.dense_words[usize::try_from(word_index).expect("u32 fits in usize")] = 0;
+        }
+        if self.dense_words.len() < word_count {
+            self.dense_words.resize(word_count, 0);
+        }
     }
-    // Most outcomes lists are 2-4 entries; an inline scan beats BTreeSet
-    // here because BTreeSet's allocation + per-insert balancing dominates
-    // O(log n) wins on tiny n. Retains the original order so callers that
-    // depend on alt ordering (e.g. fast outcome selection) stay correct.
-    //
-    // Beyond the inline buffer we promote to a heap Vec so all kept entries
-    // continue to participate in dedup — leaking duplicates here on
-    // pathological grammars (e.g. ktor's deeply ambiguous Kotlin parse)
-    // explodes the speculative cache one step up the recursion.
-    let mut inline_keys: [(usize, bool); 8] = [(0, false); 8];
-    let mut inline_len = 0_usize;
-    let mut overflow: Vec<(usize, bool)> = Vec::new();
-    outcomes.retain(|outcome| {
-        let key = (outcome.index, outcome.consumed_eof);
-        for &existing in &inline_keys[..inline_len] {
-            if existing == key {
+}
+
+fn clean_fast_outcome_dense_layout(outcomes: &[FastRecognizeOutcome]) -> Option<(usize, usize)> {
+    let first_index = outcomes.first()?.index;
+    let (min_index, max_index) = outcomes[1..].iter().fold(
+        (first_index, first_index),
+        |(min_index, max_index), outcome| {
+            (min_index.min(outcome.index), max_index.max(outcome.index))
+        },
+    );
+    let index_span = max_index.checked_sub(min_index)?.checked_add(1)?;
+    let bit_count = index_span.checked_mul(2)?;
+    let word_count =
+        bit_count.checked_add(FAST_OUTCOME_BITS_PER_WORD - 1)? / FAST_OUTCOME_BITS_PER_WORD;
+    let dense_bytes = word_count.checked_mul(size_of::<u64>())?;
+    let sparse_key_bytes = outcomes.len().checked_mul(size_of::<(usize, bool)>())?;
+    (dense_bytes <= MAX_FAST_OUTCOME_DENSE_BYTES && dense_bytes <= sparse_key_bytes)
+        .then_some((min_index, word_count))
+}
+
+#[cfg(feature = "perf-counters")]
+fn record_clean_fast_outcome_dedup(
+    strategy: FastOutcomeDedupStrategy,
+    input_len: usize,
+    output_len: usize,
+    dense_words: usize,
+) {
+    let counter = match strategy {
+        FastOutcomeDedupStrategy::Inline => &perf_counters::OUTCOME_DEDUPE_INLINE,
+        FastOutcomeDedupStrategy::Dense => &perf_counters::OUTCOME_DEDUPE_DENSE,
+        FastOutcomeDedupStrategy::Sparse => &perf_counters::OUTCOME_DEDUPE_SPARSE,
+    };
+    perf_counters::inc(
+        &perf_counters::OUTCOME_DEDUPE_INPUTS,
+        u64::try_from(input_len).unwrap_or(u64::MAX),
+    );
+    perf_counters::inc(
+        &perf_counters::OUTCOME_DEDUPE_REMOVED,
+        u64::try_from(input_len - output_len).unwrap_or(u64::MAX),
+    );
+    perf_counters::inc(counter, 1);
+    perf_counters::inc(
+        &perf_counters::OUTCOME_DEDUPE_DENSE_WORDS,
+        u64::try_from(dense_words).unwrap_or(u64::MAX),
+    );
+}
+
+/// Removes duplicate clean endpoints while preserving transition-discovery
+/// order. Tiny lists stay on the stack; larger compact ranges use a direct
+/// bitmap, and only wide sparse ranges pay for hashing.
+fn dedupe_clean_fast_outcomes(
+    outcomes: &mut Vec<FastRecognizeOutcome>,
+    scratch: &mut FastOutcomeDedupScratch,
+) -> FastOutcomeDedupStrategy {
+    #[cfg(feature = "perf-counters")]
+    let input_len = outcomes.len();
+    if outcomes.len() <= FAST_OUTCOME_INLINE_KEYS {
+        let mut inline_keys = [(0, false); FAST_OUTCOME_INLINE_KEYS];
+        let mut inline_len = 0_usize;
+        outcomes.retain(|outcome| {
+            let key = (outcome.index, outcome.consumed_eof);
+            if inline_keys[..inline_len].contains(&key) {
                 return false;
             }
-        }
-        if !overflow.is_empty() {
-            for &existing in &overflow {
-                if existing == key {
-                    return false;
-                }
-            }
-        }
-        if inline_len < inline_keys.len() {
             inline_keys[inline_len] = key;
             inline_len += 1;
-        } else {
-            overflow.push(key);
-        }
-        true
+            true
+        });
+        #[cfg(feature = "perf-counters")]
+        record_clean_fast_outcome_dedup(
+            FastOutcomeDedupStrategy::Inline,
+            input_len,
+            outcomes.len(),
+            0,
+        );
+        return FastOutcomeDedupStrategy::Inline;
+    }
+
+    if let Some((base_index, word_count)) = clean_fast_outcome_dense_layout(outcomes) {
+        scratch.prepare_dense(word_count);
+        outcomes.retain(|outcome| {
+            let bit_index = (outcome.index - base_index) * 2 + usize::from(outcome.consumed_eof);
+            let word_index = bit_index / FAST_OUTCOME_BITS_PER_WORD;
+            let bit = 1_u64 << (bit_index % FAST_OUTCOME_BITS_PER_WORD);
+            let word = &mut scratch.dense_words[word_index];
+            if *word & bit != 0 {
+                return false;
+            }
+            if *word == 0 {
+                scratch
+                    .touched_dense_words
+                    .push(u32::try_from(word_index).expect("dense outcome bitmap is capped"));
+            }
+            *word |= bit;
+            true
+        });
+        #[cfg(feature = "perf-counters")]
+        record_clean_fast_outcome_dedup(
+            FastOutcomeDedupStrategy::Dense,
+            input_len,
+            outcomes.len(),
+            word_count,
+        );
+        return FastOutcomeDedupStrategy::Dense;
+    }
+
+    scratch.sparse_keys.clear();
+    scratch.sparse_keys.reserve(outcomes.len());
+    outcomes.retain(|outcome| {
+        scratch
+            .sparse_keys
+            .insert((outcome.index, outcome.consumed_eof))
     });
+    #[cfg(feature = "perf-counters")]
+    record_clean_fast_outcome_dedup(
+        FastOutcomeDedupStrategy::Sparse,
+        input_len,
+        outcomes.len(),
+        0,
+    );
+    if scratch.sparse_keys.capacity() > MAX_RETAINED_FAST_OUTCOME_SPARSE_KEYS {
+        scratch.sparse_keys = FxHashSet::default();
+    }
+    FastOutcomeDedupStrategy::Sparse
 }
 
 /// Sorts and removes equivalent endpoints, including action traces and the
@@ -15770,6 +15920,141 @@ mod tests {
         // With no rule start recorded, it falls back to the provided index.
         let empty = parser.rule_node(ParserRuleContext::new(0, 0));
         assert_eq!(parser.after_action_start_index_for_tree(empty, 7), 7);
+    }
+
+    fn clean_fast_outcome(index: usize, consumed_eof: bool, marker: u32) -> FastRecognizeOutcome {
+        FastRecognizeOutcome {
+            index,
+            consumed_eof,
+            diagnostics: DiagnosticSeqId::EMPTY,
+            deferred_nodes: FastDeferredNodeId::EMPTY,
+            nodes: NodeSeqId(marker),
+        }
+    }
+
+    #[test]
+    fn clean_fast_outcome_dedupe_scans_small_lists_inline() {
+        let mut outcomes = vec![
+            clean_fast_outcome(4, false, 0),
+            clean_fast_outcome(2, false, 1),
+            clean_fast_outcome(4, false, 2),
+            clean_fast_outcome(4, true, 3),
+            clean_fast_outcome(2, false, 4),
+        ];
+        let mut scratch = FastOutcomeDedupScratch::default();
+
+        let strategy = dedupe_clean_fast_outcomes(&mut outcomes, &mut scratch);
+
+        assert_eq!(strategy, FastOutcomeDedupStrategy::Inline);
+        assert_eq!(
+            outcomes
+                .iter()
+                .map(|outcome| (outcome.index, outcome.consumed_eof, outcome.nodes.0))
+                .collect::<Vec<_>>(),
+            vec![(4, false, 0), (2, false, 1), (4, true, 3)]
+        );
+        assert!(scratch.dense_words.is_empty());
+        assert!(scratch.sparse_keys.is_empty());
+    }
+
+    #[test]
+    fn clean_fast_outcome_dedupe_uses_and_reuses_dense_bitmap() {
+        let mut scratch = FastOutcomeDedupScratch::default();
+        let mut outcomes = (100..109)
+            .flat_map(|index| {
+                [
+                    clean_fast_outcome(
+                        index,
+                        false,
+                        u32::try_from(index).expect("test index fits in u32"),
+                    ),
+                    clean_fast_outcome(index, false, u32::MAX),
+                ]
+            })
+            .collect();
+
+        let strategy = dedupe_clean_fast_outcomes(&mut outcomes, &mut scratch);
+
+        assert_eq!(strategy, FastOutcomeDedupStrategy::Dense);
+        assert_eq!(outcomes.len(), 9);
+        assert_eq!(outcomes[0].nodes, NodeSeqId(100));
+        let dense_capacity = scratch.dense_words.capacity();
+
+        let mut reused = (1_000..1_009)
+            .map(|index| {
+                clean_fast_outcome(
+                    index,
+                    false,
+                    u32::try_from(index).expect("test index fits in u32"),
+                )
+            })
+            .collect();
+        let strategy = dedupe_clean_fast_outcomes(&mut reused, &mut scratch);
+
+        assert_eq!(strategy, FastOutcomeDedupStrategy::Dense);
+        assert_eq!(reused.len(), 9);
+        assert_eq!(scratch.dense_words.capacity(), dense_capacity);
+    }
+
+    #[test]
+    fn clean_fast_outcome_dedupe_uses_and_reuses_sparse_hash() {
+        let mut scratch = FastOutcomeDedupScratch::default();
+        let sparse_indexes = [
+            0, 100_000, 200_000, 300_000, 400_000, 500_000, 600_000, 700_000, 800_000,
+        ];
+        let mut outcomes = sparse_indexes
+            .into_iter()
+            .chain([400_000])
+            .enumerate()
+            .map(|(marker, index)| {
+                clean_fast_outcome(
+                    index,
+                    false,
+                    u32::try_from(marker).expect("test marker fits in u32"),
+                )
+            })
+            .collect();
+
+        let strategy = dedupe_clean_fast_outcomes(&mut outcomes, &mut scratch);
+
+        assert_eq!(strategy, FastOutcomeDedupStrategy::Sparse);
+        assert_eq!(outcomes.len(), sparse_indexes.len());
+        assert_eq!(outcomes[4].nodes, NodeSeqId(4));
+        let sparse_capacity = scratch.sparse_keys.capacity();
+
+        let mut reused = sparse_indexes
+            .into_iter()
+            .map(|index| {
+                clean_fast_outcome(
+                    index,
+                    false,
+                    u32::try_from(index).expect("test index fits in u32"),
+                )
+            })
+            .collect();
+        let strategy = dedupe_clean_fast_outcomes(&mut reused, &mut scratch);
+
+        assert_eq!(strategy, FastOutcomeDedupStrategy::Sparse);
+        assert_eq!(reused.len(), sparse_indexes.len());
+        assert_eq!(scratch.sparse_keys.capacity(), sparse_capacity);
+    }
+
+    #[test]
+    fn clean_fast_outcome_dedupe_releases_oversized_sparse_hash() {
+        let mut scratch = FastOutcomeDedupScratch::default();
+        scratch
+            .sparse_keys
+            .reserve(MAX_RETAINED_FAST_OUTCOME_SPARSE_KEYS * 2);
+        assert!(scratch.sparse_keys.capacity() > MAX_RETAINED_FAST_OUTCOME_SPARSE_KEYS);
+        let mut outcomes = (0..9)
+            .map(|index| clean_fast_outcome(index * 100_000, false, index as u32))
+            .collect();
+
+        let strategy = dedupe_clean_fast_outcomes(&mut outcomes, &mut scratch);
+
+        assert_eq!(strategy, FastOutcomeDedupStrategy::Sparse);
+        assert!(scratch.sparse_keys.is_empty());
+        assert!(scratch.sparse_keys.capacity() <= MAX_RETAINED_FAST_OUTCOME_SPARSE_KEYS);
     }
 
     #[test]

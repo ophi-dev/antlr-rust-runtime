@@ -2,7 +2,9 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::hash::BuildHasherDefault;
 
-use crate::atn::lexer_dfa::{CompiledLexerAccept, CompiledLexerDfa, DEAD_STATE, ESCAPE_STATE};
+use crate::atn::lexer_dfa::{
+    CompiledLexerAccept, CompiledLexerContinuation, CompiledLexerDfa, DEAD_STATE, ESCAPE_STATE,
+};
 use crate::atn::{AtnStateKind, LexerAction, LexerAtn, LexerTransition};
 use crate::char_stream::{CharStream, TextInterval};
 use crate::int_stream::EOF;
@@ -663,9 +665,16 @@ where
     if let Some(dfa) = strategy.compiled
         && !lexer.force_interpreted()
         && let Some(start_state) = dfa.mode_start(mode)
-        && let Some(result) = match_token_compiled(lexer, dfa, start_state, start)
     {
-        return result;
+        match match_token_compiled(lexer, dfa, start_state, start) {
+            CompiledMatch::Complete(result) => return result,
+            CompiledMatch::Resume(resume) => {
+                if compiled_resume_matches_atn(atn, start, &resume) {
+                    return match_token_from_continuation(lexer, atn, resume, semantic_predicate);
+                }
+            }
+            CompiledMatch::Restart => {}
+        }
     }
     if strategy.use_cache {
         match_token_cached(lexer, atn, mode, start, semantic_predicate)
@@ -863,16 +872,19 @@ where
     let mut best = best_accept(atn, &active);
     let mut error_stop = start;
     while !active.is_empty() {
+        let position = active[0].position;
+        debug_assert!(
+            active.iter().all(|config| config.position == position),
+            "lexer ATN configs must advance through the input in lockstep"
+        );
+        let symbol = symbol_at(lexer, position);
+        if symbol != EOF {
+            error_stop = error_stop.max(position.saturating_add(1));
+        }
         let mut next = Vec::new();
         let source_dfa_state = dfa_state;
         let source_has_semantic_context = dfa_state_has_semantic_context;
-        let mut edge_symbol = None;
         for config in active {
-            let symbol = symbol_at(lexer, config.position);
-            if symbol != EOF {
-                error_stop = error_stop.max(config.position.saturating_add(1));
-                edge_symbol = Some(symbol);
-            }
             let Some(state) = atn.state(config.state) else {
                 continue;
             };
@@ -904,7 +916,7 @@ where
             );
             dfa_state_has_semantic_context = target_has_semantic_context;
             if !suppress_edge {
-                if let Some(symbol) = edge_symbol {
+                if symbol != EOF {
                     lexer.record_lexer_dfa_edge(source_dfa_state, symbol, dfa_state);
                 }
             }
@@ -1057,20 +1069,56 @@ where
 /// (including grammars whose chains never terminate).
 const MAX_COMPILED_EOF_EDGES: u32 = 8;
 
+enum CompiledMatch<'a> {
+    Complete(MatchResult),
+    Resume(CompiledResume<'a>),
+    Restart,
+}
+
+struct CompiledResume<'a> {
+    continuation: &'a CompiledLexerContinuation,
+    position: usize,
+    best: Option<AcceptState>,
+    error_stop: usize,
+}
+
+fn compiled_resume_matches_atn(atn: &LexerAtn, start: usize, resume: &CompiledResume<'_>) -> bool {
+    let Some(consumed) = resume.position.checked_sub(start) else {
+        return false;
+    };
+    let rule_count = atn.rule_to_token_type().len();
+    !resume.continuation.configs.is_empty()
+        && resume.continuation.configs.iter().all(|config| {
+            atn.state(config.state).is_some()
+                && config
+                    .alt_rule_index
+                    .is_some_and(|rule_index| rule_index < rule_count)
+                && config
+                    .stack
+                    .iter()
+                    .all(|&state_number| atn.state(state_number).is_some())
+                && config.actions.iter().all(|action| {
+                    action.action_index < atn.lexer_actions().len()
+                        && action.rule_index < rule_count
+                        && action.behind <= consumed
+                })
+        })
+}
+
 /// Matches one token by walking the ahead-of-time compiled lexer DFA.
 ///
 /// The walk reproduces the interpreter's longest-match selection: remember
 /// the best accept seen so far, advance until the table has no transition,
 /// then return the remembered accept — or a recognition error spanning every
 /// character the walk looked at, exactly like `match_token`. Reaching an
-/// escape edge (semantic predicate, recursive lexer rule, state budget)
-/// returns `None`, and the caller re-matches the token with the interpreter.
-fn match_token_compiled<I>(
+/// escape edge resumes the interpreter from its narrowed configs when present;
+/// budget-only escapes restart from the token boundary.
+fn match_token_compiled<'a, I>(
     lexer: &mut BaseLexer<I>,
-    dfa: &CompiledLexerDfa,
+    dfa: &'a CompiledLexerDfa,
     start_state: u16,
     start: usize,
-) -> Option<MatchResult>
+) -> CompiledMatch<'a>
 where
     I: CharStream,
 {
@@ -1080,12 +1128,12 @@ where
     match_token_compiled_generic(lexer, dfa, start_state, start)
 }
 
-fn match_token_compiled_ascii(
+fn match_token_compiled_ascii<'a>(
     input: &[u8],
-    dfa: &CompiledLexerDfa,
+    dfa: &'a CompiledLexerDfa,
     start_state: u16,
     start: usize,
-) -> Option<MatchResult> {
+) -> CompiledMatch<'a> {
     let mut state = start_state;
     let mut position = start;
     let mut best: Option<AcceptState> = None;
@@ -1108,18 +1156,30 @@ fn match_token_compiled_ascii(
         } else {
             eof_edges += 1;
             if eof_edges > MAX_COMPILED_EOF_EDGES {
-                break None;
+                break CompiledMatch::Restart;
             }
             (dfa.eof_target(state), true)
         };
         if target == DEAD_STATE {
-            break Some(best.map_or(
+            break CompiledMatch::Complete(best.map_or(
                 MatchResult::NoViableAlt { stop: error_stop },
                 MatchResult::Accept,
             ));
         }
         if target == ESCAPE_STATE {
-            break None;
+            let continuation = if at_eof {
+                dfa.eof_continuation(state)
+            } else {
+                dfa.char_continuation(state, i32::from(input[position]))
+            };
+            break continuation.map_or(CompiledMatch::Restart, |continuation| {
+                CompiledMatch::Resume(CompiledResume {
+                    continuation,
+                    position: position + usize::from(!at_eof),
+                    best,
+                    error_stop,
+                })
+            });
         }
         if !at_eof {
             position += 1;
@@ -1131,12 +1191,12 @@ fn match_token_compiled_ascii(
     result
 }
 
-fn match_token_compiled_generic<I>(
+fn match_token_compiled_generic<'a, I>(
     lexer: &mut BaseLexer<I>,
-    dfa: &CompiledLexerDfa,
+    dfa: &'a CompiledLexerDfa,
     start_state: u16,
     start: usize,
-) -> Option<MatchResult>
+) -> CompiledMatch<'a>
 where
     I: CharStream,
 {
@@ -1153,7 +1213,7 @@ where
         let target = if symbol == EOF {
             eof_edges += 1;
             if eof_edges > MAX_COMPILED_EOF_EDGES {
-                return None;
+                return CompiledMatch::Restart;
             }
             dfa.eof_target(state)
         } else {
@@ -1164,17 +1224,125 @@ where
             break;
         }
         if target == ESCAPE_STATE {
-            return None;
+            let continuation = if symbol == EOF {
+                dfa.eof_continuation(state)
+            } else {
+                dfa.char_continuation(state, symbol)
+            };
+            return continuation.map_or(CompiledMatch::Restart, |continuation| {
+                CompiledMatch::Resume(CompiledResume {
+                    continuation,
+                    position: position + usize::from(symbol != EOF),
+                    best,
+                    error_stop,
+                })
+            });
         }
         if symbol != EOF {
             position += 1;
         }
         state = target;
     }
-    Some(best.map_or(
+    CompiledMatch::Complete(best.map_or(
         MatchResult::NoViableAlt { stop: error_stop },
         MatchResult::Accept,
     ))
+}
+
+fn match_token_from_continuation<I, P>(
+    lexer: &mut BaseLexer<I>,
+    atn: &LexerAtn,
+    resume: CompiledResume<'_>,
+    semantic_predicate: &mut P,
+) -> MatchResult
+where
+    I: CharStream,
+    P: FnMut(&BaseLexer<I>, LexerPredicate) -> bool,
+{
+    let CompiledResume {
+        continuation,
+        position,
+        mut best,
+        mut error_stop,
+    } = resume;
+    let moved = continuation.configs.iter().map(|config| LexerConfig {
+        state: config.state,
+        position,
+        consumed_eof: config.consumed_eof,
+        alt_rule_index: config.alt_rule_index,
+        passed_non_greedy: config.passed_non_greedy,
+        stack: config.stack.clone(),
+        actions: config
+            .actions
+            .iter()
+            .map(|action| LexerActionTrace {
+                action_index: action.action_index,
+                position: position.saturating_sub(action.behind),
+                rule_index: action.rule_index,
+            })
+            .collect(),
+    });
+    let closure = epsilon_closure(atn, moved, &mut |predicate| {
+        semantic_predicate(lexer, predicate)
+    });
+    let mut active = prune_after_accepts(atn, closure.configs);
+    update_best_accept(atn, &active, &mut best);
+
+    while let Some(config) = active.first() {
+        let active_position = config.position;
+        debug_assert!(
+            active
+                .iter()
+                .all(|config| config.position == active_position),
+            "lexer ATN configs must advance through the input in lockstep"
+        );
+        let symbol = symbol_at(lexer, active_position);
+        if symbol != EOF {
+            error_stop = error_stop.max(active_position.saturating_add(1));
+        }
+        let mut next = Vec::new();
+        for config in active {
+            let Some(state) = atn.state(config.state) else {
+                continue;
+            };
+            for transition in &state.transitions {
+                if !transition.matches(symbol, MIN_CHAR_VALUE, MAX_CHAR_VALUE) {
+                    continue;
+                }
+                let mut advanced = config.clone();
+                set_config_state(atn, &mut advanced, transition.target());
+                if symbol == EOF {
+                    advanced.consumed_eof = true;
+                } else {
+                    advanced.position += 1;
+                }
+                next.push(advanced);
+            }
+        }
+
+        let closure = epsilon_closure(atn, next, &mut |predicate| {
+            semantic_predicate(lexer, predicate)
+        });
+        active = prune_after_accepts(atn, closure.configs);
+        update_best_accept(atn, &active, &mut best);
+    }
+
+    best.map_or(
+        MatchResult::NoViableAlt { stop: error_stop },
+        MatchResult::Accept,
+    )
+}
+
+fn update_best_accept(atn: &LexerAtn, active: &[LexerConfig], best: &mut Option<AcceptState>) {
+    let Some(accept) = best_accept(atn, active) else {
+        return;
+    };
+    if best.as_ref().is_none_or(|current| {
+        accept.position > current.position
+            || (accept.position == current.position && accept.rule_index < current.rule_index)
+    }) {
+        *best = Some(accept);
+    }
 }
 
 /// Applies the interpreter's longest-match / lowest-rule preference to one
@@ -1652,6 +1820,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::atn::lexer_dfa::{CompiledLexerActionTrace, CompiledLexerConfig};
     use crate::atn::serialized::{AtnDeserializer, SerializedAtn};
     use crate::atn::{LexerAtnState, LexerTransition};
     use crate::char_stream::InputStream;
@@ -2738,6 +2907,71 @@ mod tests {
             assert_eq!((token.start, token.stop), (0, 3), "{strategy:?}");
             assert_eq!(token.text, "/**/", "{strategy:?}");
         }
+    }
+
+    #[test]
+    fn compiled_resume_rejects_untrusted_continuation_payloads() {
+        let atn = trailing_action_atn(&['a'], 1, vec![LexerAction::Skip]);
+        let valid_config = CompiledLexerConfig {
+            state: 2,
+            consumed_eof: false,
+            alt_rule_index: Some(0),
+            passed_non_greedy: false,
+            stack: Vec::new(),
+            actions: vec![CompiledLexerActionTrace {
+                action_index: 0,
+                rule_index: 0,
+                behind: 0,
+            }],
+        };
+        let valid = |config| CompiledLexerContinuation {
+            configs: vec![config],
+        };
+        let matches = |continuation: &CompiledLexerContinuation| {
+            compiled_resume_matches_atn(
+                &atn,
+                4,
+                &CompiledResume {
+                    continuation,
+                    position: 5,
+                    best: None,
+                    error_stop: 5,
+                },
+            )
+        };
+
+        assert!(matches(&valid(valid_config.clone())));
+        assert!(!matches(&CompiledLexerContinuation {
+            configs: Vec::new(),
+        }));
+
+        let mut invalid = valid_config.clone();
+        invalid.state = usize::MAX;
+        assert!(!matches(&valid(invalid)));
+
+        let mut invalid = valid_config.clone();
+        invalid.alt_rule_index = None;
+        assert!(!matches(&valid(invalid)));
+
+        let mut invalid = valid_config.clone();
+        invalid.alt_rule_index = Some(1);
+        assert!(!matches(&valid(invalid)));
+
+        let mut invalid = valid_config.clone();
+        invalid.stack.push(usize::MAX);
+        assert!(!matches(&valid(invalid)));
+
+        let mut invalid = valid_config.clone();
+        invalid.actions[0].action_index = 1;
+        assert!(!matches(&valid(invalid)));
+
+        let mut invalid = valid_config.clone();
+        invalid.actions[0].rule_index = 1;
+        assert!(!matches(&valid(invalid)));
+
+        let mut invalid = valid_config;
+        invalid.actions[0].behind = 2;
+        assert!(!matches(&valid(invalid)));
     }
 
     #[test]
