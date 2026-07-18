@@ -112,6 +112,10 @@ const ADAPTIVE_DIRECT_STEP_LIMIT: usize = RECOGNITION_DEPTH_LIMIT;
 /// entries; small ambiguous Kotlin loops repeatedly hit the same keys.
 const CLEAN_SINGLE_OUTCOME_MEMO_PROBE_LIMIT: usize = 4096;
 const CLEAN_SINGLE_OUTCOME_MEMO_REPEAT_LIMIT: usize = 8;
+const FAST_RECOGNIZE_VISITING_CAPACITY: usize = 256;
+const FAST_RECOGNIZE_MIN_MEMO_CAPACITY: usize = 256;
+const FAST_RECOGNIZE_MAX_MEMO_CAPACITY: usize = 524_288;
+const FAST_RECOGNIZE_MAX_RETAINED_MEMO_CAPACITY: usize = 65_536;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum SingleOutcomeMemoMode {
@@ -1183,6 +1187,8 @@ pub struct BaseParser<S, H = NoSemanticHooks> {
     single_outcome_probe_seen: FxHashSet<FastRecognizeKey>,
     single_outcome_probe_samples: usize,
     single_outcome_probe_repeats: usize,
+    /// Reusable cycle and memo storage for one top-level fast recognition.
+    fast_recognize_scratch: FastRecognizeTopScratch,
     /// Reusable direct-index/hash storage for clean speculative endpoints.
     fast_outcome_dedup: FastOutcomeDedupScratch,
     /// Empty recovery-symbols singleton used as the default at rule entry and
@@ -1268,6 +1274,40 @@ struct FastRecognizeOutcome {
     /// Copying an outcome copies this compact ID; prepending appends one
     /// `SeqLink` without allocating an individual node or list tail.
     nodes: NodeSeqId,
+}
+
+#[derive(Debug, Default)]
+struct FastRecognizeTopScratch {
+    visiting: FxHashSet<FastRecognizeKey>,
+    memo: FxHashMap<FastRecognizeKey, Rc<[FastRecognizeOutcome]>>,
+}
+
+impl FastRecognizeTopScratch {
+    fn prepare(&mut self, memo_capacity: usize) {
+        self.visiting.clear();
+        if self.visiting.capacity() < FAST_RECOGNIZE_VISITING_CAPACITY {
+            self.visiting
+                .reserve(FAST_RECOGNIZE_VISITING_CAPACITY.saturating_sub(self.visiting.capacity()));
+        }
+        self.memo.clear();
+        if self.memo.capacity() < memo_capacity {
+            self.memo
+                .reserve(memo_capacity.saturating_sub(self.memo.capacity()));
+        }
+    }
+
+    fn release_oversized_memo(&mut self) {
+        if self.memo.capacity() > FAST_RECOGNIZE_MAX_RETAINED_MEMO_CAPACITY {
+            self.memo = FxHashMap::default();
+        }
+    }
+}
+
+fn fast_recognize_memo_capacity(buffered_tokens: usize) -> usize {
+    buffered_tokens.saturating_mul(8).clamp(
+        FAST_RECOGNIZE_MIN_MEMO_CAPACITY,
+        FAST_RECOGNIZE_MAX_MEMO_CAPACITY,
+    )
 }
 
 #[derive(Debug, Default)]
@@ -4590,6 +4630,7 @@ where
             single_outcome_probe_seen: FxHashSet::default(),
             single_outcome_probe_samples: 0,
             single_outcome_probe_repeats: 0,
+            fast_recognize_scratch: FastRecognizeTopScratch::default(),
             fast_outcome_dedup: FastOutcomeDedupScratch::default(),
             empty_recovery_symbols: Rc::new(BTreeSet::new()),
             fast_first_set_prefilter: true,
@@ -4630,7 +4671,7 @@ where
         self.reset_per_parse_caches();
         self.fast_first_set_prefilter = true;
         self.fast_recovery_enabled = true;
-        self.fast_token_nodes_enabled = true;
+        self.fast_token_nodes_enabled = self.build_parse_trees;
         self.reset_recognition_arena();
     }
 
@@ -6462,15 +6503,15 @@ where
         } = request;
         // `input.size()` is intentionally only the currently buffered token
         // count here. Do not restore an up-front fill just to size this map:
-        // the fixed floor avoids small-input churn, and large inputs grow the
-        // cache after the deferred-fill threshold without forcing startup
-        // tokenization. The 8x multiplier matches the empirical
+        // a small floor avoids tiny-input churn, and larger inputs reserve from
+        // the buffered token count without forcing startup tokenization. The
+        // 8x multiplier matches the empirical
         // memo-insert / token ratio on heavy grammars (C# averages ~6× and
         // Kotlin ~12× memo entries per token), so the table avoids one
         // rehash on the typical hot path.
-        let memo_capacity = self.input.size().saturating_mul(8).clamp(65_536, 524_288);
-        let mut visiting = FxHashSet::with_capacity_and_hasher(256, FxBuildHasher::default());
-        let mut memo = FxHashMap::with_capacity_and_hasher(memo_capacity, FxBuildHasher::default());
+        let memo_capacity = fast_recognize_memo_capacity(self.input.size());
+        let mut recognize_scratch = std::mem::take(&mut self.fast_recognize_scratch);
+        recognize_scratch.prepare(memo_capacity);
         let mut expected = ExpectedTokens::default();
         let empty_recovery = self.empty_recovery_symbols();
         let outcomes = self.recognize_state_fast(
@@ -6488,11 +6529,13 @@ where
             },
             FastRecognizeScratch {
                 predicate_context,
-                visiting: &mut visiting,
-                memo: &mut memo,
+                visiting: &mut recognize_scratch.visiting,
+                memo: &mut recognize_scratch.memo,
                 expected: &mut expected,
             },
         );
+        recognize_scratch.release_oversized_memo();
+        self.fast_recognize_scratch = recognize_scratch;
         #[cfg(feature = "perf-counters")]
         if std::env::var("ANTLR_PERF_DUMP").is_ok() {
             perf_counters::dump();
@@ -6513,7 +6556,9 @@ where
         };
         match selected {
             Some(mut outcome) => {
-                self.materialize_fast_outcome_nodes(&mut outcome);
+                if self.build_parse_trees {
+                    self.materialize_fast_outcome_nodes(&mut outcome);
+                }
                 Ok((outcome, expected))
             }
             None => Err(expected),
@@ -8396,7 +8441,7 @@ where
                         }
                         let child_stop_index =
                             self.rule_stop_token_index(child_index, child_consumed_eof);
-                        let child_node =
+                        let child_node = self.build_parse_trees.then(|| {
                             self.recognition_arena.deferred_rule_node(FastDeferredRule {
                                 rule_index: u32::try_from(rule_index)
                                     .expect("rule index fits in u32"),
@@ -8409,7 +8454,8 @@ where
                                 }),
                                 deferred_children: child.deferred_nodes,
                                 children: child.nodes,
-                            });
+                            })
+                        });
                         let child_diags_empty = child_diagnostics.is_empty();
                         outcomes.extend(follow_outcomes.into_iter().map(|mut outcome| {
                             outcome.consumed_eof |= child_consumed_eof;
@@ -8420,9 +8466,11 @@ where
                                     .recognition_arena
                                     .concat_diagnostics(child_diagnostics, outcome.diagnostics);
                             }
-                            outcome.deferred_nodes = self
-                                .recognition_arena
-                                .concat_deferred_nodes(child_node, outcome.deferred_nodes);
+                            if let Some(child_node) = child_node {
+                                outcome.deferred_nodes = self
+                                    .recognition_arena
+                                    .concat_deferred_nodes(child_node, outcome.deferred_nodes);
+                            }
                             outcome
                         }));
                     }
@@ -15019,6 +15067,44 @@ mod tests {
     }
 
     #[test]
+    fn fast_recognize_memo_capacity_scales_from_small_floor_to_bounded_maximum() {
+        assert_eq!(
+            fast_recognize_memo_capacity(0),
+            FAST_RECOGNIZE_MIN_MEMO_CAPACITY
+        );
+        assert_eq!(
+            fast_recognize_memo_capacity(FAST_RECOGNIZE_MIN_MEMO_CAPACITY / 8),
+            FAST_RECOGNIZE_MIN_MEMO_CAPACITY
+        );
+        assert_eq!(fast_recognize_memo_capacity(1_000), 8_000);
+        assert_eq!(
+            fast_recognize_memo_capacity(usize::MAX),
+            FAST_RECOGNIZE_MAX_MEMO_CAPACITY
+        );
+    }
+
+    #[test]
+    fn fast_recognize_scratch_reuses_small_tables_and_releases_oversized_memo() {
+        let mut scratch = FastRecognizeTopScratch::default();
+        scratch.prepare(FAST_RECOGNIZE_MIN_MEMO_CAPACITY);
+        let retained_capacity = scratch.memo.capacity();
+        assert!(retained_capacity >= FAST_RECOGNIZE_MIN_MEMO_CAPACITY);
+        assert!(retained_capacity <= FAST_RECOGNIZE_MAX_RETAINED_MEMO_CAPACITY);
+
+        scratch.release_oversized_memo();
+        assert_eq!(scratch.memo.capacity(), retained_capacity);
+
+        scratch
+            .memo
+            .reserve(FAST_RECOGNIZE_MAX_RETAINED_MEMO_CAPACITY * 2);
+        assert!(scratch.memo.capacity() > FAST_RECOGNIZE_MAX_RETAINED_MEMO_CAPACITY);
+
+        scratch.release_oversized_memo();
+        assert!(scratch.memo.is_empty());
+        assert_eq!(scratch.memo.capacity(), 0);
+    }
+
+    #[test]
     fn clean_empty_multi_alt_outcomes_are_memoized() {
         let mut atn = ParserAtnBuilder::new(2);
         assert_eq!(
@@ -15164,6 +15250,23 @@ mod tests {
                 .is_none(),
             "the no-tree sentinel must not resolve to stored data"
         );
+    }
+
+    #[test]
+    fn disabled_tree_building_skips_recognition_rule_node_storage() {
+        let atn = ordinary_star_loop_atn();
+        let mut parser = mini_parser(repeated_x_tokens(3));
+        parser.set_build_parse_trees(false);
+
+        parser
+            .parse_atn_rule(&atn, 0)
+            .expect("ordinary repetition should parse without a tree");
+
+        assert_eq!(parser.input.index(), 3);
+        assert!(parser.recognition_arena.nodes.is_empty());
+        assert!(parser.recognition_arena.seq_links.is_empty());
+        assert!(parser.recognition_arena.deferred_nodes.is_empty());
+        assert!(parser.recognition_arena.deferred_rules.is_empty());
     }
 
     #[test]
