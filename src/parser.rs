@@ -3737,6 +3737,55 @@ enum FastRepetitionWork {
     Exit(FastRepetitionPath),
 }
 
+/// Dense entered/exited coordinate sets for one repetition walk.
+///
+/// The start coordinate stays inline so short loops avoid a heap allocation;
+/// later token indexes use one byte each instead of two hash-table entries.
+struct FastRepetitionCoordinates {
+    base_index: usize,
+    base_state: u8,
+    later_states: Vec<u8>,
+}
+
+impl FastRepetitionCoordinates {
+    const ENTERED: u8 = 0;
+    const EXITED: u8 = 2;
+
+    const fn new(base_index: usize) -> Self {
+        Self {
+            base_index,
+            base_state: 0,
+            later_states: Vec::new(),
+        }
+    }
+
+    fn insert_entered(&mut self, path: FastRepetitionPath) -> bool {
+        self.insert(path.index, path.consumed_eof, Self::ENTERED)
+    }
+
+    fn insert_exited(&mut self, path: FastRepetitionPath) -> bool {
+        self.insert(path.index, path.consumed_eof, Self::EXITED)
+    }
+
+    fn insert(&mut self, index: usize, consumed_eof: bool, base_bit: u8) -> bool {
+        let Some(offset) = index.checked_sub(self.base_index) else {
+            return false;
+        };
+        let state = if offset == 0 {
+            &mut self.base_state
+        } else {
+            if self.later_states.len() < offset {
+                self.later_states.resize(offset, 0);
+            }
+            &mut self.later_states[offset - 1]
+        };
+        let bit = 1 << (base_bit + u8::from(consumed_eof));
+        let is_new = *state & bit == 0;
+        *state |= bit;
+        is_new
+    }
+}
+
 fn fast_repetition_shape(atn: &Atn, state: AtnState<'_>) -> Option<FastRepetitionShape> {
     if state.precedence_rule_decision()
         || !matches!(
@@ -3785,13 +3834,36 @@ fn push_fast_repetition_work(
     work: &mut Vec<FastRepetitionWork>,
     shape: FastRepetitionShape,
     path: FastRepetitionPath,
+    lookahead: Option<&DecisionLookahead>,
+    symbol: i32,
 ) {
+    // Match the normal recognizer's FIRST-set pruning before queueing work.
+    // Ambiguous body paths still share the coordinate bitmap below.
+    let transition_is_viable = |transition_index: usize| {
+        let Some(entry) = lookahead else {
+            return true;
+        };
+        let Some(transition) = entry.transitions.get(transition_index) else {
+            return true;
+        };
+        transition.nullable || transition.symbols.contains(symbol)
+    };
+    let enter_is_viable = transition_is_viable(shape.enter_transition_index);
+    let exit_is_viable = transition_is_viable(shape.exit_transition_index);
     if shape.enter_transition_index < shape.exit_transition_index {
-        work.push(FastRepetitionWork::Exit(path));
-        work.push(FastRepetitionWork::Enter(path));
+        if exit_is_viable {
+            work.push(FastRepetitionWork::Exit(path));
+        }
+        if enter_is_viable {
+            work.push(FastRepetitionWork::Enter(path));
+        }
     } else {
-        work.push(FastRepetitionWork::Enter(path));
-        work.push(FastRepetitionWork::Exit(path));
+        if enter_is_viable {
+            work.push(FastRepetitionWork::Enter(path));
+        }
+        if exit_is_viable {
+            work.push(FastRepetitionWork::Exit(path));
+        }
     }
 }
 
@@ -7141,26 +7213,64 @@ where
     fn materialize_fast_deferred_nodes(
         &mut self,
         root: FastDeferredNodeId,
-        mut suffix: NodeSeqId,
+        initial_suffix: NodeSeqId,
     ) -> NodeSeqId {
         if root.is_empty() {
-            return suffix;
+            return initial_suffix;
         }
-        let mut pending = vec![root];
+
+        enum Frame {
+            Visit(FastDeferredNodeId),
+            ContinuePrefix(FastDeferredNodeId),
+            FinishRule {
+                rule: FastDeferredRule,
+                parent_suffix: NodeSeqId,
+            },
+        }
+
+        let mut result = initial_suffix;
+        let mut pending = Vec::with_capacity(16);
+        pending.push(Frame::Visit(root));
         let mut fragment_nodes = Vec::new();
-        while let Some(deferred) = pending.pop() {
-            match self.recognition_arena.deferred_node(deferred) {
-                FastDeferredNode::Fragment(sequence) => {
-                    fragment_nodes.clear();
-                    fragment_nodes.extend(self.recognition_arena.iter(sequence));
-                    while let Some(node) = fragment_nodes.pop() {
-                        self.arena_prepend(&mut suffix, node);
+        while let Some(frame) = pending.pop() {
+            match frame {
+                Frame::Visit(deferred) => {
+                    if deferred.is_empty() {
+                        continue;
+                    }
+
+                    match self.recognition_arena.deferred_node(deferred) {
+                        FastDeferredNode::Fragment(sequence) => {
+                            fragment_nodes.clear();
+                            fragment_nodes.extend(self.recognition_arena.iter(sequence));
+                            while let Some(node) = fragment_nodes.pop() {
+                                self.arena_prepend(&mut result, node);
+                            }
+                        }
+                        FastDeferredNode::Rule(rule) => {
+                            let rule = self.recognition_arena.deferred_rule(rule);
+                            let parent_suffix = result;
+                            result = rule.children;
+                            pending.push(Frame::FinishRule {
+                                rule,
+                                parent_suffix,
+                            });
+                            pending.push(Frame::Visit(rule.deferred_children));
+                        }
+                        FastDeferredNode::Concat {
+                            prefix,
+                            suffix: deferred_suffix,
+                        } => {
+                            pending.push(Frame::ContinuePrefix(prefix));
+                            pending.push(Frame::Visit(deferred_suffix));
+                        }
                     }
                 }
-                FastDeferredNode::Rule(rule) => {
-                    let rule = self.recognition_arena.deferred_rule(rule);
-                    let children =
-                        self.materialize_fast_deferred_nodes(rule.deferred_children, rule.children);
+                Frame::ContinuePrefix(prefix) => pending.push(Frame::Visit(prefix)),
+                Frame::FinishRule {
+                    rule,
+                    parent_suffix,
+                } => {
                     let node = self.recognition_arena.push_node(ArenaRecognizedNode::Rule {
                         rule_index: rule.rule_index,
                         invoking_state: rule.invoking_state,
@@ -7168,20 +7278,14 @@ where
                         start_index: rule.start_index,
                         stop_index: rule.stop_index,
                         return_values: None,
-                        children,
+                        children: result,
                     });
-                    self.arena_prepend(&mut suffix, node);
-                }
-                FastDeferredNode::Concat {
-                    prefix,
-                    suffix: deferred_suffix,
-                } => {
-                    pending.push(prefix);
-                    pending.push(deferred_suffix);
+                    result = parent_suffix;
+                    self.arena_prepend(&mut result, node);
                 }
             }
         }
-        suffix
+        result
     }
 
     fn materialize_fast_outcome_nodes(&mut self, outcome: &mut FastRecognizeOutcome) {
@@ -7204,7 +7308,17 @@ where
             memo,
             expected,
         } = scratch;
-        let mut work = Vec::with_capacity(16);
+        let lookahead = if self.fast_first_set_prefilter {
+            atn.state(request.state_number).and_then(|state| {
+                state
+                    .rule_index()
+                    .and_then(|rule_index| atn.rule_to_stop_state().get(rule_index))
+                    .map(|rule_stop| self.cached_decision_lookahead(atn, state, rule_stop))
+            })
+        } else {
+            None
+        };
+        let mut work = Vec::with_capacity(2);
         push_fast_repetition_work(
             &mut work,
             shape,
@@ -7214,11 +7328,17 @@ where
                 diagnostics: DiagnosticSeqId::EMPTY,
                 consumed_eof: false,
             },
+            lookahead.as_deref(),
+            self.token_type_at(request.index),
         );
+        let mut coordinates = FastRepetitionCoordinates::new(request.index);
         let mut outcomes = Vec::new();
         while let Some(item) = work.pop() {
             match item {
                 FastRepetitionWork::Enter(path) => {
+                    if !coordinates.insert_entered(path) {
+                        continue;
+                    }
                     let body_outcomes = self.recognize_state_fast(
                         atn,
                         FastRecognizeRequest {
@@ -7261,10 +7381,20 @@ where
                                 .concat_diagnostics(path.diagnostics, body.diagnostics),
                             consumed_eof: path.consumed_eof || body.consumed_eof,
                         };
-                        push_fast_repetition_work(&mut work, shape, next_path);
+                        let symbol = self.token_type_at(next_path.index);
+                        push_fast_repetition_work(
+                            &mut work,
+                            shape,
+                            next_path,
+                            lookahead.as_deref(),
+                            symbol,
+                        );
                     }
                 }
                 FastRepetitionWork::Exit(path) => {
+                    if !coordinates.insert_exited(path) {
+                        continue;
+                    }
                     let suffixes = self.recognize_state_fast(
                         atn,
                         FastRecognizeRequest {
@@ -11520,6 +11650,80 @@ mod tests {
         finish_atn(atn)
     }
 
+    /// ATN for `s : (X | X X)* EOF`.
+    fn ambiguous_ordinary_star_loop_atn() -> Atn {
+        let mut atn = ParserAtnBuilder::new(1);
+        for (state_number, kind) in [
+            (0, AtnStateKind::RuleStart),
+            (1, AtnStateKind::StarLoopEntry),
+            (2, AtnStateKind::StarBlockStart),
+            (3, AtnStateKind::Basic),
+            (4, AtnStateKind::BlockEnd),
+            (5, AtnStateKind::StarLoopBack),
+            (6, AtnStateKind::LoopEnd),
+            (7, AtnStateKind::Basic),
+            (8, AtnStateKind::RuleStop),
+        ] {
+            assert_eq!(
+                atn.add_state(kind, Some(0)).expect("state").index(),
+                state_number
+            );
+        }
+        atn.set_rule_to_start_state(vec![0])
+            .expect("rule start states");
+        atn.set_rule_to_stop_state(vec![8])
+            .expect("rule stop states");
+        atn.set_end_state(2, 4).expect("block end state");
+        atn.set_loop_back_state(6, 5).expect("loop back state");
+        atn.add_decision_state(1).expect("decision state");
+        atn.add_decision_state(2).expect("decision state");
+        atn.add_transition(0, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("transition");
+        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 2 })
+            .expect("transition");
+        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 6 })
+            .expect("transition");
+        atn.add_transition(
+            2,
+            ParserTransitionSpec::Atom {
+                target: 4,
+                label: 1,
+            },
+        )
+        .expect("transition");
+        atn.add_transition(
+            2,
+            ParserTransitionSpec::Atom {
+                target: 3,
+                label: 1,
+            },
+        )
+        .expect("transition");
+        atn.add_transition(
+            3,
+            ParserTransitionSpec::Atom {
+                target: 4,
+                label: 1,
+            },
+        )
+        .expect("transition");
+        atn.add_transition(4, ParserTransitionSpec::Epsilon { target: 5 })
+            .expect("transition");
+        atn.add_transition(5, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("transition");
+        atn.add_transition(6, ParserTransitionSpec::Epsilon { target: 7 })
+            .expect("transition");
+        atn.add_transition(
+            7,
+            ParserTransitionSpec::Atom {
+                target: 8,
+                label: TOKEN_EOF,
+            },
+        )
+        .expect("transition");
+        finish_atn(atn)
+    }
+
     fn ordinary_plus_loop_atn() -> Atn {
         let mut atn = ParserAtnBuilder::new(2);
         for (state_number, kind, rule_index) in [
@@ -13796,6 +14000,75 @@ mod tests {
             );
             assert_eq!(parser.number_of_syntax_errors(), 0);
         }
+    }
+
+    #[test]
+    fn deeply_nested_deferred_rules_materialize_on_small_stack() {
+        const DEPTH: usize = 20_000;
+
+        std::thread::Builder::new()
+            .name("deferred-rule-materialization".to_owned())
+            .stack_size(256 * 1024)
+            .spawn(|| {
+                let mut parser = mini_parser(vec![TestToken::eof("parser-test", 0, 1, 0)]);
+                let mut root = FastDeferredNodeId::EMPTY;
+                for depth in 0..DEPTH {
+                    root = parser
+                        .recognition_arena
+                        .deferred_rule_node(FastDeferredRule {
+                            rule_index: u32::try_from(depth).expect("depth fits in u32"),
+                            invoking_state: i32::try_from(depth).expect("depth fits in i32"),
+                            start_index: 0,
+                            stop_index: None,
+                            deferred_children: root,
+                            children: NodeSeqId::EMPTY,
+                        });
+                }
+
+                let mut children = parser.materialize_fast_deferred_nodes(root, NodeSeqId::EMPTY);
+                for expected_rule in (0..DEPTH).rev() {
+                    let mut nodes = parser.recognition_arena.iter(children);
+                    let node = nodes.next().expect("nested rule node");
+                    assert!(nodes.next().is_none(), "each rule has one child");
+                    let ArenaRecognizedNode::Rule {
+                        rule_index,
+                        children: nested,
+                        ..
+                    } = parser.recognition_arena.node(node)
+                    else {
+                        panic!("expected nested rule");
+                    };
+                    assert_eq!(rule_index as usize, expected_rule);
+                    children = nested;
+                }
+                assert!(children.is_empty());
+            })
+            .expect("small-stack thread should start")
+            .join()
+            .expect("deferred rules should materialize without recursion");
+    }
+
+    #[test]
+    fn ambiguous_ordinary_repetition_merges_equivalent_coordinates() {
+        const REPETITIONS: usize = 64;
+
+        let atn = ambiguous_ordinary_star_loop_atn();
+        let mut parser = mini_parser(repeated_x_tokens(REPETITIONS));
+        let tree = parser
+            .parse_atn_rule(&atn, 0)
+            .expect("ambiguous ordinary repetition should parse");
+
+        let root = parser
+            .node(tree)
+            .as_rule()
+            .expect("entry result should be a rule");
+        assert_eq!(root.text(), format!("{}<EOF>", "x".repeat(REPETITIONS)));
+        assert_eq!(parser.input.index(), REPETITIONS);
+        assert!(
+            parser.recognition_arena.deferred_nodes.len() <= REPETITIONS * 8,
+            "equivalent segmentations should keep deferred storage linear"
+        );
+        assert_eq!(parser.number_of_syntax_errors(), 0);
     }
 
     #[test]
