@@ -108,8 +108,8 @@ const RECOGNITION_DEPTH_LIMIT: usize = 32_768;
 /// speculative recognition so malformed cyclic ATNs cannot spin forever.
 const ADAPTIVE_DIRECT_STEP_LIMIT: usize = RECOGNITION_DEPTH_LIMIT;
 /// Probe window for deciding whether clean-pass memo entries are reusable
-/// enough to keep caching. Large C# and MySQL parses mostly produce one-shot
-/// entries; small ambiguous Kotlin loops repeatedly hit the same keys.
+/// enough to keep caching. High-cardinality parses mostly produce one-shot
+/// entries; compact ambiguous loops repeatedly hit the same keys.
 const CLEAN_MEMO_PROBE_LIMIT: usize = 4096;
 const CLEAN_MEMO_REPEAT_LIMIT: usize = 8;
 /// Sparse parses periodically reopen the bounded probe so a repeat-heavy
