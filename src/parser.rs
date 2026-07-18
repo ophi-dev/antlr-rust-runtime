@@ -107,18 +107,21 @@ const RECOGNITION_DEPTH_LIMIT: usize = 32_768;
 /// the existing recognizer. Keep the guard at the same order of magnitude as
 /// speculative recognition so malformed cyclic ATNs cannot spin forever.
 const ADAPTIVE_DIRECT_STEP_LIMIT: usize = RECOGNITION_DEPTH_LIMIT;
-/// Probe window for deciding whether clean-pass one-outcome memo entries are
-/// reusable enough to keep caching. Large C# parses mostly produce one-shot
+/// Probe window for deciding whether clean-pass memo entries are reusable
+/// enough to keep caching. Large C# and MySQL parses mostly produce one-shot
 /// entries; small ambiguous Kotlin loops repeatedly hit the same keys.
-const CLEAN_SINGLE_OUTCOME_MEMO_PROBE_LIMIT: usize = 4096;
-const CLEAN_SINGLE_OUTCOME_MEMO_REPEAT_LIMIT: usize = 8;
+const CLEAN_MEMO_PROBE_LIMIT: usize = 4096;
+const CLEAN_MEMO_REPEAT_LIMIT: usize = 8;
+/// Sparse parses periodically reopen the bounded probe so a repeat-heavy
+/// region that starts later in the token stream can promote memoization.
+const CLEAN_MEMO_REPROBE_INTERVAL: usize = 262_144;
 const FAST_RECOGNIZE_VISITING_CAPACITY: usize = 256;
 const FAST_RECOGNIZE_MIN_MEMO_CAPACITY: usize = 256;
 const FAST_RECOGNIZE_MAX_MEMO_CAPACITY: usize = 524_288;
 const FAST_RECOGNIZE_MAX_RETAINED_MEMO_CAPACITY: usize = 65_536;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum SingleOutcomeMemoMode {
+enum CleanMemoMode {
     Probe,
     Promote,
     Sparse,
@@ -1177,16 +1180,20 @@ pub struct BaseParser<S, H = NoSemanticHooks> {
     /// attempts. The eligible fast path keeps every runtime-provided input
     /// fixed, and custom predicate hooks are required to be replay-safe.
     fast_predicate_cache: FxHashMap<(usize, usize, usize), bool>,
-    /// Per-parse cache for whether an ATN state can reach itself without
-    /// consuming input. Only those states need the recursive recognizer's
-    /// `(state, token-index)` cycle guard.
+    /// Cache for whether an ATN state can reach itself without consuming
+    /// input. Only those states need the recursive recognizer's
+    /// `(state, token-index)` cycle guard. The companion ATN key lets this
+    /// grammar-static cache survive parser resets without reusing state
+    /// coordinates after the parser is driven against a different ATN.
     empty_cycle_cache: Vec<Option<bool>>,
-    /// Probe state for deciding whether clean-pass one-outcome memo entries
-    /// are worth storing for the current parse.
-    single_outcome_memo_mode: SingleOutcomeMemoMode,
-    single_outcome_probe_seen: FxHashSet<FastRecognizeKey>,
-    single_outcome_probe_samples: usize,
-    single_outcome_probe_repeats: usize,
+    empty_cycle_cache_atn: Option<SharedAtnCacheKey>,
+    /// Probe state for deciding whether clean-pass memo entries are worth
+    /// storing for the current parse.
+    clean_memo_mode: CleanMemoMode,
+    clean_memo_probe_seen: FxHashSet<FastRecognizeKey>,
+    clean_memo_probe_samples: usize,
+    clean_memo_probe_repeats: usize,
+    clean_memo_sparse_samples: usize,
     /// Reusable cycle and memo storage for one top-level fast recognition.
     fast_recognize_scratch: FastRecognizeTopScratch,
     /// Reusable direct-index/hash storage for clean speculative endpoints.
@@ -4621,10 +4628,12 @@ where
             ll1_decision_cache: FxHashMap::default(),
             fast_predicate_cache: FxHashMap::default(),
             empty_cycle_cache: Vec::new(),
-            single_outcome_memo_mode: SingleOutcomeMemoMode::Probe,
-            single_outcome_probe_seen: FxHashSet::default(),
-            single_outcome_probe_samples: 0,
-            single_outcome_probe_repeats: 0,
+            empty_cycle_cache_atn: None,
+            clean_memo_mode: CleanMemoMode::Probe,
+            clean_memo_probe_seen: FxHashSet::default(),
+            clean_memo_probe_samples: 0,
+            clean_memo_probe_repeats: 0,
+            clean_memo_sparse_samples: 0,
             fast_recognize_scratch: FastRecognizeTopScratch::default(),
             fast_outcome_dedup: FastOutcomeDedupScratch::default(),
             empty_recovery_symbols: Rc::new(BTreeSet::new()),
@@ -7999,7 +8008,6 @@ where
             }
             return outcomes;
         }
-        let memo_lookup_enabled = self.fast_recovery_enabled || transition_count > 1;
         // In pass 1 (`fast_recovery_enabled == false`) the recovery-related
         // fields and the rule/decision boundary indices are pure plumbing —
         // they only affect the recovery branch and the no-viable diagnostic
@@ -8032,6 +8040,12 @@ where
                 recovery_state: None,
             }
         };
+        // Once the clean-pass probe has established that coordinates do not
+        // repeat, stop paying for the full memo table. Recovery always keeps
+        // memoization because cached failures carry diagnostics, while
+        // repeat-heavy clean parses promote before reaching sparse mode.
+        let memo_lookup_enabled = self.fast_recovery_enabled
+            || (transition_count > 1 && self.clean_memo_enabled_for_key(&key));
         if memo_lookup_enabled {
             if let Some(outcomes) = memo.get(&key) {
                 #[cfg(feature = "perf-counters")]
@@ -8642,10 +8656,7 @@ where
         // record diagnostics that the cache must surface to repeated
         // failed visits.
         let should_memoize = self.fast_recovery_enabled
-            || (transition_count > 1
-                && (outcomes.is_empty()
-                    || outcomes.len() > 1
-                    || (outcomes.len() == 1 && self.should_memoize_single_outcome(&key))));
+            || (transition_count > 1 && self.clean_memo_mode != CleanMemoMode::Sparse);
         // Apply inline pending state to each outcome before returning.
         // Tokens consumed inline by the loop-collapse don't appear in the
         // recursive recognizer's output, so we need to prepend them here.
@@ -9824,6 +9835,11 @@ where
     }
 
     fn state_can_reenter_without_consuming(&mut self, atn: &Atn, state_number: usize) -> bool {
+        let atn_key = SharedAtnCacheKey::for_atn(atn);
+        if self.empty_cycle_cache_atn != Some(atn_key) {
+            self.empty_cycle_cache.clear();
+            self.empty_cycle_cache_atn = Some(atn_key);
+        }
         if self.empty_cycle_cache.len() <= state_number {
             self.empty_cycle_cache
                 .resize_with(atn.states().len().max(state_number + 1), || None);
@@ -9897,30 +9913,44 @@ where
         false
     }
 
-    /// Decides whether a clean one-outcome entry is worth storing in the full
-    /// outcome memo table for this parse.
-    fn should_memoize_single_outcome(&mut self, key: &FastRecognizeKey) -> bool {
-        match self.single_outcome_memo_mode {
-            SingleOutcomeMemoMode::Promote => true,
-            SingleOutcomeMemoMode::Sparse => false,
-            SingleOutcomeMemoMode::Probe => {
-                self.single_outcome_probe_samples += 1;
-                if !self.single_outcome_probe_seen.insert(key.clone()) {
-                    self.single_outcome_probe_repeats += 1;
-                }
-                if self.single_outcome_probe_repeats >= CLEAN_SINGLE_OUTCOME_MEMO_REPEAT_LIMIT {
-                    self.single_outcome_memo_mode = SingleOutcomeMemoMode::Promote;
-                    self.single_outcome_probe_seen.clear();
-                    return true;
-                }
-                if self.single_outcome_probe_samples >= CLEAN_SINGLE_OUTCOME_MEMO_PROBE_LIMIT {
-                    self.single_outcome_memo_mode = SingleOutcomeMemoMode::Sparse;
-                    self.single_outcome_probe_seen.clear();
+    /// Decides whether the clean recognizer should use its full outcome memo
+    /// table for this coordinate.
+    fn clean_memo_enabled_for_key(&mut self, key: &FastRecognizeKey) -> bool {
+        match self.clean_memo_mode {
+            CleanMemoMode::Promote => true,
+            CleanMemoMode::Probe => self.observe_clean_memo_probe(key),
+            CleanMemoMode::Sparse => {
+                self.clean_memo_sparse_samples += 1;
+                if self.clean_memo_sparse_samples < CLEAN_MEMO_REPROBE_INTERVAL {
                     return false;
                 }
-                true
+                self.clean_memo_sparse_samples = 0;
+                self.clean_memo_mode = CleanMemoMode::Probe;
+                self.clean_memo_probe_samples = 0;
+                self.clean_memo_probe_repeats = 0;
+                self.clean_memo_probe_seen.clear();
+                self.observe_clean_memo_probe(key)
             }
         }
+    }
+
+    fn observe_clean_memo_probe(&mut self, key: &FastRecognizeKey) -> bool {
+        self.clean_memo_probe_samples += 1;
+        if !self.clean_memo_probe_seen.insert(key.clone()) {
+            self.clean_memo_probe_repeats += 1;
+        }
+        if self.clean_memo_probe_repeats >= CLEAN_MEMO_REPEAT_LIMIT {
+            self.clean_memo_mode = CleanMemoMode::Promote;
+            self.clean_memo_probe_seen.clear();
+            return true;
+        }
+        if self.clean_memo_probe_samples >= CLEAN_MEMO_PROBE_LIMIT {
+            self.clean_memo_mode = CleanMemoMode::Sparse;
+            self.clean_memo_sparse_samples = 0;
+            self.clean_memo_probe_seen.clear();
+            return false;
+        }
+        true
     }
 
     /// Borrows the visible token at an absolute token-stream index.
@@ -10666,17 +10696,19 @@ where
     ///   the identity invariant that lets `FastRecognizeKey` hash
     ///   `recovery_symbols` by pointer; they have to be cleared in lockstep
     ///   so a stale interned `Rc` cannot outlive its map entry.
+    /// * `empty_cycle_cache` is grammar-static and carries its own ATN key, so
+    ///   it is retained here and invalidated lazily when the ATN changes.
     fn reset_per_parse_caches(&mut self) {
         self.rule_first_set_cache.clear();
         self.decision_lookahead_cache.clear();
         self.ll1_decision_cache.clear();
         self.fast_predicate_cache.clear();
-        self.empty_cycle_cache.clear();
         self.rule_stop_reach_cache.clear();
-        self.single_outcome_memo_mode = SingleOutcomeMemoMode::Probe;
-        self.single_outcome_probe_seen.clear();
-        self.single_outcome_probe_samples = 0;
-        self.single_outcome_probe_repeats = 0;
+        self.clean_memo_mode = CleanMemoMode::Probe;
+        self.clean_memo_probe_seen.clear();
+        self.clean_memo_probe_samples = 0;
+        self.clean_memo_probe_repeats = 0;
+        self.clean_memo_sparse_samples = 0;
         self.recovery_symbols_intern.clear();
         self.state_expected_cache.clear();
         self.state_expected_token_cache.clear();
@@ -13359,6 +13391,31 @@ mod tests {
         .expect("artificial parser ATN should deserialize")
     }
 
+    fn epsilon_cycle_atn() -> Atn {
+        let mut atn = ParserAtnBuilder::new(1);
+        for (state_number, kind) in [
+            (0, AtnStateKind::RuleStart),
+            (1, AtnStateKind::Basic),
+            (2, AtnStateKind::RuleStop),
+        ] {
+            assert_eq!(
+                atn.add_state(kind, Some(0)).expect("state").index(),
+                state_number
+            );
+        }
+        atn.set_rule_to_start_state(vec![0])
+            .expect("rule start states");
+        atn.set_rule_to_stop_state(vec![2])
+            .expect("rule stop states");
+        atn.add_transition(0, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("transition");
+        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 1 })
+            .expect("self-cycle transition");
+        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 2 })
+            .expect("exit transition");
+        finish_atn(atn)
+    }
+
     fn eof_then_action_atn() -> Atn {
         AtnDeserializer::new(&SerializedAtn::from_i32(&[
             4, 1, 1, // version, parser, max token type
@@ -15028,7 +15085,7 @@ mod tests {
     }
 
     #[test]
-    fn single_outcome_memo_probe_selects_sparse_or_promote_mode() {
+    fn clean_memo_probe_selects_sparse_promote_and_reprobe_modes() {
         let key = |state_number| FastRecognizeKey {
             state_number,
             stop_state: 10,
@@ -15041,24 +15098,28 @@ mod tests {
         };
 
         let mut sparse = mini_parser(vec![TestToken::eof("parser-test", 1, 1, 1)]);
-        for state_number in 0..(CLEAN_SINGLE_OUTCOME_MEMO_PROBE_LIMIT - 1) {
-            assert!(sparse.should_memoize_single_outcome(&key(state_number)));
+        for state_number in 0..(CLEAN_MEMO_PROBE_LIMIT - 1) {
+            assert!(sparse.clean_memo_enabled_for_key(&key(state_number)));
         }
-        assert!(!sparse.should_memoize_single_outcome(&key(CLEAN_SINGLE_OUTCOME_MEMO_PROBE_LIMIT)));
-        assert_eq!(
-            sparse.single_outcome_memo_mode,
-            SingleOutcomeMemoMode::Sparse
-        );
+        assert!(!sparse.clean_memo_enabled_for_key(&key(CLEAN_MEMO_PROBE_LIMIT)));
+        assert_eq!(sparse.clean_memo_mode, CleanMemoMode::Sparse);
 
         let mut promote = mini_parser(vec![TestToken::eof("parser-test", 1, 1, 1)]);
         let repeated = key(1);
-        for _ in 0..=CLEAN_SINGLE_OUTCOME_MEMO_REPEAT_LIMIT {
-            assert!(promote.should_memoize_single_outcome(&repeated));
+        for _ in 0..=CLEAN_MEMO_REPEAT_LIMIT {
+            assert!(promote.clean_memo_enabled_for_key(&repeated));
         }
-        assert_eq!(
-            promote.single_outcome_memo_mode,
-            SingleOutcomeMemoMode::Promote
-        );
+        assert_eq!(promote.clean_memo_mode, CleanMemoMode::Promote);
+
+        for _ in 1..CLEAN_MEMO_REPROBE_INTERVAL {
+            assert!(!sparse.clean_memo_enabled_for_key(&repeated));
+        }
+        assert!(sparse.clean_memo_enabled_for_key(&repeated));
+        assert_eq!(sparse.clean_memo_mode, CleanMemoMode::Probe);
+        for _ in 0..CLEAN_MEMO_REPEAT_LIMIT {
+            assert!(sparse.clean_memo_enabled_for_key(&repeated));
+        }
+        assert_eq!(sparse.clean_memo_mode, CleanMemoMode::Promote);
     }
 
     #[test]
@@ -15199,6 +15260,34 @@ mod tests {
         assert!(outcomes.is_empty());
         assert_eq!(memo.len(), 1);
         assert!(memo.values().next().expect("memo entry").is_empty());
+
+        parser.clean_memo_mode = CleanMemoMode::Sparse;
+        visiting.clear();
+        memo.clear();
+        expected = ExpectedTokens::default();
+        let sparse_outcomes = parser.recognize_state_fast(
+            &atn,
+            FastRecognizeRequest {
+                state_number: 1,
+                stop_state: 2,
+                index: 0,
+                rule_start_index: 0,
+                decision_start_index: None,
+                precedence: 0,
+                depth: 0,
+                recovery_symbols: parser.empty_recovery_symbols(),
+                recovery_state: None,
+            },
+            FastRecognizeScratch {
+                predicate_context: None,
+                visiting: &mut visiting,
+                memo: &mut memo,
+                expected: &mut expected,
+            },
+        );
+
+        assert!(sparse_outcomes.is_empty());
+        assert!(memo.is_empty());
     }
 
     #[test]
@@ -16571,6 +16660,31 @@ mod tests {
 
         parser.reset_per_parse_caches();
         assert!(parser.state_expected_token_cache.is_empty());
+    }
+
+    #[test]
+    fn empty_cycle_cache_survives_reset_and_invalidates_for_a_different_atn() {
+        let cyclic = epsilon_cycle_atn();
+        let acyclic = token_then_eof_atn();
+        let mut parser = mini_parser(Vec::new());
+
+        assert!(parser.state_can_reenter_without_consuming(&cyclic, 1));
+        assert_eq!(
+            parser.empty_cycle_cache_atn,
+            Some(SharedAtnCacheKey::for_atn(&cyclic))
+        );
+        assert_eq!(parser.empty_cycle_cache[1], Some(true));
+
+        parser.reset_per_parse_caches();
+        assert_eq!(parser.empty_cycle_cache[1], Some(true));
+        assert!(parser.state_can_reenter_without_consuming(&cyclic, 1));
+
+        assert!(!parser.state_can_reenter_without_consuming(&acyclic, 1));
+        assert_eq!(
+            parser.empty_cycle_cache_atn,
+            Some(SharedAtnCacheKey::for_atn(&acyclic))
+        );
+        assert_eq!(parser.empty_cycle_cache[1], Some(false));
     }
 
     #[test]
