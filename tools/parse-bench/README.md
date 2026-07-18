@@ -40,12 +40,13 @@ Quick local smoke:
 python3 tools/parse-bench/run.py --quick
 ```
 
-SQL-only Rust vs Go smoke:
+SQL-only Rust vs Go smoke (with AST parity gate):
 
 ```bash
 python3 tools/parse-bench/run.py \
   --languages trino \
   --runtimes rust-antlr,go-antlr \
+  --ast-check \
   --quick
 ```
 
@@ -72,6 +73,31 @@ ratio against `rust-antlr` for the same fixture.
 Use `--rust-generated-only` for Adaptive LL delivery evidence so the Rust
 generator fails if any parser rule lacks a generated body and the Rust runner
 fails if a generated parser path falls back to the interpreter.
+
+### Rust vs Go AST parity
+
+Pass `--ast-check` with `--phase parse` and both `rust-antlr` and `go-antlr`
+selected. Before timing, the harness dumps each fixture's parse tree from both
+runners (same `Rule`/`Term`/`Err` format as the Kotlin parity dumper) and
+requires:
+
+- byte-identical dumps, and
+- no error nodes on either side (Rust also rejects a non-zero syntax-error count).
+
+Dumps land under `<work-dir>/ast-dumps/<language>/`.
+
+Kotlin, Java, and Trino fixtures currently pass this gate. Some C# Mono
+fixtures diverge (preprocessor/`#if` handling differences between the Go support
+base and the Rust `.interp` path) — the check fails those intentionally so
+timings are not compared on unequal trees.
+
+```bash
+python3 tools/parse-bench/run.py \
+  --languages kotlin,trino \
+  --runtimes rust-antlr,go-antlr \
+  --ast-check \
+  --quick
+```
 
 ### Lex-only measurements
 

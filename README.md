@@ -450,6 +450,18 @@ python3 tools/parse-bench/run.py \
   --markdown target/parse-bench/results.md
 ```
 
+Add `--ast-check` to require byte-identical Rust/Go parse trees (no error nodes)
+before timing. Prefer that gate for fair comparisons; some C# Mono fixtures still
+diverge today (see `tools/parse-bench/README.md`). For a clean smoke:
+
+```bash
+python3 tools/parse-bench/run.py \
+  --languages kotlin,trino \
+  --runtimes rust-antlr,go-antlr \
+  --ast-check \
+  --quick
+```
+
 The report prints `min`/`avg` parse time and a ratio against `rust-antlr` for
 every fixture. Use `--quick` for a 3-iteration/1-warmup smoke run, or adjust
 `--iters`/`--warmups` for longer, lower-variance runs; add

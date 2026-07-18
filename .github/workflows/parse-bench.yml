@@ -69,6 +69,15 @@ jobs:
           git -C /tmp/antlr-cleanroom/grammars-v4 fetch --depth 1 origin 284602b3f23ca54dc30778204ab7ae9e969145e9
           git -C /tmp/antlr-cleanroom/grammars-v4 checkout FETCH_HEAD
 
+      - name: Rust/Go AST parity (kotlin + java + trino)
+        run: |
+          python head/tools/parse-bench/run.py \
+            --languages kotlin,java,trino \
+            --runtimes rust-antlr,go-antlr \
+            --ast-check \
+            --quick \
+            --work-dir head/target/parse-bench-ast
+
       - name: Run base benchmark
         if: github.event_name == 'pull_request'
         run: |

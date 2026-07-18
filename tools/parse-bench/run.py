@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import datetime as dt
+import difflib
 import json
 import os
 import re
@@ -407,6 +408,10 @@ def write_rust_runner(
         for spec in specs
     )
     lex_arms = "\n".join(f'        "{spec.name}" => lex_{spec.name}(&src)?,' for spec in specs)
+    dump_arms = "\n".join(
+        f'        "{spec.name}" => dump_tree_{spec.name}(&src, out)?,'
+        for spec in specs
+    )
     stats_arms = "\n".join(
         f'        "{spec.name}" => prediction_stats_{spec.name}(&src).map_err(|err| err.to_string())?,'
         for spec in specs
@@ -418,11 +423,12 @@ def write_rust_runner(
 use std::env;
 use std::fs;
 use std::hint::black_box;
+use std::io::{{self, Write}};
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
 
-use antlr4_runtime::{{CommonTokenStream, InputStream}};
+use antlr4_runtime::{{CommonTokenStream, InputStream, Node, NodeKind, Parser}};
 
 mod generated {{
     #![allow(dead_code, unused_imports, unreachable_pub, unused_qualifications)]
@@ -445,6 +451,7 @@ fn run_main() -> Result<(), String> {{
     let mut args = env::args().skip(1);
     let mut language: Option<String> = None;
     let mut input: Option<PathBuf> = None;
+    let mut dump_tree: Option<PathBuf> = None;
     let mut phase = "parse".to_owned();
     let mut iters = 1_usize;
     let mut warmups = 0_usize;
@@ -452,6 +459,7 @@ fn run_main() -> Result<(), String> {{
         match arg.as_str() {{
             "--language" => language = args.next(),
             "--input" => input = args.next().map(PathBuf::from),
+            "--dump-tree" => dump_tree = args.next().map(PathBuf::from),
             "--phase" => phase = args.next().ok_or("missing value for --phase")?,
             "--iters" => iters = parse_usize(args.next(), "--iters")?,
             "--warmups" => warmups = parse_usize(args.next(), "--warmups")?,
@@ -468,6 +476,18 @@ fn run_main() -> Result<(), String> {{
     }}
     let src = fs::read_to_string(&input)
         .map_err(|err| format!("failed to read {{}}: {{err}}", input.display()))?;
+    if let Some(path) = dump_tree {{
+        if phase != "parse" {{
+            return Err("--dump-tree requires --phase parse".to_owned());
+        }}
+        let file = fs::File::create(&path)
+            .map_err(|err| format!("failed to create {{}}: {{err}}", path.display()))?;
+        let mut out = io::BufWriter::new(file);
+        dump_tree_once(&language, &src, &mut out)?;
+        out.flush()
+            .map_err(|err| format!("failed to flush {{}}: {{err}}", path.display()))?;
+        return Ok(());
+    }}
     let collect_stats = env::var_os("ANTLR_PERF_DUMP").is_some();
 
     for _ in 0..warmups {{
@@ -518,12 +538,62 @@ fn lex_once(language: &str, src: &str) -> Result<(), String> {{
     Ok(())
 }}
 
+fn dump_tree_once(language: &str, src: &str, out: &mut dyn Write) -> Result<(), String> {{
+    match language {{
+{dump_arms}
+        other => return Err(format!("unsupported language: {{other}}")),
+    }}
+    Ok(())
+}}
+
 fn run_once(phase: &str, language: &str, src: &str) -> Result<(), String> {{
     match phase {{
         "parse" => parse_once(language, src),
         "lex" => lex_once(language, src),
         other => Err(format!("unsupported phase: {{other}}")),
     }}
+}}
+
+fn dump_node<S: AsRef<str>>(
+    out: &mut dyn Write,
+    tree: Node<'_>,
+    rule_names: &[S],
+    depth: usize,
+) -> io::Result<()> {{
+    let pad = "  ".repeat(depth);
+    match tree.kind() {{
+        NodeKind::Rule => {{
+            let rule = tree.as_rule().expect("rule node kind checked");
+            let name = rule_names
+                .get(rule.rule_index())
+                .map_or("<?>", |name| name.as_ref());
+            writeln!(out, "{{pad}}Rule({{name}}, children={{}})", rule.child_count())?;
+            for child in rule.children() {{
+                dump_node(out, child, rule_names, depth + 1)?;
+            }}
+        }}
+        NodeKind::Terminal => writeln!(
+            out,
+            "{{pad}}Term({{}})",
+            tree_text(tree.as_terminal().expect("terminal node kind checked").text())
+        )?,
+        NodeKind::Error => writeln!(
+            out,
+            "{{pad}}Err({{}})",
+            tree_text(tree.as_error().expect("error node kind checked").text())
+        )?,
+    }}
+    Ok(())
+}}
+
+fn tree_text(text: &str) -> String {{
+    let mut escaped = String::new();
+    escaped.push('"');
+    for ch in text.chars() {{
+        escaped.extend(ch.escape_unicode());
+    }}
+    escaped.push('"');
+    escaped
 }}
 
 fn prediction_stats_once(
@@ -620,6 +690,30 @@ fn parse_{spec.name}(src: &str) -> Result<(), antlr4_runtime::AntlrError> {{
     let tree = parser.{spec.rust_entry}()?;
     black_box(&tree);
     Ok(())
+}}
+
+fn dump_tree_{spec.name}(src: &str, out: &mut dyn Write) -> Result<(), String> {{
+    let lexer = generated::{spec.rust_lexer_module}::{spec.rust_lexer_type}::new(InputStream::new(src));
+    let mut tokens = CommonTokenStream::new(lexer);
+    tokens.fill();
+    let lexer_errors = tokens.drain_source_errors().len();
+    let mut parser = generated::{spec.rust_parser_module}::{spec.rust_parser_type}::new(tokens);
+    let root = parser
+        .{spec.rust_entry}()
+        .map_err(|err| err.to_string())?;
+    let syntax_errors = parser.number_of_syntax_errors();
+    if lexer_errors != 0 || syntax_errors != 0 {{
+        return Err(format!(
+            "rust-antlr {spec.name} parse produced {{lexer_errors}} lexer error(s) and {{syntax_errors}} parser syntax error(s)"
+        ));
+    }}
+    dump_node(
+        out,
+        parser.node(root),
+        generated::{spec.rust_parser_module}::rule_names(),
+        0,
+    )
+    .map_err(|err| err.to_string())
 }}
 
 fn prediction_stats_{spec.name}(
@@ -814,14 +908,20 @@ def write_go_runner(work_dir: Path, specs: list[LanguageSpec]) -> Path:
         f'    case "{spec.name}":\n        parse{go_func_name(spec.name)}(src)'
         for spec in specs
     )
+    dump_arms = "\n".join(
+        f'    case "{spec.name}":\n        return dumpTree{go_func_name(spec.name)}(src, out)'
+        for spec in specs
+    )
     functions = "\n\n".join(go_parse_function(spec) for spec in specs)
     (runner / "main.go").write_text(
         f"""package main
 
 import (
     "fmt"
+    "io"
     "os"
     "strconv"
+    "strings"
     "time"
 
     "github.com/antlr4-go/antlr/v4"
@@ -829,6 +929,25 @@ import (
 )
 
 var sink any
+
+type countingErrorListener struct {{
+    *antlr.DefaultErrorListener
+    count int
+}}
+
+func newCountingErrorListener() *countingErrorListener {{
+    return &countingErrorListener{{DefaultErrorListener: antlr.NewDefaultErrorListener()}}
+}}
+
+func (l *countingErrorListener) SyntaxError(
+    _ antlr.Recognizer,
+    _ interface{{}},
+    _, _ int,
+    _ string,
+    _ antlr.RecognitionException,
+) {{
+    l.count++
+}}
 
 func main() {{
     if err := runMain(); err != nil {{
@@ -840,6 +959,7 @@ func main() {{
 func runMain() error {{
     language := ""
     input := ""
+    dumpTreePath := ""
     iters := 1
     warmups := 0
     for i := 1; i < len(os.Args); i++ {{
@@ -850,6 +970,9 @@ func runMain() error {{
         case "--input":
             i++
             input = requiredArg(i, "--input")
+        case "--dump-tree":
+            i++
+            dumpTreePath = requiredArg(i, "--dump-tree")
         case "--iters":
             i++
             iters = parsePositiveInt(requiredArg(i, "--iters"), "--iters")
@@ -871,6 +994,14 @@ func runMain() error {{
         return err
     }}
     src := string(bytes)
+    if dumpTreePath != "" {{
+        file, err := os.Create(dumpTreePath)
+        if err != nil {{
+            return err
+        }}
+        defer file.Close()
+        return dumpTreeOnce(language, src, file)
+    }}
     for i := 0; i < warmups; i++ {{
         parseOnce(language, src)
     }}
@@ -895,6 +1026,69 @@ func parseOnce(language string, src string) {{
     default:
         panic("unsupported language: " + language)
     }}
+}}
+
+func dumpTreeOnce(language string, src string, out io.Writer) error {{
+    switch language {{
+{dump_arms}
+    default:
+        return fmt.Errorf("unsupported language: %s", language)
+    }}
+}}
+
+func dumpNode(out io.Writer, tree antlr.Tree, ruleNames []string, depth int) error {{
+    pad := strings.Repeat("  ", depth)
+    switch node := tree.(type) {{
+    case antlr.ErrorNode:
+        _, err := fmt.Fprintf(out, "%sErr(%s)\\n", pad, treeText(node.GetText()))
+        return err
+    case antlr.TerminalNode:
+        _, err := fmt.Fprintf(out, "%sTerm(%s)\\n", pad, treeText(node.GetText()))
+        return err
+    case antlr.RuleNode:
+        ruleIndex := node.GetRuleContext().GetRuleIndex()
+        name := "<?>"
+        if ruleIndex >= 0 && ruleIndex < len(ruleNames) {{
+            name = ruleNames[ruleIndex]
+        }}
+        children := node.GetChildren()
+        if _, err := fmt.Fprintf(out, "%sRule(%s, children=%d)\\n", pad, name, len(children)); err != nil {{
+            return err
+        }}
+        for _, child := range children {{
+            if err := dumpNode(out, child, ruleNames, depth+1); err != nil {{
+                return err
+            }}
+        }}
+        return nil
+    default:
+        return fmt.Errorf("unsupported tree node type %T", tree)
+    }}
+}}
+
+func treeHasErrorNode(tree antlr.Tree) bool {{
+    if _, ok := tree.(antlr.ErrorNode); ok {{
+        return true
+    }}
+    if _, ok := tree.(antlr.TerminalNode); ok {{
+        return false
+    }}
+    for _, child := range tree.GetChildren() {{
+        if treeHasErrorNode(child) {{
+            return true
+        }}
+    }}
+    return false
+}}
+
+func treeText(text string) string {{
+    var b strings.Builder
+    b.WriteByte('"')
+    for _, r := range text {{
+        fmt.Fprintf(&b, `\\u{{%x}}`, r)
+    }}
+    b.WriteByte('"')
+    return b.String()
 }}
 
 func requiredArg(index int, flag string) string {{
@@ -935,13 +1129,38 @@ def go_package_name(spec: LanguageSpec) -> str:
 
 
 def go_parse_function(spec: LanguageSpec) -> str:
-    return f"""func parse{go_func_name(spec.name)}(src string) {{
+    pkg = go_package_name(spec)
+    func_name = go_func_name(spec.name)
+    return f"""func parse{func_name}(src string) {{
     input := antlr.NewInputStream(src)
-    lexer := {go_package_name(spec)}.New{spec.lexer_name}(input)
+    lexer := {pkg}.New{spec.lexer_name}(input)
     tokens := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
-    p := {go_package_name(spec)}.New{spec.parser_name}(tokens)
+    p := {pkg}.New{spec.parser_name}(tokens)
     tree := p.{spec.go_entry}()
     sink = tree
+}}
+
+func dumpTree{func_name}(src string, out io.Writer) error {{
+    input := antlr.NewInputStream(src)
+    lexer := {pkg}.New{spec.lexer_name}(input)
+    lexerErrors := newCountingErrorListener()
+    lexer.RemoveErrorListeners()
+    lexer.AddErrorListener(lexerErrors)
+    tokens := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
+    tokens.Fill()
+    p := {pkg}.New{spec.parser_name}(tokens)
+    parserErrors := newCountingErrorListener()
+    p.RemoveErrorListeners()
+    p.AddErrorListener(parserErrors)
+    tree := p.{spec.go_entry}()
+    if lexerErrors.count != 0 || parserErrors.count != 0 || treeHasErrorNode(tree) {{
+        return fmt.Errorf(
+            "go-antlr {spec.name} parse produced %d lexer error(s), %d parser syntax error(s), or error nodes",
+            lexerErrors.count,
+            parserErrors.count,
+        )
+    }}
+    return dumpNode(out, tree, p.GetRuleNames(), 0)
 }}"""
 
 
@@ -1133,6 +1352,115 @@ def measure_fixture(
     )
 
 
+def dump_tree_has_error_nodes(dump: str) -> bool:
+    return any(line.lstrip().startswith("Err(") for line in dump.splitlines())
+
+
+def format_tree_diff(rust_dump: str, go_dump: str, *, max_lines: int = 80) -> str:
+    diff = list(
+        difflib.unified_diff(
+            rust_dump.splitlines(),
+            go_dump.splitlines(),
+            fromfile="rust-antlr",
+            tofile="go-antlr",
+            lineterm="",
+        )
+    )
+    if len(diff) > max_lines:
+        omitted = len(diff) - max_lines
+        diff = diff[:max_lines] + [f"... ({omitted} more diff lines omitted)"]
+    return "\n".join(diff)
+
+
+def dump_fixture_tree(
+    runtime: str,
+    runner: Path,
+    fixture: Fixture,
+    output: Path,
+    args: argparse.Namespace,
+) -> str:
+    env = None
+    if runtime == "rust-antlr" and args.rust_generated_only:
+        env = os.environ.copy()
+        env["ANTLR4_RUST_GENERATED_ONLY"] = "1"
+    cmd = [
+        str(runner),
+        "--language",
+        fixture.language,
+        "--input",
+        str(fixture.abs_path),
+        "--dump-tree",
+        str(output),
+    ]
+    if runtime == "rust-antlr":
+        cmd.extend(["--phase", "parse"])
+    run(cmd, env=env, quiet=True)
+    return output.read_text()
+
+
+def validate_rust_go_ast_parity(
+    fixtures: list[Fixture],
+    runners: dict[str, Path],
+    args: argparse.Namespace,
+) -> None:
+    if not args.ast_check:
+        return
+    if args.phase != "parse":
+        raise SystemExit("--ast-check requires --phase parse")
+    if "rust-antlr" not in runners or "go-antlr" not in runners:
+        raise SystemExit(
+            "--ast-check requires --runtimes to include both rust-antlr and go-antlr"
+        )
+
+    dump_root = args.work_dir / "ast-dumps"
+    dump_root.mkdir(parents=True, exist_ok=True)
+    failures: list[str] = []
+
+    for fixture in fixtures:
+        fixture_dir = dump_root / fixture.language
+        fixture_dir.mkdir(parents=True, exist_ok=True)
+        rust_path = fixture_dir / f"{fixture.name}.rust.txt"
+        go_path = fixture_dir / f"{fixture.name}.go.txt"
+        try:
+            rust_dump = dump_fixture_tree(
+                "rust-antlr", runners["rust-antlr"], fixture, rust_path, args
+            )
+            go_dump = dump_fixture_tree(
+                "go-antlr", runners["go-antlr"], fixture, go_path, args
+            )
+        except subprocess.CalledProcessError as err:
+            detail = (err.stderr or err.stdout or "").strip()
+            failures.append(
+                f"{fixture.language}/{fixture.name}: tree dump failed"
+                + (f": {detail}" if detail else "")
+            )
+            continue
+
+        if dump_tree_has_error_nodes(rust_dump):
+            failures.append(
+                f"{fixture.language}/{fixture.name}: rust-antlr AST contains error nodes "
+                f"(dump: {rust_path})"
+            )
+        if dump_tree_has_error_nodes(go_dump):
+            failures.append(
+                f"{fixture.language}/{fixture.name}: go-antlr AST contains error nodes "
+                f"(dump: {go_path})"
+            )
+        if rust_dump != go_dump:
+            failures.append(
+                f"{fixture.language}/{fixture.name}: rust-antlr and go-antlr ASTs differ\n"
+                f"{format_tree_diff(rust_dump, go_dump)}"
+            )
+        else:
+            print(f"{fixture.language}/{fixture.name}: rust/go AST parity ok")
+
+    if failures:
+        print("rust/go AST parity check failed:", file=sys.stderr)
+        for failure in failures:
+            print(f"  {failure}", file=sys.stderr)
+        raise SystemExit(1)
+
+
 def print_table(results: list[Measurement]) -> None:
     rust_by_fixture = {
         (result.language, result.fixture): result.avg_ns
@@ -1292,6 +1620,16 @@ def parse_args() -> argparse.Namespace:
             "of falling back to the interpreter."
         ),
     )
+    parser.add_argument(
+        "--ast-check",
+        action="store_true",
+        help=(
+            "Before timing, dump each fixture's parse tree from rust-antlr and "
+            "go-antlr (Rule/Term/Err format) and require byte-identical dumps "
+            "with no error nodes. Requires both runtimes for --phase parse; "
+            "use this to gate fair throughput comparisons."
+        ),
+    )
     parser.add_argument("--json", type=Path, help="Write machine-readable results.")
     parser.add_argument("--markdown", type=Path, help="Write a Markdown table report.")
     return parser.parse_args()
@@ -1331,6 +1669,7 @@ def main() -> int:
     ensure_python_dependencies(args.python, runtimes)
 
     runners = prepare_work(args, specs, runtimes)
+    validate_rust_go_ast_parity(fixtures, runners, args)
 
     results: list[Measurement] = []
     for fixture in fixtures:
