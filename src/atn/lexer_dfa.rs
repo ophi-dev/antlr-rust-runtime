@@ -254,13 +254,14 @@ impl CompiledLexerDfa {
             Err(insert) if insert > 0 && ranges[insert - 1].high >= code_point => Some(insert - 1),
             Err(_) => None,
         }?;
-        self.continuations.get(ranges[found].continuation as usize)
+        let continuation = usize::try_from(ranges[found].continuation).ok()?;
+        self.continuations.get(continuation)
     }
 
     /// Interpreter continuation for an escaped EOF edge.
     pub(super) fn eof_continuation(&self, state: u16) -> Option<&CompiledLexerContinuation> {
-        self.continuations
-            .get(self.escape_rows[usize::from(state)].eof as usize)
+        let continuation = usize::try_from(self.escape_rows[usize::from(state)].eof).ok()?;
+        self.continuations.get(continuation)
     }
 
     /// Flattens the compiled DFA into a `u32` stream for embedding in
@@ -425,6 +426,10 @@ impl CompiledLexerDfa {
     fn table_indexes_are_valid(&self) -> bool {
         let state_ok =
             |target: u16| usize::from(target) < self.states.len() || target >= ESCAPE_STATE;
+        let continuation_ok = |continuation: u32| {
+            usize::try_from(continuation)
+                .is_ok_and(|continuation| continuation < self.continuations.len())
+        };
         self.mode_starts
             .iter()
             .flatten()
@@ -444,12 +449,12 @@ impl CompiledLexerDfa {
             })
             && self.escape_rows.len() == self.states.len()
             && self.escape_rows.iter().all(|row| {
-                (row.eof == u32::MAX || (row.eof as usize) < self.continuations.len())
+                (row.eof == u32::MAX || continuation_ok(row.eof))
                     && escape_row_is_searchable(&row.ranges)
                     && row
                         .ranges
                         .iter()
-                        .all(|range| (range.continuation as usize) < self.continuations.len())
+                        .all(|range| continuation_ok(range.continuation))
             })
     }
 }
@@ -1174,7 +1179,7 @@ fn merge_escape_ranges(segments: &[(i32, i32, u32)]) -> Vec<CompiledLexerEscapeR
         let high = high.cast_unsigned();
         if let Some(last) = ranges.last_mut()
             && last.continuation == continuation
-            && last.high + 1 == low
+            && last.high.checked_add(1) == Some(low)
         {
             last.high = high;
             continue;
@@ -1633,6 +1638,15 @@ mod tests {
         range.continuation = u32::MAX - 1;
 
         assert!(CompiledLexerDfa::from_serialized(&dfa.serialize()).is_none());
+    }
+
+    #[test]
+    fn escape_range_merging_does_not_wrap_maximum_bound() {
+        let ranges = merge_escape_ranges(&[(-1, -1, 0), (0, 0, 0)]);
+
+        assert_eq!(ranges.len(), 2);
+        assert_eq!((ranges[0].low, ranges[0].high), (u32::MAX, u32::MAX));
+        assert_eq!((ranges[1].low, ranges[1].high), (0, 0));
     }
 
     #[test]

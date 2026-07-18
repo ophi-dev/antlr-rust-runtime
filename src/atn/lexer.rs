@@ -1263,8 +1263,8 @@ where
     let mut active = prune_after_accepts(atn, closure.configs);
     update_best_accept(atn, &active, &mut best);
 
-    while !active.is_empty() {
-        let active_position = active[0].position;
+    while let Some(config) = active.first() {
+        let active_position = config.position;
         debug_assert!(
             active
                 .iter()
