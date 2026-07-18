@@ -2341,8 +2341,8 @@ struct LeftRecursiveOperatorLookahead {
     /// Safe for one-token loop-enter fast path.
     single_token: TokenBitSet,
     /// Operator alts that start with this symbol but still require more tokens
-    /// (e.g. Java `>>` / `>>>` when only shift is precedence-viable). Must not
-    /// force enter from one-token lookahead — `StarLoopEntry` adaptive predict
+    /// before the operand. Must not force enter from one-token lookahead when a
+    /// shorter operator shares the prefix; `StarLoopEntry` adaptive prediction
     /// has to weigh the exit alt as well.
     multi_token_prefix: TokenBitSet,
     predicate_dependent: TokenBitSet,
@@ -5494,14 +5494,12 @@ where
     /// unresolved semantic predicate requires full `StarLoopEntry` adaptive
     /// prediction (which includes the exit alt and precedence filtering).
     ///
-    /// Single-token operators (`+`, `*`, relational `>` at low precedence) and
-    /// multi-token ops that do not shadow a lower-precedence single-token use of
-    /// the same symbol (e.g. `.`) keep the one-token enter fast path.
+    /// Single-token operators and multi-token prefixes that do not shadow a
+    /// lower-precedence single-token operator keep the one-token enter fast path.
     ///
     /// Multi-token prefixes that **do** shadow a lower-precedence single-token
-    /// op (Java `>>`/`>>>` vs `>` when only shift is precedence-viable) must not
-    /// force enter — otherwise the operator decision picks relational,
-    /// `precpred` fails, and a legal outer expression dies.
+    /// operator must not force enter; the adaptive decision may need to select
+    /// the loop exit instead.
     pub fn left_recursive_loop_enter_prediction(
         &mut self,
         atn: &Atn,
