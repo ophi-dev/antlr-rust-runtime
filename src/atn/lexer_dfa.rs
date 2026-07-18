@@ -11,11 +11,11 @@
 //! closure crosses a semantic predicate (whose outcome exists only at parse
 //! time), grows an unbounded rule-call stack (recursive lexer rules such as
 //! nested comments), or exceeds the state budget is compiled as an *escape*
-//! edge. A token walk that reaches an escape edge is re-matched from the
-//! token start by the ATN interpreter, so rare dynamic constructs never
-//! poison the rest of the mode. Because the construction reuses the
-//! interpreter's own closure, pruning, and accept-selection code, a compiled
-//! walk that does not escape reproduces interpreter behavior exactly.
+//! edge. Dynamic closures carry their pre-closure configs so the interpreter
+//! resumes from the narrowed edge instead of re-matching from the token start.
+//! Because the construction reuses the interpreter's own closure, pruning, and
+//! accept-selection code, a compiled walk that does not escape reproduces
+//! interpreter behavior exactly.
 
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
@@ -38,7 +38,7 @@ const MAX_CHAR_VALUE: i32 = 0x0010_FFFF;
 /// Sentinel state id meaning "no transition".
 pub(super) const DEAD_STATE: u16 = u16::MAX;
 
-/// Sentinel state id meaning "re-match this token with the ATN interpreter".
+/// Sentinel state id meaning "hand this edge to the ATN interpreter".
 pub(super) const ESCAPE_STATE: u16 = u16::MAX - 1;
 
 /// Per-mode state budget; targets past it compile as escape edges. The cap
@@ -72,6 +72,8 @@ pub struct CompiledLexerDfa {
     ascii_rows: Vec<[u16; ASCII_EDGE_SYMBOLS]>,
     wide_rows: Vec<Box<[WideRange]>>,
     accepts: Vec<CompiledLexerAccept>,
+    escape_rows: Vec<CompiledLexerEscapeRow>,
+    continuations: Vec<CompiledLexerContinuation>,
 }
 
 /// One compiled DFA state; rows are pooled indices because many states share
@@ -91,6 +93,39 @@ struct WideRange {
     low: u32,
     high: u32,
     target: u16,
+}
+
+/// Dynamic outgoing edges for one compiled state.
+#[derive(Clone, Debug)]
+struct CompiledLexerEscapeRow {
+    ranges: Box<[CompiledLexerEscapeRange]>,
+    eof: u32,
+}
+
+/// Inclusive character range that resumes one interpreter continuation.
+#[derive(Clone, Copy, Debug)]
+struct CompiledLexerEscapeRange {
+    low: u32,
+    high: u32,
+    continuation: u32,
+}
+
+/// ATN configs immediately after an escaped consuming transition and before
+/// its dynamic epsilon closure.
+#[derive(Clone, Debug)]
+pub(super) struct CompiledLexerContinuation {
+    pub(super) configs: Vec<CompiledLexerConfig>,
+}
+
+/// Position-independent ATN config stored in an escape continuation.
+#[derive(Clone, Debug)]
+pub(super) struct CompiledLexerConfig {
+    pub(super) state: usize,
+    pub(super) consumed_eof: bool,
+    pub(super) alt_rule_index: Option<usize>,
+    pub(super) passed_non_greedy: bool,
+    pub(super) stack: Vec<usize>,
+    pub(super) actions: Vec<CompiledLexerActionTrace>,
 }
 
 /// Accept metadata for one DFA state: the winning lexer rule plus the action
@@ -113,8 +148,8 @@ pub(super) struct CompiledLexerActionTrace {
 }
 
 impl CompiledLexerDfa {
-    /// Compiles every lexer mode of `atn` that has no semantic predicates and
-    /// fits the state budget; the rest stay interpreter-matched.
+    /// Compiles every lexer mode whose initial closure is static and fits the
+    /// state budget; dynamic interior edges carry interpreter continuations.
     pub fn compile(atn: &LexerAtn) -> Self {
         let mut dfa = Self {
             mode_starts: Vec::new(),
@@ -122,6 +157,8 @@ impl CompiledLexerDfa {
             ascii_rows: Vec::new(),
             wide_rows: Vec::new(),
             accepts: Vec::new(),
+            escape_rows: Vec::new(),
+            continuations: Vec::new(),
         };
         let mut pools = RowPools::default();
         for mode in 0..atn.mode_to_start_state().len() {
@@ -204,6 +241,28 @@ impl CompiledLexerDfa {
         self.states[usize::from(state)].eof_target
     }
 
+    /// Interpreter continuation for an escaped character edge.
+    pub(super) fn char_continuation(
+        &self,
+        state: u16,
+        symbol: i32,
+    ) -> Option<&CompiledLexerContinuation> {
+        let code_point = symbol.cast_unsigned();
+        let ranges = &self.escape_rows[usize::from(state)].ranges;
+        let found = match ranges.binary_search_by(|range| range.low.cmp(&code_point)) {
+            Ok(found) => Some(found),
+            Err(insert) if insert > 0 && ranges[insert - 1].high >= code_point => Some(insert - 1),
+            Err(_) => None,
+        }?;
+        self.continuations.get(ranges[found].continuation as usize)
+    }
+
+    /// Interpreter continuation for an escaped EOF edge.
+    pub(super) fn eof_continuation(&self, state: u16) -> Option<&CompiledLexerContinuation> {
+        self.continuations
+            .get(self.escape_rows[usize::from(state)].eof as usize)
+    }
+
     /// Flattens the compiled DFA into a `u32` stream for embedding in
     /// generated code.
     ///
@@ -211,7 +270,7 @@ impl CompiledLexerDfa {
     /// rejects streams from other versions so generated lexers can fall back
     /// to [`Self::compile`].
     pub fn serialize(&self) -> Vec<u32> {
-        // Exact word count: the tag, five section-length words, and each
+        // Exact word count: the tag, seven section-length words, and each
         // section's payload (states are 4 words; ASCII rows pack 2 targets
         // per word; wide ranges and action traces are 3 words each behind
         // their per-row/per-accept length words).
@@ -221,12 +280,30 @@ impl CompiledLexerDfa {
             .iter()
             .map(|accept| 3 + accept.actions.len() * 3)
             .sum();
-        let capacity = 6
+        let escape_row_words: usize = self
+            .escape_rows
+            .iter()
+            .map(|row| 2 + row.ranges.len() * 3)
+            .sum();
+        let continuation_words: usize = self
+            .continuations
+            .iter()
+            .map(|continuation| {
+                1 + continuation
+                    .configs
+                    .iter()
+                    .map(|config| 6 + config.stack.len() + config.actions.len() * 3)
+                    .sum::<usize>()
+            })
+            .sum();
+        let capacity = 8
             + self.mode_starts.len()
             + self.states.len() * 4
             + self.ascii_rows.len() * (ASCII_EDGE_SYMBOLS / 2)
             + wide_words
-            + accept_words;
+            + accept_words
+            + escape_row_words
+            + continuation_words;
         let mut out = Vec::with_capacity(capacity);
         out.push(SERIALIZED_TAG);
         out.push(self.mode_starts.len() as u32);
@@ -266,6 +343,36 @@ impl CompiledLexerDfa {
                 out.push(action.behind as u32);
             }
         }
+        out.push(self.escape_rows.len() as u32);
+        for row in &self.escape_rows {
+            out.push(row.eof);
+            out.push(row.ranges.len() as u32);
+            for range in &*row.ranges {
+                out.push(range.low);
+                out.push(range.high);
+                out.push(range.continuation);
+            }
+        }
+        out.push(self.continuations.len() as u32);
+        for continuation in &self.continuations {
+            out.push(continuation.configs.len() as u32);
+            for config in &continuation.configs {
+                out.push(config.state as u32);
+                out.push(config.alt_rule_index.map_or(u32::MAX, |rule| rule as u32));
+                out.push(u32::from(config.consumed_eof));
+                out.push(u32::from(config.passed_non_greedy));
+                out.push(config.stack.len() as u32);
+                for &state in &config.stack {
+                    out.push(state as u32);
+                }
+                out.push(config.actions.len() as u32);
+                for action in &config.actions {
+                    out.push(action.action_index as u32);
+                    out.push(action.rule_index as u32);
+                    out.push(action.behind as u32);
+                }
+            }
+        }
         debug_assert_eq!(
             out.len(),
             capacity,
@@ -296,6 +403,8 @@ impl CompiledLexerDfa {
         let ascii_rows = reader.read_ascii_rows()?;
         let wide_rows = reader.read_wide_rows()?;
         let accepts = reader.read_accepts()?;
+        let escape_rows = reader.read_escape_rows()?;
+        let continuations = reader.read_continuations()?;
         if reader.position != data.len() {
             return None;
         }
@@ -305,6 +414,8 @@ impl CompiledLexerDfa {
             ascii_rows,
             wide_rows,
             accepts,
+            escape_rows,
+            continuations,
         };
         dfa.table_indexes_are_valid().then_some(dfa)
     }
@@ -331,6 +442,15 @@ impl CompiledLexerDfa {
             && self.wide_rows.iter().all(|row| {
                 wide_row_is_searchable(row) && row.iter().all(|range| state_ok(range.target))
             })
+            && self.escape_rows.len() == self.states.len()
+            && self.escape_rows.iter().all(|row| {
+                (row.eof == u32::MAX || (row.eof as usize) < self.continuations.len())
+                    && escape_row_is_searchable(&row.ranges)
+                    && row
+                        .ranges
+                        .iter()
+                        .all(|range| (range.continuation as usize) < self.continuations.len())
+            })
     }
 }
 
@@ -342,9 +462,14 @@ fn wide_row_is_searchable(row: &[WideRange]) -> bool {
         && row.windows(2).all(|pair| pair[0].high < pair[1].low)
 }
 
+fn escape_row_is_searchable(row: &[CompiledLexerEscapeRange]) -> bool {
+    row.iter().all(|range| range.low <= range.high)
+        && row.windows(2).all(|pair| pair[0].high < pair[1].low)
+}
+
 /// Version tag guarding embedded tables against format or construction-semantic
 /// drift.
-const SERIALIZED_TAG: u32 = 0x4C58_4402;
+const SERIALIZED_TAG: u32 = 0x4C58_4403;
 
 /// Cursor over a serialized DFA stream.
 struct SerializedReader<'a> {
@@ -437,6 +562,72 @@ impl SerializedReader<'_> {
         }
         Some(accepts)
     }
+
+    fn read_escape_rows(&mut self) -> Option<Vec<CompiledLexerEscapeRow>> {
+        let count = self.next_len()?;
+        let mut rows = Vec::with_capacity(count.min(self.data.len()));
+        for _ in 0..count {
+            let eof = self.next()?;
+            let len = self.next_len()?;
+            let mut ranges = Vec::with_capacity(len.min(self.data.len()));
+            for _ in 0..len {
+                ranges.push(CompiledLexerEscapeRange {
+                    low: self.next()?,
+                    high: self.next()?,
+                    continuation: self.next()?,
+                });
+            }
+            rows.push(CompiledLexerEscapeRow {
+                ranges: ranges.into(),
+                eof,
+            });
+        }
+        Some(rows)
+    }
+
+    fn read_continuations(&mut self) -> Option<Vec<CompiledLexerContinuation>> {
+        let count = self.next_len()?;
+        let mut continuations = Vec::with_capacity(count.min(self.data.len()));
+        for _ in 0..count {
+            let config_count = self.next_len()?;
+            let mut configs = Vec::with_capacity(config_count.min(self.data.len()));
+            for _ in 0..config_count {
+                let state = self.next_len()?;
+                let alt_rule = self.next()?;
+                let alt_rule_index = if alt_rule == u32::MAX {
+                    None
+                } else {
+                    Some(usize::try_from(alt_rule).ok()?)
+                };
+                let consumed_eof = self.next()? != 0;
+                let passed_non_greedy = self.next()? != 0;
+                let stack_count = self.next_len()?;
+                let mut stack = Vec::with_capacity(stack_count.min(self.data.len()));
+                for _ in 0..stack_count {
+                    stack.push(self.next_len()?);
+                }
+                let action_count = self.next_len()?;
+                let mut actions = Vec::with_capacity(action_count.min(self.data.len()));
+                for _ in 0..action_count {
+                    actions.push(CompiledLexerActionTrace {
+                        action_index: self.next_len()?,
+                        rule_index: self.next_len()?,
+                        behind: self.next_len()?,
+                    });
+                }
+                configs.push(CompiledLexerConfig {
+                    state,
+                    consumed_eof,
+                    alt_rule_index,
+                    passed_non_greedy,
+                    stack,
+                    actions,
+                });
+            }
+            continuations.push(CompiledLexerContinuation { configs });
+        }
+        Some(continuations)
+    }
 }
 
 /// Deduplicating pools for edge rows shared by many DFA states.
@@ -477,10 +668,12 @@ impl RowPools {
 /// shared [`CompiledLexerDfa`] until the whole mode succeeds.
 struct ModeBuild {
     base: usize,
+    continuation_base: usize,
     ids: FxHashMap<LexerDfaKey, u16>,
     configs: Vec<Vec<LexerConfig>>,
     steps: Vec<usize>,
     accepts: Vec<Option<CompiledLexerAccept>>,
+    continuations: Vec<CompiledLexerContinuation>,
 }
 
 /// Edge rows produced by expanding one DFA state.
@@ -488,16 +681,33 @@ struct StateRows {
     /// Sorted, disjoint code-point segments with live targets.
     segments: Vec<(i32, i32, u16)>,
     eof_target: u16,
+    escapes: Vec<(i32, i32, u32)>,
+    eof_escape: u32,
+}
+
+#[derive(Clone, Copy)]
+struct EdgeTarget {
+    state: u16,
+    continuation: u32,
+}
+
+impl EdgeTarget {
+    const DEAD: Self = Self {
+        state: DEAD_STATE,
+        continuation: u32::MAX,
+    };
 }
 
 impl ModeBuild {
-    fn new(base: usize) -> Self {
+    fn new(base: usize, continuation_base: usize) -> Self {
         Self {
             base,
+            continuation_base,
             ids: FxHashMap::default(),
             configs: Vec::new(),
             steps: Vec::new(),
             accepts: Vec::new(),
+            continuations: Vec::new(),
         }
     }
 
@@ -531,6 +741,35 @@ impl ModeBuild {
         self.accepts.push(compiled_accept(atn, &configs, step));
         self.configs.push(configs);
         self.steps.push(step);
+        id
+    }
+
+    fn add_continuation(&mut self, configs: &[LexerConfig], step: usize) -> u32 {
+        let id = self.continuation_base + self.continuations.len();
+        let Ok(id) = u32::try_from(id) else {
+            return u32::MAX;
+        };
+        self.continuations.push(CompiledLexerContinuation {
+            configs: configs
+                .iter()
+                .map(|config| CompiledLexerConfig {
+                    state: config.state,
+                    consumed_eof: config.consumed_eof,
+                    alt_rule_index: config.alt_rule_index,
+                    passed_non_greedy: config.passed_non_greedy,
+                    stack: config.stack.clone(),
+                    actions: config
+                        .actions
+                        .iter()
+                        .map(|action| CompiledLexerActionTrace {
+                            action_index: action.action_index,
+                            rule_index: action.rule_index,
+                            behind: step.saturating_sub(action.position),
+                        })
+                        .collect(),
+                })
+                .collect(),
+        });
         id
     }
 }
@@ -597,7 +836,7 @@ fn build_mode(
     pools: &mut RowPools,
 ) -> Option<u16> {
     let start_state = atn.mode_to_start_state().get(mode).copied()?;
-    let mut build = ModeBuild::new(dfa.states.len());
+    let mut build = ModeBuild::new(dfa.states.len(), dfa.continuations.len());
     let start_configs = closed_configs(
         atn,
         vec![LexerConfig {
@@ -696,12 +935,14 @@ fn expand_state(atn: &LexerAtn, build: &mut ModeBuild, local: usize) -> StateRow
 
     let mut rows = StateRows {
         segments: Vec::new(),
-        eof_target,
+        eof_target: eof_target.state,
+        escapes: Vec::new(),
+        eof_escape: eof_target.continuation,
     };
     // Distinct transition sets are few even when segments are many (large
     // Unicode classes fragment the alphabet), so closures run once per
     // matching-transition mask, not once per segment.
-    let mut mask_targets: FxHashMap<Vec<u64>, u16> = FxHashMap::default();
+    let mut mask_targets: FxHashMap<Vec<u64>, EdgeTarget> = FxHashMap::default();
     for (index, &(low, high)) in segments.iter().enumerate() {
         let mask = &matrix[index * words..(index + 1) * words];
         if mask.iter().all(|&word| word == 0) {
@@ -715,8 +956,11 @@ fn expand_state(atn: &LexerAtn, build: &mut ModeBuild, local: usize) -> StateRow
                 target
             }
         };
-        if target != DEAD_STATE {
-            rows.segments.push((low, high, target));
+        if target.state != DEAD_STATE {
+            rows.segments.push((low, high, target.state));
+            if target.continuation != u32::MAX {
+                rows.escapes.push((low, high, target.continuation));
+            }
         }
     }
     rows
@@ -826,7 +1070,7 @@ fn move_target(
     step: usize,
     entries: &[(usize, &LexerTransition)],
     mask: &[u64],
-) -> u16 {
+) -> EdgeTarget {
     let mut moved = Vec::new();
     for (bit, (config_index, transition)) in entries.iter().enumerate() {
         if mask[bit / 64] & (1 << (bit % 64)) == 0 {
@@ -837,13 +1081,20 @@ fn move_target(
         advanced.position += 1;
         moved.push(advanced);
     }
+    let continuation_configs = moved.clone();
     let Some(active) = closed_configs(atn, moved) else {
-        return ESCAPE_STATE;
+        return EdgeTarget {
+            state: ESCAPE_STATE,
+            continuation: build.add_continuation(&continuation_configs, step + 1),
+        };
     };
     if active.is_empty() {
-        return DEAD_STATE;
+        return EdgeTarget::DEAD;
     }
-    build.intern(atn, active, step + 1)
+    EdgeTarget {
+        state: build.intern(atn, active, step + 1),
+        continuation: u32::MAX,
+    }
 }
 
 /// Advances the EOF-matching entries; EOF consumes no character, so the input
@@ -854,7 +1105,7 @@ fn eof_move(
     configs: &[LexerConfig],
     step: usize,
     entries: &[(usize, &LexerTransition)],
-) -> u16 {
+) -> EdgeTarget {
     let mut moved = Vec::new();
     for (config_index, transition) in entries {
         if !transition.matches(EOF, MIN_CHAR_VALUE, MAX_CHAR_VALUE) {
@@ -866,15 +1117,22 @@ fn eof_move(
         moved.push(advanced);
     }
     if moved.is_empty() {
-        return DEAD_STATE;
+        return EdgeTarget::DEAD;
     }
+    let continuation_configs = moved.clone();
     let Some(active) = closed_configs(atn, moved) else {
-        return ESCAPE_STATE;
+        return EdgeTarget {
+            state: ESCAPE_STATE,
+            continuation: build.add_continuation(&continuation_configs, step),
+        };
     };
     if active.is_empty() {
-        return DEAD_STATE;
+        return EdgeTarget::DEAD;
     }
-    build.intern(atn, active, step)
+    EdgeTarget {
+        state: build.intern(atn, active, step),
+        continuation: u32::MAX,
+    }
 }
 
 /// Converts a finished mode's edge rows into pooled table entries.
@@ -884,7 +1142,12 @@ fn commit_mode(
     build: ModeBuild,
     rows: Vec<StateRows>,
 ) {
-    for (accept, state_rows) in build.accepts.into_iter().zip(rows) {
+    let ModeBuild {
+        accepts,
+        continuations,
+        ..
+    } = build;
+    for (accept, state_rows) in accepts.into_iter().zip(rows) {
         let accept_id = accept.map_or(u32::MAX, |accept| {
             dfa.accepts.push(accept);
             (dfa.accepts.len() - 1) as u32
@@ -896,7 +1159,33 @@ fn commit_mode(
             eof_target: state_rows.eof_target,
             accept: accept_id,
         });
+        dfa.escape_rows.push(CompiledLexerEscapeRow {
+            ranges: merge_escape_ranges(&state_rows.escapes).into(),
+            eof: state_rows.eof_escape,
+        });
     }
+    dfa.continuations.extend(continuations);
+}
+
+fn merge_escape_ranges(segments: &[(i32, i32, u32)]) -> Vec<CompiledLexerEscapeRange> {
+    let mut ranges: Vec<CompiledLexerEscapeRange> = Vec::new();
+    for &(low, high, continuation) in segments {
+        let low = low.cast_unsigned();
+        let high = high.cast_unsigned();
+        if let Some(last) = ranges.last_mut()
+            && last.continuation == continuation
+            && last.high + 1 == low
+        {
+            last.high = high;
+            continue;
+        }
+        ranges.push(CompiledLexerEscapeRange {
+            low,
+            high,
+            continuation,
+        });
+    }
+    ranges
 }
 
 /// Splits sorted segments into the dense ASCII row and merged wide ranges.
@@ -927,7 +1216,9 @@ fn split_rows(segments: &[(i32, i32, u16)]) -> ([u16; ASCII_EDGE_SYMBOLS], Vec<W
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::atn::lexer::{next_token, next_token_compiled, next_token_compiled_with_hooks};
+    use crate::atn::lexer::{
+        next_token, next_token_compiled, next_token_compiled_with_hooks, next_token_with_hooks,
+    };
     use crate::atn::serialized::{AtnDeserializer, SerializedAtn};
     use crate::char_stream::{CharStream, InputStream, TextInterval};
     use crate::int_stream::IntStream;
@@ -1119,12 +1410,16 @@ mod tests {
     }
 
     #[test]
-    fn predicate_edge_escapes_to_the_interpreter() {
+    fn predicate_edge_resumes_the_interpreter_for_true_and_false_outcomes() {
         let atn = two_rule_atn(true);
         let dfa = CompiledLexerDfa::compile(&atn);
         // The predicate sits mid-rule, so the mode still compiles; only the
-        // edge that would cross it escapes to the interpreter.
+        // edge that would cross it resumes the interpreter.
         assert!(dfa.mode_start(0).is_some());
+        assert!(
+            !dfa.continuations.is_empty(),
+            "predicate edge should preserve a narrowed continuation"
+        );
 
         let mut lexer = BaseLexer::new(InputStream::new(" ab"), recognizer_data());
         let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
@@ -1142,6 +1437,55 @@ mod tests {
         let token = sink.view(id).expect("emitted token should exist");
         assert_eq!(token.token_type(), 1);
         assert_eq!(token.text(), "ab");
+
+        let mut compiled = BaseLexer::new(InputStream::new("ab"), recognizer_data());
+        let mut interpreted = BaseLexer::new(InputStream::new("ab"), recognizer_data());
+        let mut compiled_store = TokenStore::new(compiled.source_text(), compiled.source_name());
+        let mut interpreted_store =
+            TokenStore::new(interpreted.source_text(), interpreted.source_name());
+        let mut compiled_sink = TokenSink::new(&mut compiled_store);
+        let mut interpreted_sink = TokenSink::new(&mut interpreted_store);
+        let compiled_id = next_token_compiled_with_hooks(
+            &mut compiled,
+            &mut compiled_sink,
+            &atn,
+            &dfa,
+            |_, _| {},
+            |_, _| false,
+            |_, _, _| {},
+        )
+        .expect("false predicate should recover to EOF");
+        let interpreted_id = next_token_with_hooks(
+            &mut interpreted,
+            &mut interpreted_sink,
+            &atn,
+            |_, _| {},
+            |_, _| false,
+            |_, _, _| {},
+        )
+        .expect("interpreted false predicate should recover to EOF");
+        assert_eq!(
+            compiled_sink
+                .view(compiled_id)
+                .expect("compiled token should exist")
+                .token_type(),
+            interpreted_sink
+                .view(interpreted_id)
+                .expect("interpreted token should exist")
+                .token_type()
+        );
+        assert_eq!(
+            compiled
+                .drain_errors()
+                .into_iter()
+                .map(|error| error.message)
+                .collect::<Vec<_>>(),
+            interpreted
+                .drain_errors()
+                .into_iter()
+                .map(|error| error.message)
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -1240,13 +1584,14 @@ mod tests {
 
     #[test]
     fn serialization_round_trips() {
-        let atn = two_rule_atn(false);
+        let atn = two_rule_atn(true);
         let dfa = CompiledLexerDfa::compile(&atn);
         let stream = dfa.serialize();
 
         let restored =
             CompiledLexerDfa::from_serialized(&stream).expect("stream should deserialize");
         assert_eq!(restored.serialize(), stream);
+        assert_eq!(restored.continuations.len(), dfa.continuations.len());
 
         let mut lexer = BaseLexer::new(InputStream::new(" ab"), recognizer_data());
         let token = compiled_token(&mut lexer, &atn, &restored);
@@ -1273,6 +1618,21 @@ mod tests {
         let mut inverted = stream;
         inverted.swap(position, position + 1);
         assert!(CompiledLexerDfa::from_serialized(&inverted).is_none());
+    }
+
+    #[test]
+    fn malformed_escape_continuations_are_rejected() {
+        let atn = two_rule_atn(true);
+        let mut dfa = CompiledLexerDfa::compile(&atn);
+        let range = dfa
+            .escape_rows
+            .iter_mut()
+            .flat_map(|row| row.ranges.iter_mut())
+            .next()
+            .expect("predicate grammar should contain an escape range");
+        range.continuation = u32::MAX - 1;
+
+        assert!(CompiledLexerDfa::from_serialized(&dfa.serialize()).is_none());
     }
 
     #[test]
