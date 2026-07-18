@@ -669,7 +669,9 @@ where
         match match_token_compiled(lexer, dfa, start_state, start) {
             CompiledMatch::Complete(result) => return result,
             CompiledMatch::Resume(resume) => {
-                return match_token_from_continuation(lexer, atn, resume, semantic_predicate);
+                if compiled_resume_matches_atn(atn, start, &resume) {
+                    return match_token_from_continuation(lexer, atn, resume, semantic_predicate);
+                }
             }
             CompiledMatch::Restart => {}
         }
@@ -1078,6 +1080,29 @@ struct CompiledResume<'a> {
     position: usize,
     best: Option<AcceptState>,
     error_stop: usize,
+}
+
+fn compiled_resume_matches_atn(atn: &LexerAtn, start: usize, resume: &CompiledResume<'_>) -> bool {
+    let Some(consumed) = resume.position.checked_sub(start) else {
+        return false;
+    };
+    let rule_count = atn.rule_to_token_type().len();
+    !resume.continuation.configs.is_empty()
+        && resume.continuation.configs.iter().all(|config| {
+            atn.state(config.state).is_some()
+                && config
+                    .alt_rule_index
+                    .is_some_and(|rule_index| rule_index < rule_count)
+                && config
+                    .stack
+                    .iter()
+                    .all(|&state_number| atn.state(state_number).is_some())
+                && config.actions.iter().all(|action| {
+                    action.action_index < atn.lexer_actions().len()
+                        && action.rule_index < rule_count
+                        && action.behind <= consumed
+                })
+        })
 }
 
 /// Matches one token by walking the ahead-of-time compiled lexer DFA.
@@ -1795,6 +1820,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::atn::lexer_dfa::{CompiledLexerActionTrace, CompiledLexerConfig};
     use crate::atn::serialized::{AtnDeserializer, SerializedAtn};
     use crate::atn::{LexerAtnState, LexerTransition};
     use crate::char_stream::InputStream;
@@ -2881,6 +2907,71 @@ mod tests {
             assert_eq!((token.start, token.stop), (0, 3), "{strategy:?}");
             assert_eq!(token.text, "/**/", "{strategy:?}");
         }
+    }
+
+    #[test]
+    fn compiled_resume_rejects_untrusted_continuation_payloads() {
+        let atn = trailing_action_atn(&['a'], 1, vec![LexerAction::Skip]);
+        let valid_config = CompiledLexerConfig {
+            state: 2,
+            consumed_eof: false,
+            alt_rule_index: Some(0),
+            passed_non_greedy: false,
+            stack: Vec::new(),
+            actions: vec![CompiledLexerActionTrace {
+                action_index: 0,
+                rule_index: 0,
+                behind: 0,
+            }],
+        };
+        let valid = |config| CompiledLexerContinuation {
+            configs: vec![config],
+        };
+        let matches = |continuation: &CompiledLexerContinuation| {
+            compiled_resume_matches_atn(
+                &atn,
+                4,
+                &CompiledResume {
+                    continuation,
+                    position: 5,
+                    best: None,
+                    error_stop: 5,
+                },
+            )
+        };
+
+        assert!(matches(&valid(valid_config.clone())));
+        assert!(!matches(&CompiledLexerContinuation {
+            configs: Vec::new(),
+        }));
+
+        let mut invalid = valid_config.clone();
+        invalid.state = usize::MAX;
+        assert!(!matches(&valid(invalid)));
+
+        let mut invalid = valid_config.clone();
+        invalid.alt_rule_index = None;
+        assert!(!matches(&valid(invalid)));
+
+        let mut invalid = valid_config.clone();
+        invalid.alt_rule_index = Some(1);
+        assert!(!matches(&valid(invalid)));
+
+        let mut invalid = valid_config.clone();
+        invalid.stack.push(usize::MAX);
+        assert!(!matches(&valid(invalid)));
+
+        let mut invalid = valid_config.clone();
+        invalid.actions[0].action_index = 1;
+        assert!(!matches(&valid(invalid)));
+
+        let mut invalid = valid_config.clone();
+        invalid.actions[0].rule_index = 1;
+        assert!(!matches(&valid(invalid)));
+
+        let mut invalid = valid_config;
+        invalid.actions[0].behind = 2;
+        assert!(!matches(&valid(invalid)));
     }
 
     #[test]

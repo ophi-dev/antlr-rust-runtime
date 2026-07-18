@@ -11573,6 +11573,7 @@ fn dedupe_fast_outcomes(outcomes: &mut Vec<FastRecognizeOutcome>, arena: &Recogn
 const FAST_OUTCOME_INLINE_KEYS: usize = 8;
 const FAST_OUTCOME_BITS_PER_WORD: usize = 64;
 const MAX_FAST_OUTCOME_DENSE_BYTES: usize = 64 * 1024;
+const MAX_RETAINED_FAST_OUTCOME_SPARSE_KEYS: usize = 65_536;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum FastOutcomeDedupStrategy {
@@ -11710,6 +11711,9 @@ fn dedupe_clean_fast_outcomes(
         outcomes.len(),
         0,
     );
+    if scratch.sparse_keys.capacity() > MAX_RETAINED_FAST_OUTCOME_SPARSE_KEYS {
+        scratch.sparse_keys = FxHashSet::default();
+    }
     FastOutcomeDedupStrategy::Sparse
 }
 
@@ -16033,6 +16037,24 @@ mod tests {
         assert_eq!(strategy, FastOutcomeDedupStrategy::Sparse);
         assert_eq!(reused.len(), sparse_indexes.len());
         assert_eq!(scratch.sparse_keys.capacity(), sparse_capacity);
+    }
+
+    #[test]
+    fn clean_fast_outcome_dedupe_releases_oversized_sparse_hash() {
+        let mut scratch = FastOutcomeDedupScratch::default();
+        scratch
+            .sparse_keys
+            .reserve(MAX_RETAINED_FAST_OUTCOME_SPARSE_KEYS * 2);
+        assert!(scratch.sparse_keys.capacity() > MAX_RETAINED_FAST_OUTCOME_SPARSE_KEYS);
+        let mut outcomes = (0..9)
+            .map(|index| clean_fast_outcome(index * 100_000, false, index as u32))
+            .collect();
+
+        let strategy = dedupe_clean_fast_outcomes(&mut outcomes, &mut scratch);
+
+        assert_eq!(strategy, FastOutcomeDedupStrategy::Sparse);
+        assert!(scratch.sparse_keys.is_empty());
+        assert!(scratch.sparse_keys.capacity() <= MAX_RETAINED_FAST_OUTCOME_SPARSE_KEYS);
     }
 
     #[test]
