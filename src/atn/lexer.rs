@@ -1460,13 +1460,14 @@ fn close_config<P>(
     }
 }
 
-/// Removes configs ordered after a non-greedy top-level accept for the same
-/// lexer rule.
+/// Removes lower-priority non-greedy configs ordered after a top-level accept
+/// for the same lexer rule.
 ///
 /// Non-greedy decisions serialize their exit path before their continuing path.
-/// Once such a path reaches the rule stop state, later same-rule configs should
-/// not continue to grow into a longer token. Greedy decisions still need all
-/// paths to remain available so longest-match selection can win.
+/// Once any earlier path reaches the rule stop state, later same-rule configs
+/// that passed through a non-greedy decision must not continue to grow into a
+/// longer token. Paths that never crossed a non-greedy decision remain
+/// available so ordinary lexer longest-match selection can still win.
 pub(super) fn prune_after_accepts(atn: &LexerAtn, configs: Vec<LexerConfig>) -> Vec<LexerConfig> {
     let mut accepted_rules = BTreeSet::new();
     let mut pruned = Vec::with_capacity(configs.len());
@@ -1475,14 +1476,14 @@ pub(super) fn prune_after_accepts(atn: &LexerAtn, configs: Vec<LexerConfig>) -> 
             pruned.push(config);
             continue;
         };
-        if accepted_rules.contains(&rule_index) {
+        if config.passed_non_greedy && accepted_rules.contains(&rule_index) {
             continue;
         }
         let is_top_level_accept = config.stack.is_empty()
             && atn
                 .state(config.state)
                 .is_some_and(crate::atn::LexerAtnState::is_rule_stop);
-        if is_top_level_accept && config.passed_non_greedy {
+        if is_top_level_accept {
             accepted_rules.insert(rule_index);
         }
         pruned.push(config);
@@ -1671,6 +1672,68 @@ mod tests {
             "T",
             Vocabulary::new([None, Some("T")], [None, Some("T")], [None::<&str>, None]),
         )
+    }
+
+    // `BLOCK_COMMENT: ('/**/' | '/*' ~[!] .*? '*/'); OTHER: .;`
+    //
+    // `#[rustfmt::skip]`: this serialized ATN is a positional stream emitted by
+    // ANTLR 4.13.2. Keeping it intact makes the regression exercise the exact
+    // shared-prefix/non-greedy topology reported in issue #106.
+    #[rustfmt::skip]
+    fn shared_prefix_non_greedy_atn() -> LexerAtn {
+        AtnDeserializer::new(&SerializedAtn::from_i32(&[
+            4, 0, 2, 25, 6, -1, 2, 0, 7, 0, 2, 1, 7, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 5, 0, 15, 8, 0, 10, 0, 12, 0, 18, 9, 0, 1, 0, 1, 0, 3, 0, 22, 8, 0, 1, 1, 1, 1, 1, 16, 0, 2, 1, 1, 3, 2, 1, 0, 1, 1, 0, 33, 33, 26, 0, 1, 1, 0, 0, 0, 0, 3, 1, 0, 0, 0, 1, 21, 1, 0, 0, 0, 3, 23, 1, 0, 0, 0, 5, 6, 5, 47, 0, 0, 6, 7, 5, 42, 0, 0, 7, 8, 5, 42, 0, 0, 8, 22, 5, 47, 0, 0, 9, 10, 5, 47, 0, 0, 10, 11, 5, 42, 0, 0, 11, 12, 1, 0, 0, 0, 12, 16, 8, 0, 0, 0, 13, 15, 9, 0, 0, 0, 14, 13, 1, 0, 0, 0, 15, 18, 1, 0, 0, 0, 16, 17, 1, 0, 0, 0, 16, 14, 1, 0, 0, 0, 17, 19, 1, 0, 0, 0, 18, 16, 1, 0, 0, 0, 19, 20, 5, 42, 0, 0, 20, 22, 5, 47, 0, 0, 21, 5, 1, 0, 0, 0, 21, 9, 1, 0, 0, 0, 22, 2, 1, 0, 0, 0, 23, 24, 9, 0, 0, 0, 24, 4, 1, 0, 0, 0, 3, 0, 16, 21, 0,
+        ]))
+        .deserialize()
+        .expect("issue #106 lexer ATN should deserialize")
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    enum TestMatchStrategy {
+        Interpreted,
+        Cached,
+        Compiled,
+    }
+
+    fn lex_issue_106_comment(strategy: TestMatchStrategy) -> TokenSnapshot {
+        let atn = shared_prefix_non_greedy_atn();
+        let dfa = CompiledLexerDfa::compile(&atn);
+        let data = RecognizerData::new(
+            "Issue106Lexer",
+            Vocabulary::new(
+                [None::<&str>, None, None],
+                [None, Some("BLOCK_COMMENT"), Some("OTHER")],
+                [None::<&str>, None, None],
+            ),
+        );
+        let mut lexer = BaseLexer::new(InputStream::new("/**/5 /*   */"), data);
+        let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
+        let mut sink = TokenSink::new(&mut store);
+        let token = match strategy {
+            TestMatchStrategy::Interpreted => next_token_with_hooks(
+                &mut lexer,
+                &mut sink,
+                &atn,
+                |_, _| {},
+                |_, _| true,
+                |_, _, _| {},
+            ),
+            TestMatchStrategy::Cached => {
+                next_token(&mut lexer, &mut sink, &atn)
+                    .expect("first pass should populate the learned DFA");
+                lexer.reset();
+                next_token(&mut lexer, &mut sink, &atn)
+            }
+            TestMatchStrategy::Compiled => next_token_compiled(&mut lexer, &mut sink, &atn, &dfa),
+        }
+        .expect("comment token should fit");
+        let token = sink.view(token).expect("comment token should exist");
+        TokenSnapshot {
+            token_type: token.token_type(),
+            start: token.start(),
+            stop: token.stop(),
+            text: token.text().to_owned(),
+        }
     }
 
     fn trailing_action_atn(
@@ -2661,6 +2724,20 @@ mod tests {
         assert_eq!(token.token_type, 1);
         assert_eq!(token.text, "ab");
         assert_eq!(lex_one(&mut lexer, &atn).token_type, TOKEN_EOF);
+    }
+
+    #[test]
+    fn fixed_literal_accept_stops_later_non_greedy_same_rule_paths() {
+        for strategy in [
+            TestMatchStrategy::Interpreted,
+            TestMatchStrategy::Cached,
+            TestMatchStrategy::Compiled,
+        ] {
+            let token = lex_issue_106_comment(strategy);
+            assert_eq!(token.token_type, 1, "{strategy:?}");
+            assert_eq!((token.start, token.stop), (0, 3), "{strategy:?}");
+            assert_eq!(token.text, "/**/", "{strategy:?}");
+        }
     }
 
     #[test]

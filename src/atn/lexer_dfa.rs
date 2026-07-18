@@ -342,8 +342,9 @@ fn wide_row_is_searchable(row: &[WideRange]) -> bool {
         && row.windows(2).all(|pair| pair[0].high < pair[1].low)
 }
 
-/// Version tag guarding embedded tables against serialization format drift.
-const SERIALIZED_TAG: u32 = 0x4C58_4401;
+/// Version tag guarding embedded tables against format or construction-semantic
+/// drift.
+const SERIALIZED_TAG: u32 = 0x4C58_4402;
 
 /// Cursor over a serialized DFA stream.
 struct SerializedReader<'a> {
