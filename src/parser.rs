@@ -1291,6 +1291,7 @@ impl FastRecognizeTopScratch {
     }
 
     fn release_oversized_memo(&mut self) {
+        self.memo.clear();
         if self.memo.capacity() > FAST_RECOGNIZE_MAX_RETAINED_MEMO_CAPACITY {
             self.memo = FxHashMap::default();
         }
@@ -6341,7 +6342,7 @@ where
             caller_follow_state,
         };
         let first_pass = self.fast_recognize_top(atn, top_request, predicate_context);
-        self.fast_token_nodes_enabled = true;
+        self.fast_token_nodes_enabled = self.build_parse_trees;
         let needs_tree_retry = matches!(
             &first_pass,
             Ok((outcome, _))
@@ -15091,7 +15092,27 @@ mod tests {
         assert!(grown_capacity >= larger_capacity);
         assert!(grown_capacity <= FAST_RECOGNIZE_MAX_RETAINED_MEMO_CAPACITY);
 
+        scratch.memo.insert(
+            FastRecognizeKey {
+                state_number: 0,
+                stop_state: 0,
+                index: 0,
+                rule_start_index: 0,
+                decision_start_index: None,
+                precedence: 0,
+                recovery_symbols_id: 0,
+                recovery_state: None,
+            },
+            Rc::from([FastRecognizeOutcome {
+                index: 0,
+                consumed_eof: false,
+                diagnostics: DiagnosticSeqId::EMPTY,
+                deferred_nodes: FastDeferredNodeId::EMPTY,
+                nodes: NodeSeqId::EMPTY,
+            }]),
+        );
         scratch.release_oversized_memo();
+        assert!(scratch.memo.is_empty());
         assert_eq!(scratch.memo.capacity(), grown_capacity);
 
         scratch
@@ -15267,6 +15288,8 @@ mod tests {
         assert!(parser.recognition_arena.seq_links.is_empty());
         assert!(parser.recognition_arena.deferred_nodes.is_empty());
         assert!(parser.recognition_arena.deferred_rules.is_empty());
+        assert!(!parser.fast_token_nodes_enabled);
+        assert!(parser.fast_recognize_scratch.memo.is_empty());
     }
 
     #[test]
