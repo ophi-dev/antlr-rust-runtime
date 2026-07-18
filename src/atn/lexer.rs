@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::HashSet;
 use std::hash::BuildHasherDefault;
 
 use crate::atn::lexer_dfa::{CompiledLexerAccept, CompiledLexerDfa, DEAD_STATE, ESCAPE_STATE};
@@ -1469,7 +1469,7 @@ fn close_config<P>(
 /// longer token. Paths that never crossed a non-greedy decision remain
 /// available so ordinary lexer longest-match selection can still win.
 pub(super) fn prune_after_accepts(atn: &LexerAtn, configs: Vec<LexerConfig>) -> Vec<LexerConfig> {
-    let mut accepted_rules = BTreeSet::new();
+    let mut accepted_rules = Vec::new();
     let mut pruned = Vec::with_capacity(configs.len());
     for config in configs {
         let Some(rule_index) = config.alt_rule_index else {
@@ -1483,8 +1483,8 @@ pub(super) fn prune_after_accepts(atn: &LexerAtn, configs: Vec<LexerConfig>) -> 
             && atn
                 .state(config.state)
                 .is_some_and(crate::atn::LexerAtnState::is_rule_stop);
-        if is_top_level_accept {
-            accepted_rules.insert(rule_index);
+        if is_top_level_accept && !accepted_rules.contains(&rule_index) {
+            accepted_rules.push(rule_index);
         }
         pruned.push(config);
     }
