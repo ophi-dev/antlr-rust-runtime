@@ -1285,15 +1285,9 @@ struct FastRecognizeTopScratch {
 impl FastRecognizeTopScratch {
     fn prepare(&mut self, memo_capacity: usize) {
         self.visiting.clear();
-        if self.visiting.capacity() < FAST_RECOGNIZE_VISITING_CAPACITY {
-            self.visiting
-                .reserve(FAST_RECOGNIZE_VISITING_CAPACITY.saturating_sub(self.visiting.capacity()));
-        }
+        self.visiting.reserve(FAST_RECOGNIZE_VISITING_CAPACITY);
         self.memo.clear();
-        if self.memo.capacity() < memo_capacity {
-            self.memo
-                .reserve(memo_capacity.saturating_sub(self.memo.capacity()));
-        }
+        self.memo.reserve(memo_capacity);
     }
 
     fn release_oversized_memo(&mut self) {
@@ -15091,8 +15085,14 @@ mod tests {
         assert!(retained_capacity >= FAST_RECOGNIZE_MIN_MEMO_CAPACITY);
         assert!(retained_capacity <= FAST_RECOGNIZE_MAX_RETAINED_MEMO_CAPACITY);
 
+        let larger_capacity = retained_capacity + 1;
+        scratch.prepare(larger_capacity);
+        let grown_capacity = scratch.memo.capacity();
+        assert!(grown_capacity >= larger_capacity);
+        assert!(grown_capacity <= FAST_RECOGNIZE_MAX_RETAINED_MEMO_CAPACITY);
+
         scratch.release_oversized_memo();
-        assert_eq!(scratch.memo.capacity(), retained_capacity);
+        assert_eq!(scratch.memo.capacity(), grown_capacity);
 
         scratch
             .memo
