@@ -9842,7 +9842,7 @@ where
         }
         if self.empty_cycle_cache.len() <= state_number {
             self.empty_cycle_cache
-                .resize_with(atn.states().len().max(state_number + 1), || None);
+                .resize_with(atn.state_count().max(state_number + 1), || None);
         }
         if let Some(cached) = self.empty_cycle_cache[state_number] {
             return cached;
