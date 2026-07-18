@@ -2336,7 +2336,15 @@ type DecisionLookaheadCache = FxHashMap<usize, Rc<DecisionLookahead>>;
 
 #[derive(Debug, Default)]
 struct LeftRecursiveOperatorLookahead {
-    unconditional_symbols: TokenBitSet,
+    /// Operator alts whose token-prefix is fully matched by this one symbol
+    /// (then only epsilons/actions remain before the recursive RHS call).
+    /// Safe for one-token loop-enter fast path.
+    single_token_symbols: TokenBitSet,
+    /// Operator alts that start with this symbol but still require more tokens
+    /// (e.g. Java `>>` / `>>>` when only shift is precedence-viable). Must not
+    /// force enter from one-token lookahead — StarLoopEntry adaptive predict
+    /// has to weigh the exit alt as well.
+    multi_token_prefix_symbols: TokenBitSet,
     predicate_dependent_symbols: TokenBitSet,
 }
 
@@ -2857,7 +2865,10 @@ enum OperatorSymbolReachability {
     #[default]
     None,
     PredicateDependent,
-    Unconditional,
+    /// Starts an operator but more tokens are required before the RHS call.
+    UnconditionalMultiToken,
+    /// One token completes the operator token-prefix.
+    UnconditionalSingleToken,
 }
 
 #[derive(Clone, Copy)]
@@ -3001,6 +3012,53 @@ fn state_is_nullable_with_precedence_cached(
     nullable
 }
 
+/// After the operator's first token is matched, is the operator token-prefix
+/// finished without needing another token? That includes binary ops (next is
+/// the recursive RHS rule call), postfix ops (nullable to loop-back / stop),
+/// but not multi-token ops like Java `>>` (another `>` is required).
+fn state_operator_token_prefix_complete(
+    atn: &Atn,
+    state_number: usize,
+    precedence: i32,
+    visited: &mut BTreeSet<usize>,
+) -> bool {
+    if !visited.insert(state_number) {
+        return false;
+    }
+    let Some(state) = atn.state(state_number) else {
+        return false;
+    };
+    match state.kind() {
+        AtnStateKind::RuleStop
+        | AtnStateKind::StarLoopBack
+        | AtnStateKind::StarLoopEntry
+        | AtnStateKind::PlusLoopBack
+        | AtnStateKind::LoopEnd => return true,
+        _ => {}
+    }
+    state.transitions().iter().any(|transition| match &transition.data() {
+        Transition::Rule { .. } => true,
+        Transition::Epsilon { target } | Transition::Action { target, .. } => {
+            state_operator_token_prefix_complete(atn, *target, precedence, visited)
+        }
+        Transition::Precedence {
+            target,
+            precedence: transition_precedence,
+        } if *transition_precedence >= precedence => {
+            state_operator_token_prefix_complete(atn, *target, precedence, visited)
+        }
+        Transition::Predicate { target, .. } => {
+            state_operator_token_prefix_complete(atn, *target, precedence, visited)
+        }
+        Transition::Atom { .. }
+        | Transition::Range { .. }
+        | Transition::Set { .. }
+        | Transition::NotSet { .. }
+        | Transition::Wildcard { .. }
+        | Transition::Precedence { .. } => false,
+    })
+}
+
 fn state_can_reach_symbol_with_precedence(
     atn: &Atn,
     state_number: usize,
@@ -3021,11 +3079,24 @@ fn state_can_reach_symbol_with_precedence(
     let mut reachability = OperatorSymbolReachability::None;
     for transition in &state.transitions() {
         if transition.matches(request.symbol, 1, atn.max_token_type()) {
+            let matched = if state_operator_token_prefix_complete(
+                atn,
+                transition.target(),
+                request.precedence,
+                &mut BTreeSet::new(),
+            ) {
+                OperatorSymbolReachability::UnconditionalSingleToken
+            } else {
+                OperatorSymbolReachability::UnconditionalMultiToken
+            };
             if request.predicate_dependent {
-                reachability = OperatorSymbolReachability::PredicateDependent;
-                continue;
+                reachability = reachability.max(OperatorSymbolReachability::PredicateDependent);
+            } else if matched == OperatorSymbolReachability::UnconditionalSingleToken {
+                return matched;
+            } else {
+                reachability = reachability.max(matched);
             }
-            return OperatorSymbolReachability::Unconditional;
+            continue;
         }
         let transition_reachability = match &transition.data() {
             Transition::Rule {
@@ -3044,7 +3115,7 @@ fn state_can_reach_symbol_with_precedence(
                     nullable_ctx,
                     visited,
                 );
-                if result == OperatorSymbolReachability::Unconditional {
+                if result == OperatorSymbolReachability::UnconditionalSingleToken {
                     return result;
                 }
                 let Some(child_stop) = atn.rule_to_stop_state().get(*rule_index) else {
@@ -3110,7 +3181,7 @@ fn state_can_reach_symbol_with_precedence(
             | Transition::NotSet { .. }
             | Transition::Wildcard { .. } => OperatorSymbolReachability::None,
         };
-        if transition_reachability == OperatorSymbolReachability::Unconditional {
+        if transition_reachability == OperatorSymbolReachability::UnconditionalSingleToken {
             return transition_reachability;
         }
         reachability = reachability.max(transition_reachability);
@@ -3152,8 +3223,11 @@ fn left_recursive_operator_lookahead(
                 &mut nullable_ctx,
                 &mut BTreeSet::new(),
             ) {
-                OperatorSymbolReachability::Unconditional => {
-                    lookahead.unconditional_symbols.insert(symbol);
+                OperatorSymbolReachability::UnconditionalSingleToken => {
+                    lookahead.single_token_symbols.insert(symbol);
+                }
+                OperatorSymbolReachability::UnconditionalMultiToken => {
+                    lookahead.multi_token_prefix_symbols.insert(symbol);
                 }
                 OperatorSymbolReachability::PredicateDependent => {
                     lookahead.predicate_dependent_symbols.insert(symbol);
@@ -5269,8 +5343,18 @@ where
     /// Predicts a generated left-recursive loop from one-token lookahead.
     ///
     /// `Some(true)` enters the operator alternative, `Some(false)` exits, and
-    /// `None` means caller overlap or an unresolved semantic predicate requires
-    /// full-context adaptive prediction.
+    /// `None` means caller overlap, a dangerous multi-token prefix, or an
+    /// unresolved semantic predicate requires full StarLoopEntry adaptive
+    /// prediction (which includes the exit alt and precedence filtering).
+    ///
+    /// Single-token operators (`+`, `*`, relational `>` at low precedence) and
+    /// multi-token ops that do not shadow a lower-precedence single-token use of
+    /// the same symbol (e.g. `.`) keep the one-token enter fast path.
+    ///
+    /// Multi-token prefixes that **do** shadow a lower-precedence single-token
+    /// op (Java `>>`/`>>>` vs `>` when only shift is precedence-viable) must not
+    /// force enter — otherwise the operator decision picks relational,
+    /// `precpred` fails, and a legal outer expression dies.
     pub fn left_recursive_loop_enter_prediction(
         &mut self,
         atn: &Atn,
@@ -5281,29 +5365,33 @@ where
         if symbol == TOKEN_EOF {
             return Some(false);
         }
-        let operator_lookahead = with_shared_atn_caches(atn, |cache| {
-            let key = (state_number, precedence);
-            if let Some(cached) = cache.left_recursive_operator_lookahead.get(&key) {
-                return Rc::clone(cached);
-            }
-            let lookahead = Rc::new(left_recursive_operator_lookahead(
-                atn,
-                state_number,
-                precedence,
-            ));
-            cache
-                .left_recursive_operator_lookahead
-                .insert(key, Rc::clone(&lookahead));
-            lookahead
-        });
-        if !operator_lookahead.unconditional_symbols.contains(symbol) {
-            if operator_lookahead
-                .predicate_dependent_symbols
-                .contains(symbol)
-            {
+        let operator_lookahead = Self::cached_left_recursive_operator_lookahead(
+            atn,
+            state_number,
+            precedence,
+        );
+        let can_single = operator_lookahead.single_token_symbols.contains(symbol);
+        let can_multi = operator_lookahead
+            .multi_token_prefix_symbols
+            .contains(symbol);
+        let can_predicate = operator_lookahead
+            .predicate_dependent_symbols
+            .contains(symbol);
+        if !can_single && !can_multi && !can_predicate {
+            return Some(false);
+        }
+        if can_predicate && !can_single && !can_multi {
+            return None;
+        }
+        // Multi-token-only at this precedence, but the same symbol is a
+        // single-token operator at precedence 0: defer so exit can win when the
+        // multi-token sequence does not actually match (e.g. `>` vs `>>`).
+        if !can_single && can_multi && precedence > 0 {
+            let baseline =
+                Self::cached_left_recursive_operator_lookahead(atn, state_number, 0);
+            if baseline.single_token_symbols.contains(symbol) {
                 return None;
             }
-            return Some(false);
         }
         let atn_key = SharedAtnCacheKey::for_atn(atn);
         let cached_overlap = self
@@ -5343,6 +5431,28 @@ where
             return None;
         }
         Some(true)
+    }
+
+    fn cached_left_recursive_operator_lookahead(
+        atn: &Atn,
+        state_number: usize,
+        precedence: i32,
+    ) -> Rc<LeftRecursiveOperatorLookahead> {
+        with_shared_atn_caches(atn, |cache| {
+            let key = (state_number, precedence);
+            if let Some(cached) = cache.left_recursive_operator_lookahead.get(&key) {
+                return Rc::clone(cached);
+            }
+            let lookahead = Rc::new(left_recursive_operator_lookahead(
+                atn,
+                state_number,
+                precedence,
+            ));
+            cache
+                .left_recursive_operator_lookahead
+                .insert(key, Rc::clone(&lookahead));
+            lookahead
+        })
     }
 
     /// Checks whether a generated left-recursive loop can unambiguously enter
@@ -11927,6 +12037,92 @@ mod tests {
         parser
     }
 
+    fn left_recursive_loop_with_shared_gt_prefix_atn() -> Atn {
+        // StarLoopEntry with two operator alts that share leading token 1 (`>`):
+        //   prec 2: token 1, token 1  (shift `>>`)
+        //   prec 1: token 1           (relational `>`)
+        let mut atn = ParserAtnBuilder::new(1);
+        for (state, kind, rule) in [
+            (0, AtnStateKind::RuleStart, 0),
+            (1, AtnStateKind::StarLoopEntry, 0),
+            (2, AtnStateKind::Basic, 0),   // ops hub
+            (3, AtnStateKind::Basic, 0),   // shift prec
+            (4, AtnStateKind::Basic, 0),   // shift first >
+            (5, AtnStateKind::Basic, 0),   // shift second >
+            (6, AtnStateKind::Basic, 0),   // rel prec
+            (7, AtnStateKind::Basic, 0),   // rel >
+            (8, AtnStateKind::LoopEnd, 0),
+            (9, AtnStateKind::RuleStop, 0),
+        ] {
+            assert_eq!(
+                atn.add_state(kind, Some(rule)).expect("state").index(),
+                state
+            );
+            if state == 0 {
+                atn.set_left_recursive_rule(state)
+                    .expect("left-recursive rule start");
+            } else if state == 1 {
+                atn.set_precedence_rule_decision(state)
+                    .expect("precedence decision");
+            }
+        }
+        atn.set_rule_to_start_state(vec![0])
+            .expect("rule start states");
+        atn.set_rule_to_stop_state(vec![9])
+            .expect("rule stop states");
+        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 2 })
+            .expect("ops");
+        atn.add_transition(1, ParserTransitionSpec::Epsilon { target: 8 })
+            .expect("exit");
+        atn.add_transition(2, ParserTransitionSpec::Epsilon { target: 3 })
+            .expect("to shift");
+        atn.add_transition(2, ParserTransitionSpec::Epsilon { target: 6 })
+            .expect("to rel");
+        atn.add_transition(
+            3,
+            ParserTransitionSpec::Precedence {
+                target: 4,
+                precedence: 2,
+            },
+        )
+        .expect("shift prec");
+        atn.add_transition(
+            4,
+            ParserTransitionSpec::Atom {
+                target: 5,
+                label: 1,
+            },
+        )
+        .expect("shift first >");
+        atn.add_transition(
+            5,
+            ParserTransitionSpec::Atom {
+                target: 1,
+                label: 1,
+            },
+        )
+        .expect("shift second >");
+        atn.add_transition(
+            6,
+            ParserTransitionSpec::Precedence {
+                target: 7,
+                precedence: 1,
+            },
+        )
+        .expect("rel prec");
+        atn.add_transition(
+            7,
+            ParserTransitionSpec::Atom {
+                target: 1,
+                label: 1,
+            },
+        )
+        .expect("rel >");
+        atn.add_transition(8, ParserTransitionSpec::Epsilon { target: 9 })
+            .expect("loop end");
+        finish_atn(atn)
+    }
+
     fn left_recursive_loop_with_nullable_operator_prefix_atn() -> Atn {
         let mut atn = ParserAtnBuilder::new(2);
         for (state, kind, rule) in [
@@ -12388,6 +12584,40 @@ mod tests {
             parser.left_recursive_loop_enter_prediction(&atn, 1, 2),
             Some(true),
             "the nullable child must use its rule-call precedence, not the caller precedence"
+        );
+    }
+
+    #[test]
+    fn left_recursive_loop_defers_multi_token_prefix_that_shadows_lower_single_token() {
+        // Models Java `>` (relational, prec 1, one token) vs `>>` (shift, prec 2,
+        // two tokens). At prec 2 only shift is viable; one-token lookahead on `>`
+        // must defer so StarLoopEntry adaptive predict can exit when the second
+        // `>` is absent (as in `a < b > c`).
+        let atn = left_recursive_loop_with_shared_gt_prefix_atn();
+        let mut parser = mini_parser(vec![
+            TestToken::new(1).with_text(">"),
+            TestToken::new(2).with_text("id"),
+            TestToken::eof("parser-test", 1, 1, 1),
+        ]);
+        parser.rule_context_stack = vec![RuleContextFrame {
+            rule_index: 0,
+            invoking_state: -1,
+        }];
+
+        assert_eq!(
+            parser.left_recursive_loop_enter_prediction(&atn, 1, 0),
+            Some(true),
+            "at low precedence relational `>` is a single-token operator"
+        );
+        assert_eq!(
+            parser.left_recursive_loop_enter_prediction(&atn, 1, 1),
+            Some(true),
+            "relational remains single-token at its own precedence"
+        );
+        assert_eq!(
+            parser.left_recursive_loop_enter_prediction(&atn, 1, 2),
+            None,
+            "at shift precedence, bare `>` must not force enter"
         );
     }
 

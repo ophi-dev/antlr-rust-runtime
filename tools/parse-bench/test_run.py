@@ -13,6 +13,21 @@ sys.modules[SPEC.name] = RUN
 SPEC.loader.exec_module(RUN)
 
 
+class DumpTreeHelpersTests(unittest.TestCase):
+    def test_detects_error_nodes(self) -> None:
+        clean = 'Rule(root, children=1)\n  Term("x")\n'
+        dirty = 'Rule(root, children=1)\n  Err("!")\n'
+        self.assertFalse(RUN.dump_tree_has_error_nodes(clean))
+        self.assertTrue(RUN.dump_tree_has_error_nodes(dirty))
+
+    def test_format_tree_diff_mentions_both_runtimes(self) -> None:
+        diff = RUN.format_tree_diff("Rule(a, children=0)\n", "Rule(b, children=0)\n")
+        self.assertIn("rust-antlr", diff)
+        self.assertIn("go-antlr", diff)
+        self.assertIn("-Rule(a, children=0)", diff)
+        self.assertIn("+Rule(b, children=0)", diff)
+
+
 class ClearWorkDirTests(unittest.TestCase):
     def test_rejects_runtime_root_and_ancestor(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
