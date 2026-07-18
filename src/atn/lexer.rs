@@ -307,6 +307,17 @@ where
     hooks.lexer_reset(&mut ctx);
 }
 
+/// Replaces a base lexer's input and resets caller-owned lifecycle state.
+pub fn set_input_stream_with_semantic_hooks<I, H>(lexer: &mut BaseLexer<I>, hooks: &mut H, input: I)
+where
+    I: CharStream,
+    H: SemanticHooks,
+{
+    lexer.set_input_stream(input);
+    let mut ctx = LexerLifecycleCtx::new(lexer, None);
+    hooks.lexer_reset(&mut ctx);
+}
+
 /// Runs one lexer-token match with a shared [`SemanticHooks`] object.
 ///
 /// This is the trait-based facade over the historical lexer closure hooks.
@@ -2777,6 +2788,14 @@ mod tests {
         reset_with_semantic_hooks(&mut lexer, &mut hooks);
         assert!(!hooks.transient);
         assert_eq!(hooks.reset_count, 1);
+
+        set_input_stream_with_semantic_hooks(
+            &mut lexer,
+            &mut hooks,
+            InputStream::with_source_name(".x", "replacement"),
+        );
+        assert_eq!(hooks.reset_count, 2);
+        assert_eq!(lexer.source_name(), "replacement");
 
         let after_reset =
             next_token_compiled_with_semantic_hooks(&mut lexer, &mut sink, &atn, &dfa, &mut hooks)

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Added
+
+- Generated lexers and parsers now expose ANTLR-style recognizer reuse APIs:
+  `set_input_stream`, `set_token_source`, `set_token_stream`, full `reset`,
+  and `clear_dfa`. `CommonTokenStream::refill` supports re-feeding the lexer
+  owned inside an existing parser without reconstructing either recognizer.
+
 ### Performance
 
 - Compiled lexers read in-memory ASCII directly from their static DFA tables
@@ -10,6 +17,8 @@
 
 ### Breaking
 
+- Generated parser rules named `reset`, `setTokenStream`, `tokenStreamMut`, or
+  `clearDfa` now gain a `_rule` suffix to avoid the recognizer reuse methods.
 - Buffered tokens now live once in a compact `TokenStore` and are addressed by
   `TokenId`; public access uses borrowing `TokenView` values.
 - `CommonTokenStream` owns its `TokenStore` directly. `BaseParser` owns one flat

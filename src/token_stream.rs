@@ -26,6 +26,46 @@ pub struct CommonTokenStream<S> {
 
 const UNKNOWN_NEXT_VISIBLE: usize = usize::MAX;
 
+fn buffer_token_source<S>(
+    source: &mut S,
+) -> Result<(TokenStore, Vec<BufferedSourceError>), TokenStoreError>
+where
+    S: TokenSource,
+{
+    let source_name = source.source_name().to_owned();
+    let mut store = TokenStore::new(source.source_text(), source_name);
+    let mut source_errors = Vec::new();
+    loop {
+        let expected_id = store.len();
+        let mut sink = TokenSink::new(&mut store);
+        let id = source.next_token(&mut sink)?;
+        let appended = sink.token_count().saturating_sub(expected_id);
+        if appended != 1 || id.index() != expected_id {
+            return Err(TokenStoreError::invalid_source_output(
+                expected_id,
+                id.index(),
+                appended,
+            ));
+        }
+        source_errors.extend(
+            source
+                .drain_errors()
+                .into_iter()
+                .map(|error| BufferedSourceError {
+                    token_index: id.index(),
+                    error,
+                }),
+        );
+        let token = sink
+            .view(id)
+            .expect("token source returned an ID it did not emit");
+        if token.token_type() == TOKEN_EOF {
+            break;
+        }
+    }
+    Ok((store, source_errors))
+}
+
 impl<S> CommonTokenStream<S>
 where
     S: TokenSource,
@@ -51,34 +91,7 @@ where
     }
 
     pub fn try_with_channel(mut source: S, channel: i32) -> Result<Self, TokenStoreError> {
-        let source_name = source.source_name().to_owned();
-        let mut store = TokenStore::new(source.source_text(), source_name);
-        let mut source_errors = Vec::new();
-        loop {
-            let expected_id = store.len();
-            let mut sink = TokenSink::new(&mut store);
-            let id = source.next_token(&mut sink)?;
-            let appended = sink.token_count().saturating_sub(expected_id);
-            if appended != 1 || id.index() != expected_id {
-                return Err(TokenStoreError::invalid_source_output(
-                    expected_id,
-                    id.index(),
-                    appended,
-                ));
-            }
-            source_errors.extend(source.drain_errors().into_iter().map(|error| {
-                BufferedSourceError {
-                    token_index: id.index(),
-                    error,
-                }
-            }));
-            let token = sink
-                .view(id)
-                .expect("token source returned an ID it did not emit");
-            if token.token_type() == TOKEN_EOF {
-                break;
-            }
-        }
+        let (store, source_errors) = buffer_token_source(&mut source)?;
         let source_token_count = store.len();
         let mut stream = Self {
             source,
@@ -93,6 +106,44 @@ where
         stream.cursor = stream.adjust_seek_index(0);
         stream.requested_token_count.set(0);
         Ok(stream)
+    }
+
+    /// Replaces the token source and eagerly buffers it through EOF.
+    ///
+    /// The configured channel is retained; cursor, token storage, requested
+    /// lookahead, and buffered source errors are reset.
+    pub fn set_token_source(&mut self, source: S) {
+        self.try_set_token_source(source)
+            .unwrap_or_else(|error| panic!("failed to buffer tokens: {error}"));
+    }
+
+    /// Fallible form of [`Self::set_token_source`].
+    pub fn try_set_token_source(&mut self, source: S) -> Result<(), TokenStoreError> {
+        let replacement = Self::try_with_channel(source, self.channel)?;
+        *self = replacement;
+        Ok(())
+    }
+
+    /// Rebuffers the current token source after it has been reset or re-fed.
+    ///
+    /// This supports fully owned recognizer stacks: mutate the nested source
+    /// through [`Self::token_source_mut`], then call `refill` without moving the
+    /// lexer out of the stream.
+    pub fn refill(&mut self) {
+        self.try_refill()
+            .unwrap_or_else(|error| panic!("failed to buffer tokens: {error}"));
+    }
+
+    /// Fallible form of [`Self::refill`].
+    pub fn try_refill(&mut self) -> Result<(), TokenStoreError> {
+        let (store, source_errors) = buffer_token_source(&mut self.source)?;
+        self.store = store;
+        self.source_token_count = self.store.len();
+        self.next_visible_after = vec![UNKNOWN_NEXT_VISIBLE; self.source_token_count];
+        self.cursor = self.adjust_seek_index(0);
+        self.requested_token_count.set(0);
+        self.source_errors = source_errors;
+        Ok(())
     }
 
     /// Idempotent eager-buffering operation. Construction already buffers
@@ -161,6 +212,11 @@ where
 
     pub const fn token_source(&self) -> &S {
         &self.source
+    }
+
+    /// Returns the current source for in-place lexer re-feeding.
+    pub const fn token_source_mut(&mut self) -> &mut S {
+        &mut self.source
     }
 
     /// Iterates borrowing views of the original buffered token sequence.
@@ -601,5 +657,43 @@ mod tests {
             stream.tokens().next_back().map(|token| token.token_type()),
             Some(TOKEN_EOF)
         );
+    }
+
+    #[test]
+    fn set_token_source_replaces_buffer_and_preserves_channel() {
+        let mut stream = CommonTokenStream::with_channel(
+            source(vec![
+                TokenSpec::explicit(1, "old").with_channel(2),
+                TokenSpec::eof(3, 3, 1, 3),
+            ]),
+            2,
+        );
+
+        stream.set_token_source(source(vec![
+            TokenSpec::explicit(2, "new").with_channel(2),
+            TokenSpec::eof(3, 3, 1, 3),
+        ]));
+
+        assert_eq!(stream.channel(), 2);
+        assert_eq!(stream.index(), 0);
+        assert_eq!(stream.la_token(1), 2);
+        assert_eq!(stream.text_all(), "new");
+    }
+
+    #[test]
+    fn refill_reuses_mutated_token_source_in_place() {
+        let mut stream = CommonTokenStream::new(source(vec![
+            TokenSpec::explicit(1, "old"),
+            TokenSpec::eof(3, 3, 1, 3),
+        ]));
+        let source = stream.token_source_mut();
+        source.tokens = vec![TokenSpec::explicit(2, "new"), TokenSpec::eof(3, 3, 1, 3)].into();
+        source.index = 0;
+
+        stream.refill();
+
+        assert_eq!(stream.index(), 0);
+        assert_eq!(stream.la_token(1), 2);
+        assert_eq!(stream.text_all(), "new");
     }
 }

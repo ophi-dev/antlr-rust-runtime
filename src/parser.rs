@@ -4605,6 +4605,41 @@ where
         &mut self.input
     }
 
+    /// Fully resets parser-owned state and rewinds the current token stream.
+    ///
+    /// Parser configuration, semantic hooks, learned DFA tables, and
+    /// grammar-owned member values are retained.
+    pub fn reset(&mut self) {
+        self.input.seek(0);
+        self.tree.reset();
+        self.data.set_state(-1);
+        self.syntax_errors = 0;
+        self.prediction_diagnostics.clear();
+        self.reported_prediction_diagnostics.clear();
+        self.generated_parser_diagnostics.clear();
+        self.generated_sync_expected = None;
+        self.rule_context_stack.clear();
+        self.advance_rule_context_version();
+        self.left_recursive_caller_overlap_cache = std::array::from_fn(|_| None);
+        self.pending_invoking_states.clear();
+        self.precedence_stack.clear();
+        self.precedence_stack.push(0);
+        self.invoked_predicates.clear();
+        self.unknown_predicate_hits.clear();
+        self.unhandled_action_hits.clear();
+        self.reset_per_parse_caches();
+        self.fast_first_set_prefilter = true;
+        self.fast_recovery_enabled = true;
+        self.fast_token_nodes_enabled = true;
+        self.reset_recognition_arena();
+    }
+
+    /// Replaces the buffered token stream and fully resets this parser.
+    pub fn set_token_stream(&mut self, input: CommonTokenStream<S>) {
+        self.input = input;
+        self.reset();
+    }
+
     /// Installs the policy for predicate coordinates that no translated table
     /// entry or user hook resolves.
     ///
@@ -4647,6 +4682,12 @@ where
     #[must_use]
     pub const fn token_stream(&self) -> &CommonTokenStream<S> {
         &self.input
+    }
+
+    /// Returns the token stream for source replacement or in-place re-feeding.
+    #[must_use]
+    pub const fn token_stream_mut(&mut self) -> &mut CommonTokenStream<S> {
+        &mut self.input
     }
 
     /// Returns the canonical token store referenced by parse trees.
@@ -14160,6 +14201,68 @@ mod tests {
 
         parser.exit_rule();
         assert!(parser.rule_context_stack.is_empty());
+    }
+
+    #[test]
+    fn reset_rewinds_input_and_clears_parser_owned_parse_state() {
+        let mut parser = mini_parser(vec![
+            TestToken::new(1).with_text("x"),
+            TestToken::eof("parser-test", 1, 1, 1),
+        ]);
+        let matched = parser.match_token(1).expect("token should match");
+        assert_eq!(parser.node(matched).text(), "x");
+        parser.record_generated_syntax_error();
+        parser.set_int_member(7, 11);
+        parser.set_build_parse_trees(false);
+        parser.set_report_diagnostic_errors(true);
+        parser.set_prediction_mode(PredictionMode::Sll);
+        parser.set_bail_on_error(true);
+        let _context = parser.enter_recursion_rule(9, 0, 4);
+        parser.pending_invoking_states.push(5);
+        parser.unknown_predicate_hits.push((0, 1));
+        parser.unhandled_action_hits.push((0, 2));
+
+        parser.reset();
+
+        assert_eq!(parser.input.index(), 0);
+        assert_eq!(parser.la(1), 1);
+        assert_eq!(parser.state(), -1);
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+        assert_eq!(parser.parse_tree_storage().node_count(), 0);
+        assert!(parser.rule_context_stack.is_empty());
+        assert!(parser.pending_invoking_states.is_empty());
+        assert_eq!(parser.precedence_stack, [0]);
+        assert!(parser.unknown_predicate_hits.is_empty());
+        assert!(parser.unhandled_action_hits.is_empty());
+        assert_eq!(parser.int_member(7), Some(11));
+        assert!(!parser.build_parse_trees());
+        assert!(parser.report_diagnostic_errors());
+        assert_eq!(parser.prediction_mode(), PredictionMode::Sll);
+        assert!(parser.bail_on_error());
+    }
+
+    #[test]
+    fn set_token_stream_replaces_input_and_resets_parser() {
+        let mut parser = mini_parser(vec![
+            TestToken::new(1).with_text("old"),
+            TestToken::eof("parser-test", 1, 1, 1),
+        ]);
+        parser.consume();
+        parser.record_generated_syntax_error();
+        let replacement = CommonTokenStream::new(Source {
+            tokens: vec![
+                TestToken::new(2).with_text("new"),
+                TestToken::eof("parser-test", 1, 1, 1),
+            ],
+            index: 0,
+        });
+
+        parser.set_token_stream(replacement);
+
+        assert_eq!(parser.input.index(), 0);
+        assert_eq!(parser.la(1), 2);
+        assert_eq!(parser.input.text_all(), "new");
+        assert_eq!(parser.number_of_syntax_errors(), 0);
     }
 
     #[test]

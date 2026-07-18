@@ -766,6 +766,16 @@ where
         self.pending_tokens.clear();
     }
 
+    /// Replaces the character stream and fully resets lexer state for reuse.
+    ///
+    /// Learned DFA tables and configuration such as forced interpretation are
+    /// retained. The new stream is always rewound to its beginning.
+    pub fn set_input_stream(&mut self, input: I) {
+        self.input = input;
+        self.has_source_text = self.input.source_text().is_some();
+        self.reset();
+    }
+
     /// Switches this lexer to the thread-shared learned DFA for `atn`.
     ///
     /// Generated lexers create a fresh instance per parse; without sharing,
@@ -782,6 +792,15 @@ where
         self.dfa_cache = SHARED_LEXER_DFA_CACHES
             .with(|caches| Rc::clone(caches.borrow_mut().entry(key).or_insert_with(Rc::default)));
         self
+    }
+
+    /// Clears the learned lexer DFA shared by recognizers for this grammar.
+    ///
+    /// Ahead-of-time compiled DFA tables are immutable generated data and are
+    /// unaffected. Any path that falls back to ATN interpretation relearns its
+    /// dynamic DFA from an empty cache after this call.
+    pub fn clear_dfa(&self) {
+        *self.dfa_cache.borrow_mut() = LexerDfaCache::default();
     }
 
     pub const fn input(&self) -> &I {
@@ -1648,5 +1667,60 @@ mod tests {
             1,
             "deduplication resets at every token boundary, even after rewinding"
         );
+    }
+
+    #[test]
+    fn set_input_stream_replaces_input_and_resets_transient_state() {
+        let data = RecognizerData::new(
+            "T",
+            Vocabulary::new(
+                std::iter::empty::<Option<&str>>(),
+                std::iter::empty::<Option<&str>>(),
+                std::iter::empty::<Option<&str>>(),
+            ),
+        );
+        let mut lexer = BaseLexer::new(InputStream::new("old"), data);
+        lexer.consume_char();
+        lexer.set_mode(7);
+        lexer.push_mode(9);
+        lexer.set_type(3);
+        lexer.record_error(1, 0, "stale");
+
+        lexer.set_input_stream(InputStream::with_source_name("new", "replacement"));
+
+        assert_eq!(lexer.input().index(), 0);
+        assert_eq!(lexer.input().size(), 3);
+        assert_eq!(lexer.source_name(), "replacement");
+        assert_eq!(lexer.source_text().as_deref(), Some("new"));
+        assert_eq!(lexer.mode(), DEFAULT_MODE);
+        assert_eq!(lexer.token_type(), INVALID_TOKEN_TYPE);
+        assert_eq!((lexer.line(), lexer.column()), (1, 0));
+        assert!(!lexer.hit_eof());
+        assert!(lexer.drain_errors().is_empty());
+        assert!(lexer.pop_mode().is_none());
+    }
+
+    #[test]
+    fn clear_dfa_invalidates_all_lexers_sharing_the_cache() {
+        let atn = Box::leak(Box::new(LexerAtn::new(1)));
+        let data = || {
+            RecognizerData::new(
+                "T",
+                Vocabulary::new(
+                    std::iter::empty::<Option<&str>>(),
+                    std::iter::empty::<Option<&str>>(),
+                    std::iter::empty::<Option<&str>>(),
+                ),
+            )
+        };
+        let first = BaseLexer::new(InputStream::new("a"), data()).with_shared_dfa(atn);
+        let second = BaseLexer::new(InputStream::new("a"), data()).with_shared_dfa(atn);
+        let state = first.lexer_dfa_state(LexerDfaKey::new(Vec::new()), Some(1));
+        first.record_lexer_dfa_edge(state, i32::from(b'a'), state);
+
+        assert!(!second.lexer_dfa_string().is_empty());
+        first.clear_dfa();
+        assert!(first.lexer_dfa_string().is_empty());
+        assert!(second.lexer_dfa_string().is_empty());
     }
 }
