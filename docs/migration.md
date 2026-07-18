@@ -4,6 +4,13 @@
 generator changes. Generated lexers and parsers must use the same release of
 `antlr4-rust-gen` as the runtime.
 
+## Recognizer Reuse Method Names
+
+Generated parsers now reserve `reset`, `set_token_stream`,
+`token_stream_mut`, and `clear_dfa` for recognizer reuse. Grammar rules that
+normalize to one of those Rust names gain the usual `_rule` suffix after
+regeneration, such as `reset_rule()`.
+
 ## Compact Token, Tree, and Prediction Stores
 
 The compact token, flat CST, and prediction-context stores replace the previous

@@ -155,6 +155,23 @@ impl ParseTreeStorage {
         }
     }
 
+    pub(crate) fn reset(&mut self) {
+        self.kinds.clear();
+        self.child_starts.clear();
+        self.child_lens.clear();
+        self.payload_a.clear();
+        self.payload_b.clear();
+        self.starts.clear();
+        self.stops.clear();
+        self.alt_numbers.clear();
+        self.extra_ids.clear();
+        self.parents.clear();
+        self.flags.clear();
+        self.children.clear();
+        self.extras.clear();
+        self.child_links.clear();
+    }
+
     pub(crate) fn release_scratch(&mut self) {
         self.child_links.clear();
     }

@@ -30,6 +30,7 @@ pub struct ParserAtnSimulator<'a> {
     outer_context_cache_hits: usize,
     outer_context_cache_misses: usize,
     shared_cache_key: Option<usize>,
+    shared_cache_generation: u64,
     /// Java's `LL_EXACT_AMBIG_DETECTION`: the full-context loop keeps
     /// consuming past "resolves to one viable alt" conflicts until every
     /// `(state, context)` subset conflicts over the same alt set.
@@ -57,9 +58,25 @@ impl PredictionStore {
     }
 }
 
+#[derive(Debug, Default)]
+struct SharedPredictionStore {
+    generation: u64,
+    store: Option<PredictionStore>,
+}
+
 thread_local! {
-    static SHARED_PREDICTION_STORES: RefCell<HashMap<usize, PredictionStore>> =
+    static SHARED_PREDICTION_STORES: RefCell<HashMap<usize, SharedPredictionStore>> =
         RefCell::new(HashMap::new());
+}
+
+fn clear_shared_prediction_store(key: usize) -> u64 {
+    SHARED_PREDICTION_STORES.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        let shared = cache.entry(key).or_default();
+        shared.generation = shared.generation.wrapping_add(1);
+        shared.store = None;
+        shared.generation
+    })
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -378,19 +395,28 @@ impl Drop for ParserAtnSimulator<'_> {
         // (that one started cold and checked its copy in first) — then union
         // the two by config-set identity so neither side's learning is lost.
         let store = std::mem::take(&mut self.store);
-        SHARED_PREDICTION_STORES.with(|cache| {
+        let published = SHARED_PREDICTION_STORES.with(|cache| {
             let mut cache = cache.borrow_mut();
-            if let Some(shared) = cache.get_mut(&key) {
-                union_prediction_stores(shared, store, &mut self.workspace);
-            } else {
-                cache.insert(key, store);
+            let shared = cache.entry(key).or_default();
+            if shared.generation != self.shared_cache_generation {
+                return false;
             }
+            if let Some(shared_store) = shared.store.as_mut() {
+                union_prediction_stores(shared_store, store, &mut self.workspace);
+            } else {
+                shared.store = Some(store);
+            }
+            true
         });
         #[cfg(feature = "perf-counters")]
-        crate::perf::record_dfa_cache_publication(
-            publication_started.elapsed().as_nanos(),
-            published_states,
-        );
+        if published {
+            crate::perf::record_dfa_cache_publication(
+                publication_started.elapsed().as_nanos(),
+                published_states,
+            );
+        }
+        #[cfg(not(feature = "perf-counters"))]
+        let _ = published;
     }
 }
 
@@ -404,8 +430,33 @@ impl<'a> ParserAtnSimulator<'a> {
             outer_context_cache_hits: 0,
             outer_context_cache_misses: 0,
             shared_cache_key: None,
+            shared_cache_generation: 0,
             exact_ambig_detection: false,
         }
+    }
+
+    /// Resets transient simulator state while retaining learned decision DFAs.
+    pub fn reset(&mut self) {
+        self.outer_context_cache = None;
+        self.workspace.reset();
+    }
+
+    /// Clears this simulator's learned decision DFAs.
+    ///
+    /// Shared simulators also invalidate the thread-local cache generation so
+    /// an overlapping stale simulator cannot republish pre-clear states later.
+    pub fn clear_dfa(&mut self) {
+        self.store = PredictionStore::new(self.atn);
+        self.reset();
+        if let Some(key) = self.shared_cache_key {
+            self.shared_cache_generation = clear_shared_prediction_store(key);
+        }
+    }
+
+    /// Clears the thread-local learned DFA store for a generated parser ATN.
+    pub fn clear_shared_dfa(atn: &'static Atn) {
+        let ptr: *const Atn = atn;
+        clear_shared_prediction_store(ptr as usize);
     }
 
     /// Switches the full-context resolution strategy (Java's
@@ -463,9 +514,17 @@ impl<'a> ParserAtnSimulator<'a> {
         let key = ptr as usize;
         #[cfg(feature = "perf-counters")]
         let import_started = std::time::Instant::now();
-        let store = SHARED_PREDICTION_STORES
-            .with(|cache| cache.borrow_mut().remove(&key))
-            .unwrap_or_else(|| PredictionStore::new(atn));
+        let (store, generation) = SHARED_PREDICTION_STORES.with(|cache| {
+            let mut cache = cache.borrow_mut();
+            let shared = cache.entry(key).or_default();
+            (
+                shared
+                    .store
+                    .take()
+                    .unwrap_or_else(|| PredictionStore::new(atn)),
+                shared.generation,
+            )
+        });
         #[cfg(feature = "perf-counters")]
         crate::perf::record_dfa_cache_import(
             import_started.elapsed().as_nanos(),
@@ -483,6 +542,7 @@ impl<'a> ParserAtnSimulator<'a> {
             outer_context_cache_hits: 0,
             outer_context_cache_misses: 0,
             shared_cache_key: Some(key),
+            shared_cache_generation: generation,
             exact_ambig_detection: false,
         }
     }
@@ -1819,6 +1879,37 @@ mod tests {
 
         let simulator = ParserAtnSimulator::new_shared(atn);
         assert_eq!(simulator.decision_dfas()[0].states().len(), learned_states);
+    }
+
+    #[test]
+    fn clear_shared_dfa_drops_learned_states() {
+        let atn = Box::leak(Box::new(two_token_decision_atn()));
+        {
+            let mut simulator = ParserAtnSimulator::new_shared(atn);
+            assert_eq!(simulator.adaptive_predict(0, [1, 2]), Ok(1));
+            assert!(!simulator.decision_dfas()[0].is_empty());
+        }
+
+        ParserAtnSimulator::clear_shared_dfa(atn);
+
+        let simulator = ParserAtnSimulator::new_shared(atn);
+        assert!(simulator.decision_dfas()[0].is_empty());
+    }
+
+    #[test]
+    fn clear_dfa_rejects_stale_overlapping_simulator_publication() {
+        let atn = Box::leak(Box::new(two_token_decision_atn()));
+        let mut current = ParserAtnSimulator::new_shared(atn);
+        let mut stale = ParserAtnSimulator::new_shared(atn);
+        assert_eq!(stale.adaptive_predict(0, [1, 2]), Ok(1));
+        assert!(!stale.decision_dfas()[0].is_empty());
+
+        current.clear_dfa();
+        drop(stale);
+        drop(current);
+
+        let simulator = ParserAtnSimulator::new_shared(atn);
+        assert!(simulator.decision_dfas()[0].is_empty());
     }
 
     #[test]

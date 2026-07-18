@@ -2425,6 +2425,24 @@ where
         }}
     }}
 
+    /// Replaces the input stream and resets runtime and lifecycle state.
+    pub fn set_input_stream(&mut self, input: I) {{
+        if H::ENABLES_LEXER_LIFECYCLE {{
+            antlr4_runtime::atn::lexer::set_input_stream_with_semantic_hooks(
+                &mut self.base,
+                &mut self.hooks,
+                input,
+            );
+        }} else {{
+            self.base.set_input_stream(input);
+        }}
+    }}
+
+    /// Clears the learned lexer DFA shared by this grammar.
+    pub fn clear_dfa(&self) {{
+        self.base.clear_dfa();
+    }}
+
 {action_method}
 {predicate_method}
 }}
@@ -6140,9 +6158,13 @@ fn render_parser(
 }
 
 const GENERATED_PARSER_RESERVED_RULE_METHODS: &[&str] = &[
+    "reset",
+    "set_token_stream",
     "token_stream",
+    "token_stream_mut",
     "token_store",
     "parse_tree_storage",
+    "clear_dfa",
     "node",
     "into_token_stream",
     "into_token_store",
@@ -7745,9 +7767,30 @@ where
         metadata()
     }}
 
+    /// Fully resets parser-owned state and rewinds the current token stream.
+    pub fn reset(&mut self) {{
+        self.base.reset();
+        if let Some(simulator) = self.simulator.as_mut() {{
+            simulator.reset();
+        }}
+    }}
+
+    /// Replaces the token stream and fully resets parser-owned state.
+    pub fn set_token_stream(&mut self, input: CommonTokenStream<L>) {{
+        self.base.set_token_stream(input);
+        if let Some(simulator) = self.simulator.as_mut() {{
+            simulator.reset();
+        }}
+    }}
+
     #[must_use]
     pub const fn token_stream(&self) -> &CommonTokenStream<L> {{
         self.base.token_stream()
+    }}
+
+    #[must_use]
+    pub const fn token_stream_mut(&mut self) -> &mut CommonTokenStream<L> {{
+        self.base.token_stream_mut()
     }}
 
     #[must_use]
@@ -7774,6 +7817,15 @@ where
             antlr4_runtime::ParserDfaStats::default,
             antlr4_runtime::ParserAtnSimulator::parser_dfa_stats,
         )
+    }}
+
+    /// Clears this grammar's learned parser decision DFAs.
+    pub fn clear_dfa(&mut self) {{
+        if let Some(simulator) = self.simulator.as_mut() {{
+            simulator.clear_dfa();
+        }} else {{
+            antlr4_runtime::ParserAtnSimulator::clear_shared_dfa(atn());
+        }}
     }}
 
     #[must_use]
@@ -10948,11 +11000,14 @@ atn:
     }
 
     #[test]
-    fn parser_rule_method_names_reserve_token_stream_accessors() {
+    fn parser_rule_method_names_reserve_recognizer_reuse_accessors() {
         let rule_names = vec![
             "tokenStream".to_owned(),
             "into_token_stream".to_owned(),
             "token_stream_rule".to_owned(),
+            "reset".to_owned(),
+            "setTokenStream".to_owned(),
+            "clearDfa".to_owned(),
             "regularRule".to_owned(),
         ];
 
@@ -10962,6 +11017,9 @@ atn:
                 "token_stream_rule",
                 "into_token_stream_rule",
                 "token_stream_rule_2",
+                "reset_rule",
+                "set_token_stream_rule",
+                "clear_dfa_rule",
                 "regular_rule"
             ]
         );
@@ -12452,6 +12510,20 @@ s : ;
 
         assert!(rendered.contains("pub const fn token_stream(&self) -> &CommonTokenStream<L>"));
         assert!(rendered.contains("self.base.token_stream()"));
+        assert!(
+            rendered
+                .contains("pub const fn token_stream_mut(&mut self) -> &mut CommonTokenStream<L>")
+        );
+        assert!(rendered.contains("self.base.token_stream_mut()"));
+        assert!(
+            rendered.contains("pub fn set_token_stream(&mut self, input: CommonTokenStream<L>)")
+        );
+        assert!(rendered.contains("self.base.set_token_stream(input)"));
+        assert!(rendered.contains("pub fn reset(&mut self)"));
+        assert!(rendered.contains("self.base.reset()"));
+        assert!(rendered.contains("pub fn clear_dfa(&mut self)"));
+        assert!(rendered.contains("simulator.clear_dfa()"));
+        assert!(rendered.contains("ParserAtnSimulator::clear_shared_dfa(atn())"));
         assert!(rendered.contains("pub fn into_token_stream(self) -> CommonTokenStream<L>"));
         assert!(rendered.contains("self.base.into_token_stream()"));
         assert!(
@@ -15895,6 +15967,11 @@ ID : [a-z]+ ;\n";
         assert!(module.contains("next_token_compiled_with_semantic_dispatch"));
         assert!(module.contains("pub fn reset(&mut self)"));
         assert!(module.contains("reset_with_semantic_hooks"));
+        assert!(module.contains("pub fn set_input_stream(&mut self, input: I)"));
+        assert!(module.contains("set_input_stream_with_semantic_hooks"));
+        assert!(module.contains("self.base.set_input_stream(input)"));
+        assert!(module.contains("pub fn clear_dfa(&self)"));
+        assert!(module.contains("self.base.clear_dfa()"));
         assert!(module.contains(
             "fn next_token(&mut self, sink: &mut TokenSink<'_>) -> Result<TokenId, TokenStoreError>"
         ));

@@ -183,6 +183,36 @@ fn main() -> Result<(), antlr4_runtime::AntlrError> {
 }
 ```
 
+### Reusing Recognizers
+
+Generated recognizers can be re-fed without reconstructing the lexer or parser.
+The token stream owns its lexer, so use the mutable accessors to update that
+nested source and rebuild the token buffer:
+
+```rust
+let lexer = JsonLexer::new(InputStream::new(""));
+let tokens = CommonTokenStream::new(lexer);
+let mut parser = Json::new(tokens);
+
+for input in [r#"{"a":1}"#, r#"{"b":2}"#] {
+    let tokens = parser.token_stream_mut();
+    tokens
+        .token_source_mut()
+        .set_input_stream(InputStream::new(input));
+    tokens.refill();
+    parser.reset();
+
+    let tree = parser.json()?;
+    println!("{}", parser.node(tree).text());
+}
+```
+
+`CommonTokenStream::set_token_source` and generated
+`Parser::set_token_stream` replace whole layers when ownership is already
+available. `clear_dfa()` on generated lexers and parsers drops learned fallback
+and decision DFA state for cold measurements or memory control; immutable
+ahead-of-time lexer DFA tables remain embedded generated data.
+
 ### Choosing Parser Entry Rules
 
 Generated parsers expose one public method per grammar rule. Call the method
