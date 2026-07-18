@@ -2339,13 +2339,13 @@ struct LeftRecursiveOperatorLookahead {
     /// Operator alts whose token-prefix is fully matched by this one symbol
     /// (then only epsilons/actions remain before the recursive RHS call).
     /// Safe for one-token loop-enter fast path.
-    single_token_symbols: TokenBitSet,
+    single_token: TokenBitSet,
     /// Operator alts that start with this symbol but still require more tokens
     /// (e.g. Java `>>` / `>>>` when only shift is precedence-viable). Must not
-    /// force enter from one-token lookahead — StarLoopEntry adaptive predict
+    /// force enter from one-token lookahead — `StarLoopEntry` adaptive predict
     /// has to weigh the exit alt as well.
-    multi_token_prefix_symbols: TokenBitSet,
-    predicate_dependent_symbols: TokenBitSet,
+    multi_token_prefix: TokenBitSet,
+    predicate_dependent: TokenBitSet,
 }
 
 #[derive(Default)]
@@ -3036,27 +3036,30 @@ fn state_operator_token_prefix_complete(
         | AtnStateKind::LoopEnd => return true,
         _ => {}
     }
-    state.transitions().iter().any(|transition| match &transition.data() {
-        Transition::Rule { .. } => true,
-        Transition::Epsilon { target } | Transition::Action { target, .. } => {
-            state_operator_token_prefix_complete(atn, *target, precedence, visited)
-        }
-        Transition::Precedence {
-            target,
-            precedence: transition_precedence,
-        } if *transition_precedence >= precedence => {
-            state_operator_token_prefix_complete(atn, *target, precedence, visited)
-        }
-        Transition::Predicate { target, .. } => {
-            state_operator_token_prefix_complete(atn, *target, precedence, visited)
-        }
-        Transition::Atom { .. }
-        | Transition::Range { .. }
-        | Transition::Set { .. }
-        | Transition::NotSet { .. }
-        | Transition::Wildcard { .. }
-        | Transition::Precedence { .. } => false,
-    })
+    state
+        .transitions()
+        .iter()
+        .any(|transition| match &transition.data() {
+            Transition::Rule { .. } => true,
+            Transition::Epsilon { target } | Transition::Action { target, .. } => {
+                state_operator_token_prefix_complete(atn, *target, precedence, visited)
+            }
+            Transition::Precedence {
+                target,
+                precedence: transition_precedence,
+            } => {
+                *transition_precedence >= precedence
+                    && state_operator_token_prefix_complete(atn, *target, precedence, visited)
+            }
+            Transition::Predicate { target, .. } => {
+                state_operator_token_prefix_complete(atn, *target, precedence, visited)
+            }
+            Transition::Atom { .. }
+            | Transition::Range { .. }
+            | Transition::Set { .. }
+            | Transition::NotSet { .. }
+            | Transition::Wildcard { .. } => false,
+        })
 }
 
 fn state_can_reach_symbol_with_precedence(
@@ -3224,13 +3227,13 @@ fn left_recursive_operator_lookahead(
                 &mut BTreeSet::new(),
             ) {
                 OperatorSymbolReachability::UnconditionalSingleToken => {
-                    lookahead.single_token_symbols.insert(symbol);
+                    lookahead.single_token.insert(symbol);
                 }
                 OperatorSymbolReachability::UnconditionalMultiToken => {
-                    lookahead.multi_token_prefix_symbols.insert(symbol);
+                    lookahead.multi_token_prefix.insert(symbol);
                 }
                 OperatorSymbolReachability::PredicateDependent => {
-                    lookahead.predicate_dependent_symbols.insert(symbol);
+                    lookahead.predicate_dependent.insert(symbol);
                 }
                 OperatorSymbolReachability::None => {}
             }
@@ -5344,7 +5347,7 @@ where
     ///
     /// `Some(true)` enters the operator alternative, `Some(false)` exits, and
     /// `None` means caller overlap, a dangerous multi-token prefix, or an
-    /// unresolved semantic predicate requires full StarLoopEntry adaptive
+    /// unresolved semantic predicate requires full `StarLoopEntry` adaptive
     /// prediction (which includes the exit alt and precedence filtering).
     ///
     /// Single-token operators (`+`, `*`, relational `>` at low precedence) and
@@ -5365,18 +5368,11 @@ where
         if symbol == TOKEN_EOF {
             return Some(false);
         }
-        let operator_lookahead = Self::cached_left_recursive_operator_lookahead(
-            atn,
-            state_number,
-            precedence,
-        );
-        let can_single = operator_lookahead.single_token_symbols.contains(symbol);
-        let can_multi = operator_lookahead
-            .multi_token_prefix_symbols
-            .contains(symbol);
-        let can_predicate = operator_lookahead
-            .predicate_dependent_symbols
-            .contains(symbol);
+        let operator_lookahead =
+            Self::cached_left_recursive_operator_lookahead(atn, state_number, precedence);
+        let can_single = operator_lookahead.single_token.contains(symbol);
+        let can_multi = operator_lookahead.multi_token_prefix.contains(symbol);
+        let can_predicate = operator_lookahead.predicate_dependent.contains(symbol);
         if !can_single && !can_multi && !can_predicate {
             return Some(false);
         }
@@ -5387,9 +5383,8 @@ where
         // single-token operator at precedence 0: defer so exit can win when the
         // multi-token sequence does not actually match (e.g. `>` vs `>>`).
         if !can_single && can_multi && precedence > 0 {
-            let baseline =
-                Self::cached_left_recursive_operator_lookahead(atn, state_number, 0);
-            if baseline.single_token_symbols.contains(symbol) {
+            let baseline = Self::cached_left_recursive_operator_lookahead(atn, state_number, 0);
+            if baseline.single_token.contains(symbol) {
                 return None;
             }
         }
@@ -12045,12 +12040,12 @@ mod tests {
         for (state, kind, rule) in [
             (0, AtnStateKind::RuleStart, 0),
             (1, AtnStateKind::StarLoopEntry, 0),
-            (2, AtnStateKind::Basic, 0),   // ops hub
-            (3, AtnStateKind::Basic, 0),   // shift prec
-            (4, AtnStateKind::Basic, 0),   // shift first >
-            (5, AtnStateKind::Basic, 0),   // shift second >
-            (6, AtnStateKind::Basic, 0),   // rel prec
-            (7, AtnStateKind::Basic, 0),   // rel >
+            (2, AtnStateKind::Basic, 0), // ops hub
+            (3, AtnStateKind::Basic, 0), // shift prec
+            (4, AtnStateKind::Basic, 0), // shift first >
+            (5, AtnStateKind::Basic, 0), // shift second >
+            (6, AtnStateKind::Basic, 0), // rel prec
+            (7, AtnStateKind::Basic, 0), // rel >
             (8, AtnStateKind::LoopEnd, 0),
             (9, AtnStateKind::RuleStop, 0),
         ] {
