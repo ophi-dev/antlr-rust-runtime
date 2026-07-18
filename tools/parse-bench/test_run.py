@@ -14,6 +14,22 @@ SPEC.loader.exec_module(RUN)
 
 
 class DumpTreeHelpersTests(unittest.TestCase):
+    def generated_sources(self) -> tuple[str, str]:
+        with tempfile.TemporaryDirectory() as temp:
+            work_dir = Path(temp)
+            spec = RUN.LANGUAGES["java"]
+            rust_runner = RUN.write_rust_runner(
+                work_dir,
+                [spec],
+                RUN.ROOT,
+                rust_thin_lto=False,
+            )
+            go_runner = RUN.write_go_runner(work_dir, [spec])
+            return (
+                (rust_runner / "src" / "main.rs").read_text(),
+                (go_runner / "main.go").read_text(),
+            )
+
     def test_detects_error_nodes(self) -> None:
         clean = 'Rule(root, children=1)\n  Term("x")\n'
         dirty = 'Rule(root, children=1)\n  Err("!")\n'
@@ -26,6 +42,51 @@ class DumpTreeHelpersTests(unittest.TestCase):
         self.assertIn("go-antlr", diff)
         self.assertIn("-Rule(a, children=0)", diff)
         self.assertIn("+Rule(b, children=0)", diff)
+
+    def test_generated_dumpers_share_unicode_scalar_encoding(self) -> None:
+        rust_source, go_source = self.generated_sources()
+
+        self.assertIn("tree_text(tree.as_terminal()", rust_source)
+        self.assertIn("tree_text(tree.as_error()", rust_source)
+        self.assertIn("escaped.extend(ch.escape_unicode());", rust_source)
+        self.assertNotIn("Term({:?})", rust_source)
+        self.assertNotIn("Err({:?})", rust_source)
+
+        self.assertIn("treeText(node.GetText())", go_source)
+        self.assertIn(r"fmt.Fprintf(&b, `\u{%x}`, r)", go_source)
+        self.assertNotIn("rustDebugStr", go_source)
+
+        sample = "\u0301\u00a0\u2028a"
+        expected = '"\\u{301}\\u{a0}\\u{2028}\\u{61}"'
+        self.assertEqual(
+            '"' + "".join(f"\\u{{{ord(ch):x}}}" for ch in sample) + '"',
+            expected,
+        )
+
+    def test_generated_dumpers_reject_lexer_and_parser_diagnostics(self) -> None:
+        rust_source, go_source = self.generated_sources()
+        rust_dump = rust_source[rust_source.index("fn dump_tree_java") :]
+        go_dump = go_source[go_source.index("func dumpTreeJava") :]
+
+        rust_fill = rust_dump.index("tokens.fill();")
+        rust_lexer_errors = rust_dump.index("tokens.drain_source_errors().len()")
+        rust_parse = rust_dump.index("let root = parser")
+        self.assertLess(rust_fill, rust_lexer_errors)
+        self.assertLess(rust_lexer_errors, rust_parse)
+        self.assertIn(
+            "if lexer_errors != 0 || syntax_errors != 0",
+            rust_dump,
+        )
+
+        go_listener = go_dump.index("lexer.AddErrorListener(lexerErrors)")
+        go_fill = go_dump.index("tokens.Fill()")
+        go_parse = go_dump.index("tree := p.CompilationUnit()")
+        self.assertLess(go_listener, go_fill)
+        self.assertLess(go_fill, go_parse)
+        self.assertIn(
+            "lexerErrors.count != 0 || parserErrors.count != 0",
+            go_dump,
+        )
 
 
 class ClearWorkDirTests(unittest.TestCase):

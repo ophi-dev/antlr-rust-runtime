@@ -574,16 +574,26 @@ fn dump_node<S: AsRef<str>>(
         }}
         NodeKind::Terminal => writeln!(
             out,
-            "{{pad}}Term({{:?}})",
-            tree.as_terminal().expect("terminal node kind checked").text()
+            "{{pad}}Term({{}})",
+            tree_text(tree.as_terminal().expect("terminal node kind checked").text())
         )?,
         NodeKind::Error => writeln!(
             out,
-            "{{pad}}Err({{:?}})",
-            tree.as_error().expect("error node kind checked").text()
+            "{{pad}}Err({{}})",
+            tree_text(tree.as_error().expect("error node kind checked").text())
         )?,
     }}
     Ok(())
+}}
+
+fn tree_text(text: &str) -> String {{
+    let mut escaped = String::new();
+    escaped.push('"');
+    for ch in text.chars() {{
+        escaped.extend(ch.escape_unicode());
+    }}
+    escaped.push('"');
+    escaped
 }}
 
 fn prediction_stats_once(
@@ -684,15 +694,17 @@ fn parse_{spec.name}(src: &str) -> Result<(), antlr4_runtime::AntlrError> {{
 
 fn dump_tree_{spec.name}(src: &str, out: &mut dyn Write) -> Result<(), String> {{
     let lexer = generated::{spec.rust_lexer_module}::{spec.rust_lexer_type}::new(InputStream::new(src));
-    let tokens = CommonTokenStream::new(lexer);
+    let mut tokens = CommonTokenStream::new(lexer);
+    tokens.fill();
+    let lexer_errors = tokens.drain_source_errors().len();
     let mut parser = generated::{spec.rust_parser_module}::{spec.rust_parser_type}::new(tokens);
     let root = parser
         .{spec.rust_entry}()
         .map_err(|err| err.to_string())?;
     let syntax_errors = parser.number_of_syntax_errors();
-    if syntax_errors != 0 {{
+    if lexer_errors != 0 || syntax_errors != 0 {{
         return Err(format!(
-            "rust-antlr {spec.name} parse produced {{syntax_errors}} syntax error(s)"
+            "rust-antlr {spec.name} parse produced {{lexer_errors}} lexer error(s) and {{syntax_errors}} parser syntax error(s)"
         ));
     }}
     dump_node(
@@ -918,6 +930,25 @@ import (
 
 var sink any
 
+type countingErrorListener struct {{
+    *antlr.DefaultErrorListener
+    count int
+}}
+
+func newCountingErrorListener() *countingErrorListener {{
+    return &countingErrorListener{{DefaultErrorListener: antlr.NewDefaultErrorListener()}}
+}}
+
+func (l *countingErrorListener) SyntaxError(
+    _ antlr.Recognizer,
+    _ interface{{}},
+    _, _ int,
+    _ string,
+    _ antlr.RecognitionException,
+) {{
+    l.count++
+}}
+
 func main() {{
     if err := runMain(); err != nil {{
         fmt.Fprintln(os.Stderr, err)
@@ -1009,10 +1040,10 @@ func dumpNode(out io.Writer, tree antlr.Tree, ruleNames []string, depth int) err
     pad := strings.Repeat("  ", depth)
     switch node := tree.(type) {{
     case antlr.ErrorNode:
-        _, err := fmt.Fprintf(out, "%sErr(%s)\\n", pad, rustDebugStr(node.GetText()))
+        _, err := fmt.Fprintf(out, "%sErr(%s)\\n", pad, treeText(node.GetText()))
         return err
     case antlr.TerminalNode:
-        _, err := fmt.Fprintf(out, "%sTerm(%s)\\n", pad, rustDebugStr(node.GetText()))
+        _, err := fmt.Fprintf(out, "%sTerm(%s)\\n", pad, treeText(node.GetText()))
         return err
     case antlr.RuleNode:
         ruleIndex := node.GetRuleContext().GetRuleIndex()
@@ -1050,30 +1081,11 @@ func treeHasErrorNode(tree antlr.Tree) bool {{
     return false
 }}
 
-func rustDebugStr(text string) string {{
+func treeText(text string) string {{
     var b strings.Builder
     b.WriteByte('"')
     for _, r := range text {{
-        switch r {{
-        case '\\\\':
-            b.WriteString(`\\\\`)
-        case '"':
-            b.WriteString(`\\"`)
-        case '\\n':
-            b.WriteString(`\\n`)
-        case '\\r':
-            b.WriteString(`\\r`)
-        case '\\t':
-            b.WriteString(`\\t`)
-        case 0:
-            b.WriteString(`\\0`)
-        default:
-            if r < 0x20 || r == 0x7f {{
-                fmt.Fprintf(&b, `\\u{{%x}}`, r)
-            }} else {{
-                b.WriteRune(r)
-            }}
-        }}
+        fmt.Fprintf(&b, `\\u{{%x}}`, r)
     }}
     b.WriteByte('"')
     return b.String()
@@ -1131,11 +1143,22 @@ def go_parse_function(spec: LanguageSpec) -> str:
 func dumpTree{func_name}(src string, out io.Writer) error {{
     input := antlr.NewInputStream(src)
     lexer := {pkg}.New{spec.lexer_name}(input)
+    lexerErrors := newCountingErrorListener()
+    lexer.RemoveErrorListeners()
+    lexer.AddErrorListener(lexerErrors)
     tokens := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
+    tokens.Fill()
     p := {pkg}.New{spec.parser_name}(tokens)
+    parserErrors := newCountingErrorListener()
+    p.RemoveErrorListeners()
+    p.AddErrorListener(parserErrors)
     tree := p.{spec.go_entry}()
-    if treeHasErrorNode(tree) {{
-        return fmt.Errorf("go-antlr {spec.name} parse produced error nodes")
+    if lexerErrors.count != 0 || parserErrors.count != 0 || treeHasErrorNode(tree) {{
+        return fmt.Errorf(
+            "go-antlr {spec.name} parse produced %d lexer error(s), %d parser syntax error(s), or error nodes",
+            lexerErrors.count,
+            parserErrors.count,
+        )
     }}
     return dumpNode(out, tree, p.GetRuleNames(), 0)
 }}"""
