@@ -136,6 +136,43 @@ python3 tools/parse-bench/run.py \
 where Cargo profile settings control the final application and its
 dependencies.
 
+For profile-guided optimization, first build an instrumented runner and train
+it on the selected fixtures:
+
+```bash
+PROFILE_DIR="$(mktemp -d /tmp/antlr-parse-pgo.XXXXXX)"
+PROFILE_DATA=/tmp/antlr-parse-pgo.profdata
+
+python3 tools/parse-bench/run.py \
+  --languages kotlin,csharp,java,trino \
+  --runtimes rust-antlr \
+  --rust-generated-only \
+  --rust-pgo-generate "$PROFILE_DIR" \
+  --work-dir /tmp/antlr-parse-pgo-train
+
+rustup component add llvm-tools-preview
+SYSROOT="$(rustc --print sysroot)"
+HOST="$(rustc -vV | sed -n 's/^host: //p')"
+"$SYSROOT/lib/rustlib/$HOST/bin/llvm-profdata" merge \
+  -o "$PROFILE_DATA" "$PROFILE_DIR"
+```
+
+Then rebuild and measure with the merged profile:
+
+```bash
+python3 tools/parse-bench/run.py \
+  --languages kotlin,csharp,java,trino \
+  --runtimes rust-antlr \
+  --rust-generated-only \
+  --rust-pgo-use "$PROFILE_DATA" \
+  --work-dir /tmp/antlr-parse-pgo-use
+```
+
+The profile-generation timings are instrumented training data, not comparison
+results. When testing PGO together with `--rust-native` or `--rust-thin-lto`,
+pass the same options to both commands. Use separate work directories for the
+ordinary, instrumented, and profile-use runners.
+
 ## Prediction Memory Counters
 
 Set `ANTLR_PERF_DUMP=1` to build the Rust runner with performance counters.
@@ -155,9 +192,11 @@ The dump includes canonical context counts, pooled and retained bytes, arena
 and workspace capacities, merge-cache activity, and outer-context cache
 hits/misses. It also reports learned parser-DFA warm hits/misses, ATN
 fallbacks, state interning activity, dense/sparse row counts, edge-density
-histograms, and hot/cold retained bytes. Store statistics are collected in a
-separate untimed parse after the benchmark loop, so walking the stores does not
-affect reported timings.
+histograms, and hot/cold retained bytes. Parser token-set counters report
+inline, dense, and interval selection; packed bitset bytes; membership
+hits/misses; and interval probes eliminated or retained. Store statistics are
+collected in a separate untimed parse after the benchmark loop, so walking the
+stores does not affect reported timings.
 
 ## PR Watchdog
 

@@ -77,7 +77,7 @@ use crate::atn::parser::{
     ParserAtnPrediction, ParserAtnPredictionDiagnosticKind, ParserAtnSimulator,
 };
 use crate::atn::parser_atn::{
-    ParserAtn as Atn, ParserAtnState as AtnState, ParserTransition,
+    ParserAtn as Atn, ParserAtnState as AtnState, ParserIntervalSet, ParserTransition,
     ParserTransitionData as Transition, ParserTransitionKind,
 };
 #[cfg(test)]
@@ -2198,17 +2198,29 @@ impl TokenBitSet {
         self.words.iter().all(|word| *word == 0)
     }
 
+    fn symbols(&self) -> impl Iterator<Item = i32> + '_ {
+        self.words
+            .iter()
+            .copied()
+            .enumerate()
+            .flat_map(|(word_index, mut bits)| {
+                std::iter::from_fn(move || {
+                    while bits != 0 {
+                        let bit = bits.trailing_zeros() as usize;
+                        bits &= bits - 1;
+                        if let Some(symbol) =
+                            token_bit_symbol(word_index * u64::BITS as usize + bit)
+                        {
+                            return Some(symbol);
+                        }
+                    }
+                    None
+                })
+            })
+    }
+
     fn extend_btree_set(&self, target: &mut BTreeSet<i32>) {
-        for (word_index, word) in self.words.iter().copied().enumerate() {
-            let mut bits = word;
-            while bits != 0 {
-                let bit = bits.trailing_zeros() as usize;
-                if let Some(symbol) = token_bit_symbol(word_index * u64::BITS as usize + bit) {
-                    target.insert(symbol);
-                }
-                bits &= bits - 1;
-            }
-        }
+        target.extend(self.symbols());
     }
 
     fn to_btree_set(&self) -> BTreeSet<i32> {
@@ -4509,6 +4521,61 @@ pub struct GeneratedMatch {
     consumed_eof: bool,
 }
 
+#[derive(Clone, Copy)]
+enum GeneratedExpectedSymbols<'a> {
+    Tree(&'a BTreeSet<i32>),
+    TokenSet(ParserIntervalSet<'a>),
+    TokenSetComplement {
+        set: ParserIntervalSet<'a>,
+        min_vocabulary: i32,
+        max_vocabulary: i32,
+    },
+}
+
+impl GeneratedExpectedSymbols<'_> {
+    fn is_empty(self) -> bool {
+        match self {
+            Self::Tree(symbols) => symbols.is_empty(),
+            Self::TokenSet(set) => set.is_empty(),
+            Self::TokenSetComplement {
+                set,
+                min_vocabulary,
+                max_vocabulary,
+            } => (min_vocabulary..=max_vocabulary).all(|symbol| set.contains(symbol)),
+        }
+    }
+
+    fn first(self) -> Option<i32> {
+        match self {
+            Self::Tree(symbols) => symbols.iter().next().copied(),
+            Self::TokenSet(set) => set.ranges().next().map(|(start, _)| start),
+            Self::TokenSetComplement {
+                set,
+                min_vocabulary,
+                max_vocabulary,
+            } => (min_vocabulary..=max_vocabulary).find(|symbol| !set.contains(*symbol)),
+        }
+    }
+
+    fn display(self, vocabulary: &Vocabulary) -> String {
+        match self {
+            Self::Tree(symbols) => expected_symbols_display(symbols, vocabulary),
+            Self::TokenSet(set) => expected_symbols_display_iter(
+                set.ranges().flat_map(|(start, stop)| start..=stop),
+                vocabulary,
+            ),
+            Self::TokenSetComplement {
+                set,
+                min_vocabulary,
+                max_vocabulary,
+            } => expected_symbols_display_iter(
+                (min_vocabulary..=max_vocabulary).filter(|symbol| !set.contains(*symbol)),
+                vocabulary,
+            ),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum GeneratedMatchChildren {
     One(ParseTree),
@@ -5102,9 +5169,13 @@ where
         }
         let mut expected_symbols = BTreeSet::new();
         expected_symbols.insert(token_type);
-        self.recover_generated_match(current, &expected_symbols, follow_state, atn, |symbol| {
-            symbol == token_type
-        })
+        self.recover_generated_match(
+            current,
+            GeneratedExpectedSymbols::Tree(&expected_symbols),
+            follow_state,
+            atn,
+            |symbol| symbol == token_type,
+        )
     }
 
     pub fn match_set_recovering(
@@ -5129,9 +5200,43 @@ where
             });
         }
         let expected_symbols = interval_symbols(intervals);
-        self.recover_generated_match(current, &expected_symbols, follow_state, atn, |symbol| {
-            interval_set_contains(intervals, symbol)
-        })
+        self.recover_generated_match(
+            current,
+            GeneratedExpectedSymbols::Tree(&expected_symbols),
+            follow_state,
+            atn,
+            |symbol| interval_set_contains(intervals, symbol),
+        )
+    }
+
+    pub fn match_token_set_recovering(
+        &mut self,
+        set: ParserIntervalSet<'_>,
+        follow_state: usize,
+        atn: &Atn,
+    ) -> Result<GeneratedMatch, AntlrError> {
+        let current = self.input.lt_id(1).ok_or_else(|| AntlrError::ParserError {
+            line: 0,
+            column: 0,
+            message: "missing current token".to_owned(),
+        })?;
+        let current_type = self.token_type_for_id(current);
+        if set.contains(current_type) {
+            self.generated_sync_expected = None;
+            let consumed_eof = current_type == TOKEN_EOF;
+            self.consume();
+            return Ok(GeneratedMatch {
+                children: GeneratedMatchChildren::One(self.terminal_tree(current)),
+                consumed_eof,
+            });
+        }
+        self.recover_generated_match(
+            current,
+            GeneratedExpectedSymbols::TokenSet(set),
+            follow_state,
+            atn,
+            |symbol| set.contains(symbol),
+        )
     }
 
     pub fn match_not_set_recovering(
@@ -5161,21 +5266,64 @@ where
         }
         let expected_symbols =
             interval_complement_symbols(intervals, min_vocabulary, max_vocabulary);
-        self.recover_generated_match(current, &expected_symbols, follow_state, atn, |symbol| {
-            (min_vocabulary..=max_vocabulary).contains(&symbol)
-                && !interval_set_contains(intervals, symbol)
-        })
+        self.recover_generated_match(
+            current,
+            GeneratedExpectedSymbols::Tree(&expected_symbols),
+            follow_state,
+            atn,
+            |symbol| {
+                (min_vocabulary..=max_vocabulary).contains(&symbol)
+                    && !interval_set_contains(intervals, symbol)
+            },
+        )
+    }
+
+    pub fn match_not_token_set_recovering(
+        &mut self,
+        set: ParserIntervalSet<'_>,
+        min_vocabulary: i32,
+        max_vocabulary: i32,
+        follow_state: usize,
+        atn: &Atn,
+    ) -> Result<GeneratedMatch, AntlrError> {
+        let current = self.input.lt_id(1).ok_or_else(|| AntlrError::ParserError {
+            line: 0,
+            column: 0,
+            message: "missing current token".to_owned(),
+        })?;
+        let current_type = self.token_type_for_id(current);
+        if (min_vocabulary..=max_vocabulary).contains(&current_type) && !set.contains(current_type)
+        {
+            self.generated_sync_expected = None;
+            let consumed_eof = current_type == TOKEN_EOF;
+            self.consume();
+            return Ok(GeneratedMatch {
+                children: GeneratedMatchChildren::One(self.terminal_tree(current)),
+                consumed_eof,
+            });
+        }
+        self.recover_generated_match(
+            current,
+            GeneratedExpectedSymbols::TokenSetComplement {
+                set,
+                min_vocabulary,
+                max_vocabulary,
+            },
+            follow_state,
+            atn,
+            |symbol| (min_vocabulary..=max_vocabulary).contains(&symbol) && !set.contains(symbol),
+        )
     }
 
     fn recover_generated_match(
         &mut self,
         current: TokenId,
-        expected_symbols: &BTreeSet<i32>,
+        expected_symbols: GeneratedExpectedSymbols<'_>,
         follow_state: usize,
         atn: &Atn,
         matches: impl Fn(i32) -> bool,
     ) -> Result<GeneratedMatch, AntlrError> {
-        let expected_display = self.expected_symbols_display(expected_symbols);
+        let expected_display = expected_symbols.display(self.vocabulary());
         let (current_type, current_line, current_column, current_display) = {
             let token = self
                 .input
@@ -5248,10 +5396,8 @@ where
             });
             self.record_syntax_errors(1);
             self.generated_sync_expected = None;
-            let token_type = expected_symbols.iter().next().copied().unwrap_or(TOKEN_EOF);
-            let mut missing_symbol = BTreeSet::new();
-            missing_symbol.insert(token_type);
-            let missing_display = self.expected_symbols_display(&missing_symbol);
+            let token_type = expected_symbols.first().unwrap_or(TOKEN_EOF);
+            let missing_display = expected_symbol_display(token_type, self.vocabulary());
             let token = self.insert_synthetic_token(
                 token_type,
                 format!("<missing {missing_display}>"),
@@ -5267,11 +5413,12 @@ where
                 consumed_eof: false,
             });
         }
-        let mismatch_expected = self.generated_sync_expected.take().map_or_else(
-            || expected_symbols.clone(),
-            |symbols| symbols.to_btree_set(),
-        );
-        let mismatch_expected_display = self.expected_symbols_display(&mismatch_expected);
+        let mismatch_expected_display = self
+            .generated_sync_expected
+            .take()
+            .map_or(expected_display, |symbols| {
+                expected_symbols_display_iter(symbols.symbols(), self.vocabulary())
+            });
         Err(AntlrError::ParserError {
             line: current_line,
             column: current_column,
@@ -11236,9 +11383,16 @@ fn report_token_source_errors(errors: &[TokenSourceError]) {
 }
 
 fn expected_symbols_display(symbols: &BTreeSet<i32>, vocabulary: &Vocabulary) -> String {
+    expected_symbols_display_iter(symbols.iter().copied(), vocabulary)
+}
+
+fn expected_symbols_display_iter(
+    symbols: impl IntoIterator<Item = i32>,
+    vocabulary: &Vocabulary,
+) -> String {
     let items = symbols
-        .iter()
-        .map(|symbol| expected_symbol_display(*symbol, vocabulary))
+        .into_iter()
+        .map(|symbol| expected_symbol_display(symbol, vocabulary))
         .collect::<Vec<_>>();
     if let [single] = items.as_slice() {
         return single.clone();
@@ -14780,7 +14934,13 @@ mod tests {
         }];
 
         let node = parser
-            .match_not_set_recovering(&[(1, 1)], 1, 1, 1, &atn)
+            .match_not_token_set_recovering(
+                atn.token_set(0).expect("excluded token set"),
+                1,
+                1,
+                1,
+                &atn,
+            )
             .expect("empty complement should recover at EOF");
 
         assert_eq!(node.children().len(), 1);

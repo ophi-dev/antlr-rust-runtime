@@ -126,5 +126,33 @@ class ClearWorkDirTests(unittest.TestCase):
             self.assertTrue(marker.exists())
 
 
+class RustCodegenFlagsTests(unittest.TestCase):
+    def test_combines_native_and_profile_generation(self) -> None:
+        self.assertEqual(
+            RUN.rust_codegen_flags(
+                native=True,
+                pgo_generate=Path("/tmp/parse-profraw"),
+                pgo_use=None,
+            ),
+            [
+                "-Ctarget-cpu=native",
+                "-Cprofile-generate=/tmp/parse-profraw",
+            ],
+        )
+
+    def test_profile_use_warns_about_missing_functions(self) -> None:
+        self.assertEqual(
+            RUN.rust_codegen_flags(
+                native=False,
+                pgo_generate=None,
+                pgo_use=Path("/tmp/parse.profdata"),
+            ),
+            [
+                "-Cprofile-use=/tmp/parse.profdata",
+                "-Cllvm-args=-pgo-warn-missing-function",
+            ],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

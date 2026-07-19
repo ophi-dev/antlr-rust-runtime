@@ -68,6 +68,19 @@ struct Counters {
     lexer_range_number_bytes: u64,
     lexer_range_whitespace_bytes: u64,
     lexer_range_other_bytes: u64,
+    parser_token_set_inline_sets: u64,
+    parser_token_set_dense_sets: u64,
+    parser_token_set_interval_sets: u64,
+    parser_token_set_inline_bytes: u64,
+    parser_token_set_dense_bytes: u64,
+    parser_token_set_inline_hits: u64,
+    parser_token_set_inline_misses: u64,
+    parser_token_set_dense_hits: u64,
+    parser_token_set_dense_misses: u64,
+    parser_token_set_interval_hits: u64,
+    parser_token_set_interval_misses: u64,
+    parser_token_set_interval_probes_eliminated: u64,
+    parser_token_set_interval_binary_probes_retained: u64,
     decisions: BTreeMap<usize, DecisionCounters>,
 }
 
@@ -91,6 +104,11 @@ fn add_len(total: &mut u64, max: &mut u64, len: usize) {
     let len = u64::try_from(len).unwrap_or(u64::MAX);
     *total = total.saturating_add(len);
     *max = (*max).max(len);
+}
+
+const fn record_hit(hit: bool, hits: &mut u64, misses: &mut u64) {
+    let counter = if hit { hits } else { misses };
+    *counter = counter.saturating_add(1);
 }
 
 pub(crate) fn record_adaptive_call(decision: usize, forced_full_context: bool) {
@@ -404,6 +422,66 @@ pub(crate) fn record_lexer_range_scan(
     });
 }
 
+pub(crate) fn record_parser_token_set_selection(
+    kind: crate::atn::parser_atn::ParserTokenSetKind,
+    bytes: usize,
+) {
+    use crate::atn::parser_atn::ParserTokenSetKind;
+
+    let bytes = u64::try_from(bytes).unwrap_or(u64::MAX);
+    with_counters(|counters| match kind {
+        ParserTokenSetKind::Inline128 => {
+            counters.parser_token_set_inline_sets =
+                counters.parser_token_set_inline_sets.saturating_add(1);
+            counters.parser_token_set_inline_bytes =
+                counters.parser_token_set_inline_bytes.saturating_add(bytes);
+        }
+        ParserTokenSetKind::Dense => {
+            counters.parser_token_set_dense_sets =
+                counters.parser_token_set_dense_sets.saturating_add(1);
+            counters.parser_token_set_dense_bytes =
+                counters.parser_token_set_dense_bytes.saturating_add(bytes);
+        }
+        ParserTokenSetKind::Intervals => {
+            counters.parser_token_set_interval_sets =
+                counters.parser_token_set_interval_sets.saturating_add(1);
+        }
+    });
+}
+
+pub(crate) fn record_parser_token_set_probe(
+    kind: crate::atn::parser_atn::ParserTokenSetKind,
+    hit: bool,
+) {
+    use crate::atn::parser_atn::ParserTokenSetKind;
+
+    with_counters(|counters| {
+        match kind {
+            ParserTokenSetKind::Inline128 => record_hit(
+                hit,
+                &mut counters.parser_token_set_inline_hits,
+                &mut counters.parser_token_set_inline_misses,
+            ),
+            ParserTokenSetKind::Dense => record_hit(
+                hit,
+                &mut counters.parser_token_set_dense_hits,
+                &mut counters.parser_token_set_dense_misses,
+            ),
+            ParserTokenSetKind::Intervals => record_hit(
+                hit,
+                &mut counters.parser_token_set_interval_hits,
+                &mut counters.parser_token_set_interval_misses,
+            ),
+        }
+        let probe_counter = if kind == ParserTokenSetKind::Intervals {
+            &mut counters.parser_token_set_interval_binary_probes_retained
+        } else {
+            &mut counters.parser_token_set_interval_probes_eliminated
+        };
+        *probe_counter = probe_counter.saturating_add(1);
+    });
+}
+
 pub fn reset() {
     COUNTERS.with(|counters| {
         let mut counters = counters.borrow_mut();
@@ -415,6 +493,11 @@ pub fn reset() {
             counters.lexer_run_descriptors_until,
             counters.lexer_range_descriptors,
             counters.lexer_range_descriptor_classes,
+            counters.parser_token_set_inline_sets,
+            counters.parser_token_set_dense_sets,
+            counters.parser_token_set_interval_sets,
+            counters.parser_token_set_inline_bytes,
+            counters.parser_token_set_dense_bytes,
         );
         *counters = Counters::default();
         counters.lexer_run_descriptors_none = descriptors.0;
@@ -422,6 +505,11 @@ pub fn reset() {
         counters.lexer_run_descriptors_until = descriptors.2;
         counters.lexer_range_descriptors = descriptors.3;
         counters.lexer_range_descriptor_classes = descriptors.4;
+        counters.parser_token_set_inline_sets = descriptors.5;
+        counters.parser_token_set_dense_sets = descriptors.6;
+        counters.parser_token_set_interval_sets = descriptors.7;
+        counters.parser_token_set_inline_bytes = descriptors.8;
+        counters.parser_token_set_dense_bytes = descriptors.9;
     });
 }
 
@@ -456,7 +544,7 @@ fn dump_decisions(counters: &Counters) {
     }
 }
 
-const fn totals(counters: &Counters) -> [(&'static str, u64); 67] {
+const fn totals(counters: &Counters) -> [(&'static str, u64); 80] {
     [
         ("prediction.adaptive_calls", counters.adaptive_calls),
         (
@@ -618,6 +706,58 @@ const fn totals(counters: &Counters) -> [(&'static str, u64); 67] {
             counters.lexer_range_whitespace_bytes,
         ),
         ("lexer.range_other_bytes", counters.lexer_range_other_bytes),
+        (
+            "parser.token_set.selection.inline128",
+            counters.parser_token_set_inline_sets,
+        ),
+        (
+            "parser.token_set.selection.dense",
+            counters.parser_token_set_dense_sets,
+        ),
+        (
+            "parser.token_set.selection.intervals",
+            counters.parser_token_set_interval_sets,
+        ),
+        (
+            "parser.token_set.inline_bytes",
+            counters.parser_token_set_inline_bytes,
+        ),
+        (
+            "parser.token_set.dense_bytes",
+            counters.parser_token_set_dense_bytes,
+        ),
+        (
+            "parser.token_set.inline_hits",
+            counters.parser_token_set_inline_hits,
+        ),
+        (
+            "parser.token_set.inline_misses",
+            counters.parser_token_set_inline_misses,
+        ),
+        (
+            "parser.token_set.dense_hits",
+            counters.parser_token_set_dense_hits,
+        ),
+        (
+            "parser.token_set.dense_misses",
+            counters.parser_token_set_dense_misses,
+        ),
+        (
+            "parser.token_set.interval_hits",
+            counters.parser_token_set_interval_hits,
+        ),
+        (
+            "parser.token_set.interval_misses",
+            counters.parser_token_set_interval_misses,
+        ),
+        (
+            "parser.token_set.interval_probes_eliminated",
+            counters.parser_token_set_interval_probes_eliminated,
+        ),
+        (
+            "parser.token_set.interval_binary_probes_retained",
+            counters.parser_token_set_interval_binary_probes_retained,
+        ),
     ]
 }
 
@@ -680,6 +820,28 @@ pub(crate) fn lexer_range_scan_snapshot() -> [u64; 6] {
             counters.lexer_range_number_bytes,
             counters.lexer_range_whitespace_bytes,
             counters.lexer_range_other_bytes,
+        ]
+    })
+}
+
+#[cfg(test)]
+pub(crate) fn parser_token_set_snapshot() -> [u64; 13] {
+    COUNTERS.with(|counters| {
+        let counters = counters.borrow();
+        [
+            counters.parser_token_set_inline_sets,
+            counters.parser_token_set_dense_sets,
+            counters.parser_token_set_interval_sets,
+            counters.parser_token_set_inline_bytes,
+            counters.parser_token_set_dense_bytes,
+            counters.parser_token_set_inline_hits,
+            counters.parser_token_set_inline_misses,
+            counters.parser_token_set_dense_hits,
+            counters.parser_token_set_dense_misses,
+            counters.parser_token_set_interval_hits,
+            counters.parser_token_set_interval_misses,
+            counters.parser_token_set_interval_probes_eliminated,
+            counters.parser_token_set_interval_binary_probes_retained,
         ]
     })
 }
