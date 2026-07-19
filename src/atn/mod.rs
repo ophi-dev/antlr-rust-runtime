@@ -5,6 +5,7 @@
 //! still mutates and inspects that shape. Parsers use the packed,
 //! index-addressed [`parser_atn::ParserAtn`] representation instead.
 
+pub(crate) mod ascii_range;
 pub mod lexer;
 pub mod lexer_dfa;
 pub mod parser;

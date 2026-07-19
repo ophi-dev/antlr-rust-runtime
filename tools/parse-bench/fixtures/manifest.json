@@ -74,6 +74,26 @@
     },
     {
       "language": "java",
+      "path": "java/lexer-range-stress.java",
+      "source": "repository synthetic benchmark",
+      "license": "BSD-3-Clause",
+      "description": "Lex-only ASCII range stress input with long identifiers, decimal and hexadecimal numbers, whitespace, mixed identifier lengths, and punctuation-heavy expressions.",
+      "phases": [
+        "lex"
+      ]
+    },
+    {
+      "language": "java",
+      "path": "java/lexer-number-whitespace-stress.java",
+      "source": "repository synthetic benchmark",
+      "license": "BSD-3-Clause",
+      "description": "Lex-only ASCII range stress input isolating long decimal and hexadecimal literals plus horizontal and newline whitespace runs.",
+      "phases": [
+        "lex"
+      ]
+    },
+    {
+      "language": "java",
       "path": "java/mojang-data-result.java",
       "source": "https://github.com/Mojang/DataFixerUpper/blob/5fc0978694e996cfe68a742b67a0d506c17de3f0/src/main/java/com/mojang/serialization/DataResult.java",
       "license": "MIT",

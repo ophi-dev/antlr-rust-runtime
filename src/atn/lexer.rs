@@ -1162,11 +1162,14 @@ fn match_token_compiled_ascii<'a>(
             record_compiled_accept(accept, position, &mut best);
         }
         if position < input.len() && self_loop_prefix == MIN_RUN_SCAN_PREFIX {
-            if let Some(scan) = dfa.ascii_run(state).scan(&input[position..]) {
+            if let Some(scan) = dfa.scan_ascii_run(state, &input[position..]) {
                 #[cfg(feature = "perf-counters")]
                 {
                     direct_chars += scan.bytes;
                     crate::perf::record_lexer_run_scan(scan.bytes, scan.found_exit);
+                    if let Some(range) = scan.range {
+                        crate::perf::record_lexer_range_scan(range.class(), scan.bytes);
+                    }
                 }
                 position += scan.bytes;
                 error_stop = error_stop.max(position);

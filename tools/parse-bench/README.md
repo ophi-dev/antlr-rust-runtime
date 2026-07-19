@@ -116,7 +116,8 @@ python3 tools/parse-bench/run.py \
 The source-derived fixtures cover ordinary Kotlin, C#, Java, and Trino input.
 Two lex-only Kotlin fixtures add concentrated ASCII coverage for long
 identifiers, strings, comments, whitespace, and punctuation, plus mixed-script
-coverage for the Unicode fallback.
+coverage for the Unicode fallback. Two lex-only Java fixtures isolate long
+ASCII range classes for identifiers, numbers, and whitespace.
 
 Use a detached checkout for same-machine baseline comparisons, and select the
 compiler-level configurations explicitly:
