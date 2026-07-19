@@ -1145,22 +1145,48 @@ fn match_token_compiled_ascii<'a>(
     start_state: u16,
     start: usize,
 ) -> CompiledMatch<'a> {
+    const MIN_RUN_SCAN_PREFIX: usize = 8;
+
     let mut state = start_state;
     let mut position = start;
     let mut best: Option<AcceptState> = None;
     let mut error_stop = start;
     let mut eof_edges = 0_u32;
+    let mut self_loop_prefix = 0;
     #[cfg(feature = "perf-counters")]
     let mut direct_chars = 0;
+    #[cfg(feature = "perf-counters")]
+    let mut scalar_chars = 0;
     let result = loop {
         if let Some(accept) = dfa.accept(state) {
             record_compiled_accept(accept, position, &mut best);
+        }
+        if position < input.len() && self_loop_prefix == MIN_RUN_SCAN_PREFIX {
+            if let Some(scan) = dfa.ascii_run(state).scan(&input[position..]) {
+                #[cfg(feature = "perf-counters")]
+                {
+                    direct_chars += scan.bytes;
+                    crate::perf::record_lexer_run_scan(scan.bytes, scan.found_exit);
+                }
+                position += scan.bytes;
+                error_stop = error_stop.max(position);
+                if scan.bytes > 0
+                    && let Some(accept) = dfa.accept(state)
+                {
+                    record_compiled_accept(accept, position, &mut best);
+                }
+            } else {
+                self_loop_prefix += 1;
+                #[cfg(feature = "perf-counters")]
+                crate::perf::record_lexer_run_rejected_state();
+            }
         }
         let (target, at_eof) = if position < input.len() {
             let symbol = input[position];
             #[cfg(feature = "perf-counters")]
             {
                 direct_chars += 1;
+                scalar_chars += 1;
             }
             error_stop = error_stop.max(position.saturating_add(1));
             (dfa.ascii_target(state, symbol), false)
@@ -1194,11 +1220,21 @@ fn match_token_compiled_ascii<'a>(
         }
         if !at_eof {
             position += 1;
+            if target == state {
+                if self_loop_prefix < MIN_RUN_SCAN_PREFIX {
+                    self_loop_prefix += 1;
+                }
+            } else {
+                self_loop_prefix = 0;
+            }
         }
         state = target;
     };
     #[cfg(feature = "perf-counters")]
-    crate::perf::record_lexer_direct_ascii(direct_chars);
+    {
+        crate::perf::record_lexer_direct_ascii(direct_chars);
+        crate::perf::record_lexer_compiled_scalar_ascii(scalar_chars);
+    }
     result
 }
 

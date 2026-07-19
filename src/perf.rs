@@ -51,6 +51,12 @@ struct Counters {
     lexer_generic_chars: u64,
     lexer_scalar_replay_chars: u64,
     lexer_bulk_committed_chars: u64,
+    lexer_compiled_scalar_ascii_chars: u64,
+    lexer_run_scan_calls: u64,
+    lexer_run_scan_bytes: u64,
+    lexer_run_scan_exits: u64,
+    lexer_run_scan_ends: u64,
+    lexer_run_rejected_states: u64,
     decisions: BTreeMap<usize, DecisionCounters>,
 }
 
@@ -304,6 +310,34 @@ pub(crate) fn record_lexer_bulk_commit(count: usize) {
     });
 }
 
+pub(crate) fn record_lexer_compiled_scalar_ascii(count: usize) {
+    with_counters(|counters| {
+        counters.lexer_compiled_scalar_ascii_chars = counters
+            .lexer_compiled_scalar_ascii_chars
+            .saturating_add(u64::try_from(count).unwrap_or(u64::MAX));
+    });
+}
+
+pub(crate) fn record_lexer_run_scan(bytes: usize, found_exit: bool) {
+    with_counters(|counters| {
+        counters.lexer_run_scan_calls = counters.lexer_run_scan_calls.saturating_add(1);
+        counters.lexer_run_scan_bytes = counters
+            .lexer_run_scan_bytes
+            .saturating_add(u64::try_from(bytes).unwrap_or(u64::MAX));
+        if found_exit {
+            counters.lexer_run_scan_exits = counters.lexer_run_scan_exits.saturating_add(1);
+        } else {
+            counters.lexer_run_scan_ends = counters.lexer_run_scan_ends.saturating_add(1);
+        }
+    });
+}
+
+pub(crate) fn record_lexer_run_rejected_state() {
+    with_counters(|counters| {
+        counters.lexer_run_rejected_states = counters.lexer_run_rejected_states.saturating_add(1);
+    });
+}
+
 pub fn reset() {
     COUNTERS.with(|counters| *counters.borrow_mut() = Counters::default());
 }
@@ -339,7 +373,7 @@ fn dump_decisions(counters: &Counters) {
     }
 }
 
-const fn totals(counters: &Counters) -> [(&'static str, u64); 44] {
+const fn totals(counters: &Counters) -> [(&'static str, u64); 50] {
     [
         ("prediction.adaptive_calls", counters.adaptive_calls),
         (
@@ -424,6 +458,18 @@ const fn totals(counters: &Counters) -> [(&'static str, u64); 44] {
             "lexer.bulk_committed_chars",
             counters.lexer_bulk_committed_chars,
         ),
+        (
+            "lexer.compiled_scalar_ascii_chars",
+            counters.lexer_compiled_scalar_ascii_chars,
+        ),
+        ("lexer.run_scan_calls", counters.lexer_run_scan_calls),
+        ("lexer.run_scan_bytes", counters.lexer_run_scan_bytes),
+        ("lexer.run_scan_exits", counters.lexer_run_scan_exits),
+        ("lexer.run_scan_ends", counters.lexer_run_scan_ends),
+        (
+            "lexer.run_rejected_states",
+            counters.lexer_run_rejected_states,
+        ),
     ]
 }
 
@@ -436,6 +482,21 @@ pub(crate) fn lexer_snapshot() -> [u64; 4] {
             counters.lexer_generic_chars,
             counters.lexer_scalar_replay_chars,
             counters.lexer_bulk_committed_chars,
+        ]
+    })
+}
+
+#[cfg(test)]
+pub(crate) fn lexer_run_snapshot() -> [u64; 6] {
+    COUNTERS.with(|counters| {
+        let counters = counters.borrow();
+        [
+            counters.lexer_compiled_scalar_ascii_chars,
+            counters.lexer_run_scan_calls,
+            counters.lexer_run_scan_bytes,
+            counters.lexer_run_scan_exits,
+            counters.lexer_run_scan_ends,
+            counters.lexer_run_rejected_states,
         ]
     })
 }
