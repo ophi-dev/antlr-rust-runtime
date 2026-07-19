@@ -82,7 +82,7 @@ impl AsciiRun {
             if count == exits.len() {
                 return Self::None;
             }
-            exits[count] = symbol as u8;
+exits[count] = u8::try_from(symbol).expect("symbol overflow");
             count += 1;
         }
         match count {
@@ -406,7 +406,7 @@ impl CompiledLexerDfa {
             out.push(u32::from(state.eof_target));
             out.push(state.accept);
         }
-        out.push(self.ascii_runs.len() as u32);
+out.push(u32::try_from(self.ascii_runs.len()).expect("ascii_runs length overflow"));
         for &run in &self.ascii_runs {
             out.push(run.pack());
         }
@@ -1273,7 +1273,7 @@ fn commit_mode(
             (dfa.accepts.len() - 1) as u32
         });
         let (ascii_row, wide_row) = split_rows(&state_rows.segments);
-        let state_id = dfa.states.len() as u16;
+let state_id = u16::try_from(dfa.states.len()).expect("state ID overflow");
         let ascii_run = AsciiRun::classify(&ascii_row, state_id);
         dfa.states.push(CompiledLexerState {
             ascii_row: pools.intern_ascii(&mut dfa.ascii_rows, ascii_row),
