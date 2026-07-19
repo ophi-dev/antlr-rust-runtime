@@ -62,12 +62,10 @@ impl AsciiRanges {
         {
             return None;
         }
-        if ranges[..count].windows(2).any(|pair| {
-            pair[0]
-                .high
-                .checked_add(1)
-                .is_some_and(|next| next >= pair[1].low)
-        }) {
+        if ranges[..count]
+            .windows(2)
+            .any(|pair| pair[0].high + 1 >= pair[1].low)
+        {
             return None;
         }
         if ranges[count..]
@@ -101,11 +99,11 @@ impl AsciiRanges {
     }
 
     pub(super) fn from_packed(count: u8, words: [u32; 2]) -> Option<Self> {
-        let bytes = [words[0].to_le_bytes(), words[1].to_le_bytes()];
         let mut ranges = [AsciiRange::default(); MAX_RANGES];
         for (index, range) in ranges.iter_mut().enumerate() {
-            range.low = bytes[index / 2][(index % 2) * 2];
-            range.high = bytes[index / 2][(index % 2) * 2 + 1];
+            let shift = (index % 2) * 16;
+            range.low = (words[index / 2] >> shift) as u8;
+            range.high = (words[index / 2] >> (shift + 8)) as u8;
         }
         Self::new(count, ranges)
     }
