@@ -20,6 +20,8 @@
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 
+use memchr::{memchr, memchr2, memchr3};
+
 use crate::atn::lexer::{
     LexerConfig, best_accept, epsilon_closure, lexer_action_belongs_to_accept, prune_after_accepts,
     set_config_state,
@@ -59,6 +61,85 @@ const ASCII_EDGE_SYMBOLS: usize = 128;
 /// [`ASCII_EDGE_SYMBOLS`] as a code point for segment arithmetic.
 const ASCII_EDGE_LIMIT: i32 = 128;
 
+/// Exact self-loop shape for one compiled state's ASCII row.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum AsciiRun {
+    None,
+    Any,
+    Until1(u8),
+    Until2(u8, u8),
+    Until3(u8, u8, u8),
+}
+
+impl AsciiRun {
+    fn classify(row: &[u16; ASCII_EDGE_SYMBOLS], state: u16) -> Self {
+        let mut exits = [0_u8; 3];
+        let mut count = 0;
+        for (symbol, &target) in row.iter().enumerate() {
+            if target == state {
+                continue;
+            }
+            if count == exits.len() {
+                return Self::None;
+            }
+exits[count] = u8::try_from(symbol).expect("symbol overflow");
+            count += 1;
+        }
+        match count {
+            0 => Self::Any,
+            1 => Self::Until1(exits[0]),
+            2 => Self::Until2(exits[0], exits[1]),
+            3 => Self::Until3(exits[0], exits[1], exits[2]),
+            _ => unreachable!("exit array bounds the descriptor"),
+        }
+    }
+
+    pub(super) fn scan(self, input: &[u8]) -> Option<AsciiRunScan> {
+        let exit = match self {
+            Self::None => return None,
+            Self::Any => None,
+            Self::Until1(a) => memchr(a, input),
+            Self::Until2(a, b) => memchr2(a, b, input),
+            Self::Until3(a, b, c) => memchr3(a, b, c, input),
+        };
+        Some(AsciiRunScan {
+            bytes: exit.unwrap_or(input.len()),
+            found_exit: exit.is_some(),
+        })
+    }
+
+    const fn pack(self) -> u32 {
+        match self {
+            Self::None => 0,
+            Self::Any => 1,
+            Self::Until1(a) => 2 | ((a as u32) << 8),
+            Self::Until2(a, b) => 3 | ((a as u32) << 8) | ((b as u32) << 16),
+            Self::Until3(a, b, c) => {
+                4 | ((a as u32) << 8) | ((b as u32) << 16) | ((c as u32) << 24)
+            }
+        }
+    }
+
+    const fn unpack(word: u32) -> Option<Self> {
+        match word.to_le_bytes() {
+            [0, 0, 0, 0] => Some(Self::None),
+            [1, 0, 0, 0] => Some(Self::Any),
+            [2, a, 0, 0] if a.is_ascii() => Some(Self::Until1(a)),
+            [3, a, b, 0] if a.is_ascii() && b.is_ascii() => Some(Self::Until2(a, b)),
+            [4, a, b, c] if a.is_ascii() && b.is_ascii() && c.is_ascii() => {
+                Some(Self::Until3(a, b, c))
+            }
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) struct AsciiRunScan {
+    pub(super) bytes: usize,
+    pub(super) found_exit: bool,
+}
+
 /// A lexer DFA compiled ahead of time from a lexer ATN.
 ///
 /// Build one per grammar with [`CompiledLexerDfa::compile`] (generated lexers
@@ -69,6 +150,7 @@ const ASCII_EDGE_LIMIT: i32 = 128;
 pub struct CompiledLexerDfa {
     mode_starts: Vec<Option<u16>>,
     states: Vec<CompiledLexerState>,
+    ascii_runs: Vec<AsciiRun>,
     ascii_rows: Vec<[u16; ASCII_EDGE_SYMBOLS]>,
     wide_rows: Vec<Box<[WideRange]>>,
     accepts: Vec<CompiledLexerAccept>,
@@ -154,6 +236,7 @@ impl CompiledLexerDfa {
         let mut dfa = Self {
             mode_starts: Vec::new(),
             states: Vec::new(),
+            ascii_runs: Vec::new(),
             ascii_rows: Vec::new(),
             wide_rows: Vec::new(),
             accepts: Vec::new(),
@@ -214,6 +297,10 @@ impl CompiledLexerDfa {
         self.ascii_rows[compiled.ascii_row as usize][usize::from(symbol)]
     }
 
+    pub(super) fn ascii_run(&self, state: u16) -> AsciiRun {
+        self.ascii_runs[usize::from(state)]
+    }
+
     /// `LexerTransition` target for a non-EOF symbol, or [`DEAD_STATE`].
     pub(super) fn char_target(&self, state: u16, symbol: i32) -> u16 {
         let compiled = &self.states[usize::from(state)];
@@ -271,10 +358,10 @@ impl CompiledLexerDfa {
     /// rejects streams from other versions so generated lexers can fall back
     /// to [`Self::compile`].
     pub fn serialize(&self) -> Vec<u32> {
-        // Exact word count: the tag, seven section-length words, and each
-        // section's payload (states are 4 words; ASCII rows pack 2 targets
-        // per word; wide ranges and action traces are 3 words each behind
-        // their per-row/per-accept length words).
+        // Exact word count: the tag, eight section-length words, and each
+        // section's payload (states are 4 words, runs are 1 word, ASCII rows
+        // pack 2 targets per word, and wide ranges/action traces are 3 words
+        // each behind their per-row/per-accept length words).
         let wide_words: usize = self.wide_rows.iter().map(|row| 1 + row.len() * 3).sum();
         let accept_words: usize = self
             .accepts
@@ -297,9 +384,10 @@ impl CompiledLexerDfa {
                     .sum::<usize>()
             })
             .sum();
-        let capacity = 8
+        let capacity = 9
             + self.mode_starts.len()
             + self.states.len() * 4
+            + self.ascii_runs.len()
             + self.ascii_rows.len() * (ASCII_EDGE_SYMBOLS / 2)
             + wide_words
             + accept_words
@@ -317,6 +405,10 @@ impl CompiledLexerDfa {
             out.push(state.wide_row);
             out.push(u32::from(state.eof_target));
             out.push(state.accept);
+        }
+out.push(u32::try_from(self.ascii_runs.len()).expect("ascii_runs length overflow"));
+        for &run in &self.ascii_runs {
+            out.push(run.pack());
         }
         out.push(self.ascii_rows.len() as u32);
         for row in &self.ascii_rows {
@@ -401,6 +493,7 @@ impl CompiledLexerDfa {
             mode_starts.push(start);
         }
         let states = reader.read_states()?;
+        let ascii_runs = reader.read_ascii_runs()?;
         let ascii_rows = reader.read_ascii_rows()?;
         let wide_rows = reader.read_wide_rows()?;
         let accepts = reader.read_accepts()?;
@@ -412,6 +505,7 @@ impl CompiledLexerDfa {
         let dfa = Self {
             mode_starts,
             states,
+            ascii_runs,
             ascii_rows,
             wide_rows,
             accepts,
@@ -440,6 +534,18 @@ impl CompiledLexerDfa {
                     && state_ok(state.eof_target)
                     && (state.accept == u32::MAX || (state.accept as usize) < self.accepts.len())
             })
+            && self.ascii_runs.len() == self.states.len()
+            && self.states.iter().zip(&self.ascii_runs).enumerate().all(
+                |(state_id, (state, &ascii_run))| {
+                    u16::try_from(state_id).is_ok_and(|state_id| {
+                        ascii_run
+                            == AsciiRun::classify(
+                                &self.ascii_rows[state.ascii_row as usize],
+                                state_id,
+                            )
+                    })
+                },
+            )
             && self
                 .ascii_rows
                 .iter()
@@ -474,7 +580,7 @@ fn escape_row_is_searchable(row: &[CompiledLexerEscapeRange]) -> bool {
 
 /// Version tag guarding embedded tables against format or construction-semantic
 /// drift.
-const SERIALIZED_TAG: u32 = 0x4C58_4403;
+const SERIALIZED_TAG: u32 = 0x4C58_4404;
 
 /// Cursor over a serialized DFA stream.
 struct SerializedReader<'a> {
@@ -509,6 +615,15 @@ impl SerializedReader<'_> {
             });
         }
         Some(states)
+    }
+
+    fn read_ascii_runs(&mut self) -> Option<Vec<AsciiRun>> {
+        let count = self.next_len()?;
+        let mut runs = Vec::with_capacity(count.min(self.data.len()));
+        for _ in 0..count {
+            runs.push(AsciiRun::unpack(self.next()?)?);
+        }
+        Some(runs)
     }
 
     fn read_ascii_rows(&mut self) -> Option<Vec<[u16; ASCII_EDGE_SYMBOLS]>> {
@@ -1158,12 +1273,15 @@ fn commit_mode(
             (dfa.accepts.len() - 1) as u32
         });
         let (ascii_row, wide_row) = split_rows(&state_rows.segments);
+let state_id = u16::try_from(dfa.states.len()).expect("state ID overflow");
+        let ascii_run = AsciiRun::classify(&ascii_row, state_id);
         dfa.states.push(CompiledLexerState {
             ascii_row: pools.intern_ascii(&mut dfa.ascii_rows, ascii_row),
             wide_row: pools.intern_wide(&mut dfa.wide_rows, wide_row),
             eof_target: state_rows.eof_target,
             accept: accept_id,
         });
+        dfa.ascii_runs.push(ascii_run);
         dfa.escape_rows.push(CompiledLexerEscapeRow {
             ranges: merge_escape_ranges(&state_rows.escapes).into(),
             eof: state_rows.eof_escape,
@@ -1236,6 +1354,11 @@ mod tests {
     struct TokenSnapshot {
         token_type: i32,
         text: String,
+        channel: i32,
+        start: usize,
+        stop: usize,
+        start_byte: usize,
+        stop_byte: usize,
         line: usize,
         column: usize,
     }
@@ -1255,6 +1378,11 @@ mod tests {
         TokenSnapshot {
             token_type: token.token_type(),
             text: token.text().to_owned(),
+            channel: token.channel(),
+            start: token.start(),
+            stop: token.stop(),
+            start_byte: token.start_byte(),
+            stop_byte: token.stop_byte(),
             line: token.line(),
             column: token.column(),
         }
@@ -1268,6 +1396,11 @@ mod tests {
         TokenSnapshot {
             token_type: token.token_type(),
             text: token.text().to_owned(),
+            channel: token.channel(),
+            start: token.start(),
+            stop: token.stop(),
+            start_byte: token.start_byte(),
+            stop_byte: token.stop_byte(),
             line: token.line(),
             column: token.column(),
         }
@@ -1398,6 +1531,143 @@ mod tests {
         ]))
         .deserialize()
         .expect("artificial wide-range lexer ATN should deserialize")
+    }
+
+    /// One token rule matching one or more characters other than newline,
+    /// double quote, or backslash. Its loop state has exactly three ASCII
+    /// exits and is therefore eligible for `Until3`.
+    #[rustfmt::skip]
+    fn complement_loop_atn() -> LexerAtn {
+        AtnDeserializer::new(&SerializedAtn::from_i32(&[
+            4, 0, 1, // version, lexer, max token type
+            5, // states
+            6, -1, // 0 token start
+            2, 0, // 1 rule 0 start
+            1, 0, // 2
+            1, 0, // 3
+            7, 0, // 4 rule 0 stop
+            0, // non-greedy
+            0, // precedence
+            1, // rules
+            1, 1, // rule 0 starts at 1, token type 1
+            1, // modes
+            0, // default mode starts at 0
+            1, // sets
+            3, 0, // three intervals, no EOF
+            '\n' as i32, '\n' as i32,
+            '"' as i32, '"' as i32,
+            '\\' as i32, '\\' as i32,
+            5, // edges
+            0, 1, 1, 0, 0, 0, // start -> rule 0
+            1, 2, 1, 0, 0, 0, //
+            2, 3, 8, 0, 0, 0, // not set 0
+            3, 2, 1, 0, 0, 0, // greedy loop continues first
+            3, 4, 1, 0, 0, 0, // then exits to stop
+            0, // decisions
+            0, // lexer actions
+        ]))
+        .deserialize()
+        .expect("artificial complement-loop lexer ATN should deserialize")
+    }
+
+    fn compiled_stream(
+        input: &str,
+        atn: &LexerAtn,
+        dfa: &CompiledLexerDfa,
+    ) -> (Vec<TokenSnapshot>, Vec<String>) {
+        let mut lexer = BaseLexer::new(InputStream::new(input), recognizer_data());
+        let mut tokens = Vec::new();
+        loop {
+            let token = compiled_token(&mut lexer, atn, dfa);
+            let at_eof = token.token_type == TOKEN_EOF;
+            tokens.push(token);
+            if at_eof {
+                break;
+            }
+        }
+        let errors = lexer
+            .drain_errors()
+            .into_iter()
+            .map(|error| error.message)
+            .collect();
+        (tokens, errors)
+    }
+
+    #[test]
+    fn ascii_run_classifies_and_scans_only_exact_self_loops() {
+        let state = 7;
+        let mut row = [state; ASCII_EDGE_SYMBOLS];
+        assert_eq!(AsciiRun::classify(&row, state), AsciiRun::Any);
+        assert_eq!(
+            AsciiRun::Any.scan(b"body"),
+            Some(AsciiRunScan {
+                bytes: 4,
+                found_exit: false,
+            })
+        );
+
+        row[usize::from(b'\n')] = DEAD_STATE;
+        row[usize::from(b'"')] = 3;
+        row[usize::from(b'\\')] = ESCAPE_STATE;
+        let run = AsciiRun::classify(&row, state);
+        assert_eq!(run, AsciiRun::Until3(b'\n', b'"', b'\\'));
+        assert_eq!(
+            run.scan(b"body\\tail"),
+            Some(AsciiRunScan {
+                bytes: 4,
+                found_exit: true,
+            })
+        );
+
+        row[usize::from(b'\r')] = DEAD_STATE;
+        assert_eq!(AsciiRun::classify(&row, state), AsciiRun::None);
+        assert_eq!(AsciiRun::None.scan(b"body"), None);
+    }
+
+    #[test]
+    fn run_scans_match_scalar_compiled_walks_for_random_ascii() {
+        let atn = complement_loop_atn();
+        let accelerated = CompiledLexerDfa::compile(&atn);
+        assert!(
+            accelerated
+                .ascii_runs
+                .iter()
+                .any(|run| matches!(run, AsciiRun::Until3(..)))
+        );
+        let mut scalar = accelerated.clone();
+        for run in &mut scalar.ascii_runs {
+            *run = AsciiRun::None;
+        }
+
+        let mut inputs = vec![
+            "a".repeat(512),
+            format!(
+                "{}\"{}\\{}\n{}",
+                "a".repeat(64),
+                "b".repeat(65),
+                "c".repeat(66),
+                "d".repeat(67)
+            ),
+        ];
+        let mut random = 0xA5A5_79E3_u32;
+        for _ in 0..128 {
+            random = random.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            let len = (random as usize) & 0xFF;
+            let mut input = String::with_capacity(len);
+            for _ in 0..len {
+                random = random.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                input.push(char::from((random >> 25) as u8));
+            }
+            inputs.push(input);
+        }
+
+        for input in inputs {
+            assert_eq!(
+                compiled_stream(&input, &atn, &accelerated),
+                compiled_stream(&input, &atn, &scalar),
+                "compiled walks diverged for {input:?}"
+            );
+        }
     }
 
     #[test]
@@ -1558,6 +1828,26 @@ mod tests {
         assert_eq!(bulk, 0);
     }
 
+    #[cfg(feature = "perf-counters")]
+    #[test]
+    fn lexer_counters_report_compiled_run_scan_coverage() {
+        let atn = complement_loop_atn();
+        let dfa = CompiledLexerDfa::compile(&atn);
+        crate::perf::reset();
+        let input = format!("{}\"", "a".repeat(512));
+        let mut lexer = BaseLexer::new(InputStream::new(input), recognizer_data());
+        let token = compiled_token(&mut lexer, &atn, &dfa);
+        assert_eq!(token.text.len(), 512);
+
+        let [scalar, calls, bytes, exits, ends, rejected] = crate::perf::lexer_run_snapshot();
+        assert_eq!(scalar, 10);
+        assert_eq!(calls, 1);
+        assert_eq!(bytes, 503);
+        assert_eq!(exits, 1);
+        assert_eq!(ends, 0);
+        assert_eq!(rejected, 0);
+    }
+
     #[test]
     fn compiled_dfa_reports_recognition_errors_like_the_interpreter() {
         let atn = wide_range_atn();
@@ -1597,6 +1887,7 @@ mod tests {
             CompiledLexerDfa::from_serialized(&stream).expect("stream should deserialize");
         assert_eq!(restored.serialize(), stream);
         assert_eq!(restored.continuations.len(), dfa.continuations.len());
+        assert_eq!(restored.ascii_runs, dfa.ascii_runs,);
 
         let mut lexer = BaseLexer::new(InputStream::new(" ab"), recognizer_data());
         let token = compiled_token(&mut lexer, &atn, &restored);
@@ -1607,6 +1898,21 @@ mod tests {
         let mut wrong_tag = stream;
         wrong_tag[0] ^= 1;
         assert!(CompiledLexerDfa::from_serialized(&wrong_tag).is_none());
+    }
+
+    #[test]
+    fn serialized_run_descriptors_are_validated_against_ascii_rows() {
+        let dfa = CompiledLexerDfa::compile(&complement_loop_atn());
+        let state = dfa
+            .ascii_runs
+            .iter()
+            .position(|&run| run != AsciiRun::Any)
+            .expect("test grammar should contain a state that is not Any");
+        let mut stream = dfa.serialize();
+        let first_run = 4 + dfa.mode_starts.len() + dfa.states.len() * 4;
+        stream[first_run + state] = AsciiRun::Any.pack();
+
+        assert!(CompiledLexerDfa::from_serialized(&stream).is_none());
     }
 
     #[test]
