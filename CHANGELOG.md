@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.12.0...v0.13.0) (2026-07-19)
+
+
+### Features
+
+* SIMD optimization ([#120](https://github.com/ophi-dev/antlr-rust-runtime/issues/120)) ([c8775c2](https://github.com/ophi-dev/antlr-rust-runtime/commit/c8775c2252d4b263588ed86f752bfa5c849010c9))
+
 ## [0.12.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.11.0...v0.12.0) (2026-07-18)
 
 ### Added

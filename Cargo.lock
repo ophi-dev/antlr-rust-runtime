@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "antlr-rust-runtime"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "memchr",
  "pretty_assertions",
