@@ -110,7 +110,7 @@ impl AsciiRanges {
         Self::new(count, ranges)
     }
 
-    #[inline]
+    #[cfg(test)]
     fn contains(self, byte: u8) -> bool {
         self.as_slice()
             .iter()
@@ -157,9 +157,14 @@ pub(crate) enum AsciiRangeClass {
 
 #[inline]
 pub(super) fn scan_scalar(ranges: AsciiRanges, input: &[u8]) -> usize {
+    let active_ranges = ranges.as_slice();
     input
         .iter()
-        .position(|&byte| !ranges.contains(byte))
+        .position(|&byte| {
+            !active_ranges
+                .iter()
+                .any(|range| byte >= range.low && byte <= range.high)
+        })
         .unwrap_or(input.len())
 }
 

@@ -1842,7 +1842,7 @@ mod tests {
         );
 
         let mut unsupported = [DEAD_STATE; ASCII_EDGE_SYMBOLS];
-        for byte in [b'a', b'c', b'e', b'g', b'i'] {
+        for byte in *b"acegi" {
             unsupported[usize::from(byte)] = state;
         }
         assert_eq!(AsciiRun::classify(&unsupported, state), AsciiRun::None);
