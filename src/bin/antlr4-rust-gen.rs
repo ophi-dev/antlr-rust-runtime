@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use antlr4_runtime::atn::lexer_dfa::CompiledLexerDfa;
 use antlr4_runtime::atn::parser_atn::{
-    ParserAtn, ParserAtnState, ParserTransition, ParserTransitionData,
+    ParserAtn, ParserAtnState, ParserTokenSetKind, ParserTransition, ParserTransitionData,
 };
 use antlr4_runtime::atn::serialized::{AtnDeserializer, SerializedAtn};
 use antlr4_runtime::atn::{AtnStateKind, LexerAction, LexerTransition};
@@ -2573,10 +2573,12 @@ enum GeneratedParserStep {
         follow_state: usize,
     },
     MatchSet {
+        token_set: Option<usize>,
         intervals: Vec<(i32, i32)>,
         follow_state: usize,
     },
     MatchNotSet {
+        token_set: Option<usize>,
         intervals: Vec<(i32, i32)>,
         follow_state: usize,
     },
@@ -4165,6 +4167,7 @@ fn compile_generated_parser_transition(
             stop,
         } => Some((
             Some(GeneratedParserStep::MatchSet {
+                token_set: None,
                 intervals: vec![(start, stop)],
                 follow_state: target,
             }),
@@ -4172,6 +4175,7 @@ fn compile_generated_parser_transition(
         )),
         ParserTransitionData::Set { target, set } => Some((
             Some(GeneratedParserStep::MatchSet {
+                token_set: (set.kind() == ParserTokenSetKind::Dense).then_some(set.index()),
                 intervals: set.ranges().collect(),
                 follow_state: target,
             }),
@@ -4179,6 +4183,7 @@ fn compile_generated_parser_transition(
         )),
         ParserTransitionData::NotSet { target, set } => Some((
             Some(GeneratedParserStep::MatchNotSet {
+                token_set: (set.kind() == ParserTokenSetKind::Dense).then_some(set.index()),
                 intervals: set.ranges().collect(),
                 follow_state: target,
             }),
@@ -4762,15 +4767,24 @@ fn render_generated_step(
             .expect("writing to a string cannot fail");
         }
         GeneratedParserStep::MatchSet {
+            token_set,
             intervals,
             follow_state,
         } => {
-            let intervals = render_i32_ranges(intervals);
-            writeln!(
-                out,
-                "{pad}let __match = self.base.match_set_recovering(&{intervals}, {follow_state}, atn())?;"
-            )
-            .expect("writing to a string cannot fail");
+            if let Some(token_set) = token_set {
+                writeln!(
+                    out,
+                    "{pad}let __match = self.base.match_token_set_recovering(atn().token_set({token_set}).expect(\"generated parser token-set index\"), {follow_state}, atn())?;"
+                )
+                .expect("writing to a string cannot fail");
+            } else {
+                let intervals = render_i32_ranges(intervals);
+                writeln!(
+                    out,
+                    "{pad}let __match = self.base.match_set_recovering(&{intervals}, {follow_state}, atn())?;"
+                )
+                .expect("writing to a string cannot fail");
+            }
             writeln!(out, "{pad}__consumed_eof |= __match.consumed_eof();")
                 .expect("writing to a string cannot fail");
             writeln!(
@@ -4780,15 +4794,24 @@ fn render_generated_step(
             .expect("writing to a string cannot fail");
         }
         GeneratedParserStep::MatchNotSet {
+            token_set,
             intervals,
             follow_state,
         } => {
-            let intervals = render_i32_ranges(intervals);
-            writeln!(
-                out,
-                "{pad}let __match = self.base.match_not_set_recovering(&{intervals}, 1, atn().max_token_type(), {follow_state}, atn())?;"
-            )
-            .expect("writing to a string cannot fail");
+            if let Some(token_set) = token_set {
+                writeln!(
+                    out,
+                    "{pad}let __match = self.base.match_not_token_set_recovering(atn().token_set({token_set}).expect(\"generated parser token-set index\"), 1, atn().max_token_type(), {follow_state}, atn())?;"
+                )
+                .expect("writing to a string cannot fail");
+            } else {
+                let intervals = render_i32_ranges(intervals);
+                writeln!(
+                    out,
+                    "{pad}let __match = self.base.match_not_set_recovering(&{intervals}, 1, atn().max_token_type(), {follow_state}, atn())?;"
+                )
+                .expect("writing to a string cannot fail");
+            }
             writeln!(out, "{pad}__consumed_eof |= __match.consumed_eof();")
                 .expect("writing to a string cannot fail");
             writeln!(
@@ -5533,13 +5556,21 @@ fn leading_lookahead_condition(steps: &[GeneratedParserStep], la_symbol: &str) -
             GeneratedParserStep::MatchToken { token_type, .. } => {
                 return Some(format!("{la_symbol} == {token_type}"));
             }
-            GeneratedParserStep::MatchSet { intervals, .. } => {
-                return Some(intervals_condition(la_symbol, intervals));
+            GeneratedParserStep::MatchSet {
+                token_set,
+                intervals,
+                ..
+            } => {
+                return Some(token_set_condition(la_symbol, *token_set, intervals));
             }
-            GeneratedParserStep::MatchNotSet { intervals, .. } => {
-                let excluded = intervals_condition(la_symbol, intervals);
+            GeneratedParserStep::MatchNotSet {
+                token_set,
+                intervals,
+                ..
+            } => {
+                let excluded = token_set_condition(la_symbol, *token_set, intervals);
                 return Some(format!(
-                    "{la_symbol} != antlr4_runtime::TOKEN_EOF && !({excluded})"
+                    "(1..=atn().max_token_type()).contains(&{la_symbol}) && !({excluded})"
                 ));
             }
             GeneratedParserStep::MatchWildcard { .. } => {
@@ -5552,6 +5583,17 @@ fn leading_lookahead_condition(steps: &[GeneratedParserStep], la_symbol: &str) -
         }
     }
     None
+}
+
+fn token_set_condition(symbol: &str, token_set: Option<usize>, intervals: &[(i32, i32)]) -> String {
+    token_set.map_or_else(
+        || intervals_condition(symbol, intervals),
+        |token_set| {
+            format!(
+                "atn().token_set({token_set}).expect(\"generated parser token-set index\").contains({symbol})"
+            )
+        },
+    )
 }
 
 fn intervals_condition(symbol: &str, intervals: &[(i32, i32)]) -> String {
@@ -11126,6 +11168,31 @@ atn:
 
     fn ms(intervals: Vec<(i32, i32)>, follow_state: usize) -> GeneratedParserStep {
         GeneratedParserStep::MatchSet {
+            token_set: None,
+            intervals,
+            follow_state,
+        }
+    }
+
+    fn mts(
+        token_set: usize,
+        intervals: Vec<(i32, i32)>,
+        follow_state: usize,
+    ) -> GeneratedParserStep {
+        GeneratedParserStep::MatchSet {
+            token_set: Some(token_set),
+            intervals,
+            follow_state,
+        }
+    }
+
+    fn mnts(
+        token_set: usize,
+        intervals: Vec<(i32, i32)>,
+        follow_state: usize,
+    ) -> GeneratedParserStep {
+        GeneratedParserStep::MatchNotSet {
+            token_set: Some(token_set),
             intervals,
             follow_state,
         }
@@ -11133,6 +11200,7 @@ atn:
 
     fn mns(intervals: Vec<(i32, i32)>, follow_state: usize) -> GeneratedParserStep {
         GeneratedParserStep::MatchNotSet {
+            token_set: None,
             intervals,
             follow_state,
         }
@@ -11775,6 +11843,35 @@ atn:
                 }
             ),
             Some((Some(mns(vec![(1, 1)], 9)), 9))
+        );
+
+        let dense_ranges = (1..=256)
+            .step_by(2)
+            .map(|token| (token, token))
+            .collect::<Vec<_>>();
+        let dense_set_atn = transition_atn(|builder| {
+            let set = builder
+                .add_interval_set(dense_ranges.iter().copied())
+                .expect("dense set");
+            ParserTransitionSpec::Set { target: 8, set }
+        });
+        let dense_set_transition = only_transition(&dense_set_atn);
+        assert_eq!(
+            compile_generated_parser_transition(
+                3,
+                &[],
+                dense_set_transition,
+                ActionStateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                    inline: &BTreeSet::new(),
+                },
+                PredicateCoordinateSets {
+                    all: &BTreeSet::new(),
+                    generated: &BTreeSet::new(),
+                }
+            ),
+            Some((Some(mts(0, dense_ranges, 8)), 8))
         );
     }
 
@@ -12635,6 +12732,51 @@ s : ;
         assert!(rendered.contains("__consumed_eof |= __match.consumed_eof();"));
         // The old non-recovering call must be gone.
         assert!(!rendered.contains("self.base.match_wildcard()"));
+    }
+
+    #[test]
+    fn renders_packed_token_sets_for_generated_matches_and_lookahead() {
+        let step = mts(4, vec![(2, 4), (9, 9)], 7);
+        let rule = GeneratedParserRule {
+            rule_index: 0,
+            entry_state: 0,
+            left_recursive: false,
+            steps: vec![step.clone()],
+        };
+
+        let rendered = render_generated_rule_dispatch(&[Some(rule)], &[], &BTreeMap::new(), false);
+
+        assert!(rendered.contains(
+            "match_token_set_recovering(atn().token_set(4).expect(\"generated parser token-set index\"), 7, atn())"
+        ));
+        assert_eq!(
+            leading_lookahead_condition(&[step], "__la"),
+            Some(
+                "atn().token_set(4).expect(\"generated parser token-set index\").contains(__la)"
+                    .to_owned()
+            )
+        );
+
+        let not_step = mnts(5, vec![(3, 6)], 8);
+        let not_rule = GeneratedParserRule {
+            rule_index: 0,
+            entry_state: 0,
+            left_recursive: false,
+            steps: vec![not_step.clone()],
+        };
+        let rendered =
+            render_generated_rule_dispatch(&[Some(not_rule)], &[], &BTreeMap::new(), false);
+
+        assert!(rendered.contains(
+            "match_not_token_set_recovering(atn().token_set(5).expect(\"generated parser token-set index\"), 1, atn().max_token_type(), 8, atn())"
+        ));
+        assert_eq!(
+            leading_lookahead_condition(&[not_step], "__la"),
+            Some(
+                "(1..=atn().max_token_type()).contains(&__la) && !(atn().token_set(5).expect(\"generated parser token-set index\").contains(__la))"
+                    .to_owned()
+            )
+        );
     }
 
     #[test]

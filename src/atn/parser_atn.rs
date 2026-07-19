@@ -13,21 +13,30 @@ use std::borrow::Cow;
 use std::fmt;
 use std::iter::FusedIterator;
 
-#[cfg(test)]
 use crate::token::TOKEN_EOF;
 
 use super::AtnStateKind;
 
 const PARSER_ATN_MAGIC: u32 = 0x5041_544e;
-const PARSER_ATN_FORMAT_VERSION: u32 = 1;
+const PARSER_ATN_FORMAT_VERSION: u32 = 2;
 const PARSER_ATN_MIN_FORMAT_VERSION: u32 = 1;
-const PARSER_ATN_MAX_FORMAT_VERSION: u32 = 1;
+const PARSER_ATN_MAX_FORMAT_VERSION: u32 = 2;
 const PARSER_ATN_BYTE_ORDER: u32 = 0x0102_0304;
 
-const HEADER_WORDS: usize = 26;
+const LEGACY_HEADER_WORDS: usize = 26;
+const HEADER_WORDS: usize = 29;
 const STATE_WORDS: usize = 7;
 const TRANSITION_WORDS: usize = 5;
-const SET_WORDS: usize = 2;
+const LEGACY_SET_WORDS: usize = 2;
+const SET_WORDS: usize = 5;
+const PACKED_U64_WORDS: usize = 2;
+
+const INLINE_TOKEN_SET_WORDS: usize = 2;
+const INLINE_TOKEN_SET_MAX_SLOT: usize = INLINE_TOKEN_SET_WORDS * u64::BITS as usize - 1;
+const MAX_DENSE_TOKEN_SET_BYTES: usize = 64 * 1024;
+const MAX_DENSE_TOKEN_SET_WORDS: usize = MAX_DENSE_TOKEN_SET_BYTES / size_of::<u64>();
+const DENSE_TOKEN_SET_COST_MULTIPLIER: usize = 2;
+const DENSE_TOKEN_SET_MIN_DENSITY_DENOMINATOR: u64 = 8;
 
 const NO_INDEX: u32 = u32::MAX;
 
@@ -65,6 +74,8 @@ const HEADER_DECISIONS_OFFSET: usize = 19;
 const HEADER_RULE_STARTS_OFFSET: usize = 21;
 const HEADER_RULE_STOPS_OFFSET: usize = 23;
 const HEADER_TOTAL_LEN: usize = 25;
+const HEADER_TOKEN_BIT_WORD_COUNT: usize = 26;
+const HEADER_TOKEN_BITS_OFFSET: usize = 27;
 
 /// Checked compact identity for one parser ATN state.
 #[repr(transparent)]
@@ -131,6 +142,18 @@ impl TryFrom<usize> for ParserIntervalSetId {
     }
 }
 
+/// Membership representation selected for one immutable parser token set.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u32)]
+pub enum ParserTokenSetKind {
+    /// Sorted, coalesced inclusive ranges searched by interval boundary.
+    Intervals = 0,
+    /// Two packed words covering EOF and token types `1..=127`.
+    Inline128 = 1,
+    /// A bounded packed word slice for a larger, cost-effective token domain.
+    Dense = 2,
+}
+
 /// Failure while reading, validating, or constructing packed parser ATN data.
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum ParserAtnError {
@@ -156,6 +179,10 @@ pub struct ParserAtnStats {
     pub transitions: usize,
     pub interval_sets: usize,
     pub interval_ranges: usize,
+    pub inline_token_sets: usize,
+    pub dense_token_sets: usize,
+    pub interval_token_sets: usize,
+    pub token_bitset_bytes: usize,
     pub decisions: usize,
     pub rules: usize,
     pub packed_bytes: usize,
@@ -206,11 +233,14 @@ impl ParserAtn {
     /// Validates and borrows generator-emitted packed data without allocating.
     pub fn from_static(words: &'static [u32]) -> Result<Self, ParserAtnError> {
         let layout = validate_packed(words)?;
-        Ok(Self {
+        let atn = Self {
             words: Cow::Borrowed(words),
             words_address: words.as_ptr() as usize,
             layout,
-        })
+        };
+        #[cfg(feature = "perf-counters")]
+        atn.record_token_set_inventory();
+        Ok(atn)
     }
 
     /// Validates one owned packed stream.
@@ -218,11 +248,14 @@ impl ParserAtn {
         let layout = validate_packed(&words)?;
         let words: Cow<'static, [u32]> = Cow::Owned(words);
         let words_address = words.as_ptr() as usize;
-        Ok(Self {
+        let atn = Self {
             words,
             words_address,
             layout,
-        })
+        };
+        #[cfg(feature = "perf-counters")]
+        atn.record_token_set_inventory();
+        Ok(atn)
     }
 
     /// Canonical generator/runtime format version carried by this ATN.
@@ -292,21 +325,51 @@ impl ParserAtn {
         &self.words
     }
 
+    /// Returns one immutable parser token set by its packed metadata index.
+    ///
+    /// Generated rule bodies use this to share the same adaptive membership
+    /// representation as ATN prediction instead of embedding a second set.
+    #[inline(always)]
+    pub fn token_set(&self, index: usize) -> Option<ParserIntervalSet<'_>> {
+        (index < self.set_count()).then(|| self.interval_set(ParserIntervalSetId(index as u32)))
+    }
+
     /// Stable backing-storage address used by thread-local grammar caches.
     pub(crate) fn storage_identity(&self) -> (usize, usize) {
         (self.words.as_ptr() as usize, self.words.len())
     }
 
     pub fn stats(&self) -> ParserAtnStats {
+        let mut inline_token_sets = 0;
+        let mut dense_token_sets = 0;
+        let mut interval_token_sets = 0;
+        let mut token_bitset_bytes = 0;
+        for index in 0..self.set_count() {
+            let set = self.interval_set(ParserIntervalSetId(index as u32));
+            match set.kind() {
+                ParserTokenSetKind::Inline128 => inline_token_sets += 1,
+                ParserTokenSetKind::Dense => dense_token_sets += 1,
+                ParserTokenSetKind::Intervals => interval_token_sets += 1,
+            }
+            token_bitset_bytes += set.bit_len * size_of::<u64>();
+        }
         ParserAtnStats {
             states: self.state_count(),
             transitions: self.transition_count(),
-            interval_sets: self.layout.sets.len / SET_WORDS,
+            interval_sets: self.set_count(),
             interval_ranges: self.layout.intervals.len / 2,
+            inline_token_sets,
+            dense_token_sets,
+            interval_token_sets,
+            token_bitset_bytes,
             decisions: self.decision_count(),
             rules: self.rule_count(),
             packed_bytes: self.words.len() * size_of::<u32>(),
         }
+    }
+
+    const fn set_count(&self) -> usize {
+        self.layout.sets.len / self.layout.set_words
     }
 
     #[inline(always)]
@@ -316,12 +379,44 @@ impl ParserAtn {
 
     #[inline(always)]
     fn interval_set(&self, id: ParserIntervalSetId) -> ParserIntervalSet<'_> {
-        let start = self.word(self.layout.sets, id.index(), 0, SET_WORDS) as usize;
-        let len = self.word(self.layout.sets, id.index(), 1, SET_WORDS) as usize;
+        let width = self.layout.set_words;
+        let start = self.word(self.layout.sets, id.index(), 0, width) as usize;
+        let len = self.word(self.layout.sets, id.index(), 1, width) as usize;
+        let (kind, bit_start, bit_len) = if self.layout.format_version == 1 {
+            (ParserTokenSetKind::Intervals, 0, 0)
+        } else {
+            (
+                decode_token_set_kind(self.word(self.layout.sets, id.index(), 2, width))
+                    .expect("packed parser token-set kind was validated"),
+                self.word(self.layout.sets, id.index(), 3, width) as usize,
+                self.word(self.layout.sets, id.index(), 4, width) as usize,
+            )
+        };
         ParserIntervalSet {
             atn: self,
+            id,
             start,
             len,
+            kind,
+            bit_start,
+            bit_len,
+        }
+    }
+
+    #[inline(always)]
+    fn token_bit_word(&self, index: usize) -> u64 {
+        let offset = self.layout.token_bits.offset + index * PACKED_U64_WORDS;
+        u64::from(self.packed_word(offset)) | (u64::from(self.packed_word(offset + 1)) << u32::BITS)
+    }
+
+    #[cfg(feature = "perf-counters")]
+    fn record_token_set_inventory(&self) {
+        for index in 0..self.set_count() {
+            let set = self.interval_set(ParserIntervalSetId(index as u32));
+            crate::perf::record_parser_token_set_selection(
+                set.kind(),
+                set.bit_len * size_of::<u64>(),
+            );
         }
     }
 
@@ -854,8 +949,12 @@ impl ParserTransitionData<'_> {
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub struct ParserIntervalSet<'a> {
     atn: &'a ParserAtn,
+    id: ParserIntervalSetId,
     start: usize,
     len: usize,
+    kind: ParserTokenSetKind,
+    bit_start: usize,
+    bit_len: usize,
 }
 
 impl fmt::Debug for ParserIntervalSet<'_> {
@@ -865,12 +964,47 @@ impl fmt::Debug for ParserIntervalSet<'_> {
 }
 
 impl<'a> ParserIntervalSet<'a> {
+    /// Stable index of this set in the packed parser metadata.
+    pub const fn index(self) -> usize {
+        self.id.index()
+    }
+
+    /// Membership representation selected when the packed ATN was built.
+    pub const fn kind(self) -> ParserTokenSetKind {
+        self.kind
+    }
+
     pub const fn is_empty(self) -> bool {
         self.len == 0
     }
 
     #[inline(always)]
     pub fn contains(self, value: i32) -> bool {
+        let hit = match self.kind {
+            ParserTokenSetKind::Inline128 | ParserTokenSetKind::Dense => {
+                self.contains_bitset(value)
+            }
+            ParserTokenSetKind::Intervals => self.contains_intervals(value),
+        };
+        #[cfg(feature = "perf-counters")]
+        crate::perf::record_parser_token_set_probe(self.kind, hit);
+        hit
+    }
+
+    #[inline(always)]
+    fn contains_bitset(self, value: i32) -> bool {
+        let Some(slot) = token_set_slot(value) else {
+            return false;
+        };
+        let word = slot / u64::BITS as usize;
+        word < self.bit_len
+            && self.atn.token_bit_word(self.bit_start + word)
+                & (1_u64 << (slot % u64::BITS as usize))
+                != 0
+    }
+
+    #[inline(always)]
+    fn contains_intervals(self, value: i32) -> bool {
         let mut low = 0;
         let mut high = self.len;
         while low < high {
@@ -1048,8 +1182,9 @@ pub struct ParserAtnBuilder {
     max_token_type: i32,
     states: Vec<StateBuild>,
     transitions: Vec<TransitionBuild>,
-    interval_sets: Vec<(u32, u32)>,
+    interval_sets: Vec<TokenSetBuild>,
     interval_ranges: Vec<(i32, i32)>,
+    token_bit_words: Vec<u64>,
     decisions: Vec<AtnStateId>,
     rule_starts: Vec<AtnStateId>,
     rule_stops: Vec<AtnStateId>,
@@ -1063,6 +1198,7 @@ impl ParserAtnBuilder {
             transitions: Vec::new(),
             interval_sets: Vec::new(),
             interval_ranges: Vec::new(),
+            token_bit_words: Vec::new(),
             decisions: Vec::new(),
             rule_starts: Vec::new(),
             rule_stops: Vec::new(),
@@ -1122,11 +1258,21 @@ impl ParserAtnBuilder {
         ranges: impl IntoIterator<Item = (i32, i32)>,
     ) -> Result<ParserIntervalSetId, ParserAtnError> {
         let id = ParserIntervalSetId::try_from(self.interval_sets.len())?;
-        let start = compact_id("parser ATN interval start", self.interval_ranges.len())?;
         let normalized = normalize_ranges(ranges);
-        let len = compact_id("parser ATN interval count", normalized.len())?;
+        let interval_start = compact_id("parser ATN interval start", self.interval_ranges.len())?;
+        let interval_len = compact_id("parser ATN interval count", normalized.len())?;
+        let prepared = prepare_token_set(&normalized);
+        let bit_start = compact_id("parser token-set bit start", self.token_bit_words.len())?;
+        let bit_len = compact_id("parser token-set bit count", prepared.words.len())?;
         self.interval_ranges.extend(normalized);
-        self.interval_sets.push((start, len));
+        self.token_bit_words.extend(prepared.words);
+        self.interval_sets.push(TokenSetBuild {
+            interval_start,
+            interval_len,
+            kind: prepared.kind,
+            bit_start,
+            bit_len,
+        });
         Ok(id)
     }
 
@@ -1392,6 +1538,7 @@ impl ParserAtnBuilder {
         self.encode_transitions(&mut words, layout.transitions);
         self.encode_sets(&mut words, layout.sets);
         self.encode_intervals(&mut words, layout.intervals);
+        self.encode_token_bits(&mut words, layout.token_bits);
         encode_ids(&mut words, layout.decisions, &self.decisions);
         encode_ids(&mut words, layout.rule_starts, &self.rule_starts);
         encode_ids(&mut words, layout.rule_stops, &self.rule_stops);
@@ -1422,6 +1569,11 @@ impl ParserAtnBuilder {
         write_section(words, HEADER_TRANSITIONS_OFFSET, layout.transitions)?;
         write_section(words, HEADER_SETS_OFFSET, layout.sets)?;
         write_section(words, HEADER_INTERVALS_OFFSET, layout.intervals)?;
+        words[HEADER_TOKEN_BIT_WORD_COUNT] = compact_id(
+            "parser token-set bit word count",
+            self.token_bit_words.len(),
+        )?;
+        write_section(words, HEADER_TOKEN_BITS_OFFSET, layout.token_bits)?;
         write_section(words, HEADER_DECISIONS_OFFSET, layout.decisions)?;
         write_section(words, HEADER_RULE_STARTS_OFFSET, layout.rule_starts)?;
         write_section(words, HEADER_RULE_STOPS_OFFSET, layout.rule_stops)?;
@@ -1455,10 +1607,13 @@ impl ParserAtnBuilder {
     }
 
     fn encode_sets(&self, words: &mut [u32], section: Section) {
-        for (index, &(start, len)) in self.interval_sets.iter().enumerate() {
+        for (index, set) in self.interval_sets.iter().enumerate() {
             let base = section.offset + index * SET_WORDS;
-            words[base] = start;
-            words[base + 1] = len;
+            words[base] = set.interval_start;
+            words[base + 1] = set.interval_len;
+            words[base + 2] = set.kind as u32;
+            words[base + 3] = set.bit_start;
+            words[base + 4] = set.bit_len;
         }
     }
 
@@ -1467,6 +1622,14 @@ impl ParserAtnBuilder {
             let base = section.offset + index * 2;
             words[base] = pack_i32(start);
             words[base + 1] = pack_i32(stop);
+        }
+    }
+
+    fn encode_token_bits(&self, words: &mut [u32], section: Section) {
+        for (index, &bits) in self.token_bit_words.iter().enumerate() {
+            let base = section.offset + index * PACKED_U64_WORDS;
+            words[base] = bits as u32;
+            words[base + 1] = (bits >> u32::BITS) as u32;
         }
     }
 }
@@ -1540,13 +1703,16 @@ impl ParserTransitionSpec {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct ParserAtnLayout {
+    format_version: u32,
     max_token_type: i32,
     state_count: usize,
     transition_count: usize,
+    set_words: usize,
     states: Section,
     transitions: Section,
     sets: Section,
     intervals: Section,
+    token_bits: Section,
     decisions: Section,
     rule_starts: Section,
     rule_stops: Section,
@@ -1564,6 +1730,7 @@ struct EncodedLayout {
     transitions: Section,
     sets: Section,
     intervals: Section,
+    token_bits: Section,
     decisions: Section,
     rule_starts: Section,
     rule_stops: Section,
@@ -1592,6 +1759,12 @@ impl EncodedLayout {
             2,
             "interval ranges",
         )?;
+        let token_bits = next_section(
+            &mut cursor,
+            builder.token_bit_words.len(),
+            PACKED_U64_WORDS,
+            "token-set bits",
+        )?;
         let decisions = next_section(&mut cursor, builder.decisions.len(), 1, "decisions")?;
         let rule_starts = next_section(&mut cursor, builder.rule_starts.len(), 1, "rule starts")?;
         let rule_stops = next_section(&mut cursor, builder.rule_stops.len(), 1, "rule stops")?;
@@ -1601,6 +1774,7 @@ impl EncodedLayout {
             transitions,
             sets,
             intervals,
+            token_bits,
             decisions,
             rule_starts,
             rule_stops,
@@ -1616,6 +1790,21 @@ struct StateBuild {
     flags: u32,
     end_state: u32,
     loop_back_state: u32,
+}
+
+#[derive(Clone, Debug)]
+struct TokenSetBuild {
+    interval_start: u32,
+    interval_len: u32,
+    kind: ParserTokenSetKind,
+    bit_start: u32,
+    bit_len: u32,
+}
+
+#[derive(Debug)]
+struct PreparedTokenSet {
+    kind: ParserTokenSetKind,
+    words: Vec<u64>,
 }
 
 #[derive(Clone, Debug)]
@@ -1710,9 +1899,9 @@ fn validate_packed(words: &[u32]) -> Result<ParserAtnLayout, ParserAtnError> {
 }
 
 fn validate_header(words: &[u32]) -> Result<(), ParserAtnError> {
-    if words.len() < HEADER_WORDS {
+    if words.len() < LEGACY_HEADER_WORDS {
         return Err(ParserAtnError::InvalidData(format!(
-            "header has {} words; expected at least {HEADER_WORDS}",
+            "header has {} words; expected at least {LEGACY_HEADER_WORDS}",
             words.len()
         )));
     }
@@ -1730,16 +1919,27 @@ fn validate_header(words: &[u32]) -> Result<(), ParserAtnError> {
             maximum: PARSER_ATN_MAX_FORMAT_VERSION,
         });
     }
+    let header_words = if version == 1 {
+        LEGACY_HEADER_WORDS
+    } else {
+        HEADER_WORDS
+    };
+    if words.len() < header_words {
+        return Err(ParserAtnError::InvalidData(format!(
+            "format {version} header has {} words; expected at least {header_words}",
+            words.len()
+        )));
+    }
     if words[HEADER_BYTE_ORDER] != PARSER_ATN_BYTE_ORDER {
         return Err(ParserAtnError::InvalidData(format!(
             "byte-order marker 0x{:08x}; expected 0x{PARSER_ATN_BYTE_ORDER:08x}",
             words[HEADER_BYTE_ORDER]
         )));
     }
-    if words[HEADER_SIZE] as usize != HEADER_WORDS {
+    if words[HEADER_SIZE] as usize != header_words {
         return Err(ParserAtnError::InvalidData(format!(
-            "header length {}; expected {HEADER_WORDS}",
-            words[HEADER_SIZE]
+            "format {version} header length {}; expected {header_words}",
+            words[HEADER_SIZE],
         )));
     }
     if words[HEADER_TOTAL_LEN] as usize != words.len() {
@@ -1753,10 +1953,24 @@ fn validate_header(words: &[u32]) -> Result<(), ParserAtnError> {
 }
 
 fn read_layout(words: &[u32]) -> Result<ParserAtnLayout, ParserAtnError> {
+    let format_version = words[HEADER_VERSION];
+    let set_words = if format_version == 1 {
+        LEGACY_SET_WORDS
+    } else {
+        SET_WORDS
+    };
     let states = read_section(words, HEADER_STATES_OFFSET)?;
     let transitions = read_section(words, HEADER_TRANSITIONS_OFFSET)?;
     let sets = read_section(words, HEADER_SETS_OFFSET)?;
     let intervals = read_section(words, HEADER_INTERVALS_OFFSET)?;
+    let token_bits = if format_version == 1 {
+        Section {
+            offset: intervals.offset + intervals.len,
+            len: 0,
+        }
+    } else {
+        read_section(words, HEADER_TOKEN_BITS_OFFSET)?
+    };
     let decisions = read_section(words, HEADER_DECISIONS_OFFSET)?;
     let rule_starts = read_section(words, HEADER_RULE_STARTS_OFFSET)?;
     let rule_stops = read_section(words, HEADER_RULE_STOPS_OFFSET)?;
@@ -1773,7 +1987,7 @@ fn read_layout(words: &[u32]) -> Result<ParserAtnLayout, ParserAtnError> {
         "interval sets",
         sets,
         words[HEADER_SET_COUNT] as usize,
-        SET_WORDS,
+        set_words,
     )?;
     expect_section_len(
         "intervals",
@@ -1781,6 +1995,14 @@ fn read_layout(words: &[u32]) -> Result<ParserAtnLayout, ParserAtnError> {
         words[HEADER_INTERVAL_COUNT] as usize,
         2,
     )?;
+    if format_version != 1 {
+        expect_section_len(
+            "token-set bits",
+            token_bits,
+            words[HEADER_TOKEN_BIT_WORD_COUNT] as usize,
+            PACKED_U64_WORDS,
+        )?;
+    }
     expect_section_len(
         "decisions",
         decisions,
@@ -1800,13 +2022,16 @@ fn read_layout(words: &[u32]) -> Result<ParserAtnLayout, ParserAtnError> {
         1,
     )?;
     Ok(ParserAtnLayout {
+        format_version,
         max_token_type: unpack_i32(words[HEADER_MAX_TOKEN_TYPE]),
         state_count,
         transition_count,
+        set_words,
         states,
         transitions,
         sets,
         intervals,
+        token_bits,
         decisions,
         rule_starts,
         rule_stops,
@@ -1819,11 +2044,16 @@ fn validate_sections(words: &[u32], layout: ParserAtnLayout) -> Result<(), Parse
         ("transitions", layout.transitions),
         ("sets", layout.sets),
         ("intervals", layout.intervals),
+        ("token-set bits", layout.token_bits),
         ("decisions", layout.decisions),
         ("rule starts", layout.rule_starts),
         ("rule stops", layout.rule_stops),
     ];
-    let mut expected_offset = HEADER_WORDS;
+    let mut expected_offset = if layout.format_version == 1 {
+        LEGACY_HEADER_WORDS
+    } else {
+        HEADER_WORDS
+    };
     for (name, section) in sections {
         if section.offset != expected_offset {
             return Err(ParserAtnError::InvalidData(format!(
@@ -1896,7 +2126,11 @@ fn validate_transitions(words: &[u32], layout: ParserAtnLayout) -> Result<(), Pa
                 }
             }
             ParserTransitionKind::Set | ParserTransitionKind::NotSet => {
-                validate_index(words[base + 2], layout.sets.len / SET_WORDS, "interval set")?;
+                validate_index(
+                    words[base + 2],
+                    layout.sets.len / layout.set_words,
+                    "interval set",
+                )?;
             }
             ParserTransitionKind::Rule => {
                 validate_index(words[base + 2], layout.rule_starts.len, "rule index")?;
@@ -1952,8 +2186,10 @@ fn validate_state_flags(words: &[u32], layout: ParserAtnLayout) -> Result<(), Pa
 }
 
 fn validate_sets(words: &[u32], layout: ParserAtnLayout) -> Result<(), ParserAtnError> {
-    for set in 0..layout.sets.len / SET_WORDS {
-        let base = layout.sets.offset + set * SET_WORDS;
+    let set_count = layout.sets.len / layout.set_words;
+    let mut bit_cursor = 0;
+    for set in 0..set_count {
+        let base = layout.sets.offset + set * layout.set_words;
         validate_range(
             words[base],
             words[base + 1],
@@ -1979,6 +2215,63 @@ fn validate_sets(words: &[u32], layout: ParserAtnLayout) -> Result<(), ParserAtn
             }
             previous_stop = Some(range_stop);
         }
+        if layout.format_version == 1 {
+            continue;
+        }
+        let kind = decode_token_set_kind(words[base + 2])?;
+        let bit_start = words[base + 3];
+        let bit_len = words[base + 4];
+        if bit_start as usize != bit_cursor {
+            return Err(ParserAtnError::InvalidData(format!(
+                "parser token set {set} bit range starts at {bit_start}, expected {bit_cursor}"
+            )));
+        }
+        validate_range(
+            bit_start,
+            bit_len,
+            layout.token_bits.len / PACKED_U64_WORDS,
+            "parser token-set bits",
+        )?;
+        let (expected_kind, expected_bit_len) =
+            token_set_shape((start..start + len).map(|interval| {
+                let interval_base = layout.intervals.offset + interval * 2;
+                (
+                    unpack_i32(words[interval_base]),
+                    unpack_i32(words[interval_base + 1]),
+                )
+            }));
+        if kind != expected_kind || bit_len as usize != expected_bit_len {
+            return Err(ParserAtnError::InvalidData(format!(
+                "parser token set {set} uses {kind:?} with {bit_len} words; \
+                 expected {expected_kind:?} with {expected_bit_len} words"
+            )));
+        }
+        for bit_word in 0..expected_bit_len {
+            let expected = expected_token_set_word(
+                (start..start + len).map(|interval| {
+                    let interval_base = layout.intervals.offset + interval * 2;
+                    (
+                        unpack_i32(words[interval_base]),
+                        unpack_i32(words[interval_base + 1]),
+                    )
+                }),
+                bit_word,
+            );
+            let actual = packed_u64(words, layout.token_bits, bit_cursor + bit_word);
+            if actual != expected {
+                return Err(ParserAtnError::InvalidData(format!(
+                    "parser token set {set} bit word {bit_word} is 0x{actual:016x}; \
+                     expected 0x{expected:016x}"
+                )));
+            }
+        }
+        bit_cursor += expected_bit_len;
+    }
+    if layout.format_version != 1 && bit_cursor != layout.token_bits.len / PACKED_U64_WORDS {
+        return Err(ParserAtnError::InvalidData(format!(
+            "parser token sets cover {bit_cursor} bit words; expected {}",
+            layout.token_bits.len / PACKED_U64_WORDS
+        )));
     }
     Ok(())
 }
@@ -2041,6 +2334,17 @@ fn decode_transition_kind(value: u32) -> Result<ParserTransitionKind, ParserAtnE
         }
     };
     Ok(kind)
+}
+
+fn decode_token_set_kind(value: u32) -> Result<ParserTokenSetKind, ParserAtnError> {
+    match value {
+        0 => Ok(ParserTokenSetKind::Intervals),
+        1 => Ok(ParserTokenSetKind::Inline128),
+        2 => Ok(ParserTokenSetKind::Dense),
+        other => Err(ParserAtnError::InvalidData(format!(
+            "parser token-set kind {other}"
+        ))),
+    }
 }
 
 const fn state_kind_word(kind: AtnStateKind) -> u32 {
@@ -2117,6 +2421,132 @@ fn normalize_ranges(ranges: impl IntoIterator<Item = (i32, i32)>) -> Vec<(i32, i
         normalized.push((start, stop));
     }
     normalized
+}
+
+/// Selects token-set storage without allocating from an unchecked maximum.
+///
+/// Every compatible set at or below token slot 127 uses two inline words.
+/// Larger sets use dense words only when the payload is at most 64 KiB and
+/// either no larger than interval storage, or at most twice that storage while
+/// covering at least one eighth of the indexed domain. Sparse, malformed, and
+/// very large domains retain normalized interval lookup.
+fn token_set_shape(ranges: impl IntoIterator<Item = (i32, i32)>) -> (ParserTokenSetKind, usize) {
+    let mut compatible = true;
+    let mut max_slot = 0;
+    let mut represented = 0_u64;
+    let mut range_count = 0_usize;
+    for (start, stop) in ranges {
+        range_count += 1;
+        represented = represented.saturating_add(
+            u64::try_from(i64::from(stop) - i64::from(start) + 1).unwrap_or(u64::MAX),
+        );
+        if start == TOKEN_EOF && stop == TOKEN_EOF {
+            continue;
+        }
+        if start < 1 {
+            compatible = false;
+            continue;
+        }
+        let stop = usize::try_from(stop).expect("positive i32 token type fits usize");
+        max_slot = max_slot.max(stop);
+    }
+    if !compatible {
+        return (ParserTokenSetKind::Intervals, 0);
+    }
+    if max_slot <= INLINE_TOKEN_SET_MAX_SLOT {
+        return (ParserTokenSetKind::Inline128, INLINE_TOKEN_SET_WORDS);
+    }
+    let word_len = max_slot / u64::BITS as usize + 1;
+    let Some(dense_bytes) = word_len.checked_mul(size_of::<u64>()) else {
+        return (ParserTokenSetKind::Intervals, 0);
+    };
+    let interval_bytes = range_count.saturating_mul(size_of::<(i32, i32)>());
+    let dense_enough = represented.saturating_mul(DENSE_TOKEN_SET_MIN_DENSITY_DENOMINATOR)
+        >= u64::try_from(max_slot)
+            .unwrap_or(u64::MAX)
+            .saturating_add(1);
+    let cost_effective = dense_bytes <= interval_bytes
+        || (dense_bytes <= interval_bytes.saturating_mul(DENSE_TOKEN_SET_COST_MULTIPLIER)
+            && dense_enough);
+    if word_len <= MAX_DENSE_TOKEN_SET_WORDS && cost_effective {
+        (ParserTokenSetKind::Dense, word_len)
+    } else {
+        (ParserTokenSetKind::Intervals, 0)
+    }
+}
+
+fn prepare_token_set(ranges: &[(i32, i32)]) -> PreparedTokenSet {
+    let (kind, word_len) = token_set_shape(ranges.iter().copied());
+    let mut words = vec![0; word_len];
+    for &(start, stop) in ranges {
+        insert_token_set_range(&mut words, start, stop);
+    }
+    PreparedTokenSet { kind, words }
+}
+
+fn insert_token_set_range(words: &mut [u64], start: i32, stop: i32) {
+    if words.is_empty() {
+        return;
+    }
+    if start == TOKEN_EOF && stop == TOKEN_EOF {
+        words[0] |= 1;
+        return;
+    }
+    debug_assert!(start >= 1 && stop >= start);
+    let start = usize::try_from(start).expect("positive i32 token type fits usize");
+    let stop = usize::try_from(stop).expect("positive i32 token type fits usize");
+    let start_word = start / u64::BITS as usize;
+    let stop_word = stop / u64::BITS as usize;
+    if start_word == stop_word {
+        words[start_word] |= token_word_mask(start % u64::BITS as usize, stop % u64::BITS as usize);
+        return;
+    }
+    words[start_word] |= !0_u64 << (start % u64::BITS as usize);
+    words[(start_word + 1)..stop_word].fill(!0);
+    words[stop_word] |= !0_u64 >> (u64::BITS as usize - 1 - stop % u64::BITS as usize);
+}
+
+fn expected_token_set_word(ranges: impl IntoIterator<Item = (i32, i32)>, word_index: usize) -> u64 {
+    let word_start = word_index * u64::BITS as usize;
+    let word_stop = word_start + u64::BITS as usize - 1;
+    let mut expected = 0;
+    for (start, stop) in ranges {
+        if start == TOKEN_EOF && stop == TOKEN_EOF {
+            if word_index == 0 {
+                expected |= 1;
+            }
+            continue;
+        }
+        let start = usize::try_from(start).expect("positive i32 token type fits usize");
+        let stop = usize::try_from(stop).expect("positive i32 token type fits usize");
+        if stop < word_start || start > word_stop {
+            continue;
+        }
+        expected |= token_word_mask(
+            start.max(word_start) - word_start,
+            stop.min(word_stop) - word_start,
+        );
+    }
+    expected
+}
+
+const fn token_word_mask(start: usize, stop: usize) -> u64 {
+    (!0_u64 << start) & (!0_u64 >> (u64::BITS as usize - 1 - stop))
+}
+
+fn packed_u64(words: &[u32], section: Section, index: usize) -> u64 {
+    let offset = section.offset + index * PACKED_U64_WORDS;
+    u64::from(words[offset]) | (u64::from(words[offset + 1]) << u32::BITS)
+}
+
+fn token_set_slot(value: i32) -> Option<usize> {
+    if value == TOKEN_EOF {
+        Some(0)
+    } else if value > 0 {
+        usize::try_from(value).ok()
+    } else {
+        None
+    }
 }
 
 fn next_section(
@@ -2263,6 +2693,78 @@ mod tests {
         builder.finish().expect("packed parser ATN")
     }
 
+    fn token_set_atn(max_token_type: i32, ranges: &[(i32, i32)]) -> ParserAtn {
+        let mut builder = ParserAtnBuilder::new(max_token_type);
+        builder
+            .add_interval_set(ranges.iter().copied())
+            .expect("token set");
+        builder.finish().expect("packed parser ATN")
+    }
+
+    fn legacy_words(atn: &ParserAtn) -> Vec<u32> {
+        let source = atn.packed_words();
+        let source_layout = atn.layout;
+        let set_count = source_layout.sets.len / source_layout.set_words;
+        let mut cursor = LEGACY_HEADER_WORDS;
+        let states = next_section(
+            &mut cursor,
+            source_layout.state_count,
+            STATE_WORDS,
+            "states",
+        )
+        .expect("legacy states");
+        let transitions = next_section(
+            &mut cursor,
+            source_layout.transition_count,
+            TRANSITION_WORDS,
+            "transitions",
+        )
+        .expect("legacy transitions");
+        let sets =
+            next_section(&mut cursor, set_count, LEGACY_SET_WORDS, "sets").expect("legacy sets");
+        let intervals = next_section(&mut cursor, source_layout.intervals.len / 2, 2, "intervals")
+            .expect("legacy intervals");
+        let decisions = next_section(&mut cursor, source_layout.decisions.len, 1, "decisions")
+            .expect("legacy decisions");
+        let rule_starts =
+            next_section(&mut cursor, source_layout.rule_starts.len, 1, "rule starts")
+                .expect("legacy rule starts");
+        let rule_stops = next_section(&mut cursor, source_layout.rule_stops.len, 1, "rule stops")
+            .expect("legacy rule stops");
+        let mut words = vec![0; cursor];
+        words[..=HEADER_RULE_COUNT].copy_from_slice(&source[..=HEADER_RULE_COUNT]);
+        words[HEADER_VERSION] = 1;
+        words[HEADER_SIZE] = LEGACY_HEADER_WORDS as u32;
+        write_section(&mut words, HEADER_STATES_OFFSET, states).expect("states header");
+        write_section(&mut words, HEADER_TRANSITIONS_OFFSET, transitions)
+            .expect("transitions header");
+        write_section(&mut words, HEADER_SETS_OFFSET, sets).expect("sets header");
+        write_section(&mut words, HEADER_INTERVALS_OFFSET, intervals).expect("intervals header");
+        write_section(&mut words, HEADER_DECISIONS_OFFSET, decisions).expect("decisions header");
+        write_section(&mut words, HEADER_RULE_STARTS_OFFSET, rule_starts)
+            .expect("rule starts header");
+        write_section(&mut words, HEADER_RULE_STOPS_OFFSET, rule_stops).expect("rule stops header");
+        words[HEADER_TOTAL_LEN] = cursor as u32;
+        for (target, section) in [
+            (states, source_layout.states),
+            (transitions, source_layout.transitions),
+            (intervals, source_layout.intervals),
+            (decisions, source_layout.decisions),
+            (rule_starts, source_layout.rule_starts),
+            (rule_stops, source_layout.rule_stops),
+        ] {
+            words[target.offset..target.offset + target.len]
+                .copy_from_slice(&source[section.offset..section.offset + section.len]);
+        }
+        for set in 0..set_count {
+            let source_base = source_layout.sets.offset + set * source_layout.set_words;
+            let target_base = sets.offset + set * LEGACY_SET_WORDS;
+            words[target_base..target_base + LEGACY_SET_WORDS]
+                .copy_from_slice(&source[source_base..source_base + LEGACY_SET_WORDS]);
+        }
+        words
+    }
+
     #[test]
     fn packed_views_preserve_state_and_transition_semantics() {
         let atn = sample_atn();
@@ -2295,11 +2797,147 @@ mod tests {
         assert_eq!(
             ParserAtn::from_owned(wrong_version),
             Err(ParserAtnError::UnsupportedVersion {
-                found: 2,
+                found: 3,
                 minimum: 1,
-                maximum: 1,
+                maximum: 2,
             })
         );
+    }
+
+    #[test]
+    fn legacy_interval_format_remains_readable() {
+        let current = token_set_atn(200, &[(TOKEN_EOF, TOKEN_EOF), (2, 8), (150, 150)]);
+        let legacy = ParserAtn::from_owned(legacy_words(&current)).expect("legacy packed ATN");
+        let set = legacy.token_set(0).expect("legacy token set");
+
+        assert_eq!(legacy.format_version(), 1);
+        assert_eq!(set.kind(), ParserTokenSetKind::Intervals);
+        assert_eq!(
+            set.ranges().collect::<Vec<_>>(),
+            [(TOKEN_EOF, TOKEN_EOF), (2, 8), (150, 150)]
+        );
+        assert!(set.contains(TOKEN_EOF));
+        assert!(set.contains(6));
+        assert!(set.contains(150));
+        assert!(!set.contains(149));
+    }
+
+    #[test]
+    fn adaptive_token_sets_cover_boundaries_and_safe_fallbacks() {
+        let inline = token_set_atn(127, &[(TOKEN_EOF, TOKEN_EOF), (1, 1), (63, 64), (127, 127)]);
+        let inline = inline.token_set(0).expect("inline set");
+        assert_eq!(inline.kind(), ParserTokenSetKind::Inline128);
+        for token in [TOKEN_EOF, 1, 63, 64, 127] {
+            assert!(inline.contains(token), "missing token {token}");
+        }
+        for token in [-2, 0, 2, 62, 65, 126, 128] {
+            assert!(!inline.contains(token), "unexpected token {token}");
+        }
+
+        let singleton_atn = token_set_atn(127, &[(42, 42)]);
+        let singleton = singleton_atn.token_set(0).expect("singleton set");
+        assert_eq!(singleton.kind(), ParserTokenSetKind::Inline128);
+        assert!(singleton.contains(42));
+        assert!(!singleton.contains(41));
+        assert!(!singleton.contains(43));
+
+        let dense_ranges = (1..=512)
+            .step_by(2)
+            .map(|token| (token, token))
+            .collect::<Vec<_>>();
+        let dense_atn = token_set_atn(512, &dense_ranges);
+        let dense = dense_atn.token_set(0).expect("dense set");
+        assert_eq!(dense.kind(), ParserTokenSetKind::Dense);
+        assert!(dense.contains(511));
+        assert!(!dense.contains(512));
+
+        let at_cap_max =
+            i32::try_from(MAX_DENSE_TOKEN_SET_WORDS * u64::BITS as usize - 1).expect("test bound");
+        assert_eq!(
+            token_set_shape((1..=at_cap_max).step_by(2).map(|token| (token, token))),
+            (ParserTokenSetKind::Dense, MAX_DENSE_TOKEN_SET_WORDS)
+        );
+        let over_cap_max = at_cap_max + 1;
+        assert_eq!(
+            token_set_shape(
+                (1..=over_cap_max)
+                    .step_by(2)
+                    .map(|token| (token, token))
+                    .chain([(over_cap_max, over_cap_max)])
+            ),
+            (ParserTokenSetKind::Intervals, 0)
+        );
+
+        for ranges in [
+            vec![(1, 1), (1_000_000, 1_000_000)],
+            vec![(1, 1), (i32::MAX, i32::MAX)],
+            vec![(-2, -2), (1, 4)],
+            vec![(0, 4)],
+        ] {
+            let atn = token_set_atn(i32::MAX, &ranges);
+            let set = atn.token_set(0).expect("interval set");
+            assert_eq!(set.kind(), ParserTokenSetKind::Intervals, "{ranges:?}");
+            assert_eq!(atn.stats().token_bitset_bytes, 0);
+            for &(start, stop) in &ranges {
+                assert!(set.contains(start));
+                assert!(set.contains(stop));
+            }
+        }
+
+        let empty_atn = token_set_atn(0, &[]);
+        let empty = empty_atn.token_set(0).expect("empty set");
+        assert_eq!(empty.kind(), ParserTokenSetKind::Inline128);
+        assert!(empty.is_empty());
+        assert!(!empty.contains(TOKEN_EOF));
+        assert!(!empty.contains(1));
+    }
+
+    #[test]
+    fn adaptive_membership_matches_randomized_normalized_intervals() {
+        let mut random = 0x9e37_79b9_7f4a_7c15_u64;
+        for case in 0..256 {
+            let range_count = (next_random(&mut random) % 24) as usize;
+            let mut ranges = Vec::with_capacity(range_count);
+            for _ in 0..range_count {
+                let start = (next_random(&mut random) % 2_100) as i32 - 4;
+                let width = (next_random(&mut random) % 24) as i32;
+                ranges.push((start, start.saturating_add(width)));
+            }
+            if case % 17 == 0 {
+                ranges.push((TOKEN_EOF, TOKEN_EOF));
+            }
+            if case % 29 == 0 {
+                ranges.push((i32::MAX, i32::MAX));
+            }
+            let normalized = normalize_ranges(ranges);
+            let atn = token_set_atn(i32::MAX, &normalized);
+            let set = atn.token_set(0).expect("randomized set");
+            for token in [TOKEN_EOF, -3, 0, 1, 63, 64, 127, 128, 2_048, i32::MAX] {
+                let expected = normalized
+                    .iter()
+                    .any(|(start, stop)| (*start..=*stop).contains(&token));
+                assert_eq!(
+                    set.contains(token),
+                    expected,
+                    "case {case}, token {token}, kind {:?}, ranges {normalized:?}",
+                    set.kind()
+                );
+            }
+            for _ in 0..64 {
+                let token = (next_random(&mut random) % 2_200) as i32 - 16;
+                let expected = normalized
+                    .iter()
+                    .any(|(start, stop)| (*start..=*stop).contains(&token));
+                assert_eq!(set.contains(token), expected, "case {case}, token {token}");
+            }
+        }
+    }
+
+    fn next_random(state: &mut u64) -> u64 {
+        *state ^= *state << 13;
+        *state ^= *state >> 7;
+        *state ^= *state << 17;
+        *state
     }
 
     #[cfg(target_pointer_width = "64")]
@@ -2315,6 +2953,7 @@ mod tests {
             transitions: section,
             sets: section,
             intervals: section,
+            token_bits: section,
             decisions: section,
             rule_starts: section,
             rule_stops: section,
@@ -2419,6 +3058,97 @@ mod tests {
             Err(ParserAtnError::InvalidData(message))
                 if message.contains("transition target")
         ));
+    }
+
+    #[test]
+    fn not_set_membership_preserves_vocabulary_bounds() {
+        let mut builder = ParserAtnBuilder::new(5);
+        builder
+            .add_state(AtnStateKind::RuleStart, Some(0))
+            .expect("start");
+        builder
+            .add_state(AtnStateKind::RuleStop, Some(0))
+            .expect("stop");
+        builder
+            .set_rule_to_start_state(vec![0])
+            .expect("rule starts");
+        builder.set_rule_to_stop_state(vec![1]).expect("rule stops");
+        let excluded = builder.add_interval_set([(2, 4)]).expect("excluded set");
+        builder
+            .add_transition(
+                0,
+                ParserTransitionSpec::NotSet {
+                    target: 1,
+                    set: excluded,
+                },
+            )
+            .expect("not-set transition");
+        let atn = builder.finish().expect("ATN");
+        let transition = atn
+            .state(0)
+            .expect("start")
+            .transitions()
+            .first()
+            .expect("transition");
+
+        assert!(transition.matches(1, 1, 5));
+        assert!(!transition.matches(2, 1, 5));
+        assert!(!transition.matches(4, 1, 5));
+        assert!(transition.matches(5, 1, 5));
+        assert!(!transition.matches(TOKEN_EOF, 1, 5));
+        assert!(!transition.matches(0, 1, 5));
+        assert!(!transition.matches(6, 1, 5));
+    }
+
+    #[test]
+    fn rejects_inconsistent_adaptive_token_set_bits() {
+        let atn = token_set_atn(127, &[(1, 3), (63, 64), (127, 127)]);
+        let mut words = atn.packed_words().to_vec();
+        words[atn.layout.token_bits.offset] ^= 1 << 1;
+        let error = ParserAtn::from_owned(words).expect_err("corrupted token bits must fail");
+        assert!(error.to_string().contains("bit word"), "{error}");
+
+        let mut words = atn.packed_words().to_vec();
+        words[atn.layout.sets.offset + 2] = 99;
+        let error = ParserAtn::from_owned(words).expect_err("unknown token-set kind must fail");
+        assert!(error.to_string().contains("token-set kind"), "{error}");
+    }
+
+    #[cfg(feature = "perf-counters")]
+    #[test]
+    fn token_set_counters_report_selection_and_probes() {
+        crate::perf::reset();
+        let before = crate::perf::parser_token_set_snapshot();
+        let inline_atn = token_set_atn(10, &[(1, 4)]);
+        let dense_ranges = (1..=256)
+            .step_by(2)
+            .map(|token| (token, token))
+            .collect::<Vec<_>>();
+        let dense_atn = token_set_atn(256, &dense_ranges);
+        let interval_atn = token_set_atn(i32::MAX, &[(1, 1), (i32::MAX, i32::MAX)]);
+        let inline = inline_atn.token_set(0).expect("inline");
+        let dense = dense_atn.token_set(0).expect("dense");
+        let intervals = interval_atn.token_set(0).expect("intervals");
+
+        assert!(inline.contains(2));
+        assert!(!inline.contains(9));
+        assert!(dense.contains(255));
+        assert!(!dense.contains(256));
+        assert!(intervals.contains(i32::MAX));
+        assert!(!intervals.contains(2));
+
+        let after = crate::perf::parser_token_set_snapshot();
+        assert!(after[0] > before[0], "{before:?} -> {after:?}");
+        assert!(after[1] > before[1], "{before:?} -> {after:?}");
+        assert!(after[2] > before[2], "{before:?} -> {after:?}");
+        assert_eq!(after[5] - before[5], 1);
+        assert_eq!(after[6] - before[6], 1);
+        assert_eq!(after[7] - before[7], 1);
+        assert_eq!(after[8] - before[8], 1);
+        assert_eq!(after[9] - before[9], 1);
+        assert_eq!(after[10] - before[10], 1);
+        assert_eq!(after[11] - before[11], 4);
+        assert_eq!(after[12] - before[12], 2);
     }
 
     #[test]

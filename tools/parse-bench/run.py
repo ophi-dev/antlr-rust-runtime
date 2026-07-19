@@ -675,6 +675,41 @@ fn dump_parser_dfa_stats(stats: antlr4_runtime::ParserDfaStats) {{
     return runner
 
 
+def rust_codegen_flags(
+    *,
+    native: bool,
+    pgo_generate: Path | None,
+    pgo_use: Path | None,
+) -> list[str]:
+    flags = []
+    if native:
+        flags.append("-Ctarget-cpu=native")
+    if pgo_generate is not None:
+        flags.append(f"-Cprofile-generate={pgo_generate}")
+    if pgo_use is not None:
+        flags.extend(
+            [
+                f"-Cprofile-use={pgo_use}",
+                "-Cllvm-args=-pgo-warn-missing-function",
+            ]
+        )
+    return flags
+
+
+def rust_build_environment(args: argparse.Namespace) -> dict[str, str] | None:
+    flags = rust_codegen_flags(
+        native=args.rust_native,
+        pgo_generate=args.rust_pgo_generate,
+        pgo_use=args.rust_pgo_use,
+    )
+    if not flags:
+        return None
+    env = os.environ.copy()
+    existing = env.get("RUSTFLAGS", "").strip()
+    env["RUSTFLAGS"] = " ".join([existing, *flags]).strip()
+    return env
+
+
 def rust_parse_function(spec: LanguageSpec) -> str:
     return f"""fn lex_{spec.name}(src: &str) -> Result<(), String> {{
     let lexer = generated::{spec.rust_lexer_module}::{spec.rust_lexer_type}::new(InputStream::new(src));
@@ -1177,6 +1212,8 @@ def prepare_work(
     work_dir = args.work_dir
     clear_work_dir(work_dir, args.runtime_root)
     work_dir.mkdir(parents=True, exist_ok=True)
+    if args.rust_pgo_generate is not None:
+        args.rust_pgo_generate.mkdir(parents=True, exist_ok=True)
 
     rust_runner = write_rust_runner(
         work_dir,
@@ -1243,12 +1280,7 @@ def prepare_work(
         ]
         if os.environ.get("ANTLR_PERF_DUMP"):
             rust_build_cmd.extend(["--features", "perf-counters"])
-        rust_build_env = None
-        if args.rust_native:
-            rust_build_env = os.environ.copy()
-            rustflags = rust_build_env.get("RUSTFLAGS", "")
-            rust_build_env["RUSTFLAGS"] = f"{rustflags} -C target-cpu=native".strip()
-        run(rust_build_cmd, env=rust_build_env)
+        run(rust_build_cmd, env=rust_build_environment(args))
         runners["rust-antlr"] = rust_runner / "target" / "release" / "parse-bench-rust-runner"
     if "python-antlr" in runtimes:
         runners["python-antlr"] = write_python_antlr_runner(work_dir, specs, py_gen)
@@ -1509,6 +1541,10 @@ def write_json(results: list[Measurement], args: argparse.Namespace) -> None:
         "repo_commit": git_rev(args.runtime_root),
         "rust_native": args.rust_native,
         "rust_thin_lto": args.rust_thin_lto,
+        "rust_pgo_generate": (
+            str(args.rust_pgo_generate) if args.rust_pgo_generate is not None else None
+        ),
+        "rust_pgo_use": str(args.rust_pgo_use) if args.rust_pgo_use is not None else None,
         "grammars_v4": {
             "path": str(args.grammars_v4),
             "commit": git_rev(args.grammars_v4),
@@ -1536,6 +1572,8 @@ def write_markdown(results: list[Measurement], args: argparse.Namespace) -> None
         f"- Runtime checkout: `{git_rev(args.runtime_root) or args.runtime_root}`",
         f"- Native CPU: `{'yes' if args.rust_native else 'no'}`",
         f"- ThinLTO / one codegen unit: `{'yes' if args.rust_thin_lto else 'no'}`",
+        f"- PGO profile generation: `{args.rust_pgo_generate or 'no'}`",
+        f"- PGO profile use: `{args.rust_pgo_use or 'no'}`",
         f"- Rust generated-only: `{'yes' if args.rust_generated_only else 'no'}`",
         f"- grammars-v4: `{git_rev(args.grammars_v4) or args.grammars_v4}`",
         "",
@@ -1608,6 +1646,19 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Build the Rust runner with ThinLTO and one codegen unit.",
     )
+    rust_pgo = parser.add_mutually_exclusive_group()
+    rust_pgo.add_argument(
+        "--rust-pgo-generate",
+        type=Path,
+        metavar="DIR",
+        help="Build the Rust runner with -Cprofile-generate=DIR for PGO training.",
+    )
+    rust_pgo.add_argument(
+        "--rust-pgo-use",
+        type=Path,
+        metavar="FILE",
+        help="Build the Rust runner with -Cprofile-use=FILE.",
+    )
     parser.add_argument("--iters", type=int, default=10)
     parser.add_argument("--warmups", type=int, default=2)
     parser.add_argument("--quick", action="store_true", help="Use 3 timed iterations and 1 warmup.")
@@ -1644,6 +1695,10 @@ def normalize_paths(args: argparse.Namespace) -> None:
         args.json = args.json.expanduser().resolve()
     if args.markdown is not None:
         args.markdown = args.markdown.expanduser().resolve()
+    if args.rust_pgo_generate is not None:
+        args.rust_pgo_generate = args.rust_pgo_generate.expanduser().resolve()
+    if args.rust_pgo_use is not None:
+        args.rust_pgo_use = args.rust_pgo_use.expanduser().resolve()
 
 
 def main() -> int:
@@ -1666,6 +1721,15 @@ def main() -> int:
     require_path(args.antlr_jar, "ANTLR jar")
     require_path(args.grammars_v4, "grammars-v4 checkout")
     require_path(args.runtime_root / "Cargo.toml", "runtime Cargo manifest")
+    if args.rust_pgo_generate is not None and args.rust_pgo_generate.exists():
+        if not args.rust_pgo_generate.is_dir():
+            raise SystemExit(
+                f"Rust PGO generation path is not a directory: {args.rust_pgo_generate}"
+            )
+    if args.rust_pgo_use is not None:
+        require_path(args.rust_pgo_use, "Rust PGO profile")
+        if not args.rust_pgo_use.is_file():
+            raise SystemExit(f"Rust PGO profile is not a file: {args.rust_pgo_use}")
     ensure_python_dependencies(args.python, runtimes)
 
     runners = prepare_work(args, specs, runtimes)
