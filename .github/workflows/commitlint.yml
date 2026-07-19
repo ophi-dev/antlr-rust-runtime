@@ -1,0 +1,19 @@
+name: Conventional Commits Check
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  commitlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: webiny/action-conventional-commits@v1.3.0
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

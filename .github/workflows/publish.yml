@@ -1,12 +1,6 @@
 name: Publish Crate
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: Version to release (without the v prefix)
-        required: true
-        type: string
   release:
     types:
       - published
@@ -16,114 +10,14 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
   id-token: write
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  prepare:
-    if: github.event_name == 'workflow_dispatch'
-    name: Prepare GitHub release
-    runs-on: ubuntu-latest
-    environment: release
-
-    steps:
-      - name: Generate GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@v3
-        with:
-          app-id: ${{ vars.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-
-      - name: Checkout default branch
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.repository.default_branch }}
-          token: ${{ steps.app-token.outputs.token }}
-
-      - name: Install stable Rust
-        run: |
-          rustup toolchain install stable --profile minimal --no-self-update
-          rustup default stable
-
-      - name: Install cargo-edit
-        run: cargo binstall --no-confirm cargo-edit
-
-      - name: Update release metadata
-        id: version
-        env:
-          VERSION: ${{ inputs.version }}
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: |
-          if [[ -z "$VERSION" || "$VERSION" == v* ]]; then
-            echo "::error::Version must be a Cargo package version without the v prefix." >&2
-            exit 1
-          fi
-
-          TAG="v${VERSION}"
-          if git show-ref --verify --quiet "refs/tags/${TAG}" || gh release view "$TAG" >/dev/null 2>&1; then
-            echo "::error::Tag or release ${TAG} already exists." >&2
-            exit 1
-          fi
-
-          cargo set-version "$VERSION"
-          PACKAGE_VERSION="$(
-            cargo metadata --no-deps --format-version 1 |
-              jq -er '.packages[] | select(.name == "antlr-rust-runtime") | .version'
-          )"
-          if [[ "$PACKAGE_VERSION" != "$VERSION" ]]; then
-            echo "::error::Requested version ${VERSION} resolves to Cargo package version ${PACKAGE_VERSION}." >&2
-            exit 1
-          fi
-
-          IFS=. read -r MAJOR MINOR _ <<< "$VERSION"
-          if [[ -z "$MAJOR" || -z "$MINOR" ]]; then
-            echo "::error::Could not derive the README version requirement from ${VERSION}." >&2
-            exit 1
-          fi
-          MAJOR_MINOR="${MAJOR}.${MINOR}"
-          sed -i -E "s/^antlr-rust-runtime = \".*\"/antlr-rust-runtime = \"${MAJOR_MINOR}\"/" README.md
-          if ! grep -Fqx "antlr-rust-runtime = \"${MAJOR_MINOR}\"" README.md; then
-            echo "::error::README.md dependency line was not updated to \"${MAJOR_MINOR}\"." >&2
-            exit 1
-          fi
-
-          git diff --check
-          git diff -- Cargo.toml Cargo.lock README.md
-          {
-            echo "tag=${TAG}"
-            echo "version=${VERSION}"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Commit version updates
-        id: commit
-        run: |
-          if ! git diff --quiet -- Cargo.toml Cargo.lock README.md; then
-            git config user.name "ophiarch[bot]"
-            git config user.email "ophiarch[bot]@users.noreply.github.com"
-            git add Cargo.toml Cargo.lock README.md
-            git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
-          fi
-          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
-      - name: Verify package
-        run: cargo publish --dry-run --locked
-
-      - name: Push version update
-        run: git push origin HEAD:${{ github.event.repository.default_branch }}
-
-      - name: Create GitHub release
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          TAG: ${{ steps.version.outputs.tag }}
-          TARGET_SHA: ${{ steps.commit.outputs.sha }}
-        run: gh release create "$TAG" --target "$TARGET_SHA" --title "$TAG" --generate-notes
-
   publish:
-    if: github.event_name == 'release'
     name: Publish to crates.io
     runs-on: ubuntu-latest
     environment: release

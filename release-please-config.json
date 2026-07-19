@@ -1,0 +1,48 @@
+{
+    "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+    "packages": {
+        ".": {
+            "release-type": "rust",
+            "changelog-path": "CHANGELOG.md",
+            "include-v-in-tag": true,
+            "include-component-in-tag": false,
+            "draft": false,
+            "prerelease": false,
+            "bump-minor-pre-major": true,
+            "bump-patch-for-minor-pre-major": false,
+            "changelog-sections": [
+                {
+                    "type": "feat",
+                    "section": "Features",
+                    "hidden": false
+                },
+                {
+                    "type": "fix",
+                    "section": "Bug Fixes",
+                    "hidden": false
+                },
+                {
+                    "type": "perf",
+                    "section": "Performance Improvements",
+                    "hidden": false
+                },
+                {
+                    "type": "deps",
+                    "section": "Dependency Updates",
+                    "hidden": false
+                },
+                {
+                    "type": "revert",
+                    "section": "Reverts",
+                    "hidden": false
+                }
+            ],
+            "extra-files": [
+                {
+                    "type": "generic",
+                    "path": "README.md"
+                }
+            ]
+        }
+    }
+}

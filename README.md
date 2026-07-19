@@ -20,10 +20,14 @@ runtime tests currently validate against ANTLR `4.13.2`.
 Each ANTLR target language needs a runtime package used by generated parsers.
 For Rust projects, add the runtime crate:
 
+<!-- x-release-please-start-version -->
+
 ```toml
 [dependencies]
-antlr-rust-runtime = "0.12"
+antlr-rust-runtime = "0.12.0"
 ```
+
+<!-- x-release-please-end -->
 
 The library crate is imported as `antlr4_runtime`:
 

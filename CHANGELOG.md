@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [0.12.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.11.0...v0.12.0) (2026-07-18)
 
 ### Added
 
@@ -8,6 +8,13 @@
   `set_input_stream`, `set_token_source`, `set_token_stream`, full `reset`,
   and `clear_dfa`. `CommonTokenStream::refill` supports re-feeding the lexer
   owned inside an existing parser without reconstructing either recognizer.
+
+### Breaking
+
+- Generated parser rules named `reset`, `setTokenStream`, `tokenStreamMut`, or
+  `clearDfa` now gain a `_rule` suffix to avoid the recognizer reuse methods.
+
+## [0.11.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.10.0...v0.11.0) (2026-07-18)
 
 ### Performance
 
@@ -17,8 +24,6 @@
 
 ### Breaking
 
-- Generated parser rules named `reset`, `setTokenStream`, `tokenStreamMut`, or
-  `clearDfa` now gain a `_rule` suffix to avoid the recognizer reuse methods.
 - Buffered tokens now live once in a compact `TokenStore` and are addressed by
   `TokenId`; public access uses borrowing `TokenView` values.
 - `CommonTokenStream` owns its `TokenStore` directly. `BaseParser` owns one flat
