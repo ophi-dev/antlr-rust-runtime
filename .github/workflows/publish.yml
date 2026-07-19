@@ -1,25 +1,31 @@
 name: Publish Crate
 
 on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release (without the v prefix)
+        required: true
+        type: string
   release:
     types:
       - published
 
 concurrency:
   group: ${{ github.workflow }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: write
   id-token: write
-  repository-projects: write
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  publish:
-    name: Publish to crates.io
+  prepare:
+    if: github.event_name == 'workflow_dispatch'
+    name: Prepare GitHub release
     runs-on: ubuntu-latest
     environment: release
 
@@ -31,10 +37,11 @@ jobs:
           app-id: ${{ vars.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
-      - name: Checkout
+      - name: Checkout default branch
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          ref: ${{ github.event.repository.default_branch }}
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Install stable Rust
@@ -44,39 +51,123 @@ jobs:
 
       - name: Install cargo-edit
         run: cargo binstall --no-confirm cargo-edit
-      - name: Extract version from release tag
+
+      - name: Update release metadata
         id: version
-        run: |
-          TAG="${{ github.event.release.tag_name }}"
-          VERSION="${TAG#v}"
-          MAJOR_MINOR="$(echo "$VERSION" | cut -d. -f1,2)"
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "major_minor=$MAJOR_MINOR" >> $GITHUB_OUTPUT
-          echo "Release version: $VERSION (README requirement: $MAJOR_MINOR)"
-
-      - name: Update Cargo.toml, Cargo.lock, and README
-        run: |
-          cargo set-version ${{ steps.version.outputs.version }}
-          MAJOR_MINOR="${{ steps.version.outputs.major_minor }}"
-          sed -i -E "s/^antlr-rust-runtime = \".*\"/antlr-rust-runtime = \"${MAJOR_MINOR}\"/" README.md
-          if ! grep -q "^antlr-rust-runtime = \"${MAJOR_MINOR}\"" README.md; then
-            echo "::error::README.md dependency line not updated to \"${MAJOR_MINOR}\" — the expected 'antlr-rust-runtime = \"...\"' line was not found. Update the sed pattern in publish.yml." >&2
-            exit 1
-          fi
-          git diff Cargo.toml Cargo.lock README.md
-
-      - name: Commit and push version updates
         env:
+          VERSION: ${{ inputs.version }}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          git config user.name "ophiarch[bot]"
-          git config user.email "ophiarch[bot]@users.noreply.github.com"
-          git add Cargo.toml Cargo.lock README.md
-          git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
-          git push origin HEAD:${{ github.event.release.target_commitish }}
+          if [[ -z "$VERSION" || "$VERSION" == v* ]]; then
+            echo "::error::Version must be a Cargo package version without the v prefix." >&2
+            exit 1
+          fi
+
+          TAG="v${VERSION}"
+          if git show-ref --verify --quiet "refs/tags/${TAG}" || gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag or release ${TAG} already exists." >&2
+            exit 1
+          fi
+
+          cargo set-version "$VERSION"
+          PACKAGE_VERSION="$(
+            cargo metadata --no-deps --format-version 1 |
+              jq -er '.packages[] | select(.name == "antlr-rust-runtime") | .version'
+          )"
+          if [[ "$PACKAGE_VERSION" != "$VERSION" ]]; then
+            echo "::error::Requested version ${VERSION} resolves to Cargo package version ${PACKAGE_VERSION}." >&2
+            exit 1
+          fi
+
+          IFS=. read -r MAJOR MINOR _ <<< "$VERSION"
+          if [[ -z "$MAJOR" || -z "$MINOR" ]]; then
+            echo "::error::Could not derive the README version requirement from ${VERSION}." >&2
+            exit 1
+          fi
+          MAJOR_MINOR="${MAJOR}.${MINOR}"
+          sed -i -E "s/^antlr-rust-runtime = \".*\"/antlr-rust-runtime = \"${MAJOR_MINOR}\"/" README.md
+          if ! grep -Fqx "antlr-rust-runtime = \"${MAJOR_MINOR}\"" README.md; then
+            echo "::error::README.md dependency line was not updated to \"${MAJOR_MINOR}\"." >&2
+            exit 1
+          fi
+
+          git diff --check
+          git diff -- Cargo.toml Cargo.lock README.md
+          {
+            echo "tag=${TAG}"
+            echo "version=${VERSION}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Commit version updates
+        id: commit
+        run: |
+          if ! git diff --quiet -- Cargo.toml Cargo.lock README.md; then
+            git config user.name "ophiarch[bot]"
+            git config user.email "ophiarch[bot]@users.noreply.github.com"
+            git add Cargo.toml Cargo.lock README.md
+            git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Verify package
-        run: cargo publish --dry-run
+        run: cargo publish --dry-run --locked
+
+      - name: Push version update
+        run: git push origin HEAD:${{ github.event.repository.default_branch }}
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          TARGET_SHA: ${{ steps.commit.outputs.sha }}
+        run: gh release create "$TAG" --target "$TARGET_SHA" --title "$TAG" --generate-notes
+
+  publish:
+    if: github.event_name == 'release'
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+    environment: release
+
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Install stable Rust
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+
+      - name: Verify release metadata
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [[ "$TAG" != v* ]]; then
+            echo "::error::Release tag ${TAG} must start with v." >&2
+            exit 1
+          fi
+
+          VERSION="${TAG#v}"
+          PACKAGE_VERSION="$(
+            cargo metadata --no-deps --format-version 1 |
+              jq -er '.packages[] | select(.name == "antlr-rust-runtime") | .version'
+          )"
+          if [[ "$PACKAGE_VERSION" != "$VERSION" ]]; then
+            echo "::error::Release tag ${TAG} does not match Cargo.toml version ${PACKAGE_VERSION}." >&2
+            exit 1
+          fi
+
+          TAG_SHA="$(git rev-parse "${TAG}^{commit}")"
+          HEAD_SHA="$(git rev-parse HEAD)"
+          if [[ "$TAG_SHA" != "$HEAD_SHA" ]]; then
+            echo "::error::Checked out ${HEAD_SHA}, but ${TAG} resolves to ${TAG_SHA}." >&2
+            exit 1
+          fi
+
+      - name: Verify package
+        run: cargo publish --dry-run --locked
 
       - name: Authenticate with crates.io
         id: auth
