@@ -57,6 +57,17 @@ struct Counters {
     lexer_run_scan_exits: u64,
     lexer_run_scan_ends: u64,
     lexer_run_rejected_states: u64,
+    lexer_run_descriptors_none: u64,
+    lexer_run_descriptors_any: u64,
+    lexer_run_descriptors_until: u64,
+    lexer_range_descriptors: [u64; 4],
+    lexer_range_descriptor_classes: [u64; 4],
+    lexer_range_scalar_calls: u64,
+    lexer_range_scalar_bytes: u64,
+    lexer_range_identifier_bytes: u64,
+    lexer_range_number_bytes: u64,
+    lexer_range_whitespace_bytes: u64,
+    lexer_range_other_bytes: u64,
     decisions: BTreeMap<usize, DecisionCounters>,
 }
 
@@ -338,8 +349,80 @@ pub(crate) fn record_lexer_run_rejected_state() {
     });
 }
 
+pub(crate) fn record_lexer_run_descriptor(kind: crate::atn::lexer_dfa::AsciiRunDescriptorKind) {
+    use crate::atn::lexer_dfa::AsciiRunDescriptorKind;
+
+    with_counters(|counters| match kind {
+        AsciiRunDescriptorKind::None => {
+            counters.lexer_run_descriptors_none =
+                counters.lexer_run_descriptors_none.saturating_add(1);
+        }
+        AsciiRunDescriptorKind::Any => {
+            counters.lexer_run_descriptors_any =
+                counters.lexer_run_descriptors_any.saturating_add(1);
+        }
+        AsciiRunDescriptorKind::Until => {
+            counters.lexer_run_descriptors_until =
+                counters.lexer_run_descriptors_until.saturating_add(1);
+        }
+        AsciiRunDescriptorKind::Ranges { count, class } => {
+            if let Some(counter) = count
+                .checked_sub(1)
+                .and_then(|index| counters.lexer_range_descriptors.get_mut(usize::from(index)))
+            {
+                *counter = counter.saturating_add(1);
+            }
+            let class_index = match class {
+                crate::atn::ascii_range::AsciiRangeClass::Identifier => 0,
+                crate::atn::ascii_range::AsciiRangeClass::Number => 1,
+                crate::atn::ascii_range::AsciiRangeClass::Whitespace => 2,
+                crate::atn::ascii_range::AsciiRangeClass::Other => 3,
+            };
+            counters.lexer_range_descriptor_classes[class_index] =
+                counters.lexer_range_descriptor_classes[class_index].saturating_add(1);
+        }
+    });
+}
+
+pub(crate) fn record_lexer_range_scan(
+    class: crate::atn::ascii_range::AsciiRangeClass,
+    bytes: usize,
+) {
+    use crate::atn::ascii_range::AsciiRangeClass;
+
+    let bytes = u64::try_from(bytes).unwrap_or(u64::MAX);
+    with_counters(|counters| {
+        counters.lexer_range_scalar_calls = counters.lexer_range_scalar_calls.saturating_add(1);
+        counters.lexer_range_scalar_bytes = counters.lexer_range_scalar_bytes.saturating_add(bytes);
+        let class_bytes = match class {
+            AsciiRangeClass::Identifier => &mut counters.lexer_range_identifier_bytes,
+            AsciiRangeClass::Number => &mut counters.lexer_range_number_bytes,
+            AsciiRangeClass::Whitespace => &mut counters.lexer_range_whitespace_bytes,
+            AsciiRangeClass::Other => &mut counters.lexer_range_other_bytes,
+        };
+        *class_bytes = class_bytes.saturating_add(bytes);
+    });
+}
+
 pub fn reset() {
-    COUNTERS.with(|counters| *counters.borrow_mut() = Counters::default());
+    COUNTERS.with(|counters| {
+        let mut counters = counters.borrow_mut();
+        // Compiled DFAs are usually initialized during warmup and then reused.
+        // Keep their static descriptor inventory while clearing timed counters.
+        let descriptors = (
+            counters.lexer_run_descriptors_none,
+            counters.lexer_run_descriptors_any,
+            counters.lexer_run_descriptors_until,
+            counters.lexer_range_descriptors,
+            counters.lexer_range_descriptor_classes,
+        );
+        *counters = Counters::default();
+        counters.lexer_run_descriptors_none = descriptors.0;
+        counters.lexer_run_descriptors_any = descriptors.1;
+        counters.lexer_run_descriptors_until = descriptors.2;
+        counters.lexer_range_descriptors = descriptors.3;
+        counters.lexer_range_descriptor_classes = descriptors.4;
+    });
 }
 
 pub fn dump() {
@@ -373,7 +456,7 @@ fn dump_decisions(counters: &Counters) {
     }
 }
 
-const fn totals(counters: &Counters) -> [(&'static str, u64); 50] {
+const fn totals(counters: &Counters) -> [(&'static str, u64); 67] {
     [
         ("prediction.adaptive_calls", counters.adaptive_calls),
         (
@@ -470,6 +553,71 @@ const fn totals(counters: &Counters) -> [(&'static str, u64); 50] {
             "lexer.run_rejected_states",
             counters.lexer_run_rejected_states,
         ),
+        (
+            "lexer.run_descriptors.none",
+            counters.lexer_run_descriptors_none,
+        ),
+        (
+            "lexer.run_descriptors.any",
+            counters.lexer_run_descriptors_any,
+        ),
+        (
+            "lexer.run_descriptors.until",
+            counters.lexer_run_descriptors_until,
+        ),
+        (
+            "lexer.range_descriptors.1",
+            counters.lexer_range_descriptors[0],
+        ),
+        (
+            "lexer.range_descriptors.2",
+            counters.lexer_range_descriptors[1],
+        ),
+        (
+            "lexer.range_descriptors.3",
+            counters.lexer_range_descriptors[2],
+        ),
+        (
+            "lexer.range_descriptors.4",
+            counters.lexer_range_descriptors[3],
+        ),
+        (
+            "lexer.range_descriptor_classes.identifier",
+            counters.lexer_range_descriptor_classes[0],
+        ),
+        (
+            "lexer.range_descriptor_classes.number",
+            counters.lexer_range_descriptor_classes[1],
+        ),
+        (
+            "lexer.range_descriptor_classes.whitespace",
+            counters.lexer_range_descriptor_classes[2],
+        ),
+        (
+            "lexer.range_descriptor_classes.other",
+            counters.lexer_range_descriptor_classes[3],
+        ),
+        (
+            "lexer.range_scalar_calls",
+            counters.lexer_range_scalar_calls,
+        ),
+        (
+            "lexer.range_scalar_bytes",
+            counters.lexer_range_scalar_bytes,
+        ),
+        (
+            "lexer.range_identifier_bytes",
+            counters.lexer_range_identifier_bytes,
+        ),
+        (
+            "lexer.range_number_bytes",
+            counters.lexer_range_number_bytes,
+        ),
+        (
+            "lexer.range_whitespace_bytes",
+            counters.lexer_range_whitespace_bytes,
+        ),
+        ("lexer.range_other_bytes", counters.lexer_range_other_bytes),
     ]
 }
 
@@ -497,6 +645,41 @@ pub(crate) fn lexer_run_snapshot() -> [u64; 6] {
             counters.lexer_run_scan_exits,
             counters.lexer_run_scan_ends,
             counters.lexer_run_rejected_states,
+        ]
+    })
+}
+
+#[cfg(test)]
+pub(crate) fn lexer_range_descriptor_snapshot() -> [u64; 11] {
+    COUNTERS.with(|counters| {
+        let counters = counters.borrow();
+        [
+            counters.lexer_run_descriptors_none,
+            counters.lexer_run_descriptors_any,
+            counters.lexer_run_descriptors_until,
+            counters.lexer_range_descriptors[0],
+            counters.lexer_range_descriptors[1],
+            counters.lexer_range_descriptors[2],
+            counters.lexer_range_descriptors[3],
+            counters.lexer_range_descriptor_classes[0],
+            counters.lexer_range_descriptor_classes[1],
+            counters.lexer_range_descriptor_classes[2],
+            counters.lexer_range_descriptor_classes[3],
+        ]
+    })
+}
+
+#[cfg(test)]
+pub(crate) fn lexer_range_scan_snapshot() -> [u64; 6] {
+    COUNTERS.with(|counters| {
+        let counters = counters.borrow();
+        [
+            counters.lexer_range_scalar_calls,
+            counters.lexer_range_scalar_bytes,
+            counters.lexer_range_identifier_bytes,
+            counters.lexer_range_number_bytes,
+            counters.lexer_range_whitespace_bytes,
+            counters.lexer_range_other_bytes,
         ]
     })
 }
