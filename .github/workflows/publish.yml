@@ -43,11 +43,7 @@ jobs:
           rustup default stable
 
       - name: Install cargo-edit
-        uses: taiki-e/cache-cargo-install-action@v3
-        with:
-          tool: cargo-edit
-          git: https://github.com/killercup/cargo-edit
-          rev: 98d58b713cb9a7715c01053dbd36cb84f3be1e4f # v0.13.11
+        run: cargo binstall --no-confirm cargo-edit
       - name: Extract version from release tag
         id: version
         run: |
