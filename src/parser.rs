@@ -2205,12 +2205,16 @@ impl TokenBitSet {
             .enumerate()
             .flat_map(|(word_index, mut bits)| {
                 std::iter::from_fn(move || {
-                    if bits == 0 {
-                        return None;
+                    while bits != 0 {
+                        let bit = bits.trailing_zeros() as usize;
+                        bits &= bits - 1;
+                        if let Some(symbol) =
+                            token_bit_symbol(word_index * u64::BITS as usize + bit)
+                        {
+                            return Some(symbol);
+                        }
                     }
-                    let bit = bits.trailing_zeros() as usize;
-                    bits &= bits - 1;
-                    token_bit_symbol(word_index * u64::BITS as usize + bit)
+                    None
                 })
             })
     }

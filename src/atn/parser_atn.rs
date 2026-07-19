@@ -331,7 +331,8 @@ impl ParserAtn {
     /// representation as ATN prediction instead of embedding a second set.
     #[inline(always)]
     pub fn token_set(&self, index: usize) -> Option<ParserIntervalSet<'_>> {
-        (index < self.set_count()).then(|| self.interval_set(ParserIntervalSetId(index as u32)))
+        let id = ParserIntervalSetId::try_from(index).ok()?;
+        (index < self.set_count()).then(|| self.interval_set(id))
     }
 
     /// Stable backing-storage address used by thread-local grammar caches.
@@ -345,7 +346,9 @@ impl ParserAtn {
         let mut interval_token_sets = 0;
         let mut token_bitset_bytes = 0;
         for index in 0..self.set_count() {
-            let set = self.interval_set(ParserIntervalSetId(index as u32));
+            let set = self
+                .token_set(index)
+                .expect("in-bounds parser token-set index");
             match set.kind() {
                 ParserTokenSetKind::Inline128 => inline_token_sets += 1,
                 ParserTokenSetKind::Dense => dense_token_sets += 1,
@@ -412,7 +415,9 @@ impl ParserAtn {
     #[cfg(feature = "perf-counters")]
     fn record_token_set_inventory(&self) {
         for index in 0..self.set_count() {
-            let set = self.interval_set(ParserIntervalSetId(index as u32));
+            let set = self
+                .token_set(index)
+                .expect("in-bounds parser token-set index");
             crate::perf::record_parser_token_set_selection(
                 set.kind(),
                 set.bit_len * size_of::<u64>(),
@@ -2890,6 +2895,7 @@ mod tests {
         assert!(empty.is_empty());
         assert!(!empty.contains(TOKEN_EOF));
         assert!(!empty.contains(1));
+        assert!(empty_atn.token_set(usize::MAX).is_none());
     }
 
     #[test]
