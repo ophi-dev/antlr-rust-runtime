@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.1](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.14.0...v0.14.1) (2026-07-20)
+
+
+### Bug Fixes
+
+* **parser:** prevent adaptive-set stack overflow ([405dde5](https://github.com/ophi-dev/antlr-rust-runtime/commit/405dde56716fcc94084d7a7c05ddff7861cac51e))
+
 ## [0.14.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.13.0...v0.14.0) (2026-07-20)
 
 
