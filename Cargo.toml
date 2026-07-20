@@ -23,6 +23,7 @@ perf-counters = []
 
 [dependencies]
 memchr = "2"
+stacker = "0.1.24"
 thiserror = "2"
 
 [dev-dependencies]
