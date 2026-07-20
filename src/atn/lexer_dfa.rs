@@ -1227,52 +1227,99 @@ fn compile_context(
     if let Some(&id) = ids.get(&context) {
         return id;
     }
-    let node = match contexts.node(context) {
-        LexerContextNode::Empty => return 0,
-        LexerContextNode::Singleton {
-            parent,
-            return_state,
-        } => CompiledLexerContext::Singleton {
-            parent: compile_context(contexts, parent, ids, compiled),
-            return_state,
-        },
-        LexerContextNode::Union { left, right } => CompiledLexerContext::Union {
-            left: compile_context(contexts, left, ids, compiled),
-            right: compile_context(contexts, right, ids, compiled),
-        },
-    };
-    let id = u32::try_from(compiled.len() + 1).expect("compiled lexer context table overflow");
-    compiled.push(node);
-    ids.insert(context, id);
-    id
+
+    enum Frame {
+        Visit(LexerContextId),
+        Finish(LexerContextId),
+    }
+
+    let mut pending = vec![Frame::Visit(context)];
+    while let Some(frame) = pending.pop() {
+        match frame {
+            Frame::Visit(current) => {
+                if ids.contains_key(&current) {
+                    continue;
+                }
+                let node = contexts.node(current);
+                match node {
+                    LexerContextNode::Empty => {
+                        ids.insert(current, 0);
+                    }
+                    LexerContextNode::Singleton { parent, .. } => {
+                        pending.push(Frame::Finish(current));
+                        pending.push(Frame::Visit(parent));
+                    }
+                    LexerContextNode::Union { left, right } => {
+                        pending.push(Frame::Finish(current));
+                        pending.push(Frame::Visit(right));
+                        pending.push(Frame::Visit(left));
+                    }
+                }
+            }
+            Frame::Finish(current) => {
+                let node = match contexts.node(current) {
+                    LexerContextNode::Empty => unreachable!("empty contexts finish immediately"),
+                    LexerContextNode::Singleton {
+                        parent,
+                        return_state,
+                    } => CompiledLexerContext::Singleton {
+                        parent: ids[&parent],
+                        return_state,
+                    },
+                    LexerContextNode::Union { left, right } => CompiledLexerContext::Union {
+                        left: ids[&left],
+                        right: ids[&right],
+                    },
+                };
+                let id = u32::try_from(compiled.len() + 1)
+                    .expect("compiled lexer context table overflow");
+                compiled.push(node);
+                ids.insert(current, id);
+            }
+        }
+    }
+
+    ids[&context]
 }
 
 /// Detects a repeated return state on any caller-context path. Such recursive
 /// paths grow without bound and therefore cannot be represented by a finite
 /// compiled DFA.
 fn has_recursive_context(config: &LexerConfig, contexts: &LexerContextArena) -> bool {
-    fn visit(contexts: &LexerContextArena, context: LexerContextId, path: &mut Vec<usize>) -> bool {
-        match contexts.node(context) {
-            LexerContextNode::Empty => false,
-            LexerContextNode::Union { left, right } => {
-                visit(contexts, left, path) || visit(contexts, right, path)
-            }
-            LexerContextNode::Singleton {
-                parent,
-                return_state,
-            } => {
-                if path.len() >= MAX_CONTEXT_DEPTH || path.contains(&return_state) {
-                    return true;
+    enum Frame {
+        Visit(LexerContextId),
+        LeaveRule,
+    }
+
+    let mut path = Vec::with_capacity(MAX_CONTEXT_DEPTH);
+    let mut pending = vec![Frame::Visit(config.context)];
+    while let Some(frame) = pending.pop() {
+        match frame {
+            Frame::Visit(context) => match contexts.node(context) {
+                LexerContextNode::Empty => {}
+                LexerContextNode::Union { left, right } => {
+                    pending.push(Frame::Visit(right));
+                    pending.push(Frame::Visit(left));
                 }
-                path.push(return_state);
-                let recursive = visit(contexts, parent, path);
-                path.pop();
-                recursive
+                LexerContextNode::Singleton {
+                    parent,
+                    return_state,
+                } => {
+                    if path.len() >= MAX_CONTEXT_DEPTH || path.contains(&return_state) {
+                        return true;
+                    }
+                    path.push(return_state);
+                    pending.push(Frame::LeaveRule);
+                    pending.push(Frame::Visit(parent));
+                }
+            },
+            Frame::LeaveRule => {
+                path.pop().expect("leave frame must match an entered rule");
             }
         }
     }
 
-    visit(contexts, config.context, &mut Vec::new())
+    false
 }
 
 /// Computes every outgoing edge of one interned DFA state.
@@ -1955,6 +2002,44 @@ mod tests {
         let first = contexts.singleton(EMPTY_LEXER_CONTEXT, 7);
         let recursive = contexts.singleton(first, 7);
         assert!(has_recursive_context(&config(recursive), &contexts));
+    }
+
+    #[test]
+    fn deep_union_context_operations_fit_on_a_small_native_stack() {
+        let mut contexts = LexerContextArena::new();
+        let mut workspace = PredictionWorkspace::default();
+        let mut context = contexts.singleton(EMPTY_LEXER_CONTEXT, 0);
+        for return_state in 1..2048 {
+            let branch = contexts.singleton(EMPTY_LEXER_CONTEXT, return_state);
+            context = contexts.merge(context, branch, &mut workspace);
+        }
+        let expected_contexts = contexts.len() - 1;
+        let config = LexerConfig {
+            state: 0,
+            position: 0,
+            consumed_eof: false,
+            alt_rule_index: Some(0),
+            passed_non_greedy: false,
+            context,
+            actions: Vec::new(),
+        };
+
+        std::thread::Builder::new()
+            .stack_size(64 * 1024)
+            .spawn(move || {
+                assert!(!has_recursive_context(&config, &contexts));
+
+                let mut ids = FxHashMap::default();
+                ids.insert(EMPTY_LEXER_CONTEXT, 0);
+                let mut compiled = Vec::new();
+                let compiled_context =
+                    compile_context(&contexts, config.context, &mut ids, &mut compiled);
+                assert_eq!(compiled.len(), expected_contexts);
+                assert_eq!(compiled_context as usize, expected_contexts);
+            })
+            .expect("small-stack context thread should start")
+            .join()
+            .expect("deep context traversal should not overflow");
     }
 
     #[test]
