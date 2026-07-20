@@ -2236,19 +2236,24 @@ mod tests {
         let mut lexer = BaseLexer::new(InputStream::new(" ab"), recognizer_data());
         let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
         let mut sink = TokenSink::new(&mut store);
+        let mut true_predicate_calls = 0;
         let id = next_token_compiled_with_hooks(
             &mut lexer,
             &mut sink,
             &atn,
             &dfa,
             |_, _| {},
-            |_, _| true,
+            |_, _| {
+                true_predicate_calls += 1;
+                true_predicate_calls == 1
+            },
             |_, _, _| {},
         )
         .expect("test token should fit");
         let token = sink.view(id).expect("emitted token should exist");
         assert_eq!(token.token_type(), 1);
         assert_eq!(token.text(), "ab");
+        assert_eq!(true_predicate_calls, 1);
 
         let mut compiled = BaseLexer::new(InputStream::new("ab"), recognizer_data());
         let mut interpreted = BaseLexer::new(InputStream::new("ab"), recognizer_data());
@@ -2257,25 +2262,35 @@ mod tests {
             TokenStore::new(interpreted.source_text(), interpreted.source_name());
         let mut compiled_sink = TokenSink::new(&mut compiled_store);
         let mut interpreted_sink = TokenSink::new(&mut interpreted_store);
+        let mut compiled_predicate_calls = 0;
         let compiled_id = next_token_compiled_with_hooks(
             &mut compiled,
             &mut compiled_sink,
             &atn,
             &dfa,
             |_, _| {},
-            |_, _| false,
+            |_, _| {
+                compiled_predicate_calls += 1;
+                false
+            },
             |_, _, _| {},
         )
         .expect("false predicate should recover to EOF");
+        let mut interpreted_predicate_calls = 0;
         let interpreted_id = next_token_with_hooks(
             &mut interpreted,
             &mut interpreted_sink,
             &atn,
             |_, _| {},
-            |_, _| false,
+            |_, _| {
+                interpreted_predicate_calls += 1;
+                false
+            },
             |_, _, _| {},
         )
         .expect("interpreted false predicate should recover to EOF");
+        assert_eq!(compiled_predicate_calls, interpreted_predicate_calls);
+        assert_eq!(compiled_predicate_calls, 1);
         assert_eq!(
             compiled_sink
                 .view(compiled_id)

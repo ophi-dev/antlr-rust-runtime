@@ -944,7 +944,14 @@ where
     /// unaffected. Any path that falls back to ATN interpretation relearns its
     /// dynamic DFA from an empty cache after this call.
     pub fn clear_dfa(&self) {
-        *self.dfa_cache.borrow_mut() = LexerDfaCache::default();
+        let mut cache = self.dfa_cache.borrow_mut();
+        // In-flight predicate evaluation may clear the DFA while its configs
+        // still hold store-local context IDs.
+        let prediction = std::mem::take(&mut cache.prediction);
+        *cache = LexerDfaCache {
+            prediction,
+            ..LexerDfaCache::default()
+        };
     }
 
     pub const fn input(&self) -> &I {
