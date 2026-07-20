@@ -23,7 +23,12 @@ pub enum AntlrError {
     Unsupported(String),
 }
 
-pub trait ErrorListener<R: Recognizer> {
+/// Receives recognizer diagnostics.
+///
+/// Listeners registered through [`Recognizer::add_error_listener`] must work
+/// with every recognizer type. Implement the trait generically, as
+/// [`ConsoleErrorListener`] does, when a listener will be registered.
+pub trait ErrorListener<R: Recognizer + ?Sized> {
     fn syntax_error(
         &mut self,
         recognizer: &R,
@@ -37,7 +42,7 @@ pub trait ErrorListener<R: Recognizer> {
 #[derive(Debug, Default)]
 pub struct ConsoleErrorListener;
 
-impl<R: Recognizer> ErrorListener<R> for ConsoleErrorListener {
+impl<R: Recognizer + ?Sized> ErrorListener<R> for ConsoleErrorListener {
     #[allow(clippy::print_stderr)]
     fn syntax_error(
         &mut self,

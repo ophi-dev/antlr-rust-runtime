@@ -4872,7 +4872,8 @@ where
     /// Emits diagnostics buffered by the token stream while generated parser
     /// code was fetching lexer tokens directly.
     pub fn report_token_source_errors(&mut self) {
-        report_token_source_errors(&self.input.drain_source_errors());
+        let errors = self.input.drain_source_errors();
+        self.dispatch_token_source_errors(&errors);
     }
 
     /// Captures generated-parser diagnostics and syntax-error count before a
@@ -4898,7 +4899,72 @@ where
     pub fn report_generated_parser_diagnostics(&mut self) {
         let parser_diagnostics = std::mem::take(&mut self.generated_parser_diagnostics);
         let token_errors = self.input.drain_source_errors();
-        report_generated_diagnostics(&parser_diagnostics, &token_errors);
+        self.dispatch_generated_diagnostics(&parser_diagnostics, &token_errors);
+    }
+
+    fn dispatch_parser_diagnostic(&self, diagnostic: &ParserDiagnostic) {
+        self.notify_error_listeners(
+            diagnostic.line,
+            diagnostic.column,
+            &diagnostic.message,
+            None,
+        );
+    }
+
+    fn dispatch_parser_diagnostics<'a>(
+        &self,
+        diagnostics: impl IntoIterator<Item = &'a ParserDiagnostic>,
+    ) {
+        for diagnostic in diagnostics {
+            self.dispatch_parser_diagnostic(diagnostic);
+        }
+    }
+
+    fn dispatch_token_source_error(&self, source_error: &TokenSourceError) {
+        if self.input.token_source().report_error(source_error) {
+            return;
+        }
+        self.notify_error_listeners(
+            source_error.line,
+            source_error.column,
+            &source_error.message,
+            None,
+        );
+    }
+
+    fn dispatch_token_source_errors(&self, errors: &[TokenSourceError]) {
+        for error in errors {
+            self.dispatch_token_source_error(error);
+        }
+    }
+
+    /// Dispatches generated parser and lexer diagnostics in the same
+    /// source-position order as ANTLR's lazy token stream reports them.
+    fn dispatch_generated_diagnostics(
+        &self,
+        parser_diagnostics: &[ParserDiagnostic],
+        token_errors: &[TokenSourceError],
+    ) {
+        // Parser diagnostics keep their event order: Java's console and
+        // DiagnosticErrorListener print reports as prediction produces them,
+        // so reportAttemptingFullContext precedes reportContextSensitivity
+        // even though the latter's position is earlier. Buffered token-source
+        // errors interleave by source position and win ties.
+        let mut token_iter = token_errors.iter().peekable();
+        for diagnostic in parser_diagnostics {
+            while let Some(error) = token_iter.peek() {
+                if (error.line, error.column) <= (diagnostic.line, diagnostic.column) {
+                    self.dispatch_token_source_error(error);
+                    token_iter.next();
+                } else {
+                    break;
+                }
+            }
+            self.dispatch_parser_diagnostic(diagnostic);
+        }
+        for error in token_iter {
+            self.dispatch_token_source_error(error);
+        }
     }
 
     /// Buffers ANTLR-style ambiguity diagnostics discovered by generated
@@ -6424,7 +6490,7 @@ where
 
         match result {
             Ok(tree) => {
-                report_token_source_errors(&self.input.drain_source_errors());
+                self.report_token_source_errors();
                 self.release_tree_scratch_if_idle();
                 Ok(tree)
             }
@@ -6550,12 +6616,12 @@ where
                 if predicate_context.is_some()
                     && let Some(error) = self.unknown_semantic_error()
                 {
-                    report_token_source_errors(&self.input.drain_source_errors());
+                    self.report_token_source_errors();
                     return error;
                 }
                 let error = self.recognition_error(rule_index, start_index, &expected);
                 self.record_syntax_errors(1);
-                report_token_source_errors(&self.input.drain_source_errors());
+                self.report_token_source_errors();
                 error
             })?
         } else {
@@ -6564,13 +6630,13 @@ where
         if predicate_context.is_some()
             && let Some(error) = self.unknown_semantic_error()
         {
-            report_token_source_errors(&self.input.drain_source_errors());
+            self.report_token_source_errors();
             return Err(error);
         }
         self.record_syntax_errors(self.recognition_arena.diagnostics_len(outcome.diagnostics));
-        report_parser_diagnostics(&self.prediction_diagnostics);
-        report_parser_diagnostics(self.recognition_arena.diagnostics(outcome.diagnostics));
-        report_token_source_errors(&self.input.drain_source_errors());
+        self.dispatch_parser_diagnostics(&self.prediction_diagnostics);
+        self.dispatch_parser_diagnostics(self.recognition_arena.diagnostics(outcome.diagnostics));
+        self.report_token_source_errors();
         let mut context = ParserRuleContext::with_child_capacity(
             rule_index,
             self.state(),
@@ -7097,7 +7163,7 @@ where
             &mut expected,
         );
         if let Some(error) = self.unknown_semantic_error() {
-            report_token_source_errors(&self.input.drain_source_errors());
+            self.report_token_source_errors();
             // Keep the recorded coordinates: when this interpreted rule is a
             // child of a generated parent, the parent's catch block recovers an
             // ordinary `AntlrError` into a partial subtree, so the fail-loud
@@ -7116,14 +7182,14 @@ where
         ) else {
             let error = self.recognition_error(rule_index, start_index, &expected);
             self.record_syntax_errors(1);
-            report_token_source_errors(&self.input.drain_source_errors());
+            self.report_token_source_errors();
             return Err(error);
         };
 
         self.record_syntax_errors(self.recognition_arena.diagnostics_len(outcome.diagnostics));
-        report_parser_diagnostics(&self.prediction_diagnostics);
-        report_parser_diagnostics(self.recognition_arena.diagnostics(outcome.diagnostics));
-        report_token_source_errors(&self.input.drain_source_errors());
+        self.dispatch_parser_diagnostics(&self.prediction_diagnostics);
+        self.dispatch_parser_diagnostics(self.recognition_arena.diagnostics(outcome.diagnostics));
+        self.report_token_source_errors();
         let mut actions = outcome.actions;
         if init_action_rules.contains(&rule_index) {
             actions.insert(
@@ -11329,59 +11395,6 @@ fn diagnostic_for_token<T: Token>(token: Option<T>, message: String) -> ParserDi
     }
 }
 
-/// Emits parser diagnostics for the selected recovered parse path.
-#[allow(clippy::print_stderr)]
-fn report_parser_diagnostics<'a>(diagnostics: impl IntoIterator<Item = &'a ParserDiagnostic>) {
-    for diagnostic in diagnostics {
-        eprintln!(
-            "line {}:{} {}",
-            diagnostic.line, diagnostic.column, diagnostic.message
-        );
-    }
-}
-
-/// Emits generated parser diagnostics and lexer diagnostics in the same
-/// source-position order as ANTLR's lazy token stream reports them.
-#[allow(clippy::print_stderr)]
-fn report_generated_diagnostics(
-    parser_diagnostics: &[ParserDiagnostic],
-    token_errors: &[TokenSourceError],
-) {
-    // Parser diagnostics keep their event order: Java's console and
-    // DiagnosticErrorListener print reports as prediction produces them, so
-    // `reportAttemptingFullContext` precedes `reportContextSensitivity` even
-    // though the latter's position is earlier. Buffered token-source errors
-    // interleave by source position — ANTLR's lazy token stream surfaces a
-    // lexer error when the parser first fetches that token — and win ties.
-    let mut token_iter = token_errors.iter().peekable();
-    for diagnostic in parser_diagnostics {
-        while let Some(error) = token_iter.peek() {
-            if (error.line, error.column) <= (diagnostic.line, diagnostic.column) {
-                eprintln!("line {}:{} {}", error.line, error.column, error.message);
-                token_iter.next();
-            } else {
-                break;
-            }
-        }
-        eprintln!(
-            "line {}:{} {}",
-            diagnostic.line, diagnostic.column, diagnostic.message
-        );
-    }
-    for error in token_iter {
-        eprintln!("line {}:{} {}", error.line, error.column, error.message);
-    }
-}
-
-/// Emits buffered token-source diagnostics after parser diagnostics that were
-/// discovered while speculatively reading the same token stream.
-#[allow(clippy::print_stderr)]
-fn report_token_source_errors(errors: &[TokenSourceError]) {
-    for error in errors {
-        eprintln!("line {}:{} {}", error.line, error.column, error.message);
-    }
-}
-
 fn expected_symbols_display(symbols: &BTreeSet<i32>, vocabulary: &Vocabulary) -> String {
     expected_symbols_display_iter(symbols.iter().copied(), vocabulary)
 }
@@ -12071,7 +12084,9 @@ mod tests {
     use crate::token_stream::CommonTokenStream;
     use crate::tree::{NodeKind, ParseTreeStats};
     use crate::vocabulary::Vocabulary;
+    use std::cell::RefCell;
     use std::mem::size_of;
+    use std::rc::Rc;
 
     #[test]
     fn fx_hasher_write_matches_typed_methods_for_full_words() {
@@ -12221,6 +12236,71 @@ mod tests {
         }
     }
 
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    struct RecordedDiagnostic {
+        grammar_file_name: String,
+        line: usize,
+        column: usize,
+        message: String,
+        error: Option<AntlrError>,
+    }
+
+    #[derive(Clone, Debug)]
+    struct RecordingErrorListener {
+        diagnostics: Rc<RefCell<Vec<RecordedDiagnostic>>>,
+    }
+
+    impl<R> crate::ErrorListener<R> for RecordingErrorListener
+    where
+        R: Recognizer + ?Sized,
+    {
+        fn syntax_error(
+            &mut self,
+            recognizer: &R,
+            line: usize,
+            column: usize,
+            message: &str,
+            error: Option<&AntlrError>,
+        ) {
+            self.diagnostics.borrow_mut().push(RecordedDiagnostic {
+                grammar_file_name: recognizer.grammar_file_name().to_owned(),
+                line,
+                column,
+                message: message.to_owned(),
+                error: error.cloned(),
+            });
+        }
+    }
+
+    #[derive(Debug)]
+    struct ReportingSource {
+        source: Source,
+        diagnostics: Rc<RefCell<Vec<TokenSourceError>>>,
+    }
+
+    impl TokenSource for ReportingSource {
+        fn next_token(&mut self, sink: &mut TokenSink<'_>) -> Result<TokenId, TokenStoreError> {
+            self.source.next_token(sink)
+        }
+
+        fn line(&self) -> usize {
+            self.source.line()
+        }
+
+        fn column(&self) -> usize {
+            self.source.column()
+        }
+
+        fn source_name(&self) -> &str {
+            self.source.source_name()
+        }
+
+        fn report_error(&self, error: &TokenSourceError) -> bool {
+            self.diagnostics.borrow_mut().push(error.clone());
+            true
+        }
+    }
+
     fn mini_parser_data() -> RecognizerData {
         RecognizerData::new(
             "Mini.g4",
@@ -12243,6 +12323,82 @@ mod tests {
             mini_parser_data(),
             hooks,
         )
+    }
+
+    #[test]
+    fn parser_dispatches_recovery_diagnostics_through_registered_listeners() {
+        let mut parser = mini_parser(vec![TestToken::eof("parser-test", 0, 1, 0)]);
+        parser.remove_error_listeners();
+        let diagnostics = Rc::new(RefCell::new(Vec::new()));
+        parser.add_error_listener(RecordingErrorListener {
+            diagnostics: Rc::clone(&diagnostics),
+        });
+        let parser_diagnostics = [ParserDiagnostic {
+            line: 1,
+            column: 2,
+            message: "missing 'x' at 'y'".to_owned(),
+        }];
+        let token_errors = [
+            TokenSourceError::new(1, 1, "token recognition error at: '@'"),
+            TokenSourceError::new(1, 3, "token recognition error at: '#'"),
+        ];
+
+        parser.dispatch_generated_diagnostics(&parser_diagnostics, &token_errors);
+
+        assert_eq!(
+            *diagnostics.borrow(),
+            [
+                RecordedDiagnostic {
+                    grammar_file_name: "Mini.g4".to_owned(),
+                    line: 1,
+                    column: 1,
+                    message: "token recognition error at: '@'".to_owned(),
+                    error: None,
+                },
+                RecordedDiagnostic {
+                    grammar_file_name: "Mini.g4".to_owned(),
+                    line: 1,
+                    column: 2,
+                    message: "missing 'x' at 'y'".to_owned(),
+                    error: None,
+                },
+                RecordedDiagnostic {
+                    grammar_file_name: "Mini.g4".to_owned(),
+                    line: 1,
+                    column: 3,
+                    message: "token recognition error at: '#'".to_owned(),
+                    error: None,
+                },
+            ]
+        );
+
+        parser.remove_error_listeners();
+        parser.dispatch_generated_diagnostics(&parser_diagnostics, &token_errors);
+        assert_eq!(diagnostics.borrow().len(), 3);
+    }
+
+    #[test]
+    fn parser_leaves_token_errors_to_source_owned_listeners() {
+        let source_diagnostics = Rc::new(RefCell::new(Vec::new()));
+        let source = ReportingSource {
+            source: Source {
+                tokens: vec![TestToken::eof("parser-test", 0, 1, 0)],
+                index: 0,
+            },
+            diagnostics: Rc::clone(&source_diagnostics),
+        };
+        let mut parser = BaseParser::new(CommonTokenStream::new(source), mini_parser_data());
+        parser.remove_error_listeners();
+        let parser_diagnostics = Rc::new(RefCell::new(Vec::new()));
+        parser.add_error_listener(RecordingErrorListener {
+            diagnostics: Rc::clone(&parser_diagnostics),
+        });
+        let source_error = TokenSourceError::new(2, 4, "token recognition error at: '$'");
+
+        parser.dispatch_token_source_errors(std::slice::from_ref(&source_error));
+
+        assert_eq!(*source_diagnostics.borrow(), [source_error]);
+        assert!(parser_diagnostics.borrow().is_empty());
     }
 
     fn finish_atn(builder: ParserAtnBuilder) -> Atn {
