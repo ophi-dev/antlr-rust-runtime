@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{RefCell, RefMut};
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::hash::BuildHasherDefault;
 use std::rc::Rc;
@@ -6,7 +6,9 @@ use std::rc::Rc;
 use crate::atn::LexerAtn;
 use crate::char_stream::{CharStream, TextInterval};
 use crate::int_stream::EOF;
-use crate::prediction::PredictionFxHasher;
+use crate::prediction::{
+    ContextArena, ContextId, EMPTY_CONTEXT, PredictionFxHasher, PredictionWorkspace,
+};
 use crate::recognizer::{Recognizer, RecognizerData};
 use crate::token::{
     DEFAULT_CHANNEL, INVALID_TOKEN_TYPE, TokenId, TokenSink, TokenSourceError, TokenSpec,
@@ -595,8 +597,9 @@ pub struct BaseLexer<I> {
 /// re-simulates them instead of trusting their cached data, so the cache can
 /// be shared across lexer instances (and inputs) for the same ATN — see
 /// [`BaseLexer::with_shared_dfa`].
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Default)]
 struct LexerDfaCache {
+    prediction: LexerPredictionStore,
     state_numbers: FxHashMap<LexerDfaKey, usize>,
     accept_predictions: FxHashMap<usize, i32>,
     /// `showDFA` edge trace. Lives with the tables it describes, so a lexer
@@ -613,6 +616,147 @@ struct LexerDfaCache {
     /// Transitions on symbols outside the dense range (supplementary planes).
     sparse_edges: FxHashMap<(usize, i32), LexerDfaCachedTransition>,
     mode_starts: FxHashMap<i32, usize>,
+}
+
+/// Canonical caller contexts paired with the learned lexer DFA that stores
+/// their IDs.
+#[derive(Debug, Default)]
+pub(crate) struct LexerPredictionStore {
+    pub(crate) contexts: LexerContextArena,
+    pub(crate) workspace: PredictionWorkspace,
+}
+
+/// Store-local identity for one ordered lexer caller-context node.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(crate) struct LexerContextId(u32);
+
+pub(crate) const EMPTY_LEXER_CONTEXT: LexerContextId = LexerContextId(0);
+
+/// One node in an ordered graph of lexer caller stacks.
+///
+/// `Union` preserves ATN traversal priority. The paired unordered prediction
+/// context detects when a later union adds no stack paths, which keeps cyclic
+/// lexer closures finite without flattening their priority order.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub(crate) enum LexerContextNode {
+    Empty,
+    Singleton {
+        parent: LexerContextId,
+        return_state: usize,
+    },
+    Union {
+        left: LexerContextId,
+        right: LexerContextId,
+    },
+}
+
+#[derive(Clone, Copy, Debug)]
+struct LexerContextRecord {
+    node: LexerContextNode,
+    path_set: ContextId,
+}
+
+/// Canonical ordered caller-context DAG for one learned or compiled lexer DFA.
+#[derive(Debug)]
+pub(crate) struct LexerContextArena {
+    records: Vec<LexerContextRecord>,
+    ids: FxHashMap<LexerContextNode, LexerContextId>,
+    path_sets: ContextArena,
+}
+
+impl LexerContextArena {
+    pub(crate) fn new() -> Self {
+        let mut ids = FxHashMap::default();
+        ids.insert(LexerContextNode::Empty, EMPTY_LEXER_CONTEXT);
+        Self {
+            records: vec![LexerContextRecord {
+                node: LexerContextNode::Empty,
+                path_set: EMPTY_CONTEXT,
+            }],
+            ids,
+            path_sets: ContextArena::new(),
+        }
+    }
+
+    pub(crate) fn singleton(
+        &mut self,
+        parent: LexerContextId,
+        return_state: usize,
+    ) -> LexerContextId {
+        self.assert_valid(parent);
+        let node = LexerContextNode::Singleton {
+            parent,
+            return_state,
+        };
+        if let Some(&context) = self.ids.get(&node) {
+            return context;
+        }
+        let path_set = self
+            .path_sets
+            .singleton(self.record(parent).path_set, return_state);
+        self.intern(node, path_set)
+    }
+
+    pub(crate) fn merge(
+        &mut self,
+        left: LexerContextId,
+        right: LexerContextId,
+        workspace: &mut PredictionWorkspace,
+    ) -> LexerContextId {
+        self.assert_valid(left);
+        self.assert_valid(right);
+        if left == right {
+            return left;
+        }
+        let left_set = self.record(left).path_set;
+        let right_set = self.record(right).path_set;
+        let path_set = self.path_sets.merge(left_set, right_set, false, workspace);
+        if path_set == left_set {
+            return left;
+        }
+        let node = LexerContextNode::Union { left, right };
+        if let Some(&context) = self.ids.get(&node) {
+            return context;
+        }
+        self.intern(node, path_set)
+    }
+
+    pub(crate) fn node(&self, context: LexerContextId) -> LexerContextNode {
+        self.record(context).node
+    }
+
+    #[cfg(test)]
+    pub(crate) const fn len(&self) -> usize {
+        self.records.len()
+    }
+
+    fn intern(&mut self, node: LexerContextNode, path_set: ContextId) -> LexerContextId {
+        let context = LexerContextId(
+            u32::try_from(self.records.len()).expect("lexer context arena must fit in u32"),
+        );
+        self.records.push(LexerContextRecord { node, path_set });
+        self.ids.insert(node, context);
+        context
+    }
+
+    fn record(&self, context: LexerContextId) -> &LexerContextRecord {
+        self.assert_valid(context);
+        &self.records[usize::try_from(context.0).expect("u32 lexer context ID fits in usize")]
+    }
+
+    fn assert_valid(&self, context: LexerContextId) {
+        assert!(
+            usize::try_from(context.0).is_ok_and(|index| index < self.records.len()),
+            "lexer context ID does not belong to this store"
+        );
+    }
+}
+
+impl Default for LexerContextArena {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Dense-row width: ASCII, matching the reference runtimes' DFA edge arrays.
@@ -654,7 +798,7 @@ pub(crate) struct LexerDfaConfigKey {
     pub(crate) alt_rule_index: Option<usize>,
     pub(crate) consumed_eof: bool,
     pub(crate) passed_non_greedy: bool,
-    pub(crate) stack: Vec<usize>,
+    pub(crate) context: LexerContextId,
     pub(crate) actions: Vec<LexerDfaActionKey>,
 }
 
@@ -671,7 +815,7 @@ impl LexerDfaConfigKey {
         alt_rule_index: Option<usize>,
         consumed_eof: bool,
         passed_non_greedy: bool,
-        stack: Vec<usize>,
+        context: LexerContextId,
         actions: Vec<LexerDfaActionKey>,
     ) -> Self {
         Self {
@@ -679,7 +823,7 @@ impl LexerDfaConfigKey {
             alt_rule_index,
             consumed_eof,
             passed_non_greedy,
-            stack,
+            context,
             actions,
         }
     }
@@ -800,7 +944,14 @@ where
     /// unaffected. Any path that falls back to ATN interpretation relearns its
     /// dynamic DFA from an empty cache after this call.
     pub fn clear_dfa(&self) {
-        *self.dfa_cache.borrow_mut() = LexerDfaCache::default();
+        let mut cache = self.dfa_cache.borrow_mut();
+        // In-flight predicate evaluation may clear the DFA while its configs
+        // still hold store-local context IDs.
+        let prediction = std::mem::take(&mut cache.prediction);
+        *cache = LexerDfaCache {
+            prediction,
+            ..LexerDfaCache::default()
+        };
     }
 
     pub const fn input(&self) -> &I {
@@ -1314,6 +1465,44 @@ where
     /// Returns and clears lexer diagnostics produced while fetching tokens.
     pub fn drain_errors(&mut self) -> Vec<TokenSourceError> {
         std::mem::take(self.errors.get_mut())
+    }
+
+    /// Borrows the canonical caller-context store paired with this lexer's
+    /// learned DFA.
+    pub(crate) fn lexer_prediction_store(&self) -> RefMut<'_, LexerPredictionStore> {
+        RefMut::map(self.dfa_cache.borrow_mut(), |cache| &mut cache.prediction)
+    }
+
+    /// Starts a fresh token prediction while retaining bounded scratch
+    /// allocations for subsequent matches.
+    pub(crate) fn reset_lexer_prediction_workspace(&self) {
+        self.dfa_cache.borrow_mut().prediction.workspace.reset();
+    }
+
+    #[cfg(test)]
+    pub(crate) fn lexer_dfa_cache_shape(&self) -> (usize, usize, usize, usize) {
+        let cache = self.dfa_cache.borrow();
+        let cached_states = cache.cached_states.iter().flatten().count();
+        let cached_transitions = cache
+            .dense_edges
+            .iter()
+            .flatten()
+            .map(|row| {
+                row.iter()
+                    .filter(|transition| transition.target_state != usize::MAX)
+                    .count()
+            })
+            .sum::<usize>()
+            + cache.sparse_edges.len();
+        let max_configs = cache
+            .cached_states
+            .iter()
+            .flatten()
+            .map(|state| state.configs.len())
+            .max()
+            .unwrap_or(0);
+        let contexts = cache.prediction.contexts.len();
+        (cached_states, cached_transitions, max_configs, contexts)
     }
 
     /// Returns the stable state number for a normalized lexer DFA config set,

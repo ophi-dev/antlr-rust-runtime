@@ -9,7 +9,7 @@
 //!
 //! Compilation is conservative at the edge level: a transition whose target
 //! closure crosses a semantic predicate (whose outcome exists only at parse
-//! time), grows an unbounded rule-call stack (recursive lexer rules such as
+//! time), grows an unbounded caller-context path (recursive lexer rules such as
 //! nested comments), or exceeds the state budget is compiled as an *escape*
 //! edge. Dynamic closures carry their pre-closure configs so the interpreter
 //! resumes from the narrowed edge instead of re-matching from the token start.
@@ -31,8 +31,11 @@ use crate::atn::lexer::{
 };
 use crate::atn::{LexerAtn, LexerTransition};
 use crate::int_stream::EOF;
-use crate::lexer::{LexerDfaActionKey, LexerDfaConfigKey, LexerDfaKey};
-use crate::prediction::PredictionFxHasher;
+use crate::lexer::{
+    EMPTY_LEXER_CONTEXT, LexerContextArena, LexerContextId, LexerContextNode, LexerDfaActionKey,
+    LexerDfaConfigKey, LexerDfaKey,
+};
+use crate::prediction::{PredictionFxHasher, PredictionWorkspace};
 
 #[allow(clippy::disallowed_types)]
 type FxHashMap<K, V> = HashMap<K, V, BuildHasherDefault<PredictionFxHasher>>;
@@ -50,9 +53,9 @@ pub(super) const ESCAPE_STATE: u16 = u16::MAX - 1;
 /// also bounds compile time for pathological grammars.
 const MAX_MODE_STATES: usize = 4096;
 
-/// Rule-call stacks deeper than this escape to the interpreter, as a backstop
+/// Caller-context paths deeper than this escape to the interpreter, as a backstop
 /// for grammars with extraordinarily long non-recursive fragment chains.
-const MAX_STACK_DEPTH: usize = 32;
+const MAX_CONTEXT_DEPTH: usize = 32;
 
 /// Configs whose surviving action trace grows past this escape to the
 /// interpreter: a custom action crossed inside a loop is genuinely
@@ -266,7 +269,15 @@ struct CompiledLexerEscapeRange {
 /// its dynamic epsilon closure.
 #[derive(Clone, Debug)]
 pub(super) struct CompiledLexerContinuation {
+    pub(super) contexts: Vec<CompiledLexerContext>,
     pub(super) configs: Vec<CompiledLexerConfig>,
+}
+
+/// One ordered caller-context node in a continuation-local topological table.
+#[derive(Clone, Copy, Debug)]
+pub(super) enum CompiledLexerContext {
+    Singleton { parent: u32, return_state: usize },
+    Union { left: u32, right: u32 },
 }
 
 /// Position-independent ATN config stored in an escape continuation.
@@ -276,7 +287,7 @@ pub(super) struct CompiledLexerConfig {
     pub(super) consumed_eof: bool,
     pub(super) alt_rule_index: Option<usize>,
     pub(super) passed_non_greedy: bool,
-    pub(super) stack: Vec<usize>,
+    pub(super) context: u32,
     pub(super) actions: Vec<CompiledLexerActionTrace>,
 }
 
@@ -458,11 +469,12 @@ impl CompiledLexerDfa {
             .continuations
             .iter()
             .map(|continuation| {
-                1 + continuation
-                    .configs
-                    .iter()
-                    .map(|config| 6 + config.stack.len() + config.actions.len() * 3)
-                    .sum::<usize>()
+                2 + continuation.contexts.len() * 3
+                    + continuation
+                        .configs
+                        .iter()
+                        .map(|config| 6 + config.actions.len() * 3)
+                        .sum::<usize>()
             })
             .sum();
         let capacity = 9
@@ -529,16 +541,34 @@ impl CompiledLexerDfa {
         }
         out.push(self.continuations.len() as u32);
         for continuation in &self.continuations {
+            out.push(continuation.contexts.len() as u32);
+            for context in &continuation.contexts {
+                match context {
+                    CompiledLexerContext::Singleton {
+                        parent,
+                        return_state,
+                    } => {
+                        out.push(0);
+                        out.push(*parent);
+                        out.push(
+                            u32::try_from(*return_state)
+                                .expect("lexer context return state must fit in u32"),
+                        );
+                    }
+                    CompiledLexerContext::Union { left, right } => {
+                        out.push(1);
+                        out.push(*left);
+                        out.push(*right);
+                    }
+                }
+            }
             out.push(continuation.configs.len() as u32);
             for config in &continuation.configs {
                 out.push(config.state as u32);
                 out.push(config.alt_rule_index.map_or(u32::MAX, |rule| rule as u32));
                 out.push(u32::from(config.consumed_eof));
                 out.push(u32::from(config.passed_non_greedy));
-                out.push(config.stack.len() as u32);
-                for &state in &config.stack {
-                    out.push(state as u32);
-                }
+                out.push(config.context);
                 out.push(config.actions.len() as u32);
                 for action in &config.actions {
                     out.push(action.action_index as u32);
@@ -648,6 +678,10 @@ impl CompiledLexerDfa {
                         .iter()
                         .all(|range| continuation_ok(range.continuation))
             })
+            && self
+                .continuations
+                .iter()
+                .all(compiled_continuation_contexts_are_valid)
     }
 
     #[cfg(feature = "perf-counters")]
@@ -656,6 +690,29 @@ impl CompiledLexerDfa {
             crate::perf::record_lexer_run_descriptor(run.descriptor_kind());
         }
     }
+}
+
+fn compiled_continuation_contexts_are_valid(continuation: &CompiledLexerContinuation) -> bool {
+    let contexts_valid = continuation
+        .contexts
+        .iter()
+        .enumerate()
+        .all(|(index, context)| {
+            let local_id = u32::try_from(index + 1).ok();
+            local_id.is_some_and(|local_id| match context {
+                CompiledLexerContext::Singleton { parent, .. } => *parent < local_id,
+                CompiledLexerContext::Union { left, right } => {
+                    *left < local_id && *right < local_id
+                }
+            })
+        });
+    contexts_valid
+        && u32::try_from(continuation.contexts.len()).is_ok_and(|max_context| {
+            continuation
+                .configs
+                .iter()
+                .all(|config| config.context <= max_context)
+        })
 }
 
 /// Wide rows must hold well-formed, sorted, disjoint ranges for
@@ -673,7 +730,7 @@ fn escape_row_is_searchable(row: &[CompiledLexerEscapeRange]) -> bool {
 
 /// Version tag guarding embedded tables against format or construction-semantic
 /// drift.
-const SERIALIZED_TAG: u32 = 0x4C58_4405;
+const SERIALIZED_TAG: u32 = 0x4C58_4406;
 
 /// Cursor over a serialized DFA stream.
 struct SerializedReader<'a> {
@@ -802,6 +859,24 @@ impl SerializedReader<'_> {
         let count = self.next_len()?;
         let mut continuations = Vec::with_capacity(count.min(self.data.len()));
         for _ in 0..count {
+            let context_count = self.next_len()?;
+            let mut contexts = Vec::with_capacity(context_count.min(self.data.len()));
+            for _ in 0..context_count {
+                let kind = self.next()?;
+                let first = self.next()?;
+                let second = self.next()?;
+                contexts.push(match kind {
+                    0 => CompiledLexerContext::Singleton {
+                        parent: first,
+                        return_state: usize::try_from(second).ok()?,
+                    },
+                    1 => CompiledLexerContext::Union {
+                        left: first,
+                        right: second,
+                    },
+                    _ => return None,
+                });
+            }
             let config_count = self.next_len()?;
             let mut configs = Vec::with_capacity(config_count.min(self.data.len()));
             for _ in 0..config_count {
@@ -814,11 +889,7 @@ impl SerializedReader<'_> {
                 };
                 let consumed_eof = self.next()? != 0;
                 let passed_non_greedy = self.next()? != 0;
-                let stack_count = self.next_len()?;
-                let mut stack = Vec::with_capacity(stack_count.min(self.data.len()));
-                for _ in 0..stack_count {
-                    stack.push(self.next_len()?);
-                }
+                let context = self.next()?;
                 let action_count = self.next_len()?;
                 let mut actions = Vec::with_capacity(action_count.min(self.data.len()));
                 for _ in 0..action_count {
@@ -833,11 +904,11 @@ impl SerializedReader<'_> {
                     consumed_eof,
                     alt_rule_index,
                     passed_non_greedy,
-                    stack,
+                    context,
                     actions,
                 });
             }
-            continuations.push(CompiledLexerContinuation { configs });
+            continuations.push(CompiledLexerContinuation { contexts, configs });
         }
         Some(continuations)
     }
@@ -882,6 +953,8 @@ impl RowPools {
 struct ModeBuild {
     base: usize,
     continuation_base: usize,
+    contexts: LexerContextArena,
+    workspace: PredictionWorkspace,
     ids: FxHashMap<LexerDfaKey, u16>,
     configs: Vec<Vec<LexerConfig>>,
     steps: Vec<usize>,
@@ -916,6 +989,8 @@ impl ModeBuild {
         Self {
             base,
             continuation_base,
+            contexts: LexerContextArena::new(),
+            workspace: PredictionWorkspace::default(),
             ids: FxHashMap::default(),
             configs: Vec::new(),
             steps: Vec::new(),
@@ -962,26 +1037,36 @@ impl ModeBuild {
         let Ok(id) = u32::try_from(id) else {
             return u32::MAX;
         };
+        let mut context_ids = FxHashMap::default();
+        context_ids.insert(EMPTY_LEXER_CONTEXT, 0);
+        let mut contexts = Vec::new();
+        let compiled_configs = configs
+            .iter()
+            .map(|config| CompiledLexerConfig {
+                state: config.state,
+                consumed_eof: config.consumed_eof,
+                alt_rule_index: config.alt_rule_index,
+                passed_non_greedy: config.passed_non_greedy,
+                context: compile_context(
+                    &self.contexts,
+                    config.context,
+                    &mut context_ids,
+                    &mut contexts,
+                ),
+                actions: config
+                    .actions
+                    .iter()
+                    .map(|action| CompiledLexerActionTrace {
+                        action_index: action.action_index,
+                        rule_index: action.rule_index,
+                        behind: step.saturating_sub(action.position),
+                    })
+                    .collect(),
+            })
+            .collect();
         self.continuations.push(CompiledLexerContinuation {
-            configs: configs
-                .iter()
-                .map(|config| CompiledLexerConfig {
-                    state: config.state,
-                    consumed_eof: config.consumed_eof,
-                    alt_rule_index: config.alt_rule_index,
-                    passed_non_greedy: config.passed_non_greedy,
-                    stack: config.stack.clone(),
-                    actions: config
-                        .actions
-                        .iter()
-                        .map(|action| CompiledLexerActionTrace {
-                            action_index: action.action_index,
-                            rule_index: action.rule_index,
-                            behind: step.saturating_sub(action.position),
-                        })
-                        .collect(),
-                })
-                .collect(),
+            contexts,
+            configs: compiled_configs,
         });
         id
     }
@@ -1000,7 +1085,7 @@ fn relative_config_key(config: &LexerConfig, step: usize) -> LexerDfaConfigKey {
         config.alt_rule_index,
         config.consumed_eof,
         config.passed_non_greedy,
-        config.stack.clone(),
+        config.context,
         config
             .actions
             .iter()
@@ -1052,13 +1137,14 @@ fn build_mode(
     let mut build = ModeBuild::new(dfa.states.len(), dfa.continuations.len());
     let start_configs = closed_configs(
         atn,
+        &mut build,
         vec![LexerConfig {
             state: start_state,
             position: 0,
             consumed_eof: false,
             alt_rule_index: None,
             passed_non_greedy: false,
-            stack: Vec::new(),
+            context: EMPTY_LEXER_CONTEXT,
             actions: Vec::new(),
         }],
     )?;
@@ -1082,12 +1168,26 @@ fn build_mode(
 /// `None` means the closure crossed a semantic predicate (which only the
 /// interpreter can evaluate) or entered a recursive lexer rule (nested
 /// comments never determinize), so the edge must escape.
-fn closed_configs(atn: &LexerAtn, moved: Vec<LexerConfig>) -> Option<Vec<LexerConfig>> {
-    let closure = epsilon_closure(atn, moved, &mut |_| true);
+fn closed_configs(
+    atn: &LexerAtn,
+    build: &mut ModeBuild,
+    moved: Vec<LexerConfig>,
+) -> Option<Vec<LexerConfig>> {
+    let closure = epsilon_closure(
+        atn,
+        moved,
+        &mut build.contexts,
+        &mut build.workspace,
+        &mut |_| true,
+    );
     if closure.has_semantic_context {
         return None;
     }
-    if closure.configs.iter().any(has_recursive_stack) {
+    if closure
+        .configs
+        .iter()
+        .any(|config| has_recursive_context(config, &build.contexts))
+    {
         return None;
     }
     let mut configs = closure.configs;
@@ -1117,18 +1217,109 @@ fn prune_dead_action_traces(atn: &LexerAtn, config: &mut LexerConfig) {
         .retain(|trace| lexer_action_belongs_to_accept(atn, accept_rule, trace.rule_index));
 }
 
-/// Detects lexer-rule recursion: re-entering a rule from the same call site
-/// pushes the same follow state again, so a duplicated stack entry (or an
-/// implausibly deep stack) marks a config a finite DFA cannot represent.
-fn has_recursive_stack(config: &LexerConfig) -> bool {
-    let stack = &config.stack;
-    if stack.len() > MAX_STACK_DEPTH {
-        return true;
+/// Copies one arena context into a continuation-local topological table.
+fn compile_context(
+    contexts: &LexerContextArena,
+    context: LexerContextId,
+    ids: &mut FxHashMap<LexerContextId, u32>,
+    compiled: &mut Vec<CompiledLexerContext>,
+) -> u32 {
+    if let Some(&id) = ids.get(&context) {
+        return id;
     }
-    stack
-        .iter()
-        .enumerate()
-        .any(|(index, follow)| stack[..index].contains(follow))
+
+    enum Frame {
+        Visit(LexerContextId),
+        Finish(LexerContextId),
+    }
+
+    let mut pending = vec![Frame::Visit(context)];
+    while let Some(frame) = pending.pop() {
+        match frame {
+            Frame::Visit(current) => {
+                if ids.contains_key(&current) {
+                    continue;
+                }
+                let node = contexts.node(current);
+                match node {
+                    LexerContextNode::Empty => {
+                        ids.insert(current, 0);
+                    }
+                    LexerContextNode::Singleton { parent, .. } => {
+                        pending.push(Frame::Finish(current));
+                        pending.push(Frame::Visit(parent));
+                    }
+                    LexerContextNode::Union { left, right } => {
+                        pending.push(Frame::Finish(current));
+                        pending.push(Frame::Visit(right));
+                        pending.push(Frame::Visit(left));
+                    }
+                }
+            }
+            Frame::Finish(current) => {
+                let node = match contexts.node(current) {
+                    LexerContextNode::Empty => unreachable!("empty contexts finish immediately"),
+                    LexerContextNode::Singleton {
+                        parent,
+                        return_state,
+                    } => CompiledLexerContext::Singleton {
+                        parent: ids[&parent],
+                        return_state,
+                    },
+                    LexerContextNode::Union { left, right } => CompiledLexerContext::Union {
+                        left: ids[&left],
+                        right: ids[&right],
+                    },
+                };
+                let id = u32::try_from(compiled.len() + 1)
+                    .expect("compiled lexer context table overflow");
+                compiled.push(node);
+                ids.insert(current, id);
+            }
+        }
+    }
+
+    ids[&context]
+}
+
+/// Detects a repeated return state on any caller-context path. Such recursive
+/// paths grow without bound and therefore cannot be represented by a finite
+/// compiled DFA.
+fn has_recursive_context(config: &LexerConfig, contexts: &LexerContextArena) -> bool {
+    enum Frame {
+        Visit(LexerContextId),
+        LeaveRule,
+    }
+
+    let mut path = Vec::with_capacity(MAX_CONTEXT_DEPTH);
+    let mut pending = vec![Frame::Visit(config.context)];
+    while let Some(frame) = pending.pop() {
+        match frame {
+            Frame::Visit(context) => match contexts.node(context) {
+                LexerContextNode::Empty => {}
+                LexerContextNode::Union { left, right } => {
+                    pending.push(Frame::Visit(right));
+                    pending.push(Frame::Visit(left));
+                }
+                LexerContextNode::Singleton {
+                    parent,
+                    return_state,
+                } => {
+                    if path.len() >= MAX_CONTEXT_DEPTH || path.contains(&return_state) {
+                        return true;
+                    }
+                    path.push(return_state);
+                    pending.push(Frame::LeaveRule);
+                    pending.push(Frame::Visit(parent));
+                }
+            },
+            Frame::LeaveRule => {
+                path.pop().expect("leave frame must match an entered rule");
+            }
+        }
+    }
+
+    false
 }
 
 /// Computes every outgoing edge of one interned DFA state.
@@ -1295,7 +1486,7 @@ fn move_target(
         moved.push(advanced);
     }
     let continuation_configs = moved.clone();
-    let Some(active) = closed_configs(atn, moved) else {
+    let Some(active) = closed_configs(atn, build, moved) else {
         return EdgeTarget {
             state: ESCAPE_STATE,
             continuation: build.add_continuation(&continuation_configs, step + 1),
@@ -1333,7 +1524,7 @@ fn eof_move(
         return EdgeTarget::DEAD;
     }
     let continuation_configs = moved.clone();
-    let Some(active) = closed_configs(atn, moved) else {
+    let Some(active) = closed_configs(atn, build, moved) else {
         return EdgeTarget {
             state: ESCAPE_STATE,
             continuation: build.add_continuation(&continuation_configs, step),
@@ -1787,6 +1978,71 @@ mod tests {
     }
 
     #[test]
+    fn recursive_context_detection_enforces_depth_and_cycle_backstops() {
+        let mut contexts = LexerContextArena::new();
+        let mut bounded = EMPTY_LEXER_CONTEXT;
+        for return_state in 0..MAX_CONTEXT_DEPTH {
+            bounded = contexts.singleton(bounded, return_state);
+        }
+        let config = |context| LexerConfig {
+            state: 0,
+            position: 0,
+            consumed_eof: false,
+            alt_rule_index: Some(0),
+            passed_non_greedy: false,
+            context,
+            actions: Vec::new(),
+        };
+
+        assert!(!has_recursive_context(&config(bounded), &contexts));
+
+        let too_deep = contexts.singleton(bounded, MAX_CONTEXT_DEPTH);
+        assert!(has_recursive_context(&config(too_deep), &contexts));
+
+        let first = contexts.singleton(EMPTY_LEXER_CONTEXT, 7);
+        let recursive = contexts.singleton(first, 7);
+        assert!(has_recursive_context(&config(recursive), &contexts));
+    }
+
+    #[test]
+    fn deep_union_context_operations_fit_on_a_small_native_stack() {
+        let mut contexts = LexerContextArena::new();
+        let mut workspace = PredictionWorkspace::default();
+        let mut context = contexts.singleton(EMPTY_LEXER_CONTEXT, 0);
+        for return_state in 1..2048 {
+            let branch = contexts.singleton(EMPTY_LEXER_CONTEXT, return_state);
+            context = contexts.merge(context, branch, &mut workspace);
+        }
+        let expected_contexts = contexts.len() - 1;
+        let config = LexerConfig {
+            state: 0,
+            position: 0,
+            consumed_eof: false,
+            alt_rule_index: Some(0),
+            passed_non_greedy: false,
+            context,
+            actions: Vec::new(),
+        };
+
+        std::thread::Builder::new()
+            .stack_size(64 * 1024)
+            .spawn(move || {
+                assert!(!has_recursive_context(&config, &contexts));
+
+                let mut ids = FxHashMap::default();
+                ids.insert(EMPTY_LEXER_CONTEXT, 0);
+                let mut compiled = Vec::new();
+                let compiled_context =
+                    compile_context(&contexts, config.context, &mut ids, &mut compiled);
+                assert_eq!(compiled.len(), expected_contexts);
+                assert_eq!(compiled_context as usize, expected_contexts);
+            })
+            .expect("small-stack context thread should start")
+            .join()
+            .expect("deep context traversal should not overflow");
+    }
+
+    #[test]
     fn ascii_run_classifies_and_scans_only_exact_self_loops() {
         let state = 7;
         let mut row = [state; ASCII_EDGE_SYMBOLS];
@@ -1980,19 +2236,24 @@ mod tests {
         let mut lexer = BaseLexer::new(InputStream::new(" ab"), recognizer_data());
         let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
         let mut sink = TokenSink::new(&mut store);
+        let mut true_predicate_calls = 0;
         let id = next_token_compiled_with_hooks(
             &mut lexer,
             &mut sink,
             &atn,
             &dfa,
             |_, _| {},
-            |_, _| true,
+            |_, _| {
+                true_predicate_calls += 1;
+                true_predicate_calls == 1
+            },
             |_, _, _| {},
         )
         .expect("test token should fit");
         let token = sink.view(id).expect("emitted token should exist");
         assert_eq!(token.token_type(), 1);
         assert_eq!(token.text(), "ab");
+        assert_eq!(true_predicate_calls, 1);
 
         let mut compiled = BaseLexer::new(InputStream::new("ab"), recognizer_data());
         let mut interpreted = BaseLexer::new(InputStream::new("ab"), recognizer_data());
@@ -2001,25 +2262,35 @@ mod tests {
             TokenStore::new(interpreted.source_text(), interpreted.source_name());
         let mut compiled_sink = TokenSink::new(&mut compiled_store);
         let mut interpreted_sink = TokenSink::new(&mut interpreted_store);
+        let mut compiled_predicate_calls = 0;
         let compiled_id = next_token_compiled_with_hooks(
             &mut compiled,
             &mut compiled_sink,
             &atn,
             &dfa,
             |_, _| {},
-            |_, _| false,
+            |_, _| {
+                compiled_predicate_calls += 1;
+                false
+            },
             |_, _, _| {},
         )
         .expect("false predicate should recover to EOF");
+        let mut interpreted_predicate_calls = 0;
         let interpreted_id = next_token_with_hooks(
             &mut interpreted,
             &mut interpreted_sink,
             &atn,
             |_, _| {},
-            |_, _| false,
+            |_, _| {
+                interpreted_predicate_calls += 1;
+                false
+            },
             |_, _, _| {},
         )
         .expect("interpreted false predicate should recover to EOF");
+        assert_eq!(compiled_predicate_calls, interpreted_predicate_calls);
+        assert_eq!(compiled_predicate_calls, 1);
         assert_eq!(
             compiled_sink
                 .view(compiled_id)

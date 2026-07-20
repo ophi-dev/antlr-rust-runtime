@@ -1,21 +1,26 @@
 use std::cell::RefCell;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::hash::BuildHasherDefault;
 
 use crate::atn::lexer_dfa::{
-    CompiledLexerAccept, CompiledLexerContinuation, CompiledLexerDfa, DEAD_STATE, ESCAPE_STATE,
+    CompiledLexerAccept, CompiledLexerContext, CompiledLexerContinuation, CompiledLexerDfa,
+    DEAD_STATE, ESCAPE_STATE,
 };
 use crate::atn::{AtnStateKind, LexerAction, LexerAtn, LexerTransition};
 use crate::char_stream::{CharStream, TextInterval};
 use crate::int_stream::EOF;
 use crate::lexer::{
-    BaseLexer, Lexer, LexerCustomAction, LexerDfaActionKey, LexerDfaCachedAccept,
-    LexerDfaCachedState, LexerDfaCachedTransition, LexerDfaConfigKey, LexerDfaKey,
-    LexerLifecycleCtx, LexerPredicate, LexerSemCtx,
+    BaseLexer, EMPTY_LEXER_CONTEXT, Lexer, LexerContextArena, LexerContextId, LexerContextNode,
+    LexerCustomAction, LexerDfaActionKey, LexerDfaCachedAccept, LexerDfaCachedState,
+    LexerDfaCachedTransition, LexerDfaConfigKey, LexerDfaKey, LexerLifecycleCtx, LexerPredicate,
+    LexerSemCtx,
 };
 use crate::parser::{SemanticHooks, UnknownSemanticPolicy};
-use crate::prediction::PredictionFxHasher;
+use crate::prediction::{PredictionFxHasher, PredictionWorkspace};
 use crate::token::{INVALID_TOKEN_TYPE, TokenId, TokenSink, TokenStoreError};
+
+#[allow(clippy::disallowed_types)]
+type FxHashMap<K, V> = HashMap<K, V, BuildHasherDefault<PredictionFxHasher>>;
 
 #[allow(clippy::disallowed_types)]
 type FxHashSet<K> = HashSet<K, BuildHasherDefault<PredictionFxHasher>>;
@@ -30,8 +35,115 @@ pub(super) struct LexerConfig {
     pub(super) consumed_eof: bool,
     pub(super) alt_rule_index: Option<usize>,
     pub(super) passed_non_greedy: bool,
-    pub(super) stack: Vec<usize>,
+    pub(super) context: LexerContextId,
     pub(super) actions: Vec<LexerActionTrace>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct LexerConfigKey {
+    state: usize,
+    position: usize,
+    consumed_eof: bool,
+    alt_rule_index: Option<usize>,
+    passed_non_greedy: bool,
+    actions: Vec<LexerActionTrace>,
+}
+
+impl From<&LexerConfig> for LexerConfigKey {
+    fn from(config: &LexerConfig) -> Self {
+        Self {
+            state: config.state,
+            position: config.position,
+            consumed_eof: config.consumed_eof,
+            alt_rule_index: config.alt_rule_index,
+            passed_non_greedy: config.passed_non_greedy,
+            actions: config.actions.clone(),
+        }
+    }
+}
+
+trait LexerContextOps {
+    fn singleton(&mut self, parent: LexerContextId, return_state: usize) -> LexerContextId;
+    fn merge(&mut self, left: LexerContextId, right: LexerContextId) -> LexerContextId;
+    fn node(&self, context: LexerContextId) -> LexerContextNode;
+}
+
+struct BorrowedLexerContexts<'a> {
+    contexts: &'a mut LexerContextArena,
+    workspace: &'a mut PredictionWorkspace,
+}
+
+impl LexerContextOps for BorrowedLexerContexts<'_> {
+    fn singleton(&mut self, parent: LexerContextId, return_state: usize) -> LexerContextId {
+        self.contexts.singleton(parent, return_state)
+    }
+
+    fn merge(&mut self, left: LexerContextId, right: LexerContextId) -> LexerContextId {
+        self.contexts.merge(left, right, &mut *self.workspace)
+    }
+
+    fn node(&self, context: LexerContextId) -> LexerContextNode {
+        self.contexts.node(context)
+    }
+}
+
+struct SharedLexerContexts<'a, I> {
+    lexer: &'a BaseLexer<I>,
+}
+
+impl<I> LexerContextOps for SharedLexerContexts<'_, I>
+where
+    I: CharStream,
+{
+    fn singleton(&mut self, parent: LexerContextId, return_state: usize) -> LexerContextId {
+        self.lexer
+            .lexer_prediction_store()
+            .contexts
+            .singleton(parent, return_state)
+    }
+
+    fn merge(&mut self, left: LexerContextId, right: LexerContextId) -> LexerContextId {
+        let mut prediction = self.lexer.lexer_prediction_store();
+        let prediction = &mut *prediction;
+        prediction
+            .contexts
+            .merge(left, right, &mut prediction.workspace)
+    }
+
+    fn node(&self, context: LexerContextId) -> LexerContextNode {
+        self.lexer.lexer_prediction_store().contexts.node(context)
+    }
+}
+
+/// Ordered lexer configurations with graph-structured caller contexts.
+///
+/// Configurations which differ only by their caller path are behaviorally
+/// equivalent until a rule stop pops that path, so retaining one config with
+/// the union of those paths avoids materializing every concrete call stack.
+#[derive(Debug, Default)]
+struct LexerConfigSet {
+    configs: Vec<LexerConfig>,
+    config_index: FxHashMap<LexerConfigKey, usize>,
+}
+
+impl LexerConfigSet {
+    fn add<C>(&mut self, config: LexerConfig, contexts: &mut C)
+    where
+        C: LexerContextOps,
+    {
+        let key = LexerConfigKey::from(&config);
+        if let Some(&index) = self.config_index.get(&key) {
+            let existing = self.configs[index].context;
+            self.configs[index].context = contexts.merge(existing, config.context);
+            return;
+        }
+        self.config_index.insert(key, self.configs.len());
+        self.configs.push(config);
+    }
+
+    fn into_configs(self) -> Vec<LexerConfig> {
+        self.configs
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -57,6 +169,14 @@ pub(super) struct AcceptState {
 enum MatchResult {
     Accept(AcceptState),
     NoViableAlt { stop: usize },
+}
+
+struct InterpretedMatchState {
+    active: Vec<LexerConfig>,
+    dfa_state: usize,
+    dfa_state_has_semantic_context: bool,
+    best: Option<AcceptState>,
+    error_stop: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -100,8 +220,8 @@ where
 /// Accumulates one epsilon-closure expansion, including whether predicate
 /// evaluation made the closure input-position-sensitive.
 struct ClosureState {
-    seen: FxHashSet<LexerConfig>,
-    closed: Vec<LexerConfig>,
+    expanded: FxHashMap<LexerConfigKey, LexerContextId>,
+    closed: LexerConfigSet,
     has_semantic_context: bool,
 }
 
@@ -673,6 +793,7 @@ where
     I: CharStream,
     P: FnMut(&BaseLexer<I>, LexerPredicate) -> bool,
 {
+    lexer.reset_lexer_prediction_workspace();
     if let Some(dfa) = strategy.compiled
         && !lexer.force_interpreted()
         && let Some(start_state) = dfa.mode_start(mode)
@@ -681,7 +802,14 @@ where
             CompiledMatch::Complete(result) => return result,
             CompiledMatch::Resume(resume) => {
                 if compiled_resume_matches_atn(atn, start, &resume) {
-                    return match_token_from_continuation(lexer, atn, resume, semantic_predicate);
+                    return match_token_from_continuation(
+                        lexer,
+                        atn,
+                        mode,
+                        start,
+                        resume,
+                        semantic_predicate,
+                    );
                 }
             }
             CompiledMatch::Restart => {}
@@ -860,7 +988,8 @@ where
     let Some(start_state) = atn.mode_to_start_state().get(mode_index).copied() else {
         return MatchResult::NoViableAlt { stop: start };
     };
-    let start_closure = epsilon_closure(
+    let start_closure = epsilon_closure_with_lexer(
+        lexer,
         atn,
         [LexerConfig {
             state: start_state,
@@ -868,20 +997,50 @@ where
             consumed_eof: false,
             alt_rule_index: None,
             passed_non_greedy: false,
-            stack: Vec::new(),
+            context: EMPTY_LEXER_CONTEXT,
             actions: Vec::new(),
         }],
-        &mut |predicate| semantic_predicate(lexer, predicate),
+        semantic_predicate,
     );
-    let mut active = prune_after_accepts(atn, start_closure.configs);
-    let mut dfa_state = lexer.lexer_dfa_state(
+    let active = prune_after_accepts(atn, start_closure.configs);
+    let dfa_state = lexer.lexer_dfa_state(
         lexer_dfa_key(&active, start),
         accept_prediction(atn, &active),
     );
-    let mut dfa_state_has_semantic_context = start_closure.has_semantic_context;
+    let best = best_accept(atn, &active);
+    continue_interpreted_match(
+        lexer,
+        atn,
+        start,
+        InterpretedMatchState {
+            active,
+            dfa_state,
+            dfa_state_has_semantic_context: start_closure.has_semantic_context,
+            best,
+            error_stop: start,
+        },
+        semantic_predicate,
+    )
+}
 
-    let mut best = best_accept(atn, &active);
-    let mut error_stop = start;
+fn continue_interpreted_match<I, P>(
+    lexer: &mut BaseLexer<I>,
+    atn: &LexerAtn,
+    start: usize,
+    state: InterpretedMatchState,
+    semantic_predicate: &mut P,
+) -> MatchResult
+where
+    I: CharStream,
+    P: FnMut(&BaseLexer<I>, LexerPredicate) -> bool,
+{
+    let InterpretedMatchState {
+        mut active,
+        mut dfa_state,
+        mut dfa_state_has_semantic_context,
+        mut best,
+        mut error_stop,
+    } = state;
     while !active.is_empty() {
         let position = active[0].position;
         debug_assert!(
@@ -914,9 +1073,7 @@ where
             }
         }
 
-        let closure = epsilon_closure(atn, next, &mut |predicate| {
-            semantic_predicate(lexer, predicate)
-        });
+        let closure = epsilon_closure_with_lexer(lexer, atn, next, semantic_predicate);
         let target_has_semantic_context = closure.has_semantic_context;
         let suppress_edge = source_has_semantic_context || target_has_semantic_context;
         active = prune_after_accepts(atn, closure.configs);
@@ -932,21 +1089,21 @@ where
                 }
             }
         }
-        if let Some(accept) = best_accept(atn, &active) {
-            if best.as_ref().is_none_or(|current| {
-                accept.position > current.position
-                    || (accept.position == current.position
-                        && accept.rule_index < current.rule_index)
-            }) {
-                best = Some(accept);
-            }
-        }
+        update_best_accept(atn, &active, &mut best);
     }
 
     best.map_or(
         MatchResult::NoViableAlt { stop: error_stop },
         MatchResult::Accept,
     )
+}
+
+enum CachedModeStart {
+    Cached(usize),
+    Evaluated {
+        dfa_state: usize,
+        active: Vec<LexerConfig>,
+    },
 }
 
 fn match_token_cached<I, P>(
@@ -960,18 +1117,59 @@ where
     I: CharStream,
     P: FnMut(&BaseLexer<I>, LexerPredicate) -> bool,
 {
-    let Some((mut dfa_state, mode_start_has_semantic_context)) =
-        cached_mode_start_state(lexer, atn, mode, start, semantic_predicate)
+    let Some(mode_start) = cached_mode_start_state(lexer, atn, mode, start, semantic_predicate)
     else {
         return MatchResult::NoViableAlt { stop: start };
     };
-    if mode_start_has_semantic_context {
-        return match_token(lexer, atn, mode, start, semantic_predicate);
-    }
+    let dfa_state = match mode_start {
+        CachedModeStart::Cached(dfa_state) => dfa_state,
+        CachedModeStart::Evaluated { dfa_state, active } => {
+            let best = best_accept(atn, &active);
+            return continue_interpreted_match(
+                lexer,
+                atn,
+                start,
+                InterpretedMatchState {
+                    active,
+                    dfa_state,
+                    dfa_state_has_semantic_context: true,
+                    best,
+                    error_stop: start,
+                },
+                semantic_predicate,
+            );
+        }
+    };
 
-    let mut position = start;
-    let mut best = None;
-    let mut error_stop = start;
+    match_token_cached_from_state(
+        lexer,
+        atn,
+        mode,
+        start,
+        dfa_state,
+        start,
+        None,
+        start,
+        semantic_predicate,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn match_token_cached_from_state<I, P>(
+    lexer: &mut BaseLexer<I>,
+    atn: &LexerAtn,
+    mode: i32,
+    start: usize,
+    mut dfa_state: usize,
+    mut position: usize,
+    mut best: Option<AcceptState>,
+    mut error_stop: usize,
+    semantic_predicate: &mut P,
+) -> MatchResult
+where
+    I: CharStream,
+    P: FnMut(&BaseLexer<I>, LexerPredicate) -> bool,
+{
     loop {
         let Some(cached_state) = lexer.cached_lexer_dfa_state(dfa_state) else {
             return match_token(lexer, atn, mode, start, semantic_predicate);
@@ -1031,21 +1229,16 @@ where
             }
         }
 
-        let closure = epsilon_closure(atn, next, &mut |predicate| {
-            semantic_predicate(lexer, predicate)
-        });
+        let closure = epsilon_closure_with_lexer(lexer, atn, next, semantic_predicate);
         let target_has_semantic_context = closure.has_semantic_context;
-        if target_has_semantic_context {
-            return match_token(lexer, atn, mode, start, semantic_predicate);
-        }
         let suppress_edge = source_has_semantic_context || target_has_semantic_context;
         let active = prune_after_accepts(atn, closure.configs);
+        update_best_accept(atn, &active, &mut best);
         if active.is_empty() {
             break;
         }
-        let Some(target_position) = shared_config_position(&active) else {
-            return match_token(lexer, atn, mode, start, semantic_predicate);
-        };
+        let target_position =
+            shared_config_position(&active).expect("lexer ATN configs advance in lockstep");
         dfa_state = cache_dfa_state(
             lexer,
             atn,
@@ -1054,6 +1247,21 @@ where
             start,
             target_position,
         );
+        if target_has_semantic_context {
+            return continue_interpreted_match(
+                lexer,
+                atn,
+                start,
+                InterpretedMatchState {
+                    active,
+                    dfa_state,
+                    dfa_state_has_semantic_context: true,
+                    best,
+                    error_stop,
+                },
+                semantic_predicate,
+            );
+        }
         if !suppress_edge && symbol != EOF {
             lexer.record_lexer_dfa_edge(source_dfa_state, symbol, dfa_state);
             lexer.cache_lexer_dfa_transition(
@@ -1098,16 +1306,32 @@ fn compiled_resume_matches_atn(atn: &LexerAtn, start: usize, resume: &CompiledRe
         return false;
     };
     let rule_count = atn.rule_to_token_type().len();
-    !resume.continuation.configs.is_empty()
+    let contexts_valid = resume
+        .continuation
+        .contexts
+        .iter()
+        .enumerate()
+        .all(|(index, context)| {
+            let local_id = u32::try_from(index + 1).ok();
+            local_id.is_some_and(|local_id| match context {
+                CompiledLexerContext::Singleton {
+                    parent,
+                    return_state,
+                } => *parent < local_id && atn.state(*return_state).is_some(),
+                CompiledLexerContext::Union { left, right } => {
+                    *left < local_id && *right < local_id
+                }
+            })
+        });
+    contexts_valid
+        && !resume.continuation.configs.is_empty()
         && resume.continuation.configs.iter().all(|config| {
             atn.state(config.state).is_some()
                 && config
                     .alt_rule_index
                     .is_some_and(|rule_index| rule_index < rule_count)
-                && config
-                    .stack
-                    .iter()
-                    .all(|&state_number| atn.state(state_number).is_some())
+                && usize::try_from(config.context)
+                    .is_ok_and(|context| context <= resume.continuation.contexts.len())
                 && config.actions.iter().all(|action| {
                     action.action_index < atn.lexer_actions().len()
                         && action.rule_index < rule_count
@@ -1302,6 +1526,8 @@ where
 fn match_token_from_continuation<I, P>(
     lexer: &mut BaseLexer<I>,
     atn: &LexerAtn,
+    mode: i32,
+    start: usize,
     resume: CompiledResume<'_>,
     semantic_predicate: &mut P,
 ) -> MatchResult
@@ -1313,73 +1539,88 @@ where
         continuation,
         position,
         mut best,
-        mut error_stop,
+        error_stop,
     } = resume;
-    let moved = continuation.configs.iter().map(|config| LexerConfig {
-        state: config.state,
-        position,
-        consumed_eof: config.consumed_eof,
-        alt_rule_index: config.alt_rule_index,
-        passed_non_greedy: config.passed_non_greedy,
-        stack: config.stack.clone(),
-        actions: config
-            .actions
-            .iter()
-            .map(|action| LexerActionTrace {
-                action_index: action.action_index,
-                position: position.saturating_sub(action.behind),
-                rule_index: action.rule_index,
-            })
-            .collect(),
-    });
-    let closure = epsilon_closure(atn, moved, &mut |predicate| {
-        semantic_predicate(lexer, predicate)
-    });
-    let mut active = prune_after_accepts(atn, closure.configs);
-    update_best_accept(atn, &active, &mut best);
-
-    while let Some(config) = active.first() {
-        let active_position = config.position;
-        debug_assert!(
-            active
-                .iter()
-                .all(|config| config.position == active_position),
-            "lexer ATN configs must advance through the input in lockstep"
-        );
-        let symbol = symbol_at(lexer, active_position);
-        if symbol != EOF {
-            error_stop = error_stop.max(active_position.saturating_add(1));
-        }
-        let mut next = Vec::new();
-        for config in active {
-            let Some(state) = atn.state(config.state) else {
-                continue;
+    let moved = {
+        let mut prediction = lexer.lexer_prediction_store();
+        let prediction = &mut *prediction;
+        let mut contexts = Vec::with_capacity(continuation.contexts.len() + 1);
+        contexts.push(EMPTY_LEXER_CONTEXT);
+        for compiled in &continuation.contexts {
+            let imported = match *compiled {
+                CompiledLexerContext::Singleton {
+                    parent,
+                    return_state,
+                } => prediction
+                    .contexts
+                    .singleton(contexts[parent as usize], return_state),
+                CompiledLexerContext::Union { left, right } => prediction.contexts.merge(
+                    contexts[left as usize],
+                    contexts[right as usize],
+                    &mut prediction.workspace,
+                ),
             };
-            for transition in &state.transitions {
-                if !transition.matches(symbol, MIN_CHAR_VALUE, MAX_CHAR_VALUE) {
-                    continue;
-                }
-                let mut advanced = config.clone();
-                set_config_state(atn, &mut advanced, transition.target());
-                if symbol == EOF {
-                    advanced.consumed_eof = true;
-                } else {
-                    advanced.position += 1;
-                }
-                next.push(advanced);
-            }
+            contexts.push(imported);
         }
-
-        let closure = epsilon_closure(atn, next, &mut |predicate| {
-            semantic_predicate(lexer, predicate)
-        });
-        active = prune_after_accepts(atn, closure.configs);
-        update_best_accept(atn, &active, &mut best);
+        continuation
+            .configs
+            .iter()
+            .map(|config| LexerConfig {
+                state: config.state,
+                position,
+                consumed_eof: config.consumed_eof,
+                alt_rule_index: config.alt_rule_index,
+                passed_non_greedy: config.passed_non_greedy,
+                context: contexts[config.context as usize],
+                actions: config
+                    .actions
+                    .iter()
+                    .map(|action| LexerActionTrace {
+                        action_index: action.action_index,
+                        position: position.saturating_sub(action.behind),
+                        rule_index: action.rule_index,
+                    })
+                    .collect(),
+            })
+            .collect::<Vec<_>>()
+    };
+    let closure = epsilon_closure_with_lexer(lexer, atn, moved, semantic_predicate);
+    let has_semantic_context = closure.has_semantic_context;
+    let active = prune_after_accepts(atn, closure.configs);
+    update_best_accept(atn, &active, &mut best);
+    if active.is_empty() {
+        return best.map_or(
+            MatchResult::NoViableAlt { stop: error_stop },
+            MatchResult::Accept,
+        );
     }
-
-    best.map_or(
-        MatchResult::NoViableAlt { stop: error_stop },
-        MatchResult::Accept,
+    let position = shared_config_position(&active).expect("lexer ATN configs advance in lockstep");
+    let dfa_state = cache_dfa_state(lexer, atn, &active, has_semantic_context, start, position);
+    if has_semantic_context {
+        return continue_interpreted_match(
+            lexer,
+            atn,
+            start,
+            InterpretedMatchState {
+                active,
+                dfa_state,
+                dfa_state_has_semantic_context: true,
+                best,
+                error_stop,
+            },
+            semantic_predicate,
+        );
+    }
+    match_token_cached_from_state(
+        lexer,
+        atn,
+        mode,
+        start,
+        dfa_state,
+        position,
+        best,
+        error_stop,
+        semantic_predicate,
     )
 }
 
@@ -1432,18 +1673,19 @@ fn cached_mode_start_state<I, P>(
     mode: i32,
     start: usize,
     semantic_predicate: &mut P,
-) -> Option<(usize, bool)>
+) -> Option<CachedModeStart>
 where
     I: CharStream,
     P: FnMut(&BaseLexer<I>, LexerPredicate) -> bool,
 {
     if let Some(state) = lexer.cached_lexer_mode_start(mode) {
-        return Some((state, false));
+        return Some(CachedModeStart::Cached(state));
     }
 
     let mode_index = usize::try_from(mode).ok()?;
     let start_state = atn.mode_to_start_state().get(mode_index).copied()?;
-    let start_closure = epsilon_closure(
+    let start_closure = epsilon_closure_with_lexer(
+        lexer,
         atn,
         [LexerConfig {
             state: start_state,
@@ -1451,10 +1693,10 @@ where
             consumed_eof: false,
             alt_rule_index: None,
             passed_non_greedy: false,
-            stack: Vec::new(),
+            context: EMPTY_LEXER_CONTEXT,
             actions: Vec::new(),
         }],
-        &mut |predicate| semantic_predicate(lexer, predicate),
+        semantic_predicate,
     );
     let active = prune_after_accepts(atn, start_closure.configs);
     let state = cache_dfa_state(
@@ -1465,10 +1707,14 @@ where
         start,
         start,
     );
-    if !start_closure.has_semantic_context {
-        lexer.cache_lexer_mode_start(mode, state);
+    if start_closure.has_semantic_context {
+        return Some(CachedModeStart::Evaluated {
+            dfa_state: state,
+            active,
+        });
     }
-    Some((state, start_closure.has_semantic_context))
+    lexer.cache_lexer_mode_start(mode, state);
+    Some(CachedModeStart::Cached(state))
 }
 
 fn cache_dfa_state<I>(
@@ -1537,32 +1783,67 @@ fn cached_accept_state(
     }
 }
 
-/// Expands epsilon, rule-call, predicate, precedence, and action transitions
-/// without consuming input.
-///
-/// Lexer rule calls use an explicit return-state stack in `LexerConfig` because
-/// fragment rules and nested lexer constructs compile to rule transitions in the
-/// serialized ATN.
-pub(super) fn epsilon_closure<P>(
+fn epsilon_closure_with_lexer<I, P>(
+    lexer: &BaseLexer<I>,
     atn: &LexerAtn,
     configs: impl IntoIterator<Item = LexerConfig>,
     semantic_predicate: &mut P,
 ) -> ClosureResult
 where
+    I: CharStream,
+    P: FnMut(&BaseLexer<I>, LexerPredicate) -> bool,
+{
+    let mut contexts = SharedLexerContexts { lexer };
+    epsilon_closure_with_contexts(atn, configs, &mut contexts, &mut |predicate| {
+        semantic_predicate(lexer, predicate)
+    })
+}
+
+/// Expands epsilon, rule-call, predicate, precedence, and action transitions
+/// without consuming input.
+///
+/// Lexer rule calls use graph-structured caller contexts. Equivalent configs
+/// merge their contexts in the returned ordered set, retaining all return
+/// paths without cloning every concrete stack.
+pub(super) fn epsilon_closure<P>(
+    atn: &LexerAtn,
+    configs: impl IntoIterator<Item = LexerConfig>,
+    contexts: &mut LexerContextArena,
+    workspace: &mut PredictionWorkspace,
+    semantic_predicate: &mut P,
+) -> ClosureResult
+where
+    P: FnMut(LexerPredicate) -> bool,
+{
+    let mut contexts = BorrowedLexerContexts {
+        contexts,
+        workspace,
+    };
+    epsilon_closure_with_contexts(atn, configs, &mut contexts, semantic_predicate)
+}
+
+fn epsilon_closure_with_contexts<C, P>(
+    atn: &LexerAtn,
+    configs: impl IntoIterator<Item = LexerConfig>,
+    contexts: &mut C,
+    semantic_predicate: &mut P,
+) -> ClosureResult
+where
+    C: LexerContextOps,
     P: FnMut(LexerPredicate) -> bool,
 {
     let mut state = ClosureState {
-        seen: FxHashSet::default(),
-        closed: Vec::new(),
+        expanded: FxHashMap::default(),
+        closed: LexerConfigSet::default(),
         has_semantic_context: false,
     };
 
     for config in configs {
-        close_config(atn, config, &mut state, semantic_predicate);
+        close_config(atn, config, contexts, &mut state, semantic_predicate);
     }
 
     ClosureResult {
-        configs: state.closed,
+        configs: state.closed.into_configs(),
         has_semantic_context: state.has_semantic_context,
     }
 }
@@ -1573,16 +1854,27 @@ where
 /// Ordered DFS matters for lexer greediness: greedy loop entries serialize the
 /// loop path before the exit path, while non-greedy entries serialize the exit
 /// path first. The later accept-pruning step relies on this order.
-fn close_config<P>(
+fn close_config<C, P>(
     atn: &LexerAtn,
     config: LexerConfig,
+    contexts: &mut C,
     closure: &mut ClosureState,
     semantic_predicate: &mut P,
 ) where
+    C: LexerContextOps,
     P: FnMut(LexerPredicate) -> bool,
 {
-    if !closure.seen.insert(config.clone()) {
-        return;
+    let key = LexerConfigKey::from(&config);
+    if let Some(existing) = closure.expanded.get(&key).copied() {
+        let merged = contexts.merge(existing, config.context);
+        if merged == existing {
+            return;
+        }
+        closure.expanded.insert(key, merged);
+        // `config` is the newly discovered ordered delta. Re-expanding the
+        // merged prefix would duplicate earlier paths ahead of this one.
+    } else {
+        closure.expanded.insert(key, config.context);
     }
 
     let Some(state) = atn.state(config.state) else {
@@ -1590,13 +1882,33 @@ fn close_config<P>(
     };
 
     if state.kind == AtnStateKind::RuleStop {
-        if let Some((&follow_state, rest)) = config.stack.split_last() {
-            let mut returned = config.clone();
-            set_config_state(atn, &mut returned, follow_state);
-            returned.stack = rest.to_vec();
-            close_config(atn, returned, closure, semantic_predicate);
+        let mut pending = vec![config.context];
+        let mut visited = FxHashSet::default();
+        while let Some(context) = pending.pop() {
+            if !visited.insert(context) {
+                continue;
+            }
+            match contexts.node(context) {
+                LexerContextNode::Empty => {
+                    let mut accepted = config.clone();
+                    accepted.context = EMPTY_LEXER_CONTEXT;
+                    closure.closed.add(accepted, contexts);
+                }
+                LexerContextNode::Singleton {
+                    parent,
+                    return_state,
+                } => {
+                    let mut returned = config.clone();
+                    set_config_state(atn, &mut returned, return_state);
+                    returned.context = parent;
+                    close_config(atn, returned, contexts, closure, semantic_predicate);
+                }
+                LexerContextNode::Union { left, right } => {
+                    pending.push(right);
+                    pending.push(left);
+                }
+            }
         }
-        closure.closed.push(config);
         return;
     }
 
@@ -1606,7 +1918,7 @@ fn close_config<P>(
                 let mut next = config.clone();
                 set_config_state(atn, &mut next, *target);
                 next.passed_non_greedy |= state.non_greedy;
-                close_config(atn, next, closure, semantic_predicate);
+                close_config(atn, next, contexts, closure, semantic_predicate);
             }
             LexerTransition::Rule {
                 target,
@@ -1616,8 +1928,8 @@ fn close_config<P>(
                 let mut next = config.clone();
                 set_config_state(atn, &mut next, *target);
                 next.passed_non_greedy |= state.non_greedy;
-                next.stack.push(*follow_state);
-                close_config(atn, next, closure, semantic_predicate);
+                next.context = contexts.singleton(config.context, *follow_state);
+                close_config(atn, next, contexts, closure, semantic_predicate);
             }
             LexerTransition::Predicate {
                 target,
@@ -1634,14 +1946,14 @@ fn close_config<P>(
                     let mut next = config.clone();
                     set_config_state(atn, &mut next, *target);
                     next.passed_non_greedy |= state.non_greedy;
-                    close_config(atn, next, closure, semantic_predicate);
+                    close_config(atn, next, contexts, closure, semantic_predicate);
                 }
             }
             LexerTransition::Precedence { target, .. } => {
                 let mut next = config.clone();
                 set_config_state(atn, &mut next, *target);
                 next.passed_non_greedy |= state.non_greedy;
-                close_config(atn, next, closure, semantic_predicate);
+                close_config(atn, next, contexts, closure, semantic_predicate);
             }
             LexerTransition::Action {
                 target,
@@ -1653,13 +1965,19 @@ fn close_config<P>(
                 set_config_state(atn, &mut next, *target);
                 next.passed_non_greedy |= state.non_greedy;
                 if let Some(action_index) = action_index {
-                    next.actions.push(LexerActionTrace {
+                    let trace = LexerActionTrace {
                         action_index: *action_index,
                         position: config.position,
                         rule_index: *rule_index,
+                    };
+                    let keep = next.alt_rule_index.is_none_or(|accept_rule| {
+                        lexer_action_belongs_to_accept(atn, accept_rule, *rule_index)
                     });
+                    if keep {
+                        append_lexer_action_trace(atn, &mut next.actions, trace);
+                    }
                 }
-                close_config(atn, next, closure, semantic_predicate);
+                close_config(atn, next, contexts, closure, semantic_predicate);
             }
             LexerTransition::Atom { .. }
             | LexerTransition::Range { .. }
@@ -1674,8 +1992,56 @@ fn close_config<P>(
         .iter()
         .any(|transition| !transition.is_epsilon())
     {
-        closure.closed.push(config);
+        closure.closed.add(config, contexts);
     }
+}
+
+/// Appends one executable action while removing an earlier setter whose
+/// result cannot be observed before this one overwrites it.
+fn append_lexer_action_trace(
+    atn: &LexerAtn,
+    actions: &mut Vec<LexerActionTrace>,
+    trace: LexerActionTrace,
+) {
+    #[derive(Clone, Copy, Eq, PartialEq)]
+    enum Setter {
+        Channel,
+        Mode,
+        TokenType,
+    }
+
+    const fn setter(action: &LexerAction) -> Option<Setter> {
+        match action {
+            LexerAction::Channel(_) => Some(Setter::Channel),
+            LexerAction::Mode(_) => Some(Setter::Mode),
+            LexerAction::More | LexerAction::Skip | LexerAction::Type(_) => Some(Setter::TokenType),
+            LexerAction::Custom { .. } | LexerAction::PopMode | LexerAction::PushMode(_) => None,
+        }
+    }
+
+    let Some(action) = atn.lexer_actions().get(trace.action_index) else {
+        actions.push(trace);
+        return;
+    };
+    let Some(slot) = setter(action) else {
+        actions.push(trace);
+        return;
+    };
+    for index in (0..actions.len()).rev() {
+        let Some(previous) = atn.lexer_actions().get(actions[index].action_index) else {
+            break;
+        };
+        if matches!(previous, LexerAction::Custom { .. })
+            || (slot == Setter::Mode && matches!(previous, LexerAction::PushMode(_)))
+        {
+            break;
+        }
+        if setter(previous) == Some(slot) {
+            actions.remove(index);
+            break;
+        }
+    }
+    actions.push(trace);
 }
 
 /// Removes lower-priority non-greedy configs ordered after a top-level accept
@@ -1697,7 +2063,7 @@ pub(super) fn prune_after_accepts(atn: &LexerAtn, configs: Vec<LexerConfig>) -> 
         if config.passed_non_greedy && accepted_rules.contains(&rule_index) {
             continue;
         }
-        let is_top_level_accept = config.stack.is_empty()
+        let is_top_level_accept = config.context == EMPTY_LEXER_CONTEXT
             && atn
                 .state(config.state)
                 .is_some_and(crate::atn::LexerAtnState::is_rule_stop);
@@ -1719,7 +2085,7 @@ pub(super) fn best_accept(atn: &LexerAtn, configs: &[LexerConfig]) -> Option<Acc
         .iter()
         .filter_map(|config| {
             let state = atn.state(config.state)?;
-            if !state.is_rule_stop() || !config.stack.is_empty() {
+            if !state.is_rule_stop() || config.context != EMPTY_LEXER_CONTEXT {
                 return None;
             }
             Some(AcceptState {
@@ -1758,7 +2124,7 @@ fn normalized_config_key(config: &LexerConfig, token_start: usize) -> LexerDfaCo
         config.alt_rule_index,
         config.consumed_eof,
         config.passed_non_greedy,
-        config.stack.clone(),
+        config.context,
         config
             .actions
             .iter()
@@ -1798,7 +2164,7 @@ fn cached_configs_to_configs(
             consumed_eof: config.consumed_eof,
             alt_rule_index: config.alt_rule_index,
             passed_non_greedy: config.passed_non_greedy,
-            stack: config.stack.clone(),
+            context: config.context,
             actions: config
                 .actions
                 .iter()
@@ -1870,7 +2236,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::atn::lexer_dfa::{CompiledLexerActionTrace, CompiledLexerConfig};
+    use crate::atn::lexer_dfa::{
+        CompiledLexerActionTrace, CompiledLexerConfig, CompiledLexerContext,
+    };
     use crate::atn::serialized::{AtnDeserializer, SerializedAtn};
     use crate::atn::{LexerAtnState, LexerTransition};
     use crate::char_stream::InputStream;
@@ -1893,6 +2261,47 @@ mod tests {
         )
     }
 
+    fn predicate_atn() -> LexerAtn {
+        let mut atn = LexerAtn::new(1);
+
+        let mut mode_start = LexerAtnState::new(0, AtnStateKind::TokenStart);
+        mode_start.add_transition(LexerTransition::Epsilon { target: 1 });
+        atn.add_state(mode_start);
+
+        let mut rule_start = LexerAtnState::new(1, AtnStateKind::RuleStart).with_rule_index(0);
+        rule_start.add_transition(LexerTransition::Atom {
+            target: 2,
+            label: 'a' as i32,
+        });
+        atn.add_state(rule_start);
+
+        let mut call_fragment = LexerAtnState::new(2, AtnStateKind::Basic).with_rule_index(0);
+        call_fragment.add_transition(LexerTransition::Rule {
+            target: 4,
+            rule_index: 1,
+            follow_state: 3,
+            precedence: 0,
+        });
+        atn.add_state(call_fragment);
+        atn.add_state(LexerAtnState::new(3, AtnStateKind::RuleStop).with_rule_index(0));
+
+        let mut fragment_start = LexerAtnState::new(4, AtnStateKind::RuleStart).with_rule_index(1);
+        fragment_start.add_transition(LexerTransition::Predicate {
+            target: 5,
+            rule_index: 1,
+            pred_index: 0,
+            context_dependent: false,
+        });
+        atn.add_state(fragment_start);
+        atn.add_state(LexerAtnState::new(5, AtnStateKind::RuleStop).with_rule_index(1));
+
+        atn.set_rule_to_start_state(vec![1, 4]);
+        atn.set_rule_to_stop_state(vec![3, 5]);
+        atn.set_rule_to_token_type(vec![1, INVALID_TOKEN_TYPE]);
+        atn.add_mode_start_state(0);
+        atn
+    }
+
     // `BLOCK_COMMENT: ('/**/' | '/*' ~[!] .*? '*/'); OTHER: .;`
     //
     // `#[rustfmt::skip]`: this serialized ATN is a positional stream emitted by
@@ -1905,6 +2314,34 @@ mod tests {
         ]))
         .deserialize()
         .expect("issue #106 lexer ATN should deserialize")
+    }
+
+    // `COMMENT: '/*' (COMMENT | .)*? '*/' -> channel(HIDDEN);`
+    // `fragment Hidden: COMMENT; AT_PRE: Hidden '@'; OTHER: .;`
+    //
+    // This is the reduced issue #135 topology: recursive non-greedy comments
+    // remain speculative through another token rule, and the referenced token
+    // rule carries a built-in action.
+    #[rustfmt::skip]
+    fn recursive_comment_channel_atn() -> LexerAtn {
+        AtnDeserializer::new(&SerializedAtn::from_i32(&[
+            4, 0, 3, 31, 6, -1, 2, 0, 7, 0, 2, 1, 7, 1, 2, 2, 7, 2, 2, 3, 7, 3,
+            1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 5, 0, 15, 8, 0, 10, 0, 12, 0, 18, 9, 0,
+            1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 2, 1, 2, 1, 2, 1, 3,
+            1, 3, 1, 16, 0, 4, 1, 1, 3, 0, 5, 2, 7, 3, 1, 0, 0, 31, 0, 1, 1, 0,
+            0, 0, 0, 5, 1, 0, 0, 0, 0, 7, 1, 0, 0, 0, 1, 9, 1, 0, 0, 0, 3, 24,
+            1, 0, 0, 0, 5, 26, 1, 0, 0, 0, 7, 29, 1, 0, 0, 0, 9, 10, 5, 47, 0,
+            0, 10, 11, 5, 42, 0, 0, 11, 16, 1, 0, 0, 0, 12, 15, 3, 1, 0, 0, 13,
+            15, 9, 0, 0, 0, 14, 12, 1, 0, 0, 0, 14, 13, 1, 0, 0, 0, 15, 18, 1,
+            0, 0, 0, 16, 17, 1, 0, 0, 0, 16, 14, 1, 0, 0, 0, 17, 19, 1, 0, 0,
+            0, 18, 16, 1, 0, 0, 0, 19, 20, 5, 42, 0, 0, 20, 21, 5, 47, 0, 0, 21,
+            22, 1, 0, 0, 0, 22, 23, 6, 0, 0, 0, 23, 2, 1, 0, 0, 0, 24, 25, 3, 1,
+            0, 0, 25, 4, 1, 0, 0, 0, 26, 27, 3, 3, 1, 0, 27, 28, 5, 64, 0, 0, 28,
+            6, 1, 0, 0, 0, 29, 30, 9, 0, 0, 0, 30, 8, 1, 0, 0, 0, 3, 0, 14, 16,
+            1, 0, 1, 0,
+        ]))
+        .deserialize()
+        .expect("recursive-comment lexer ATN should deserialize")
     }
 
     #[derive(Clone, Copy, Debug)]
@@ -2866,6 +3303,35 @@ mod tests {
     }
 
     #[test]
+    fn predicate_can_inspect_and_clear_the_active_dfa() {
+        let atn = predicate_atn();
+        let mut lexer = BaseLexer::new(InputStream::new("a"), recognizer_data());
+        let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
+        let mut sink = TokenSink::new(&mut store);
+        let mut predicate_calls = 0;
+
+        let id = next_token_with_cache(
+            &mut lexer,
+            &mut sink,
+            &atn,
+            |_, _| {},
+            |lexer, _| {
+                predicate_calls += 1;
+                let _ = lexer.lexer_dfa_string();
+                lexer.clear_dfa();
+                true
+            },
+            |_, _, _| {},
+        )
+        .expect("predicate token should fit");
+        let token = sink.view(id).expect("predicate token should exist");
+
+        assert_eq!(token.token_type(), 1);
+        assert_eq!(token.text(), "a");
+        assert_eq!(predicate_calls, 1);
+    }
+
+    #[test]
     fn lexer_action_hook_context_can_change_mode() {
         // A custom-action hook receives a mutable lexer borrow, so it can push /
         // pop / set the lexer mode (matching the closure `custom_action` API). A
@@ -2968,6 +3434,83 @@ mod tests {
     }
 
     #[test]
+    fn recursive_comment_contexts_and_actions_stay_bounded_on_all_paths() {
+        let atn = recursive_comment_channel_atn();
+        let compiled = CompiledLexerDfa::compile(&atn);
+        let serialized = compiled.serialize();
+        let compiled =
+            CompiledLexerDfa::from_serialized(&serialized).expect("compiled DFA round trip");
+        let first = "/* first /* nested */ tail */";
+        let mut source = format!("{first}x");
+        for _ in 0..40 {
+            source.push_str("/* comment */x");
+        }
+
+        for strategy in [
+            TestMatchStrategy::Interpreted,
+            TestMatchStrategy::Cached,
+            TestMatchStrategy::Compiled,
+        ] {
+            let data = RecognizerData::new(
+                "RecursiveComment",
+                Vocabulary::new(
+                    [None::<&str>, None, None, None],
+                    [None, Some("COMMENT"), Some("AT_PRE"), Some("OTHER")],
+                    [None::<&str>, None, None, None],
+                ),
+            );
+            let mut lexer = BaseLexer::new(InputStream::new(source.clone()), data);
+            let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
+            let mut sink = TokenSink::new(&mut store);
+            let mut token_count = 0;
+            let mut contexts_after_warmup = 0;
+            loop {
+                let token = match strategy {
+                    TestMatchStrategy::Interpreted => next_token_with_hooks(
+                        &mut lexer,
+                        &mut sink,
+                        &atn,
+                        |_, _| {},
+                        |_, _| true,
+                        |_, _, _| {},
+                    ),
+                    TestMatchStrategy::Cached => next_token(&mut lexer, &mut sink, &atn),
+                    TestMatchStrategy::Compiled => {
+                        next_token_compiled(&mut lexer, &mut sink, &atn, &compiled)
+                    }
+                }
+                .expect("recursive comment source should lex");
+                let token = sink.view(token).expect("token should exist");
+                if token_count == 0 {
+                    assert_eq!(token.token_type(), 1, "{strategy:?}");
+                    assert_eq!(token.text(), first, "{strategy:?}");
+                    assert_eq!(token.channel(), HIDDEN_CHANNEL, "{strategy:?}");
+                } else if token_count == 3 {
+                    contexts_after_warmup = lexer.lexer_dfa_cache_shape().3;
+                }
+                token_count += 1;
+                if token.token_type() == TOKEN_EOF {
+                    break;
+                }
+            }
+            assert_eq!(token_count, 83, "{strategy:?}");
+
+            let (cached_states, cached_transitions, max_configs, contexts) =
+                lexer.lexer_dfa_cache_shape();
+            assert!(max_configs <= 16, "{strategy:?}: {max_configs} configs");
+            assert!(contexts <= 1024, "{strategy:?}: {contexts} contexts");
+            assert!(
+                contexts <= contexts_after_warmup + 16,
+                "{strategy:?}: contexts grew from {contexts_after_warmup} to {contexts}"
+            );
+            if !matches!(strategy, TestMatchStrategy::Interpreted) {
+                assert!(cached_states > 0, "{strategy:?}");
+                assert!(cached_transitions > 0, "{strategy:?}");
+            }
+        }
+    }
+
+    #[test]
     fn compiled_resume_rejects_untrusted_continuation_payloads() {
         let atn = trailing_action_atn(&['a'], 1, vec![LexerAction::Skip]);
         let valid_config = CompiledLexerConfig {
@@ -2975,7 +3518,7 @@ mod tests {
             consumed_eof: false,
             alt_rule_index: Some(0),
             passed_non_greedy: false,
-            stack: Vec::new(),
+            context: 0,
             actions: vec![CompiledLexerActionTrace {
                 action_index: 0,
                 rule_index: 0,
@@ -2983,6 +3526,7 @@ mod tests {
             }],
         };
         let valid = |config| CompiledLexerContinuation {
+            contexts: Vec::new(),
             configs: vec![config],
         };
         let matches = |continuation: &CompiledLexerContinuation| {
@@ -3000,6 +3544,7 @@ mod tests {
 
         assert!(matches(&valid(valid_config.clone())));
         assert!(!matches(&CompiledLexerContinuation {
+            contexts: Vec::new(),
             configs: Vec::new(),
         }));
 
@@ -3016,8 +3561,16 @@ mod tests {
         assert!(!matches(&valid(invalid)));
 
         let mut invalid = valid_config.clone();
-        invalid.stack.push(usize::MAX);
+        invalid.context = u32::MAX;
         assert!(!matches(&valid(invalid)));
+
+        assert!(!matches(&CompiledLexerContinuation {
+            contexts: vec![CompiledLexerContext::Singleton {
+                parent: 1,
+                return_state: 2,
+            }],
+            configs: vec![valid_config.clone()],
+        }));
 
         let mut invalid = valid_config.clone();
         invalid.actions[0].action_index = 1;
