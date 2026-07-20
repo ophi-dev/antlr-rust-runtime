@@ -2409,7 +2409,7 @@ where
     /// Adds a listener for lexer diagnostics.
     pub fn add_error_listener<T>(&mut self, listener: T)
     where
-        T: for<'a> antlr4_runtime::ErrorListener<dyn antlr4_runtime::Recognizer + 'a> + 'static,
+        T: for<'a> antlr4_runtime::ErrorListener<dyn antlr4_runtime::Recognizer + 'a> + Send + 'static,
     {{
         self.base.add_error_listener(listener);
     }}
@@ -7837,7 +7837,7 @@ where
     /// Adds a listener for parser diagnostics.
     pub fn add_error_listener<T>(&mut self, listener: T)
     where
-        T: for<'a> antlr4_runtime::ErrorListener<dyn antlr4_runtime::Recognizer + 'a> + 'static,
+        T: for<'a> antlr4_runtime::ErrorListener<dyn antlr4_runtime::Recognizer + 'a> + Send + 'static,
     {{
         self.base.add_error_listener(listener);
     }}
@@ -12664,6 +12664,9 @@ s : ;
         assert!(rendered.contains("simulator.clear_dfa()"));
         assert!(rendered.contains("ParserAtnSimulator::clear_shared_dfa(atn())"));
         assert!(rendered.contains("pub fn add_error_listener<T>(&mut self, listener: T)"));
+        assert!(rendered.contains(
+            "T: for<'a> antlr4_runtime::ErrorListener<dyn antlr4_runtime::Recognizer + 'a> + Send + 'static,"
+        ));
         assert!(rendered.contains("self.base.add_error_listener(listener)"));
         assert!(rendered.contains("pub fn remove_error_listeners(&mut self)"));
         assert!(rendered.contains("self.base.remove_error_listeners()"));
@@ -16161,6 +16164,9 @@ ID : [a-z]+ ;\n";
         assert!(module.contains("pub fn clear_dfa(&self)"));
         assert!(module.contains("self.base.clear_dfa()"));
         assert!(module.contains("pub fn add_error_listener<T>(&mut self, listener: T)"));
+        assert!(module.contains(
+            "T: for<'a> antlr4_runtime::ErrorListener<dyn antlr4_runtime::Recognizer + 'a> + Send + 'static,"
+        ));
         assert!(module.contains("self.base.add_error_listener(listener)"));
         assert!(module.contains("pub fn remove_error_listeners(&mut self)"));
         assert!(module.contains("self.base.remove_error_listeners()"));

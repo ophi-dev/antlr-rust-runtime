@@ -1,19 +1,18 @@
-use std::cell::RefCell;
 use std::fmt;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use crate::errors::{AntlrError, ConsoleErrorListener, ErrorListener};
 use crate::vocabulary::Vocabulary;
 
 #[derive(Clone)]
-struct ErrorListenerSlot(Rc<RefCell<dyn for<'a> ErrorListener<dyn Recognizer + 'a>>>);
+struct ErrorListenerSlot(Arc<Mutex<dyn for<'a> ErrorListener<dyn Recognizer + 'a> + Send>>);
 
 impl ErrorListenerSlot {
     fn new<L>(listener: L) -> Self
     where
-        L: for<'a> ErrorListener<dyn Recognizer + 'a> + 'static,
+        L: for<'a> ErrorListener<dyn Recognizer + 'a> + Send + 'static,
     {
-        Self(Rc::new(RefCell::new(listener)))
+        Self(Arc::new(Mutex::new(listener)))
     }
 
     fn syntax_error(
@@ -25,7 +24,8 @@ impl ErrorListenerSlot {
         error: Option<&AntlrError>,
     ) {
         self.0
-            .borrow_mut()
+            .lock()
+            .expect("error listener lock poisoned")
             .syntax_error(recognizer, line, column, message, error);
     }
 }
@@ -107,7 +107,7 @@ impl RecognizerData {
 
     fn add_error_listener<L>(&mut self, listener: L)
     where
-        L: for<'a> ErrorListener<dyn Recognizer + 'a> + 'static,
+        L: for<'a> ErrorListener<dyn Recognizer + 'a> + Send + 'static,
     {
         self.error_listeners.push(ErrorListenerSlot::new(listener));
     }
@@ -170,7 +170,7 @@ pub trait Recognizer {
     fn add_error_listener<L>(&mut self, listener: L)
     where
         Self: Sized,
-        L: for<'a> ErrorListener<dyn Recognizer + 'a> + 'static,
+        L: for<'a> ErrorListener<dyn Recognizer + 'a> + Send + 'static,
     {
         self.data_mut().add_error_listener(listener);
     }
@@ -216,7 +216,7 @@ mod tests {
 
     #[derive(Clone, Debug)]
     struct RecordingErrorListener {
-        errors: Rc<RefCell<Vec<RecordedError>>>,
+        errors: Arc<Mutex<Vec<RecordedError>>>,
     }
 
     impl<R> ErrorListener<R> for RecordingErrorListener
@@ -231,13 +231,16 @@ mod tests {
             message: &str,
             error: Option<&AntlrError>,
         ) {
-            self.errors.borrow_mut().push(RecordedError {
-                grammar_file_name: recognizer.grammar_file_name().to_owned(),
-                line,
-                column,
-                message: message.to_owned(),
-                error: error.cloned(),
-            });
+            self.errors
+                .lock()
+                .expect("recorded errors lock")
+                .push(RecordedError {
+                    grammar_file_name: recognizer.grammar_file_name().to_owned(),
+                    line,
+                    column,
+                    message: message.to_owned(),
+                    error: error.cloned(),
+                });
         }
     }
 
@@ -277,9 +280,9 @@ mod tests {
         recognizer.remove_error_listeners();
         assert!(recognizer.data.error_listeners.is_empty());
 
-        let errors = Rc::new(RefCell::new(Vec::new()));
+        let errors = Arc::new(Mutex::new(Vec::new()));
         recognizer.add_error_listener(RecordingErrorListener {
-            errors: Rc::clone(&errors),
+            errors: Arc::clone(&errors),
         });
         let error = AntlrError::ParserError {
             line: 3,
@@ -289,7 +292,7 @@ mod tests {
         recognizer.notify_error_listeners(3, 5, "unexpected token", Some(&error));
 
         assert_eq!(
-            *errors.borrow(),
+            *errors.lock().expect("recorded errors lock"),
             [RecordedError {
                 grammar_file_name: "Test.g4".to_owned(),
                 line: 3,
@@ -298,6 +301,13 @@ mod tests {
                 error: Some(error),
             }]
         );
+    }
+
+    #[test]
+    fn recognizer_data_remains_send_and_sync() {
+        fn assert_send_and_sync<T: Send + Sync>() {}
+
+        assert_send_and_sync::<RecognizerData>();
     }
 
     #[test]

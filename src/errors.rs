@@ -25,9 +25,10 @@ pub enum AntlrError {
 
 /// Receives recognizer diagnostics.
 ///
-/// Listeners registered through [`Recognizer::add_error_listener`] must work
-/// with every recognizer type. Implement the trait generically, as
-/// [`ConsoleErrorListener`] does, when a listener will be registered.
+/// Listeners registered through [`Recognizer::add_error_listener`] must be
+/// [`Send`] and work with every recognizer type. Implement the trait
+/// generically, as [`ConsoleErrorListener`] does, when a listener will be
+/// registered.
 pub trait ErrorListener<R: Recognizer + ?Sized> {
     fn syntax_error(
         &mut self,

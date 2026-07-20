@@ -12087,6 +12087,7 @@ mod tests {
     use std::cell::RefCell;
     use std::mem::size_of;
     use std::rc::Rc;
+    use std::sync::{Arc, Mutex};
 
     #[test]
     fn fx_hasher_write_matches_typed_methods_for_full_words() {
@@ -12247,7 +12248,7 @@ mod tests {
 
     #[derive(Clone, Debug)]
     struct RecordingErrorListener {
-        diagnostics: Rc<RefCell<Vec<RecordedDiagnostic>>>,
+        diagnostics: Arc<Mutex<Vec<RecordedDiagnostic>>>,
     }
 
     impl<R> crate::ErrorListener<R> for RecordingErrorListener
@@ -12262,13 +12263,16 @@ mod tests {
             message: &str,
             error: Option<&AntlrError>,
         ) {
-            self.diagnostics.borrow_mut().push(RecordedDiagnostic {
-                grammar_file_name: recognizer.grammar_file_name().to_owned(),
-                line,
-                column,
-                message: message.to_owned(),
-                error: error.cloned(),
-            });
+            self.diagnostics
+                .lock()
+                .expect("recorded diagnostics lock")
+                .push(RecordedDiagnostic {
+                    grammar_file_name: recognizer.grammar_file_name().to_owned(),
+                    line,
+                    column,
+                    message: message.to_owned(),
+                    error: error.cloned(),
+                });
         }
     }
 
@@ -12329,9 +12333,9 @@ mod tests {
     fn parser_dispatches_recovery_diagnostics_through_registered_listeners() {
         let mut parser = mini_parser(vec![TestToken::eof("parser-test", 0, 1, 0)]);
         parser.remove_error_listeners();
-        let diagnostics = Rc::new(RefCell::new(Vec::new()));
+        let diagnostics = Arc::new(Mutex::new(Vec::new()));
         parser.add_error_listener(RecordingErrorListener {
-            diagnostics: Rc::clone(&diagnostics),
+            diagnostics: Arc::clone(&diagnostics),
         });
         let parser_diagnostics = [ParserDiagnostic {
             line: 1,
@@ -12346,7 +12350,7 @@ mod tests {
         parser.dispatch_generated_diagnostics(&parser_diagnostics, &token_errors);
 
         assert_eq!(
-            *diagnostics.borrow(),
+            *diagnostics.lock().expect("recorded diagnostics lock"),
             [
                 RecordedDiagnostic {
                     grammar_file_name: "Mini.g4".to_owned(),
@@ -12374,7 +12378,10 @@ mod tests {
 
         parser.remove_error_listeners();
         parser.dispatch_generated_diagnostics(&parser_diagnostics, &token_errors);
-        assert_eq!(diagnostics.borrow().len(), 3);
+        assert_eq!(
+            diagnostics.lock().expect("recorded diagnostics lock").len(),
+            3
+        );
     }
 
     #[test]
@@ -12389,16 +12396,21 @@ mod tests {
         };
         let mut parser = BaseParser::new(CommonTokenStream::new(source), mini_parser_data());
         parser.remove_error_listeners();
-        let parser_diagnostics = Rc::new(RefCell::new(Vec::new()));
+        let parser_diagnostics = Arc::new(Mutex::new(Vec::new()));
         parser.add_error_listener(RecordingErrorListener {
-            diagnostics: Rc::clone(&parser_diagnostics),
+            diagnostics: Arc::clone(&parser_diagnostics),
         });
         let source_error = TokenSourceError::new(2, 4, "token recognition error at: '$'");
 
         parser.dispatch_token_source_errors(std::slice::from_ref(&source_error));
 
         assert_eq!(*source_diagnostics.borrow(), [source_error]);
-        assert!(parser_diagnostics.borrow().is_empty());
+        assert!(
+            parser_diagnostics
+                .lock()
+                .expect("recorded diagnostics lock")
+                .is_empty()
+        );
     }
 
     fn finish_atn(builder: ParserAtnBuilder) -> Atn {
