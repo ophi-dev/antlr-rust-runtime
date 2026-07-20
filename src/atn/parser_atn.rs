@@ -983,7 +983,8 @@ impl<'a> ParserIntervalSet<'a> {
         self.len == 0
     }
 
-    #[inline(always)]
+    // Forced inlining bloats recursive recognizer frames in unoptimized builds.
+    #[inline]
     pub fn contains(self, value: i32) -> bool {
         let hit = match self.kind {
             ParserTokenSetKind::Inline128 | ParserTokenSetKind::Dense => {

@@ -12417,6 +12417,53 @@ mod tests {
         builder.finish().expect("valid packed parser ATN")
     }
 
+    fn nested_rule_chain_atn(depth: usize) -> Atn {
+        assert!(depth > 0);
+        let mut atn = ParserAtnBuilder::new(1);
+        let mut starts = Vec::with_capacity(depth);
+        let mut stops = Vec::with_capacity(depth);
+        for rule_index in 0..depth {
+            starts.push(
+                atn.add_state(AtnStateKind::RuleStart, Some(rule_index))
+                    .expect("rule start")
+                    .index(),
+            );
+        }
+        for rule_index in 0..depth {
+            stops.push(
+                atn.add_state(AtnStateKind::RuleStop, Some(rule_index))
+                    .expect("rule stop")
+                    .index(),
+            );
+        }
+        atn.set_rule_to_start_state(starts.clone())
+            .expect("rule start states");
+        atn.set_rule_to_stop_state(stops.clone())
+            .expect("rule stop states");
+        for rule_index in 0..depth - 1 {
+            atn.add_transition(
+                starts[rule_index],
+                ParserTransitionSpec::Rule {
+                    target: starts[rule_index + 1],
+                    rule_index: rule_index + 1,
+                    follow_state: stops[rule_index],
+                    precedence: 0,
+                },
+            )
+            .expect("nested rule transition");
+        }
+        let token_set = atn.add_interval_set([(1, 1)]).expect("token set");
+        atn.add_transition(
+            starts[depth - 1],
+            ParserTransitionSpec::Set {
+                target: stops[depth - 1],
+                set: token_set,
+            },
+        )
+        .expect("terminal set transition");
+        finish_atn(atn)
+    }
+
     fn ordinary_star_loop_atn() -> Atn {
         let mut atn = ParserAtnBuilder::new(2);
         for (state_number, kind, rule_index) in [
@@ -15328,6 +15375,29 @@ mod tests {
             .expect("small-stack thread should start")
             .join()
             .expect("deferred rules should materialize without recursion");
+    }
+
+    #[test]
+    fn nested_rule_chain_with_adaptive_set_fits_default_stack() {
+        // This depth separates the corrected frame from v0.14.0 on a 2 MiB stack.
+        const DEPTH: usize = 130;
+        const STACK_SIZE: usize = 2 * 1024 * 1024;
+
+        std::thread::Builder::new()
+            .name("nested-adaptive-set-rules".to_owned())
+            .stack_size(STACK_SIZE)
+            .spawn(|| {
+                let atn = nested_rule_chain_atn(DEPTH);
+                let mut parser = mini_parser(vec![TestToken::new(1).with_text("x")]);
+                parser.set_build_parse_trees(false);
+                parser
+                    .parse_atn_rule(&atn, 0)
+                    .expect("nested rule chain should parse on the default-sized stack");
+                assert_eq!(parser.input.index(), 1);
+            })
+            .expect("small-stack thread should start")
+            .join()
+            .expect("nested rule chain should not overflow its stack");
     }
 
     #[test]
