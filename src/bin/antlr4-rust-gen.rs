@@ -2406,6 +2406,19 @@ where
         metadata()
     }}
 
+    /// Adds a listener for lexer diagnostics.
+    pub fn add_error_listener<T>(&mut self, listener: T)
+    where
+        T: for<'a> antlr4_runtime::ErrorListener<dyn antlr4_runtime::Recognizer + 'a> + Send + 'static,
+    {{
+        self.base.add_error_listener(listener);
+    }}
+
+    /// Removes every lexer error listener, including the default console listener.
+    pub fn remove_error_listeners(&mut self) {{
+        self.base.remove_error_listeners();
+    }}
+
     /// Routes every token through ATN interpretation instead of the compiled
     /// lexer DFA, so the learned-DFA trace (`lexer_dfa_string`) observes each
     /// match.
@@ -2499,6 +2512,16 @@ where
     fn source_text(&self) -> Option<std::rc::Rc<str>> {{ self.base.source_text() }}
     fn drain_errors(&mut self) -> Vec<antlr4_runtime::token::TokenSourceError> {{
         self.base.drain_errors()
+    }}
+    fn report_error(&self, source_error: &antlr4_runtime::token::TokenSourceError) -> bool {{
+        antlr4_runtime::Recognizer::notify_error_listeners(
+            self,
+            source_error.line,
+            source_error.column,
+            &source_error.message,
+            None,
+        );
+        true
     }}
     fn lexer_dfa_string(&self) -> String {{
         self.base.lexer_dfa_string()
@@ -6207,6 +6230,8 @@ const GENERATED_PARSER_RESERVED_RULE_METHODS: &[&str] = &[
     "token_store",
     "parse_tree_storage",
     "clear_dfa",
+    "add_error_listener",
+    "remove_error_listeners",
     "node",
     "into_token_stream",
     "into_token_store",
@@ -7807,6 +7832,19 @@ where
 
     pub fn metadata() -> &'static GrammarMetadata {{
         metadata()
+    }}
+
+    /// Adds a listener for parser diagnostics.
+    pub fn add_error_listener<T>(&mut self, listener: T)
+    where
+        T: for<'a> antlr4_runtime::ErrorListener<dyn antlr4_runtime::Recognizer + 'a> + Send + 'static,
+    {{
+        self.base.add_error_listener(listener);
+    }}
+
+    /// Removes every parser error listener, including the default console listener.
+    pub fn remove_error_listeners(&mut self) {{
+        self.base.remove_error_listeners();
     }}
 
     /// Fully resets parser-owned state and rewinds the current token stream.
@@ -11050,6 +11088,8 @@ atn:
             "reset".to_owned(),
             "setTokenStream".to_owned(),
             "clearDfa".to_owned(),
+            "addErrorListener".to_owned(),
+            "removeErrorListeners".to_owned(),
             "regularRule".to_owned(),
         ];
 
@@ -11062,6 +11102,8 @@ atn:
                 "reset_rule",
                 "set_token_stream_rule",
                 "clear_dfa_rule",
+                "add_error_listener_rule",
+                "remove_error_listeners_rule",
                 "regular_rule"
             ]
         );
@@ -12621,6 +12663,13 @@ s : ;
         assert!(rendered.contains("pub fn clear_dfa(&mut self)"));
         assert!(rendered.contains("simulator.clear_dfa()"));
         assert!(rendered.contains("ParserAtnSimulator::clear_shared_dfa(atn())"));
+        assert!(rendered.contains("pub fn add_error_listener<T>(&mut self, listener: T)"));
+        assert!(rendered.contains(
+            "T: for<'a> antlr4_runtime::ErrorListener<dyn antlr4_runtime::Recognizer + 'a> + Send + 'static,"
+        ));
+        assert!(rendered.contains("self.base.add_error_listener(listener)"));
+        assert!(rendered.contains("pub fn remove_error_listeners(&mut self)"));
+        assert!(rendered.contains("self.base.remove_error_listeners()"));
         assert!(rendered.contains("pub fn into_token_stream(self) -> CommonTokenStream<L>"));
         assert!(rendered.contains("self.base.into_token_stream()"));
         assert!(
@@ -16114,12 +16163,23 @@ ID : [a-z]+ ;\n";
         assert!(module.contains("self.base.set_input_stream(input)"));
         assert!(module.contains("pub fn clear_dfa(&self)"));
         assert!(module.contains("self.base.clear_dfa()"));
+        assert!(module.contains("pub fn add_error_listener<T>(&mut self, listener: T)"));
+        assert!(module.contains(
+            "T: for<'a> antlr4_runtime::ErrorListener<dyn antlr4_runtime::Recognizer + 'a> + Send + 'static,"
+        ));
+        assert!(module.contains("self.base.add_error_listener(listener)"));
+        assert!(module.contains("pub fn remove_error_listeners(&mut self)"));
+        assert!(module.contains("self.base.remove_error_listeners()"));
         assert!(module.contains(
             "fn next_token(&mut self, sink: &mut TokenSink<'_>) -> Result<TokenId, TokenStoreError>"
         ));
         assert!(module.contains(
             "fn source_text(&self) -> Option<std::rc::Rc<str>> { self.base.source_text() }"
         ));
+        assert!(module.contains(
+            "fn report_error(&self, source_error: &antlr4_runtime::token::TokenSourceError) -> bool"
+        ));
+        assert!(module.contains("Recognizer::notify_error_listeners("));
         assert!(!module.contains("CommonToken"));
         assert!(!module.contains("TokenFactory"));
     }

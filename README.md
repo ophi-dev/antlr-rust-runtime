@@ -177,15 +177,21 @@ use generated::json::Json;
 use generated::json_lexer::JsonLexer;
 
 fn main() -> Result<(), antlr4_runtime::AntlrError> {
-    let lexer = JsonLexer::new(InputStream::new(r#"{"a":1}"#));
+    let mut lexer = JsonLexer::new(InputStream::new(r#"{"a":1}"#));
+    lexer.remove_error_listeners();
     let tokens = CommonTokenStream::new(lexer);
     let mut parser = Json::new(tokens);
+    parser.remove_error_listeners();
     let tree = parser.json()?;
 
     println!("{}", parser.node(tree).text());
     Ok(())
 }
 ```
+
+Generated recognizers install a `ConsoleErrorListener` by default. Remove it
+from both the lexer and parser to suppress recovery output, as above, or call
+`add_error_listener` after removal to redirect diagnostics to a replacement.
 
 ### Reusing Recognizers
 

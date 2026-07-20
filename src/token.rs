@@ -694,6 +694,15 @@ pub trait TokenSource {
         Vec::new()
     }
 
+    /// Reports a buffered diagnostic through source-owned listeners.
+    ///
+    /// Returns `true` when the source owns diagnostic reporting. The parser
+    /// uses its own listeners as a fallback for token sources that return
+    /// `false`.
+    fn report_error(&self, _error: &TokenSourceError) -> bool {
+        false
+    }
+
     /// Serializes lexer DFA cache state when the token source exposes one.
     fn lexer_dfa_string(&self) -> String {
         String::new()
