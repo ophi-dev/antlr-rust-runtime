@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.14.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.13.0...v0.14.0) (2026-07-20)
+
+
+### Features
+
+* scan compact ASCII lexer range classes ([#127](https://github.com/ophi-dev/antlr-rust-runtime/issues/127)) ([2b82653](https://github.com/ophi-dev/antlr-rust-runtime/commit/2b826537d392a3e94c828cae04c546ca66d7db0c))
+
+
+### Bug Fixes
+
+* make recovery diagnostics configurable ([#140](https://github.com/ophi-dev/antlr-rust-runtime/issues/140)) ([6f0d206](https://github.com/ophi-dev/antlr-rust-runtime/commit/6f0d2061600c4b41bed47b9df19911aae0cb901d))
+
+
+### Performance Improvements
+
+* **parser:** add adaptive token sets ([#133](https://github.com/ophi-dev/antlr-rust-runtime/issues/133)) ([12ca05c](https://github.com/ophi-dev/antlr-rust-runtime/commit/12ca05c4ad9fa8d97c5988c65478cd22ce6764a9))
+
 ## [0.13.0](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.12.0...v0.13.0) (2026-07-19)
 
 
