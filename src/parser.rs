@@ -5731,7 +5731,11 @@ where
             let child = self.error_tree(token);
             self.add_parse_child(context, child);
         }
-        self.generated_recovery_error_index = Some(self.input.index());
+        let recovery_index = self.input.index();
+        if self.generated_recovery_error_index != Some(recovery_index) {
+            self.generated_recovery_error_index = Some(recovery_index);
+            self.generated_recovery_error_states.clear();
+        }
         self.generated_recovery_error_states.insert(error_state);
         let recovery_symbols = self.context_expected_symbols(atn);
         loop {
@@ -15475,6 +15479,10 @@ mod tests {
             },
         );
         assert_eq!(parser.input.index(), 0);
+        assert_eq!(
+            parser.generated_recovery_error_states,
+            BTreeSet::from([20, 21])
+        );
 
         parser.set_state(20);
         parser.recover_generated_rule(
@@ -15488,6 +15496,7 @@ mod tests {
         assert_eq!(parser.input.index(), 1);
         assert_eq!(parser.la(1), TOKEN_EOF);
         assert!(context.has_matched_child());
+        assert_eq!(parser.generated_recovery_error_states, BTreeSet::from([20]));
 
         parser.match_eof().expect("EOF should match");
         assert_eq!(parser.generated_recovery_error_index, None);
