@@ -32,5 +32,6 @@ src/bin_support/grammar/generated/antlr_v4_lexer.rs
 src/bin_support/grammar/generated/antlr_v4_parser.rs
 ```
 
-Their hashes are recorded by `tools/grammar-frontend/update-stage0.sh` in
-`stage0-manifest.json`.
+Their hashes, the intermediate `.interp` hashes, the seed JDK, and the exact
+commands are recorded in `stage0-manifest.json`. Use `--update` instead of
+`--check` only when intentionally refreshing the checked-in seed.
