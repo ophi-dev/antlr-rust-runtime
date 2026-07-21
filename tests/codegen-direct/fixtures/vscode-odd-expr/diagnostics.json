@@ -1,0 +1,136 @@
+{
+  "java_antlr": [
+    {
+      "severity": "warning",
+      "code": 125,
+      "line": 8,
+      "column": 27
+    },
+    {
+      "severity": "warning",
+      "code": 125,
+      "line": 10,
+      "column": 13
+    },
+    {
+      "severity": "warning",
+      "code": 125,
+      "line": 12,
+      "column": 13
+    },
+    {
+      "severity": "warning",
+      "code": 125,
+      "line": 14,
+      "column": 13
+    },
+    {
+      "severity": "warning",
+      "code": 125,
+      "line": 16,
+      "column": 13
+    },
+    {
+      "severity": "warning",
+      "code": 125,
+      "line": 18,
+      "column": 13
+    },
+    {
+      "severity": "warning",
+      "code": 125,
+      "line": 20,
+      "column": 13
+    },
+    {
+      "severity": "warning",
+      "code": 125,
+      "line": 22,
+      "column": 13
+    },
+    {
+      "severity": "warning",
+      "code": 125,
+      "line": 24,
+      "column": 13
+    },
+    {
+      "severity": "warning",
+      "code": 125,
+      "line": 26,
+      "column": 13
+    },
+    {
+      "severity": "warning",
+      "code": 125,
+      "line": 28,
+      "column": 13
+    },
+    {
+      "severity": "warning",
+      "code": 125,
+      "line": 30,
+      "column": 13
+    },
+    {
+      "severity": "warning",
+      "code": 125,
+      "line": 32,
+      "column": 13
+    },
+    {
+      "severity": "warning",
+      "code": 125,
+      "line": 34,
+      "column": 13
+    },
+    {
+      "severity": "warning",
+      "code": 125,
+      "line": 36,
+      "column": 13
+    },
+    {
+      "severity": "warning",
+      "code": 125,
+      "line": 38,
+      "column": 13
+    },
+    {
+      "severity": "warning",
+      "code": 125,
+      "line": 40,
+      "column": 13
+    },
+    {
+      "severity": "warning",
+      "code": 125,
+      "line": 42,
+      "column": 13
+    },
+    {
+      "severity": "warning",
+      "code": 125,
+      "line": 44,
+      "column": 13
+    },
+    {
+      "severity": "warning",
+      "code": 125,
+      "line": 46,
+      "column": 13
+    },
+    {
+      "severity": "warning",
+      "code": 125,
+      "line": 48,
+      "column": 13
+    },
+    {
+      "severity": "warning",
+      "code": 125,
+      "line": 50,
+      "column": 13
+    }
+  ]
+}

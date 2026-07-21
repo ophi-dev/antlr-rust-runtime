@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "CPP14.g4"
+  ],
+  "logical_ids": [
+    "vscode-antlr4-cpp14"
+  ],
+  "external_source": {
+    "repository": "https://github.com/mike-lischke/vscode-antlr4.git",
+    "commit": "3e9469d1d490c71b3e3b909edf1235582a3f8db8",
+    "path": "tests/backend/test-data/CPP14.g4",
+    "license": "MIT"
+  },
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "exit_status": 0
+  },
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh vscode-cpp14 --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar",
+  "files": {
+    "CPP14.g4": "fe357d9fbb5cac4f0b750a288b1aaf12b20b9692254db8d92818a13c5f87433d",
+    "CPP14.interp": "434ed89eea0891bf5f6ee10078f8c6209dfd88d6ed1c7f3a57a6fb902baa5b2b",
+    "CPP14.tokens": "9edad37168fcee87dae392248637facd6a379422110aae550e1be387abd69305",
+    "CPP14Lexer.interp": "d98b9cc191b503c3730e6d97dcb2bda43acb49d05662872429866a9c07f30123",
+    "CPP14Lexer.tokens": "9edad37168fcee87dae392248637facd6a379422110aae550e1be387abd69305",
+    "oracle/java-antlr.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

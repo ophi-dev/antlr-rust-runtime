@@ -1,0 +1,2 @@
+error(177): t.g4:8:18: BLAH is not a recognized channel name
+warning(125): t.g4:3:3: implicit definition of token ZZ in parser

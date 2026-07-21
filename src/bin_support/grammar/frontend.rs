@@ -31,11 +31,23 @@ impl SourceId {
 
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub(crate) struct SyntaxId(u32);
+pub(crate) struct SyntaxId(u64);
 
 impl SyntaxId {
+    pub(crate) const fn new(index: u32) -> Self {
+        Self(index as u64)
+    }
+
+    pub(crate) const fn for_source(source: SourceId, index: u32) -> Self {
+        Self(((source.0 as u64) << 32) | index as u64)
+    }
+
     pub(crate) const fn index(self) -> usize {
-        self.0 as usize
+        (self.0 as u32) as usize
+    }
+
+    pub(crate) const fn source(self) -> SourceId {
+        SourceId::new((self.0 >> 32) as u32)
     }
 }
 
@@ -83,6 +95,10 @@ pub(crate) struct Cst {
 }
 
 impl Cst {
+    pub(crate) const fn root_id(&self) -> SyntaxId {
+        self.root
+    }
+
     pub(crate) fn root(&self) -> &SyntaxNode {
         &self.nodes[self.root.index()]
     }
@@ -91,13 +107,35 @@ impl Cst {
         self.nodes.get(id.index())
     }
 
-    pub(crate) fn children(&self, id: SyntaxId) -> impl Iterator<Item = SyntaxId> + '_ {
+    pub(crate) fn children(&self, id: SyntaxId) -> impl DoubleEndedIterator<Item = SyntaxId> + '_ {
         self.node(id)
             .into_iter()
             .flat_map(|node| {
                 self.children[node.child_ids.start as usize..node.child_ids.end as usize].iter()
             })
             .copied()
+    }
+
+    pub(crate) fn descendants(&self, id: SyntaxId) -> CstDescendants<'_> {
+        CstDescendants {
+            cst: self,
+            pending: vec![id],
+        }
+    }
+}
+
+pub(crate) struct CstDescendants<'a> {
+    cst: &'a Cst,
+    pending: Vec<SyntaxId>,
+}
+
+impl Iterator for CstDescendants<'_> {
+    type Item = SyntaxId;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let id = self.pending.pop()?;
+        self.pending.extend(self.cst.children(id).rev());
+        Some(id)
     }
 }
 
@@ -517,7 +555,7 @@ fn copy_node(
     let child_end = u32::try_from(children.len())
         .map_err(|_| invalid_span(source, "CST exceeds 2^32 edges"))?;
     nodes[node_index as usize].child_ids = child_start..child_end;
-    Ok(SyntaxId(node_index))
+    Ok(SyntaxId::for_source(source, node_index))
 }
 
 fn node_span(

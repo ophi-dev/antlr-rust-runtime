@@ -1,0 +1,8 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 119
+    }
+  ]
+}

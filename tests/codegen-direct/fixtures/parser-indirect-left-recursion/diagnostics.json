@@ -1,0 +1,15 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 119,
+      "message": "The following sets of rules are mutually left-recursive [a, c, b]"
+    }
+  ],
+  "rust": [
+    {
+      "severity": "error",
+      "category": "G4A005"
+    }
+  ]
+}

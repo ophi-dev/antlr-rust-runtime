@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "ParserLookahead.g4"
+  ],
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76"
+  },
+  "files": {
+    "ParserLookahead.g4": "e9b4185b27baade039a83759d9d3a3de1e9fbe63f5176b6f75830ef8768e5faa",
+    "ParserLookahead.interp": "0b331d96a32069f70159c6741372f23c51448a4f9e24833a7f314ea4f017d50c"
+  }
+}

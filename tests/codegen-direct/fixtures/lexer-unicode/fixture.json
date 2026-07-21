@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "LexerUnicode.g4"
+  ],
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "exit_status": 0
+  },
+  "files": {
+    "LexerUnicode.g4": "75312844907d02985ae214dfbd13b14fd40efc0309c0be121bca89cd94999ba6",
+    "LexerUnicode.interp": "5655b6ceb58212563a2bb67138e64f5255e26467aea15c89bce2a8bb1dd9f8a2",
+    "LexerUnicode.tokens": "4740fbd6b8f644898dbf0f1be0ab369975f925128cced13dd64ce5581cad0ac3",
+    "oracle/java-antlr.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh lexer-unicode --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar"
+}

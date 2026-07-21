@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "ParserEpsilonOptional.g4"
+  ],
+  "expected": "warning",
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76"
+  },
+  "files": {
+    "ParserEpsilonOptional.g4": "65693e700501f7659d6016a7ed6c16633b6d858677fcc61d852bdd3131479afb",
+    "ParserEpsilonOptional.interp": "0cabac4ba1ed526d1d131b85f412d400b7244f4fc041bde8ec9a5e7a1f0b1f63"
+  }
+}

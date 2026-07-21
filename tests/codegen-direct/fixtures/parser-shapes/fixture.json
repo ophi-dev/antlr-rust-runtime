@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "ParserShapes.g4"
+  ],
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76"
+  },
+  "files": {
+    "ParserShapes.g4": "9aa695753d0259b6909f420f034327c7114bc39083dd31d1b3f36a694a6e6e2b",
+    "ParserShapes.interp": "b3d4513e7e9aac107e4d3e46684a4bb3a4e4cf8dbc911fcdbd6f1f6f0b47e7a2"
+  }
+}

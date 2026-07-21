@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "ParserLeftRecursionFull.g4"
+  ],
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76"
+  },
+  "files": {
+    "ParserLeftRecursionFull.g4": "5a539e51d156d16b0d3e34ab2befaf5bff1621e7b422a1770ee7cfc93c39055e",
+    "ParserLeftRecursionFull.interp": "5cdac76ad8d2bf31c5022c7d3d848e50d67943010fbaa76604e2f880b70a29de"
+  }
+}

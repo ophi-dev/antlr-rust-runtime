@@ -410,11 +410,18 @@ function externalAssertionInput(assertionId) {
 
 function mappedRow(logicalId, cases, policy) {
     const sourceCaseIds = cases.map((testCase) => testCase.id).sort();
+    const externalAssertionIds = [...externalAssertions]
+        .filter(
+            ([, { assertion }]) =>
+                assertion.tdd_owner === `upstream:${logicalId}`,
+        )
+        .map(([assertionId]) => assertionId)
+        .sort();
     if (policy.disposition !== "port") {
         return {
             logical_id: logicalId,
             source_case_ids: sourceCaseIds,
-            external_assertion_ids: [],
+            external_assertion_ids: externalAssertionIds,
             owner_phase: policy.owner,
             disposition: policy.disposition,
             active_revision_id: null,
@@ -427,7 +434,14 @@ function mappedRow(logicalId, cases, policy) {
     const closure = {
         logical_id: logicalId,
         source_case_ids: sourceCaseIds,
-        external_assertion_ids: [],
+        external_assertion_ids: externalAssertionIds,
+        ...(externalAssertionIds.length === 0
+            ? {}
+            : {
+                  external_assertion_inputs: externalAssertionIds.map(
+                      externalAssertionInput,
+                  ),
+              }),
         owner_phase: policy.owner,
         disposition: "port",
         rust_test: `planned:tests/codegen-direct/fixtures/${logicalId}`,
@@ -437,7 +451,7 @@ function mappedRow(logicalId, cases, policy) {
     return {
         logical_id: logicalId,
         source_case_ids: sourceCaseIds,
-        external_assertion_ids: [],
+        external_assertion_ids: externalAssertionIds,
         owner_phase: policy.owner,
         disposition: "port",
         active_revision_id: `${logicalId}-r1`,

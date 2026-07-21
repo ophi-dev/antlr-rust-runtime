@@ -159,7 +159,7 @@ fn map_attr_type(raw: &str) -> String {
 
 /// Parses `[a: i32, int b, String s]`-style attribute declarations, accepting
 /// both the rendered Rust `name: type` form and raw `type name` descriptors.
-fn parse_attr_decls(clause: &str) -> Vec<AttrDecl> {
+pub(crate) fn parse_attr_decls(clause: &str) -> Vec<AttrDecl> {
     let mut decls = Vec::new();
     for part in split_top_level(clause, ',') {
         let part = strip_default_initializer(part.trim());

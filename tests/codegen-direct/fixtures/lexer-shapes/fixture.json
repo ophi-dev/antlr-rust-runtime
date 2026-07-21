@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "LexerShapes.g4"
+  ],
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1+9"
+  },
+  "files": {
+    "LexerShapes.g4": "cc1e11e824248985c95ae49b458b571968d223258212c1f45e01b28a4d15b341",
+    "LexerShapes.interp": "9ea712e5c700c4eea6d53fa5545ed797a99a33f4b9f8803c2ccf920deb6e4a0d",
+    "LexerShapes.tokens": "5f25c13759e59ef89356bc7db061b0e004412eb9b4c04b24216cabd61b7dd59c"
+  }
+}

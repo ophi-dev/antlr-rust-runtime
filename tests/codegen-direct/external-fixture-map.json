@@ -50,6 +50,15 @@
           "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles",
           "upstream_active_revision_id": "frontend-token-cst-parity-r1",
           "transitive_closure_sha256": "a409bb9aec5a84548c338069061cbebd193b588ea676643871c22db2898a40b5"
+        },
+        {
+          "id": "vscode-antlr4:grammars/ANTLRv4Lexer.g4:direct-atn",
+          "phase": "B",
+          "observable": "the imported LexBasic grammar and direct lexer ATN serialize exactly like Java 4.13.2",
+          "tdd_owner": "upstream:testcompositegrammars-testimportintolexergrammar-caf8b54010",
+          "rust_test": "grammar::atn::interp_test::tests::vscode_alternate_meta_grammar_and_import_match_java",
+          "upstream_active_revision_id": "testcompositegrammars-testimportintolexergrammar-caf8b54010-r1",
+          "transitive_closure_sha256": "41626af1232c08eae810b85beee172def9182535c7271a05948569dbb19300e3"
         }
       ]
     },
@@ -81,6 +90,15 @@
           "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles",
           "upstream_active_revision_id": "frontend-token-cst-parity-r1",
           "transitive_closure_sha256": "a409bb9aec5a84548c338069061cbebd193b588ea676643871c22db2898a40b5"
+        },
+        {
+          "id": "vscode-antlr4:grammars/ANTLRv4Parser.g4:direct-atn",
+          "phase": "B",
+          "observable": "source-backed tokenVocab resolution and the direct parser ATN serialize exactly like Java 4.13.2",
+          "tdd_owner": "upstream:testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb",
+          "rust_test": "grammar::atn::interp_test::tests::vscode_alternate_meta_grammar_and_import_match_java",
+          "upstream_active_revision_id": "testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb-r1",
+          "transitive_closure_sha256": "2dd25578efdab0aa8b8ea73a6a3ddeffb0ee225f00114fe4e0b563fdb9f75fe7"
         }
       ]
     },
@@ -111,6 +129,15 @@
           "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles",
           "upstream_active_revision_id": "frontend-token-cst-parity-r1",
           "transitive_closure_sha256": "a409bb9aec5a84548c338069061cbebd193b588ea676643871c22db2898a40b5"
+        },
+        {
+          "id": "vscode-antlr4:grammars/LexBasic.g4:direct-atn",
+          "phase": "B",
+          "observable": "the direct lexer ATN and recognizer tables serialize exactly like Java 4.13.2",
+          "tdd_owner": "upstream:testatnserialization-testlexertworules-1b3e930083",
+          "rust_test": "grammar::atn::interp_test::tests::vscode_alternate_meta_grammar_and_import_match_java",
+          "upstream_active_revision_id": "testatnserialization-testlexertworules-1b3e930083-r1",
+          "transitive_closure_sha256": "30f8ef4ed5976a0cb49a13b4540145cfbb643196b7d1d4351041bbb89b240af2"
         }
       ]
     },
@@ -142,6 +169,15 @@
           "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles",
           "upstream_active_revision_id": "frontend-token-cst-parity-r1",
           "transitive_closure_sha256": "a409bb9aec5a84548c338069061cbebd193b588ea676643871c22db2898a40b5"
+        },
+        {
+          "id": "vscode-antlr4:tests/backend/test-data/CPP14.g4:direct-atns",
+          "phase": "B",
+          "observable": "combined splitting produces direct lexer and parser ATNs identical to Java 4.13.2",
+          "tdd_owner": "upstream:testatnserialization-test3alts-9c04d047af",
+          "rust_test": "grammar::atn::interp_test::tests::vscode_cpp14_combined_grammar_matches_java",
+          "upstream_active_revision_id": "testatnserialization-test3alts-9c04d047af-r1",
+          "transitive_closure_sha256": "86463a05f3ef96714d239781da5796df9d0b001f23fe6a3665ba5748bc9a7c93"
         }
       ]
     },
@@ -171,6 +207,15 @@
           "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles",
           "upstream_active_revision_id": "frontend-token-cst-parity-r1",
           "transitive_closure_sha256": "a409bb9aec5a84548c338069061cbebd193b588ea676643871c22db2898a40b5"
+        },
+        {
+          "id": "vscode-antlr4:tests/backend/test-data/OddExpr.g4:direct-atns",
+          "phase": "B",
+          "observable": "the 101246-state direct lexer ATN and parser ATN serialize exactly like Java 4.13.2",
+          "tdd_owner": "upstream:testatnserialization-testlexerunicodesmpandbmpsetserialized-146bb39ee2",
+          "rust_test": "grammar::atn::interp_test::tests::vscode_odd_expr_large_atns_match_java_without_state_limit",
+          "upstream_active_revision_id": "testatnserialization-testlexerunicodesmpandbmpsetserialized-146bb39ee2-r1",
+          "transitive_closure_sha256": "27a1c93cd97f8de6a9cd103df36a0a2e44b34ea32fea8cd36d9dada3b3ff3bf7"
         }
       ]
     },
@@ -201,6 +246,15 @@
           "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles",
           "upstream_active_revision_id": "frontend-token-cst-parity-r1",
           "transitive_closure_sha256": "a409bb9aec5a84548c338069061cbebd193b588ea676643871c22db2898a40b5"
+        },
+        {
+          "id": "vscode-antlr4:tests/backend/test-data/TLexer.g4:direct-atn",
+          "phase": "B",
+          "observable": "modes, channels, commands, actions, and the direct lexer ATN match Java 4.13.2",
+          "tdd_owner": "upstream:testatnserialization-testmodeinlexer-01129db88a",
+          "rust_test": "grammar::atn::interp_test::tests::vscode_split_grammar_matches_java",
+          "upstream_active_revision_id": "testatnserialization-testmodeinlexer-01129db88a-r1",
+          "transitive_closure_sha256": "e1a65daf43c080dac3c5df2f23481cb285762e14e60413a8ec498cfe8e1b8bb4"
         }
       ]
     },
@@ -230,6 +284,15 @@
           "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles",
           "upstream_active_revision_id": "frontend-token-cst-parity-r1",
           "transitive_closure_sha256": "a409bb9aec5a84548c338069061cbebd193b588ea676643871c22db2898a40b5"
+        },
+        {
+          "id": "vscode-antlr4:tests/backend/test-data/TLexer2.g4:direct-diagnostic",
+          "phase": "B",
+          "observable": "missing tokenVocab reports the Java error category and source position",
+          "tdd_owner": "upstream:testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb",
+          "rust_test": "grammar::compiler::tests::missing_token_vocab_matches_java_diagnostic_site",
+          "upstream_active_revision_id": "testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb-r1",
+          "transitive_closure_sha256": "2dd25578efdab0aa8b8ea73a6a3ddeffb0ee225f00114fe4e0b563fdb9f75fe7"
         }
       ]
     },
@@ -345,6 +408,15 @@
             "closure_sha256": "d6c2867064a0b7cd37fcd5605c025926aa0782d92cd36c6fbbe3851b69e3bf9a",
             "evidence_path": "tests/codegen-direct/port-evidence/vscode-tparser-source-spans"
           }
+        },
+        {
+          "id": "vscode-antlr4:tests/backend/test-data/TParser.g4:direct-atn",
+          "phase": "B",
+          "observable": "split tokenVocab resolution, immediate left recursion, labels, and the direct parser ATN match Java 4.13.2",
+          "tdd_owner": "upstream:testtokenpositionoptions-testleftrecursionwithlabels-6e604809f0",
+          "rust_test": "grammar::atn::interp_test::tests::vscode_split_grammar_matches_java",
+          "upstream_active_revision_id": "testtokenpositionoptions-testleftrecursionwithlabels-6e604809f0-r1",
+          "transitive_closure_sha256": "3d2a81b7b0e114e04e4978608d93c1d1b39254b77e6b8b76d44a206ac1e779fd"
         }
       ]
     },
@@ -374,6 +446,15 @@
           "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles",
           "upstream_active_revision_id": "frontend-token-cst-parity-r1",
           "transitive_closure_sha256": "a409bb9aec5a84548c338069061cbebd193b588ea676643871c22db2898a40b5"
+        },
+        {
+          "id": "vscode-antlr4:tests/backend/test-data/TParser2.g4:direct-diagnostic",
+          "phase": "B",
+          "observable": "the split parser dependency participates in the missing tokenVocab failure without partial compilation",
+          "tdd_owner": "upstream:testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb",
+          "rust_test": "grammar::compiler::tests::missing_token_vocab_matches_java_diagnostic_site",
+          "upstream_active_revision_id": "testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb-r1",
+          "transitive_closure_sha256": "2dd25578efdab0aa8b8ea73a6a3ddeffb0ee225f00114fe4e0b563fdb9f75fe7"
         }
       ]
     },
@@ -403,6 +484,15 @@
           "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles",
           "upstream_active_revision_id": "frontend-token-cst-parity-r1",
           "transitive_closure_sha256": "a409bb9aec5a84548c338069061cbebd193b588ea676643871c22db2898a40b5"
+        },
+        {
+          "id": "vscode-antlr4:tests/backend/test-data/sentences.g4:direct-atns",
+          "phase": "B",
+          "observable": "Unicode-property expansion and direct lexer/parser ATNs match Java 4.13.2",
+          "tdd_owner": "upstream:testatnconstruction-testcharsetunicodepropertyescape-1ca01ebe06",
+          "rust_test": "grammar::atn::interp_test::tests::vscode_sentences_combined_parser_and_unicode_lexer_match_java",
+          "upstream_active_revision_id": "testatnconstruction-testcharsetunicodepropertyescape-1ca01ebe06-r1",
+          "transitive_closure_sha256": "57333464e9f98b17703408c050659328a0c7603b93168ecf97f614734b240b39"
         }
       ]
     },
@@ -599,6 +689,15 @@
             "closure_sha256": "0f3aea6c744bc31456fb4e92600976aa50d8ba8e8e1d7165c2869b73efea38d4",
             "evidence_path": "tests/codegen-direct/port-evidence/vscode-symbol-info-valid-undefined-edit"
           }
+        },
+        {
+          "id": "vscode-antlr4:tests/backend/test-data/t.g4:direct-diagnostics",
+          "phase": "B",
+          "observable": "implicit-token warning 125 and unknown-channel error 177 match Java categories and source positions",
+          "tdd_owner": "upstream:testsymbolissues-testwrongidfortypechannelmodecommand-5245d6d5c3",
+          "rust_test": "grammar::compiler::tests::implicit_token_warning_precedes_unknown_channel_error",
+          "upstream_active_revision_id": "testsymbolissues-testwrongidfortypechannelmodecommand-5245d6d5c3-r1",
+          "transitive_closure_sha256": "c668ea703313f832e465b505d9f2b8e6262c2c21b17e9f1bf8e7f79497542a0b"
         }
       ]
     },
@@ -628,6 +727,15 @@
           "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles",
           "upstream_active_revision_id": "frontend-token-cst-parity-r1",
           "transitive_closure_sha256": "a409bb9aec5a84548c338069061cbebd193b588ea676643871c22db2898a40b5"
+        },
+        {
+          "id": "vscode-antlr4:tests/backend/test-data/t2.g4:direct-diagnostic",
+          "phase": "B",
+          "observable": "the direct parser post-build graph reports Java-compatible mutual-left-recursion members",
+          "tdd_owner": "upstream:testtopologicalsort-testcyclicgraph-94f1aecafb",
+          "rust_test": "grammar::compiler::tests::indirect_left_recursion_matches_java_cycle_members",
+          "upstream_active_revision_id": "testtopologicalsort-testcyclicgraph-94f1aecafb-r1",
+          "transitive_closure_sha256": "485dae722ccc5091031fc75ab258fb457f043d279a9eaeb2b81127e74ec265d6"
         }
       ]
     }
