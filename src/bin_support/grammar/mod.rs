@@ -1,4 +1,5 @@
 mod atn;
+mod char_support;
 mod compiler;
 mod diagnostic;
 pub(crate) mod frontend;
