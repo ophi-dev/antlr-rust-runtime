@@ -27,6 +27,32 @@ impl Vocabulary {
         }
     }
 
+    pub fn from_token_names(
+        token_names: impl IntoIterator<Item = Option<impl Into<String>>>,
+    ) -> Self {
+        let display = token_names
+            .into_iter()
+            .map(|value| value.map(Into::into))
+            .collect::<Vec<Option<String>>>();
+        let literal = display
+            .iter()
+            .map(|name| name.as_ref().filter(|name| name.starts_with('\'')).cloned())
+            .collect();
+        let symbolic = display
+            .iter()
+            .map(|name| {
+                name.as_ref()
+                    .filter(|name| name.starts_with(char::is_uppercase))
+                    .cloned()
+            })
+            .collect();
+        Self {
+            literal,
+            symbolic,
+            display,
+        }
+    }
+
     pub fn literal_name(&self, token_type: i32) -> Option<&str> {
         Self::get(&self.literal, token_type)
     }
