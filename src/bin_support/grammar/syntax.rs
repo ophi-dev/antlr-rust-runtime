@@ -1,3 +1,4 @@
+use super::char_support::get_string_from_grammar_string_literal;
 use super::frontend::{Cst, SourceFile, SourceSpan, SyntaxId, SyntaxNodeKind, SyntaxToken};
 use super::generated::antlr_v4_parser as p;
 use super::model::{
@@ -1082,7 +1083,15 @@ fn predicate_fail_message(node: SyntaxNodeRef<'_>) -> Option<String> {
         .find_map(|option| {
             let text = option.text();
             let (name, value) = text.split_once('=')?;
-            (name.trim() == "fail").then(|| value.trim().to_owned())
+            if name.trim() != "fail" {
+                return None;
+            }
+            let value = value.trim();
+            if value.starts_with(['\'', '"']) {
+                get_string_from_grammar_string_literal(value)
+            } else {
+                Some(value.to_owned())
+            }
         })
 }
 
