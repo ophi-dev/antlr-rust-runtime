@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "T.g4"
+  ],
+  "logical_ids": [
+    "testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:testtokenpositionoptions-testleftrecursionrewrite@5b73499bd6ac",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestTokenPositionOptions.spec.ts",
+      "case": "testLeftRecursionRewrite",
+      "source_sha256": "93e59ec0b07fa150971050ae405afdd7445efca59b5667a4e628c2bd4c7d2701"
+    },
+    {
+      "source_case_id": "java-antlr:testtokenpositionoptions-testleftrecursionrewrite@5b73499bd6ac",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestTokenPositionOptions.java",
+      "case": "testLeftRecursionRewrite",
+      "source_sha256": "48c3a5e06556bfb0e223900a2fbcb17dc867a4ee3b9d3f20481b60d1c80f7d69"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testtokenpositionoptions-testleftrecursionrewrite@5b73499bd6ac",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestTokenPositionOptions.java",
+    "case": "testLeftRecursionRewrite",
+    "source_sha256": "48c3a5e06556bfb0e223900a2fbcb17dc867a4ee3b9d3f20481b60d1c80f7d69"
+  },
+  "antlr_ng_test": {
+    "source_case_id": "antlr-ng:testtokenpositionoptions-testleftrecursionrewrite@5b73499bd6ac",
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/TestTokenPositionOptions.spec.ts",
+    "case": "testLeftRecursionRewrite",
+    "source_sha256": "93e59ec0b07fa150971050ae405afdd7445efca59b5667a4e628c2bd4c7d2701"
+  },
+  "expected": "success",
+  "structural_oracle": {
+    "agreement": "Java ANTLR and antlr-ng preserve the same authored token positions through left-recursion rewriting",
+    "compatibility_verdict": "Java ANTLR 4.13.2"
+  },
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "exit_status": 0
+  },
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91 --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar",
+  "files": {
+    "T.g4": "fafb6f767dce034c0a7dcdb00bbde0750d12165f5f7f5ef5651060e13e86966b",
+    "T.interp": "1f88bab2938946debcbe3bcaa40bccc5b2638db3638109ab157f772be3f47070",
+    "T.tokens": "b8ed8effed0ffb336c2bd91591b3d79a3d1aca7ce4ff1d1b6d58d69a7106566a",
+    "TLexer.interp": "701214d4c081c53b8add8973c2e61aa65b6c50bf68251001119537603a65431d",
+    "TLexer.tokens": "b8ed8effed0ffb336c2bd91591b3d79a3d1aca7ce4ff1d1b6d58d69a7106566a",
+    "oracle/java-antlr.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

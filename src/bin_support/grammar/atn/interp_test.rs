@@ -1898,6 +1898,186 @@ mod tests {
         }
     }
 
+    mod upstream_token_position_options {
+        use super::*;
+        use crate::grammar::model::{Block, ElementKind, SetElement, Terminal};
+
+        #[test]
+        fn left_recursion_rewrite_matches_java() {
+            let compilation = assert_combined_fixture(
+                "testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91",
+            );
+            let parser = parser_named(&compilation, "TParser");
+            assert_eq!(
+                authored_positions(&parser.semantic.unit.rules),
+                [
+                    "rule:s@11",
+                    "e@15",
+                    "';'@17",
+                    "rule:e@23",
+                    "'-'@64",
+                    "e@68",
+                    "ID@74",
+                    "'*'@29",
+                    "e@33",
+                    "'+'@41",
+                    "e@45",
+                    "'.'@53",
+                    "ID@57",
+                ],
+            );
+            assert!(authored_labels(&parser.semantic.unit.rules).is_empty());
+        }
+
+        #[test]
+        fn left_recursion_with_labels_matches_java() {
+            let compilation = assert_combined_fixture(
+                "testtokenpositionoptions-testleftrecursionwithlabels-6e604809f0",
+            );
+            let parser = parser_named(&compilation, "TParser");
+            assert_eq!(
+                authored_positions(&parser.semantic.unit.rules),
+                [
+                    "rule:s@11",
+                    "e@15",
+                    "';'@17",
+                    "rule:e@23",
+                    "'-'@68",
+                    "e@72",
+                    "ID@78",
+                    "'*'@29",
+                    "e@35",
+                    "'+'@43",
+                    "e@47",
+                    "'.'@55",
+                    "ID@61",
+                ],
+            );
+            assert_eq!(
+                authored_labels(&parser.semantic.unit.rules),
+                ["x@33", "y@59"],
+            );
+        }
+
+        #[test]
+        fn left_recursion_with_set_matches_java() {
+            let compilation = assert_combined_fixture(
+                "testtokenpositionoptions-testleftrecursionwithset-57f72a753d",
+            );
+            let parser = parser_named(&compilation, "TParser");
+            assert_eq!(
+                authored_positions(&parser.semantic.unit.rules),
+                [
+                    "rule:s@11",
+                    "e@15",
+                    "';'@17",
+                    "rule:e@23",
+                    "'-'@73",
+                    "e@77",
+                    "ID@83",
+                    "'*'@33",
+                    "'/'@37",
+                    "e@42",
+                    "'+'@50",
+                    "e@54",
+                    "'.'@62",
+                    "ID@66",
+                ],
+            );
+            assert_eq!(authored_labels(&parser.semantic.unit.rules), ["op@29"]);
+        }
+
+        fn assert_combined_fixture(fixture_name: &str) -> Compilation {
+            let compilation =
+                compile_fixture(fixture_name, &["T.g4"]).expect("combined fixture should compile");
+            let path = fixture(fixture_name);
+            assert_parser_interp(
+                parser_named(&compilation, "TParser"),
+                &path.join("T.interp"),
+            );
+            assert_lexer_interp(
+                lexer_named(&compilation, "TLexer"),
+                &path.join("TLexer.interp"),
+            );
+            compilation
+        }
+
+        fn authored_positions(rules: &[crate::grammar::model::Rule]) -> Vec<String> {
+            let mut positions = Vec::new();
+            for rule in rules {
+                positions.push(format!("rule:{}@{}", rule.name, rule.span.bytes.start));
+                collect_block_positions(&rule.block, &mut positions);
+            }
+            positions
+        }
+
+        fn collect_block_positions(block: &Block, positions: &mut Vec<String>) {
+            for alternative in &block.alternatives {
+                for element in &alternative.elements {
+                    match &element.kind {
+                        ElementKind::Terminal(terminal) => positions.push(format!(
+                            "{}@{}",
+                            terminal_name(terminal),
+                            element.span.bytes.start,
+                        )),
+                        ElementKind::RuleCall(call) => {
+                            positions.push(format!("{}@{}", call.name, element.span.bytes.start));
+                        }
+                        ElementKind::Set { elements, .. } => {
+                            for member in elements {
+                                if let SetElement::Terminal { value, span, .. } = member {
+                                    positions.push(format!(
+                                        "{}@{}",
+                                        terminal_name(value),
+                                        span.bytes.start,
+                                    ));
+                                }
+                            }
+                        }
+                        ElementKind::Block(nested) => {
+                            collect_block_positions(nested, positions);
+                        }
+                        ElementKind::Range(..)
+                        | ElementKind::Action { .. }
+                        | ElementKind::Predicate { .. }
+                        | ElementKind::Epsilon => {}
+                    }
+                }
+            }
+        }
+
+        fn authored_labels(rules: &[crate::grammar::model::Rule]) -> Vec<String> {
+            fn collect(block: &Block, labels: &mut Vec<String>) {
+                for alternative in &block.alternatives {
+                    for element in &alternative.elements {
+                        if let Some(label) = &element.label {
+                            labels.push(format!("{}@{}", label.name, label.span.bytes.start));
+                        }
+                        if let ElementKind::Block(nested) = &element.kind {
+                            collect(nested, labels);
+                        }
+                    }
+                }
+            }
+
+            let mut labels = Vec::new();
+            for rule in rules {
+                collect(&rule.block, &mut labels);
+            }
+            labels
+        }
+
+        fn terminal_name(terminal: &Terminal) -> &str {
+            match terminal {
+                Terminal::Token(name) | Terminal::Literal(name) | Terminal::LexerCharSet(name) => {
+                    name
+                }
+                Terminal::Wildcard => ".",
+                Terminal::Eof => "EOF",
+            }
+        }
+    }
+
     struct ExpectedSemanticDiagnostic {
         code: &'static str,
         severity: crate::grammar::diagnostic::Severity,
