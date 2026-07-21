@@ -574,6 +574,195 @@ mod tests {
         assert_eq!(lookup.shadowed.len(), 1);
     }
 
+    mod upstream_topological_sort {
+        use super::*;
+
+        #[test]
+        fn fairly_large_graph_matches_java() {
+            let fixture = Fixture::new("topological-fairly-large");
+            fixture.write("C.g4", "parser grammar C; import F, G, A, B;");
+            fixture.write("A.g4", "parser grammar A; import D, E;");
+            fixture.write("B.g4", "parser grammar B; import E;");
+            fixture.write("D.g4", "parser grammar D; import E, F;");
+            fixture.write("E.g4", "parser grammar E; import F;");
+            fixture.write("F.g4", "parser grammar F; import H;");
+            fixture.write("G.g4", "parser grammar G;");
+            fixture.write("H.g4", "parser grammar H;");
+
+            let loaded = load_fixture(&fixture, &["C.g4"]).expect("graph should load");
+
+            assert_eq!(
+                load_order_names(&loaded.grammars),
+                ["H", "F", "G", "E", "D", "A", "B", "C"],
+            );
+        }
+
+        #[test]
+        fn cyclic_graph_matches_java() {
+            let fixture = Fixture::new("topological-cycle");
+            fixture.write("A.g4", "parser grammar A; import B;");
+            fixture.write("B.g4", "parser grammar B; import C;");
+            fixture.write("C.g4", "parser grammar C; import A, D;");
+            fixture.write("D.g4", "parser grammar D;");
+            let mut loader = Loader::new(load_options(&fixture, &["A.g4"]));
+
+            loader.run();
+
+            assert_eq!(
+                load_order_names_from_parts(&loader.grammars, &loader.load_order),
+                ["D", "C", "B", "A"],
+            );
+            assert!(loader.diagnostics.iter().any(|diagnostic| {
+                diagnostic.code == "G4L009"
+                    && diagnostic.message == "grammar dependency cycle: A -> B -> C -> A"
+            }));
+        }
+
+        #[test]
+        fn repeated_edges_match_java() {
+            let fixture = Fixture::new("topological-repeated-edges");
+            fixture.write("A.g4", "parser grammar A; import B, B;");
+            fixture.write("B.g4", "parser grammar B; import C;");
+            fixture.write("C.g4", "parser grammar C; import D;");
+            fixture.write("D.g4", "parser grammar D;");
+
+            let loaded = load_fixture(&fixture, &["A.g4"]).expect("graph should load");
+
+            assert_eq!(load_order_names(&loaded.grammars), ["D", "C", "B", "A"],);
+        }
+
+        #[test]
+        fn simple_token_dependence_matches_java() {
+            let fixture = Fixture::new("topological-token-dependence");
+            fixture.write(
+                "Java.g4",
+                "grammar Java; options { tokenVocab=MyJava; } id: ID; ID: 'a';",
+            );
+            fixture.write("Def.g4", "parser grammar Def; options { tokenVocab=Java; }");
+            fixture.write("Ref.g4", "parser grammar Ref; options { tokenVocab=Java; }");
+            fixture.write("MyJava.tokens", "ID=1\n");
+
+            let loaded = load_fixture(&fixture, &["Java.g4", "Def.g4", "Ref.g4"])
+                .expect("token dependency graph should load");
+
+            assert_eq!(load_order_names(&loaded.grammars), ["Java", "Def", "Ref"],);
+            assert_vocabulary_source(
+                &loaded.grammars,
+                "Java",
+                ExpectedVocabularySource::TokensFile("MyJava.tokens"),
+            );
+            assert_vocabulary_source(
+                &loaded.grammars,
+                "Def",
+                ExpectedVocabularySource::Grammar("Java"),
+            );
+            assert_vocabulary_source(
+                &loaded.grammars,
+                "Ref",
+                ExpectedVocabularySource::Grammar("Java"),
+            );
+        }
+
+        #[test]
+        fn parser_lexer_combo_matches_java() {
+            let fixture = Fixture::new("topological-parser-lexer");
+            fixture.write("JavaLexer.g4", "lexer grammar JavaLexer; ID: 'a';");
+            fixture.write(
+                "JavaParser.g4",
+                "parser grammar JavaParser; options { tokenVocab=JavaLexer; }",
+            );
+            fixture.write(
+                "Def.g4",
+                "parser grammar Def; options { tokenVocab=JavaLexer; }",
+            );
+            fixture.write(
+                "Ref.g4",
+                "parser grammar Ref; options { tokenVocab=JavaLexer; }",
+            );
+
+            let loaded = load_fixture(&fixture, &["JavaParser.g4", "Def.g4", "Ref.g4"])
+                .expect("parser/lexer dependency graph should load");
+
+            assert_eq!(
+                load_order_names(&loaded.grammars),
+                ["JavaLexer", "JavaParser", "Def", "Ref"],
+            );
+            for consumer in ["JavaParser", "Def", "Ref"] {
+                assert_vocabulary_source(
+                    &loaded.grammars,
+                    consumer,
+                    ExpectedVocabularySource::Grammar("JavaLexer"),
+                );
+            }
+        }
+
+        fn load_fixture(
+            fixture: &Fixture,
+            roots: &[&str],
+        ) -> Result<LoadedSources, CompilationError> {
+            load(load_options(fixture, roots))
+        }
+
+        fn load_options(fixture: &Fixture, roots: &[&str]) -> LoadOptions {
+            LoadOptions {
+                roots: roots.iter().map(|root| fixture.path(root)).collect(),
+                library_directories: Vec::new(),
+            }
+        }
+
+        fn load_order_names(grammars: &LoadedGrammarSet) -> Vec<&str> {
+            load_order_names_from_parts(&grammars.grammars, &grammars.load_order)
+        }
+
+        fn load_order_names_from_parts<'a>(
+            grammars: &'a [ParsedGrammarUnit],
+            order: &[GrammarId],
+        ) -> Vec<&'a str> {
+            order
+                .iter()
+                .map(|grammar| grammars[grammar.index()].header.name.value.as_str())
+                .collect()
+        }
+
+        #[derive(Clone, Copy)]
+        enum ExpectedVocabularySource<'a> {
+            Grammar(&'a str),
+            TokensFile(&'a str),
+        }
+
+        fn assert_vocabulary_source(
+            grammars: &LoadedGrammarSet,
+            consumer: &str,
+            expected: ExpectedVocabularySource<'_>,
+        ) {
+            let consumer = grammars.by_name[consumer];
+            let source = &grammars
+                .vocabularies
+                .iter()
+                .find(|edge| edge.importer == consumer)
+                .expect("consumer should have a vocabulary edge")
+                .source;
+            match (source, expected) {
+                (
+                    VocabularySource::Grammar(actual),
+                    ExpectedVocabularySource::Grammar(expected),
+                ) => {
+                    assert_eq!(grammars.grammar(*actual).header.name.value, expected);
+                }
+                (
+                    VocabularySource::TokensFile(actual),
+                    ExpectedVocabularySource::TokensFile(expected),
+                ) => {
+                    assert_eq!(
+                        actual.file_name().and_then(std::ffi::OsStr::to_str),
+                        Some(expected),
+                    );
+                }
+                _ => panic!("vocabulary source kind differs"),
+            }
+        }
+    }
+
     struct Fixture {
         root: PathBuf,
     }
