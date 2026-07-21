@@ -305,6 +305,7 @@ pub(crate) enum SetElement {
     Terminal {
         source: ElementId,
         value: Terminal,
+        span: SourceSpan,
         options: Vec<OptionDecl>,
     },
     Range {

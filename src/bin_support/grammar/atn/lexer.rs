@@ -532,27 +532,33 @@ impl<'a> LexerFactory<'a> {
         let mut char_set = ParsedCharSet::default();
         for element in elements {
             match element {
-                SetElement::Terminal { value, .. } => match value {
+                SetElement::Terminal {
+                    value,
+                    span: member_span,
+                    ..
+                } => match value {
                     Terminal::Literal(literal) => match decode_character_literal(literal) {
                         Ok(value) => char_set.explicit.push((value, value)),
-                        Err(message) => self.diagnostics.push(Diagnostic::error(
-                            "G4L002",
-                            span.clone(),
-                            message,
+                        Err(_) => self.diagnostics.push(Diagnostic::error(
+                            "G4S066",
+                            member_span.clone(),
+                            format!(
+                                "multi-character literals are not allowed in lexer sets: {literal}"
+                            ),
                         )),
                     },
                     Terminal::LexerCharSet(text) => match parse_char_set(text) {
                         Ok(parsed) => char_set.extend(parsed),
                         Err(message) => self.diagnostics.push(Diagnostic::error(
                             "G4L002",
-                            span.clone(),
+                            member_span.clone(),
                             message,
                         )),
                     },
                     Terminal::Token(name) => self.diagnostics.push(Diagnostic::error(
-                        "G4L003",
-                        span.clone(),
-                        format!("token reference {name} is not supported in a lexer set"),
+                        "G4S065",
+                        member_span.clone(),
+                        format!("rule reference {name} is not currently supported in a set"),
                     )),
                     Terminal::Eof => {
                         char_set.explicit.push((EOF_CODE_POINT, EOF_CODE_POINT));

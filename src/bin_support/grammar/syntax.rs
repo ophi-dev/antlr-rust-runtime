@@ -980,6 +980,7 @@ fn parse_set_element(node: SyntaxNodeRef<'_>, source: ElementId) -> Option<SetEl
         return Some(SetElement::Terminal {
             source,
             value: Terminal::Token(token.text().to_owned()),
+            span: token.span(),
             options: parse_set_member_options(node),
         });
     }
@@ -987,6 +988,7 @@ fn parse_set_element(node: SyntaxNodeRef<'_>, source: ElementId) -> Option<SetEl
         return Some(SetElement::Terminal {
             source,
             value: Terminal::Literal(literal.text().to_owned()),
+            span: literal.span(),
             options: parse_set_member_options(node),
         });
     }
@@ -994,6 +996,7 @@ fn parse_set_element(node: SyntaxNodeRef<'_>, source: ElementId) -> Option<SetEl
         .map(|set| SetElement::Terminal {
             source,
             value: Terminal::LexerCharSet(set.text().to_owned()),
+            span: set.span(),
             options: parse_set_member_options(node),
         })
 }

@@ -811,12 +811,14 @@ fn block_set_members(block: &Block, lexer: bool) -> Option<(Vec<SetElement>, Vec
                 SetElement::Terminal {
                     source: element.id,
                     value: Terminal::Literal(literal.clone()),
+                    span: element.span.clone(),
                     options: element.options.clone(),
                 }
             }
             ElementKind::Terminal(Terminal::Token(token)) if !lexer => SetElement::Terminal {
                 source: element.id,
                 value: Terminal::Token(token.clone()),
+                span: element.span.clone(),
                 options: element.options.clone(),
             },
             ElementKind::Range(start, stop)
