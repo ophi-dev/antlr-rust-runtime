@@ -730,7 +730,7 @@ fn escape_row_is_searchable(row: &[CompiledLexerEscapeRange]) -> bool {
 
 /// Version tag guarding embedded tables against format or construction-semantic
 /// drift.
-const SERIALIZED_TAG: u32 = 0x4C58_4406;
+const SERIALIZED_TAG: u32 = 0x4C58_4407;
 
 /// Cursor over a serialized DFA stream.
 struct SerializedReader<'a> {

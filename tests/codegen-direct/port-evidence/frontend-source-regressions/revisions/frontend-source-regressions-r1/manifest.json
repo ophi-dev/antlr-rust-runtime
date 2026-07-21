@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "logical_id": "frontend-source-regressions",
+  "revision_id": "frontend-source-regressions-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "A",
+  "state": "done",
+  "closure": {
+    "logical_id": "frontend-source-regressions",
+    "source_case_ids": [
+      "antlr-ng:general-grammar-with-element-options@acaecb36b1e4",
+      "antlr-ng:general-non-greedy-optionals@3e377e14c912",
+      "antlr-ng:general-bug-62-triple-quoted-strings-in-actions@f33c09d8e723"
+    ],
+    "external_assertion_ids": [],
+    "external_assertion_inputs": [],
+    "fixture_paths": [],
+    "owner_phase": "A",
+    "disposition": "port",
+    "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles",
+    "unit_under_test": "Stage 0 grammar-source lexer adaptor",
+    "observable": "element options, nongreedy EBNF, and nested action strings remain lossless",
+    "scaffold_commit": "75615945749dc93fca5d929cb22ad481f12dfdc9",
+    "primary_test_commit": "a4258562c44818e2ba97d206587c64d4c38408d0"
+  },
+  "closure_sha256": "1b4cd4ac98594887b89c19902b37e9605b6b03f4b65a0988d6e3cacabd11b2cd",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:general-grammar-with-element-options@acaecb36b1e4",
+      "path": "tests/bugs/General.spec.ts",
+      "sha256": "d10ecdc3a8bf65568eb74e94dedd8186c5be2f6cb8ff568c47bbf54093296eec"
+    },
+    {
+      "source_case_id": "antlr-ng:general-non-greedy-optionals@3e377e14c912",
+      "path": "tests/bugs/General.spec.ts",
+      "sha256": "d10ecdc3a8bf65568eb74e94dedd8186c5be2f6cb8ff568c47bbf54093296eec"
+    },
+    {
+      "source_case_id": "antlr-ng:general-bug-62-triple-quoted-strings-in-actions@f33c09d8e723",
+      "path": "tests/bugs/General.spec.ts",
+      "sha256": "d10ecdc3a8bf65568eb74e94dedd8186c5be2f6cb8ff568c47bbf54093296eec"
+    }
+  ],
+  "commits": {
+    "scaffold": "75615945749dc93fca5d929cb22ad481f12dfdc9",
+    "primary_test": "a4258562c44818e2ba97d206587c64d4c38408d0",
+    "primary_implementation": "8a00a3d6496779b969a42511d7e29c0d102d62d7"
+  },
+  "ancestry": {
+    "primary_test_parent": "75615945749dc93fca5d929cb22ad481f12dfdc9",
+    "primary_implementation_parent": "a4258562c44818e2ba97d206587c64d4c38408d0",
+    "reachability": "direct ancestry is verified when the recorded commit objects are available"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/frontend.rs",
+      "marker": "#[cfg(test)]",
+      "sha256": "898c44fb501a8d1daec3ff9307e7678b1fd5abae52d928091e6f496f410337fa"
+    }
+  ],
+  "demonstrated_red": {
+    "command": "cargo test --locked --bin antlr4-rust-gen grammar::frontend::tests::",
+    "commit": "a4258562c44818e2ba97d206587c64d4c38408d0",
+    "exit_code": 101,
+    "fingerprint": "G4F000: the Stage 0 grammar frontend is not installed"
+  },
+  "green_result": {
+    "command": "cargo test --locked --bin antlr4-rust-gen grammar::frontend::tests::",
+    "commit": "8a00a3d6496779b969a42511d7e29c0d102d62d7",
+    "exit_code": 0,
+    "result": "5 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/frontend-source-regressions/revisions/frontend-source-regressions-r1/oracle-results/declared-sources.json",
+      "sha256": "79dbf8f227efc3a84119b6ad7f0944fca87667556ffa75ba6a07fd6026f78686"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/frontend-source-regressions/revisions/frontend-source-regressions-r1/matrix-results/results.json",
+      "sha256": "e1802fa7f495d94853aebd9c9b35581dd57591e5a5ac5871677a001e15ef3f39"
+    }
+  ]
+}

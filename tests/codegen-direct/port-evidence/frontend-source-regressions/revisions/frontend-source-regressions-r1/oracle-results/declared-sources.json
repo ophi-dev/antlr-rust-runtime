@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "logical_id": "frontend-source-regressions",
+  "revision_id": "frontend-source-regressions-r1",
+  "primary_test_source": {
+    "implementation": "antlr-ng",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "source_case_ids": [
+      "antlr-ng:general-bug-62-triple-quoted-strings-in-actions@f33c09d8e723",
+      "antlr-ng:general-grammar-with-element-options@acaecb36b1e4",
+      "antlr-ng:general-non-greedy-optionals@3e377e14c912"
+    ]
+  },
+  "alternate_test_source": {
+    "implementation": "independent-generated-oracle",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "source_case_ids": [],
+    "reason": "Java fixture generated from the same canonical grammar input"
+  },
+  "outcomes": {
+    "primary": "pinned source cases passed in the recorded JUnit/Vitest discovery or immutable fixture snapshot",
+    "alternate": "alternate source cases passed in the recorded runner discovery or generated oracle",
+    "java_compatibility_verdict": "Java-compatible syntax; antlr-ng supplies the canonical Phase A CST shape"
+  }
+}

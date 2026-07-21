@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "frontend-bootstrap-corpus",
+  "revision_id": "frontend-bootstrap-corpus-r1",
+  "cells": [
+    {
+      "test_port": "primary",
+      "test_commit": "a4258562c44818e2ba97d206587c64d4c38408d0",
+      "implementation_port": "primary-antlr-ng",
+      "implementation_commit": "8a00a3d6496779b969a42511d7e29c0d102d62d7",
+      "command": "cargo test --locked --bin antlr4-rust-gen grammar::frontend::tests::",
+      "result": "green: 5 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the primary implementation passed the locked primary tests"
+}

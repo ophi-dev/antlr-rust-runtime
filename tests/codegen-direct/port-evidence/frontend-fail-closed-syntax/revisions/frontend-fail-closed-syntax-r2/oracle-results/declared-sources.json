@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "logical_id": "frontend-fail-closed-syntax",
+  "revision_id": "frontend-fail-closed-syntax-r2",
+  "primary_test_source": {
+    "implementation": "java-antlr",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "source_case_ids": [
+      "java-antlr:testtoolsyntaxerrors-testa@b70d3582bdbf",
+      "java-antlr:testtoolsyntaxerrors-testbadruleprequelstart2@c34a72a729ad",
+      "java-antlr:testtoolsyntaxerrors-testbadruleprequelstart@d52a6b13d477",
+      "java-antlr:testtoolsyntaxerrors-testemptyblockoptions@b149dbfbc843",
+      "java-antlr:testtoolsyntaxerrors-testemptygrammaroptions@efc27899492e",
+      "java-antlr:testtoolsyntaxerrors-testemptyruleoptions@e6704d177f9a",
+      "java-antlr:testtoolsyntaxerrors-testemptytokensblock@755c9832e57f",
+      "java-antlr:testtoolsyntaxerrors-testextracolon@a241a35e58b3",
+      "java-antlr:testtoolsyntaxerrors-testmissingrulesemi2@3919fbf58f8f",
+      "java-antlr:testtoolsyntaxerrors-testmissingrulesemi3@d0fae8ce37dd",
+      "java-antlr:testtoolsyntaxerrors-testmissingrulesemi4@0e7f5dd29b17",
+      "java-antlr:testtoolsyntaxerrors-testmissingrulesemi5@0e07a49605bd",
+      "java-antlr:testtoolsyntaxerrors-testmissingrulesemi@742753592b0c",
+      "java-antlr:testtoolsyntaxerrors-testparserrulenamestartingwithunderscore@a3c848cb72c0",
+      "java-antlr:testtoolsyntaxerrors-testunterminatedstringliteral@686cb320a608"
+    ]
+  },
+  "alternate_test_source": {
+    "implementation": "antlr-ng",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "source_case_ids": [
+      "antlr-ng:testtoolsyntaxerrors-testa@b70d3582bdbf",
+      "antlr-ng:testtoolsyntaxerrors-testbadruleprequelstart2@c34a72a729ad",
+      "antlr-ng:testtoolsyntaxerrors-testbadruleprequelstart@d52a6b13d477",
+      "antlr-ng:testtoolsyntaxerrors-testemptyblockoptions@b149dbfbc843",
+      "antlr-ng:testtoolsyntaxerrors-testemptygrammaroptions@efc27899492e",
+      "antlr-ng:testtoolsyntaxerrors-testemptyruleoptions@e6704d177f9a",
+      "antlr-ng:testtoolsyntaxerrors-testemptytokensblock@755c9832e57f",
+      "antlr-ng:testtoolsyntaxerrors-testextracolon@a241a35e58b3",
+      "antlr-ng:testtoolsyntaxerrors-testmissingrulesemi2@3919fbf58f8f",
+      "antlr-ng:testtoolsyntaxerrors-testmissingrulesemi3@d0fae8ce37dd",
+      "antlr-ng:testtoolsyntaxerrors-testmissingrulesemi4@0e7f5dd29b17",
+      "antlr-ng:testtoolsyntaxerrors-testmissingrulesemi5@0e07a49605bd",
+      "antlr-ng:testtoolsyntaxerrors-testmissingrulesemi@742753592b0c",
+      "antlr-ng:testtoolsyntaxerrors-testparserrulenamestartingwithunderscore@a3c848cb72c0",
+      "antlr-ng:testtoolsyntaxerrors-testunterminatedstringliteral@686cb320a608"
+    ]
+  },
+  "outcomes": {
+    "primary": "the case-specific Rust port matches the pinned accepted and rejected syntax outcomes",
+    "alternate": "alternate source cases passed in the recorded runner discovery or generated oracle",
+    "java_compatibility_verdict": "Java-compatible syntax; antlr-ng supplies the canonical Phase A CST shape"
+  }
+}

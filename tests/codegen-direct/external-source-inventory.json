@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "repository": "https://github.com/mike-lischke/vscode-antlr4.git",
+  "commit": "3e9469d1d490c71b3e3b909edf1235582a3f8db8",
+  "required_artifact_query": "git ls-tree -r <commit>: License.txt plus every tracked *.g4",
+  "generated_by": "tools/grammar-frontend/update-vscode-antlr4-fixtures.mjs",
+  "artifacts": [
+    {
+      "source_id": "vscode-antlr4:License.txt",
+      "path": "License.txt",
+      "mode": "100644",
+      "git_blob": "c7069cc6dbd9a9defa8384066bbc7a9e027af2ac",
+      "sha256": "ecd53939d7fea4266bdc5e81b3641fed3db74ce6b02bbb31a958fcf26aff4263",
+      "mirror_path": "tests/codegen-direct/external/vscode-antlr4/License.txt"
+    },
+    {
+      "source_id": "vscode-antlr4:grammars/ANTLRv4Lexer.g4",
+      "path": "grammars/ANTLRv4Lexer.g4",
+      "mode": "100644",
+      "git_blob": "ee8ca2dded179a9fb9b4db4d2bab67c2aa9c6dc8",
+      "sha256": "5c6f7ff2ed7d8ec09f2b430bebc73cb0fbb540cd918b37b0ce014ba95421ef85",
+      "mirror_path": "tests/codegen-direct/external/vscode-antlr4/grammars/ANTLRv4Lexer.g4"
+    },
+    {
+      "source_id": "vscode-antlr4:grammars/ANTLRv4Parser.g4",
+      "path": "grammars/ANTLRv4Parser.g4",
+      "mode": "100644",
+      "git_blob": "c5da2095fbe884d516b6642a3089e24271dc33c6",
+      "sha256": "d2e8c407c8037481128ca5186636e0efa99710990aec400a5b26704b18e59ba0",
+      "mirror_path": "tests/codegen-direct/external/vscode-antlr4/grammars/ANTLRv4Parser.g4"
+    },
+    {
+      "source_id": "vscode-antlr4:grammars/LexBasic.g4",
+      "path": "grammars/LexBasic.g4",
+      "mode": "100644",
+      "git_blob": "7d4629561a0554b95d6c2c9afa07acbaf9bb8e94",
+      "sha256": "bb6a1ab8c32cfc2b8c6d5778140025174b4c74e786825ce05e5de089b6d69961",
+      "mirror_path": "tests/codegen-direct/external/vscode-antlr4/grammars/LexBasic.g4"
+    },
+    {
+      "source_id": "vscode-antlr4:tests/backend/test-data/CPP14.g4",
+      "path": "tests/backend/test-data/CPP14.g4",
+      "mode": "100644",
+      "git_blob": "5e18e5950f58d2e77b0f997f96480708212a532c",
+      "sha256": "fe357d9fbb5cac4f0b750a288b1aaf12b20b9692254db8d92818a13c5f87433d",
+      "mirror_path": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/CPP14.g4"
+    },
+    {
+      "source_id": "vscode-antlr4:tests/backend/test-data/OddExpr.g4",
+      "path": "tests/backend/test-data/OddExpr.g4",
+      "mode": "100644",
+      "git_blob": "d2ef56572900c3617ca609dd8baac74e681386b1",
+      "sha256": "5b976405f9bfff5db92683665ea3d8b90816333504b588d3642a77c3a39ade92",
+      "mirror_path": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/OddExpr.g4"
+    },
+    {
+      "source_id": "vscode-antlr4:tests/backend/test-data/TLexer.g4",
+      "path": "tests/backend/test-data/TLexer.g4",
+      "mode": "100644",
+      "git_blob": "0d845e1d90f9a87758eed356530634029418291f",
+      "sha256": "de05eeb0093b65818e48f66fcc68f5012321bb7a6927f582956565872786126b",
+      "mirror_path": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/TLexer.g4"
+    },
+    {
+      "source_id": "vscode-antlr4:tests/backend/test-data/TLexer2.g4",
+      "path": "tests/backend/test-data/TLexer2.g4",
+      "mode": "100644",
+      "git_blob": "3141fed5a2a8ccbdcd6a3b403b2ae3c7f4764159",
+      "sha256": "3e6ac6743e840a85d172728890323850fb954b29aa746e797a499f58a3388d7a",
+      "mirror_path": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/TLexer2.g4"
+    },
+    {
+      "source_id": "vscode-antlr4:tests/backend/test-data/TParser.g4",
+      "path": "tests/backend/test-data/TParser.g4",
+      "mode": "100644",
+      "git_blob": "fa51172f7c94e4bd0c1dbda640d7570ab0d7489f",
+      "sha256": "4e85ed4c929eb98083cdae3304307c9388b35f23fad02d1755c18cc8f655ba27",
+      "mirror_path": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/TParser.g4"
+    },
+    {
+      "source_id": "vscode-antlr4:tests/backend/test-data/TParser2.g4",
+      "path": "tests/backend/test-data/TParser2.g4",
+      "mode": "100644",
+      "git_blob": "0aa238b66c9bf8c7d4abb503dc09647b440c8267",
+      "sha256": "5b7a5257cd28ae29e2d6971179f620d6e34343fd1b5b553a30205918ec9e843b",
+      "mirror_path": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/TParser2.g4"
+    },
+    {
+      "source_id": "vscode-antlr4:tests/backend/test-data/sentences.g4",
+      "path": "tests/backend/test-data/sentences.g4",
+      "mode": "100644",
+      "git_blob": "11e12edd4b71c0d6720ce098953dc1c9f26cea30",
+      "sha256": "48bb9c7fbc1f199d908c80b4c162447974673eae400660d10858ef14d5e7b3f7",
+      "mirror_path": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/sentences.g4"
+    },
+    {
+      "source_id": "vscode-antlr4:tests/backend/test-data/t.g4",
+      "path": "tests/backend/test-data/t.g4",
+      "mode": "100644",
+      "git_blob": "feece81a4fbdbbb0605781e04d193dbf1a57590b",
+      "sha256": "0c1da889ca65acbcd9af3d3b0b07649d00c8af25c0da9804daaf57b82b991d4b",
+      "mirror_path": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/t.g4"
+    },
+    {
+      "source_id": "vscode-antlr4:tests/backend/test-data/t2.g4",
+      "path": "tests/backend/test-data/t2.g4",
+      "mode": "100644",
+      "git_blob": "0a11c0e46c2bb7a9ed330c6cc2427f3baadee446",
+      "sha256": "eccb0c28b1dd507a01ad394f7a553c77f32b4c7355b40a37ea4e603a1fef1cbb",
+      "mirror_path": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/t2.g4"
+    }
+  ]
+}

@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "stage": "stage0",
+  "bootstrap_only": true,
+  "antlr_tool": {
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "version": "4.13.2",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76"
+  },
+  "legacy_generator": {
+    "repository": "https://github.com/ophi-dev/antlr-rust-runtime.git",
+    "commit": "481fa1e5933e67d1ec43755ef7ddd004714b6add",
+    "version": "0.14.2"
+  },
+  "seed_java_runtime": [
+    "openjdk version \"26.0.1\" 2026-04-21",
+    "OpenJDK Runtime Environment Homebrew (build 26.0.1)",
+    "OpenJDK 64-Bit Server VM Homebrew (build 26.0.1, mixed mode, sharing)"
+  ],
+  "commands": {
+    "antlr": [
+      "java",
+      "-jar",
+      "${ANTLR4_JAR}",
+      "-o",
+      "${WORK_DIR}/interp",
+      "-Xexact-output-dir",
+      "ANTLRv4Lexer.g4",
+      "ANTLRv4Parser.g4"
+    ],
+    "generator_build": [
+      "cargo",
+      "build",
+      "--quiet",
+      "--locked",
+      "--bin",
+      "antlr4-rust-gen",
+      "--target-dir",
+      "${WORK_DIR}/target"
+    ],
+    "lexer_codegen": [
+      "${WORK_DIR}/target/debug/antlr4-rust-gen",
+      "--lexer",
+      "${WORK_DIR}/interp/ANTLRv4Lexer.interp",
+      "--grammar",
+      "${WORK_DIR}/ANTLRv4Lexer.g4",
+      "--out-dir",
+      "${WORK_DIR}/generated",
+      "--sem-patterns",
+      "third_party/antlr-v4-grammar/antlr-v4.toml",
+      "--option-hook",
+      "superClass=LexerAdaptor",
+      "--sem-unknown",
+      "error",
+      "--require-full-semantics"
+    ],
+    "parser_codegen": [
+      "${WORK_DIR}/target/debug/antlr4-rust-gen",
+      "--parser",
+      "${WORK_DIR}/interp/ANTLRv4Parser.interp",
+      "--grammar",
+      "${WORK_DIR}/ANTLRv4Parser.g4",
+      "--out-dir",
+      "${WORK_DIR}/generated",
+      "--sem-patterns",
+      "third_party/antlr-v4-grammar/antlr-v4.toml",
+      "--sem-unknown",
+      "error",
+      "--require-full-semantics",
+      "--require-generated-parser"
+    ]
+  },
+  "inputs": [
+    {
+      "path": "third_party/antlr-v4-grammar/ANTLRv4Lexer.g4",
+      "sha256": "92eac08c54fea3be1dfedb9a0dedfdc3b3303e5e913b13171c24002d45f7d935"
+    },
+    {
+      "path": "third_party/antlr-v4-grammar/ANTLRv4Parser.g4",
+      "sha256": "99cbd18892749a718323c9a8b96c988cecc55eff34ac9addde1971e55c607990"
+    },
+    {
+      "path": "third_party/antlr-v4-grammar/predefined.tokens",
+      "sha256": "c7114545a75ab294215819962e92e570383dc830fd5768463dab04e6733bcb80"
+    },
+    {
+      "path": "third_party/antlr-v4-grammar/antlr-v4.toml",
+      "sha256": "5803594bd2c8dd2d5180f1ca08fc70dfc80308479d18a7c4a1b743fa523b55ec"
+    }
+  ],
+  "intermediates": [
+    {
+      "seed_path": "interp/ANTLRv4Lexer.interp",
+      "sha256": "512c7a1aa09a48ece1d7755d563e9618065fc25da933416e7ccdf756222fe24d"
+    },
+    {
+      "seed_path": "interp/ANTLRv4Parser.interp",
+      "sha256": "6e5424ed23ffe75b6a0bbae24492bd2aab6bc5a425ef99ac8ff2ddefccdbf906"
+    }
+  ],
+  "outputs": [
+    {
+      "seed_path": "generated/antl_rv4_lexer.rs",
+      "checked_in_path": "src/bin_support/grammar/generated/antlr_v4_lexer.rs",
+      "sha256": "d5d023df0f1c9dc0d13b83ee0546c36d553bc9b30f165e8b178767d8e05c9a30"
+    },
+    {
+      "seed_path": "generated/antl_rv4_parser.rs",
+      "checked_in_path": "src/bin_support/grammar/generated/antlr_v4_parser.rs",
+      "sha256": "c47f81e147f0152164320da3f863d4381426d753762fc5259f6a9bf812aea45a"
+    }
+  ]
+}

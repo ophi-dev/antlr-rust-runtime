@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "vscode-tparser-source-spans",
+  "active_revision_id": "external-vscode-tparser-source-spans-r1",
+  "revisions": [
+    {
+      "revision_id": "external-vscode-tparser-source-spans-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/vscode-tparser-source-spans/revisions/external-vscode-tparser-source-spans-r1/manifest.json",
+      "closure_sha256": "d6c2867064a0b7cd37fcd5605c025926aa0782d92cd36c6fbbe3851b69e3bf9a"
+    }
+  ]
+}

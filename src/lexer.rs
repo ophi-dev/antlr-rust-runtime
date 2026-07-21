@@ -778,15 +778,17 @@ thread_local! {
         RefCell::new(HashMap::new());
 }
 
-/// Normalized lexer ATN config-set identity used for observed DFA traces.
+/// Position-independent lexer ATN config sequence used for observed DFA traces.
+///
+/// Configuration order is part of the identity because it carries serialized
+/// ATN priority through non-greedy decisions.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub(crate) struct LexerDfaKey {
     configs: Vec<LexerDfaConfigKey>,
 }
 
 impl LexerDfaKey {
-    pub(crate) fn new(mut configs: Vec<LexerDfaConfigKey>) -> Self {
-        configs.sort_unstable();
+    pub(crate) const fn new(configs: Vec<LexerDfaConfigKey>) -> Self {
         Self { configs }
     }
 }

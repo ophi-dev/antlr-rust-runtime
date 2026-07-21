@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "logical_id": "vscode-tparser-source-spans",
+  "revision_id": "external-vscode-tparser-source-spans-r1",
+  "primary_test_source": {
+    "repository": "https://github.com/mike-lischke/vscode-antlr4.git",
+    "commit": "3e9469d1d490c71b3e3b909edf1235582a3f8db8",
+    "path": "tests/backend/symbol-info.spec.ts",
+    "case": "Symbol ranges",
+    "sha256": "df274a0dca42823cc2ef2608d98d544be53246a48c56f96050b0a987ce0890f3"
+  },
+  "alternate_test_source": {
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "oracle": "independent grammar frontend token/tree/diagnostic observation"
+  },
+  "outcomes": {
+    "primary": {
+      "named_action_bytes": [
+        1090,
+        1264
+      ],
+      "parser_rule_bytes": [
+        3421,
+        3650
+      ],
+      "argument_block_bytes": [
+        3484,
+        3511
+      ]
+    },
+    "alternate": "antlr-ng grammar frontend nodes preserve the same token boundaries",
+    "java_compatibility_verdict": "not-applicable: Java has source intervals but not the extension enclosing-symbol API"
+  }
+}

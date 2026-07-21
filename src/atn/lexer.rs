@@ -2344,6 +2344,18 @@ mod tests {
         .expect("recursive-comment lexer ATN should deserialize")
     }
 
+    // `ACTION: NESTED;`
+    // `fragment NESTED: '{' (NESTED | '/*' .*? '*/' | ~'{')*? '}';`
+    // `OTHER: .;`
+    #[rustfmt::skip]
+    fn nested_non_greedy_action_atn() -> LexerAtn {
+        AtnDeserializer::new(&SerializedAtn::from_i32(&[
+            4, 0, 2, 32, 6, -1, 2, 0, 7, 0, 2, 1, 7, 1, 2, 2, 7, 2, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 5, 1, 16, 8, 1, 10, 1, 12, 1, 19, 9, 1, 1, 1, 1, 1, 1, 1, 5, 1, 24, 8, 1, 10, 1, 12, 1, 27, 9, 1, 1, 1, 1, 1, 1, 2, 1, 2, 2, 17, 25, 0, 3, 1, 1, 3, 0, 5, 2, 1, 0, 1, 1, 0, 123, 123, 34, 0, 1, 1, 0, 0, 0, 0, 5, 1, 0, 0, 0, 1, 7, 1, 0, 0, 0, 3, 9, 1, 0, 0, 0, 5, 30, 1, 0, 0, 0, 7, 8, 3, 3, 1, 0, 8, 2, 1, 0, 0, 0, 9, 25, 5, 123, 0, 0, 10, 24, 3, 3, 1, 0, 11, 12, 5, 47, 0, 0, 12, 13, 5, 42, 0, 0, 13, 17, 1, 0, 0, 0, 14, 16, 9, 0, 0, 0, 15, 14, 1, 0, 0, 0, 16, 19, 1, 0, 0, 0, 17, 18, 1, 0, 0, 0, 17, 15, 1, 0, 0, 0, 18, 20, 1, 0, 0, 0, 19, 17, 1, 0, 0, 0, 20, 21, 5, 42, 0, 0, 21, 24, 5, 47, 0, 0, 22, 24, 8, 0, 0, 0, 23, 10, 1, 0, 0, 0, 23, 11, 1, 0, 0, 0, 23, 22, 1, 0, 0, 0, 24, 27, 1, 0, 0, 0, 25, 26, 1, 0, 0, 0, 25, 23, 1, 0, 0, 0, 26, 28, 1, 0, 0, 0, 27, 25, 1, 0, 0, 0, 28, 29, 5, 125, 0, 0, 29, 4, 1, 0, 0, 0, 30, 31, 9, 0, 0, 0, 31, 6, 1, 0, 0, 0, 4, 0, 17, 23, 25, 0,
+        ]))
+        .deserialize()
+        .expect("nested non-greedy action ATN should deserialize")
+    }
+
     #[derive(Clone, Copy, Debug)]
     enum TestMatchStrategy {
         Interpreted,
@@ -3430,6 +3442,49 @@ mod tests {
             assert_eq!(token.token_type, 1, "{strategy:?}");
             assert_eq!((token.start, token.stop), (0, 3), "{strategy:?}");
             assert_eq!(token.text, "/**/", "{strategy:?}");
+        }
+    }
+
+    #[test]
+    fn compiled_recursive_non_greedy_resume_preserves_earliest_accept() {
+        let atn = nested_non_greedy_action_atn();
+        let compiled = CompiledLexerDfa::compile(&atn);
+        let source = "{/*x*/}\n@{/*y*/}";
+
+        for strategy in [
+            TestMatchStrategy::Interpreted,
+            TestMatchStrategy::Cached,
+            TestMatchStrategy::Compiled,
+        ] {
+            let data = RecognizerData::new(
+                "Nested",
+                Vocabulary::new(
+                    [None::<&str>, None, None],
+                    [None, Some("ACTION"), Some("OTHER")],
+                    [None::<&str>, None, None],
+                ),
+            );
+            let mut lexer = BaseLexer::new(InputStream::new(source), data);
+            let mut store = TokenStore::new(lexer.source_text(), lexer.source_name());
+            let mut sink = TokenSink::new(&mut store);
+            let token = match strategy {
+                TestMatchStrategy::Interpreted => next_token_with_hooks(
+                    &mut lexer,
+                    &mut sink,
+                    &atn,
+                    |_, _| {},
+                    |_, _| true,
+                    |_, _, _| {},
+                ),
+                TestMatchStrategy::Cached => next_token(&mut lexer, &mut sink, &atn),
+                TestMatchStrategy::Compiled => {
+                    next_token_compiled(&mut lexer, &mut sink, &atn, &compiled)
+                }
+            }
+            .expect("nested action token should fit");
+            let token = sink.view(token).expect("nested action token should exist");
+            assert_eq!(token.token_type(), 1, "{strategy:?}");
+            assert_eq!(token.text(), "{/*x*/}", "{strategy:?}");
         }
     }
 
