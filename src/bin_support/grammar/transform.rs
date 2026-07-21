@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use super::char_support::decode_character_literal;
 use super::diagnostic::{CompilationError, Diagnostic, Severity};
 use super::loader::LoadedSources;
 use super::model::{
@@ -883,34 +884,10 @@ fn tombstone_block(provenance: &mut ProvenanceIndex, block: &Block, replacements
 }
 
 fn grammar_literal_scalar(literal: &str) -> Option<char> {
-    let contents = literal.strip_prefix('\'')?.strip_suffix('\'')?;
-    let mut chars = contents.chars();
-    let first = chars.next()?;
-    if first != '\\' {
-        return chars.next().is_none().then_some(first);
-    }
-    let escape = chars.next()?;
-    let value = match escape {
-        'n' => '\n',
-        'r' => '\r',
-        't' => '\t',
-        'b' => '\u{0008}',
-        'f' => '\u{000c}',
-        '\\' => '\\',
-        '\'' => '\'',
-        'u' => {
-            let rest = chars.collect::<String>();
-            let digits = rest
-                .strip_prefix('{')
-                .and_then(|value| value.strip_suffix('}'))
-                .unwrap_or(&rest);
-            return u32::from_str_radix(digits, 16)
-                .ok()
-                .and_then(char::from_u32);
-        }
-        other => other,
-    };
-    chars.next().is_none().then_some(value)
+    decode_character_literal(literal)
+        .ok()
+        .and_then(|value| u32::try_from(value).ok())
+        .and_then(char::from_u32)
 }
 
 fn split_combined(

@@ -8,6 +8,9 @@ use antlr4_runtime::atn::{
 use petgraph::algo::tarjan_scc;
 use petgraph::graph::DiGraph;
 
+use super::super::char_support::{
+    decode_character_literal, decode_string_literal, parse_code_point_escape,
+};
 use super::super::diagnostic::{CompilationError, Diagnostic, Severity};
 use super::super::frontend::SourceSpan;
 use super::super::model::{
@@ -1321,99 +1324,6 @@ fn transitions_by_id(
         .iter()
         .map(|transition| (transition.original, transition))
         .collect()
-}
-
-fn decode_string_literal(literal: &str) -> Result<Vec<i32>, String> {
-    let body = literal
-        .strip_prefix('\'')
-        .and_then(|value| value.strip_suffix('\''))
-        .ok_or_else(|| format!("invalid lexer string literal {literal}"))?;
-    let mut values = Vec::new();
-    let mut cursor = 0;
-    while cursor < body.len() {
-        let character = body[cursor..]
-            .chars()
-            .next()
-            .expect("cursor is on a character boundary");
-        if character == '\\' {
-            let (value, consumed) = parse_code_point_escape(body, cursor, false)?;
-            values.push(value);
-            cursor += consumed;
-        } else {
-            values.push(character as i32);
-            cursor += character.len_utf8();
-        }
-    }
-    Ok(values)
-}
-
-fn decode_character_literal(literal: &str) -> Result<i32, String> {
-    let values = decode_string_literal(literal)?;
-    match values.as_slice() {
-        [value] => Ok(*value),
-        _ => Err(format!(
-            "lexer character literal {literal} must contain exactly one Unicode scalar"
-        )),
-    }
-}
-
-fn parse_code_point_escape(text: &str, start: usize, in_set: bool) -> Result<(i32, usize), String> {
-    let tail = text
-        .get(start..)
-        .ok_or_else(|| "escape starts outside source text".to_owned())?;
-    let mut characters = tail.char_indices();
-    let (_, slash) = characters
-        .next()
-        .ok_or_else(|| "unterminated escape sequence".to_owned())?;
-    if slash != '\\' {
-        return Err("escape sequence does not start with a backslash".to_owned());
-    }
-    let (escaped_offset, escaped) = characters
-        .next()
-        .ok_or_else(|| "unterminated escape sequence".to_owned())?;
-    let simple = match escaped {
-        'n' => Some('\n'),
-        'r' => Some('\r'),
-        't' => Some('\t'),
-        'b' => Some('\u{0008}'),
-        'f' => Some('\u{000c}'),
-        '\\' => Some('\\'),
-        '\'' => Some('\''),
-        ']' | '-' if in_set => Some(escaped),
-        _ => None,
-    };
-    if let Some(value) = simple {
-        return Ok((value as i32, escaped_offset + escaped.len_utf8()));
-    }
-    if escaped != 'u' {
-        return Err(format!("invalid escape sequence \\{escaped}"));
-    }
-
-    let digits_start = escaped_offset + escaped.len_utf8();
-    let unicode = &tail[digits_start..];
-    let (digits, consumed) = if let Some(rest) = unicode.strip_prefix('{') {
-        let close = rest
-            .find('}')
-            .ok_or_else(|| "unterminated braced Unicode escape".to_owned())?;
-        (&rest[..close], digits_start + 1 + close + 1)
-    } else {
-        if unicode.len() < 4 {
-            return Err("Unicode escape must contain four hexadecimal digits".to_owned());
-        }
-        (&unicode[..4], digits_start + 4)
-    };
-    if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return Err(format!("invalid Unicode escape \\u{{{digits}}}"));
-    }
-    let value = u32::from_str_radix(digits, 16)
-        .map_err(|_| format!("invalid Unicode escape \\u{{{digits}}}"))?;
-    if value > MAX_CODE_POINT as u32 || char::from_u32(value).is_none() {
-        return Err(format!("Unicode escape is not a scalar value: {value:#x}"));
-    }
-    Ok((
-        i32::try_from(value).expect("Unicode scalar fits i32"),
-        consumed,
-    ))
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
