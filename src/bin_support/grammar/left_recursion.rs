@@ -291,6 +291,7 @@ fn rewrite_rule(
                 options: Vec::new(),
                 syntax: rule.syntax,
                 span: rule.span.clone(),
+                enclosing_span: rule.span.clone(),
             },
             Element {
                 id: operator_element,
@@ -300,6 +301,7 @@ fn rewrite_rule(
                 options: Vec::new(),
                 syntax: rule.syntax,
                 span: rule.span.clone(),
+                enclosing_span: rule.span.clone(),
             },
         ],
         label: None,
@@ -366,6 +368,7 @@ fn prepend_result_action(
             options: Vec::new(),
             syntax: alternative.syntax,
             span: alternative.span.clone(),
+            enclosing_span: alternative.span.clone(),
         },
     );
 }
@@ -411,6 +414,7 @@ fn prepend_precedence_predicate(
             options: Vec::new(),
             syntax: alternative.syntax,
             span: alternative.span.clone(),
+            enclosing_span: alternative.span.clone(),
         },
     );
 }

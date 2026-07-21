@@ -778,6 +778,7 @@ fn reduce_top_level_block(
             options: Vec::new(),
             syntax: block.syntax,
             span: block.span.clone(),
+            enclosing_span: block.span.clone(),
         }],
         label: None,
         options: Vec::new(),
@@ -1184,6 +1185,7 @@ fn implicit_literal_rule(
                     options: Vec::new(),
                     syntax: original.syntax,
                     span: original.span.clone(),
+                    enclosing_span: original.span.clone(),
                 }],
                 label: None,
                 options: Vec::new(),
@@ -1407,7 +1409,7 @@ fn collect_block_nodes(block: &Block, nodes: &mut BTreeSet<ModelNodeId>) -> Resu
             insert_model_node(
                 nodes,
                 ModelNodeId::Element(element.id),
-                element.span.clone(),
+                element.enclosing_span.clone(),
             )?;
             if let Some(label) = &element.label {
                 insert_model_node(nodes, ModelNodeId::Label(label.id), label.span.clone())?;

@@ -636,43 +636,51 @@ impl ModelBuilder<'_> {
     fn parser_element(&mut self, node: SyntaxNodeRef<'_>) -> Element {
         let id = self.ids.element();
         let mut label = None;
-        let (kind, quantifier) = if let Some(labeled) = node.child_rule(p::RULE_LABELED_ELEMENT) {
-            label = self.element_label(labeled);
-            let kind = labeled.child_rule(p::RULE_ATOM).map_or_else(
-                || {
-                    let block = labeled
-                        .child_rule(p::RULE_BLOCK)
-                        .expect("labeled element has an atom or block");
-                    ElementKind::Block(self.parser_block(block))
-                },
-                |atom| Self::parser_atom(atom, id),
-            );
-            (
-                kind,
-                suffix_quantifier(node.child_rule(p::RULE_EBNF_SUFFIX)),
-            )
-        } else if let Some(atom) = node.child_rule(p::RULE_ATOM) {
-            (
-                Self::parser_atom(atom, id),
-                suffix_quantifier(node.child_rule(p::RULE_EBNF_SUFFIX)),
-            )
-        } else if let Some(ebnf) = node.child_rule(p::RULE_EBNF) {
-            let block = ebnf
-                .child_rule(p::RULE_BLOCK)
-                .expect("EBNF element has a block");
-            let suffix = ebnf
-                .child_rule(p::RULE_BLOCK_SUFFIX)
-                .and_then(|suffix| suffix.child_rule(p::RULE_EBNF_SUFFIX));
-            (
-                ElementKind::Block(self.parser_block(block)),
-                suffix_quantifier(suffix),
-            )
-        } else {
-            let action = node
-                .child_rule(p::RULE_ACTION_BLOCK)
-                .expect("parser element has a recognized shape");
-            (self.action_or_predicate(node, action), Quantifier::One)
-        };
+        let (kind, quantifier, span) =
+            if let Some(labeled) = node.child_rule(p::RULE_LABELED_ELEMENT) {
+                label = self.element_label(labeled);
+                let (kind, span) = labeled.child_rule(p::RULE_ATOM).map_or_else(
+                    || {
+                        let block = labeled
+                            .child_rule(p::RULE_BLOCK)
+                            .expect("labeled element has an atom or block");
+                        (ElementKind::Block(self.parser_block(block)), block.span())
+                    },
+                    |atom| (Self::parser_atom(atom, id), atom.span()),
+                );
+                (
+                    kind,
+                    suffix_quantifier(node.child_rule(p::RULE_EBNF_SUFFIX)),
+                    span,
+                )
+            } else if let Some(atom) = node.child_rule(p::RULE_ATOM) {
+                (
+                    Self::parser_atom(atom, id),
+                    suffix_quantifier(node.child_rule(p::RULE_EBNF_SUFFIX)),
+                    atom.span(),
+                )
+            } else if let Some(ebnf) = node.child_rule(p::RULE_EBNF) {
+                let block = ebnf
+                    .child_rule(p::RULE_BLOCK)
+                    .expect("EBNF element has a block");
+                let suffix = ebnf
+                    .child_rule(p::RULE_BLOCK_SUFFIX)
+                    .and_then(|suffix| suffix.child_rule(p::RULE_EBNF_SUFFIX));
+                (
+                    ElementKind::Block(self.parser_block(block)),
+                    suffix_quantifier(suffix),
+                    block.span(),
+                )
+            } else {
+                let action = node
+                    .child_rule(p::RULE_ACTION_BLOCK)
+                    .expect("parser element has a recognized shape");
+                (
+                    self.action_or_predicate(node, action),
+                    Quantifier::One,
+                    action.span(),
+                )
+            };
         let option_owner = node
             .child_rule(p::RULE_LABELED_ELEMENT)
             .and_then(|labeled| labeled.child_rule(p::RULE_ATOM))
@@ -691,29 +699,36 @@ impl ModelBuilder<'_> {
             label,
             options,
             syntax: node.id(),
-            span: node.span(),
+            span,
+            enclosing_span: node.span(),
         }
     }
 
     fn lexer_element(&mut self, node: SyntaxNodeRef<'_>) -> Element {
         let id = self.ids.element();
-        let (kind, quantifier) = node.child_rule(p::RULE_LEXER_ATOM).map_or_else(
+        let (kind, quantifier, span) = node.child_rule(p::RULE_LEXER_ATOM).map_or_else(
             || {
                 let Some(block) = node.child_rule(p::RULE_LEXER_BLOCK) else {
                     let action = node
                         .child_rule(p::RULE_ACTION_BLOCK)
                         .expect("lexer element has a recognized shape");
-                    return (self.action_or_predicate(node, action), Quantifier::One);
+                    return (
+                        self.action_or_predicate(node, action),
+                        Quantifier::One,
+                        action.span(),
+                    );
                 };
                 (
                     ElementKind::Block(self.lexer_block(block)),
                     suffix_quantifier(node.child_rule(p::RULE_EBNF_SUFFIX)),
+                    block.span(),
                 )
             },
             |atom| {
                 (
                     Self::lexer_atom(atom, id),
                     suffix_quantifier(node.child_rule(p::RULE_EBNF_SUFFIX)),
+                    atom.span(),
                 )
             },
         );
@@ -732,7 +747,8 @@ impl ModelBuilder<'_> {
             label: None,
             options,
             syntax: node.id(),
-            span: node.span(),
+            span,
+            enclosing_span: node.span(),
         }
     }
 

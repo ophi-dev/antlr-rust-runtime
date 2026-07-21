@@ -348,6 +348,7 @@ pub(crate) struct Element {
     pub(crate) options: Vec<OptionDecl>,
     pub(crate) syntax: SyntaxId,
     pub(crate) span: SourceSpan,
+    pub(crate) enclosing_span: SourceSpan,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
