@@ -101,7 +101,7 @@ mod tests {
 
         #[test]
         fn empty_vocabulary_matches_java() {
-            let vocabulary = Vocabulary::default();
+            let vocabulary = Vocabulary::empty();
 
             assert_eq!(
                 vocabulary.symbolic_name(crate::token::TOKEN_EOF),
