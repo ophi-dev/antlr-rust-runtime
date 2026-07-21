@@ -14,6 +14,9 @@ import {
     BASIC_SEMANTIC_BASE_COMMIT,
     BASIC_SEMANTIC_IMPLEMENTATION_COMMIT,
     BASIC_SEMANTIC_TEST_COMMIT,
+    EMPTY_VOCABULARY_BASE_COMMIT,
+    EMPTY_VOCABULARY_IMPLEMENTATION_COMMIT,
+    EMPTY_VOCABULARY_TEST_COMMIT,
     ERROR_SETS_BASE_COMMIT,
     ERROR_SETS_IMPLEMENTATION_COMMIT,
     ERROR_SETS_TEST_COMMIT,
@@ -30,6 +33,9 @@ import {
     TOKEN_POSITION_TEST_COMMIT,
     TOPOLOGICAL_SORT_BASE_COMMIT,
     TOPOLOGICAL_SORT_TEST_COMMIT,
+    VOCABULARY_BASE_COMMIT,
+    VOCABULARY_IMPLEMENTATION_COMMIT,
+    VOCABULARY_TEST_COMMIT,
     digest,
     gitShowOptional,
     stableStringify,
@@ -37,6 +43,8 @@ import {
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "../..");
+const EMPTY_VOCABULARY_LOGICAL_ID =
+    "testvocabulary-testemptyvocabulary-66d31ad014";
 const evidenceRoot = resolve(
     repoRoot,
     "tests/codegen-direct/port-evidence",
@@ -254,6 +262,9 @@ for (const [logicalId, record] of records) {
         const topologicalSort = logicalId.startsWith(
             "testtopologicalsort-",
         );
+        const vocabulary = logicalId.startsWith(
+            "testvocabulary-",
+        );
         if (resolution === "verified-covered-existing") {
             if (atnSerialization) {
                 expect(
@@ -413,6 +424,35 @@ for (const [logicalId, record] of records) {
                         manifest.ancestry.primary_implementation_parent ===
                             TOKEN_POSITION_TEST_COMMIT,
                     `${logicalId} token position recorded ancestry differs`,
+                );
+            } else if (vocabulary) {
+                const emptyVocabulary =
+                    logicalId === EMPTY_VOCABULARY_LOGICAL_ID;
+                expect(
+                    manifest.commits.scaffold ===
+                            (emptyVocabulary
+                                ? EMPTY_VOCABULARY_BASE_COMMIT
+                                : VOCABULARY_BASE_COMMIT) &&
+                        manifest.commits.primary_test ===
+                            (emptyVocabulary
+                                ? EMPTY_VOCABULARY_TEST_COMMIT
+                                : VOCABULARY_TEST_COMMIT) &&
+                        manifest.commits.primary_implementation ===
+                            (emptyVocabulary
+                                ? EMPTY_VOCABULARY_IMPLEMENTATION_COMMIT
+                                : VOCABULARY_IMPLEMENTATION_COMMIT),
+                    `${logicalId} vocabulary evidence commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            (emptyVocabulary
+                                ? EMPTY_VOCABULARY_BASE_COMMIT
+                                : VOCABULARY_BASE_COMMIT) &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            (emptyVocabulary
+                                ? EMPTY_VOCABULARY_TEST_COMMIT
+                                : VOCABULARY_TEST_COMMIT),
+                    `${logicalId} vocabulary recorded ancestry differs`,
                 );
             } else {
                 expect(
@@ -598,6 +638,49 @@ if (topologicalSortTestParent !== null) {
     expect(
         topologicalSortTestParent.trim() === TOPOLOGICAL_SORT_BASE_COMMIT,
         "topological sort test commit is not based on its recorded base",
+    );
+}
+const vocabularyTestParent = gitOptional([
+    "rev-parse",
+    `${VOCABULARY_TEST_COMMIT}^`,
+]);
+if (vocabularyTestParent !== null) {
+    expect(
+        vocabularyTestParent.trim() === VOCABULARY_BASE_COMMIT,
+        "vocabulary test commit is not based on its recorded base",
+    );
+}
+const vocabularyImplementationParent = gitOptional([
+    "rev-parse",
+    `${VOCABULARY_IMPLEMENTATION_COMMIT}^`,
+]);
+if (vocabularyImplementationParent !== null) {
+    expect(
+        vocabularyImplementationParent.trim() ===
+            VOCABULARY_TEST_COMMIT,
+        "vocabulary implementation commit is not based on its locked test",
+    );
+}
+const emptyVocabularyTestParent = gitOptional([
+    "rev-parse",
+    `${EMPTY_VOCABULARY_TEST_COMMIT}^`,
+]);
+if (emptyVocabularyTestParent !== null) {
+    expect(
+        emptyVocabularyTestParent.trim() ===
+            EMPTY_VOCABULARY_BASE_COMMIT,
+        "empty vocabulary test commit is not based on its recorded base",
+    );
+}
+const emptyVocabularyImplementationParent = gitOptional([
+    "rev-parse",
+    `${EMPTY_VOCABULARY_IMPLEMENTATION_COMMIT}^`,
+]);
+if (emptyVocabularyImplementationParent !== null) {
+    expect(
+        emptyVocabularyImplementationParent.trim() ===
+            EMPTY_VOCABULARY_TEST_COMMIT,
+        "empty vocabulary implementation commit is not based on its locked test",
     );
 }
 

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testvocabulary-testvocabularyfromtokennames-d047506a84",
+  "revision_id": "testvocabulary-testvocabularyfromtokennames-d047506a84-r1",
+  "cells": [
+    {
+      "test_port": "primary",
+      "test_commit": "d725eac437b8425eb6429f9a0b1844a409f45194",
+      "implementation_port": "primary-antlr-ng",
+      "implementation_commit": "134b4e7304defa10da58e2b2ef90c6517f20213f",
+      "command": "cargo test --locked --lib upstream_vocabulary -- --test-threads=1",
+      "result": "green: 2 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the primary implementation passed the locked primary tests"
+}

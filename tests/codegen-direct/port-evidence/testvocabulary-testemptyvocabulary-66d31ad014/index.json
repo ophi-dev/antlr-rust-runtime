@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testvocabulary-testemptyvocabulary-66d31ad014",
+  "active_revision_id": "testvocabulary-testemptyvocabulary-66d31ad014-r1",
+  "revisions": [
+    {
+      "revision_id": "testvocabulary-testemptyvocabulary-66d31ad014-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testvocabulary-testemptyvocabulary-66d31ad014/revisions/testvocabulary-testemptyvocabulary-66d31ad014-r1/manifest.json",
+      "closure_sha256": "3acfd293697c647ea7562f1c20db8402627faf0e417fa8fe77bcb2849ce9c5b5"
+    }
+  ]
+}

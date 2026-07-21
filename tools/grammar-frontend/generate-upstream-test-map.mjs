@@ -13,6 +13,9 @@ import {
     BASIC_SEMANTIC_BASE_COMMIT,
     BASIC_SEMANTIC_IMPLEMENTATION_COMMIT,
     BASIC_SEMANTIC_TEST_COMMIT,
+    EMPTY_VOCABULARY_BASE_COMMIT,
+    EMPTY_VOCABULARY_IMPLEMENTATION_COMMIT,
+    EMPTY_VOCABULARY_TEST_COMMIT,
     ERROR_SETS_BASE_COMMIT,
     ERROR_SETS_IMPLEMENTATION_COMMIT,
     ERROR_SETS_TEST_COMMIT,
@@ -28,6 +31,9 @@ import {
     TOKEN_POSITION_TEST_COMMIT,
     TOPOLOGICAL_SORT_BASE_COMMIT,
     TOPOLOGICAL_SORT_TEST_COMMIT,
+    VOCABULARY_BASE_COMMIT,
+    VOCABULARY_IMPLEMENTATION_COMMIT,
+    VOCABULARY_TEST_COMMIT,
     digest,
     parseMode,
     stableStringify,
@@ -172,6 +178,40 @@ const TOPOLOGICAL_SORT_PORTS = new Map([
     [
         "testtopologicalsort-testsimpletokendependence-02d55e6f25",
         "simple_token_dependence_matches_java",
+    ],
+]);
+const VOCABULARY_TEST_COMMAND =
+    "cargo test --locked --lib upstream_vocabulary -- --test-threads=1";
+const EMPTY_VOCABULARY_TEST_COMMAND =
+    "cargo test --locked --lib empty_vocabulary_matches_java -- --test-threads=1";
+const VOCABULARY_PORTS = new Map([
+    [
+        "testvocabulary-testemptyvocabulary-66d31ad014",
+        {
+            rustTest:
+                "vocabulary::tests::upstream_vocabulary::empty_vocabulary_matches_java",
+            scaffoldCommit: EMPTY_VOCABULARY_BASE_COMMIT,
+            testCommit: EMPTY_VOCABULARY_TEST_COMMIT,
+            implementationCommit: EMPTY_VOCABULARY_IMPLEMENTATION_COMMIT,
+            testCommand: EMPTY_VOCABULARY_TEST_COMMAND,
+            greenResult: "1 passed; 0 failed",
+            redFingerprint:
+                "E0599: no associated function or constant named empty found for Vocabulary",
+        },
+    ],
+    [
+        "testvocabulary-testvocabularyfromtokennames-d047506a84",
+        {
+            rustTest:
+                "vocabulary::tests::upstream_vocabulary::vocabulary_from_token_names_matches_java",
+            scaffoldCommit: VOCABULARY_BASE_COMMIT,
+            testCommit: VOCABULARY_TEST_COMMIT,
+            implementationCommit: VOCABULARY_IMPLEMENTATION_COMMIT,
+            testCommand: VOCABULARY_TEST_COMMAND,
+            greenResult: "2 passed; 0 failed",
+            redFingerprint:
+                "E0599: no associated function or constant named from_token_names found for Vocabulary",
+        },
     ],
 ]);
 
@@ -662,6 +702,9 @@ function completedPhaseBRow(
                   : completed.kind === "topological-sort"
                     ? `direct Rust grammar dependencies preserve Java's dependency-first ` +
                       `order for ${cases[0].suite}.${cases[0].name}`
+                    : completed.kind === "vocabulary"
+                      ? `the Rust vocabulary API matches Java 4.13.2 name classification ` +
+                        `for ${cases[0].suite}.${cases[0].name}`
                   : `direct Rust semantic diagnostics match Java 4.13.2 exactly ` +
                     `for ${cases[0].suite}.${cases[0].name}`;
     const coveredExisting =
@@ -864,8 +907,22 @@ async function loadCompletedPhaseBPorts() {
             greenResult: "5 passed; 0 failed",
         });
     }
-    if (ports.size !== 89) {
-        throw new Error(`expected 89 completed Phase B ports, found ${ports.size}`);
+    for (const [logicalId, definition] of VOCABULARY_PORTS) {
+        ports.set(logicalId, {
+            fixturePaths: [],
+            rustTest: definition.rustTest,
+            kind: "vocabulary",
+            resolution: "ported",
+            scaffoldCommit: definition.scaffoldCommit,
+            testCommit: definition.testCommit,
+            implementationCommit: definition.implementationCommit,
+            testCommand: definition.testCommand,
+            greenResult: definition.greenResult,
+            redFingerprint: definition.redFingerprint,
+        });
+    }
+    if (ports.size !== 91) {
+        throw new Error(`expected 91 completed Phase B ports, found ${ports.size}`);
     }
     return ports;
 }

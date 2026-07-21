@@ -17,6 +17,9 @@ import {
     BASIC_SEMANTIC_BASE_COMMIT,
     BASIC_SEMANTIC_IMPLEMENTATION_COMMIT,
     BASIC_SEMANTIC_TEST_COMMIT,
+    EMPTY_VOCABULARY_BASE_COMMIT,
+    EMPTY_VOCABULARY_IMPLEMENTATION_COMMIT,
+    EMPTY_VOCABULARY_TEST_COMMIT,
     ERROR_SETS_BASE_COMMIT,
     ERROR_SETS_IMPLEMENTATION_COMMIT,
     ERROR_SETS_TEST_COMMIT,
@@ -33,6 +36,9 @@ import {
     TOKEN_POSITION_TEST_COMMIT,
     TOPOLOGICAL_SORT_BASE_COMMIT,
     TOPOLOGICAL_SORT_TEST_COMMIT,
+    VOCABULARY_BASE_COMMIT,
+    VOCABULARY_IMPLEMENTATION_COMMIT,
+    VOCABULARY_TEST_COMMIT,
     VSCODE_COMMIT,
     digest,
     gitShowOptional,
@@ -75,6 +81,17 @@ const TOPOLOGICAL_SORT_TEST_START =
     "    mod upstream_topological_sort {";
 const TOPOLOGICAL_SORT_TEST_END =
     "\n    struct Fixture {";
+const VOCABULARY_TEST_PATH = "src/vocabulary.rs";
+const EMPTY_VOCABULARY_TEST_START =
+    "        #[test]\n        fn empty_vocabulary_matches_java() {";
+const EMPTY_VOCABULARY_TEST_END =
+    "\n        #[test]\n        fn vocabulary_from_token_names_matches_java() {";
+const TOKEN_NAMES_VOCABULARY_TEST_START =
+    "        #[test]\n        fn vocabulary_from_token_names_matches_java() {";
+const TOKEN_NAMES_VOCABULARY_TEST_END =
+    "\n    }\n}";
+const EMPTY_VOCABULARY_LOGICAL_ID =
+    "testvocabulary-testemptyvocabulary-66d31ad014";
 const SYMBOL_INFO_SHA256 =
     "df274a0dca42823cc2ef2608d98d544be53246a48c56f96050b0a987ce0890f3";
 
@@ -569,6 +586,100 @@ const topologicalSortLockedSections = [
         sha256: digest(checkedInTopologicalSortTests),
     },
 ];
+const checkedInEmptyVocabularyTest = sectionBetweenMarkers(
+    await readFile(resolve(repoRoot, VOCABULARY_TEST_PATH), "utf8"),
+    EMPTY_VOCABULARY_TEST_START,
+    EMPTY_VOCABULARY_TEST_END,
+);
+const recordedEmptyVocabularyTest = gitShowOptional(
+    repoRoot,
+    EMPTY_VOCABULARY_TEST_COMMIT,
+    VOCABULARY_TEST_PATH,
+);
+const implementedEmptyVocabularyTest = gitShowOptional(
+    repoRoot,
+    EMPTY_VOCABULARY_IMPLEMENTATION_COMMIT,
+    VOCABULARY_TEST_PATH,
+);
+if (
+    recordedEmptyVocabularyTest === null ||
+    sectionBetweenMarkers(
+        recordedEmptyVocabularyTest,
+        EMPTY_VOCABULARY_TEST_START,
+        EMPTY_VOCABULARY_TEST_END,
+    ) !== checkedInEmptyVocabularyTest
+) {
+    throw new Error(
+        "checked-in empty vocabulary port differs from its test commit",
+    );
+}
+if (
+    implementedEmptyVocabularyTest === null ||
+    sectionBetweenMarkers(
+        implementedEmptyVocabularyTest,
+        EMPTY_VOCABULARY_TEST_START,
+        EMPTY_VOCABULARY_TEST_END,
+    ) !== checkedInEmptyVocabularyTest
+) {
+    throw new Error(
+        "empty vocabulary implementation changed the locked test port",
+    );
+}
+const emptyVocabularyLockedSections = [
+    {
+        path: VOCABULARY_TEST_PATH,
+        marker: EMPTY_VOCABULARY_TEST_START,
+        end_marker: EMPTY_VOCABULARY_TEST_END,
+        sha256: digest(checkedInEmptyVocabularyTest),
+    },
+];
+const checkedInTokenNamesVocabularyTest = sectionBetweenMarkers(
+    await readFile(resolve(repoRoot, VOCABULARY_TEST_PATH), "utf8"),
+    TOKEN_NAMES_VOCABULARY_TEST_START,
+    TOKEN_NAMES_VOCABULARY_TEST_END,
+);
+const recordedTokenNamesVocabularyTest = gitShowOptional(
+    repoRoot,
+    VOCABULARY_TEST_COMMIT,
+    VOCABULARY_TEST_PATH,
+);
+const implementedTokenNamesVocabularyTest = gitShowOptional(
+    repoRoot,
+    VOCABULARY_IMPLEMENTATION_COMMIT,
+    VOCABULARY_TEST_PATH,
+);
+if (
+    recordedTokenNamesVocabularyTest === null ||
+    sectionBetweenMarkers(
+        recordedTokenNamesVocabularyTest,
+        TOKEN_NAMES_VOCABULARY_TEST_START,
+        TOKEN_NAMES_VOCABULARY_TEST_END,
+    ) !== checkedInTokenNamesVocabularyTest
+) {
+    throw new Error(
+        "checked-in token-names vocabulary port differs from its test commit",
+    );
+}
+if (
+    implementedTokenNamesVocabularyTest === null ||
+    sectionBetweenMarkers(
+        implementedTokenNamesVocabularyTest,
+        TOKEN_NAMES_VOCABULARY_TEST_START,
+        TOKEN_NAMES_VOCABULARY_TEST_END,
+    ) !== checkedInTokenNamesVocabularyTest
+) {
+    throw new Error(
+        "token-names vocabulary implementation changed the locked test port",
+    );
+}
+const tokenNamesVocabularyLockedSections = [
+    {
+        path: VOCABULARY_TEST_PATH,
+        marker: TOKEN_NAMES_VOCABULARY_TEST_START,
+        end_marker: TOKEN_NAMES_VOCABULARY_TEST_END,
+        sha256: digest(checkedInTokenNamesVocabularyTest),
+    },
+];
 
 const upstreamByLogicalId = new Map(
     testMap.rows.map((row) => [row.logical_id, row]),
@@ -678,6 +789,9 @@ for (const row of completedRows) {
     const phaseBTopologicalSort = row.logical_id.startsWith(
         "testtopologicalsort-",
     );
+    const phaseBVocabulary = row.logical_id.startsWith(
+        "testvocabulary-",
+    );
     if (
         row.owner_phase === "B" &&
         !phaseBAtnSerialization &&
@@ -685,7 +799,8 @@ for (const row of completedRows) {
         !phaseBBasicSemantic &&
         !phaseBErrorSets &&
         !phaseBTokenPosition &&
-        !phaseBTopologicalSort
+        !phaseBTopologicalSort &&
+        !phaseBVocabulary
     ) {
         throw new Error(`missing Phase B evidence profile for ${row.logical_id}`);
     }
@@ -750,6 +865,30 @@ for (const row of completedRows) {
                         reachability:
                             "the case-specific test passed against the Phase B loader implementation reachable from its parent",
                     }
+                  : phaseBVocabulary
+                    ? row.logical_id === EMPTY_VOCABULARY_LOGICAL_ID
+                        ? {
+                              lockedSections:
+                                  emptyVocabularyLockedSections,
+                              scaffoldCommit:
+                                  EMPTY_VOCABULARY_BASE_COMMIT,
+                              testParent:
+                                  EMPTY_VOCABULARY_BASE_COMMIT,
+                              implementationParent:
+                                  EMPTY_VOCABULARY_TEST_COMMIT,
+                              reachability:
+                                  "the empty vocabulary implementation commit is directly based on its locked red test",
+                          }
+                        : {
+                              lockedSections:
+                                  tokenNamesVocabularyLockedSections,
+                              scaffoldCommit: VOCABULARY_BASE_COMMIT,
+                              testParent: VOCABULARY_BASE_COMMIT,
+                              implementationParent:
+                                  VOCABULARY_TEST_COMMIT,
+                              reachability:
+                                  "the token-names vocabulary implementation commit is directly based on its locked red test",
+                          }
           : null;
     await addEvidence({
         logicalId: row.logical_id,
@@ -814,6 +953,15 @@ for (const row of completedRows) {
                             java_compatibility_verdict:
                                 "exact Java 4.13.2 topological order with source-backed vocabulary edges",
                         }
+                      : phaseBVocabulary
+                        ? {
+                              primary:
+                                  "the Rust vocabulary API matches Java 4.13.2 empty, display, literal, symbolic, and EOF name behavior",
+                              alternate:
+                                  "the pinned antlr-ng TestVocabulary case exposes the same vocabulary behavior",
+                              java_compatibility_verdict:
+                                  "exact Java 4.13.2 vocabulary name classification",
+                          }
             : {
                   primary: coveredExisting
                       ? "the case-specific Rust port matches the pinned accepted and rejected syntax outcomes"
@@ -856,6 +1004,7 @@ for (const row of completedRows) {
             phaseBAtnConstruction ||
             phaseBBasicSemantic ||
             phaseBErrorSets ||
+            phaseBVocabulary ||
             (phaseBTokenPosition && !coveredExisting)
             ? row.demonstrated_red
             : undefined,

@@ -31429,8 +31429,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testvocabulary-testemptyvocabulary-66d31ad014-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testvocabulary-testemptyvocabulary-66d31ad014",
+      "tdd_state": "done",
+      "rust_test": "vocabulary::tests::upstream_vocabulary::empty_vocabulary_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -31451,8 +31451,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestVocabulary.testEmptyVocabulary behavior",
+      "expected_red_failure_fingerprint": "E0599: no associated function or constant named empty found for Vocabulary",
+      "observable_equivalence": "the Rust vocabulary API matches Java 4.13.2 name classification for TestVocabulary.testEmptyVocabulary",
+      "scaffold_commit": "134b4e7304defa10da58e2b2ef90c6517f20213f",
+      "primary_test_commit": "d2211267b0573bf147d1baa57af8f7c13ce2d245",
+      "demonstrated_red": {
+        "command": "cargo test --locked --lib empty_vocabulary_matches_java -- --test-threads=1",
+        "exit_code": 101,
+        "fingerprint": "E0599: no associated function or constant named empty found for Vocabulary"
+      },
+      "primary_implementation_commit": "2de0397b1db0d20cad0d59f2ea31c55b989edae2",
+      "green_result": {
+        "command": "cargo test --locked --lib empty_vocabulary_matches_java -- --test-threads=1",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testvocabulary-testemptyvocabulary-66d31ad014",
         "source_case_ids": [
@@ -31460,14 +31472,17 @@
           "java-antlr:testvocabulary-testemptyvocabulary@8e69cf9e9958"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testvocabulary-testemptyvocabulary-66d31ad014",
+        "rust_test": "vocabulary::tests::upstream_vocabulary::empty_vocabulary_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestVocabulary.testEmptyVocabulary behavior"
+        "observable": "the Rust vocabulary API matches Java 4.13.2 name classification for TestVocabulary.testEmptyVocabulary",
+        "scaffold_commit": "134b4e7304defa10da58e2b2ef90c6517f20213f",
+        "primary_test_commit": "d2211267b0573bf147d1baa57af8f7c13ce2d245"
       },
-      "closure_sha256": "b05de0921d3bb3808ebcb6479fed4b7500d7a47ae4a8803ab6ea33123f002ccd",
-      "evidence_path": null
+      "closure_sha256": "3acfd293697c647ea7562f1c20db8402627faf0e417fa8fe77bcb2849ce9c5b5",
+      "evidence_path": "tests/codegen-direct/port-evidence/testvocabulary-testemptyvocabulary-66d31ad014"
     },
     {
       "logical_id": "testvocabulary-testvocabularyfromtokennames-d047506a84",
@@ -31479,8 +31494,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testvocabulary-testvocabularyfromtokennames-d047506a84-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testvocabulary-testvocabularyfromtokennames-d047506a84",
+      "tdd_state": "done",
+      "rust_test": "vocabulary::tests::upstream_vocabulary::vocabulary_from_token_names_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -31501,8 +31516,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestVocabulary.testVocabularyFromTokenNames behavior",
+      "expected_red_failure_fingerprint": "E0599: no associated function or constant named from_token_names found for Vocabulary",
+      "observable_equivalence": "the Rust vocabulary API matches Java 4.13.2 name classification for TestVocabulary.testVocabularyFromTokenNames",
+      "scaffold_commit": "f7a868948f3d40e64c9a10f27bdb3d0028456618",
+      "primary_test_commit": "d725eac437b8425eb6429f9a0b1844a409f45194",
+      "demonstrated_red": {
+        "command": "cargo test --locked --lib upstream_vocabulary -- --test-threads=1",
+        "exit_code": 101,
+        "fingerprint": "E0599: no associated function or constant named from_token_names found for Vocabulary"
+      },
+      "primary_implementation_commit": "134b4e7304defa10da58e2b2ef90c6517f20213f",
+      "green_result": {
+        "command": "cargo test --locked --lib upstream_vocabulary -- --test-threads=1",
+        "result": "2 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testvocabulary-testvocabularyfromtokennames-d047506a84",
         "source_case_ids": [
@@ -31510,14 +31537,17 @@
           "java-antlr:testvocabulary-testvocabularyfromtokennames@c109120df87b"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testvocabulary-testvocabularyfromtokennames-d047506a84",
+        "rust_test": "vocabulary::tests::upstream_vocabulary::vocabulary_from_token_names_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestVocabulary.testVocabularyFromTokenNames behavior"
+        "observable": "the Rust vocabulary API matches Java 4.13.2 name classification for TestVocabulary.testVocabularyFromTokenNames",
+        "scaffold_commit": "f7a868948f3d40e64c9a10f27bdb3d0028456618",
+        "primary_test_commit": "d725eac437b8425eb6429f9a0b1844a409f45194"
       },
-      "closure_sha256": "c419ae8c36441573979765a16621ac901d57b6d9a7a7d2131cff833979f2cbcc",
-      "evidence_path": null
+      "closure_sha256": "b01255f68bb158fc87e8216c5f4bee37c0dd73681aebb3986a2f74d112ca15ce",
+      "evidence_path": "tests/codegen-direct/port-evidence/testvocabulary-testvocabularyfromtokennames-d047506a84"
     },
     {
       "logical_id": "testxpath-testbadrulename-3fe66cd0a1",
