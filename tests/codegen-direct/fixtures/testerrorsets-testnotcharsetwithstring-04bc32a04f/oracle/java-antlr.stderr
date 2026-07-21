@@ -1,0 +1,1 @@
+error(144): T.g4:3:10: multi-character literals are not allowed in lexer sets: 'aa'

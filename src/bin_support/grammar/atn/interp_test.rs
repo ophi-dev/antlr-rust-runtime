@@ -1847,6 +1847,57 @@ mod tests {
         }
     }
 
+    mod upstream_error_sets {
+        use super::*;
+        use crate::grammar::diagnostic::Severity::Error;
+
+        #[test]
+        fn not_char_set_with_rule_ref_matches_java() {
+            assert_basic_semantic_errors(
+                "testerrorsets-testnotcharsetwithruleref-9d8ec8db7a",
+                "T.g4",
+                &[expected(
+                    "G4S065",
+                    Error,
+                    3,
+                    10,
+                    "rule reference B is not currently supported in a set",
+                )],
+            );
+        }
+
+        #[test]
+        fn not_char_set_with_string_matches_java() {
+            assert_basic_semantic_errors(
+                "testerrorsets-testnotcharsetwithstring-04bc32a04f",
+                "T.g4",
+                &[expected(
+                    "G4S066",
+                    Error,
+                    3,
+                    10,
+                    "multi-character literals are not allowed in lexer sets: 'aa'",
+                )],
+            );
+        }
+
+        const fn expected(
+            code: &'static str,
+            severity: crate::grammar::diagnostic::Severity,
+            line: usize,
+            column: usize,
+            message: &'static str,
+        ) -> ExpectedSemanticDiagnostic {
+            ExpectedSemanticDiagnostic {
+                code,
+                severity,
+                line,
+                column,
+                message,
+            }
+        }
+    }
+
     struct ExpectedSemanticDiagnostic {
         code: &'static str,
         severity: crate::grammar::diagnostic::Severity,
