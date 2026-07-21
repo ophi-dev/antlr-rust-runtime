@@ -101,7 +101,7 @@
     {
       "seed_path": "generated/antl_rv4_lexer.rs",
       "checked_in_path": "src/bin_support/grammar/generated/antlr_v4_lexer.rs",
-      "sha256": "859e8f9a417542e73969407b95496babea84aa974e06339128b7fede5d00b626"
+      "sha256": "d5d023df0f1c9dc0d13b83ee0546c36d553bc9b30f165e8b178767d8e05c9a30"
     },
     {
       "seed_path": "generated/antl_rv4_parser.rs",

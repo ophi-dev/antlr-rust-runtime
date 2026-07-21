@@ -211,7 +211,6 @@ pub(crate) fn parse_source(
     let input = InputStream::with_source_name(&text, logical_path.to_string_lossy());
     let mut lexer = AntlRv4Lexer::with_hooks(input, LexerAdaptor::default());
     lexer.remove_error_listeners();
-    lexer.set_force_interpreted(true);
     let mut token_stream = CommonTokenStream::try_new(lexer).map_err(|error| FrontendError {
         diagnostics: vec![SyntaxDiagnostic {
             code: "G4F001",
