@@ -25,6 +25,9 @@ import {
     PHASE_B_BASE_COMMIT,
     PHASE_B_IMPLEMENTATION_COMMIT,
     SCAFFOLD_COMMIT,
+    SCOPE_PARSING_BASE_COMMIT,
+    SCOPE_PARSING_IMPLEMENTATION_COMMIT,
+    SCOPE_PARSING_TEST_COMMIT,
     TEST_COMMIT,
     TOKEN_POSITION_BASE_COMMIT,
     TOKEN_POSITION_IMPLEMENTATION_COMMIT,
@@ -214,6 +217,8 @@ const VOCABULARY_PORTS = new Map([
         },
     ],
 ]);
+const SCOPE_PARSING_TEST_COMMAND =
+    "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java";
 
 const PHASE_B_SUITES = new Set([
     "TestATNConstruction",
@@ -705,8 +710,11 @@ function completedPhaseBRow(
                     : completed.kind === "vocabulary"
                       ? `the Rust vocabulary API matches Java 4.13.2 name classification ` +
                         `for ${cases[0].suite}.${cases[0].name}`
-                  : `direct Rust semantic diagnostics match Java 4.13.2 exactly ` +
-                    `for ${cases[0].suite}.${cases[0].name}`;
+                      : completed.kind === "scope-parsing"
+                        ? `direct Rust declaration parsing matches Java 4.13.2 names, ` +
+                          `types, and initializers for ${cases[0].suite}.${cases[0].name}`
+                        : `direct Rust semantic diagnostics match Java 4.13.2 exactly ` +
+                          `for ${cases[0].suite}.${cases[0].name}`;
     const coveredExisting =
         completed.resolution === "verified-covered-existing";
     const closure = {
@@ -921,8 +929,46 @@ async function loadCompletedPhaseBPorts() {
             redFingerprint: definition.redFingerprint,
         });
     }
-    if (ports.size !== 91) {
-        throw new Error(`expected 91 completed Phase B ports, found ${ports.size}`);
+    const scopeGroups = new Map();
+    for (const testCase of inventory.cases) {
+        if (testCase.suite !== "TestScopeParsing") {
+            continue;
+        }
+        const key =
+            `${testCase.suite}\0${canonicalName(testCase.name)}` +
+            `\0${parameterKey(testCase)}`;
+        const group = scopeGroups.get(key) ?? [];
+        group.push(testCase);
+        scopeGroups.set(key, group);
+    }
+    for (const [key, cases] of scopeGroups) {
+        const logicalId = logicalCaseId(
+            cases[0].suite,
+            cases[0].name,
+            key,
+        );
+        ports.set(logicalId, {
+            fixturePaths: [],
+            rustTest:
+                "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+            kind: "scope-parsing",
+            resolution: "ported",
+            scaffoldCommit: SCOPE_PARSING_BASE_COMMIT,
+            testCommit: SCOPE_PARSING_TEST_COMMIT,
+            implementationCommit: SCOPE_PARSING_IMPLEMENTATION_COMMIT,
+            testCommand: SCOPE_PARSING_TEST_COMMAND,
+            greenResult: "1 passed; 0 failed",
+            redFingerprint:
+                "E0425: cannot find function `parse_scope_decls` in this scope",
+        });
+    }
+    if (scopeGroups.size !== 47) {
+        throw new Error(
+            `expected 47 completed TestScopeParsing ports, found ${scopeGroups.size}`,
+        );
+    }
+    if (ports.size !== 138) {
+        throw new Error(`expected 138 completed Phase B ports, found ${ports.size}`);
     }
     return ports;
 }

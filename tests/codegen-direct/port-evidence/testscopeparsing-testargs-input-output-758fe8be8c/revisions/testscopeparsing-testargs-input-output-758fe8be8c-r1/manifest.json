@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "logical_id": "testscopeparsing-testargs-input-output-758fe8be8c",
+  "revision_id": "testscopeparsing-testargs-input-output-758fe8be8c-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "closure": {
+    "logical_id": "testscopeparsing-testargs-input-output-758fe8be8c",
+    "source_case_ids": [
+      "antlr-ng:testscopeparsing-testargs-input-output@364ecb945534",
+      "antlr-ng:testscopeparsing-testargs-input-output@65fa7883e4a6"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: ' ', output: '' }",
+    "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+    "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
+  },
+  "closure_sha256": "2cc2643de939a7222cc79f9a4f5b41f721e6c514c644188a0c6b95ded7a03797",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testscopeparsing-testargs-input-output@364ecb945534",
+      "path": "tests/TestScopeParsing.spec.ts",
+      "sha256": "bfff35a210b05e9ddf083816d5e7aff1a9efa4fe634061bcd5f85010ae23eb8b"
+    },
+    {
+      "source_case_id": "antlr-ng:testscopeparsing-testargs-input-output@65fa7883e4a6",
+      "path": "tests/TestScopeParsing.spec.ts",
+      "sha256": "bfff35a210b05e9ddf083816d5e7aff1a9efa4fe634061bcd5f85010ae23eb8b"
+    }
+  ],
+  "commits": {
+    "scaffold": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+    "primary_test": "dfb3d07d4536f91094931dcc4884567530f78b11",
+    "primary_implementation": "9bef3f59a6e29b5319e25807a2af6702e2d387a5"
+  },
+  "ancestry": {
+    "primary_test_parent": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+    "primary_implementation_parent": "dfb3d07d4536f91094931dcc4884567530f78b11",
+    "reachability": "the scope parsing implementation commit is directly based on its locked red test"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/embedded.rs",
+      "marker": "    mod upstream_scope_parsing {",
+      "end_marker": "\n    #[test]\n    fn translates_attr_and_rule_reads()",
+      "sha256": "2ecd35f8c02e2d521e877274a3156b2a373a07ac4c77ad4357197b12a445d6f2"
+    }
+  ],
+  "demonstrated_red": {
+    "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+    "commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+    "exit_code": 101,
+    "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+  },
+  "green_result": {
+    "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+    "commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-output-758fe8be8c/revisions/testscopeparsing-testargs-input-output-758fe8be8c-r1/oracle-results/declared-sources.json",
+      "sha256": "9cebc6d4c5d57a9c8372d72d1d23120b8e6a293a45733a631a9df5deb2bf8855"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-output-758fe8be8c/revisions/testscopeparsing-testargs-input-output-758fe8be8c-r1/matrix-results/results.json",
+      "sha256": "a978dd67d84f2801b7a6e7dee4ff0cc276f87d089daeb5fbfc80cc96f1f56928"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testscopeparsing-testargs-input-map-a-list-b-i-output-i-map-a-list-b-0c3d427323",
+  "active_revision_id": "testscopeparsing-testargs-input-map-a-list-b-i-output-i-map-a-list-b-0c3d427323-r1",
+  "revisions": [
+    {
+      "revision_id": "testscopeparsing-testargs-input-map-a-list-b-i-output-i-map-a-list-b-0c3d427323-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-map-a-list-b-i-output-i-map-a-list-b-0c3d427323/revisions/testscopeparsing-testargs-input-map-a-list-b-i-output-i-map-a-list-b-0c3d427323-r1/manifest.json",
+      "closure_sha256": "137dbc7b68395935386f88ed3a1a3cee99910f90a0cbec8f62bbc5b33de04c09"
+    }
+  ]
+}

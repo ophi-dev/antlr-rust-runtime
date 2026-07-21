@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testscopeparsing-testargs-input-int-i-int-j-output-i-int-j-int-cec3004b79",
+  "active_revision_id": "testscopeparsing-testargs-input-int-i-int-j-output-i-int-j-int-cec3004b79-r1",
+  "revisions": [
+    {
+      "revision_id": "testscopeparsing-testargs-input-int-i-int-j-output-i-int-j-int-cec3004b79-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-int-i-int-j-output-i-int-j-int-cec3004b79/revisions/testscopeparsing-testargs-input-int-i-int-j-output-i-int-j-int-cec3004b79-r1/manifest.json",
+      "closure_sha256": "ae175569d7316caade15bbaf128ca99a2955290e7ca634cfe116053dd5b84b1f"
+    }
+  ]
+}

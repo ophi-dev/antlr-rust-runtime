@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testscopeparsing-testargs-input-p-pointer-to-int-output-p-pointer-to-int-61212ee5f3",
+  "active_revision_id": "testscopeparsing-testargs-input-p-pointer-to-int-output-p-pointer-to-int-61212ee5f3-r1",
+  "revisions": [
+    {
+      "revision_id": "testscopeparsing-testargs-input-p-pointer-to-int-output-p-pointer-to-int-61212ee5f3-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-p-pointer-to-int-output-p-pointer-to-int-61212ee5f3/revisions/testscopeparsing-testargs-input-p-pointer-to-int-output-p-pointer-to-int-61212ee5f3-r1/manifest.json",
+      "closure_sha256": "76217216c3adeaadaedcec643a4e9c08e0daa3aa1f0fe976c838c8290c796abc"
+    }
+  ]
+}

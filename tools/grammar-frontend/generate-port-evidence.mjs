@@ -30,6 +30,9 @@ import {
     PHASE_B_BASE_COMMIT,
     PHASE_B_IMPLEMENTATION_COMMIT,
     SCAFFOLD_COMMIT,
+    SCOPE_PARSING_BASE_COMMIT,
+    SCOPE_PARSING_IMPLEMENTATION_COMMIT,
+    SCOPE_PARSING_TEST_COMMIT,
     TEST_COMMIT,
     TOKEN_POSITION_BASE_COMMIT,
     TOKEN_POSITION_IMPLEMENTATION_COMMIT,
@@ -90,6 +93,11 @@ const TOKEN_NAMES_VOCABULARY_TEST_START =
     "        #[test]\n        fn vocabulary_from_token_names_matches_java() {";
 const TOKEN_NAMES_VOCABULARY_TEST_END =
     "\n    }\n}";
+const SCOPE_PARSING_TEST_PATH = "src/bin_support/embedded.rs";
+const SCOPE_PARSING_TEST_START =
+    "    mod upstream_scope_parsing {";
+const SCOPE_PARSING_TEST_END =
+    "\n    #[test]\n    fn translates_attr_and_rule_reads()";
 const EMPTY_VOCABULARY_LOGICAL_ID =
     "testvocabulary-testemptyvocabulary-66d31ad014";
 const SYMBOL_INFO_SHA256 =
@@ -680,6 +688,53 @@ const tokenNamesVocabularyLockedSections = [
         sha256: digest(checkedInTokenNamesVocabularyTest),
     },
 ];
+const checkedInScopeParsingTest = sectionBetweenMarkers(
+    await readFile(resolve(repoRoot, SCOPE_PARSING_TEST_PATH), "utf8"),
+    SCOPE_PARSING_TEST_START,
+    SCOPE_PARSING_TEST_END,
+);
+const recordedScopeParsingTest = gitShowOptional(
+    repoRoot,
+    SCOPE_PARSING_TEST_COMMIT,
+    SCOPE_PARSING_TEST_PATH,
+);
+const implementedScopeParsingTest = gitShowOptional(
+    repoRoot,
+    SCOPE_PARSING_IMPLEMENTATION_COMMIT,
+    SCOPE_PARSING_TEST_PATH,
+);
+if (
+    recordedScopeParsingTest === null ||
+    sectionBetweenMarkers(
+        recordedScopeParsingTest,
+        SCOPE_PARSING_TEST_START,
+        SCOPE_PARSING_TEST_END,
+    ) !== checkedInScopeParsingTest
+) {
+    throw new Error(
+        "checked-in scope parsing port differs from its test commit",
+    );
+}
+if (
+    implementedScopeParsingTest === null ||
+    sectionBetweenMarkers(
+        implementedScopeParsingTest,
+        SCOPE_PARSING_TEST_START,
+        SCOPE_PARSING_TEST_END,
+    ) !== checkedInScopeParsingTest
+) {
+    throw new Error(
+        "scope parsing implementation changed the locked test port",
+    );
+}
+const scopeParsingLockedSections = [
+    {
+        path: SCOPE_PARSING_TEST_PATH,
+        marker: SCOPE_PARSING_TEST_START,
+        end_marker: SCOPE_PARSING_TEST_END,
+        sha256: digest(checkedInScopeParsingTest),
+    },
+];
 
 const upstreamByLogicalId = new Map(
     testMap.rows.map((row) => [row.logical_id, row]),
@@ -792,6 +847,9 @@ for (const row of completedRows) {
     const phaseBVocabulary = row.logical_id.startsWith(
         "testvocabulary-",
     );
+    const phaseBScopeParsing = row.logical_id.startsWith(
+        "testscopeparsing-",
+    );
     if (
         row.owner_phase === "B" &&
         !phaseBAtnSerialization &&
@@ -800,7 +858,8 @@ for (const row of completedRows) {
         !phaseBErrorSets &&
         !phaseBTokenPosition &&
         !phaseBTopologicalSort &&
-        !phaseBVocabulary
+        !phaseBVocabulary &&
+        !phaseBScopeParsing
     ) {
         throw new Error(`missing Phase B evidence profile for ${row.logical_id}`);
     }
@@ -889,6 +948,16 @@ for (const row of completedRows) {
                               reachability:
                                   "the token-names vocabulary implementation commit is directly based on its locked red test",
                           }
+                    : phaseBScopeParsing
+                      ? {
+                            lockedSections: scopeParsingLockedSections,
+                            scaffoldCommit: SCOPE_PARSING_BASE_COMMIT,
+                            testParent: SCOPE_PARSING_BASE_COMMIT,
+                            implementationParent:
+                                SCOPE_PARSING_TEST_COMMIT,
+                            reachability:
+                                "the scope parsing implementation commit is directly based on its locked red test",
+                        }
           : null;
     await addEvidence({
         logicalId: row.logical_id,
@@ -962,6 +1031,15 @@ for (const row of completedRows) {
                               java_compatibility_verdict:
                                   "exact Java 4.13.2 vocabulary name classification",
                           }
+                        : phaseBScopeParsing
+                          ? {
+                                primary:
+                                    "the direct Rust declaration parser matches Java 4.13.2 names, authored types, and initializers",
+                                alternate:
+                                    "the paired pinned source cases expose the same prefix and postfix declaration behavior",
+                                java_compatibility_verdict:
+                                    "exact Java 4.13.2 scope declaration parsing",
+                            }
             : {
                   primary: coveredExisting
                       ? "the case-specific Rust port matches the pinned accepted and rejected syntax outcomes"
@@ -1005,6 +1083,7 @@ for (const row of completedRows) {
             phaseBBasicSemantic ||
             phaseBErrorSets ||
             phaseBVocabulary ||
+            phaseBScopeParsing ||
             (phaseBTokenPosition && !coveredExisting)
             ? row.demonstrated_red
             : undefined,

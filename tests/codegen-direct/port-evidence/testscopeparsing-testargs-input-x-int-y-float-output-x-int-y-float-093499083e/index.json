@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testscopeparsing-testargs-input-x-int-y-float-output-x-int-y-float-093499083e",
+  "active_revision_id": "testscopeparsing-testargs-input-x-int-y-float-output-x-int-y-float-093499083e-r1",
+  "revisions": [
+    {
+      "revision_id": "testscopeparsing-testargs-input-x-int-y-float-output-x-int-y-float-093499083e-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-x-int-y-float-output-x-int-y-float-093499083e/revisions/testscopeparsing-testargs-input-x-int-y-float-output-x-int-y-float-093499083e-r1/manifest.json",
+      "closure_sha256": "6d6e46b0b4f5f9e8991dc8c2cba0a82c9bcbaa1ea6215b3e5115dc7bf8ac29eb"
+    }
+  ]
+}

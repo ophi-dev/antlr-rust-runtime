@@ -23027,8 +23027,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-069204c884-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-069204c884",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -23048,22 +23048,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-069204c884",
         "source_case_ids": [
           "java-antlr:testscopeparsing-testargs-parameter-18@c1c98df9295d"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-069204c884",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "0204e594bcc9833d7c020a3b6d2a10188c1f5be8bc4dce7922c606c1830cdb68",
-      "evidence_path": null
+      "closure_sha256": "bdc17648b4a499356f512f181544762eed948f48185583d54cd5568ec866645f",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-069204c884"
     },
     {
       "logical_id": "testscopeparsing-testargs-08eea1b19f",
@@ -23074,8 +23089,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-08eea1b19f-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-08eea1b19f",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -23095,22 +23110,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-08eea1b19f",
         "source_case_ids": [
           "java-antlr:testscopeparsing-testargs-parameter-11@ea4e905486da"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-08eea1b19f",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "35f9abcd08cbf1d9a83b080051186c9e50bf80cfddad93c329a75ce3ad73f926",
-      "evidence_path": null
+      "closure_sha256": "6d2e2ee05fce0ae116dad85b7d0106d8b29fb0a807e6c47147964a5362b7d418",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-08eea1b19f"
     },
     {
       "logical_id": "testscopeparsing-testargs-09ae46e509",
@@ -23121,8 +23151,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-09ae46e509-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-09ae46e509",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -23142,22 +23172,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-09ae46e509",
         "source_case_ids": [
           "java-antlr:testscopeparsing-testargs-parameter-7@ddf1375d9656"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-09ae46e509",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "4274c38698eb0f30ddb6dabf4b8748243956f2f2d64b17099463911e6e461bc3",
-      "evidence_path": null
+      "closure_sha256": "0c5166f541fc736bfae3144e4021adffd7e86103da76a1e413dd0b182a62e783",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-09ae46e509"
     },
     {
       "logical_id": "testscopeparsing-testargs-1373775c81",
@@ -23168,8 +23213,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-1373775c81-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-1373775c81",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -23189,22 +23234,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-1373775c81",
         "source_case_ids": [
           "java-antlr:testscopeparsing-testargs-parameter-2@bfd050d05a0d"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-1373775c81",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "a68bd1b86c1b61e2740f84ca9784d8d919bb6d5f9cd1abd6ef4a6e66c8998d06",
-      "evidence_path": null
+      "closure_sha256": "fbe7c18f1148b56abc3e0d51b5b7f9e8393309b261ff12591062d0a8c019e32c",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-1373775c81"
     },
     {
       "logical_id": "testscopeparsing-testargs-1f72ffce29",
@@ -23215,8 +23275,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-1f72ffce29-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-1f72ffce29",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -23236,22 +23296,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-1f72ffce29",
         "source_case_ids": [
           "java-antlr:testscopeparsing-testargs-parameter-17@b703bedfa54e"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-1f72ffce29",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "c3703e27ac36aa316ebea45ef617f8ba0e81828e3e31004a3534b1d0de77d6e5",
-      "evidence_path": null
+      "closure_sha256": "fda7f15d5c4f99cdd4663327204f46d28b55cf931d77194c262fdc4d58d3f9bd",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-1f72ffce29"
     },
     {
       "logical_id": "testscopeparsing-testargs-26914e242a",
@@ -23262,8 +23337,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-26914e242a-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-26914e242a",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -23283,22 +23358,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-26914e242a",
         "source_case_ids": [
           "java-antlr:testscopeparsing-testargs-parameter-13@bace54f7b0cd"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-26914e242a",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "4177b7241d0e8a244d955ec6abd4d3b4b909867b25c45531a260ef58ebfa696e",
-      "evidence_path": null
+      "closure_sha256": "4d9d52e5c7466886acc6ced468ebe4a2d96c7b104a1d32a7f3ca8d325e851919",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-26914e242a"
     },
     {
       "logical_id": "testscopeparsing-testargs-28a73da6e0",
@@ -23309,8 +23399,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-28a73da6e0-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-28a73da6e0",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -23330,22 +23420,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-28a73da6e0",
         "source_case_ids": [
           "java-antlr:testscopeparsing-testargs-parameter-14@889ca1b7d06d"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-28a73da6e0",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "0c5b10b230705a4970a9b055981e9ed6e8b6b5618aae3cf3150639df0231c84e",
-      "evidence_path": null
+      "closure_sha256": "50de55393f3c47dddb2f4d8294dcf8807ae5dd32c65c0552bb7a39d9586ee620",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-28a73da6e0"
     },
     {
       "logical_id": "testscopeparsing-testargs-2d7d8fa1d9",
@@ -23356,8 +23461,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-2d7d8fa1d9-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-2d7d8fa1d9",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -23377,22 +23482,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-2d7d8fa1d9",
         "source_case_ids": [
           "java-antlr:testscopeparsing-testargs-parameter-25@2cb1a341eb20"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-2d7d8fa1d9",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "35640ed6a4f17afe005e71a43aab96104a9d88a0afb931b74c1efe539a46f379",
-      "evidence_path": null
+      "closure_sha256": "fda81bb8d5e51a671e87971fad959b4e2aac17b2f9fa4a18ef97174e231e640f",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-2d7d8fa1d9"
     },
     {
       "logical_id": "testscopeparsing-testargs-49f1a5b1e2",
@@ -23403,8 +23523,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-49f1a5b1e2-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-49f1a5b1e2",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -23424,22 +23544,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-49f1a5b1e2",
         "source_case_ids": [
           "java-antlr:testscopeparsing-testargs-parameter-15@32c89449f4ea"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-49f1a5b1e2",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "7654e9f7cac6cabdce09943b02668563360c51a0e875d51849df1701e6343e56",
-      "evidence_path": null
+      "closure_sha256": "f112ff66493170b867306a526bd8d5e5a6100632079bf7dfe9712a9ff89641de",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-49f1a5b1e2"
     },
     {
       "logical_id": "testscopeparsing-testargs-4b67ac1cba",
@@ -23450,8 +23585,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-4b67ac1cba-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-4b67ac1cba",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -23471,22 +23606,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-4b67ac1cba",
         "source_case_ids": [
           "java-antlr:testscopeparsing-testargs-parameter-21@a88e77c35254"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-4b67ac1cba",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "62be4329eb899e9355a16681440bcfc95b16633077ecdc8d027a874e919d1d30",
-      "evidence_path": null
+      "closure_sha256": "62f75629376c5947d168ea133a0e4596266e67c8d44f63d7dd6e83bd02df9560",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-4b67ac1cba"
     },
     {
       "logical_id": "testscopeparsing-testargs-4dc0c6270c",
@@ -23497,8 +23647,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-4dc0c6270c-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-4dc0c6270c",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -23518,22 +23668,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-4dc0c6270c",
         "source_case_ids": [
           "java-antlr:testscopeparsing-testargs-parameter-23@669e862ec2de"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-4dc0c6270c",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "c9aaf3e9d71290bdc64eca817adc7eb82d166c356fa6cad25b763ecf5c6f19e6",
-      "evidence_path": null
+      "closure_sha256": "08c3a3e72abc23291e8a120f2a983120665300adf0d18052560b2cf15fdb9446",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-4dc0c6270c"
     },
     {
       "logical_id": "testscopeparsing-testargs-5aa461063d",
@@ -23544,8 +23709,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-5aa461063d-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-5aa461063d",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -23565,22 +23730,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-5aa461063d",
         "source_case_ids": [
           "java-antlr:testscopeparsing-testargs-parameter-19@5d65b098d6a9"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-5aa461063d",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "bda5b2ec348e46aa8ea4668777b939bb08ef3e04ac879eded7242db803fe8ce9",
-      "evidence_path": null
+      "closure_sha256": "101847b1af908f663e010033b06a27d34b414eed8f8122a58829815e8ddaffac",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-5aa461063d"
     },
     {
       "logical_id": "testscopeparsing-testargs-6cc0d305e4",
@@ -23591,8 +23771,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-6cc0d305e4-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-6cc0d305e4",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -23612,22 +23792,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-6cc0d305e4",
         "source_case_ids": [
           "java-antlr:testscopeparsing-testargs-parameter-8@a3d8299a0b0a"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-6cc0d305e4",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "ff654084806a8bb9a3fe236d3d05dd2d2f60be69e68c8e9ed940192bee49b29d",
-      "evidence_path": null
+      "closure_sha256": "1cc9459ea58787f6fdf0298dd2b49d8d2249bebdde0b067ca6eaa553030995b2",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-6cc0d305e4"
     },
     {
       "logical_id": "testscopeparsing-testargs-7222435ebe",
@@ -23638,8 +23833,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-7222435ebe-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-7222435ebe",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -23659,22 +23854,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-7222435ebe",
         "source_case_ids": [
           "java-antlr:testscopeparsing-testargs-parameter-3@03f506740816"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-7222435ebe",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "57274a6e838dafc9c987e2ceb553e343bdf39bebcddf6b43add1d5bf89da7981",
-      "evidence_path": null
+      "closure_sha256": "1aac3430905a4dc85b5f962ee580eee8c79eb687de1726706066c67170c3e934",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-7222435ebe"
     },
     {
       "logical_id": "testscopeparsing-testargs-77e78240eb",
@@ -23685,8 +23895,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-77e78240eb-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-77e78240eb",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -23706,22 +23916,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-77e78240eb",
         "source_case_ids": [
           "java-antlr:testscopeparsing-testargs-parameter-20@9e6c910c146e"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-77e78240eb",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "b90f3e830120f2f1a390f5cc3b930ade1bce1d762d899a571775ded20be3e230",
-      "evidence_path": null
+      "closure_sha256": "54744ec95f2e6a6aefe10dfa936a12e7ff32c76209f3a2cf2dcbc961ce83f7ca",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-77e78240eb"
     },
     {
       "logical_id": "testscopeparsing-testargs-9c7c85eb88",
@@ -23732,8 +23957,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-9c7c85eb88-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-9c7c85eb88",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -23753,22 +23978,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-9c7c85eb88",
         "source_case_ids": [
           "java-antlr:testscopeparsing-testargs-parameter-6@89844127c6fa"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-9c7c85eb88",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "838181f850695ae909b1e502822967f9e36bf4d188e959c073043a1a38f9e176",
-      "evidence_path": null
+      "closure_sha256": "653a67c23eadf22f8f588fb631ad5515beda3901f97fd75465236f09c89a9c63",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-9c7c85eb88"
     },
     {
       "logical_id": "testscopeparsing-testargs-a522f03546",
@@ -23779,8 +24019,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-a522f03546-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-a522f03546",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -23800,22 +24040,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-a522f03546",
         "source_case_ids": [
           "java-antlr:testscopeparsing-testargs-parameter-5@b23a92f9a177"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-a522f03546",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "59b8b0d956eb101a76031dfcd7a52852feafde5f7c179fbe9919a10dbf79b336",
-      "evidence_path": null
+      "closure_sha256": "2ef6daf97ff85a02c4aa4b816a1b6b5af13bd0d57666783d93802ace806d8a64",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-a522f03546"
     },
     {
       "logical_id": "testscopeparsing-testargs-b2aa2a4304",
@@ -23826,8 +24081,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-b2aa2a4304-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-b2aa2a4304",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -23847,22 +24102,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-b2aa2a4304",
         "source_case_ids": [
           "java-antlr:testscopeparsing-testargs-parameter-4@9609a4afa440"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-b2aa2a4304",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "69a6a5ac28e92cad32a6fdd9afd897ee839b355f462159cbd976695642923179",
-      "evidence_path": null
+      "closure_sha256": "82d678c7d5f69cb32e2020026a2fa8b3fe9c98c7420223d58cee06848cb8f022",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-b2aa2a4304"
     },
     {
       "logical_id": "testscopeparsing-testargs-b3339e9592",
@@ -23873,8 +24143,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-b3339e9592-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-b3339e9592",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -23894,22 +24164,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-b3339e9592",
         "source_case_ids": [
           "java-antlr:testscopeparsing-testargs-parameter-22@159a1ef7f508"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-b3339e9592",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "5ba8da9bd7205d3e35a869b353e72bcb8f5bdfb525696c19cde1b0e7faf78b7a",
-      "evidence_path": null
+      "closure_sha256": "0519fe0fe362f2d23d84826b9745527475ddadf7a7a581460f909f6500e3f319",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-b3339e9592"
     },
     {
       "logical_id": "testscopeparsing-testargs-ba52cda3db",
@@ -23920,8 +24205,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-ba52cda3db-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-ba52cda3db",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -23941,22 +24226,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-ba52cda3db",
         "source_case_ids": [
           "java-antlr:testscopeparsing-testargs-parameter-12@51dad6bf9e66"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-ba52cda3db",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "8d656a21180268ae54ba5ee10b60cd5aa1e36e9bc0e9b825d7fce4c6c3a9b6d2",
-      "evidence_path": null
+      "closure_sha256": "7f678312c22ef9adac51b8af579a39489d3cc520563f4cffa993e01f53cf0a74",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-ba52cda3db"
     },
     {
       "logical_id": "testscopeparsing-testargs-c109edb044",
@@ -23967,8 +24267,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-c109edb044-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-c109edb044",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -23988,22 +24288,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-c109edb044",
         "source_case_ids": [
           "java-antlr:testscopeparsing-testargs-parameter-10@9bfe188b7daa"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-c109edb044",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "f3089d8799501330183df7f3d6194df9fa2768d7167c167a5528841bf8a6e641",
-      "evidence_path": null
+      "closure_sha256": "bfbbce8becc6a4e1889f9154a9564cfbc957499b4ba331b22fff989fe12babcc",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-c109edb044"
     },
     {
       "logical_id": "testscopeparsing-testargs-c4f95b1e36",
@@ -24014,8 +24329,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-c4f95b1e36-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-c4f95b1e36",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -24035,22 +24350,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-c4f95b1e36",
         "source_case_ids": [
           "java-antlr:testscopeparsing-testargs-parameter-16@2bda2a9169d2"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-c4f95b1e36",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "72ec15ce15207ae97b37e8d9d6018dfcc1c91b514eabb24f059d4ef3d05b101a",
-      "evidence_path": null
+      "closure_sha256": "44b286f87825fa23b88da553dc84360888f7d5698110ffbba86fa0bb19f71d55",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-c4f95b1e36"
     },
     {
       "logical_id": "testscopeparsing-testargs-d5dee69633",
@@ -24061,8 +24391,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-d5dee69633-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-d5dee69633",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -24082,22 +24412,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-d5dee69633",
         "source_case_ids": [
           "java-antlr:testscopeparsing-testargs-parameter-1@01be75631ab4"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-d5dee69633",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "42dee041b7be9d331e569abed1c6a1cb43537ba14310bf3a8d468d00f2bd8446",
-      "evidence_path": null
+      "closure_sha256": "cd4293bb148f7aaa7fc61eaa595a3aef524b5b0ad7a9f3de05358bb3818fb7cc",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-d5dee69633"
     },
     {
       "logical_id": "testscopeparsing-testargs-d736e3f493",
@@ -24108,8 +24453,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-d736e3f493-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-d736e3f493",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -24129,22 +24474,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-d736e3f493",
         "source_case_ids": [
           "java-antlr:testscopeparsing-testargs-parameter-24@8b0c231df062"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-d736e3f493",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "02eee120db50aca55a4e59e97d46e20be2cfde026655e2f2111be4c38ecd56b7",
-      "evidence_path": null
+      "closure_sha256": "26429f4548412e9c09b0698d588c877fb9c49f6e62c99f239fb7a0ecfdf2cf03",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-d736e3f493"
     },
     {
       "logical_id": "testscopeparsing-testargs-fc86188cca",
@@ -24155,8 +24515,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-fc86188cca-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-fc86188cca",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -24176,22 +24536,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-fc86188cca",
         "source_case_ids": [
           "java-antlr:testscopeparsing-testargs-parameter-9@aa2fd21ed3dd"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-fc86188cca",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "f798ffc96be58ae057157b2e65ed9c051e11ac36adbe88cd455a55c39064cf1a",
-      "evidence_path": null
+      "closure_sha256": "156875e2c20eb7531c5aefdec3c9c6d31332600605f3162c1b82acf5513d8679",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-fc86188cca"
     },
     {
       "logical_id": "testscopeparsing-testargs-input-a-array-3-of-int-output-a-array-3-of-int-2fc69084b2",
@@ -24202,8 +24577,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-input-a-array-3-of-int-output-a-array-3-of-int-2fc69084b2-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-a-array-3-of-int-output-a-array-3-of-int-2fc69084b2",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "independent-generated-oracle",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -24223,22 +24598,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs: { input: 'a: array[3] of int', output: 'a:array[3] of int' } behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'a: array[3] of int', output: 'a:array[3] of int' }",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-input-a-array-3-of-int-output-a-array-3-of-int-2fc69084b2",
         "source_case_ids": [
           "antlr-ng:testscopeparsing-testargs-input-a-array-3-of-int-output-a-array-3-of-int@2062f25faa38"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-a-array-3-of-int-output-a-array-3-of-int-2fc69084b2",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs: { input: 'a: array[3] of int', output: 'a:array[3] of int' } behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'a: array[3] of int', output: 'a:array[3] of int' }",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "83b60a29d5bb291f495b60b309208070a035e460e94e8527d7ceb2d4502cb17d",
-      "evidence_path": null
+      "closure_sha256": "3f33b2b397ffd6eed59eb2a548a55c7ea296ca229b4b9e9043d8c35d9fc2b98c",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-a-array-3-of-int-output-a-array-3-of-int-2fc69084b2"
     },
     {
       "logical_id": "testscopeparsing-testargs-input-a-t-tfunc-array-3-of-int-output-a-func-array-3-of-int-c93f399e1a",
@@ -24249,8 +24639,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-input-a-t-tfunc-array-3-of-int-output-a-func-array-3-of-int-c93f399e1a-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-a-t-tfunc-array-3-of-int-output-a-func-array-3-of-int-c93f399e1a",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "independent-generated-oracle",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -24270,22 +24660,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs: { input: 'a \\t:\\tfunc(array[3] of int)', output: 'a:func(array[3] of int)' } behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'a \\t:\\tfunc(array[3] of int)', output: 'a:func(array[3] of int)' }",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-input-a-t-tfunc-array-3-of-int-output-a-func-array-3-of-int-c93f399e1a",
         "source_case_ids": [
           "antlr-ng:testscopeparsing-testargs-input-a-t-tfunc-array-3-of-int-output-a-func-a@0218295f3861"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-a-t-tfunc-array-3-of-int-output-a-func-array-3-of-int-c93f399e1a",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs: { input: 'a \\t:\\tfunc(array[3] of int)', output: 'a:func(array[3] of int)' } behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'a \\t:\\tfunc(array[3] of int)', output: 'a:func(array[3] of int)' }",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "8485fe9660dde3faefc07020c2179d2aa88dfffd832174b075cba59aedf85724",
-      "evidence_path": null
+      "closure_sha256": "b304d8b8f4ba4f650b770b804b04746d1d3d706d9e388c24acaf330023cca13d",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-a-t-tfunc-array-3-of-int-output-a-func-array-3-of-int-c93f399e1a"
     },
     {
       "logical_id": "testscopeparsing-testargs-input-char-3-foo-1-2-3-output-foo-char-3-1-2-3-a118d4105d",
@@ -24296,8 +24701,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-input-char-3-foo-1-2-3-output-foo-char-3-1-2-3-a118d4105d-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-char-3-foo-1-2-3-output-foo-char-3-1-2-3-a118d4105d",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "independent-generated-oracle",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -24317,22 +24722,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs: { input: 'char *[3] foo = {1,2,3}', output: 'foo:char *[3]={1,2,3}' } behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'char *[3] foo = {1,2,3}', output: 'foo:char *[3]={1,2,3}' }",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-input-char-3-foo-1-2-3-output-foo-char-3-1-2-3-a118d4105d",
         "source_case_ids": [
           "antlr-ng:testscopeparsing-testargs-input-char-3-foo-1-2-3-output-foo-char-3-1-2-3@3bb73b980e28"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-char-3-foo-1-2-3-output-foo-char-3-1-2-3-a118d4105d",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs: { input: 'char *[3] foo = {1,2,3}', output: 'foo:char *[3]={1,2,3}' } behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'char *[3] foo = {1,2,3}', output: 'foo:char *[3]={1,2,3}' }",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "a4a30fa185f98004893cfc259b42cad6bdeef8c8668550991338751938e25676",
-      "evidence_path": null
+      "closure_sha256": "8c2b7a2a69d1f02de19735466b27a0d29a50f0299b5d9433f3787b2fa9739241",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-char-3-foo-1-2-3-output-foo-char-3-1-2-3-a118d4105d"
     },
     {
       "logical_id": "testscopeparsing-testargs-input-float64-x-3-output-x-float64-3-7ba88dbe90",
@@ -24343,8 +24763,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-input-float64-x-3-output-x-float64-3-7ba88dbe90-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-float64-x-3-output-x-float64-3-7ba88dbe90",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "independent-generated-oracle",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -24364,22 +24784,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs: { input: 'float64 x = 3', output: 'x:float64=3' } behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'float64 x = 3', output: 'x:float64=3' }",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-input-float64-x-3-output-x-float64-3-7ba88dbe90",
         "source_case_ids": [
           "antlr-ng:testscopeparsing-testargs-input-float64-x-3-output-x-float64-3@9fd645d30033"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-float64-x-3-output-x-float64-3-7ba88dbe90",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs: { input: 'float64 x = 3', output: 'x:float64=3' } behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'float64 x = 3', output: 'x:float64=3' }",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "a0cb0a601a901cb325a84c8c6859322ea4153a5b36aabafad72e41d3cc8c701e",
-      "evidence_path": null
+      "closure_sha256": "55753f420ab17ec1184be256f4b367cba8d8b9b35473b689f7c9e2f639441b78",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-float64-x-3-output-x-float64-3-7ba88dbe90"
     },
     {
       "logical_id": "testscopeparsing-testargs-input-i-j-output-i-j-3c35b10605",
@@ -24390,8 +24825,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-input-i-j-output-i-j-3c35b10605-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-i-j-output-i-j-3c35b10605",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "independent-generated-oracle",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -24411,22 +24846,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs: { input: 'i,j', output: 'i, j' } behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'i,j', output: 'i, j' }",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-input-i-j-output-i-j-3c35b10605",
         "source_case_ids": [
           "antlr-ng:testscopeparsing-testargs-input-i-j-output-i-j@a14899236f99"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-i-j-output-i-j-3c35b10605",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs: { input: 'i,j', output: 'i, j' } behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'i,j', output: 'i, j' }",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "ea06cb2948b3446c9d15379fd933ddd0504cce3f4f4d8fa4542b056b04b6b0fa",
-      "evidence_path": null
+      "closure_sha256": "7e803cdf56ca2a349a09e43503432aed97cacd5468dbc06c299a7e1e4677c8c5",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-i-j-output-i-j-3c35b10605"
     },
     {
       "logical_id": "testscopeparsing-testargs-input-i-output-i-964c10d655",
@@ -24437,8 +24887,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-input-i-output-i-964c10d655-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-i-output-i-964c10d655",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "independent-generated-oracle",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -24458,22 +24908,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs: { input: 'i', output: 'i' } behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'i', output: 'i' }",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-input-i-output-i-964c10d655",
         "source_case_ids": [
           "antlr-ng:testscopeparsing-testargs-input-i-output-i@94fdeafd8c56"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-i-output-i-964c10d655",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs: { input: 'i', output: 'i' } behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'i', output: 'i' }",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "f9c8529951fca9770ffe72af4dc2433a1dac5d2d77ca0321336121a98ccd7806",
-      "evidence_path": null
+      "closure_sha256": "d9bf9fe328c14877a8e1462ed664b6a522b993a52e0ae965ae4262d900b403af",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-i-output-i-964c10d655"
     },
     {
       "logical_id": "testscopeparsing-testargs-input-i-t-j-k-output-i-j-k-247654d359",
@@ -24484,8 +24949,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-input-i-t-j-k-output-i-j-k-247654d359-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-i-t-j-k-output-i-j-k-247654d359",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "independent-generated-oracle",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -24505,22 +24970,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs: { input: 'i\\t,j, k', output: 'i, j, k' } behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'i\\t,j, k', output: 'i, j, k' }",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-input-i-t-j-k-output-i-j-k-247654d359",
         "source_case_ids": [
           "antlr-ng:testscopeparsing-testargs-input-i-t-j-k-output-i-j-k@25ff23a8cff1"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-i-t-j-k-output-i-j-k-247654d359",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs: { input: 'i\\t,j, k', output: 'i, j, k' } behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'i\\t,j, k', output: 'i, j, k' }",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "04e968f33277ab25df7856597946e02649f31bb06a4f0a511ec70310c8faeff3",
-      "evidence_path": null
+      "closure_sha256": "c83a0531ca9944b76a92677b3ea680f5a1b20c14ebe50e654b17676320f97f38",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-i-t-j-k-output-i-j-k-247654d359"
     },
     {
       "logical_id": "testscopeparsing-testargs-input-int-i-34-a-3-int-j-new-int-34-output-i-int-34-a-3-j-int--4b99eb3ff1",
@@ -24531,8 +25011,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-input-int-i-34-a-3-int-j-new-int-34-output-i-int-34-a-3-j-int--4b99eb3ff1-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-int-i-34-a-3-int-j-new-int-34-output-i-int-34-a-3-j-int--4b99eb3ff1",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "independent-generated-oracle",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -24552,22 +25032,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs: { input: 'int i = 34+a[3], int j[] = new int[34]', output: 'i:int=34+a[3], j:int []=new int[34]' } behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'int i = 34+a[3], int j[] = new int[34]', output: 'i:int=34+a[3], j:int []=new int[34]' }",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-input-int-i-34-a-3-int-j-new-int-34-output-i-int-34-a-3-j-int--4b99eb3ff1",
         "source_case_ids": [
           "antlr-ng:testscopeparsing-testargs-input-int-i-34-a-3-int-j-new-int-34-output-i-i@750b6e12221f"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-int-i-34-a-3-int-j-new-int-34-output-i-int-34-a-3-j-int--4b99eb3ff1",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs: { input: 'int i = 34+a[3], int j[] = new int[34]', output: 'i:int=34+a[3], j:int []=new int[34]' } behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'int i = 34+a[3], int j[] = new int[34]', output: 'i:int=34+a[3], j:int []=new int[34]' }",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "20b0f3e90918eb2a7e96c85177bdd19ff19561b3c55061a59fa0698e731a0eb9",
-      "evidence_path": null
+      "closure_sha256": "c8e7850b996459d1792a8aee7992c8961cc7d53dee46603eba6b40f320237acc",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-int-i-34-a-3-int-j-new-int-34-output-i-int-34-a-3-j-int--4b99eb3ff1"
     },
     {
       "logical_id": "testscopeparsing-testargs-input-int-i-int-j-output-i-int-j-int-cec3004b79",
@@ -24578,8 +25073,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-input-int-i-int-j-output-i-int-j-int-cec3004b79-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-int-i-int-j-output-i-int-j-int-cec3004b79",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "independent-generated-oracle",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -24599,22 +25094,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs: { input: 'int[] i, int j[]', output: 'i:int[], j:int []' } behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'int[] i, int j[]', output: 'i:int[], j:int []' }",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-input-int-i-int-j-output-i-int-j-int-cec3004b79",
         "source_case_ids": [
           "antlr-ng:testscopeparsing-testargs-input-int-i-int-j-output-i-int-j-int@b02531102488"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-int-i-int-j-output-i-int-j-int-cec3004b79",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs: { input: 'int[] i, int j[]', output: 'i:int[], j:int []' } behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'int[] i, int j[]', output: 'i:int[], j:int []' }",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "cd458c34ec8d955d31aa8af6fd5b3e55d4a1c2aeaf4cd6e7b0266ada676a5d44",
-      "evidence_path": null
+      "closure_sha256": "ae175569d7316caade15bbaf128ca99a2955290e7ca634cfe116053dd5b84b1f",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-int-i-int-j-output-i-int-j-int-cec3004b79"
     },
     {
       "logical_id": "testscopeparsing-testargs-input-int-i-output-i-int-98cc0887cd",
@@ -24625,8 +25135,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-input-int-i-output-i-int-98cc0887cd-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-int-i-output-i-int-98cc0887cd",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "independent-generated-oracle",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -24646,22 +25156,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs: { input: 'int i', output: 'i:int' } behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'int i', output: 'i:int' }",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-input-int-i-output-i-int-98cc0887cd",
         "source_case_ids": [
           "antlr-ng:testscopeparsing-testargs-input-int-i-output-i-int@372b0f7538a5"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-int-i-output-i-int-98cc0887cd",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs: { input: 'int i', output: 'i:int' } behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'int i', output: 'i:int' }",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "fe714149c8fa649b97c2882c8e64babe8ea4d845a6b789f9b4fe34b5cba1a7f7",
-      "evidence_path": null
+      "closure_sha256": "bb2ad58c07b7b2966f0a2ded71236eb4131c540340f2e49181d0c69ba83ac07b",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-int-i-output-i-int-98cc0887cd"
     },
     {
       "logical_id": "testscopeparsing-testargs-input-map-a-b-i-int-j-output-i-map-a-b-j-int-1c362c9e0d",
@@ -24672,8 +25197,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-input-map-a-b-i-int-j-output-i-map-a-b-j-int-1c362c9e0d-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-map-a-b-i-int-j-output-i-map-a-b-j-int-1c362c9e0d",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "independent-generated-oracle",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -24693,22 +25218,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs: { input: 'Map<A,B>[] i, int j[]', output: 'i:Map<A,B>[], j:int []' } behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'Map<A,B>[] i, int j[]', output: 'i:Map<A,B>[], j:int []' }",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-input-map-a-b-i-int-j-output-i-map-a-b-j-int-1c362c9e0d",
         "source_case_ids": [
           "antlr-ng:testscopeparsing-testargs-input-map-a-b-i-int-j-output-i-map-a-b-j-int@7450d7f201d9"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-map-a-b-i-int-j-output-i-map-a-b-j-int-1c362c9e0d",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs: { input: 'Map<A,B>[] i, int j[]', output: 'i:Map<A,B>[], j:int []' } behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'Map<A,B>[] i, int j[]', output: 'i:Map<A,B>[], j:int []' }",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "27fe5c0699e41a66509d2b18a3ef8fa9d39f6f7d15152ee8e1008c102679644f",
-      "evidence_path": null
+      "closure_sha256": "c9bb283cffcb625540a0278645799b2fd16d9d23101b6282f263739116d5f2a9",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-map-a-b-i-int-j-output-i-map-a-b-j-int-1c362c9e0d"
     },
     {
       "logical_id": "testscopeparsing-testargs-input-map-a-list-b-i-output-i-map-a-list-b-0c3d427323",
@@ -24719,8 +25259,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-input-map-a-list-b-i-output-i-map-a-list-b-0c3d427323-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-map-a-list-b-i-output-i-map-a-list-b-0c3d427323",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "independent-generated-oracle",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -24740,22 +25280,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs: { input: 'Map<A,List<B>>[] i', output: 'i:Map<A,List<B>>[]' } behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'Map<A,List<B>>[] i', output: 'i:Map<A,List<B>>[]' }",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-input-map-a-list-b-i-output-i-map-a-list-b-0c3d427323",
         "source_case_ids": [
           "antlr-ng:testscopeparsing-testargs-input-map-a-list-b-i-output-i-map-a-list-b@7387546df385"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-map-a-list-b-i-output-i-map-a-list-b-0c3d427323",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs: { input: 'Map<A,List<B>>[] i', output: 'i:Map<A,List<B>>[]' } behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'Map<A,List<B>>[] i', output: 'i:Map<A,List<B>>[]' }",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "0dd4b7fd45c645e11320d2dc552569e8854abce8a09370fa532fb199904d818a",
-      "evidence_path": null
+      "closure_sha256": "137dbc7b68395935386f88ed3a1a3cee99910f90a0cbec8f62bbc5b33de04c09",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-map-a-list-b-i-output-i-map-a-list-b-0c3d427323"
     },
     {
       "logical_id": "testscopeparsing-testargs-input-map-string-int-x-output-x-map-string-int-dd61910cbd",
@@ -24766,8 +25321,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-input-map-string-int-x-output-x-map-string-int-dd61910cbd-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-map-string-int-x-output-x-map-string-int-dd61910cbd",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "independent-generated-oracle",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -24787,22 +25342,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs: { input: 'map[string]int x', output: 'x:map[string]int' } behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'map[string]int x', output: 'x:map[string]int' }",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-input-map-string-int-x-output-x-map-string-int-dd61910cbd",
         "source_case_ids": [
           "antlr-ng:testscopeparsing-testargs-input-map-string-int-x-output-x-map-string-int@a3804757399d"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-map-string-int-x-output-x-map-string-int-dd61910cbd",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs: { input: 'map[string]int x', output: 'x:map[string]int' } behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'map[string]int x', output: 'x:map[string]int' }",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "8c83e54e58032d3824a39620856923af652ba5576b8a688843f7986c5ade9dd5",
-      "evidence_path": null
+      "closure_sha256": "ef497fc72b8500124443a6c3c0523fca706d896056cd7a28fec8c08a33efb036",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-map-string-int-x-output-x-map-string-int-dd61910cbd"
     },
     {
       "logical_id": "testscopeparsing-testargs-input-output-758fe8be8c",
@@ -24814,8 +25384,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-input-output-758fe8be8c-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-output-758fe8be8c",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "independent-generated-oracle",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -24836,8 +25406,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs: { input: ' ', output: '' } behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: ' ', output: '' }",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-input-output-758fe8be8c",
         "source_case_ids": [
@@ -24845,14 +25427,17 @@
           "antlr-ng:testscopeparsing-testargs-input-output@65fa7883e4a6"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-output-758fe8be8c",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs: { input: ' ', output: '' } behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: ' ', output: '' }",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "5373bf204a11314032d14c759f06aa65b3f216668bdc85ff7a698246022f37c8",
-      "evidence_path": null
+      "closure_sha256": "2cc2643de939a7222cc79f9a4f5b41f721e6c514c644188a0c6b95ded7a03797",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-output-758fe8be8c"
     },
     {
       "logical_id": "testscopeparsing-testargs-input-p-pointer-to-int-output-p-pointer-to-int-61212ee5f3",
@@ -24863,8 +25448,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-input-p-pointer-to-int-output-p-pointer-to-int-61212ee5f3-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-p-pointer-to-int-output-p-pointer-to-int-61212ee5f3",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "independent-generated-oracle",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -24884,22 +25469,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs: { input: 'p:pointer to int', output: 'p:pointer to int' } behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'p:pointer to int', output: 'p:pointer to int' }",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-input-p-pointer-to-int-output-p-pointer-to-int-61212ee5f3",
         "source_case_ids": [
           "antlr-ng:testscopeparsing-testargs-input-p-pointer-to-int-output-p-pointer-to-int@a96913248e6c"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-p-pointer-to-int-output-p-pointer-to-int-61212ee5f3",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs: { input: 'p:pointer to int', output: 'p:pointer to int' } behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'p:pointer to int', output: 'p:pointer to int' }",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "296a7ea5d7d06fd46e419562a349288d38778200ff6bf8a663e346ab64cf93a1",
-      "evidence_path": null
+      "closure_sha256": "76217216c3adeaadaedcec643a4e9c08e0daa3aa1f0fe976c838c8290c796abc",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-p-pointer-to-int-output-p-pointer-to-int-61212ee5f3"
     },
     {
       "logical_id": "testscopeparsing-testargs-input-r-rectangle-rectangle-fromlength-6-frombreadth-12-output-df688ce09b",
@@ -24910,8 +25510,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-input-r-rectangle-rectangle-fromlength-6-frombreadth-12-output-df688ce09b-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-r-rectangle-rectangle-fromlength-6-frombreadth-12-output-df688ce09b",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "independent-generated-oracle",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -24931,22 +25531,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs: { input: 'r:Rectangle=Rectangle(fromLength: 6, fromBreadth: 12)', output: 'r:Rectangle=Rectangle(fromLength: 6, fromBreadth: 12)' } behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'r:Rectangle=Rectangle(fromLength: 6, fromBreadth: 12)', output: 'r:Rectangle=Rectangle(fromLength: 6, fromBreadth: 12)' }",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-input-r-rectangle-rectangle-fromlength-6-frombreadth-12-output-df688ce09b",
         "source_case_ids": [
           "antlr-ng:testscopeparsing-testargs-input-r-rectangle-rectangle-fromlength-6-fromb@00bac0b1bfc3"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-r-rectangle-rectangle-fromlength-6-frombreadth-12-output-df688ce09b",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs: { input: 'r:Rectangle=Rectangle(fromLength: 6, fromBreadth: 12)', output: 'r:Rectangle=Rectangle(fromLength: 6, fromBreadth: 12)' } behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'r:Rectangle=Rectangle(fromLength: 6, fromBreadth: 12)', output: 'r:Rectangle=Rectangle(fromLength: 6, fromBreadth: 12)' }",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "779542af770631175868f7601d24f357746ef1cc2df0ccbbab2054ae444b3d7b",
-      "evidence_path": null
+      "closure_sha256": "748e94cafa025b693e1e0ae7600bfc47709e6567705ba868bec88edf4c25dc4e",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-r-rectangle-rectangle-fromlength-6-frombreadth-12-output-df688ce09b"
     },
     {
       "logical_id": "testscopeparsing-testargs-input-std-vector-std-string-x-output-x-std-vector-std-string-c3e45db169",
@@ -24957,8 +25572,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-input-std-vector-std-string-x-output-x-std-vector-std-string-c3e45db169-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-std-vector-std-string-x-output-x-std-vector-std-string-c3e45db169",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "independent-generated-oracle",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -24978,22 +25593,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs: { input: 'std::vector<std::string> x', output: 'x:std::vector<std::string>' } behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'std::vector<std::string> x', output: 'x:std::vector<std::string>' }",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-input-std-vector-std-string-x-output-x-std-vector-std-string-c3e45db169",
         "source_case_ids": [
           "antlr-ng:testscopeparsing-testargs-input-std-vector-std-string-x-output-x-std-vec@d391137b1408"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-std-vector-std-string-x-output-x-std-vector-std-string-c3e45db169",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs: { input: 'std::vector<std::string> x', output: 'x:std::vector<std::string>' } behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'std::vector<std::string> x', output: 'x:std::vector<std::string>' }",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "28b8674d5d6e93ad1de19ce8376d4780c558b22bdb3e2dfce2246ecbea82442a",
-      "evidence_path": null
+      "closure_sha256": "e97e5275b4031f1b3b151cc441e0b1cc9be2e0751e9e95dced28335ccbaa6441",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-std-vector-std-string-x-output-x-std-vector-std-string-c3e45db169"
     },
     {
       "logical_id": "testscopeparsing-testargs-input-string-headers-output-headers-string-03de5b601c",
@@ -25004,8 +25634,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-input-string-headers-output-headers-string-03de5b601c-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-string-headers-output-headers-string-03de5b601c",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "independent-generated-oracle",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -25025,22 +25655,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs: { input: 'String[] headers', output: 'headers:String[]' } behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'String[] headers', output: 'headers:String[]' }",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-input-string-headers-output-headers-string-03de5b601c",
         "source_case_ids": [
           "antlr-ng:testscopeparsing-testargs-input-string-headers-output-headers-string@35364f0e9335"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-string-headers-output-headers-string-03de5b601c",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs: { input: 'String[] headers', output: 'headers:String[]' } behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'String[] headers', output: 'headers:String[]' }",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "df0dfb833d310b0fc537136a4d5e6488c825ea563b04714166cf153301672d2c",
-      "evidence_path": null
+      "closure_sha256": "35ee9c5b944a6671833a6329a3cb6ecd5ae53df8c9c9e834a97c8fac00f5b38a",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-string-headers-output-headers-string-03de5b601c"
     },
     {
       "logical_id": "testscopeparsing-testargs-input-x-int-3-output-x-int-3-3ee7939f52",
@@ -25051,8 +25696,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-input-x-int-3-output-x-int-3-3ee7939f52-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-x-int-3-output-x-int-3-3ee7939f52",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "independent-generated-oracle",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -25072,22 +25717,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs: { input: 'x:int=3', output: 'x:int=3' } behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'x:int=3', output: 'x:int=3' }",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-input-x-int-3-output-x-int-3-3ee7939f52",
         "source_case_ids": [
           "antlr-ng:testscopeparsing-testargs-input-x-int-3-output-x-int-3@59beca34dafb"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-x-int-3-output-x-int-3-3ee7939f52",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs: { input: 'x:int=3', output: 'x:int=3' } behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'x:int=3', output: 'x:int=3' }",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "5405df9e6b5dbda16884f74047c685460350383ab052d6973964df9a9fda94ac",
-      "evidence_path": null
+      "closure_sha256": "c5692b1542ab6908da3763711b1133a5113a2a734ef839133099b817413b35f5",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-x-int-3-output-x-int-3-3ee7939f52"
     },
     {
       "logical_id": "testscopeparsing-testargs-input-x-int-output-x-int-db8df1c628",
@@ -25100,8 +25760,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-input-x-int-output-x-int-db8df1c628-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-x-int-output-x-int-db8df1c628",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "independent-generated-oracle",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -25123,8 +25783,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs: { input: 'x: int', output: 'x:int' } behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'x: int', output: 'x:int' }",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-input-x-int-output-x-int-db8df1c628",
         "source_case_ids": [
@@ -25133,14 +25805,17 @@
           "antlr-ng:testscopeparsing-testargs-input-x-int-output-x-int@8de23da96e29"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-x-int-output-x-int-db8df1c628",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs: { input: 'x: int', output: 'x:int' } behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'x: int', output: 'x:int' }",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "52ec79253a0117548c0869db22adf5ece4a6bbda5d8d07a6d5f3e1964e36ab8b",
-      "evidence_path": null
+      "closure_sha256": "f08f7bd09a77f392da266209bcdad8f42e3433e8eac3ded5da4337bd9cc65559",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-x-int-output-x-int-db8df1c628"
     },
     {
       "logical_id": "testscopeparsing-testargs-input-x-int-y-float-output-x-int-y-float-093499083e",
@@ -25151,8 +25826,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-input-x-int-y-float-output-x-int-y-float-093499083e-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-x-int-y-float-output-x-int-y-float-093499083e",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "independent-generated-oracle",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -25172,22 +25847,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs: { input: 'x:int, y:float', output: 'x:int, y:float' } behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'x:int, y:float', output: 'x:int, y:float' }",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-input-x-int-y-float-output-x-int-y-float-093499083e",
         "source_case_ids": [
           "antlr-ng:testscopeparsing-testargs-input-x-int-y-float-output-x-int-y-float@233c4f6e3463"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-x-int-y-float-output-x-int-y-float-093499083e",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs: { input: 'x:int, y:float', output: 'x:int, y:float' } behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'x:int, y:float', output: 'x:int, y:float' }",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "2d7bed4820cc986579ab072988379fb26e917c6b885c415c6fe270f18c55e620",
-      "evidence_path": null
+      "closure_sha256": "6d6e46b0b4f5f9e8991dc8c2cba0a82c9bcbaa1ea6215b3e5115dc7bf8ac29eb",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-x-int-y-float-output-x-int-y-float-093499083e"
     },
     {
       "logical_id": "testscopeparsing-testargs-input-x-t-f-func-array-3-of-int-y-int-output-x-t-f-func-array--f9580e541e",
@@ -25198,8 +25888,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testscopeparsing-testargs-input-x-t-f-func-array-3-of-int-y-int-output-x-t-f-func-array--f9580e541e-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-x-t-f-func-array-3-of-int-y-int-output-x-t-f-func-array--f9580e541e",
+      "tdd_state": "done",
+      "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
       "primary_test_source": {
         "implementation": "independent-generated-oracle",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -25219,22 +25909,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestScopeParsing.testArgs: { input: 'x:T?, f:func(array[3] of int), y:int', output: 'x:T?, f:func(array[3] of int), y:int' } behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope",
+      "observable_equivalence": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'x:T?, f:func(array[3] of int), y:int', output: 'x:T?, f:func(array[3] of int), y:int' }",
+      "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+      "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+      },
+      "primary_implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testscopeparsing-testargs-input-x-t-f-func-array-3-of-int-y-int-output-x-t-f-func-array--f9580e541e",
         "source_case_ids": [
           "antlr-ng:testscopeparsing-testargs-input-x-t-f-func-array-3-of-int-y-int-output-x@174ce4ed1ccc"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testscopeparsing-testargs-input-x-t-f-func-array-3-of-int-y-int-output-x-t-f-func-array--f9580e541e",
+        "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestScopeParsing.testArgs: { input: 'x:T?, f:func(array[3] of int), y:int', output: 'x:T?, f:func(array[3] of int), y:int' } behavior"
+        "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'x:T?, f:func(array[3] of int), y:int', output: 'x:T?, f:func(array[3] of int), y:int' }",
+        "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+        "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
       },
-      "closure_sha256": "d4987792bbdfcde48762b127491bc8ef0cf8a404e1e0b499492773822880af1a",
-      "evidence_path": null
+      "closure_sha256": "0299a64aa59f770566a142b2578d0d9b4974cd674a4576204ed0a691390e87ff",
+      "evidence_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-x-t-f-func-array-3-of-int-y-int-output-x-t-f-func-array--f9580e541e"
     },
     {
       "logical_id": "testsymbolissues-testa-2e644f226d",

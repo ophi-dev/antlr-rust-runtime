@@ -27,6 +27,9 @@ import {
     PHASE_B_BASE_COMMIT,
     PHASE_B_IMPLEMENTATION_COMMIT,
     SCAFFOLD_COMMIT,
+    SCOPE_PARSING_BASE_COMMIT,
+    SCOPE_PARSING_IMPLEMENTATION_COMMIT,
+    SCOPE_PARSING_TEST_COMMIT,
     TEST_COMMIT,
     TOKEN_POSITION_BASE_COMMIT,
     TOKEN_POSITION_IMPLEMENTATION_COMMIT,
@@ -265,6 +268,9 @@ for (const [logicalId, record] of records) {
         const vocabulary = logicalId.startsWith(
             "testvocabulary-",
         );
+        const scopeParsing = logicalId.startsWith(
+            "testscopeparsing-",
+        );
         if (resolution === "verified-covered-existing") {
             if (atnSerialization) {
                 expect(
@@ -453,6 +459,23 @@ for (const [logicalId, record] of records) {
                                 ? EMPTY_VOCABULARY_TEST_COMMIT
                                 : VOCABULARY_TEST_COMMIT),
                     `${logicalId} vocabulary recorded ancestry differs`,
+                );
+            } else if (scopeParsing) {
+                expect(
+                    manifest.commits.scaffold ===
+                            SCOPE_PARSING_BASE_COMMIT &&
+                        manifest.commits.primary_test ===
+                            SCOPE_PARSING_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            SCOPE_PARSING_IMPLEMENTATION_COMMIT,
+                    `${logicalId} scope parsing evidence commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            SCOPE_PARSING_BASE_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            SCOPE_PARSING_TEST_COMMIT,
+                    `${logicalId} scope parsing recorded ancestry differs`,
                 );
             } else {
                 expect(

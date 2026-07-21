@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testscopeparsing-testargs-2d7d8fa1d9",
+  "revision_id": "testscopeparsing-testargs-2d7d8fa1d9-r1",
+  "cells": [
+    {
+      "test_port": "primary",
+      "test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+      "implementation_port": "primary-antlr-ng",
+      "implementation_commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+      "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+      "result": "green: 1 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the primary implementation passed the locked primary tests"
+}

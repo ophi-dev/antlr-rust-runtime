@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testscopeparsing-testargs-b3339e9592",
+  "active_revision_id": "testscopeparsing-testargs-b3339e9592-r1",
+  "revisions": [
+    {
+      "revision_id": "testscopeparsing-testargs-b3339e9592-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-b3339e9592/revisions/testscopeparsing-testargs-b3339e9592-r1/manifest.json",
+      "closure_sha256": "0519fe0fe362f2d23d84826b9745527475ddadf7a7a581460f909f6500e3f319"
+    }
+  ]
+}

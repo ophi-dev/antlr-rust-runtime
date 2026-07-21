@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testscopeparsing-testargs-input-int-i-34-a-3-int-j-new-int-34-output-i-int-34-a-3-j-int--4b99eb3ff1",
+  "active_revision_id": "testscopeparsing-testargs-input-int-i-34-a-3-int-j-new-int-34-output-i-int-34-a-3-j-int--4b99eb3ff1-r1",
+  "revisions": [
+    {
+      "revision_id": "testscopeparsing-testargs-input-int-i-34-a-3-int-j-new-int-34-output-i-int-34-a-3-j-int--4b99eb3ff1-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-int-i-34-a-3-int-j-new-int-34-output-i-int-34-a-3-j-int--4b99eb3ff1/revisions/testscopeparsing-testargs-input-int-i-34-a-3-int-j-new-int-34-output-i-int-34-a-3-j-int--4b99eb3ff1-r1/manifest.json",
+      "closure_sha256": "c8e7850b996459d1792a8aee7992c8961cc7d53dee46603eba6b40f320237acc"
+    }
+  ]
+}

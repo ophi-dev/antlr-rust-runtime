@@ -57,6 +57,12 @@ export const EMPTY_VOCABULARY_TEST_COMMIT =
     "d2211267b0573bf147d1baa57af8f7c13ce2d245";
 export const EMPTY_VOCABULARY_IMPLEMENTATION_COMMIT =
     "2de0397b1db0d20cad0d59f2ea31c55b989edae2";
+export const SCOPE_PARSING_BASE_COMMIT =
+    "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2";
+export const SCOPE_PARSING_TEST_COMMIT =
+    "dfb3d07d4536f91094931dcc4884567530f78b11";
+export const SCOPE_PARSING_IMPLEMENTATION_COMMIT =
+    "9bef3f59a6e29b5319e25807a2af6702e2d387a5";
 
 export function stableStringify(value) {
     if (Array.isArray(value)) {

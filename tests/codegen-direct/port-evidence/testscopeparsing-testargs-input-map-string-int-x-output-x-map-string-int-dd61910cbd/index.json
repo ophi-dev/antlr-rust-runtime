@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testscopeparsing-testargs-input-map-string-int-x-output-x-map-string-int-dd61910cbd",
+  "active_revision_id": "testscopeparsing-testargs-input-map-string-int-x-output-x-map-string-int-dd61910cbd-r1",
+  "revisions": [
+    {
+      "revision_id": "testscopeparsing-testargs-input-map-string-int-x-output-x-map-string-int-dd61910cbd-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-map-string-int-x-output-x-map-string-int-dd61910cbd/revisions/testscopeparsing-testargs-input-map-string-int-x-output-x-map-string-int-dd61910cbd-r1/manifest.json",
+      "closure_sha256": "ef497fc72b8500124443a6c3c0523fca706d896056cd7a28fec8c08a33efb036"
+    }
+  ]
+}
