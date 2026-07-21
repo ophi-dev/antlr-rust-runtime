@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "logical_id": "testescapesequenceparsing-testparseunicodepropertyinvertedtooshort-f564de3b4e",
+  "revision_id": "testescapesequenceparsing-testparseunicodepropertyinvertedtooshort-f564de3b4e-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "resolution": "verified-covered-existing",
+  "closure": {
+    "logical_id": "testescapesequenceparsing-testparseunicodepropertyinvertedtooshort-f564de3b4e",
+    "source_case_ids": [
+      "antlr-ng:testescapesequenceparsing-testparseunicodepropertyinvertedtooshort@b8ffc14e12cb",
+      "java-antlr:testescapesequenceparsing-testparseunicodepropertyinvertedtooshort@b8ffc14e12cb"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::escape_sequence::tests::parse_unicode_property_inverted_too_short_matches_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseUnicodePropertyInvertedTooShort",
+    "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+    "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+    "resolution": "verified-covered-existing"
+  },
+  "closure_sha256": "6d6e8a6e223c0e48f8b1258692572e6bade357e758d6cd5335d9efafd7a550ad",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testescapesequenceparsing-testparseunicodepropertyinvertedtooshort@b8ffc14e12cb",
+      "path": "tests/TestEscapeSequenceParsing.spec.ts",
+      "sha256": "292d2a01f1a77cceffe714fafee14dda9a007011813a1ed1872c02929356ee92"
+    },
+    {
+      "source_case_id": "java-antlr:testescapesequenceparsing-testparseunicodepropertyinvertedtooshort@b8ffc14e12cb",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestEscapeSequenceParsing.java",
+      "sha256": "5c7c6c40f64392995b320d9290bce214e8496667792f52e0b064231bf1647c19"
+    }
+  ],
+  "commits": {
+    "scaffold": "ce366e7033cff879abe0d23cd5f896c577e42358",
+    "primary_test": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+    "primary_implementation": "ce366e7033cff879abe0d23cd5f896c577e42358"
+  },
+  "ancestry": {
+    "primary_test_parent": "ce366e7033cff879abe0d23cd5f896c577e42358",
+    "primary_implementation_parent": "17ae053923ef3d11121a1c7523335c06e6a4e657",
+    "reachability": "the case-specific invalid-input test passed against the behavior-free escape parser scaffold"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/escape_sequence.rs",
+      "marker": "#[cfg(test)]\nmod tests {",
+      "sha256": "ece072cc2218f60f9b47b7de54166339f58420fe30aa3aae129394f8438dd9a6"
+    }
+  ],
+  "verified_covered_existing": {
+    "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_property_inverted_too_short_matches_java -- --exact",
+    "commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed",
+    "covering_implementation_commit": "ce366e7033cff879abe0d23cd5f896c577e42358"
+  },
+  "green_result": {
+    "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_property_inverted_too_short_matches_java -- --exact",
+    "commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparseunicodepropertyinvertedtooshort-f564de3b4e/revisions/testescapesequenceparsing-testparseunicodepropertyinvertedtooshort-f564de3b4e-r1/oracle-results/declared-sources.json",
+      "sha256": "e7da9518e1cb09831cd7ce35a3b2090cfdac6f1faa836ec586601b233841413a"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparseunicodepropertyinvertedtooshort-f564de3b4e/revisions/testescapesequenceparsing-testparseunicodepropertyinvertedtooshort-f564de3b4e-r1/matrix-results/results.json",
+      "sha256": "25ca7e1d3bff59059ab38e4f98f5e695cedba7c084a99e112e6c741c69f40559"
+    }
+  ]
+}

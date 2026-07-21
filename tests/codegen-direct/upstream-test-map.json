@@ -16583,8 +16583,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testescapesequenceparsing-testparseempty-98a0364b12-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparseempty-98a0364b12",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::escape_sequence::tests::parse_empty_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -16605,8 +16606,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestEscapeSequenceParsing.testParseEmpty behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseEmpty",
+      "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+      "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_empty_matches_java -- --exact",
+        "commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_empty_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testescapesequenceparsing-testparseempty-98a0364b12",
         "source_case_ids": [
@@ -16614,14 +16628,18 @@
           "java-antlr:testescapesequenceparsing-testparseempty@10d38db8e336"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparseempty-98a0364b12",
+        "rust_test": "grammar::escape_sequence::tests::parse_empty_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestEscapeSequenceParsing.testParseEmpty behavior"
+        "observable": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseEmpty",
+        "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+        "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "46ac119e195ad0a6b710a6cfc990bce700cb143b5f076916dbc9524e630245ff",
-      "evidence_path": null
+      "closure_sha256": "900d260029d2905d6cbbeae3e90b9c48835c621ec28ac9e21001b8ee335ffac1",
+      "evidence_path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparseempty-98a0364b12"
     },
     {
       "logical_id": "testescapesequenceparsing-testparseinvalidescape-19043ed21e",
@@ -16633,8 +16651,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testescapesequenceparsing-testparseinvalidescape-19043ed21e-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparseinvalidescape-19043ed21e",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::escape_sequence::tests::parse_invalid_escape_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -16655,8 +16674,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestEscapeSequenceParsing.testParseInvalidEscape behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseInvalidEscape",
+      "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+      "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_invalid_escape_matches_java -- --exact",
+        "commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_invalid_escape_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testescapesequenceparsing-testparseinvalidescape-19043ed21e",
         "source_case_ids": [
@@ -16664,14 +16696,18 @@
           "java-antlr:testescapesequenceparsing-testparseinvalidescape@3b4881e25814"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparseinvalidescape-19043ed21e",
+        "rust_test": "grammar::escape_sequence::tests::parse_invalid_escape_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestEscapeSequenceParsing.testParseInvalidEscape behavior"
+        "observable": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseInvalidEscape",
+        "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+        "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "ebed87da6ce839e376b439476cfb1de35039828018d94f9fb59dfc2dd4fba4bb",
-      "evidence_path": null
+      "closure_sha256": "d57fb9ddd848274f829328f448dfc6e199601db7686dc119e6b792b7462d679e",
+      "evidence_path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparseinvalidescape-19043ed21e"
     },
     {
       "logical_id": "testescapesequenceparsing-testparsejustbackslash-5777522916",
@@ -16683,8 +16719,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testescapesequenceparsing-testparsejustbackslash-5777522916-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparsejustbackslash-5777522916",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::escape_sequence::tests::parse_just_backslash_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -16705,8 +16742,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestEscapeSequenceParsing.testParseJustBackslash behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseJustBackslash",
+      "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+      "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_just_backslash_matches_java -- --exact",
+        "commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_just_backslash_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testescapesequenceparsing-testparsejustbackslash-5777522916",
         "source_case_ids": [
@@ -16714,14 +16764,18 @@
           "java-antlr:testescapesequenceparsing-testparsejustbackslash@e7dcb6e7699e"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparsejustbackslash-5777522916",
+        "rust_test": "grammar::escape_sequence::tests::parse_just_backslash_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestEscapeSequenceParsing.testParseJustBackslash behavior"
+        "observable": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseJustBackslash",
+        "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+        "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "f3d0f16d5d77e6b7472fafaf9f4b0b0530c15503749e1bcbc55c506089db8c2c",
-      "evidence_path": null
+      "closure_sha256": "e8082df6598823d4be25e9ac34b95ef91399a6f91779232e0523ef346bfd6a65",
+      "evidence_path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparsejustbackslash-5777522916"
     },
     {
       "logical_id": "testescapesequenceparsing-testparsenewline-8d0dddafad",
@@ -16733,8 +16787,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testescapesequenceparsing-testparsenewline-8d0dddafad-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparsenewline-8d0dddafad",
+      "tdd_state": "done",
+      "rust_test": "grammar::escape_sequence::tests::parse_newline_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -16755,8 +16809,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestEscapeSequenceParsing.testParseNewline behavior",
+      "expected_red_failure_fingerprint": "left Invalid, right CodePoint { value: 10, start: 0, stop: 2 }",
+      "observable_equivalence": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseNewline",
+      "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+      "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_newline_matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "left Invalid, right CodePoint { value: 10, start: 0, stop: 2 }"
+      },
+      "primary_implementation_commit": "56d2ac6a31671f9d786f2c3fa6323fffa6474375",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_newline_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testescapesequenceparsing-testparsenewline-8d0dddafad",
         "source_case_ids": [
@@ -16764,14 +16830,17 @@
           "java-antlr:testescapesequenceparsing-testparsenewline@dc6784bae3d3"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparsenewline-8d0dddafad",
+        "rust_test": "grammar::escape_sequence::tests::parse_newline_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestEscapeSequenceParsing.testParseNewline behavior"
+        "observable": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseNewline",
+        "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+        "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e"
       },
-      "closure_sha256": "d8c3d4b6c75f153ef72fcde21d0833ccac3312e1a52fe0877acc96aae4b3ce6f",
-      "evidence_path": null
+      "closure_sha256": "000694e60123f536614f2f0d3c18ee70d66d35f04f381b4457f6f9b5f3a06759",
+      "evidence_path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparsenewline-8d0dddafad"
     },
     {
       "logical_id": "testescapesequenceparsing-testparsetab-6eeb9f3559",
@@ -16783,8 +16852,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testescapesequenceparsing-testparsetab-6eeb9f3559-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparsetab-6eeb9f3559",
+      "tdd_state": "done",
+      "rust_test": "grammar::escape_sequence::tests::parse_tab_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -16805,8 +16874,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestEscapeSequenceParsing.testParseTab behavior",
+      "expected_red_failure_fingerprint": "left Invalid, right CodePoint { value: 9, start: 0, stop: 2 }",
+      "observable_equivalence": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseTab",
+      "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+      "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_tab_matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "left Invalid, right CodePoint { value: 9, start: 0, stop: 2 }"
+      },
+      "primary_implementation_commit": "56d2ac6a31671f9d786f2c3fa6323fffa6474375",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_tab_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testescapesequenceparsing-testparsetab-6eeb9f3559",
         "source_case_ids": [
@@ -16814,14 +16895,17 @@
           "java-antlr:testescapesequenceparsing-testparsetab@4115f77efeae"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparsetab-6eeb9f3559",
+        "rust_test": "grammar::escape_sequence::tests::parse_tab_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestEscapeSequenceParsing.testParseTab behavior"
+        "observable": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseTab",
+        "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+        "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e"
       },
-      "closure_sha256": "fdb90a53abc2d4ca8d429e4a41b02605305a3b78c1660d56e03b72a4c270e2e7",
-      "evidence_path": null
+      "closure_sha256": "b28455a9eb24461f94b383886aabc0dc927dd44be845b8c75e85420ca14a38ff",
+      "evidence_path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparsetab-6eeb9f3559"
     },
     {
       "logical_id": "testescapesequenceparsing-testparseunicodebmp-a9f7890fe5",
@@ -16833,8 +16917,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testescapesequenceparsing-testparseunicodebmp-a9f7890fe5-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparseunicodebmp-a9f7890fe5",
+      "tdd_state": "done",
+      "rust_test": "grammar::escape_sequence::tests::parse_unicode_bmp_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -16855,8 +16939,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestEscapeSequenceParsing.testParseUnicodeBMP behavior",
+      "expected_red_failure_fingerprint": "left Invalid, right CodePoint { value: 43981, start: 0, stop: 6 }",
+      "observable_equivalence": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseUnicodeBMP",
+      "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+      "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_bmp_matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "left Invalid, right CodePoint { value: 43981, start: 0, stop: 6 }"
+      },
+      "primary_implementation_commit": "56d2ac6a31671f9d786f2c3fa6323fffa6474375",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_bmp_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testescapesequenceparsing-testparseunicodebmp-a9f7890fe5",
         "source_case_ids": [
@@ -16864,14 +16960,17 @@
           "java-antlr:testescapesequenceparsing-testparseunicodebmp@d526a3fa7967"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparseunicodebmp-a9f7890fe5",
+        "rust_test": "grammar::escape_sequence::tests::parse_unicode_bmp_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestEscapeSequenceParsing.testParseUnicodeBMP behavior"
+        "observable": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseUnicodeBMP",
+        "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+        "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e"
       },
-      "closure_sha256": "6922c23ee1874b0562c60ea3fd0a16336f985b98c2fe0f28ccdfdb08ed0bd0da",
-      "evidence_path": null
+      "closure_sha256": "00ab08ce74ac1e6bdcf843e12b267166adcbd7499961af3e7f0edd95b9799042",
+      "evidence_path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparseunicodebmp-a9f7890fe5"
     },
     {
       "logical_id": "testescapesequenceparsing-testparseunicodeproperty-a0192196ae",
@@ -16883,8 +16982,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testescapesequenceparsing-testparseunicodeproperty-a0192196ae-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparseunicodeproperty-a0192196ae",
+      "tdd_state": "done",
+      "rust_test": "grammar::escape_sequence::tests::parse_unicode_property_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -16905,8 +17004,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestEscapeSequenceParsing.testParseUnicodeProperty behavior",
+      "expected_red_failure_fingerprint": "left Invalid, right Property with ranges [(66560, 66639)]",
+      "observable_equivalence": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseUnicodeProperty",
+      "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+      "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_property_matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "left Invalid, right Property with ranges [(66560, 66639)]"
+      },
+      "primary_implementation_commit": "56d2ac6a31671f9d786f2c3fa6323fffa6474375",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_property_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testescapesequenceparsing-testparseunicodeproperty-a0192196ae",
         "source_case_ids": [
@@ -16914,14 +17025,17 @@
           "java-antlr:testescapesequenceparsing-testparseunicodeproperty@b15cf86e6e02"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparseunicodeproperty-a0192196ae",
+        "rust_test": "grammar::escape_sequence::tests::parse_unicode_property_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestEscapeSequenceParsing.testParseUnicodeProperty behavior"
+        "observable": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseUnicodeProperty",
+        "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+        "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e"
       },
-      "closure_sha256": "1a05ea4d020192bda936496280d3dd5ee1ef046f89f485631733b71def57d3fe",
-      "evidence_path": null
+      "closure_sha256": "70e7574be4a3c59359ff97d555f4e27120e5519d7a30d6054e74425a91fe6c8e",
+      "evidence_path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparseunicodeproperty-a0192196ae"
     },
     {
       "logical_id": "testescapesequenceparsing-testparseunicodepropertyinverted-34d1268457",
@@ -16933,8 +17047,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testescapesequenceparsing-testparseunicodepropertyinverted-34d1268457-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparseunicodepropertyinverted-34d1268457",
+      "tdd_state": "done",
+      "rust_test": "grammar::escape_sequence::tests::parse_unicode_property_inverted_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -16955,8 +17069,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestEscapeSequenceParsing.testParseUnicodePropertyInverted behavior",
+      "expected_red_failure_fingerprint": "left Invalid, right Property with ranges [(0, 66559), (66640, 1114111)]",
+      "observable_equivalence": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseUnicodePropertyInverted",
+      "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+      "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_property_inverted_matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "left Invalid, right Property with ranges [(0, 66559), (66640, 1114111)]"
+      },
+      "primary_implementation_commit": "56d2ac6a31671f9d786f2c3fa6323fffa6474375",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_property_inverted_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testescapesequenceparsing-testparseunicodepropertyinverted-34d1268457",
         "source_case_ids": [
@@ -16964,14 +17090,17 @@
           "java-antlr:testescapesequenceparsing-testparseunicodepropertyinverted@98f0cca9968b"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparseunicodepropertyinverted-34d1268457",
+        "rust_test": "grammar::escape_sequence::tests::parse_unicode_property_inverted_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestEscapeSequenceParsing.testParseUnicodePropertyInverted behavior"
+        "observable": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseUnicodePropertyInverted",
+        "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+        "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e"
       },
-      "closure_sha256": "4725e59934a66e9a996a379f969569dcb28c311727bc01b0a282466a7ce3fc43",
-      "evidence_path": null
+      "closure_sha256": "891293b15c6bf45709a09242a679f9e55bf10b61ac72ca0c92015295c2e3d3e6",
+      "evidence_path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparseunicodepropertyinverted-34d1268457"
     },
     {
       "logical_id": "testescapesequenceparsing-testparseunicodepropertyinvertedmissingclosebrace-dd21bab8f1",
@@ -16983,8 +17112,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testescapesequenceparsing-testparseunicodepropertyinvertedmissingclosebrace-dd21bab8f1-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparseunicodepropertyinvertedmissingclosebrace-dd21bab8f1",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::escape_sequence::tests::parse_unicode_property_inverted_missing_close_brace_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -17005,8 +17135,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestEscapeSequenceParsing.testParseUnicodePropertyInvertedMissingCloseBrace behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseUnicodePropertyInvertedMissingCloseBrace",
+      "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+      "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_property_inverted_missing_close_brace_matches_java -- --exact",
+        "commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_property_inverted_missing_close_brace_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testescapesequenceparsing-testparseunicodepropertyinvertedmissingclosebrace-dd21bab8f1",
         "source_case_ids": [
@@ -17014,14 +17157,18 @@
           "java-antlr:testescapesequenceparsing-testparseunicodepropertyinvertedmissingclosebr@4a6143786f2e"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparseunicodepropertyinvertedmissingclosebrace-dd21bab8f1",
+        "rust_test": "grammar::escape_sequence::tests::parse_unicode_property_inverted_missing_close_brace_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestEscapeSequenceParsing.testParseUnicodePropertyInvertedMissingCloseBrace behavior"
+        "observable": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseUnicodePropertyInvertedMissingCloseBrace",
+        "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+        "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "001fabd02136c79e5421bdd4ae50f8aa02e16aa15ff3d6a7920536bf18817b22",
-      "evidence_path": null
+      "closure_sha256": "37512d0599ecd0910e194adcd1b2c85426da6202d4a6f817058e1f98dcbd4ac2",
+      "evidence_path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparseunicodepropertyinvertedmissingclosebrace-dd21bab8f1"
     },
     {
       "logical_id": "testescapesequenceparsing-testparseunicodepropertyinvertedtooshort-f564de3b4e",
@@ -17033,8 +17180,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testescapesequenceparsing-testparseunicodepropertyinvertedtooshort-f564de3b4e-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparseunicodepropertyinvertedtooshort-f564de3b4e",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::escape_sequence::tests::parse_unicode_property_inverted_too_short_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -17055,8 +17203,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestEscapeSequenceParsing.testParseUnicodePropertyInvertedTooShort behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseUnicodePropertyInvertedTooShort",
+      "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+      "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_property_inverted_too_short_matches_java -- --exact",
+        "commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_property_inverted_too_short_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testescapesequenceparsing-testparseunicodepropertyinvertedtooshort-f564de3b4e",
         "source_case_ids": [
@@ -17064,14 +17225,18 @@
           "java-antlr:testescapesequenceparsing-testparseunicodepropertyinvertedtooshort@b8ffc14e12cb"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparseunicodepropertyinvertedtooshort-f564de3b4e",
+        "rust_test": "grammar::escape_sequence::tests::parse_unicode_property_inverted_too_short_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestEscapeSequenceParsing.testParseUnicodePropertyInvertedTooShort behavior"
+        "observable": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseUnicodePropertyInvertedTooShort",
+        "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+        "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "f76bd2eab4672060a0f2ef20deefd5ba819958710b8cc22dd7a3c5033c4cd93f",
-      "evidence_path": null
+      "closure_sha256": "6d6e8a6e223c0e48f8b1258692572e6bade357e758d6cd5335d9efafd7a550ad",
+      "evidence_path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparseunicodepropertyinvertedtooshort-f564de3b4e"
     },
     {
       "logical_id": "testescapesequenceparsing-testparseunicodepropertymissingclosebrace-00ba64082b",
@@ -17083,8 +17248,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testescapesequenceparsing-testparseunicodepropertymissingclosebrace-00ba64082b-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparseunicodepropertymissingclosebrace-00ba64082b",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::escape_sequence::tests::parse_unicode_property_missing_close_brace_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -17105,8 +17271,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestEscapeSequenceParsing.testParseUnicodePropertyMissingCloseBrace behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseUnicodePropertyMissingCloseBrace",
+      "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+      "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_property_missing_close_brace_matches_java -- --exact",
+        "commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_property_missing_close_brace_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testescapesequenceparsing-testparseunicodepropertymissingclosebrace-00ba64082b",
         "source_case_ids": [
@@ -17114,14 +17293,18 @@
           "java-antlr:testescapesequenceparsing-testparseunicodepropertymissingclosebrace@119f632600de"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparseunicodepropertymissingclosebrace-00ba64082b",
+        "rust_test": "grammar::escape_sequence::tests::parse_unicode_property_missing_close_brace_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestEscapeSequenceParsing.testParseUnicodePropertyMissingCloseBrace behavior"
+        "observable": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseUnicodePropertyMissingCloseBrace",
+        "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+        "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "301d234f3423ebc2179e81ea55d13de5726f0461e67e4655b9c52e1f11ce7788",
-      "evidence_path": null
+      "closure_sha256": "b41eece20b57d03a4f20acbae70620c00ae0348b5abd71e7e23ae79e90ac7fa6",
+      "evidence_path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparseunicodepropertymissingclosebrace-00ba64082b"
     },
     {
       "logical_id": "testescapesequenceparsing-testparseunicodepropertytooshort-293140bbd4",
@@ -17133,8 +17316,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testescapesequenceparsing-testparseunicodepropertytooshort-293140bbd4-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparseunicodepropertytooshort-293140bbd4",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::escape_sequence::tests::parse_unicode_property_too_short_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -17155,8 +17339,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestEscapeSequenceParsing.testParseUnicodePropertyTooShort behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseUnicodePropertyTooShort",
+      "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+      "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_property_too_short_matches_java -- --exact",
+        "commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_property_too_short_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testescapesequenceparsing-testparseunicodepropertytooshort-293140bbd4",
         "source_case_ids": [
@@ -17164,14 +17361,18 @@
           "java-antlr:testescapesequenceparsing-testparseunicodepropertytooshort@5af6a143a779"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparseunicodepropertytooshort-293140bbd4",
+        "rust_test": "grammar::escape_sequence::tests::parse_unicode_property_too_short_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestEscapeSequenceParsing.testParseUnicodePropertyTooShort behavior"
+        "observable": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseUnicodePropertyTooShort",
+        "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+        "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "32e8ebdbd979fd072e29a7e01ed82b1f73e694b5a2290d5b0db9a1042fe9fa22",
-      "evidence_path": null
+      "closure_sha256": "65e18742c63c32c0834d9954b7d1a12c7b5e7e9be8396f7a4881ae1d5dc7ddfb",
+      "evidence_path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparseunicodepropertytooshort-293140bbd4"
     },
     {
       "logical_id": "testescapesequenceparsing-testparseunicodesmp-65d205f9eb",
@@ -17183,8 +17384,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testescapesequenceparsing-testparseunicodesmp-65d205f9eb-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparseunicodesmp-65d205f9eb",
+      "tdd_state": "done",
+      "rust_test": "grammar::escape_sequence::tests::parse_unicode_smp_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -17205,8 +17406,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestEscapeSequenceParsing.testParseUnicodeSMP behavior",
+      "expected_red_failure_fingerprint": "left Invalid, right CodePoint { value: 1092557, start: 0, stop: 10 }",
+      "observable_equivalence": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseUnicodeSMP",
+      "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+      "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_smp_matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "left Invalid, right CodePoint { value: 1092557, start: 0, stop: 10 }"
+      },
+      "primary_implementation_commit": "56d2ac6a31671f9d786f2c3fa6323fffa6474375",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_smp_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testescapesequenceparsing-testparseunicodesmp-65d205f9eb",
         "source_case_ids": [
@@ -17214,14 +17427,17 @@
           "java-antlr:testescapesequenceparsing-testparseunicodesmp@0fa9f9da8973"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparseunicodesmp-65d205f9eb",
+        "rust_test": "grammar::escape_sequence::tests::parse_unicode_smp_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestEscapeSequenceParsing.testParseUnicodeSMP behavior"
+        "observable": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseUnicodeSMP",
+        "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+        "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e"
       },
-      "closure_sha256": "18f3ee25346598b0b15c840b96a59286f743cf28aad51eaf311023eb3604291a",
-      "evidence_path": null
+      "closure_sha256": "d9984d1745762f589fd8b858223ee3343be56c8cf7c9931f7fad7349d2b56a41",
+      "evidence_path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparseunicodesmp-65d205f9eb"
     },
     {
       "logical_id": "testescapesequenceparsing-testparseunicodesmpmissingclosebrace-0940378cd3",
@@ -17233,8 +17449,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testescapesequenceparsing-testparseunicodesmpmissingclosebrace-0940378cd3-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparseunicodesmpmissingclosebrace-0940378cd3",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::escape_sequence::tests::parse_unicode_smp_missing_close_brace_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -17255,8 +17472,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestEscapeSequenceParsing.testParseUnicodeSMPMissingCloseBrace behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseUnicodeSMPMissingCloseBrace",
+      "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+      "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_smp_missing_close_brace_matches_java -- --exact",
+        "commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_smp_missing_close_brace_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testescapesequenceparsing-testparseunicodesmpmissingclosebrace-0940378cd3",
         "source_case_ids": [
@@ -17264,14 +17494,18 @@
           "java-antlr:testescapesequenceparsing-testparseunicodesmpmissingclosebrace@c3e4d7751ee3"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparseunicodesmpmissingclosebrace-0940378cd3",
+        "rust_test": "grammar::escape_sequence::tests::parse_unicode_smp_missing_close_brace_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestEscapeSequenceParsing.testParseUnicodeSMPMissingCloseBrace behavior"
+        "observable": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseUnicodeSMPMissingCloseBrace",
+        "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+        "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "873f35b22462071915c9ff2c977dd1b6675c133969acc4dce9e1912cdbf09a89",
-      "evidence_path": null
+      "closure_sha256": "bf4c7ea39b467862854a895c7ceebed8db4e40c5995e2f3d28174074f56b71ac",
+      "evidence_path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparseunicodesmpmissingclosebrace-0940378cd3"
     },
     {
       "logical_id": "testescapesequenceparsing-testparseunicodesmptooshort-f9630e6fe2",
@@ -17283,8 +17517,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testescapesequenceparsing-testparseunicodesmptooshort-f9630e6fe2-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparseunicodesmptooshort-f9630e6fe2",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::escape_sequence::tests::parse_unicode_smp_too_short_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -17305,8 +17540,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestEscapeSequenceParsing.testParseUnicodeSMPTooShort behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseUnicodeSMPTooShort",
+      "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+      "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_smp_too_short_matches_java -- --exact",
+        "commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_smp_too_short_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testescapesequenceparsing-testparseunicodesmptooshort-f9630e6fe2",
         "source_case_ids": [
@@ -17314,14 +17562,18 @@
           "java-antlr:testescapesequenceparsing-testparseunicodesmptooshort@d3287a96eb9c"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparseunicodesmptooshort-f9630e6fe2",
+        "rust_test": "grammar::escape_sequence::tests::parse_unicode_smp_too_short_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestEscapeSequenceParsing.testParseUnicodeSMPTooShort behavior"
+        "observable": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseUnicodeSMPTooShort",
+        "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+        "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "5e66e5f32b21f6ab726d196b67c18c9b44d61d5aeb67a29a8c1591a8a4fb4e9f",
-      "evidence_path": null
+      "closure_sha256": "3f37cfb9c59204738194e742af724d3de0ee1969e732943dce6f75fad31adfed",
+      "evidence_path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparseunicodesmptooshort-f9630e6fe2"
     },
     {
       "logical_id": "testescapesequenceparsing-testparseunicodetoobig-b8f1660925",
@@ -17333,8 +17585,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testescapesequenceparsing-testparseunicodetoobig-b8f1660925-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparseunicodetoobig-b8f1660925",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::escape_sequence::tests::parse_unicode_too_big_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -17355,8 +17608,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestEscapeSequenceParsing.testParseUnicodeTooBig behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseUnicodeTooBig",
+      "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+      "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_too_big_matches_java -- --exact",
+        "commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_too_big_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testescapesequenceparsing-testparseunicodetoobig-b8f1660925",
         "source_case_ids": [
@@ -17364,14 +17630,18 @@
           "java-antlr:testescapesequenceparsing-testparseunicodetoobig@eb00b77720ef"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparseunicodetoobig-b8f1660925",
+        "rust_test": "grammar::escape_sequence::tests::parse_unicode_too_big_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestEscapeSequenceParsing.testParseUnicodeTooBig behavior"
+        "observable": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseUnicodeTooBig",
+        "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+        "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "e93dea76b4e0d6b6c794e06c87e8de7b8c76f102ca75fabb393782898925f8a9",
-      "evidence_path": null
+      "closure_sha256": "6ce44c96b9514ec34624dd1332f4c7e4ab1b5535d51933a21c2a6688ff07736d",
+      "evidence_path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparseunicodetoobig-b8f1660925"
     },
     {
       "logical_id": "testescapesequenceparsing-testparseunicodetooshort-74b2396a8e",
@@ -17383,8 +17653,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testescapesequenceparsing-testparseunicodetooshort-74b2396a8e-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparseunicodetooshort-74b2396a8e",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::escape_sequence::tests::parse_unicode_too_short_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -17405,8 +17676,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestEscapeSequenceParsing.testParseUnicodeTooShort behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseUnicodeTooShort",
+      "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+      "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_too_short_matches_java -- --exact",
+        "commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_too_short_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testescapesequenceparsing-testparseunicodetooshort-74b2396a8e",
         "source_case_ids": [
@@ -17414,14 +17698,18 @@
           "java-antlr:testescapesequenceparsing-testparseunicodetooshort@38efd19ad899"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testescapesequenceparsing-testparseunicodetooshort-74b2396a8e",
+        "rust_test": "grammar::escape_sequence::tests::parse_unicode_too_short_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestEscapeSequenceParsing.testParseUnicodeTooShort behavior"
+        "observable": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseUnicodeTooShort",
+        "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+        "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "e5448439ea9439a08290ac576eda6aec32418914b68d881f9484b173471b3a84",
-      "evidence_path": null
+      "closure_sha256": "91807cebf5004159bbd3a48375742f018106d71878a592156dc4c682709cde72",
+      "evidence_path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparseunicodetooshort-74b2396a8e"
     },
     {
       "logical_id": "testfastqueue-testgetfromemptyqueue-706dc79bac",

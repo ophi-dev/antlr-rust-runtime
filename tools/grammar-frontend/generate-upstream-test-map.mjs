@@ -22,6 +22,9 @@ import {
     ERROR_SETS_BASE_COMMIT,
     ERROR_SETS_IMPLEMENTATION_COMMIT,
     ERROR_SETS_TEST_COMMIT,
+    ESCAPE_SEQUENCE_IMPLEMENTATION_COMMIT,
+    ESCAPE_SEQUENCE_SCAFFOLD_COMMIT,
+    ESCAPE_SEQUENCE_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_COMMIT,
     IMPLEMENTATION_COMMIT,
     JAVA_COMMIT,
@@ -231,6 +234,34 @@ const NESTED_ACTION_LOGICAL_ID =
     "testlexeractions-nested-actions-3d175db5e5";
 const NESTED_ACTION_TEST_COMMAND =
     "cargo test --locked --bin antlr4-rust-gen grammar::syntax::tests::nested_actions_match_upstream -- --exact";
+const ESCAPE_SEQUENCE_TEST_PREFIX =
+    "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::";
+const ESCAPE_SEQUENCE_RED_CASES = new Map([
+    [
+        "testParseNewline",
+        "left Invalid, right CodePoint { value: 10, start: 0, stop: 2 }",
+    ],
+    [
+        "testParseTab",
+        "left Invalid, right CodePoint { value: 9, start: 0, stop: 2 }",
+    ],
+    [
+        "testParseUnicodeBMP",
+        "left Invalid, right CodePoint { value: 43981, start: 0, stop: 6 }",
+    ],
+    [
+        "testParseUnicodeSMP",
+        "left Invalid, right CodePoint { value: 1092557, start: 0, stop: 10 }",
+    ],
+    [
+        "testParseUnicodeProperty",
+        "left Invalid, right Property with ranges [(66560, 66639)]",
+    ],
+    [
+        "testParseUnicodePropertyInverted",
+        "left Invalid, right Property with ranges [(0, 66559), (66640, 1114111)]",
+    ],
+]);
 const CHAR_SUPPORT_PORTS = new Map([
     [
         "testcharsupport-testcapitalize-25cbf55e21",
@@ -789,6 +820,9 @@ function completedPhaseBRow(
                           : completed.kind === "nested-action"
                             ? `direct Rust grammar modeling preserves nested member actions and ` +
                               `normalizes predicate fail messages for ${cases[0].suite}.${cases[0].name}`
+                            : completed.kind === "escape-sequence"
+                              ? `direct Rust escape parsing matches Java 4.13.2 result kind, ` +
+                                `value or property set, and consumed span for ${cases[0].suite}.${cases[0].name}`
                         : `direct Rust semantic diagnostics match Java 4.13.2 exactly ` +
                           `for ${cases[0].suite}.${cases[0].name}`;
     const coveredExisting =
@@ -1035,6 +1069,52 @@ async function loadCompletedPhaseBPorts() {
             "predicate fail message retained grammar quotes: " +
             "left Some(\"'custom message'\"), right Some(\"custom message\")",
     });
+    const escapeSequenceGroups = new Map();
+    for (const testCase of inventory.cases) {
+        if (testCase.suite !== "TestEscapeSequenceParsing") {
+            continue;
+        }
+        const key =
+            `${testCase.suite}\0${canonicalName(testCase.name)}` +
+            `\0${parameterKey(testCase)}`;
+        const group = escapeSequenceGroups.get(key) ?? [];
+        group.push(testCase);
+        escapeSequenceGroups.set(key, group);
+    }
+    for (const [key, cases] of escapeSequenceGroups) {
+        const logicalId = logicalCaseId(
+            cases[0].suite,
+            cases[0].name,
+            key,
+        );
+        const testName = escapeSequenceRustTestName(cases[0].name);
+        const redFingerprint = ESCAPE_SEQUENCE_RED_CASES.get(
+            cases[0].name,
+        );
+        ports.set(logicalId, {
+            fixturePaths: [],
+            rustTest:
+                `grammar::escape_sequence::tests::${testName}`,
+            kind: "escape-sequence",
+            resolution: redFingerprint
+                ? "ported"
+                : "verified-covered-existing",
+            scaffoldCommit: ESCAPE_SEQUENCE_SCAFFOLD_COMMIT,
+            testCommit: ESCAPE_SEQUENCE_TEST_COMMIT,
+            implementationCommit: redFingerprint
+                ? ESCAPE_SEQUENCE_IMPLEMENTATION_COMMIT
+                : ESCAPE_SEQUENCE_SCAFFOLD_COMMIT,
+            testCommand:
+                `${ESCAPE_SEQUENCE_TEST_PREFIX}${testName} -- --exact`,
+            greenResult: "1 passed; 0 failed",
+            redFingerprint,
+        });
+    }
+    if (escapeSequenceGroups.size !== 17) {
+        throw new Error(
+            `expected 17 completed TestEscapeSequenceParsing ports, found ${escapeSequenceGroups.size}`,
+        );
+    }
     const scopeGroups = new Map();
     for (const testCase of inventory.cases) {
         if (testCase.suite !== "TestScopeParsing") {
@@ -1073,8 +1153,8 @@ async function loadCompletedPhaseBPorts() {
             `expected 47 completed TestScopeParsing ports, found ${scopeGroups.size}`,
         );
     }
-    if (ports.size !== 147) {
-        throw new Error(`expected 147 completed Phase B ports, found ${ports.size}`);
+    if (ports.size !== 164) {
+        throw new Error(`expected 164 completed Phase B ports, found ${ports.size}`);
     }
     return ports;
 }
@@ -1183,6 +1263,14 @@ function parameterKey(testCase) {
 
 function canonicalName(name) {
     return name.normalize("NFKD").toLowerCase().replaceAll(/[^a-z0-9]+/gu, "");
+}
+
+function escapeSequenceRustTestName(name) {
+    return name
+        .replace(/^test/u, "")
+        .replace(/([A-Z]+)([A-Z][a-z])/gu, "$1_$2")
+        .replace(/([a-z0-9])([A-Z])/gu, "$1_$2")
+        .toLowerCase() + "_matches_java";
 }
 
 function slug(value) {

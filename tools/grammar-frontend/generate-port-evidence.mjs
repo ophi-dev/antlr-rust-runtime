@@ -26,6 +26,10 @@ import {
     ERROR_SETS_BASE_COMMIT,
     ERROR_SETS_IMPLEMENTATION_COMMIT,
     ERROR_SETS_TEST_COMMIT,
+    ESCAPE_SEQUENCE_IMPLEMENTATION_COMMIT,
+    ESCAPE_SEQUENCE_SCAFFOLD_COMMIT,
+    ESCAPE_SEQUENCE_SCAFFOLD_PARENT_COMMIT,
+    ESCAPE_SEQUENCE_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_PARENT,
     IMPLEMENTATION_COMMIT,
@@ -112,6 +116,9 @@ const NESTED_ACTION_TEST_PATH =
 const NESTED_ACTION_TEST_MARKER = "#[cfg(test)]\nmod tests {";
 const NESTED_ACTION_LOGICAL_ID =
     "testlexeractions-nested-actions-3d175db5e5";
+const ESCAPE_SEQUENCE_TEST_PATH =
+    "src/bin_support/grammar/escape_sequence.rs";
+const ESCAPE_SEQUENCE_TEST_MARKER = "#[cfg(test)]\nmod tests {";
 const EMPTY_VOCABULARY_LOGICAL_ID =
     "testvocabulary-testemptyvocabulary-66d31ad014";
 const SYMBOL_INFO_SHA256 =
@@ -835,6 +842,49 @@ const nestedActionLockedSections = [
         sha256: digest(checkedInNestedActionTests),
     },
 ];
+const checkedInEscapeSequenceTests = sectionAtMarker(
+    await readFile(resolve(repoRoot, ESCAPE_SEQUENCE_TEST_PATH), "utf8"),
+    ESCAPE_SEQUENCE_TEST_MARKER,
+);
+const recordedEscapeSequenceTests = gitShowOptional(
+    repoRoot,
+    ESCAPE_SEQUENCE_TEST_COMMIT,
+    ESCAPE_SEQUENCE_TEST_PATH,
+);
+const implementedEscapeSequenceTests = gitShowOptional(
+    repoRoot,
+    ESCAPE_SEQUENCE_IMPLEMENTATION_COMMIT,
+    ESCAPE_SEQUENCE_TEST_PATH,
+);
+if (
+    recordedEscapeSequenceTests === null ||
+    sectionAtMarker(
+        recordedEscapeSequenceTests,
+        ESCAPE_SEQUENCE_TEST_MARKER,
+    ) !== checkedInEscapeSequenceTests
+) {
+    throw new Error(
+        "checked-in escape sequence ports differ from their test commit",
+    );
+}
+if (
+    implementedEscapeSequenceTests === null ||
+    sectionAtMarker(
+        implementedEscapeSequenceTests,
+        ESCAPE_SEQUENCE_TEST_MARKER,
+    ) !== checkedInEscapeSequenceTests
+) {
+    throw new Error(
+        "escape sequence implementation changed the locked test ports",
+    );
+}
+const escapeSequenceLockedSections = [
+    {
+        path: ESCAPE_SEQUENCE_TEST_PATH,
+        marker: ESCAPE_SEQUENCE_TEST_MARKER,
+        sha256: digest(checkedInEscapeSequenceTests),
+    },
+];
 
 const upstreamByLogicalId = new Map(
     testMap.rows.map((row) => [row.logical_id, row]),
@@ -955,6 +1005,9 @@ for (const row of completedRows) {
     );
     const phaseBNestedAction =
         row.logical_id === NESTED_ACTION_LOGICAL_ID;
+    const phaseBEscapeSequence = row.logical_id.startsWith(
+        "testescapesequenceparsing-",
+    );
     if (
         row.owner_phase === "B" &&
         !phaseBAtnSerialization &&
@@ -966,7 +1019,8 @@ for (const row of completedRows) {
         !phaseBVocabulary &&
         !phaseBScopeParsing &&
         !phaseBCharSupport &&
-        !phaseBNestedAction
+        !phaseBNestedAction &&
+        !phaseBEscapeSequence
     ) {
         throw new Error(`missing Phase B evidence profile for ${row.logical_id}`);
     }
@@ -1088,6 +1142,21 @@ for (const row of completedRows) {
                                 reachability:
                                     "the nested action implementation commit is directly based on its locked red test",
                             }
+                          : phaseBEscapeSequence
+                            ? {
+                                  lockedSections:
+                                      escapeSequenceLockedSections,
+                                  scaffoldCommit:
+                                      ESCAPE_SEQUENCE_SCAFFOLD_COMMIT,
+                                  testParent:
+                                      ESCAPE_SEQUENCE_SCAFFOLD_COMMIT,
+                                  implementationParent: coveredExisting
+                                      ? ESCAPE_SEQUENCE_SCAFFOLD_PARENT_COMMIT
+                                      : ESCAPE_SEQUENCE_TEST_COMMIT,
+                                  reachability: coveredExisting
+                                      ? "the case-specific invalid-input test passed against the behavior-free escape parser scaffold"
+                                      : "the escape sequence implementation commit is directly based on its locked red tests",
+                              }
           : null;
     await addEvidence({
         logicalId: row.logical_id,
@@ -1188,6 +1257,15 @@ for (const row of completedRows) {
                                     java_compatibility_verdict:
                                         "Java 4.13.2 supplies the predicate fail-message compatibility verdict",
                                 }
+                              : phaseBEscapeSequence
+                                ? {
+                                      primary:
+                                          "the direct Rust escape parser matches Java 4.13.2 result kind, code point or property set, and consumed span",
+                                      alternate:
+                                          "the pinned antlr-ng TestEscapeSequenceParsing case exposes the same result contract",
+                                      java_compatibility_verdict:
+                                          "exact Java 4.13.2 TestEscapeSequenceParsing result equality",
+                                  }
             : {
                   primary: coveredExisting
                       ? "the case-specific Rust port matches the pinned accepted and rejected syntax outcomes"
@@ -1234,6 +1312,7 @@ for (const row of completedRows) {
             phaseBScopeParsing ||
             phaseBCharSupport ||
             phaseBNestedAction ||
+            (phaseBEscapeSequence && !coveredExisting) ||
             (phaseBTokenPosition && !coveredExisting)
             ? row.demonstrated_red
             : undefined,

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testescapesequenceparsing-testparseunicodetoobig-b8f1660925",
+  "active_revision_id": "testescapesequenceparsing-testparseunicodetoobig-b8f1660925-r1",
+  "revisions": [
+    {
+      "revision_id": "testescapesequenceparsing-testparseunicodetoobig-b8f1660925-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparseunicodetoobig-b8f1660925/revisions/testescapesequenceparsing-testparseunicodetoobig-b8f1660925-r1/manifest.json",
+      "closure_sha256": "6ce44c96b9514ec34624dd1332f4c7e4ab1b5535d51933a21c2a6688ff07736d"
+    }
+  ]
+}

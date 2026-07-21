@@ -23,6 +23,10 @@ import {
     ERROR_SETS_BASE_COMMIT,
     ERROR_SETS_IMPLEMENTATION_COMMIT,
     ERROR_SETS_TEST_COMMIT,
+    ESCAPE_SEQUENCE_IMPLEMENTATION_COMMIT,
+    ESCAPE_SEQUENCE_SCAFFOLD_COMMIT,
+    ESCAPE_SEQUENCE_SCAFFOLD_PARENT_COMMIT,
+    ESCAPE_SEQUENCE_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_PARENT,
     IMPLEMENTATION_COMMIT,
@@ -284,6 +288,9 @@ for (const [logicalId, record] of records) {
         );
         const nestedAction =
             logicalId === NESTED_ACTION_LOGICAL_ID;
+        const escapeSequence = logicalId.startsWith(
+            "testescapesequenceparsing-",
+        );
         if (resolution === "verified-covered-existing") {
             if (atnSerialization) {
                 expect(
@@ -351,6 +358,23 @@ for (const [logicalId, record] of records) {
                         manifest.ancestry.primary_implementation_parent ===
                             TOKEN_POSITION_IMPLEMENTATION_COMMIT,
                     `${logicalId} topological sort covered-existing ancestry differs`,
+                );
+            } else if (escapeSequence) {
+                expect(
+                    manifest.commits.scaffold ===
+                            ESCAPE_SEQUENCE_SCAFFOLD_COMMIT &&
+                        manifest.commits.primary_test ===
+                            ESCAPE_SEQUENCE_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            ESCAPE_SEQUENCE_SCAFFOLD_COMMIT,
+                    `${logicalId} escape sequence covered-existing commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            ESCAPE_SEQUENCE_SCAFFOLD_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            ESCAPE_SEQUENCE_SCAFFOLD_PARENT_COMMIT,
+                    `${logicalId} escape sequence covered-existing ancestry differs`,
                 );
             } else {
                 expect(
@@ -523,6 +547,23 @@ for (const [logicalId, record] of records) {
                         manifest.ancestry.primary_implementation_parent ===
                             NESTED_ACTION_TEST_COMMIT,
                     `${logicalId} nested action recorded ancestry differs`,
+                );
+            } else if (escapeSequence) {
+                expect(
+                    manifest.commits.scaffold ===
+                            ESCAPE_SEQUENCE_SCAFFOLD_COMMIT &&
+                        manifest.commits.primary_test ===
+                            ESCAPE_SEQUENCE_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            ESCAPE_SEQUENCE_IMPLEMENTATION_COMMIT,
+                    `${logicalId} escape sequence evidence commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            ESCAPE_SEQUENCE_SCAFFOLD_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            ESCAPE_SEQUENCE_TEST_COMMIT,
+                    `${logicalId} escape sequence recorded ancestry differs`,
                 );
             } else {
                 expect(
@@ -772,6 +813,39 @@ if (nestedActionImplementationParent !== null) {
         nestedActionImplementationParent.trim() ===
             NESTED_ACTION_TEST_COMMIT,
         "nested action implementation commit is not based on its locked test",
+    );
+}
+const escapeSequenceScaffoldParent = gitOptional([
+    "rev-parse",
+    `${ESCAPE_SEQUENCE_SCAFFOLD_COMMIT}^`,
+]);
+if (escapeSequenceScaffoldParent !== null) {
+    expect(
+        escapeSequenceScaffoldParent.trim() ===
+            ESCAPE_SEQUENCE_SCAFFOLD_PARENT_COMMIT,
+        "escape sequence scaffold commit has an unexpected parent",
+    );
+}
+const escapeSequenceTestParent = gitOptional([
+    "rev-parse",
+    `${ESCAPE_SEQUENCE_TEST_COMMIT}^`,
+]);
+if (escapeSequenceTestParent !== null) {
+    expect(
+        escapeSequenceTestParent.trim() ===
+            ESCAPE_SEQUENCE_SCAFFOLD_COMMIT,
+        "escape sequence test commit is not based on its scaffold",
+    );
+}
+const escapeSequenceImplementationParent = gitOptional([
+    "rev-parse",
+    `${ESCAPE_SEQUENCE_IMPLEMENTATION_COMMIT}^`,
+]);
+if (escapeSequenceImplementationParent !== null) {
+    expect(
+        escapeSequenceImplementationParent.trim() ===
+            ESCAPE_SEQUENCE_TEST_COMMIT,
+        "escape sequence implementation commit is not based on its locked tests",
     );
 }
 

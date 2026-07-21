@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testescapesequenceparsing-testparseinvalidescape-19043ed21e",
+  "revision_id": "testescapesequenceparsing-testparseinvalidescape-19043ed21e-r1",
+  "cells": [
+    {
+      "test_port": "coverage-extension",
+      "test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+      "implementation_port": "existing-primary-antlr-ng",
+      "implementation_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+      "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_invalid_escape_matches_java -- --exact",
+      "result": "green: 1 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the case-specific test passed against the existing Phase B implementation"
+}

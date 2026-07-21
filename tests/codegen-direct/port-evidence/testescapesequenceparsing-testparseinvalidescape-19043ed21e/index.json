@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testescapesequenceparsing-testparseinvalidescape-19043ed21e",
+  "active_revision_id": "testescapesequenceparsing-testparseinvalidescape-19043ed21e-r1",
+  "revisions": [
+    {
+      "revision_id": "testescapesequenceparsing-testparseinvalidescape-19043ed21e-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparseinvalidescape-19043ed21e/revisions/testescapesequenceparsing-testparseinvalidescape-19043ed21e-r1/manifest.json",
+      "closure_sha256": "d57fb9ddd848274f829328f448dfc6e199601db7686dc119e6b792b7462d679e"
+    }
+  ]
+}
