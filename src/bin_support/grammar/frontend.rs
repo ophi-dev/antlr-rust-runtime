@@ -1,6 +1,19 @@
 use std::fmt;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+
+use antlr4_runtime::{
+    CommonTokenStream, ErrorListener, InputStream, Node, NodeKind, Parser, Recognizer,
+    TOKEN_EOF as RUNTIME_TOKEN_EOF, Token,
+};
+
+use super::generated::antlr_v4_lexer::{
+    AntlRv4Lexer, BLOCK_COMMENT, DOC_COMMENT, UNTERMINATED_ARGUMENT, UNTERMINATED_CHAR_SET,
+    UNTERMINATED_STRING_LITERAL,
+};
+use super::generated::antlr_v4_parser::AntlRv4Parser;
+use super::lexer_adaptor::LexerAdaptor;
 
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -117,6 +130,9 @@ impl SourceFile {
     }
 
     pub(crate) fn token_text(&self, token: &SyntaxToken) -> &str {
+        if token.token_type == RUNTIME_TOKEN_EOF {
+            return "<EOF>";
+        }
         let span = &token.span.bytes;
         &self.text[span.start as usize..span.end as usize]
     }
@@ -186,17 +202,422 @@ impl std::error::Error for FrontendError {}
 
 pub(crate) fn parse_source(
     source: SourceId,
-    _logical_path: impl Into<PathBuf>,
-    _text: impl Into<Box<str>>,
+    logical_path: impl Into<PathBuf>,
+    text: impl Into<Box<str>>,
 ) -> Result<SourceFile, FrontendError> {
-    Err(FrontendError {
+    let logical_path = logical_path.into();
+    let text = text.into();
+    let line_starts = line_starts(source, &text)?;
+    let input = InputStream::with_source_name(&text, logical_path.to_string_lossy());
+    let mut lexer = AntlRv4Lexer::with_hooks(input, LexerAdaptor::default());
+    lexer.remove_error_listeners();
+    lexer.set_force_interpreted(true);
+    let mut token_stream = CommonTokenStream::try_new(lexer).map_err(|error| FrontendError {
         diagnostics: vec![SyntaxDiagnostic {
-            code: "G4F000",
+            code: "G4F001",
             stage: DiagnosticStage::Source,
             span: SourceSpan::empty(source),
-            message: "the Stage 0 grammar frontend is not installed".to_owned(),
+            message: format!("could not buffer grammar tokens: {error}"),
         }],
+    })?;
+    token_stream.fill();
+
+    let tokens = copy_tokens(source, &text, &token_stream)?;
+    let mut diagnostics = token_stream
+        .drain_source_errors()
+        .into_iter()
+        .map(|error| SyntaxDiagnostic {
+            code: "G4F002",
+            stage: DiagnosticStage::Lexer,
+            span: diagnostic_span(
+                source,
+                &text,
+                &line_starts,
+                &tokens,
+                error.line,
+                error.column,
+            ),
+            message: error.message,
+        })
+        .collect::<Vec<_>>();
+    diagnostics.extend(unterminated_diagnostics(source, &text, &tokens));
+    if !diagnostics.is_empty() {
+        return Err(FrontendError { diagnostics });
+    }
+
+    let collector = DiagnosticCollector::default();
+    let mut parser = AntlRv4Parser::new(token_stream);
+    parser.remove_error_listeners();
+    parser.add_error_listener(collector.clone());
+    let root = parser.grammar_spec();
+    let syntax_error_count = parser.number_of_syntax_errors();
+    let reported = collector.take();
+    diagnostics.extend(reported.into_iter().map(|diagnostic| SyntaxDiagnostic {
+        code: "G4F003",
+        stage: DiagnosticStage::Parser,
+        span: diagnostic_span(
+            source,
+            &text,
+            &line_starts,
+            &tokens,
+            diagnostic.line,
+            diagnostic.column,
+        ),
+        message: diagnostic.message,
+    }));
+
+    let root = match root {
+        Ok(root) if syntax_error_count == 0 && diagnostics.is_empty() => root,
+        Ok(_) => {
+            if diagnostics.is_empty() {
+                diagnostics.push(SyntaxDiagnostic {
+                    code: "G4F003",
+                    stage: DiagnosticStage::Parser,
+                    span: SourceSpan::empty(source),
+                    message: format!(
+                        "grammar parser recovered from {syntax_error_count} syntax error(s)"
+                    ),
+                });
+            }
+            return Err(FrontendError { diagnostics });
+        }
+        Err(error) => {
+            if diagnostics.is_empty() {
+                diagnostics.push(SyntaxDiagnostic {
+                    code: "G4F003",
+                    stage: DiagnosticStage::Parser,
+                    span: SourceSpan::empty(source),
+                    message: error.to_string(),
+                });
+            }
+            return Err(FrontendError { diagnostics });
+        }
+    };
+
+    let parsed = parser.into_parsed_file(root);
+    let cst = copy_cst(source, &tokens, parsed.tree())?;
+    let trivia = tokens
+        .iter()
+        .enumerate()
+        .filter(|(_, token)| {
+            token.channel != antlr4_runtime::token::DEFAULT_CHANNEL
+                && token.token_type != RUNTIME_TOKEN_EOF
+        })
+        .map(|(index, _)| index as u32)
+        .collect();
+    Ok(SourceFile {
+        id: source,
+        logical_path,
+        text,
+        line_starts,
+        tokens: tokens.into_boxed_slice(),
+        trivia,
+        cst,
     })
+}
+
+fn line_starts(source: SourceId, text: &str) -> Result<Box<[u32]>, FrontendError> {
+    let mut starts = vec![0];
+    for (index, byte) in text.bytes().enumerate() {
+        if byte == b'\n' {
+            let start = u32::try_from(index + 1).map_err(|_| FrontendError {
+                diagnostics: vec![SyntaxDiagnostic {
+                    code: "G4F001",
+                    stage: DiagnosticStage::Source,
+                    span: SourceSpan::empty(source),
+                    message: "grammar source exceeds the 4 GiB frontend limit".to_owned(),
+                }],
+            })?;
+            starts.push(start);
+        }
+    }
+    u32::try_from(text.len()).map_err(|_| FrontendError {
+        diagnostics: vec![SyntaxDiagnostic {
+            code: "G4F001",
+            stage: DiagnosticStage::Source,
+            span: SourceSpan::empty(source),
+            message: "grammar source exceeds the 4 GiB frontend limit".to_owned(),
+        }],
+    })?;
+    Ok(starts.into_boxed_slice())
+}
+
+fn copy_tokens<S>(
+    source: SourceId,
+    text: &str,
+    token_stream: &CommonTokenStream<S>,
+) -> Result<Vec<SyntaxToken>, FrontendError>
+where
+    S: antlr4_runtime::TokenSource,
+{
+    token_stream
+        .tokens()
+        .map(|token| {
+            let start = u32::try_from(token.start_byte());
+            let end = u32::try_from(token.stop_byte());
+            let (Ok(start), Ok(end)) = (start, end) else {
+                return Err(invalid_span(source, "token byte span exceeds 4 GiB"));
+            };
+            if start > end
+                || end as usize > text.len()
+                || !text.is_char_boundary(start as usize)
+                || !text.is_char_boundary(end as usize)
+            {
+                return Err(invalid_span(
+                    source,
+                    "token span is not on valid UTF-8 boundaries",
+                ));
+            }
+            Ok(SyntaxToken {
+                token_type: token.token_type(),
+                channel: token.channel(),
+                span: SourceSpan {
+                    source,
+                    bytes: start..end,
+                },
+            })
+        })
+        .collect()
+}
+
+fn invalid_span(source: SourceId, message: &str) -> FrontendError {
+    FrontendError {
+        diagnostics: vec![SyntaxDiagnostic {
+            code: "G4F001",
+            stage: DiagnosticStage::Source,
+            span: SourceSpan::empty(source),
+            message: message.to_owned(),
+        }],
+    }
+}
+
+fn unterminated_diagnostics(
+    source: SourceId,
+    text: &str,
+    tokens: &[SyntaxToken],
+) -> Vec<SyntaxDiagnostic> {
+    tokens
+        .iter()
+        .filter_map(|token| {
+            let token_text = token_text(text, token);
+            let message = match token.token_type {
+                UNTERMINATED_STRING_LITERAL => "unterminated string literal",
+                UNTERMINATED_ARGUMENT => "unterminated argument",
+                UNTERMINATED_CHAR_SET => "unterminated lexer character set",
+                BLOCK_COMMENT | DOC_COMMENT if !token_text.ends_with("*/") => {
+                    "unterminated block comment"
+                }
+                _ => return None,
+            };
+            Some(SyntaxDiagnostic {
+                code: "G4F002",
+                stage: DiagnosticStage::Lexer,
+                span: SourceSpan {
+                    source,
+                    bytes: token.span.bytes.clone(),
+                },
+                message: message.to_owned(),
+            })
+        })
+        .collect()
+}
+
+fn token_text<'a>(text: &'a str, token: &SyntaxToken) -> &'a str {
+    if token.token_type == RUNTIME_TOKEN_EOF {
+        "<EOF>"
+    } else {
+        &text[token.span.bytes.start as usize..token.span.bytes.end as usize]
+    }
+}
+
+fn diagnostic_span(
+    source: SourceId,
+    text: &str,
+    line_starts: &[u32],
+    tokens: &[SyntaxToken],
+    line: usize,
+    column: usize,
+) -> SourceSpan {
+    let start = byte_offset(text, line_starts, line, column);
+    if let Some(token) = tokens.iter().find(|token| token.span.bytes.start == start) {
+        return token.span.clone();
+    }
+    let start_usize = start as usize;
+    let end = text[start_usize..]
+        .chars()
+        .next()
+        .map_or(start, |character| start + character.len_utf8() as u32);
+    SourceSpan {
+        source,
+        bytes: start..end,
+    }
+}
+
+fn byte_offset(text: &str, line_starts: &[u32], line: usize, column: usize) -> u32 {
+    let line_start = line
+        .checked_sub(1)
+        .and_then(|index| line_starts.get(index))
+        .copied()
+        .unwrap_or_else(|| u32::try_from(text.len()).expect("source length checked"));
+    let line_start_usize = line_start as usize;
+    let line_end = text[line_start_usize..]
+        .find('\n')
+        .map_or(text.len(), |offset| line_start_usize + offset);
+    let offset = text[line_start_usize..line_end]
+        .char_indices()
+        .nth(column)
+        .map_or(line_end, |(offset, _)| line_start_usize + offset);
+    u32::try_from(offset).expect("source length checked")
+}
+
+fn copy_cst(
+    source: SourceId,
+    tokens: &[SyntaxToken],
+    root: Node<'_>,
+) -> Result<Cst, FrontendError> {
+    let mut nodes = Vec::new();
+    let mut children = Vec::new();
+    let root = copy_node(source, tokens, root, &mut nodes, &mut children)?;
+    Ok(Cst {
+        nodes: nodes.into_boxed_slice(),
+        children: children.into_boxed_slice(),
+        root,
+    })
+}
+
+fn copy_node(
+    source: SourceId,
+    tokens: &[SyntaxToken],
+    node: Node<'_>,
+    nodes: &mut Vec<SyntaxNode>,
+    children: &mut Vec<SyntaxId>,
+) -> Result<SyntaxId, FrontendError> {
+    let node_index =
+        u32::try_from(nodes.len()).map_err(|_| invalid_span(source, "CST exceeds 2^32 nodes"))?;
+    let kind = match node.kind() {
+        NodeKind::Rule => SyntaxNodeKind::Rule {
+            rule_index: node.as_rule().expect("rule node kind checked").rule_index(),
+        },
+        NodeKind::Terminal => SyntaxNodeKind::Terminal {
+            token_index: node
+                .as_terminal()
+                .expect("terminal node kind checked")
+                .token_id()
+                .index(),
+        },
+        NodeKind::Error => SyntaxNodeKind::Error {
+            token_index: node
+                .as_error()
+                .expect("error node kind checked")
+                .token_id()
+                .index(),
+        },
+    };
+    let span = node_span(source, tokens, node)?;
+    nodes.push(SyntaxNode {
+        kind,
+        span,
+        child_ids: 0..0,
+    });
+
+    let mut direct_children = Vec::new();
+    for child in node.children() {
+        direct_children.push(copy_node(source, tokens, child, nodes, children)?);
+    }
+    let child_start = u32::try_from(children.len())
+        .map_err(|_| invalid_span(source, "CST exceeds 2^32 edges"))?;
+    children.extend(direct_children);
+    let child_end = u32::try_from(children.len())
+        .map_err(|_| invalid_span(source, "CST exceeds 2^32 edges"))?;
+    nodes[node_index as usize].child_ids = child_start..child_end;
+    Ok(SyntaxId(node_index))
+}
+
+fn node_span(
+    source: SourceId,
+    tokens: &[SyntaxToken],
+    node: Node<'_>,
+) -> Result<SourceSpan, FrontendError> {
+    let token_span = |index: usize| {
+        tokens
+            .get(index)
+            .map(|token| token.span.bytes.clone())
+            .ok_or_else(|| invalid_span(source, "CST references a missing token"))
+    };
+    let bytes = match node.kind() {
+        NodeKind::Terminal => token_span(
+            node.as_terminal()
+                .expect("terminal node kind checked")
+                .token_id()
+                .index(),
+        )?,
+        NodeKind::Error => token_span(
+            node.as_error()
+                .expect("error node kind checked")
+                .token_id()
+                .index(),
+        )?,
+        NodeKind::Rule => {
+            let rule = node.as_rule().expect("rule node kind checked");
+            let start = rule
+                .start()
+                .map(|token| token_span(token.token_id().index()))
+                .transpose()?
+                .map_or(0, |span| span.start);
+            let end = rule
+                .stop()
+                .map(|token| token_span(token.token_id().index()))
+                .transpose()?
+                .map_or(start, |span| span.end)
+                .max(start);
+            start..end
+        }
+    };
+    Ok(SourceSpan { source, bytes })
+}
+
+#[derive(Clone, Debug)]
+struct ReportedDiagnostic {
+    line: usize,
+    column: usize,
+    message: String,
+}
+
+#[derive(Clone, Debug, Default)]
+struct DiagnosticCollector(Arc<Mutex<Vec<ReportedDiagnostic>>>);
+
+impl DiagnosticCollector {
+    fn take(&self) -> Vec<ReportedDiagnostic> {
+        std::mem::take(
+            &mut *self
+                .0
+                .lock()
+                .expect("grammar diagnostic collector mutex poisoned"),
+        )
+    }
+}
+
+impl<R> ErrorListener<R> for DiagnosticCollector
+where
+    R: Recognizer + ?Sized,
+{
+    fn syntax_error(
+        &mut self,
+        _recognizer: &R,
+        line: usize,
+        column: usize,
+        message: &str,
+        _error: Option<&antlr4_runtime::AntlrError>,
+    ) {
+        self.0
+            .lock()
+            .expect("grammar diagnostic collector mutex poisoned")
+            .push(ReportedDiagnostic {
+                line,
+                column,
+                message: message.to_owned(),
+            });
+    }
 }
 
 #[cfg(test)]

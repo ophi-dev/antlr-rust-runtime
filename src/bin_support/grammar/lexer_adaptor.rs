@@ -1,0 +1,138 @@
+use antlr4_runtime::{
+    CharStream, INVALID_TOKEN_TYPE, LexerCustomAction, LexerLifecycleCtx, LexerSemCtx,
+    SemanticHooks, TokenView,
+};
+
+use super::generated::antlr_v4_lexer::{
+    ACTION, ARGUMENT_CONTENT, AT, AntlRv4LexerHooks, AntlRv4LexerTypedHooks, CHANNELS, ID, OPTIONS,
+    RBRACE, RULE_REF, SEMI, TOKEN_REF, TOKENS,
+};
+
+const PREQUEL_CONSTRUCT: i32 = -10;
+const OPTIONS_CONSTRUCT: i32 = -11;
+const ARGUMENT_MODE: i32 = 1;
+const LEXER_CHAR_SET_MODE: i32 = 2;
+
+#[derive(Clone, Debug)]
+struct LexerAdaptorState {
+    current_rule_type: i32,
+}
+
+impl Default for LexerAdaptorState {
+    fn default() -> Self {
+        Self {
+            current_rule_type: INVALID_TOKEN_TYPE,
+        }
+    }
+}
+
+impl AntlRv4LexerHooks for LexerAdaptorState {
+    fn handle_begin_argument<I>(&mut self, ctx: &mut LexerSemCtx<'_, I>)
+    where
+        I: CharStream,
+    {
+        if self.current_rule_type == TOKEN_REF {
+            ctx.push_mode(LEXER_CHAR_SET_MODE);
+            ctx.more();
+        } else {
+            ctx.push_mode(ARGUMENT_MODE);
+        }
+    }
+
+    fn handle_end_argument<I>(&mut self, ctx: &mut LexerSemCtx<'_, I>)
+    where
+        I: CharStream,
+    {
+        if ctx.pop_mode() == Some(ARGUMENT_MODE) {
+            ctx.set_type(ARGUMENT_CONTENT);
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub(super) struct LexerAdaptor(AntlRv4LexerTypedHooks<LexerAdaptorState>);
+
+impl SemanticHooks for LexerAdaptor {
+    fn observes_parser_predicates(&self) -> bool {
+        false
+    }
+
+    fn lexer_sempred<I>(
+        &mut self,
+        ctx: &mut LexerSemCtx<'_, I>,
+        rule_index: usize,
+        pred_index: usize,
+    ) -> Option<bool>
+    where
+        I: CharStream,
+    {
+        self.0.lexer_sempred(ctx, rule_index, pred_index)
+    }
+
+    fn lexer_action<I>(&mut self, ctx: &mut LexerSemCtx<'_, I>, action: LexerCustomAction) -> bool
+    where
+        I: CharStream,
+    {
+        self.0.lexer_action(ctx, action)
+    }
+
+    fn lexer_reset<I>(&mut self, ctx: &mut LexerLifecycleCtx<'_, I>)
+    where
+        I: CharStream,
+    {
+        self.0.0.current_rule_type = INVALID_TOKEN_TYPE;
+        self.0.lexer_reset(ctx);
+    }
+
+    fn lexer_before_token<I>(&mut self, ctx: &mut LexerLifecycleCtx<'_, I>)
+    where
+        I: CharStream,
+    {
+        self.0.lexer_before_token(ctx);
+    }
+
+    fn lexer_after_accept<I>(&mut self, ctx: &mut LexerLifecycleCtx<'_, I>)
+    where
+        I: CharStream,
+    {
+        self.0.lexer_after_accept(ctx);
+
+        let state = &mut self.0.0;
+        let token_type = ctx.token_type();
+        if matches!(token_type, OPTIONS | TOKENS | CHANNELS)
+            && state.current_rule_type == INVALID_TOKEN_TYPE
+        {
+            state.current_rule_type = PREQUEL_CONSTRUCT;
+        } else if token_type == OPTIONS && state.current_rule_type == TOKEN_REF {
+            state.current_rule_type = OPTIONS_CONSTRUCT;
+        } else if token_type == RBRACE && state.current_rule_type == PREQUEL_CONSTRUCT {
+            state.current_rule_type = INVALID_TOKEN_TYPE;
+        } else if token_type == RBRACE && state.current_rule_type == OPTIONS_CONSTRUCT {
+            state.current_rule_type = TOKEN_REF;
+        } else if token_type == AT && state.current_rule_type == INVALID_TOKEN_TYPE {
+            state.current_rule_type = AT;
+        } else if token_type == SEMI && state.current_rule_type == OPTIONS_CONSTRUCT {
+            // The option terminator does not end the surrounding lexer rule.
+        } else if token_type == ACTION && state.current_rule_type == AT {
+            state.current_rule_type = INVALID_TOKEN_TYPE;
+        } else if token_type == ID {
+            let text = ctx.token_text();
+            let first = text.chars().next().expect("ID tokens are non-empty");
+            let classified = if first.to_uppercase().eq(first.to_string().chars()) {
+                TOKEN_REF
+            } else {
+                RULE_REF
+            };
+            ctx.set_type(classified);
+            if state.current_rule_type == INVALID_TOKEN_TYPE {
+                state.current_rule_type = classified;
+            }
+        } else if token_type == SEMI {
+            state.current_rule_type = INVALID_TOKEN_TYPE;
+        }
+    }
+
+    fn lexer_token_emitted(&mut self, token: TokenView<'_>) {
+        self.0.lexer_token_emitted(token);
+    }
+}
