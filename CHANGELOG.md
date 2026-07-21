@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.2](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.14.1...v0.14.2) (2026-07-21)
+
+
+### Bug Fixes
+
+* **parser:** bound speculative recognition stack ([#147](https://github.com/ophi-dev/antlr-rust-runtime/issues/147)) ([84f365e](https://github.com/ophi-dev/antlr-rust-runtime/commit/84f365e9d1a675f6d92e37a18afd3231a2883035))
+
 ## [0.14.1](https://github.com/ophi-dev/antlr-rust-runtime/compare/v0.14.0...v0.14.1) (2026-07-20)
 
 
