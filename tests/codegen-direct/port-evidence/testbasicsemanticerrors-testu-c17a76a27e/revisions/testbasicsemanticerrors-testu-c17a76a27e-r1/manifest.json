@@ -74,8 +74,8 @@
     {
       "path": "src/bin_support/grammar/atn/interp_test.rs",
       "marker": "    mod upstream_basic_semantic_errors {",
-      "end_marker": "\n    fn compile_fixture(",
-      "sha256": "43409bc5b7ca255b0b92c28215a8dffe182f5054a0403bb92581155084d81cdf"
+      "end_marker": "\n        const fn expected(",
+      "sha256": "601b3d2e7a8126b38b502258a1ecf7693c3ef8580b30639baeb40eccf5fb1cd5"
     }
   ],
   "demonstrated_red": {

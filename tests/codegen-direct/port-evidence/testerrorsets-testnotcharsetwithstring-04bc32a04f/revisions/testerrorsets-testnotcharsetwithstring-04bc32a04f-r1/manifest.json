@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "logical_id": "testerrorsets-testnotcharsetwithstring-04bc32a04f",
+  "revision_id": "testerrorsets-testnotcharsetwithstring-04bc32a04f-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "closure": {
+    "logical_id": "testerrorsets-testnotcharsetwithstring-04bc32a04f",
+    "source_case_ids": [
+      "antlr-ng:testerrorsets-testnotcharsetwithstring@608d687e971d",
+      "java-antlr:testerrorsets-testnotcharsetwithstring@608d687e971d"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testerrorsets-testnotcharsetwithstring-04bc32a04f/T.g4",
+      "tests/codegen-direct/fixtures/testerrorsets-testnotcharsetwithstring-04bc32a04f/T.tokens",
+      "tests/codegen-direct/fixtures/testerrorsets-testnotcharsetwithstring-04bc32a04f/diagnostics.json",
+      "tests/codegen-direct/fixtures/testerrorsets-testnotcharsetwithstring-04bc32a04f/fixture.json",
+      "tests/codegen-direct/fixtures/testerrorsets-testnotcharsetwithstring-04bc32a04f/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testerrorsets-testnotcharsetwithstring-04bc32a04f/oracle/java-antlr.stdout"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_error_sets::not_char_set_with_string_matches_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust lexer-set diagnostics match Java 4.13.2 exactly for TestErrorSets.testNotCharSetWithString",
+    "scaffold_commit": "78ab1df577b28595576051b902285dfbe669fe7a",
+    "primary_test_commit": "01e1d8fce4bb5638f2b4f726049a4c8c4378047a"
+  },
+  "closure_sha256": "9fbee04f23f76a49a30cf8c57b4115e0fc942630544b24125a0f0e9ed3ed2c59",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testerrorsets-testnotcharsetwithstring@608d687e971d",
+      "path": "tests/TestErrorSets.spec.ts",
+      "sha256": "612cfab5207f6c84d10ac273d968584147e763be9e5e9733ab75904f9480ef2c"
+    },
+    {
+      "source_case_id": "java-antlr:testerrorsets-testnotcharsetwithstring@608d687e971d",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestErrorSets.java",
+      "sha256": "4113c3ccec07e7931070b9072f82381d6b9e0c6b5836def318edb1c17c62217e"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testerrorsets-testnotcharsetwithstring-04bc32a04f/T.g4",
+      "sha256": "4481fd5b43f5a69793e2533c474eae69cfcb01ba5baf7ba3a8174dee5a00737c"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testerrorsets-testnotcharsetwithstring-04bc32a04f/T.tokens",
+      "sha256": "4caac4c4839017a18d0363b4c0cc731f1567c80f7f3aa1df80215e595f8dfdc0"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testerrorsets-testnotcharsetwithstring-04bc32a04f/diagnostics.json",
+      "sha256": "77921df05a15db9379f93b0593a782e1853babce8fc320852e9e55371ffd2ce6"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testerrorsets-testnotcharsetwithstring-04bc32a04f/fixture.json",
+      "sha256": "baea246ae480b0d8579401912aa2732f59ff656f8972002c8db074be37db4345"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testerrorsets-testnotcharsetwithstring-04bc32a04f/oracle/java-antlr.stderr",
+      "sha256": "7e3d9a65bc0978cd7bb6df19689c463c24b1c8d4ee1ef61df14d665abea882f3"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testerrorsets-testnotcharsetwithstring-04bc32a04f/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "commits": {
+    "scaffold": "78ab1df577b28595576051b902285dfbe669fe7a",
+    "primary_test": "01e1d8fce4bb5638f2b4f726049a4c8c4378047a",
+    "primary_implementation": "181eb633a681f90b6047b649a1d190062d38aa99"
+  },
+  "ancestry": {
+    "primary_test_parent": "78ab1df577b28595576051b902285dfbe669fe7a",
+    "primary_implementation_parent": "01e1d8fce4bb5638f2b4f726049a4c8c4378047a",
+    "reachability": "the implementation commit is directly based on the locked red lexer-set tests"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_error_sets {",
+      "end_marker": "\n        const fn expected(",
+      "sha256": "de9c432fb72b45d587fbfcbcc4fd06870a5fdc40cef14273757d2a9bede0b8c0"
+    }
+  ],
+  "demonstrated_red": {
+    "command": "cargo test --locked --bin antlr4-rust-gen upstream_error_sets -- --test-threads=1",
+    "commit": "01e1d8fce4bb5638f2b4f726049a4c8c4378047a",
+    "exit_code": 101,
+    "fingerprint": "expected G4S066 at the lexer-set member, but the compiler emitted G4L002 for the enclosing set"
+  },
+  "green_result": {
+    "command": "cargo test --locked --bin antlr4-rust-gen upstream_error_sets -- --test-threads=1",
+    "commit": "181eb633a681f90b6047b649a1d190062d38aa99",
+    "exit_code": 0,
+    "result": "2 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testerrorsets-testnotcharsetwithstring-04bc32a04f/revisions/testerrorsets-testnotcharsetwithstring-04bc32a04f-r1/oracle-results/declared-sources.json",
+      "sha256": "7f4f5e52c306f42ede2bd671940b796d8748ee4fc227c2db5feb0910e3582f9e"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testerrorsets-testnotcharsetwithstring-04bc32a04f/revisions/testerrorsets-testnotcharsetwithstring-04bc32a04f-r1/matrix-results/results.json",
+      "sha256": "e19e23bd7dbcfb888d64c16cda58d5acce5ef37797f93aa8ff7f52454ed2ce13"
+    }
+  ]
+}

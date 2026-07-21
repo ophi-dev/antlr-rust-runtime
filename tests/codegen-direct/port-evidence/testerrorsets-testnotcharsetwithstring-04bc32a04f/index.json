@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testerrorsets-testnotcharsetwithstring-04bc32a04f",
+  "active_revision_id": "testerrorsets-testnotcharsetwithstring-04bc32a04f-r1",
+  "revisions": [
+    {
+      "revision_id": "testerrorsets-testnotcharsetwithstring-04bc32a04f-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testerrorsets-testnotcharsetwithstring-04bc32a04f/revisions/testerrorsets-testnotcharsetwithstring-04bc32a04f-r1/manifest.json",
+      "closure_sha256": "9fbee04f23f76a49a30cf8c57b4115e0fc942630544b24125a0f0e9ed3ed2c59"
+    }
+  ]
+}

@@ -14,6 +14,9 @@ import {
     BASIC_SEMANTIC_BASE_COMMIT,
     BASIC_SEMANTIC_IMPLEMENTATION_COMMIT,
     BASIC_SEMANTIC_TEST_COMMIT,
+    ERROR_SETS_BASE_COMMIT,
+    ERROR_SETS_IMPLEMENTATION_COMMIT,
+    ERROR_SETS_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_PARENT,
     IMPLEMENTATION_COMMIT,
@@ -237,6 +240,9 @@ for (const [logicalId, record] of records) {
         const basicSemantic = logicalId.startsWith(
             "testbasicsemanticerrors-",
         );
+        const errorSets = logicalId.startsWith(
+            "testerrorsets-",
+        );
         if (resolution === "verified-covered-existing") {
             if (atnSerialization) {
                 expect(
@@ -329,6 +335,22 @@ for (const [logicalId, record] of records) {
                         manifest.ancestry.primary_implementation_parent ===
                             BASIC_SEMANTIC_TEST_COMMIT,
                     `${logicalId} basic semantic recorded ancestry differs`,
+                );
+            } else if (errorSets) {
+                expect(
+                    manifest.commits.scaffold === ERROR_SETS_BASE_COMMIT &&
+                        manifest.commits.primary_test ===
+                            ERROR_SETS_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            ERROR_SETS_IMPLEMENTATION_COMMIT,
+                    `${logicalId} lexer set evidence commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            ERROR_SETS_BASE_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            ERROR_SETS_TEST_COMMIT,
+                    `${logicalId} lexer set recorded ancestry differs`,
                 );
             } else {
                 expect(
@@ -463,6 +485,26 @@ if (basicSemanticImplementationParent !== null) {
         basicSemanticImplementationParent.trim() ===
             BASIC_SEMANTIC_TEST_COMMIT,
         "basic semantic implementation commit is not based on its locked tests",
+    );
+}
+const errorSetsTestParent = gitOptional([
+    "rev-parse",
+    `${ERROR_SETS_TEST_COMMIT}^`,
+]);
+if (errorSetsTestParent !== null) {
+    expect(
+        errorSetsTestParent.trim() === ERROR_SETS_BASE_COMMIT,
+        "lexer set test commit is not based on its recorded base",
+    );
+}
+const errorSetsImplementationParent = gitOptional([
+    "rev-parse",
+    `${ERROR_SETS_IMPLEMENTATION_COMMIT}^`,
+]);
+if (errorSetsImplementationParent !== null) {
+    expect(
+        errorSetsImplementationParent.trim() === ERROR_SETS_TEST_COMMIT,
+        "lexer set implementation commit is not based on its locked tests",
     );
 }
 

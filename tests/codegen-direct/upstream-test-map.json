@@ -16319,8 +16319,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testerrorsets-testnotcharsetwithruleref-9d8ec8db7a-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testerrorsets-testnotcharsetwithruleref-9d8ec8db7a",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_error_sets::not_char_set_with_rule_ref_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -16341,8 +16341,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestErrorSets.testNotCharSetWithRuleRef behavior",
+      "expected_red_failure_fingerprint": "expected G4S065 at the lexer-set member, but the compiler emitted G4L003 for the enclosing set",
+      "observable_equivalence": "direct Rust lexer-set diagnostics match Java 4.13.2 exactly for TestErrorSets.testNotCharSetWithRuleRef",
+      "scaffold_commit": "78ab1df577b28595576051b902285dfbe669fe7a",
+      "primary_test_commit": "01e1d8fce4bb5638f2b4f726049a4c8c4378047a",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_error_sets -- --test-threads=1",
+        "exit_code": 101,
+        "fingerprint": "expected G4S065 at the lexer-set member, but the compiler emitted G4L003 for the enclosing set"
+      },
+      "primary_implementation_commit": "181eb633a681f90b6047b649a1d190062d38aa99",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_error_sets -- --test-threads=1",
+        "result": "2 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testerrorsets-testnotcharsetwithruleref-9d8ec8db7a",
         "source_case_ids": [
@@ -16350,14 +16362,24 @@
           "java-antlr:testerrorsets-testnotcharsetwithruleref@5a4e97345f61"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testerrorsets-testnotcharsetwithruleref-9d8ec8db7a/T.g4",
+          "tests/codegen-direct/fixtures/testerrorsets-testnotcharsetwithruleref-9d8ec8db7a/T.tokens",
+          "tests/codegen-direct/fixtures/testerrorsets-testnotcharsetwithruleref-9d8ec8db7a/diagnostics.json",
+          "tests/codegen-direct/fixtures/testerrorsets-testnotcharsetwithruleref-9d8ec8db7a/fixture.json",
+          "tests/codegen-direct/fixtures/testerrorsets-testnotcharsetwithruleref-9d8ec8db7a/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testerrorsets-testnotcharsetwithruleref-9d8ec8db7a/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testerrorsets-testnotcharsetwithruleref-9d8ec8db7a",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_error_sets::not_char_set_with_rule_ref_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestErrorSets.testNotCharSetWithRuleRef behavior"
+        "observable": "direct Rust lexer-set diagnostics match Java 4.13.2 exactly for TestErrorSets.testNotCharSetWithRuleRef",
+        "scaffold_commit": "78ab1df577b28595576051b902285dfbe669fe7a",
+        "primary_test_commit": "01e1d8fce4bb5638f2b4f726049a4c8c4378047a"
       },
-      "closure_sha256": "fe6302b973fccfe75c064b299b4a8e262b722b85c1c94a91c29d35d8de5e94c3",
-      "evidence_path": null
+      "closure_sha256": "f062ab15c992a8514cfcac690f235c36bd3d9b35afe11d57ba15dbeae6875218",
+      "evidence_path": "tests/codegen-direct/port-evidence/testerrorsets-testnotcharsetwithruleref-9d8ec8db7a"
     },
     {
       "logical_id": "testerrorsets-testnotcharsetwithstring-04bc32a04f",
@@ -16369,8 +16391,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testerrorsets-testnotcharsetwithstring-04bc32a04f-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testerrorsets-testnotcharsetwithstring-04bc32a04f",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_error_sets::not_char_set_with_string_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -16391,8 +16413,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestErrorSets.testNotCharSetWithString behavior",
+      "expected_red_failure_fingerprint": "expected G4S066 at the lexer-set member, but the compiler emitted G4L002 for the enclosing set",
+      "observable_equivalence": "direct Rust lexer-set diagnostics match Java 4.13.2 exactly for TestErrorSets.testNotCharSetWithString",
+      "scaffold_commit": "78ab1df577b28595576051b902285dfbe669fe7a",
+      "primary_test_commit": "01e1d8fce4bb5638f2b4f726049a4c8c4378047a",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_error_sets -- --test-threads=1",
+        "exit_code": 101,
+        "fingerprint": "expected G4S066 at the lexer-set member, but the compiler emitted G4L002 for the enclosing set"
+      },
+      "primary_implementation_commit": "181eb633a681f90b6047b649a1d190062d38aa99",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_error_sets -- --test-threads=1",
+        "result": "2 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testerrorsets-testnotcharsetwithstring-04bc32a04f",
         "source_case_ids": [
@@ -16400,14 +16434,24 @@
           "java-antlr:testerrorsets-testnotcharsetwithstring@608d687e971d"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testerrorsets-testnotcharsetwithstring-04bc32a04f/T.g4",
+          "tests/codegen-direct/fixtures/testerrorsets-testnotcharsetwithstring-04bc32a04f/T.tokens",
+          "tests/codegen-direct/fixtures/testerrorsets-testnotcharsetwithstring-04bc32a04f/diagnostics.json",
+          "tests/codegen-direct/fixtures/testerrorsets-testnotcharsetwithstring-04bc32a04f/fixture.json",
+          "tests/codegen-direct/fixtures/testerrorsets-testnotcharsetwithstring-04bc32a04f/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testerrorsets-testnotcharsetwithstring-04bc32a04f/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testerrorsets-testnotcharsetwithstring-04bc32a04f",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_error_sets::not_char_set_with_string_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestErrorSets.testNotCharSetWithString behavior"
+        "observable": "direct Rust lexer-set diagnostics match Java 4.13.2 exactly for TestErrorSets.testNotCharSetWithString",
+        "scaffold_commit": "78ab1df577b28595576051b902285dfbe669fe7a",
+        "primary_test_commit": "01e1d8fce4bb5638f2b4f726049a4c8c4378047a"
       },
-      "closure_sha256": "becd0411ec2dbaaecf4636fb0ff59d83cf09fda83079095fb6905376a3859d69",
-      "evidence_path": null
+      "closure_sha256": "9fbee04f23f76a49a30cf8c57b4115e0fc942630544b24125a0f0e9ed3ed2c59",
+      "evidence_path": "tests/codegen-direct/port-evidence/testerrorsets-testnotcharsetwithstring-04bc32a04f"
     },
     {
       "logical_id": "testescapesequenceparsing-testparseempty-98a0364b12",

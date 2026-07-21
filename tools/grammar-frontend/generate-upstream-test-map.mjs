@@ -13,6 +13,9 @@ import {
     BASIC_SEMANTIC_BASE_COMMIT,
     BASIC_SEMANTIC_IMPLEMENTATION_COMMIT,
     BASIC_SEMANTIC_TEST_COMMIT,
+    ERROR_SETS_BASE_COMMIT,
+    ERROR_SETS_IMPLEMENTATION_COMMIT,
+    ERROR_SETS_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_COMMIT,
     IMPLEMENTATION_COMMIT,
     JAVA_COMMIT,
@@ -76,6 +79,28 @@ const BASIC_SEMANTIC_PORTS = new Map([
                 "grammar::atn::interp_test::tests::upstream_basic_semantic_errors::u_matches_java",
             redFingerprint:
                 "expected 11 ordered diagnostics, but the direct compiler emitted 3",
+        },
+    ],
+]);
+const ERROR_SETS_TEST_COMMAND =
+    "cargo test --locked --bin antlr4-rust-gen upstream_error_sets -- --test-threads=1";
+const ERROR_SETS_PORTS = new Map([
+    [
+        "testerrorsets-testnotcharsetwithruleref-9d8ec8db7a",
+        {
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_error_sets::not_char_set_with_rule_ref_matches_java",
+            redFingerprint:
+                "expected G4S065 at the lexer-set member, but the compiler emitted G4L003 for the enclosing set",
+        },
+    ],
+    [
+        "testerrorsets-testnotcharsetwithstring-04bc32a04f",
+        {
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_error_sets::not_char_set_with_string_matches_java",
+            redFingerprint:
+                "expected G4S066 at the lexer-set member, but the compiler emitted G4L002 for the enclosing set",
         },
     ],
 ]);
@@ -558,8 +583,11 @@ function completedPhaseBRow(
             : completed.kind === "atn-construction"
               ? `direct Rust ATN construction matches the Java 4.13.2 graph, ` +
                 `.interp, or diagnostic for ${cases[0].suite}.${cases[0].name}`
-              : `direct Rust semantic diagnostics match Java 4.13.2 exactly ` +
-                `for ${cases[0].suite}.${cases[0].name}`;
+              : completed.kind === "error-sets"
+                ? `direct Rust lexer-set diagnostics match Java 4.13.2 exactly ` +
+                  `for ${cases[0].suite}.${cases[0].name}`
+                : `direct Rust semantic diagnostics match Java 4.13.2 exactly ` +
+                  `for ${cases[0].suite}.${cases[0].name}`;
     const coveredExisting =
         completed.resolution === "verified-covered-existing";
     const closure = {
@@ -717,8 +745,22 @@ async function loadCompletedPhaseBPorts() {
             redFingerprint: definition.redFingerprint,
         });
     }
-    if (ports.size !== 79) {
-        throw new Error(`expected 79 completed Phase B ports, found ${ports.size}`);
+    for (const [logicalId, definition] of ERROR_SETS_PORTS) {
+        ports.set(logicalId, {
+            fixturePaths: await fixturePaths(logicalId),
+            rustTest: definition.rustTest,
+            kind: "error-sets",
+            resolution: "ported",
+            scaffoldCommit: ERROR_SETS_BASE_COMMIT,
+            testCommit: ERROR_SETS_TEST_COMMIT,
+            implementationCommit: ERROR_SETS_IMPLEMENTATION_COMMIT,
+            testCommand: ERROR_SETS_TEST_COMMAND,
+            greenResult: "2 passed; 0 failed",
+            redFingerprint: definition.redFingerprint,
+        });
+    }
+    if (ports.size !== 81) {
+        throw new Error(`expected 81 completed Phase B ports, found ${ports.size}`);
     }
     return ports;
 }

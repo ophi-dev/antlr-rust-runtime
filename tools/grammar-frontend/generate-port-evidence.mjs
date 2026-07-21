@@ -17,6 +17,9 @@ import {
     BASIC_SEMANTIC_BASE_COMMIT,
     BASIC_SEMANTIC_IMPLEMENTATION_COMMIT,
     BASIC_SEMANTIC_TEST_COMMIT,
+    ERROR_SETS_BASE_COMMIT,
+    ERROR_SETS_IMPLEMENTATION_COMMIT,
+    ERROR_SETS_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_PARENT,
     IMPLEMENTATION_COMMIT,
@@ -52,7 +55,11 @@ const ATN_CONSTRUCTION_TEST_END = "\n    struct GraphOracle";
 const BASIC_SEMANTIC_TEST_START =
     "    mod upstream_basic_semantic_errors {";
 const BASIC_SEMANTIC_TEST_END =
-    "\n    fn compile_fixture(";
+    "\n        const fn expected(";
+const ERROR_SETS_TEST_START =
+    "    mod upstream_error_sets {";
+const ERROR_SETS_TEST_END =
+    "\n        const fn expected(";
 const SYMBOL_INFO_SHA256 =
     "df274a0dca42823cc2ef2608d98d544be53246a48c56f96050b0a987ce0890f3";
 
@@ -398,6 +405,63 @@ const basicSemanticLockedSections = [
         sha256: digest(checkedInBasicSemanticTests),
     },
 ];
+const checkedInErrorSetsTests = sectionBetweenMarkers(
+    await readFile(resolve(repoRoot, ATN_SERIALIZATION_TEST_PATH), "utf8"),
+    ERROR_SETS_TEST_START,
+    ERROR_SETS_TEST_END,
+);
+const recordedErrorSetsTests = gitShowOptional(
+    repoRoot,
+    ERROR_SETS_TEST_COMMIT,
+    ATN_SERIALIZATION_TEST_PATH,
+);
+const implementedErrorSetsTests = gitShowOptional(
+    repoRoot,
+    ERROR_SETS_IMPLEMENTATION_COMMIT,
+    ATN_SERIALIZATION_TEST_PATH,
+);
+if (recordedErrorSetsTests === null) {
+    warnMissingHistoricalSource(
+        "lexer set error test verification",
+        ERROR_SETS_TEST_COMMIT,
+        ATN_SERIALIZATION_TEST_PATH,
+    );
+} else if (
+    sectionBetweenMarkers(
+        recordedErrorSetsTests,
+        ERROR_SETS_TEST_START,
+        ERROR_SETS_TEST_END,
+    ) !== checkedInErrorSetsTests
+) {
+    throw new Error(
+        "checked-in lexer set error ports differ from their test commit",
+    );
+}
+if (implementedErrorSetsTests === null) {
+    warnMissingHistoricalSource(
+        "lexer set error implementation verification",
+        ERROR_SETS_IMPLEMENTATION_COMMIT,
+        ATN_SERIALIZATION_TEST_PATH,
+    );
+} else if (
+    sectionBetweenMarkers(
+        implementedErrorSetsTests,
+        ERROR_SETS_TEST_START,
+        ERROR_SETS_TEST_END,
+    ) !== checkedInErrorSetsTests
+) {
+    throw new Error(
+        "lexer set error implementation changed the locked test ports",
+    );
+}
+const errorSetsLockedSections = [
+    {
+        path: ATN_SERIALIZATION_TEST_PATH,
+        marker: ERROR_SETS_TEST_START,
+        end_marker: ERROR_SETS_TEST_END,
+        sha256: digest(checkedInErrorSetsTests),
+    },
+];
 
 const upstreamByLogicalId = new Map(
     testMap.rows.map((row) => [row.logical_id, row]),
@@ -498,11 +562,15 @@ for (const row of completedRows) {
     const phaseBBasicSemantic = row.logical_id.startsWith(
         "testbasicsemanticerrors-",
     );
+    const phaseBErrorSets = row.logical_id.startsWith(
+        "testerrorsets-",
+    );
     if (
         row.owner_phase === "B" &&
         !phaseBAtnSerialization &&
         !phaseBAtnConstruction &&
-        !phaseBBasicSemantic
+        !phaseBBasicSemantic &&
+        !phaseBErrorSets
     ) {
         throw new Error(`missing Phase B evidence profile for ${row.logical_id}`);
     }
@@ -536,6 +604,15 @@ for (const row of completedRows) {
                   reachability:
                       "the implementation commit is directly based on the locked red semantic tests",
               }
+            : phaseBErrorSets
+              ? {
+                    lockedSections: errorSetsLockedSections,
+                    scaffoldCommit: ERROR_SETS_BASE_COMMIT,
+                    testParent: ERROR_SETS_BASE_COMMIT,
+                    implementationParent: ERROR_SETS_TEST_COMMIT,
+                    reachability:
+                        "the implementation commit is directly based on the locked red lexer-set tests",
+                }
           : null;
     await addEvidence({
         logicalId: row.logical_id,
@@ -573,6 +650,15 @@ for (const row of completedRows) {
                       java_compatibility_verdict:
                           "exact Java 4.13.2 diagnostic severity, ordering, position, and message equality",
                   }
+                : phaseBErrorSets
+                  ? {
+                        primary:
+                            "the direct Rust compiler emits the same lexer-set diagnostic category and source position as Java 4.13.2",
+                        alternate:
+                            "the pinned antlr-ng TestErrorSets case exposes the same lexer-set category and position contract",
+                        java_compatibility_verdict:
+                            "exact Java 4.13.2 diagnostic severity, position, and message equality",
+                    }
             : {
                   primary: coveredExisting
                       ? "the case-specific Rust port matches the pinned accepted and rejected syntax outcomes"
@@ -611,7 +697,8 @@ for (const row of completedRows) {
             : coveredExisting
               ? "the case-specific test passed against an implementation already present in its parent"
               : "direct ancestry is verified when the recorded commit objects are available",
-        demonstratedRed: phaseBAtnConstruction || phaseBBasicSemantic
+        demonstratedRed:
+            phaseBAtnConstruction || phaseBBasicSemantic || phaseBErrorSets
             ? row.demonstrated_red
             : undefined,
     });

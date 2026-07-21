@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testerrorsets-testnotcharsetwithruleref-9d8ec8db7a",
+  "active_revision_id": "testerrorsets-testnotcharsetwithruleref-9d8ec8db7a-r1",
+  "revisions": [
+    {
+      "revision_id": "testerrorsets-testnotcharsetwithruleref-9d8ec8db7a-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testerrorsets-testnotcharsetwithruleref-9d8ec8db7a/revisions/testerrorsets-testnotcharsetwithruleref-9d8ec8db7a-r1/manifest.json",
+      "closure_sha256": "f062ab15c992a8514cfcac690f235c36bd3d9b35afe11d57ba15dbeae6875218"
+    }
+  ]
+}

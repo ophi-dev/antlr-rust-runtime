@@ -29,6 +29,12 @@ export const BASIC_SEMANTIC_TEST_COMMIT =
     "d133e49cebf5b149b9cdf0dff70171128cd8ded5";
 export const BASIC_SEMANTIC_IMPLEMENTATION_COMMIT =
     "1733fa4e06a1b97951592da68689a9bff27ba86c";
+export const ERROR_SETS_BASE_COMMIT =
+    "78ab1df577b28595576051b902285dfbe669fe7a";
+export const ERROR_SETS_TEST_COMMIT =
+    "01e1d8fce4bb5638f2b4f726049a4c8c4378047a";
+export const ERROR_SETS_IMPLEMENTATION_COMMIT =
+    "181eb633a681f90b6047b649a1d190062d38aa99";
 
 export function stableStringify(value) {
     if (Array.isArray(value)) {
