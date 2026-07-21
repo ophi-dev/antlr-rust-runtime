@@ -45,6 +45,13 @@ fn normalize_property_name(name: &str) -> String {
 mod tests {
     use super::*;
 
+    fn contains(property: &str, code_point: i32) -> bool {
+        property_ranges(property)
+            .expect("known Unicode property")
+            .chunks_exact(2)
+            .any(|range| (range[0]..=range[1]).contains(&code_point))
+    }
+
     #[test]
     fn resolves_properties_aliases_and_normalization() {
         assert_eq!(property_ranges("Gothic"), Some(&[66352, 66378][..]));
@@ -62,5 +69,164 @@ mod tests {
         assert_eq!(simple_uppercase(i32::from(b'a')), i32::from(b'A'));
         assert_eq!(simple_uppercase(0x00df), 0x00df);
         assert_eq!(simple_lowercase(0x0130), i32::from(b'i'));
+    }
+
+    #[test]
+    fn unicode_general_categories_latin_matches_java() {
+        assert!(contains("Lu", i32::from(b'X')));
+        assert!(!contains("Lu", i32::from(b'x')));
+        assert!(contains("Ll", i32::from(b'x')));
+        assert!(!contains("Ll", i32::from(b'X')));
+        assert!(contains("L", i32::from(b'X')));
+        assert!(contains("L", i32::from(b'x')));
+        assert!(contains("N", i32::from(b'0')));
+        assert!(contains("Z", i32::from(b' ')));
+    }
+
+    #[test]
+    fn unicode_general_categories_bmp_matches_java() {
+        assert!(contains("Lu", 0x1e3a));
+        assert!(!contains("Lu", 0x1e3b));
+        assert!(contains("Ll", 0x1e3b));
+        assert!(!contains("Ll", 0x1e3a));
+        assert!(contains("L", 0x1e3a));
+        assert!(contains("L", 0x1e3b));
+        assert!(contains("N", 0x1bb0));
+        assert!(!contains("N", 0x1e3a));
+        assert!(contains("Z", 0x2028));
+        assert!(!contains("Z", 0x1e3a));
+    }
+
+    #[test]
+    fn unicode_general_categories_smp_matches_java() {
+        assert!(contains("Lu", 0x1d5d4));
+        assert!(!contains("Lu", 0x1d770));
+        assert!(contains("Ll", 0x1d770));
+        assert!(!contains("Ll", 0x1d5d4));
+        assert!(contains("L", 0x1d5d4));
+        assert!(contains("L", 0x1d770));
+        assert!(contains("N", 0x11c50));
+        assert!(!contains("N", 0x1d5d4));
+    }
+
+    #[test]
+    fn unicode_category_aliases_match_java() {
+        assert!(contains("Lowercase_Letter", i32::from(b'x')));
+        assert!(!contains("Lowercase_Letter", i32::from(b'X')));
+        assert!(contains("Letter", i32::from(b'x')));
+        assert!(!contains("Letter", i32::from(b'0')));
+        assert!(contains("Enclosing_Mark", 0x20e2));
+        assert!(!contains("Enclosing_Mark", i32::from(b'x')));
+    }
+
+    #[test]
+    fn unicode_binary_properties_match_java() {
+        assert!(contains("Emoji", 0x1f4a9));
+        assert!(!contains("Emoji", i32::from(b'X')));
+        assert!(contains("alnum", i32::from(b'9')));
+        assert!(!contains("alnum", 0x1f4a9));
+        assert!(contains("Dash", i32::from(b'-')));
+        assert!(contains("Hex", i32::from(b'D')));
+        assert!(!contains("Hex", i32::from(b'Q')));
+    }
+
+    #[test]
+    fn unicode_binary_property_aliases_match_java() {
+        assert!(contains("Ideo", 0x611b));
+        assert!(!contains("Ideo", i32::from(b'X')));
+        assert!(contains("Soft_Dotted", 0x0456));
+        assert!(!contains("Soft_Dotted", i32::from(b'X')));
+        assert!(contains("Noncharacter_Code_Point", 0xffff));
+        assert!(!contains("Noncharacter_Code_Point", i32::from(b'X')));
+    }
+
+    #[test]
+    fn unicode_scripts_match_java() {
+        assert!(contains("Zyyy", i32::from(b'0')));
+        assert!(contains("Latn", i32::from(b'X')));
+        assert!(contains("Hani", 0x4e04));
+        assert!(contains("Cyrl", 0x0404));
+    }
+
+    #[test]
+    fn unicode_script_equals_matches_java() {
+        assert!(contains("Script=Zyyy", i32::from(b'0')));
+        assert!(contains("Script=Latn", i32::from(b'X')));
+        assert!(contains("Script=Hani", 0x4e04));
+        assert!(contains("Script=Cyrl", 0x0404));
+    }
+
+    #[test]
+    fn unicode_script_aliases_match_java() {
+        assert!(contains("Common", i32::from(b'0')));
+        assert!(contains("Latin", i32::from(b'X')));
+        assert!(contains("Han", 0x4e04));
+        assert!(contains("Cyrillic", 0x0404));
+    }
+
+    #[test]
+    fn unicode_blocks_match_java() {
+        assert!(contains("InASCII", i32::from(b'0')));
+        assert!(contains("InCJK", 0x4e04));
+        assert!(contains("InCyrillic", 0x0404));
+        assert!(contains("InMisc_Pictographs", 0x1f4a9));
+    }
+
+    #[test]
+    fn unicode_block_equals_matches_java() {
+        assert!(contains("Block=ASCII", i32::from(b'0')));
+        assert!(contains("Block=CJK", 0x4e04));
+        assert!(contains("Block=Cyrillic", 0x0404));
+        assert!(contains("Block=Misc_Pictographs", 0x1f4a9));
+    }
+
+    #[test]
+    fn unicode_block_aliases_match_java() {
+        assert!(contains("InBasic_Latin", i32::from(b'0')));
+        assert!(contains("InMiscellaneous_Mathematical_Symbols_B", 0x29be));
+    }
+
+    #[test]
+    fn enumerated_property_equals_matches_java() {
+        assert!(!contains("Grapheme_Cluster_Break=E_Base", 0x1f47e));
+        assert!(!contains("Grapheme_Cluster_Break=E_Base", 0x1038));
+        assert!(contains("East_Asian_Width=Ambiguous", 0x00a1));
+        assert!(!contains("East_Asian_Width=Ambiguous", 0x00a2));
+    }
+
+    #[test]
+    fn extended_pictographic_matches_java() {
+        assert!(contains("Extended_Pictographic", 0x1f588));
+        assert!(!contains("Extended_Pictographic", i32::from(b'0')));
+    }
+
+    #[test]
+    fn emoji_presentation_matches_java() {
+        assert!(contains("EmojiPresentation=EmojiDefault", 0x1f4a9));
+        assert!(!contains("EmojiPresentation=EmojiDefault", i32::from(b'0')));
+        assert!(!contains("EmojiPresentation=EmojiDefault", i32::from(b'A')));
+        assert!(!contains("EmojiPresentation=TextDefault", 0x1f4a9));
+        assert!(contains("EmojiPresentation=TextDefault", i32::from(b'0')));
+        assert!(!contains("EmojiPresentation=TextDefault", i32::from(b'A')));
+    }
+
+    #[test]
+    fn property_case_insensitivity_matches_java() {
+        assert!(contains("l", i32::from(b'x')));
+        assert!(!contains("l", i32::from(b'0')));
+        assert!(contains("common", i32::from(b'0')));
+        assert!(contains("Alnum", i32::from(b'0')));
+    }
+
+    #[test]
+    fn property_dash_same_as_underscore_matches_java() {
+        assert!(contains("InLatin-1", 0x00f0));
+    }
+
+    #[test]
+    fn modifying_unicode_data_should_throw_matches_java() {
+        fn requires_read_only_static_slice(_: &'static [i32]) {}
+
+        requires_read_only_static_slice(property_ranges("L").expect("known Unicode property"));
     }
 }
