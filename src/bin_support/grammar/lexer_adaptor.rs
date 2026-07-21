@@ -16,12 +16,14 @@ const LEXER_CHAR_SET_MODE: i32 = 2;
 #[derive(Clone, Debug)]
 struct LexerAdaptorState {
     current_rule_type: i32,
+    enclosing_rule_type: Option<i32>,
 }
 
 impl Default for LexerAdaptorState {
     fn default() -> Self {
         Self {
             current_rule_type: INVALID_TOKEN_TYPE,
+            enclosing_rule_type: None,
         }
     }
 }
@@ -81,6 +83,7 @@ impl SemanticHooks for LexerAdaptor {
         I: CharStream,
     {
         self.0.0.current_rule_type = INVALID_TOKEN_TYPE;
+        self.0.0.enclosing_rule_type = None;
         self.0.lexer_reset(ctx);
     }
 
@@ -103,16 +106,20 @@ impl SemanticHooks for LexerAdaptor {
             && state.current_rule_type == INVALID_TOKEN_TYPE
         {
             state.current_rule_type = PREQUEL_CONSTRUCT;
-        } else if token_type == OPTIONS && state.current_rule_type == TOKEN_REF {
+        } else if token_type == OPTIONS && matches!(state.current_rule_type, RULE_REF | TOKEN_REF) {
+            state.enclosing_rule_type = Some(state.current_rule_type);
             state.current_rule_type = OPTIONS_CONSTRUCT;
         } else if token_type == RBRACE && state.current_rule_type == PREQUEL_CONSTRUCT {
             state.current_rule_type = INVALID_TOKEN_TYPE;
         } else if token_type == RBRACE && state.current_rule_type == OPTIONS_CONSTRUCT {
-            state.current_rule_type = TOKEN_REF;
+            state.current_rule_type = state
+                .enclosing_rule_type
+                .take()
+                .unwrap_or(INVALID_TOKEN_TYPE);
         } else if token_type == AT && state.current_rule_type == INVALID_TOKEN_TYPE {
             state.current_rule_type = AT;
         } else if token_type == SEMI && state.current_rule_type == OPTIONS_CONSTRUCT {
-            // The option terminator does not end the surrounding lexer rule.
+            // The option terminator does not end the surrounding rule.
         } else if token_type == ACTION && state.current_rule_type == AT {
             state.current_rule_type = INVALID_TOKEN_TYPE;
         } else if token_type == ID {
