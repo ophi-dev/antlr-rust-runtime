@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodedata-emojipresentation-537f7d4f94",
+  "revision_id": "testunicodedata-emojipresentation-537f7d4f94-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "resolution": "verified-covered-existing",
+  "closure": {
+    "logical_id": "testunicodedata-emojipresentation-537f7d4f94",
+    "source_case_ids": [
+      "java-antlr:testunicodedata-emojipresentation@e4555e19487a"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::unicode::tests::emoji_presentation_matches_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.emojiPresentation",
+    "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+    "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+    "resolution": "verified-covered-existing"
+  },
+  "closure_sha256": "ef7b78bb4249da3a9c19470d6894b3b2b7afed0269154a2702161c75e602ff3d",
+  "allowed_inputs": [
+    {
+      "source_case_id": "java-antlr:testunicodedata-emojipresentation@e4555e19487a",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestUnicodeData.java",
+      "sha256": "ade89cb248c990ad3508f03006b47213a4f751e5633420217ac211e6ae583c7f"
+    }
+  ],
+  "commits": {
+    "scaffold": "adb9780e25a8145cff258d641231c3fcea04f710",
+    "primary_test": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+    "primary_implementation": "adb9780e25a8145cff258d641231c3fcea04f710"
+  },
+  "ancestry": {
+    "primary_test_parent": "adb9780e25a8145cff258d641231c3fcea04f710",
+    "primary_implementation_parent": "247896246d88bfca50208b84e271dc907da220f7",
+    "reachability": "the case-specific tests passed against the existing generated Unicode data implementation"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/unicode.rs",
+      "marker": "#[cfg(test)]\nmod tests {",
+      "sha256": "fc942ab1ce3ba564d12d311589c30e1f9ea1bd5e2658c41dd07e4d6c687dbb5b"
+    }
+  ],
+  "verified_covered_existing": {
+    "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::emoji_presentation_matches_java -- --exact",
+    "commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed",
+    "covering_implementation_commit": "adb9780e25a8145cff258d641231c3fcea04f710"
+  },
+  "green_result": {
+    "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::emoji_presentation_matches_java -- --exact",
+    "commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testunicodedata-emojipresentation-537f7d4f94/revisions/testunicodedata-emojipresentation-537f7d4f94-r1/oracle-results/declared-sources.json",
+      "sha256": "db2f81dbaf5ca499732dbe2c64a46796d98a70ff68e436d1fa34c43ee705af64"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testunicodedata-emojipresentation-537f7d4f94/revisions/testunicodedata-emojipresentation-537f7d4f94-r1/matrix-results/results.json",
+      "sha256": "56496d95330f63ebfd6e0d06963d35a88ae88974a11d277293c5c27a46ffd082"
+    }
+  ]
+}

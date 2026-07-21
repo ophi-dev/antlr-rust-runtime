@@ -49,6 +49,9 @@ import {
     TOKEN_POSITION_TEST_COMMIT,
     TOPOLOGICAL_SORT_BASE_COMMIT,
     TOPOLOGICAL_SORT_TEST_COMMIT,
+    UNICODE_DATA_BASE_COMMIT,
+    UNICODE_DATA_BASE_PARENT_COMMIT,
+    UNICODE_DATA_TEST_COMMIT,
     UNICODE_ESCAPE_IMPLEMENTATION_COMMIT,
     UNICODE_ESCAPE_SCAFFOLD_COMMIT,
     UNICODE_ESCAPE_TEST_COMMIT,
@@ -125,6 +128,9 @@ const ESCAPE_SEQUENCE_TEST_MARKER = "#[cfg(test)]\nmod tests {";
 const UNICODE_ESCAPE_TEST_PATH =
     "src/bin_support/grammar/unicode_escape.rs";
 const UNICODE_ESCAPE_TEST_MARKER = "#[cfg(test)]\nmod tests {";
+const UNICODE_DATA_TEST_PATH =
+    "src/bin_support/grammar/unicode.rs";
+const UNICODE_DATA_TEST_MARKER = "#[cfg(test)]\nmod tests {";
 const EMPTY_VOCABULARY_LOGICAL_ID =
     "testvocabulary-testemptyvocabulary-66d31ad014";
 const SYMBOL_INFO_SHA256 =
@@ -934,6 +940,33 @@ const unicodeEscapeLockedSections = [
         sha256: digest(checkedInUnicodeEscapeTests),
     },
 ];
+const checkedInUnicodeDataTests = sectionAtMarker(
+    await readFile(resolve(repoRoot, UNICODE_DATA_TEST_PATH), "utf8"),
+    UNICODE_DATA_TEST_MARKER,
+);
+const recordedUnicodeDataTests = gitShowOptional(
+    repoRoot,
+    UNICODE_DATA_TEST_COMMIT,
+    UNICODE_DATA_TEST_PATH,
+);
+if (
+    recordedUnicodeDataTests === null ||
+    sectionAtMarker(
+        recordedUnicodeDataTests,
+        UNICODE_DATA_TEST_MARKER,
+    ) !== checkedInUnicodeDataTests
+) {
+    throw new Error(
+        "checked-in Unicode data ports differ from their test commit",
+    );
+}
+const unicodeDataLockedSections = [
+    {
+        path: UNICODE_DATA_TEST_PATH,
+        marker: UNICODE_DATA_TEST_MARKER,
+        sha256: digest(checkedInUnicodeDataTests),
+    },
+];
 
 const upstreamByLogicalId = new Map(
     testMap.rows.map((row) => [row.logical_id, row]),
@@ -1060,6 +1093,9 @@ for (const row of completedRows) {
     const phaseBUnicodeEscape = row.logical_id.startsWith(
         "testunicodeescapes-",
     );
+    const phaseBUnicodeData = row.logical_id.startsWith(
+        "testunicodedata-",
+    );
     if (
         row.owner_phase === "B" &&
         !phaseBAtnSerialization &&
@@ -1073,7 +1109,8 @@ for (const row of completedRows) {
         !phaseBCharSupport &&
         !phaseBNestedAction &&
         !phaseBEscapeSequence &&
-        !phaseBUnicodeEscape
+        !phaseBUnicodeEscape &&
+        !phaseBUnicodeData
     ) {
         throw new Error(`missing Phase B evidence profile for ${row.logical_id}`);
     }
@@ -1223,6 +1260,19 @@ for (const row of completedRows) {
                                     reachability:
                                         "the Unicode escape implementation commit is directly based on its locked red tests",
                                 }
+                              : phaseBUnicodeData
+                                ? {
+                                      lockedSections:
+                                          unicodeDataLockedSections,
+                                      scaffoldCommit:
+                                          UNICODE_DATA_BASE_COMMIT,
+                                      testParent:
+                                          UNICODE_DATA_BASE_COMMIT,
+                                      implementationParent:
+                                          UNICODE_DATA_BASE_PARENT_COMMIT,
+                                      reachability:
+                                          "the case-specific tests passed against the existing generated Unicode data implementation",
+                                  }
           : null;
     await addEvidence({
         logicalId: row.logical_id,
@@ -1341,6 +1391,15 @@ for (const row of completedRows) {
                                         java_compatibility_verdict:
                                             "exact Java 4.13.2 TestUnicodeEscapes output equality",
                                     }
+                                  : phaseBUnicodeData
+                                    ? {
+                                          primary:
+                                              "the direct Rust Unicode property tables match Java 4.13.2 categories, aliases, scripts, blocks, and emoji properties while exposing read-only static slices",
+                                          alternate:
+                                              "paired pinned antlr-ng cases where available, plus the generated property-table oracle, expose the same membership behavior",
+                                          java_compatibility_verdict:
+                                              "exact Java 4.13.2 property membership; Rust's read-only slice statically enforces Java's mutation rejection contract",
+                                      }
             : {
                   primary: coveredExisting
                       ? "the case-specific Rust port matches the pinned accepted and rejected syntax outcomes"

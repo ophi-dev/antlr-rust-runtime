@@ -43,6 +43,8 @@ import {
     TOKEN_POSITION_TEST_COMMIT,
     TOPOLOGICAL_SORT_BASE_COMMIT,
     TOPOLOGICAL_SORT_TEST_COMMIT,
+    UNICODE_DATA_BASE_COMMIT,
+    UNICODE_DATA_TEST_COMMIT,
     UNICODE_ESCAPE_IMPLEMENTATION_COMMIT,
     UNICODE_ESCAPE_SCAFFOLD_COMMIT,
     UNICODE_ESCAPE_TEST_COMMIT,
@@ -278,6 +280,49 @@ const UNICODE_ESCAPE_EXPECTED = new Map([
 ]);
 const UNICODE_ESCAPE_TEST_PREFIX =
     "cargo test --locked --bin antlr4-rust-gen grammar::unicode_escape::tests::";
+const UNICODE_DATA_TEST_PREFIX =
+    "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::";
+const UNICODE_DATA_TEST_NAMES = new Map([
+    [
+        "testUnicodeGeneralCategoriesLatin",
+        "unicode_general_categories_latin_matches_java",
+    ],
+    [
+        "testUnicodeGeneralCategoriesBMP",
+        "unicode_general_categories_bmp_matches_java",
+    ],
+    [
+        "testUnicodeGeneralCategoriesSMP",
+        "unicode_general_categories_smp_matches_java",
+    ],
+    ["testUnicodeCategoryAliases", "unicode_category_aliases_match_java"],
+    ["testUnicodeBinaryProperties", "unicode_binary_properties_match_java"],
+    [
+        "testUnicodeBinaryPropertyAliases",
+        "unicode_binary_property_aliases_match_java",
+    ],
+    ["testUnicodeScripts", "unicode_scripts_match_java"],
+    ["testUnicodeScriptEquals", "unicode_script_equals_matches_java"],
+    ["testUnicodeScriptAliases", "unicode_script_aliases_match_java"],
+    ["testUnicodeBlocks", "unicode_blocks_match_java"],
+    ["testUnicodeBlockEquals", "unicode_block_equals_matches_java"],
+    ["testUnicodeBlockAliases", "unicode_block_aliases_match_java"],
+    ["testEnumeratedPropertyEquals", "enumerated_property_equals_matches_java"],
+    ["extendedPictographic", "extended_pictographic_matches_java"],
+    ["emojiPresentation", "emoji_presentation_matches_java"],
+    [
+        "testPropertyCaseInsensitivity",
+        "property_case_insensitivity_matches_java",
+    ],
+    [
+        "testPropertyDashSameAsUnderscore",
+        "property_dash_same_as_underscore_matches_java",
+    ],
+    [
+        "modifyingUnicodeDataShouldThrow",
+        "modifying_unicode_data_should_throw_matches_java",
+    ],
+]);
 const CHAR_SUPPORT_PORTS = new Map([
     [
         "testcharsupport-testcapitalize-25cbf55e21",
@@ -842,6 +887,9 @@ function completedPhaseBRow(
                               : completed.kind === "unicode-escape"
                                 ? `direct Rust Unicode escape rendering matches Java 4.13.2 ` +
                                   `for ${cases[0].suite}.${cases[0].name}`
+                                : completed.kind === "unicode-data"
+                                  ? `direct Rust Unicode property data matches Java 4.13.2 ` +
+                                    `for ${cases[0].suite}.${cases[0].name}`
                         : `direct Rust semantic diagnostics match Java 4.13.2 exactly ` +
                           `for ${cases[0].suite}.${cases[0].name}`;
     const coveredExisting =
@@ -1181,6 +1229,48 @@ async function loadCompletedPhaseBPorts() {
             `expected 9 completed TestUnicodeEscapes ports, found ${unicodeEscapeGroups.size}`,
         );
     }
+    const unicodeDataGroups = new Map();
+    for (const testCase of inventory.cases) {
+        if (testCase.suite !== "TestUnicodeData") {
+            continue;
+        }
+        const key =
+            `${testCase.suite}\0${canonicalName(testCase.name)}` +
+            `\0${parameterKey(testCase)}`;
+        const group = unicodeDataGroups.get(key) ?? [];
+        group.push(testCase);
+        unicodeDataGroups.set(key, group);
+    }
+    for (const [key, cases] of unicodeDataGroups) {
+        const logicalId = logicalCaseId(
+            cases[0].suite,
+            cases[0].name,
+            key,
+        );
+        const testName = UNICODE_DATA_TEST_NAMES.get(cases[0].name);
+        if (testName === undefined) {
+            throw new Error(
+                `missing Unicode data test mapping for ${cases[0].name}`,
+            );
+        }
+        ports.set(logicalId, {
+            fixturePaths: [],
+            rustTest: `grammar::unicode::tests::${testName}`,
+            kind: "unicode-data",
+            resolution: "verified-covered-existing",
+            scaffoldCommit: UNICODE_DATA_BASE_COMMIT,
+            testCommit: UNICODE_DATA_TEST_COMMIT,
+            implementationCommit: UNICODE_DATA_BASE_COMMIT,
+            testCommand:
+                `${UNICODE_DATA_TEST_PREFIX}${testName} -- --exact`,
+            greenResult: "1 passed; 0 failed",
+        });
+    }
+    if (unicodeDataGroups.size !== 18) {
+        throw new Error(
+            `expected 18 completed TestUnicodeData ports, found ${unicodeDataGroups.size}`,
+        );
+    }
     const scopeGroups = new Map();
     for (const testCase of inventory.cases) {
         if (testCase.suite !== "TestScopeParsing") {
@@ -1219,8 +1309,8 @@ async function loadCompletedPhaseBPorts() {
             `expected 47 completed TestScopeParsing ports, found ${scopeGroups.size}`,
         );
     }
-    if (ports.size !== 173) {
-        throw new Error(`expected 173 completed Phase B ports, found ${ports.size}`);
+    if (ports.size !== 191) {
+        throw new Error(`expected 191 completed Phase B ports, found ${ports.size}`);
     }
     return ports;
 }

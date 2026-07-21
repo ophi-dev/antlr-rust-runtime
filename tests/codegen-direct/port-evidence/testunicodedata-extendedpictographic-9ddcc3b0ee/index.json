@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodedata-extendedpictographic-9ddcc3b0ee",
+  "active_revision_id": "testunicodedata-extendedpictographic-9ddcc3b0ee-r1",
+  "revisions": [
+    {
+      "revision_id": "testunicodedata-extendedpictographic-9ddcc3b0ee-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testunicodedata-extendedpictographic-9ddcc3b0ee/revisions/testunicodedata-extendedpictographic-9ddcc3b0ee-r1/manifest.json",
+      "closure_sha256": "d95da0e908bbb233934c264e789b511f45f7c9e22474c4b846a33ef2e928f0f7"
+    }
+  ]
+}

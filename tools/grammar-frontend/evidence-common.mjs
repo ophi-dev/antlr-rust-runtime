@@ -91,6 +91,12 @@ export const UNICODE_ESCAPE_TEST_COMMIT =
     "602ef46199b845536abdf339f9507c82fff99c1c";
 export const UNICODE_ESCAPE_IMPLEMENTATION_COMMIT =
     "247896246d88bfca50208b84e271dc907da220f7";
+export const UNICODE_DATA_BASE_PARENT_COMMIT =
+    UNICODE_ESCAPE_IMPLEMENTATION_COMMIT;
+export const UNICODE_DATA_BASE_COMMIT =
+    "adb9780e25a8145cff258d641231c3fcea04f710";
+export const UNICODE_DATA_TEST_COMMIT =
+    "cd65be4f29e8d710f4d20ee9538e57f863e767d1";
 
 export function stableStringify(value) {
     if (Array.isArray(value)) {

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodedata-testunicodescriptequals-4802f00b80",
+  "active_revision_id": "testunicodedata-testunicodescriptequals-4802f00b80-r1",
+  "revisions": [
+    {
+      "revision_id": "testunicodedata-testunicodescriptequals-4802f00b80-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testunicodedata-testunicodescriptequals-4802f00b80/revisions/testunicodedata-testunicodescriptequals-4802f00b80-r1/manifest.json",
+      "closure_sha256": "f36218f8ed6cfb5b2d13088d78e65e04aad2a3963b15b55eb370a4cbf10a1a44"
+    }
+  ]
+}

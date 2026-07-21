@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodedata-modifyingunicodedatashouldthrow-0ed129e278",
+  "revision_id": "testunicodedata-modifyingunicodedatashouldthrow-0ed129e278-r1",
+  "primary_test_source": {
+    "implementation": "java-antlr",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "source_case_ids": [
+      "java-antlr:testunicodedata-modifyingunicodedatashouldthrow@fb3190632f48"
+    ]
+  },
+  "alternate_test_source": {
+    "implementation": "independent-generated-oracle",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "source_case_ids": [],
+    "reason": "no antlr-ng source case exposes this exact observable"
+  },
+  "outcomes": {
+    "primary": "the direct Rust Unicode property tables match Java 4.13.2 categories, aliases, scripts, blocks, and emoji properties while exposing read-only static slices",
+    "alternate": "paired pinned antlr-ng cases where available, plus the generated property-table oracle, expose the same membership behavior",
+    "java_compatibility_verdict": "exact Java 4.13.2 property membership; Rust's read-only slice statically enforces Java's mutation rejection contract"
+  }
+}

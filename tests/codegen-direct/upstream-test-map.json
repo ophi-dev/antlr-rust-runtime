@@ -30770,8 +30770,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodedata-emojipresentation-537f7d4f94-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-emojipresentation-537f7d4f94",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::unicode::tests::emoji_presentation_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -30791,22 +30792,39 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeData.emojiPresentation behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.emojiPresentation",
+      "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::emoji_presentation_matches_java -- --exact",
+        "commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::emoji_presentation_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodedata-emojipresentation-537f7d4f94",
         "source_case_ids": [
           "java-antlr:testunicodedata-emojipresentation@e4555e19487a"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-emojipresentation-537f7d4f94",
+        "rust_test": "grammar::unicode::tests::emoji_presentation_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeData.emojiPresentation behavior"
+        "observable": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.emojiPresentation",
+        "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+        "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "f458b7bffb03a1d5af44ee60f5cbd4230c764ef15b4bc2b751592865ff10bf14",
-      "evidence_path": null
+      "closure_sha256": "ef7b78bb4249da3a9c19470d6894b3b2b7afed0269154a2702161c75e602ff3d",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodedata-emojipresentation-537f7d4f94"
     },
     {
       "logical_id": "testunicodedata-extendedpictographic-9ddcc3b0ee",
@@ -30818,8 +30836,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodedata-extendedpictographic-9ddcc3b0ee-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-extendedpictographic-9ddcc3b0ee",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::unicode::tests::extended_pictographic_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -30840,8 +30859,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeData.extendedPictographic behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.extendedPictographic",
+      "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::extended_pictographic_matches_java -- --exact",
+        "commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::extended_pictographic_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodedata-extendedpictographic-9ddcc3b0ee",
         "source_case_ids": [
@@ -30849,14 +30881,18 @@
           "java-antlr:testunicodedata-extendedpictographic@37105bbf2745"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-extendedpictographic-9ddcc3b0ee",
+        "rust_test": "grammar::unicode::tests::extended_pictographic_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeData.extendedPictographic behavior"
+        "observable": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.extendedPictographic",
+        "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+        "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "3203c763491cd73a172df63b5b9343d937ea4efaa808a40d1df5f007ac9c0e24",
-      "evidence_path": null
+      "closure_sha256": "d95da0e908bbb233934c264e789b511f45f7c9e22474c4b846a33ef2e928f0f7",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodedata-extendedpictographic-9ddcc3b0ee"
     },
     {
       "logical_id": "testunicodedata-modifyingunicodedatashouldthrow-0ed129e278",
@@ -30867,8 +30903,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodedata-modifyingunicodedatashouldthrow-0ed129e278-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-modifyingunicodedatashouldthrow-0ed129e278",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::unicode::tests::modifying_unicode_data_should_throw_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -30888,22 +30925,39 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeData.modifyingUnicodeDataShouldThrow behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.modifyingUnicodeDataShouldThrow",
+      "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::modifying_unicode_data_should_throw_matches_java -- --exact",
+        "commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::modifying_unicode_data_should_throw_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodedata-modifyingunicodedatashouldthrow-0ed129e278",
         "source_case_ids": [
           "java-antlr:testunicodedata-modifyingunicodedatashouldthrow@fb3190632f48"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-modifyingunicodedatashouldthrow-0ed129e278",
+        "rust_test": "grammar::unicode::tests::modifying_unicode_data_should_throw_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeData.modifyingUnicodeDataShouldThrow behavior"
+        "observable": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.modifyingUnicodeDataShouldThrow",
+        "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+        "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "b7030182853cb000ead712f267baa06718d0ded16997f767c6c139befd6f61c9",
-      "evidence_path": null
+      "closure_sha256": "a65a99acaab806f0e4f185b035ad0da56146c47a18b882c0a4d0f5c50be9ee63",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodedata-modifyingunicodedatashouldthrow-0ed129e278"
     },
     {
       "logical_id": "testunicodedata-testenumeratedpropertyequals-1934829201",
@@ -30915,8 +30969,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodedata-testenumeratedpropertyequals-1934829201-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-testenumeratedpropertyequals-1934829201",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::unicode::tests::enumerated_property_equals_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -30937,8 +30992,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeData.testEnumeratedPropertyEquals behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.testEnumeratedPropertyEquals",
+      "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::enumerated_property_equals_matches_java -- --exact",
+        "commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::enumerated_property_equals_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodedata-testenumeratedpropertyequals-1934829201",
         "source_case_ids": [
@@ -30946,14 +31014,18 @@
           "java-antlr:testunicodedata-testenumeratedpropertyequals@7e7d618cd8d7"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-testenumeratedpropertyequals-1934829201",
+        "rust_test": "grammar::unicode::tests::enumerated_property_equals_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeData.testEnumeratedPropertyEquals behavior"
+        "observable": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.testEnumeratedPropertyEquals",
+        "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+        "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "81d17a4847a4d9e45848e6064d7520bbd30efadb965172eafcb6435d381e2c76",
-      "evidence_path": null
+      "closure_sha256": "ce7ea343800d702a7acbf063fad25555e37f42e689784e5af0773e79e36fde95",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodedata-testenumeratedpropertyequals-1934829201"
     },
     {
       "logical_id": "testunicodedata-testpropertycaseinsensitivity-39527b75bf",
@@ -30965,8 +31037,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodedata-testpropertycaseinsensitivity-39527b75bf-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-testpropertycaseinsensitivity-39527b75bf",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::unicode::tests::property_case_insensitivity_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -30987,8 +31060,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeData.testPropertyCaseInsensitivity behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.testPropertyCaseInsensitivity",
+      "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::property_case_insensitivity_matches_java -- --exact",
+        "commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::property_case_insensitivity_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodedata-testpropertycaseinsensitivity-39527b75bf",
         "source_case_ids": [
@@ -30996,14 +31082,18 @@
           "java-antlr:testunicodedata-testpropertycaseinsensitivity@601808201d05"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-testpropertycaseinsensitivity-39527b75bf",
+        "rust_test": "grammar::unicode::tests::property_case_insensitivity_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeData.testPropertyCaseInsensitivity behavior"
+        "observable": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.testPropertyCaseInsensitivity",
+        "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+        "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "c87c6b54ab7485533f282a330fec038280980d009f70bc176919d12e86349313",
-      "evidence_path": null
+      "closure_sha256": "9757e500ff85504785722361ebea9a654cfe46c8b34c8c60b746a638594f6582",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodedata-testpropertycaseinsensitivity-39527b75bf"
     },
     {
       "logical_id": "testunicodedata-testpropertydashsameasunderscore-505c6f8101",
@@ -31015,8 +31105,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodedata-testpropertydashsameasunderscore-505c6f8101-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-testpropertydashsameasunderscore-505c6f8101",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::unicode::tests::property_dash_same_as_underscore_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -31037,8 +31128,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeData.testPropertyDashSameAsUnderscore behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.testPropertyDashSameAsUnderscore",
+      "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::property_dash_same_as_underscore_matches_java -- --exact",
+        "commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::property_dash_same_as_underscore_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodedata-testpropertydashsameasunderscore-505c6f8101",
         "source_case_ids": [
@@ -31046,14 +31150,18 @@
           "java-antlr:testunicodedata-testpropertydashsameasunderscore@880f21fc55bb"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-testpropertydashsameasunderscore-505c6f8101",
+        "rust_test": "grammar::unicode::tests::property_dash_same_as_underscore_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeData.testPropertyDashSameAsUnderscore behavior"
+        "observable": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.testPropertyDashSameAsUnderscore",
+        "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+        "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "f8a74272947b2c5b8e1211fa56a015d2cfea4066452d32bcd32788bf77c87a53",
-      "evidence_path": null
+      "closure_sha256": "c2957c93620626b5b93794cbd794cdad80c01e53212479fc076186a8e4c2723b",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodedata-testpropertydashsameasunderscore-505c6f8101"
     },
     {
       "logical_id": "testunicodedata-testunicodebinaryproperties-1397356569",
@@ -31065,8 +31173,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodedata-testunicodebinaryproperties-1397356569-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-testunicodebinaryproperties-1397356569",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::unicode::tests::unicode_binary_properties_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -31087,8 +31196,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeData.testUnicodeBinaryProperties behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.testUnicodeBinaryProperties",
+      "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::unicode_binary_properties_match_java -- --exact",
+        "commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::unicode_binary_properties_match_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodedata-testunicodebinaryproperties-1397356569",
         "source_case_ids": [
@@ -31096,14 +31218,18 @@
           "java-antlr:testunicodedata-testunicodebinaryproperties@52504c49b1a3"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-testunicodebinaryproperties-1397356569",
+        "rust_test": "grammar::unicode::tests::unicode_binary_properties_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeData.testUnicodeBinaryProperties behavior"
+        "observable": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.testUnicodeBinaryProperties",
+        "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+        "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "765fa6fd928ba793a5ee0bf06ab84efe212d0f6455f2c6821f0f85c5f9b2bc22",
-      "evidence_path": null
+      "closure_sha256": "6d51bca2fe9be65cc23d5f55d8f3cbd29e0937eb571243ba09cbcf3c59f72693",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodedata-testunicodebinaryproperties-1397356569"
     },
     {
       "logical_id": "testunicodedata-testunicodebinarypropertyaliases-d1c88d2c94",
@@ -31115,8 +31241,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodedata-testunicodebinarypropertyaliases-d1c88d2c94-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-testunicodebinarypropertyaliases-d1c88d2c94",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::unicode::tests::unicode_binary_property_aliases_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -31137,8 +31264,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeData.testUnicodeBinaryPropertyAliases behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.testUnicodeBinaryPropertyAliases",
+      "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::unicode_binary_property_aliases_match_java -- --exact",
+        "commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::unicode_binary_property_aliases_match_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodedata-testunicodebinarypropertyaliases-d1c88d2c94",
         "source_case_ids": [
@@ -31146,14 +31286,18 @@
           "java-antlr:testunicodedata-testunicodebinarypropertyaliases@6f4e4c819be9"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-testunicodebinarypropertyaliases-d1c88d2c94",
+        "rust_test": "grammar::unicode::tests::unicode_binary_property_aliases_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeData.testUnicodeBinaryPropertyAliases behavior"
+        "observable": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.testUnicodeBinaryPropertyAliases",
+        "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+        "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "265105e205477191fe3ced85fda2f591c0f757971bf9e7f6c2d748d6d489eb58",
-      "evidence_path": null
+      "closure_sha256": "56f9a2de95d8fe296fbd31f62a2a6df5c50766a388dee80e9ee1c8e614198672",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodedata-testunicodebinarypropertyaliases-d1c88d2c94"
     },
     {
       "logical_id": "testunicodedata-testunicodeblockaliases-1b547cba87",
@@ -31165,8 +31309,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodedata-testunicodeblockaliases-1b547cba87-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-testunicodeblockaliases-1b547cba87",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::unicode::tests::unicode_block_aliases_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -31187,8 +31332,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeData.testUnicodeBlockAliases behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.testUnicodeBlockAliases",
+      "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::unicode_block_aliases_match_java -- --exact",
+        "commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::unicode_block_aliases_match_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodedata-testunicodeblockaliases-1b547cba87",
         "source_case_ids": [
@@ -31196,14 +31354,18 @@
           "java-antlr:testunicodedata-testunicodeblockaliases@206ddc1efdf3"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-testunicodeblockaliases-1b547cba87",
+        "rust_test": "grammar::unicode::tests::unicode_block_aliases_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeData.testUnicodeBlockAliases behavior"
+        "observable": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.testUnicodeBlockAliases",
+        "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+        "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "dd2a9240012259c23c67e7571f650f16554358b166d814b6d40a4e4eea82eb9e",
-      "evidence_path": null
+      "closure_sha256": "519f155aa8741b031052a4d72edb56cf9e4c79dd78e0c81beb33868e63aca235",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodedata-testunicodeblockaliases-1b547cba87"
     },
     {
       "logical_id": "testunicodedata-testunicodeblockequals-9d43d16263",
@@ -31215,8 +31377,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodedata-testunicodeblockequals-9d43d16263-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-testunicodeblockequals-9d43d16263",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::unicode::tests::unicode_block_equals_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -31237,8 +31400,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeData.testUnicodeBlockEquals behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.testUnicodeBlockEquals",
+      "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::unicode_block_equals_matches_java -- --exact",
+        "commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::unicode_block_equals_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodedata-testunicodeblockequals-9d43d16263",
         "source_case_ids": [
@@ -31246,14 +31422,18 @@
           "java-antlr:testunicodedata-testunicodeblockequals@32f0de044407"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-testunicodeblockequals-9d43d16263",
+        "rust_test": "grammar::unicode::tests::unicode_block_equals_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeData.testUnicodeBlockEquals behavior"
+        "observable": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.testUnicodeBlockEquals",
+        "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+        "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "e3b48810585fbfc83829d8e93fb5bf95332709aa835235f952ed09b4bd358275",
-      "evidence_path": null
+      "closure_sha256": "a379a645b19a32f0873fefad6df20d541ecde14e0bd784126a190ab4c88ecaee",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodedata-testunicodeblockequals-9d43d16263"
     },
     {
       "logical_id": "testunicodedata-testunicodeblocks-30b862ab8b",
@@ -31265,8 +31445,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodedata-testunicodeblocks-30b862ab8b-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-testunicodeblocks-30b862ab8b",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::unicode::tests::unicode_blocks_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -31287,8 +31468,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeData.testUnicodeBlocks behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.testUnicodeBlocks",
+      "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::unicode_blocks_match_java -- --exact",
+        "commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::unicode_blocks_match_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodedata-testunicodeblocks-30b862ab8b",
         "source_case_ids": [
@@ -31296,14 +31490,18 @@
           "java-antlr:testunicodedata-testunicodeblocks@251e7f04da48"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-testunicodeblocks-30b862ab8b",
+        "rust_test": "grammar::unicode::tests::unicode_blocks_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeData.testUnicodeBlocks behavior"
+        "observable": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.testUnicodeBlocks",
+        "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+        "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "dce09a1e24bd5ace9b7d8abca8785408ff011e142ddcdea0e2370e3cccb65c08",
-      "evidence_path": null
+      "closure_sha256": "f5ee896567b582c664114da3ec5424351418de273dc4b0c431992c4af48edf79",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodedata-testunicodeblocks-30b862ab8b"
     },
     {
       "logical_id": "testunicodedata-testunicodecategoryaliases-5d2d3aae9b",
@@ -31315,8 +31513,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodedata-testunicodecategoryaliases-5d2d3aae9b-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-testunicodecategoryaliases-5d2d3aae9b",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::unicode::tests::unicode_category_aliases_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -31337,8 +31536,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeData.testUnicodeCategoryAliases behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.testUnicodeCategoryAliases",
+      "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::unicode_category_aliases_match_java -- --exact",
+        "commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::unicode_category_aliases_match_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodedata-testunicodecategoryaliases-5d2d3aae9b",
         "source_case_ids": [
@@ -31346,14 +31558,18 @@
           "java-antlr:testunicodedata-testunicodecategoryaliases@8d7927f55338"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-testunicodecategoryaliases-5d2d3aae9b",
+        "rust_test": "grammar::unicode::tests::unicode_category_aliases_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeData.testUnicodeCategoryAliases behavior"
+        "observable": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.testUnicodeCategoryAliases",
+        "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+        "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "8dfeaf4a5d3c793881c18392a9f3611c213559d2f8548442d894c240576db0d9",
-      "evidence_path": null
+      "closure_sha256": "06d55094c92b91d9f46e5ec77f0aa103e9acb69bec80c5e7fea8a37ae694d77c",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodedata-testunicodecategoryaliases-5d2d3aae9b"
     },
     {
       "logical_id": "testunicodedata-testunicodegeneralcategoriesbmp-f1a726438e",
@@ -31365,8 +31581,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodedata-testunicodegeneralcategoriesbmp-f1a726438e-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-testunicodegeneralcategoriesbmp-f1a726438e",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::unicode::tests::unicode_general_categories_bmp_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -31387,8 +31604,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeData.testUnicodeGeneralCategoriesBMP behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.testUnicodeGeneralCategoriesBMP",
+      "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::unicode_general_categories_bmp_matches_java -- --exact",
+        "commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::unicode_general_categories_bmp_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodedata-testunicodegeneralcategoriesbmp-f1a726438e",
         "source_case_ids": [
@@ -31396,14 +31626,18 @@
           "java-antlr:testunicodedata-testunicodegeneralcategoriesbmp@5b01dad974ef"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-testunicodegeneralcategoriesbmp-f1a726438e",
+        "rust_test": "grammar::unicode::tests::unicode_general_categories_bmp_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeData.testUnicodeGeneralCategoriesBMP behavior"
+        "observable": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.testUnicodeGeneralCategoriesBMP",
+        "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+        "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "087b990ea51d01a0f21d93f79e4368397f47d7e05b514436257a71b2001dbd18",
-      "evidence_path": null
+      "closure_sha256": "939c2c58e182b690f97cb752c6c12cea45346a9274bbc206bbe80706e9c0c841",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodedata-testunicodegeneralcategoriesbmp-f1a726438e"
     },
     {
       "logical_id": "testunicodedata-testunicodegeneralcategorieslatin-42fdf6bf79",
@@ -31415,8 +31649,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodedata-testunicodegeneralcategorieslatin-42fdf6bf79-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-testunicodegeneralcategorieslatin-42fdf6bf79",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::unicode::tests::unicode_general_categories_latin_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -31437,8 +31672,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeData.testUnicodeGeneralCategoriesLatin behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.testUnicodeGeneralCategoriesLatin",
+      "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::unicode_general_categories_latin_matches_java -- --exact",
+        "commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::unicode_general_categories_latin_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodedata-testunicodegeneralcategorieslatin-42fdf6bf79",
         "source_case_ids": [
@@ -31446,14 +31694,18 @@
           "java-antlr:testunicodedata-testunicodegeneralcategorieslatin@2db7bf02b4f9"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-testunicodegeneralcategorieslatin-42fdf6bf79",
+        "rust_test": "grammar::unicode::tests::unicode_general_categories_latin_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeData.testUnicodeGeneralCategoriesLatin behavior"
+        "observable": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.testUnicodeGeneralCategoriesLatin",
+        "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+        "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "f1ee527acfe94ed271b679e86e054dbc5174a2fe53d0dc8948346db492553ccd",
-      "evidence_path": null
+      "closure_sha256": "10a4f767231e01f5a491397508448760a8f1e4a5a1a9bf7b39c37fd46fc29470",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodedata-testunicodegeneralcategorieslatin-42fdf6bf79"
     },
     {
       "logical_id": "testunicodedata-testunicodegeneralcategoriessmp-fc134b5870",
@@ -31465,8 +31717,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodedata-testunicodegeneralcategoriessmp-fc134b5870-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-testunicodegeneralcategoriessmp-fc134b5870",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::unicode::tests::unicode_general_categories_smp_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -31487,8 +31740,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeData.testUnicodeGeneralCategoriesSMP behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.testUnicodeGeneralCategoriesSMP",
+      "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::unicode_general_categories_smp_matches_java -- --exact",
+        "commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::unicode_general_categories_smp_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodedata-testunicodegeneralcategoriessmp-fc134b5870",
         "source_case_ids": [
@@ -31496,14 +31762,18 @@
           "java-antlr:testunicodedata-testunicodegeneralcategoriessmp@68aa28e44cdb"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-testunicodegeneralcategoriessmp-fc134b5870",
+        "rust_test": "grammar::unicode::tests::unicode_general_categories_smp_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeData.testUnicodeGeneralCategoriesSMP behavior"
+        "observable": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.testUnicodeGeneralCategoriesSMP",
+        "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+        "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "77f685636156842df6217acd30112707a79b0c04d2ad92ee6a178f1f52727461",
-      "evidence_path": null
+      "closure_sha256": "e68c94b1ca85e9b51ef816db042e0897a2ea34d20300ea2feb318e659a2e2d74",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodedata-testunicodegeneralcategoriessmp-fc134b5870"
     },
     {
       "logical_id": "testunicodedata-testunicodescriptaliases-9bd1cbfc9f",
@@ -31515,8 +31785,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodedata-testunicodescriptaliases-9bd1cbfc9f-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-testunicodescriptaliases-9bd1cbfc9f",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::unicode::tests::unicode_script_aliases_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -31537,8 +31808,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeData.testUnicodeScriptAliases behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.testUnicodeScriptAliases",
+      "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::unicode_script_aliases_match_java -- --exact",
+        "commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::unicode_script_aliases_match_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodedata-testunicodescriptaliases-9bd1cbfc9f",
         "source_case_ids": [
@@ -31546,14 +31830,18 @@
           "java-antlr:testunicodedata-testunicodescriptaliases@47b1b05f11fe"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-testunicodescriptaliases-9bd1cbfc9f",
+        "rust_test": "grammar::unicode::tests::unicode_script_aliases_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeData.testUnicodeScriptAliases behavior"
+        "observable": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.testUnicodeScriptAliases",
+        "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+        "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "5cb82ea83aec63fec6ba32694801999672e5bf04d95ff61cf4ba401165f83793",
-      "evidence_path": null
+      "closure_sha256": "5246fdf98ffa96356311ba45e535e7ec9c36adea147ce8f6c89f0cd568e27c6a",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodedata-testunicodescriptaliases-9bd1cbfc9f"
     },
     {
       "logical_id": "testunicodedata-testunicodescriptequals-4802f00b80",
@@ -31565,8 +31853,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodedata-testunicodescriptequals-4802f00b80-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-testunicodescriptequals-4802f00b80",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::unicode::tests::unicode_script_equals_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -31587,8 +31876,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeData.testUnicodeScriptEquals behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.testUnicodeScriptEquals",
+      "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::unicode_script_equals_matches_java -- --exact",
+        "commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::unicode_script_equals_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodedata-testunicodescriptequals-4802f00b80",
         "source_case_ids": [
@@ -31596,14 +31898,18 @@
           "java-antlr:testunicodedata-testunicodescriptequals@8c0b0ac59ce7"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-testunicodescriptequals-4802f00b80",
+        "rust_test": "grammar::unicode::tests::unicode_script_equals_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeData.testUnicodeScriptEquals behavior"
+        "observable": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.testUnicodeScriptEquals",
+        "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+        "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "734b9653b3580eba7ba2bd52761bf2f0f1d6b0df1c448ecafa61964de46ff119",
-      "evidence_path": null
+      "closure_sha256": "f36218f8ed6cfb5b2d13088d78e65e04aad2a3963b15b55eb370a4cbf10a1a44",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodedata-testunicodescriptequals-4802f00b80"
     },
     {
       "logical_id": "testunicodedata-testunicodescripts-e6e61b0790",
@@ -31615,8 +31921,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodedata-testunicodescripts-e6e61b0790-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-testunicodescripts-e6e61b0790",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::unicode::tests::unicode_scripts_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -31637,8 +31944,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeData.testUnicodeScripts behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.testUnicodeScripts",
+      "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::unicode_scripts_match_java -- --exact",
+        "commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::unicode_scripts_match_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodedata-testunicodescripts-e6e61b0790",
         "source_case_ids": [
@@ -31646,14 +31966,18 @@
           "java-antlr:testunicodedata-testunicodescripts@6aed414658a6"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodedata-testunicodescripts-e6e61b0790",
+        "rust_test": "grammar::unicode::tests::unicode_scripts_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeData.testUnicodeScripts behavior"
+        "observable": "direct Rust Unicode property data matches Java 4.13.2 for TestUnicodeData.testUnicodeScripts",
+        "scaffold_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+        "primary_test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "c1ab951ad0b1e1305e02d2b69655d45765aed3bbd188ded1b288bdc20cbe97e2",
-      "evidence_path": null
+      "closure_sha256": "5f83031579de00b880a460ea4554289fac9ff69348acb900c29afd642063f02e",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodedata-testunicodescripts-e6e61b0790"
     },
     {
       "logical_id": "testunicodeescapes-bmpjavaescape-299139ad49",
