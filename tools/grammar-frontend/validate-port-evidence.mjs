@@ -11,6 +11,9 @@ import {
     ATN_CONSTRUCTION_IMPLEMENTATION_COMMIT,
     ATN_CONSTRUCTION_TEST_COMMIT,
     ATN_SERIALIZATION_TEST_COMMIT,
+    BASIC_SEMANTIC_BASE_COMMIT,
+    BASIC_SEMANTIC_IMPLEMENTATION_COMMIT,
+    BASIC_SEMANTIC_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_PARENT,
     IMPLEMENTATION_COMMIT,
@@ -231,6 +234,9 @@ for (const [logicalId, record] of records) {
         const atnConstruction = logicalId.startsWith(
             "testatnconstruction-",
         );
+        const basicSemantic = logicalId.startsWith(
+            "testbasicsemanticerrors-",
+        );
         if (resolution === "verified-covered-existing") {
             if (atnSerialization) {
                 expect(
@@ -306,6 +312,23 @@ for (const [logicalId, record] of records) {
                         manifest.ancestry.primary_implementation_parent ===
                             ATN_CONSTRUCTION_TEST_COMMIT,
                     `${logicalId} ATN construction recorded ancestry differs`,
+                );
+            } else if (basicSemantic) {
+                expect(
+                    manifest.commits.scaffold ===
+                            BASIC_SEMANTIC_BASE_COMMIT &&
+                        manifest.commits.primary_test ===
+                            BASIC_SEMANTIC_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            BASIC_SEMANTIC_IMPLEMENTATION_COMMIT,
+                    `${logicalId} basic semantic evidence commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            BASIC_SEMANTIC_BASE_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            BASIC_SEMANTIC_TEST_COMMIT,
+                    `${logicalId} basic semantic recorded ancestry differs`,
                 );
             } else {
                 expect(
@@ -419,6 +442,27 @@ if (atnConstructionImplementationParent !== null) {
         atnConstructionImplementationParent.trim() ===
             ATN_CONSTRUCTION_TEST_COMMIT,
         "ATN construction implementation commit is not based on its locked tests",
+    );
+}
+const basicSemanticTestParent = gitOptional([
+    "rev-parse",
+    `${BASIC_SEMANTIC_TEST_COMMIT}^`,
+]);
+if (basicSemanticTestParent !== null) {
+    expect(
+        basicSemanticTestParent.trim() === BASIC_SEMANTIC_BASE_COMMIT,
+        "basic semantic test commit is not based on its recorded base",
+    );
+}
+const basicSemanticImplementationParent = gitOptional([
+    "rev-parse",
+    `${BASIC_SEMANTIC_IMPLEMENTATION_COMMIT}^`,
+]);
+if (basicSemanticImplementationParent !== null) {
+    expect(
+        basicSemanticImplementationParent.trim() ===
+            BASIC_SEMANTIC_TEST_COMMIT,
+        "basic semantic implementation commit is not based on its locked tests",
     );
 }
 

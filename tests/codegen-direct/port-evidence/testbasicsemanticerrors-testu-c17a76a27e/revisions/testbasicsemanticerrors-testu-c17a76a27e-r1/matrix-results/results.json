@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testbasicsemanticerrors-testu-c17a76a27e",
+  "revision_id": "testbasicsemanticerrors-testu-c17a76a27e-r1",
+  "cells": [
+    {
+      "test_port": "primary",
+      "test_commit": "d133e49cebf5b149b9cdf0dff70171128cd8ded5",
+      "implementation_port": "primary-antlr-ng",
+      "implementation_commit": "1733fa4e06a1b97951592da68689a9bff27ba86c",
+      "command": "cargo test --locked --bin antlr4-rust-gen upstream_basic_semantic_errors -- --test-threads=1",
+      "result": "green: 3 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the primary implementation passed the locked primary tests"
+}

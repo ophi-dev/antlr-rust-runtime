@@ -23,6 +23,12 @@ export const ATN_CONSTRUCTION_TEST_COMMIT =
     "62111d633ccc4bddcc85ab7126591febbeb18690";
 export const ATN_CONSTRUCTION_IMPLEMENTATION_COMMIT =
     "5d0729a84eac4b89012e31819eb00f5acb654c3a";
+export const BASIC_SEMANTIC_BASE_COMMIT =
+    "685575f01d17b4d6791de8ac4207afe6f38d4b40";
+export const BASIC_SEMANTIC_TEST_COMMIT =
+    "d133e49cebf5b149b9cdf0dff70171128cd8ded5";
+export const BASIC_SEMANTIC_IMPLEMENTATION_COMMIT =
+    "1733fa4e06a1b97951592da68689a9bff27ba86c";
 
 export function stableStringify(value) {
     if (Array.isArray(value)) {

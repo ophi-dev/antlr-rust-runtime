@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44",
+  "active_revision_id": "testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44-r1",
+  "revisions": [
+    {
+      "revision_id": "testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44/revisions/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44-r1/manifest.json",
+      "closure_sha256": "16a6e9807dd55352f6bf3130c85a443742a849f1db7a669435cfae99860f8907"
+    }
+  ]
+}

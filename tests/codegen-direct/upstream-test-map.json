@@ -13962,8 +13962,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_basic_semantic_errors::argument_retval_local_conflicts_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -13984,8 +13984,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestBasicSemanticErrors.testArgumentRetvalLocalConflicts behavior",
+      "expected_red_failure_fingerprint": "expected 10 ordered diagnostics, but the direct compiler emitted 7 generic rule-wide diagnostics",
+      "observable_equivalence": "direct Rust semantic diagnostics match Java 4.13.2 exactly for TestBasicSemanticErrors.testArgumentRetvalLocalConflicts",
+      "scaffold_commit": "685575f01d17b4d6791de8ac4207afe6f38d4b40",
+      "primary_test_commit": "d133e49cebf5b149b9cdf0dff70171128cd8ded5",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_basic_semantic_errors -- --test-threads=1",
+        "exit_code": 101,
+        "fingerprint": "expected 10 ordered diagnostics, but the direct compiler emitted 7 generic rule-wide diagnostics"
+      },
+      "primary_implementation_commit": "1733fa4e06a1b97951592da68689a9bff27ba86c",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_basic_semantic_errors -- --test-threads=1",
+        "result": "3 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44",
         "source_case_ids": [
@@ -13993,14 +14005,25 @@
           "java-antlr:testbasicsemanticerrors-testargumentretvallocalconflicts@b6ec1bbf1a62"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44/T.g4",
+          "tests/codegen-direct/fixtures/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44/TLexer.interp",
+          "tests/codegen-direct/fixtures/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44/TLexer.tokens",
+          "tests/codegen-direct/fixtures/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44/diagnostics.json",
+          "tests/codegen-direct/fixtures/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44/fixture.json",
+          "tests/codegen-direct/fixtures/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_basic_semantic_errors::argument_retval_local_conflicts_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestBasicSemanticErrors.testArgumentRetvalLocalConflicts behavior"
+        "observable": "direct Rust semantic diagnostics match Java 4.13.2 exactly for TestBasicSemanticErrors.testArgumentRetvalLocalConflicts",
+        "scaffold_commit": "685575f01d17b4d6791de8ac4207afe6f38d4b40",
+        "primary_test_commit": "d133e49cebf5b149b9cdf0dff70171128cd8ded5"
       },
-      "closure_sha256": "d6ec86ee169dd220aaf064d41baebfc3deb270a0ed3d63256befd3df044245fc",
-      "evidence_path": null
+      "closure_sha256": "16a6e9807dd55352f6bf3130c85a443742a849f1db7a669435cfae99860f8907",
+      "evidence_path": "tests/codegen-direct/port-evidence/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44"
     },
     {
       "logical_id": "testbasicsemanticerrors-testillegalnonsetlabel-5c18487902",
@@ -14012,8 +14035,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testbasicsemanticerrors-testillegalnonsetlabel-5c18487902-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_basic_semantic_errors::illegal_non_set_label_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -14034,8 +14057,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestBasicSemanticErrors.testIllegalNonSetLabel behavior",
+      "expected_red_failure_fingerprint": "the invalid label on a non-set block compiled successfully",
+      "observable_equivalence": "direct Rust semantic diagnostics match Java 4.13.2 exactly for TestBasicSemanticErrors.testIllegalNonSetLabel",
+      "scaffold_commit": "685575f01d17b4d6791de8ac4207afe6f38d4b40",
+      "primary_test_commit": "d133e49cebf5b149b9cdf0dff70171128cd8ded5",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_basic_semantic_errors -- --test-threads=1",
+        "exit_code": 101,
+        "fingerprint": "the invalid label on a non-set block compiled successfully"
+      },
+      "primary_implementation_commit": "1733fa4e06a1b97951592da68689a9bff27ba86c",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_basic_semantic_errors -- --test-threads=1",
+        "result": "3 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testbasicsemanticerrors-testillegalnonsetlabel-5c18487902",
         "source_case_ids": [
@@ -14043,14 +14078,25 @@
           "java-antlr:testbasicsemanticerrors-testillegalnonsetlabel@783e32f2af06"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902/T.g4",
+          "tests/codegen-direct/fixtures/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902/TLexer.interp",
+          "tests/codegen-direct/fixtures/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902/TLexer.tokens",
+          "tests/codegen-direct/fixtures/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902/diagnostics.json",
+          "tests/codegen-direct/fixtures/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902/fixture.json",
+          "tests/codegen-direct/fixtures/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_basic_semantic_errors::illegal_non_set_label_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestBasicSemanticErrors.testIllegalNonSetLabel behavior"
+        "observable": "direct Rust semantic diagnostics match Java 4.13.2 exactly for TestBasicSemanticErrors.testIllegalNonSetLabel",
+        "scaffold_commit": "685575f01d17b4d6791de8ac4207afe6f38d4b40",
+        "primary_test_commit": "d133e49cebf5b149b9cdf0dff70171128cd8ded5"
       },
-      "closure_sha256": "b3f2bc44e5873c19196093cee2f07791cc1778bda3a0002f5673190136cc8283",
-      "evidence_path": null
+      "closure_sha256": "3bed687eaace9a97ef414dd794401da34520408a73c58cc1004e880dffa7faad",
+      "evidence_path": "tests/codegen-direct/port-evidence/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902"
     },
     {
       "logical_id": "testbasicsemanticerrors-testu-c17a76a27e",
@@ -14062,8 +14108,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testbasicsemanticerrors-testu-c17a76a27e-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testbasicsemanticerrors-testu-c17a76a27e",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_basic_semantic_errors::u_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -14084,8 +14130,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestBasicSemanticErrors.testU behavior",
+      "expected_red_failure_fingerprint": "expected 11 ordered diagnostics, but the direct compiler emitted 3",
+      "observable_equivalence": "direct Rust semantic diagnostics match Java 4.13.2 exactly for TestBasicSemanticErrors.testU",
+      "scaffold_commit": "685575f01d17b4d6791de8ac4207afe6f38d4b40",
+      "primary_test_commit": "d133e49cebf5b149b9cdf0dff70171128cd8ded5",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_basic_semantic_errors -- --test-threads=1",
+        "exit_code": 101,
+        "fingerprint": "expected 11 ordered diagnostics, but the direct compiler emitted 3"
+      },
+      "primary_implementation_commit": "1733fa4e06a1b97951592da68689a9bff27ba86c",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_basic_semantic_errors -- --test-threads=1",
+        "result": "3 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testbasicsemanticerrors-testu-c17a76a27e",
         "source_case_ids": [
@@ -14093,14 +14151,23 @@
           "java-antlr:testbasicsemanticerrors-testu@bfbbf710db94"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testbasicsemanticerrors-testu-c17a76a27e/U.g4",
+          "tests/codegen-direct/fixtures/testbasicsemanticerrors-testu-c17a76a27e/diagnostics.json",
+          "tests/codegen-direct/fixtures/testbasicsemanticerrors-testu-c17a76a27e/fixture.json",
+          "tests/codegen-direct/fixtures/testbasicsemanticerrors-testu-c17a76a27e/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testbasicsemanticerrors-testu-c17a76a27e/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testbasicsemanticerrors-testu-c17a76a27e",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_basic_semantic_errors::u_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestBasicSemanticErrors.testU behavior"
+        "observable": "direct Rust semantic diagnostics match Java 4.13.2 exactly for TestBasicSemanticErrors.testU",
+        "scaffold_commit": "685575f01d17b4d6791de8ac4207afe6f38d4b40",
+        "primary_test_commit": "d133e49cebf5b149b9cdf0dff70171128cd8ded5"
       },
-      "closure_sha256": "d8a5529faba0aad373c9f05937461c5a7468b3751580cc616f1be8dd0cb9d3e8",
-      "evidence_path": null
+      "closure_sha256": "3fc34a40625314f116b6c23a50130d219ff788a96f872da64f1fb45f86c4b4c9",
+      "evidence_path": "tests/codegen-direct/port-evidence/testbasicsemanticerrors-testu-c17a76a27e"
     },
     {
       "logical_id": "testbufferedtokenstream-test2ndtoken-0fea6b9471",

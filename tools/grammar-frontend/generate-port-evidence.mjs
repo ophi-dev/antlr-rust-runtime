@@ -14,6 +14,9 @@ import {
     ATN_CONSTRUCTION_IMPLEMENTATION_COMMIT,
     ATN_CONSTRUCTION_TEST_COMMIT,
     ATN_SERIALIZATION_TEST_COMMIT,
+    BASIC_SEMANTIC_BASE_COMMIT,
+    BASIC_SEMANTIC_IMPLEMENTATION_COMMIT,
+    BASIC_SEMANTIC_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_PARENT,
     IMPLEMENTATION_COMMIT,
@@ -46,6 +49,10 @@ const ATN_SERIALIZATION_TEST_END = "\n    fn assert_lexer_fixture";
 const ATN_CONSTRUCTION_TEST_START =
     "    mod upstream_atn_construction {";
 const ATN_CONSTRUCTION_TEST_END = "\n    struct GraphOracle";
+const BASIC_SEMANTIC_TEST_START =
+    "    mod upstream_basic_semantic_errors {";
+const BASIC_SEMANTIC_TEST_END =
+    "\n    fn compile_fixture(";
 const SYMBOL_INFO_SHA256 =
     "df274a0dca42823cc2ef2608d98d544be53246a48c56f96050b0a987ce0890f3";
 
@@ -334,6 +341,63 @@ const atnConstructionLockedSections = [
         sha256: digest(checkedInAtnConstructionTests),
     },
 ];
+const checkedInBasicSemanticTests = sectionBetweenMarkers(
+    await readFile(resolve(repoRoot, ATN_SERIALIZATION_TEST_PATH), "utf8"),
+    BASIC_SEMANTIC_TEST_START,
+    BASIC_SEMANTIC_TEST_END,
+);
+const recordedBasicSemanticTests = gitShowOptional(
+    repoRoot,
+    BASIC_SEMANTIC_TEST_COMMIT,
+    ATN_SERIALIZATION_TEST_PATH,
+);
+const implementedBasicSemanticTests = gitShowOptional(
+    repoRoot,
+    BASIC_SEMANTIC_IMPLEMENTATION_COMMIT,
+    ATN_SERIALIZATION_TEST_PATH,
+);
+if (recordedBasicSemanticTests === null) {
+    warnMissingHistoricalSource(
+        "basic semantic test verification",
+        BASIC_SEMANTIC_TEST_COMMIT,
+        ATN_SERIALIZATION_TEST_PATH,
+    );
+} else if (
+    sectionBetweenMarkers(
+        recordedBasicSemanticTests,
+        BASIC_SEMANTIC_TEST_START,
+        BASIC_SEMANTIC_TEST_END,
+    ) !== checkedInBasicSemanticTests
+) {
+    throw new Error(
+        "checked-in basic semantic ports differ from their test commit",
+    );
+}
+if (implementedBasicSemanticTests === null) {
+    warnMissingHistoricalSource(
+        "basic semantic implementation verification",
+        BASIC_SEMANTIC_IMPLEMENTATION_COMMIT,
+        ATN_SERIALIZATION_TEST_PATH,
+    );
+} else if (
+    sectionBetweenMarkers(
+        implementedBasicSemanticTests,
+        BASIC_SEMANTIC_TEST_START,
+        BASIC_SEMANTIC_TEST_END,
+    ) !== checkedInBasicSemanticTests
+) {
+    throw new Error(
+        "basic semantic implementation changed the locked test ports",
+    );
+}
+const basicSemanticLockedSections = [
+    {
+        path: ATN_SERIALIZATION_TEST_PATH,
+        marker: BASIC_SEMANTIC_TEST_START,
+        end_marker: BASIC_SEMANTIC_TEST_END,
+        sha256: digest(checkedInBasicSemanticTests),
+    },
+];
 
 const upstreamByLogicalId = new Map(
     testMap.rows.map((row) => [row.logical_id, row]),
@@ -431,10 +495,14 @@ for (const row of completedRows) {
     const phaseBAtnConstruction = row.logical_id.startsWith(
         "testatnconstruction-",
     );
+    const phaseBBasicSemantic = row.logical_id.startsWith(
+        "testbasicsemanticerrors-",
+    );
     if (
         row.owner_phase === "B" &&
         !phaseBAtnSerialization &&
-        !phaseBAtnConstruction
+        !phaseBAtnConstruction &&
+        !phaseBBasicSemantic
     ) {
         throw new Error(`missing Phase B evidence profile for ${row.logical_id}`);
     }
@@ -459,6 +527,15 @@ for (const row of completedRows) {
                     ? "the case-specific test passed against the Phase B implementation already reachable from its parent"
                     : "the implementation commit is directly based on the locked red construction tests",
             }
+          : phaseBBasicSemantic
+            ? {
+                  lockedSections: basicSemanticLockedSections,
+                  scaffoldCommit: BASIC_SEMANTIC_BASE_COMMIT,
+                  testParent: BASIC_SEMANTIC_BASE_COMMIT,
+                  implementationParent: BASIC_SEMANTIC_TEST_COMMIT,
+                  reachability:
+                      "the implementation commit is directly based on the locked red semantic tests",
+              }
           : null;
     await addEvidence({
         logicalId: row.logical_id,
@@ -487,6 +564,15 @@ for (const row of completedRows) {
                     java_compatibility_verdict:
                         "Java 4.13.2 supplies the compatibility verdict for graph, serialization, Unicode, and diagnostic differences",
                 }
+              : phaseBBasicSemantic
+                ? {
+                      primary:
+                          "the direct Rust compiler emits the same ordered semantic diagnostics and source positions as Java 4.13.2",
+                      alternate:
+                          "the pinned antlr-ng TestBasicSemanticErrors case exposes the same semantic category and position contract",
+                      java_compatibility_verdict:
+                          "exact Java 4.13.2 diagnostic severity, ordering, position, and message equality",
+                  }
             : {
                   primary: coveredExisting
                       ? "the case-specific Rust port matches the pinned accepted and rejected syntax outcomes"
@@ -525,7 +611,7 @@ for (const row of completedRows) {
             : coveredExisting
               ? "the case-specific test passed against an implementation already present in its parent"
               : "direct ancestry is verified when the recorded commit objects are available",
-        demonstratedRed: phaseBAtnConstruction
+        demonstratedRed: phaseBAtnConstruction || phaseBBasicSemantic
             ? row.demonstrated_red
             : undefined,
     });

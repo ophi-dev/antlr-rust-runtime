@@ -10,6 +10,9 @@ import {
     ATN_CONSTRUCTION_IMPLEMENTATION_COMMIT,
     ATN_CONSTRUCTION_TEST_COMMIT,
     ATN_SERIALIZATION_TEST_COMMIT,
+    BASIC_SEMANTIC_BASE_COMMIT,
+    BASIC_SEMANTIC_IMPLEMENTATION_COMMIT,
+    BASIC_SEMANTIC_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_COMMIT,
     IMPLEMENTATION_COMMIT,
     JAVA_COMMIT,
@@ -43,6 +46,37 @@ const ATN_CONSTRUCTION_RED_CASES = new Map([
     [
         "testatnconstruction-testparserrulerefinlexerrule-34f2000a35",
         "missing G4S008 diagnostic; Stage 0 reported G4F003 no viable alternative at input 'a'",
+    ],
+]);
+const BASIC_SEMANTIC_TEST_COMMAND =
+    "cargo test --locked --bin antlr4-rust-gen upstream_basic_semantic_errors -- --test-threads=1";
+const BASIC_SEMANTIC_PORTS = new Map([
+    [
+        "testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44",
+        {
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_basic_semantic_errors::argument_retval_local_conflicts_match_java",
+            redFingerprint:
+                "expected 10 ordered diagnostics, but the direct compiler emitted 7 generic rule-wide diagnostics",
+        },
+    ],
+    [
+        "testbasicsemanticerrors-testillegalnonsetlabel-5c18487902",
+        {
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_basic_semantic_errors::illegal_non_set_label_matches_java",
+            redFingerprint:
+                "the invalid label on a non-set block compiled successfully",
+        },
+    ],
+    [
+        "testbasicsemanticerrors-testu-c17a76a27e",
+        {
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_basic_semantic_errors::u_matches_java",
+            redFingerprint:
+                "expected 11 ordered diagnostics, but the direct compiler emitted 3",
+        },
     ],
 ]);
 
@@ -521,8 +555,11 @@ function completedPhaseBRow(
         completed.kind === "atn-serialization"
             ? `direct Rust serialization matches the complete Java 4.13.2 .interp ` +
               `for ${cases[0].suite}.${cases[0].name}`
-            : `direct Rust ATN construction matches the Java 4.13.2 graph, ` +
-              `.interp, or diagnostic for ${cases[0].suite}.${cases[0].name}`;
+            : completed.kind === "atn-construction"
+              ? `direct Rust ATN construction matches the Java 4.13.2 graph, ` +
+                `.interp, or diagnostic for ${cases[0].suite}.${cases[0].name}`
+              : `direct Rust semantic diagnostics match Java 4.13.2 exactly ` +
+                `for ${cases[0].suite}.${cases[0].name}`;
     const coveredExisting =
         completed.resolution === "verified-covered-existing";
     const closure = {
@@ -665,8 +702,23 @@ async function loadCompletedPhaseBPorts() {
             `expected 40 completed TestATNConstruction ports, found ${constructionCount}`,
         );
     }
-    if (ports.size !== 76) {
-        throw new Error(`expected 76 completed Phase B ports, found ${ports.size}`);
+
+    for (const [logicalId, definition] of BASIC_SEMANTIC_PORTS) {
+        ports.set(logicalId, {
+            fixturePaths: await fixturePaths(logicalId),
+            rustTest: definition.rustTest,
+            kind: "basic-semantic-errors",
+            resolution: "ported",
+            scaffoldCommit: BASIC_SEMANTIC_BASE_COMMIT,
+            testCommit: BASIC_SEMANTIC_TEST_COMMIT,
+            implementationCommit: BASIC_SEMANTIC_IMPLEMENTATION_COMMIT,
+            testCommand: BASIC_SEMANTIC_TEST_COMMAND,
+            greenResult: "3 passed; 0 failed",
+            redFingerprint: definition.redFingerprint,
+        });
+    }
+    if (ports.size !== 79) {
+        throw new Error(`expected 79 completed Phase B ports, found ${ports.size}`);
     }
     return ports;
 }

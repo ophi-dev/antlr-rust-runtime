@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "logical_id": "testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44",
+  "revision_id": "testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "closure": {
+    "logical_id": "testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44",
+    "source_case_ids": [
+      "antlr-ng:testbasicsemanticerrors-testargumentretvallocalconflicts@b6ec1bbf1a62",
+      "java-antlr:testbasicsemanticerrors-testargumentretvallocalconflicts@b6ec1bbf1a62"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44/T.g4",
+      "tests/codegen-direct/fixtures/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44/TLexer.interp",
+      "tests/codegen-direct/fixtures/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44/TLexer.tokens",
+      "tests/codegen-direct/fixtures/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44/diagnostics.json",
+      "tests/codegen-direct/fixtures/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44/fixture.json",
+      "tests/codegen-direct/fixtures/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44/oracle/java-antlr.stdout"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_basic_semantic_errors::argument_retval_local_conflicts_match_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust semantic diagnostics match Java 4.13.2 exactly for TestBasicSemanticErrors.testArgumentRetvalLocalConflicts",
+    "scaffold_commit": "685575f01d17b4d6791de8ac4207afe6f38d4b40",
+    "primary_test_commit": "d133e49cebf5b149b9cdf0dff70171128cd8ded5"
+  },
+  "closure_sha256": "16a6e9807dd55352f6bf3130c85a443742a849f1db7a669435cfae99860f8907",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testbasicsemanticerrors-testargumentretvallocalconflicts@b6ec1bbf1a62",
+      "path": "tests/TestBasicSemanticErrors.spec.ts",
+      "sha256": "074aff6e9a006420110fbd883d45039887bee9663a3e089d3767269b7fab5dd4"
+    },
+    {
+      "source_case_id": "java-antlr:testbasicsemanticerrors-testargumentretvallocalconflicts@b6ec1bbf1a62",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestBasicSemanticErrors.java",
+      "sha256": "5f739f16bdcbd8a3c519a49b91c1c02f22e12c0cc718c881c7239f8abc8385ac"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44/T.g4",
+      "sha256": "8c1f5db0f19cc193cabf3ff618e9e3101c8260c3e99b451b7f634fd7f9550767"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44/TLexer.interp",
+      "sha256": "d6652d96eae655f12a74d603514dbe9867f4845f2cae34768a5dff2c7753ca62"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44/TLexer.tokens",
+      "sha256": "7379721ddf2e31b895124776ae96856137a1649eec99540f0f43aab6d40b9c9b"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44/diagnostics.json",
+      "sha256": "bc9e02eb2fa77beb9ac45785ba9e019c3a7aef82f4beec32cfe66d311363afde"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44/fixture.json",
+      "sha256": "57195d82e23c6ed5860ba947154bad77067284dc3339fff41a8ef56ccf743564"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44/oracle/java-antlr.stderr",
+      "sha256": "bbb33f07cd9ad9dd436766a7e570b288ba31412e40b6844dbd3d98015b204499"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "commits": {
+    "scaffold": "685575f01d17b4d6791de8ac4207afe6f38d4b40",
+    "primary_test": "d133e49cebf5b149b9cdf0dff70171128cd8ded5",
+    "primary_implementation": "1733fa4e06a1b97951592da68689a9bff27ba86c"
+  },
+  "ancestry": {
+    "primary_test_parent": "685575f01d17b4d6791de8ac4207afe6f38d4b40",
+    "primary_implementation_parent": "d133e49cebf5b149b9cdf0dff70171128cd8ded5",
+    "reachability": "the implementation commit is directly based on the locked red semantic tests"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_basic_semantic_errors {",
+      "end_marker": "\n    fn compile_fixture(",
+      "sha256": "43409bc5b7ca255b0b92c28215a8dffe182f5054a0403bb92581155084d81cdf"
+    }
+  ],
+  "demonstrated_red": {
+    "command": "cargo test --locked --bin antlr4-rust-gen upstream_basic_semantic_errors -- --test-threads=1",
+    "commit": "d133e49cebf5b149b9cdf0dff70171128cd8ded5",
+    "exit_code": 101,
+    "fingerprint": "expected 10 ordered diagnostics, but the direct compiler emitted 7 generic rule-wide diagnostics"
+  },
+  "green_result": {
+    "command": "cargo test --locked --bin antlr4-rust-gen upstream_basic_semantic_errors -- --test-threads=1",
+    "commit": "1733fa4e06a1b97951592da68689a9bff27ba86c",
+    "exit_code": 0,
+    "result": "3 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44/revisions/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44-r1/oracle-results/declared-sources.json",
+      "sha256": "432f64121b094b58ff1b983656c3ca7a9ff83950721c86d902e33cd89e268ce5"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44/revisions/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44-r1/matrix-results/results.json",
+      "sha256": "51d23691d4d8166edc11534323a3d19eac86b111f79d7163ca2bb9ab45ac6a35"
+    }
+  ]
+}
