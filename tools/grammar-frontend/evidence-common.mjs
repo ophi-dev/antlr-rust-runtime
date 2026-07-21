@@ -41,6 +41,10 @@ export const TOKEN_POSITION_TEST_COMMIT =
     "a82df4a391d4bec1c355569f3e94dedafe4f0e2e";
 export const TOKEN_POSITION_IMPLEMENTATION_COMMIT =
     "b058502fd73d34776cf53afd2bcff3cbb2517c3f";
+export const TOPOLOGICAL_SORT_BASE_COMMIT =
+    "6b1c62d0e8d6c06e07a39a773354044cf92b47b4";
+export const TOPOLOGICAL_SORT_TEST_COMMIT =
+    "738ada36e551037733b02e556809b03b8c2c73ea";
 
 export function stableStringify(value) {
     if (Array.isArray(value)) {

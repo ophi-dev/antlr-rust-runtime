@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtopologicalsort-testrepeatededges-e97d12fac9",
+  "revision_id": "testtopologicalsort-testrepeatededges-e97d12fac9-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "resolution": "verified-covered-existing",
+  "closure": {
+    "logical_id": "testtopologicalsort-testrepeatededges-e97d12fac9",
+    "source_case_ids": [
+      "antlr-ng:testtopologicalsort-testrepeatededges@e01965bcbd7c",
+      "java-antlr:testtopologicalsort-testrepeatededges@e01965bcbd7c"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::loader::tests::upstream_topological_sort::repeated_edges_match_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust grammar dependencies preserve Java's dependency-first order for TestTopologicalSort.testRepeatedEdges",
+    "scaffold_commit": "6b1c62d0e8d6c06e07a39a773354044cf92b47b4",
+    "primary_test_commit": "738ada36e551037733b02e556809b03b8c2c73ea",
+    "resolution": "verified-covered-existing"
+  },
+  "closure_sha256": "1db85b858d3470dfbf4cff3b220e5d96e4d3f7f3f0737743f1bc2c76adbb488e",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testtopologicalsort-testrepeatededges@e01965bcbd7c",
+      "path": "tests/TestTopologicalSort.spec.ts",
+      "sha256": "2feabc0e1806f73a53a1c78db81597f10dec19d0657bf7d47b327a3055d3cb46"
+    },
+    {
+      "source_case_id": "java-antlr:testtopologicalsort-testrepeatededges@e01965bcbd7c",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestTopologicalSort.java",
+      "sha256": "5a78c528962c059e2914211da2054737ab839e05f3ae524835217d336255ed73"
+    }
+  ],
+  "commits": {
+    "scaffold": "6b1c62d0e8d6c06e07a39a773354044cf92b47b4",
+    "primary_test": "738ada36e551037733b02e556809b03b8c2c73ea",
+    "primary_implementation": "6b1c62d0e8d6c06e07a39a773354044cf92b47b4"
+  },
+  "ancestry": {
+    "primary_test_parent": "6b1c62d0e8d6c06e07a39a773354044cf92b47b4",
+    "primary_implementation_parent": "b058502fd73d34776cf53afd2bcff3cbb2517c3f",
+    "reachability": "the case-specific test passed against the Phase B loader implementation reachable from its parent"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/loader.rs",
+      "marker": "    mod upstream_topological_sort {",
+      "end_marker": "\n    struct Fixture {",
+      "sha256": "7ad9bd6b1641882fd2da94aea2700e8b83180e80b0d0da2e5c02c59624869108"
+    }
+  ],
+  "verified_covered_existing": {
+    "command": "cargo test --locked --bin antlr4-rust-gen upstream_topological_sort -- --test-threads=1",
+    "commit": "738ada36e551037733b02e556809b03b8c2c73ea",
+    "exit_code": 0,
+    "result": "5 passed; 0 failed",
+    "covering_implementation_commit": "6b1c62d0e8d6c06e07a39a773354044cf92b47b4"
+  },
+  "green_result": {
+    "command": "cargo test --locked --bin antlr4-rust-gen upstream_topological_sort -- --test-threads=1",
+    "commit": "738ada36e551037733b02e556809b03b8c2c73ea",
+    "exit_code": 0,
+    "result": "5 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testtopologicalsort-testrepeatededges-e97d12fac9/revisions/testtopologicalsort-testrepeatededges-e97d12fac9-r1/oracle-results/declared-sources.json",
+      "sha256": "cc469774249bacaa5e10ae8390ada65cc6e00d34fced2a8a959ffc86e1cb1a92"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testtopologicalsort-testrepeatededges-e97d12fac9/revisions/testtopologicalsort-testrepeatededges-e97d12fac9-r1/matrix-results/results.json",
+      "sha256": "0c83bea9fd055c704c22a426fe67deb0d517936fa6f592bf67abd4b4997a8bb7"
+    }
+  ]
+}

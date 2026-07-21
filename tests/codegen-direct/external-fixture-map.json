@@ -735,7 +735,7 @@
           "tdd_owner": "upstream:testtopologicalsort-testcyclicgraph-94f1aecafb",
           "rust_test": "grammar::compiler::tests::indirect_left_recursion_matches_java_cycle_members",
           "upstream_active_revision_id": "testtopologicalsort-testcyclicgraph-94f1aecafb-r1",
-          "transitive_closure_sha256": "485dae722ccc5091031fc75ab258fb457f043d279a9eaeb2b81127e74ec265d6"
+          "transitive_closure_sha256": "2291cd07fe02090063b3b4bf5e877439014c97c652b80d639817984c1d5723c7"
         }
       ]
     }

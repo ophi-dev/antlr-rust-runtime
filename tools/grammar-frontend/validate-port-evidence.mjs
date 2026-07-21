@@ -28,6 +28,8 @@ import {
     TOKEN_POSITION_BASE_COMMIT,
     TOKEN_POSITION_IMPLEMENTATION_COMMIT,
     TOKEN_POSITION_TEST_COMMIT,
+    TOPOLOGICAL_SORT_BASE_COMMIT,
+    TOPOLOGICAL_SORT_TEST_COMMIT,
     digest,
     gitShowOptional,
     stableStringify,
@@ -249,6 +251,9 @@ for (const [logicalId, record] of records) {
         const tokenPosition = logicalId.startsWith(
             "testtokenpositionoptions-",
         );
+        const topologicalSort = logicalId.startsWith(
+            "testtopologicalsort-",
+        );
         if (resolution === "verified-covered-existing") {
             if (atnSerialization) {
                 expect(
@@ -299,6 +304,23 @@ for (const [logicalId, record] of records) {
                         manifest.ancestry.primary_implementation_parent ===
                             ERROR_SETS_IMPLEMENTATION_COMMIT,
                     `${logicalId} token position covered-existing ancestry differs`,
+                );
+            } else if (topologicalSort) {
+                expect(
+                    manifest.commits.scaffold ===
+                            TOPOLOGICAL_SORT_BASE_COMMIT &&
+                        manifest.commits.primary_test ===
+                            TOPOLOGICAL_SORT_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            TOPOLOGICAL_SORT_BASE_COMMIT,
+                    `${logicalId} topological sort covered-existing commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            TOPOLOGICAL_SORT_BASE_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            TOKEN_POSITION_IMPLEMENTATION_COMMIT,
+                    `${logicalId} topological sort covered-existing ancestry differs`,
                 );
             } else {
                 expect(
@@ -566,6 +588,16 @@ if (tokenPositionImplementationParent !== null) {
         tokenPositionImplementationParent.trim() ===
             TOKEN_POSITION_TEST_COMMIT,
         "token position implementation commit is not based on its locked tests",
+    );
+}
+const topologicalSortTestParent = gitOptional([
+    "rev-parse",
+    `${TOPOLOGICAL_SORT_TEST_COMMIT}^`,
+]);
+if (topologicalSortTestParent !== null) {
+    expect(
+        topologicalSortTestParent.trim() === TOPOLOGICAL_SORT_BASE_COMMIT,
+        "topological sort test commit is not based on its recorded base",
     );
 }
 

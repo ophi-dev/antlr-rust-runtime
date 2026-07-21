@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtopologicalsort-testcyclicgraph-94f1aecafb",
+  "active_revision_id": "testtopologicalsort-testcyclicgraph-94f1aecafb-r1",
+  "revisions": [
+    {
+      "revision_id": "testtopologicalsort-testcyclicgraph-94f1aecafb-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testtopologicalsort-testcyclicgraph-94f1aecafb/revisions/testtopologicalsort-testcyclicgraph-94f1aecafb-r1/manifest.json",
+      "closure_sha256": "2291cd07fe02090063b3b4bf5e877439014c97c652b80d639817984c1d5723c7"
+    }
+  ]
+}

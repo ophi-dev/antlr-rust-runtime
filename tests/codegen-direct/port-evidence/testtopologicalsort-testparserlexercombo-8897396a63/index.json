@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtopologicalsort-testparserlexercombo-8897396a63",
+  "active_revision_id": "testtopologicalsort-testparserlexercombo-8897396a63-r1",
+  "revisions": [
+    {
+      "revision_id": "testtopologicalsort-testparserlexercombo-8897396a63-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testtopologicalsort-testparserlexercombo-8897396a63/revisions/testtopologicalsort-testparserlexercombo-8897396a63-r1/manifest.json",
+      "closure_sha256": "8ef223205b7fc782abc2e3252051455af1424dbdc7224d956543118492aea8a3"
+    }
+  ]
+}

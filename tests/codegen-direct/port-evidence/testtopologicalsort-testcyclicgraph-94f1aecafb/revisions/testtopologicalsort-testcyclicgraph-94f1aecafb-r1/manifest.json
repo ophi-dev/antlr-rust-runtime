@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtopologicalsort-testcyclicgraph-94f1aecafb",
+  "revision_id": "testtopologicalsort-testcyclicgraph-94f1aecafb-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "resolution": "verified-covered-existing",
+  "closure": {
+    "logical_id": "testtopologicalsort-testcyclicgraph-94f1aecafb",
+    "source_case_ids": [
+      "antlr-ng:testtopologicalsort-testcyclicgraph@9299c895849d",
+      "java-antlr:testtopologicalsort-testcyclicgraph@9299c895849d"
+    ],
+    "external_assertion_ids": [
+      "vscode-antlr4:tests/backend/test-data/t2.g4:direct-diagnostic"
+    ],
+    "external_assertion_inputs": [
+      {
+        "assertion_id": "vscode-antlr4:tests/backend/test-data/t2.g4:direct-diagnostic",
+        "source_id": "vscode-antlr4:tests/backend/test-data/t2.g4",
+        "source_sha256": "eccb0c28b1dd507a01ad394f7a553c77f32b4c7355b40a37ea4e603a1fef1cbb",
+        "observable": "the direct parser post-build graph reports Java-compatible mutual-left-recursion members",
+        "rust_test": "grammar::compiler::tests::indirect_left_recursion_matches_java_cycle_members"
+      }
+    ],
+    "fixture_paths": [],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::loader::tests::upstream_topological_sort::cyclic_graph_matches_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust grammar dependencies preserve Java's dependency-first order for TestTopologicalSort.testCyclicGraph",
+    "scaffold_commit": "6b1c62d0e8d6c06e07a39a773354044cf92b47b4",
+    "primary_test_commit": "738ada36e551037733b02e556809b03b8c2c73ea",
+    "resolution": "verified-covered-existing"
+  },
+  "closure_sha256": "2291cd07fe02090063b3b4bf5e877439014c97c652b80d639817984c1d5723c7",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testtopologicalsort-testcyclicgraph@9299c895849d",
+      "path": "tests/TestTopologicalSort.spec.ts",
+      "sha256": "2feabc0e1806f73a53a1c78db81597f10dec19d0657bf7d47b327a3055d3cb46"
+    },
+    {
+      "source_case_id": "java-antlr:testtopologicalsort-testcyclicgraph@9299c895849d",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestTopologicalSort.java",
+      "sha256": "5a78c528962c059e2914211da2054737ab839e05f3ae524835217d336255ed73"
+    }
+  ],
+  "commits": {
+    "scaffold": "6b1c62d0e8d6c06e07a39a773354044cf92b47b4",
+    "primary_test": "738ada36e551037733b02e556809b03b8c2c73ea",
+    "primary_implementation": "6b1c62d0e8d6c06e07a39a773354044cf92b47b4"
+  },
+  "ancestry": {
+    "primary_test_parent": "6b1c62d0e8d6c06e07a39a773354044cf92b47b4",
+    "primary_implementation_parent": "b058502fd73d34776cf53afd2bcff3cbb2517c3f",
+    "reachability": "the case-specific test passed against the Phase B loader implementation reachable from its parent"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/loader.rs",
+      "marker": "    mod upstream_topological_sort {",
+      "end_marker": "\n    struct Fixture {",
+      "sha256": "7ad9bd6b1641882fd2da94aea2700e8b83180e80b0d0da2e5c02c59624869108"
+    }
+  ],
+  "verified_covered_existing": {
+    "command": "cargo test --locked --bin antlr4-rust-gen upstream_topological_sort -- --test-threads=1",
+    "commit": "738ada36e551037733b02e556809b03b8c2c73ea",
+    "exit_code": 0,
+    "result": "5 passed; 0 failed",
+    "covering_implementation_commit": "6b1c62d0e8d6c06e07a39a773354044cf92b47b4"
+  },
+  "green_result": {
+    "command": "cargo test --locked --bin antlr4-rust-gen upstream_topological_sort -- --test-threads=1",
+    "commit": "738ada36e551037733b02e556809b03b8c2c73ea",
+    "exit_code": 0,
+    "result": "5 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testtopologicalsort-testcyclicgraph-94f1aecafb/revisions/testtopologicalsort-testcyclicgraph-94f1aecafb-r1/oracle-results/declared-sources.json",
+      "sha256": "9cc77270baa4aa2b30c00d96bb05cc6c4cc7184a36d0d7380d70dc148f66147b"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testtopologicalsort-testcyclicgraph-94f1aecafb/revisions/testtopologicalsort-testcyclicgraph-94f1aecafb-r1/matrix-results/results.json",
+      "sha256": "f58f9442935b543bf41cb8a30e7c490244a8a102de611293b5046039233f2214"
+    }
+  ]
+}

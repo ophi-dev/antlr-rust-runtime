@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtopologicalsort-testsimpletokendependence-02d55e6f25",
+  "revision_id": "testtopologicalsort-testsimpletokendependence-02d55e6f25-r1",
+  "cells": [
+    {
+      "test_port": "coverage-extension",
+      "test_commit": "738ada36e551037733b02e556809b03b8c2c73ea",
+      "implementation_port": "existing-primary-antlr-ng",
+      "implementation_commit": "6b1c62d0e8d6c06e07a39a773354044cf92b47b4",
+      "command": "cargo test --locked --bin antlr4-rust-gen upstream_topological_sort -- --test-threads=1",
+      "result": "green: 5 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the case-specific test passed against the existing Phase B implementation"
+}

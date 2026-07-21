@@ -26,6 +26,8 @@ import {
     TOKEN_POSITION_BASE_COMMIT,
     TOKEN_POSITION_IMPLEMENTATION_COMMIT,
     TOKEN_POSITION_TEST_COMMIT,
+    TOPOLOGICAL_SORT_BASE_COMMIT,
+    TOPOLOGICAL_SORT_TEST_COMMIT,
     digest,
     parseMode,
     stableStringify,
@@ -146,6 +148,30 @@ const TOKEN_POSITION_PORTS = new Map([
                 "cargo test --locked --bin antlr4-rust-gen upstream_token_position_options::left_recursion_with_set_matches_java -- --test-threads=1",
             greenResult: "1 passed; 0 failed",
         },
+    ],
+]);
+const TOPOLOGICAL_SORT_TEST_COMMAND =
+    "cargo test --locked --bin antlr4-rust-gen upstream_topological_sort -- --test-threads=1";
+const TOPOLOGICAL_SORT_PORTS = new Map([
+    [
+        "testtopologicalsort-testcyclicgraph-94f1aecafb",
+        "cyclic_graph_matches_java",
+    ],
+    [
+        "testtopologicalsort-testfairlylargegraph-a5f1fbf809",
+        "fairly_large_graph_matches_java",
+    ],
+    [
+        "testtopologicalsort-testparserlexercombo-8897396a63",
+        "parser_lexer_combo_matches_java",
+    ],
+    [
+        "testtopologicalsort-testrepeatededges-e97d12fac9",
+        "repeated_edges_match_java",
+    ],
+    [
+        "testtopologicalsort-testsimpletokendependence-02d55e6f25",
+        "simple_token_dependence_matches_java",
     ],
 ]);
 
@@ -633,6 +659,9 @@ function completedPhaseBRow(
                 : completed.kind === "token-position-options"
                   ? `direct Rust left-recursion source bindings and .interp match ` +
                     `Java 4.13.2 for ${cases[0].suite}.${cases[0].name}`
+                  : completed.kind === "topological-sort"
+                    ? `direct Rust grammar dependencies preserve Java's dependency-first ` +
+                      `order for ${cases[0].suite}.${cases[0].name}`
                   : `direct Rust semantic diagnostics match Java 4.13.2 exactly ` +
                     `for ${cases[0].suite}.${cases[0].name}`;
     const coveredExisting =
@@ -820,8 +849,23 @@ async function loadCompletedPhaseBPorts() {
             redFingerprint: definition.redFingerprint,
         });
     }
-    if (ports.size !== 84) {
-        throw new Error(`expected 84 completed Phase B ports, found ${ports.size}`);
+    for (const [logicalId, testName] of TOPOLOGICAL_SORT_PORTS) {
+        ports.set(logicalId, {
+            fixturePaths: [],
+            rustTest:
+                "grammar::loader::tests::upstream_topological_sort::" +
+                testName,
+            kind: "topological-sort",
+            resolution: "verified-covered-existing",
+            scaffoldCommit: TOPOLOGICAL_SORT_BASE_COMMIT,
+            testCommit: TOPOLOGICAL_SORT_TEST_COMMIT,
+            implementationCommit: TOPOLOGICAL_SORT_BASE_COMMIT,
+            testCommand: TOPOLOGICAL_SORT_TEST_COMMAND,
+            greenResult: "5 passed; 0 failed",
+        });
+    }
+    if (ports.size !== 89) {
+        throw new Error(`expected 89 completed Phase B ports, found ${ports.size}`);
     }
     return ports;
 }

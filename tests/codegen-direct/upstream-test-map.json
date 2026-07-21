@@ -28902,8 +28902,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testtopologicalsort-testcyclicgraph-94f1aecafb-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testtopologicalsort-testcyclicgraph-94f1aecafb",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::loader::tests::upstream_topological_sort::cyclic_graph_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -28924,8 +28925,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestTopologicalSort.testCyclicGraph behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust grammar dependencies preserve Java's dependency-first order for TestTopologicalSort.testCyclicGraph",
+      "scaffold_commit": "6b1c62d0e8d6c06e07a39a773354044cf92b47b4",
+      "primary_test_commit": "738ada36e551037733b02e556809b03b8c2c73ea",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_topological_sort -- --test-threads=1",
+        "commit": "738ada36e551037733b02e556809b03b8c2c73ea",
+        "exit_code": 0,
+        "result": "5 passed; 0 failed"
+      },
+      "primary_implementation_commit": "6b1c62d0e8d6c06e07a39a773354044cf92b47b4",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_topological_sort -- --test-threads=1",
+        "result": "5 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testtopologicalsort-testcyclicgraph-94f1aecafb",
         "source_case_ids": [
@@ -28944,14 +28958,18 @@
             "rust_test": "grammar::compiler::tests::indirect_left_recursion_matches_java_cycle_members"
           }
         ],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testtopologicalsort-testcyclicgraph-94f1aecafb",
+        "rust_test": "grammar::loader::tests::upstream_topological_sort::cyclic_graph_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestTopologicalSort.testCyclicGraph behavior"
+        "observable": "direct Rust grammar dependencies preserve Java's dependency-first order for TestTopologicalSort.testCyclicGraph",
+        "scaffold_commit": "6b1c62d0e8d6c06e07a39a773354044cf92b47b4",
+        "primary_test_commit": "738ada36e551037733b02e556809b03b8c2c73ea",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "485dae722ccc5091031fc75ab258fb457f043d279a9eaeb2b81127e74ec265d6",
-      "evidence_path": null
+      "closure_sha256": "2291cd07fe02090063b3b4bf5e877439014c97c652b80d639817984c1d5723c7",
+      "evidence_path": "tests/codegen-direct/port-evidence/testtopologicalsort-testcyclicgraph-94f1aecafb"
     },
     {
       "logical_id": "testtopologicalsort-testfairlylargegraph-a5f1fbf809",
@@ -28963,8 +28981,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testtopologicalsort-testfairlylargegraph-a5f1fbf809-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testtopologicalsort-testfairlylargegraph-a5f1fbf809",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::loader::tests::upstream_topological_sort::fairly_large_graph_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -28985,8 +29004,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestTopologicalSort.testFairlyLargeGraph behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust grammar dependencies preserve Java's dependency-first order for TestTopologicalSort.testFairlyLargeGraph",
+      "scaffold_commit": "6b1c62d0e8d6c06e07a39a773354044cf92b47b4",
+      "primary_test_commit": "738ada36e551037733b02e556809b03b8c2c73ea",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_topological_sort -- --test-threads=1",
+        "commit": "738ada36e551037733b02e556809b03b8c2c73ea",
+        "exit_code": 0,
+        "result": "5 passed; 0 failed"
+      },
+      "primary_implementation_commit": "6b1c62d0e8d6c06e07a39a773354044cf92b47b4",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_topological_sort -- --test-threads=1",
+        "result": "5 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testtopologicalsort-testfairlylargegraph-a5f1fbf809",
         "source_case_ids": [
@@ -28994,14 +29026,18 @@
           "java-antlr:testtopologicalsort-testfairlylargegraph@fd1eeebb889a"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testtopologicalsort-testfairlylargegraph-a5f1fbf809",
+        "rust_test": "grammar::loader::tests::upstream_topological_sort::fairly_large_graph_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestTopologicalSort.testFairlyLargeGraph behavior"
+        "observable": "direct Rust grammar dependencies preserve Java's dependency-first order for TestTopologicalSort.testFairlyLargeGraph",
+        "scaffold_commit": "6b1c62d0e8d6c06e07a39a773354044cf92b47b4",
+        "primary_test_commit": "738ada36e551037733b02e556809b03b8c2c73ea",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "fe96f4d7962c20aabb9c4b576267d09b2d5116a208e2814234576e06bce726fd",
-      "evidence_path": null
+      "closure_sha256": "64e55708f923c0a32e99b9502000ddd2f26bdbebcd3fb24e7511f5da71ead078",
+      "evidence_path": "tests/codegen-direct/port-evidence/testtopologicalsort-testfairlylargegraph-a5f1fbf809"
     },
     {
       "logical_id": "testtopologicalsort-testparserlexercombo-8897396a63",
@@ -29013,8 +29049,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testtopologicalsort-testparserlexercombo-8897396a63-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testtopologicalsort-testparserlexercombo-8897396a63",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::loader::tests::upstream_topological_sort::parser_lexer_combo_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -29035,8 +29072,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestTopologicalSort.testParserLexerCombo behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust grammar dependencies preserve Java's dependency-first order for TestTopologicalSort.testParserLexerCombo",
+      "scaffold_commit": "6b1c62d0e8d6c06e07a39a773354044cf92b47b4",
+      "primary_test_commit": "738ada36e551037733b02e556809b03b8c2c73ea",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_topological_sort -- --test-threads=1",
+        "commit": "738ada36e551037733b02e556809b03b8c2c73ea",
+        "exit_code": 0,
+        "result": "5 passed; 0 failed"
+      },
+      "primary_implementation_commit": "6b1c62d0e8d6c06e07a39a773354044cf92b47b4",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_topological_sort -- --test-threads=1",
+        "result": "5 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testtopologicalsort-testparserlexercombo-8897396a63",
         "source_case_ids": [
@@ -29044,14 +29094,18 @@
           "java-antlr:testtopologicalsort-testparserlexercombo@4604a80ed9a0"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testtopologicalsort-testparserlexercombo-8897396a63",
+        "rust_test": "grammar::loader::tests::upstream_topological_sort::parser_lexer_combo_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestTopologicalSort.testParserLexerCombo behavior"
+        "observable": "direct Rust grammar dependencies preserve Java's dependency-first order for TestTopologicalSort.testParserLexerCombo",
+        "scaffold_commit": "6b1c62d0e8d6c06e07a39a773354044cf92b47b4",
+        "primary_test_commit": "738ada36e551037733b02e556809b03b8c2c73ea",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "43f1dea056ef18d8babc1c57b90b2b648412dce1c61dabd7bf89889a81cd43c3",
-      "evidence_path": null
+      "closure_sha256": "8ef223205b7fc782abc2e3252051455af1424dbdc7224d956543118492aea8a3",
+      "evidence_path": "tests/codegen-direct/port-evidence/testtopologicalsort-testparserlexercombo-8897396a63"
     },
     {
       "logical_id": "testtopologicalsort-testrepeatededges-e97d12fac9",
@@ -29063,8 +29117,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testtopologicalsort-testrepeatededges-e97d12fac9-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testtopologicalsort-testrepeatededges-e97d12fac9",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::loader::tests::upstream_topological_sort::repeated_edges_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -29085,8 +29140,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestTopologicalSort.testRepeatedEdges behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust grammar dependencies preserve Java's dependency-first order for TestTopologicalSort.testRepeatedEdges",
+      "scaffold_commit": "6b1c62d0e8d6c06e07a39a773354044cf92b47b4",
+      "primary_test_commit": "738ada36e551037733b02e556809b03b8c2c73ea",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_topological_sort -- --test-threads=1",
+        "commit": "738ada36e551037733b02e556809b03b8c2c73ea",
+        "exit_code": 0,
+        "result": "5 passed; 0 failed"
+      },
+      "primary_implementation_commit": "6b1c62d0e8d6c06e07a39a773354044cf92b47b4",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_topological_sort -- --test-threads=1",
+        "result": "5 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testtopologicalsort-testrepeatededges-e97d12fac9",
         "source_case_ids": [
@@ -29094,14 +29162,18 @@
           "java-antlr:testtopologicalsort-testrepeatededges@e01965bcbd7c"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testtopologicalsort-testrepeatededges-e97d12fac9",
+        "rust_test": "grammar::loader::tests::upstream_topological_sort::repeated_edges_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestTopologicalSort.testRepeatedEdges behavior"
+        "observable": "direct Rust grammar dependencies preserve Java's dependency-first order for TestTopologicalSort.testRepeatedEdges",
+        "scaffold_commit": "6b1c62d0e8d6c06e07a39a773354044cf92b47b4",
+        "primary_test_commit": "738ada36e551037733b02e556809b03b8c2c73ea",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "27985195033035150ac5b919d7ad76776d7e671eaa3c856dca26d950955909c1",
-      "evidence_path": null
+      "closure_sha256": "1db85b858d3470dfbf4cff3b220e5d96e4d3f7f3f0737743f1bc2c76adbb488e",
+      "evidence_path": "tests/codegen-direct/port-evidence/testtopologicalsort-testrepeatededges-e97d12fac9"
     },
     {
       "logical_id": "testtopologicalsort-testsimpletokendependence-02d55e6f25",
@@ -29113,8 +29185,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testtopologicalsort-testsimpletokendependence-02d55e6f25-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testtopologicalsort-testsimpletokendependence-02d55e6f25",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::loader::tests::upstream_topological_sort::simple_token_dependence_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -29135,8 +29208,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestTopologicalSort.testSimpleTokenDependence behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust grammar dependencies preserve Java's dependency-first order for TestTopologicalSort.testSimpleTokenDependence",
+      "scaffold_commit": "6b1c62d0e8d6c06e07a39a773354044cf92b47b4",
+      "primary_test_commit": "738ada36e551037733b02e556809b03b8c2c73ea",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_topological_sort -- --test-threads=1",
+        "commit": "738ada36e551037733b02e556809b03b8c2c73ea",
+        "exit_code": 0,
+        "result": "5 passed; 0 failed"
+      },
+      "primary_implementation_commit": "6b1c62d0e8d6c06e07a39a773354044cf92b47b4",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_topological_sort -- --test-threads=1",
+        "result": "5 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testtopologicalsort-testsimpletokendependence-02d55e6f25",
         "source_case_ids": [
@@ -29144,14 +29230,18 @@
           "java-antlr:testtopologicalsort-testsimpletokendependence@802c98c88390"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testtopologicalsort-testsimpletokendependence-02d55e6f25",
+        "rust_test": "grammar::loader::tests::upstream_topological_sort::simple_token_dependence_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestTopologicalSort.testSimpleTokenDependence behavior"
+        "observable": "direct Rust grammar dependencies preserve Java's dependency-first order for TestTopologicalSort.testSimpleTokenDependence",
+        "scaffold_commit": "6b1c62d0e8d6c06e07a39a773354044cf92b47b4",
+        "primary_test_commit": "738ada36e551037733b02e556809b03b8c2c73ea",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "c6177ea7e1eb9853d088b1f811b7bf948ca431bcd5b1a75d8d0a55bb0c88ef2e",
-      "evidence_path": null
+      "closure_sha256": "1a9e76c5bad4d0a752da2c5b81646d0831b8d280b8a936185d1f107be3e8f5a5",
+      "evidence_path": "tests/codegen-direct/port-evidence/testtopologicalsort-testsimpletokendependence-02d55e6f25"
     },
     {
       "logical_id": "testunbufferedcharstream-test1char-9742e4fef4",

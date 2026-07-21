@@ -31,6 +31,8 @@ import {
     TOKEN_POSITION_BASE_COMMIT,
     TOKEN_POSITION_IMPLEMENTATION_COMMIT,
     TOKEN_POSITION_TEST_COMMIT,
+    TOPOLOGICAL_SORT_BASE_COMMIT,
+    TOPOLOGICAL_SORT_TEST_COMMIT,
     VSCODE_COMMIT,
     digest,
     gitShowOptional,
@@ -67,6 +69,12 @@ const TOKEN_POSITION_TEST_START =
     "    mod upstream_token_position_options {";
 const TOKEN_POSITION_TEST_END =
     "\n    struct ExpectedSemanticDiagnostic {";
+const TOPOLOGICAL_SORT_TEST_PATH =
+    "src/bin_support/grammar/loader.rs";
+const TOPOLOGICAL_SORT_TEST_START =
+    "    mod upstream_topological_sort {";
+const TOPOLOGICAL_SORT_TEST_END =
+    "\n    struct Fixture {";
 const SYMBOL_INFO_SHA256 =
     "df274a0dca42823cc2ef2608d98d544be53246a48c56f96050b0a987ce0890f3";
 
@@ -526,6 +534,41 @@ const tokenPositionLockedSections = [
         sha256: digest(checkedInTokenPositionTests),
     },
 ];
+const checkedInTopologicalSortTests = sectionBetweenMarkers(
+    await readFile(resolve(repoRoot, TOPOLOGICAL_SORT_TEST_PATH), "utf8"),
+    TOPOLOGICAL_SORT_TEST_START,
+    TOPOLOGICAL_SORT_TEST_END,
+);
+const recordedTopologicalSortTests = gitShowOptional(
+    repoRoot,
+    TOPOLOGICAL_SORT_TEST_COMMIT,
+    TOPOLOGICAL_SORT_TEST_PATH,
+);
+if (recordedTopologicalSortTests === null) {
+    warnMissingHistoricalSource(
+        "topological sort test verification",
+        TOPOLOGICAL_SORT_TEST_COMMIT,
+        TOPOLOGICAL_SORT_TEST_PATH,
+    );
+} else if (
+    sectionBetweenMarkers(
+        recordedTopologicalSortTests,
+        TOPOLOGICAL_SORT_TEST_START,
+        TOPOLOGICAL_SORT_TEST_END,
+    ) !== checkedInTopologicalSortTests
+) {
+    throw new Error(
+        "checked-in topological sort ports differ from their test commit",
+    );
+}
+const topologicalSortLockedSections = [
+    {
+        path: TOPOLOGICAL_SORT_TEST_PATH,
+        marker: TOPOLOGICAL_SORT_TEST_START,
+        end_marker: TOPOLOGICAL_SORT_TEST_END,
+        sha256: digest(checkedInTopologicalSortTests),
+    },
+];
 
 const upstreamByLogicalId = new Map(
     testMap.rows.map((row) => [row.logical_id, row]),
@@ -632,13 +675,17 @@ for (const row of completedRows) {
     const phaseBTokenPosition = row.logical_id.startsWith(
         "testtokenpositionoptions-",
     );
+    const phaseBTopologicalSort = row.logical_id.startsWith(
+        "testtopologicalsort-",
+    );
     if (
         row.owner_phase === "B" &&
         !phaseBAtnSerialization &&
         !phaseBAtnConstruction &&
         !phaseBBasicSemantic &&
         !phaseBErrorSets &&
-        !phaseBTokenPosition
+        !phaseBTokenPosition &&
+        !phaseBTopologicalSort
     ) {
         throw new Error(`missing Phase B evidence profile for ${row.logical_id}`);
     }
@@ -693,6 +740,16 @@ for (const row of completedRows) {
                           ? "the case-specific test passed against the Phase B implementation reachable from its parent"
                           : "the implementation commit is directly based on the locked red token-position tests",
                   }
+                : phaseBTopologicalSort
+                  ? {
+                        lockedSections: topologicalSortLockedSections,
+                        scaffoldCommit: TOPOLOGICAL_SORT_BASE_COMMIT,
+                        testParent: TOPOLOGICAL_SORT_BASE_COMMIT,
+                        implementationParent:
+                            TOKEN_POSITION_IMPLEMENTATION_COMMIT,
+                        reachability:
+                            "the case-specific test passed against the Phase B loader implementation reachable from its parent",
+                    }
           : null;
     await addEvidence({
         logicalId: row.logical_id,
@@ -748,6 +805,15 @@ for (const row of completedRows) {
                           java_compatibility_verdict:
                               "exact Java 4.13.2 parser and lexer .interp equality plus authored token-position equality",
                       }
+                    : phaseBTopologicalSort
+                      ? {
+                            primary:
+                                "the direct Rust loader preserves Java 4.13.2 dependency-first ordering, duplicate-edge handling, and cycle traversal",
+                            alternate:
+                                "the pinned antlr-ng TestTopologicalSort case exposes the same dependency ordering",
+                            java_compatibility_verdict:
+                                "exact Java 4.13.2 topological order with source-backed vocabulary edges",
+                        }
             : {
                   primary: coveredExisting
                       ? "the case-specific Rust port matches the pinned accepted and rejected syntax outcomes"
