@@ -2,6 +2,7 @@ mod atn;
 mod char_support;
 mod compiler;
 mod diagnostic;
+mod escape_sequence;
 pub(crate) mod frontend;
 mod generated {
     pub(super) mod antlr_v4_lexer;
