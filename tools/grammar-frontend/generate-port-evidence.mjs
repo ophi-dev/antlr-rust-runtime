@@ -7,7 +7,6 @@ import {
 } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
 
 import {
     ANTLR_NG_COMMIT,
@@ -19,6 +18,7 @@ import {
     TEST_COMMIT,
     VSCODE_COMMIT,
     digest,
+    gitShowOptional,
     parseMode,
     stableStringify,
 } from "./evidence-common.mjs";
@@ -131,11 +131,26 @@ const checkedInTestModule = sectionAtMarker(
     await readFile(resolve(repoRoot, TEST_MODULE_PATH), "utf8"),
     TEST_MODULE_MARKER,
 );
-const testModule = gitShowOptional(TEST_COMMIT, TEST_MODULE_PATH);
+const testModule = gitShowOptional(repoRoot, TEST_COMMIT, TEST_MODULE_PATH);
 const implementationTestModule = gitShowOptional(
+    repoRoot,
     IMPLEMENTATION_COMMIT,
     TEST_MODULE_PATH,
 );
+if (testModule === null) {
+    warnMissingHistoricalSource(
+        "locked frontend test verification",
+        TEST_COMMIT,
+        TEST_MODULE_PATH,
+    );
+}
+if (implementationTestModule === null) {
+    warnMissingHistoricalSource(
+        "locked frontend implementation verification",
+        IMPLEMENTATION_COMMIT,
+        TEST_MODULE_PATH,
+    );
+}
 if (testModule !== null && implementationTestModule !== null) {
     const lockedTestModule = sectionAtMarker(testModule, TEST_MODULE_MARKER);
     const implementedTestModule = sectionAtMarker(
@@ -157,13 +172,19 @@ const checkedInSyntaxTest = sectionAtMarker(
     FRONTEND_SYNTAX_TEST_MARKER,
 );
 const recordedSyntaxTest = gitShowOptional(
+    repoRoot,
     FRONTEND_SYNTAX_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_PATH,
 );
-if (
-    recordedSyntaxTest !== null &&
+if (recordedSyntaxTest === null) {
+    warnMissingHistoricalSource(
+        "frontend syntax test verification",
+        FRONTEND_SYNTAX_TEST_COMMIT,
+        FRONTEND_SYNTAX_TEST_PATH,
+    );
+} else if (
     sectionAtMarker(recordedSyntaxTest, FRONTEND_SYNTAX_TEST_MARKER) !==
-        checkedInSyntaxTest
+    checkedInSyntaxTest
 ) {
     throw new Error("checked-in frontend syntax port differs from its test commit");
 }
@@ -172,13 +193,19 @@ const checkedInSyntaxModule = sectionAtMarker(
     FRONTEND_SYNTAX_MODULE_MARKER,
 );
 const recordedSyntaxModule = gitShowOptional(
+    repoRoot,
     FRONTEND_SYNTAX_TEST_COMMIT,
     FRONTEND_SYNTAX_MODULE_PATH,
 );
-if (
-    recordedSyntaxModule !== null &&
+if (recordedSyntaxModule === null) {
+    warnMissingHistoricalSource(
+        "frontend syntax module verification",
+        FRONTEND_SYNTAX_TEST_COMMIT,
+        FRONTEND_SYNTAX_MODULE_PATH,
+    );
+} else if (
     sectionAtMarker(recordedSyntaxModule, FRONTEND_SYNTAX_MODULE_MARKER) !==
-        checkedInSyntaxModule
+    checkedInSyntaxModule
 ) {
     throw new Error("checked-in frontend syntax test module differs from its test commit");
 }
@@ -544,16 +571,10 @@ function sectionAtMarker(text, marker) {
     return text.slice(offset);
 }
 
-function gitShowOptional(commit, path) {
-    const result = spawnSync("git", ["show", `${commit}:${path}`], {
-        cwd: repoRoot,
-        encoding: "utf8",
-        maxBuffer: 32 * 1024 * 1024,
-    });
-    if (result.status !== 0) {
-        return null;
-    }
-    return result.stdout;
+function warnMissingHistoricalSource(label, commit, path) {
+    console.warn(
+        `warning: skipped ${label}; unavailable pinned Git source ${commit}:${path}`,
+    );
 }
 
 async function load(path) {

@@ -14,6 +14,7 @@ import {
     SCAFFOLD_COMMIT,
     TEST_COMMIT,
     digest,
+    gitShowOptional,
     stableStringify,
 } from "./evidence-common.mjs";
 
@@ -177,10 +178,12 @@ for (const [logicalId, record] of records) {
                 );
             }
             const testSource = gitShowOptional(
+                repoRoot,
                 manifest.commits.primary_test,
                 section.path,
             );
             const implementationSource = gitShowOptional(
+                repoRoot,
                 manifest.commits.primary_implementation,
                 section.path,
             );
@@ -428,10 +431,6 @@ async function expectLocalHash(logicalId, path, expected) {
             `${logicalId} cannot read allowed input ${path}: ${error.message}`,
         );
     }
-}
-
-function gitShowOptional(commit, path) {
-    return gitOptional(["show", `${commit}:${path}`]);
 }
 
 function gitOptional(args) {

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 
 export const JAVA_COMMIT = "cc82115a4e7f53d71d9d905caa2c2dfa4da58899";
 export const ANTLR_NG_COMMIT = "1f68422ae4bfc62f93343769e144d01f305487b1";
@@ -26,6 +27,18 @@ export function stableStringify(value) {
 
 export function digest(value) {
     return createHash("sha256").update(value).digest("hex");
+}
+
+export function gitShowOptional(cwd, commit, path) {
+    const result = spawnSync("git", ["show", `${commit}:${path}`], {
+        cwd,
+        encoding: "utf8",
+        maxBuffer: 32 * 1024 * 1024,
+    });
+    if (result.status !== 0) {
+        return null;
+    }
+    return result.stdout;
 }
 
 export function parseMode(args, scriptName) {
