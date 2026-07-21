@@ -1,12 +1,16 @@
 #!/usr/bin/env node
 
-import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import {
+    VSCODE_COMMIT,
+    digest,
+    stableStringify,
+} from "./evidence-common.mjs";
+
 const REPOSITORY = "https://github.com/mike-lischke/vscode-antlr4.git";
-const COMMIT = "3e9469d1d490c71b3e3b909edf1235582a3f8db8";
 const PHASES = new Set(["A", "B", "C"]);
 const OUTCOMES = new Set(["valid", "semantic-error", "dependency-error"]);
 
@@ -21,8 +25,8 @@ expect(inventory.schema_version === 1, "inventory schema_version must be 1");
 expect(fixtureMap.schema_version === 1, "fixture-map schema_version must be 1");
 expect(inventory.repository === REPOSITORY, "inventory repository pin differs");
 expect(fixtureMap.repository === REPOSITORY, "fixture-map repository pin differs");
-expect(inventory.commit === COMMIT, "inventory commit pin differs");
-expect(fixtureMap.commit === COMMIT, "fixture-map commit pin differs");
+expect(inventory.commit === VSCODE_COMMIT, "inventory commit pin differs");
+expect(fixtureMap.commit === VSCODE_COMMIT, "fixture-map commit pin differs");
 expect(
     Array.isArray(inventory.artifacts) && inventory.artifacts.length === 13,
     "inventory must contain exactly 13 artifacts",
@@ -140,7 +144,7 @@ for (const fixture of fixtureMap.fixtures ?? []) {
             );
             expect(
                 assertion.tdd?.closure_sha256 ===
-                    digestText(stableStringify(assertion.tdd?.closure)),
+                    digest(stableStringify(assertion.tdd?.closure)),
                 `${assertion.id} external closure hash differs`,
             );
             expect(
@@ -200,27 +204,6 @@ function uniqueMap(entries, field, label) {
         result.set(key, entry);
     }
     return result;
-}
-
-function digest(contents) {
-    return createHash("sha256").update(contents).digest("hex");
-}
-
-function digestText(contents) {
-    return createHash("sha256").update(contents).digest("hex");
-}
-
-function stableStringify(value) {
-    if (Array.isArray(value)) {
-        return `[${value.map(stableStringify).join(",")}]`;
-    }
-    if (value && typeof value === "object") {
-        return `{${Object.keys(value)
-            .sort()
-            .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
-            .join(",")}}`;
-    }
-    return JSON.stringify(value);
 }
 
 function expect(condition, message) {

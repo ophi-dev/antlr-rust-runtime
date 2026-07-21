@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -10,8 +11,13 @@ const EXPECTED_ANTLR_NG =
 
 const options = parseArguments(process.argv.slice(2));
 const repo = resolve(options.repo ?? process.cwd());
+if (options["antlr-ng"] && options["antlr-ng-root"]) {
+    throw new Error("pass only one of --antlr-ng-root or --antlr-ng");
+}
 const antlrNg = resolve(
-    options["antlr-ng"] ?? "/tmp/antlr-cleanroom/antlr-ng-1f68422",
+    options["antlr-ng-root"] ??
+        options["antlr-ng"] ??
+        "/tmp/antlr-cleanroom/antlr-ng-1f68422",
 );
 const corpusPath = resolve(
     repo,
@@ -26,6 +32,7 @@ const corpus = JSON.parse(await readFile(corpusPath, "utf8"));
 if (corpus.antlr_ng.commit !== EXPECTED_ANTLR_NG) {
     throw new Error(`unexpected corpus antlr-ng pin: ${corpus.antlr_ng.commit}`);
 }
+verifyCheckout(antlrNg);
 
 const antlr = await import(
     pathToFileURL(join(antlrNg, "node_modules/antlr4ng/dist/index.mjs")).href
@@ -191,4 +198,21 @@ function parseArguments(argumentsList) {
         index += 1;
     }
     return result;
+}
+
+function verifyCheckout(root) {
+    const result = spawnSync("git", ["-C", root, "rev-parse", "HEAD"], {
+        encoding: "utf8",
+    });
+    if (result.status !== 0) {
+        throw new Error(
+            `could not inspect antlr-ng checkout ${root}: ${result.stderr.trim()}`,
+        );
+    }
+    const actual = result.stdout.trim();
+    if (actual !== EXPECTED_ANTLR_NG) {
+        throw new Error(
+            `unexpected antlr-ng checkout commit: expected ${EXPECTED_ANTLR_NG}, got ${actual}`,
+        );
+    }
 }

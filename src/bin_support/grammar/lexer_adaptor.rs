@@ -152,6 +152,18 @@ mod tests {
     use antlr4_runtime::{CommonTokenStream, InputStream, Token};
 
     #[test]
+    fn grammar_options_preserve_following_lexer_rule_mode() {
+        let grammar = concat!(
+            "lexer grammar G;\n",
+            "options { language=Rust; tokenVocab=T; }\n",
+            "A: [a];\n",
+        );
+
+        parse_source(SourceId::new(0), "memory:grammar-options", grammar)
+            .expect("grammar options must not turn a later lexer charset into arguments");
+    }
+
+    #[test]
     fn parser_rule_options_preserve_argument_mode() {
         let grammar = concat!(
             "grammar G;\n",

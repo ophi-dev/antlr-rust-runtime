@@ -778,7 +778,7 @@ thread_local! {
         RefCell::new(HashMap::new());
 }
 
-/// Normalized lexer ATN config-set identity used for observed DFA traces.
+/// Position-independent lexer ATN config sequence used for observed DFA traces.
 ///
 /// Configuration order is part of the identity because it carries serialized
 /// ATN priority through non-greedy decisions.

@@ -25,11 +25,23 @@ const evidenceRoot = resolve(
 );
 const testMap = await load("tests/codegen-direct/upstream-test-map.json");
 const externalMap = await load("tests/codegen-direct/external-fixture-map.json");
+const upstreamInventory = await load(
+    "tests/codegen-direct/upstream-case-inventory.json",
+);
+const externalInventory = await load(
+    "tests/codegen-direct/external-source-inventory.json",
+);
 const differences = await load(
     "tests/codegen-direct/approved-differences.json",
 );
 const failures = [];
 const records = new Map();
+const sourceCases = new Map(
+    (upstreamInventory.cases ?? []).map((testCase) => [testCase.id, testCase]),
+);
+const externalSources = new Map(
+    (externalInventory.artifacts ?? []).map((source) => [source.source_id, source]),
+);
 
 for (const row of testMap.rows ?? []) {
     if (row.disposition === "port" && row.owner_phase === "A") {
@@ -144,6 +156,7 @@ for (const [logicalId, record] of records) {
             manifest.closure_sha256 === digest(stableStringify(manifest.closure)),
             `${logicalId} manifest closure hash is invalid`,
         );
+        await validateAllowedInputs(logicalId, manifest);
         for (const evidenceFile of manifest.evidence_files ?? []) {
             const contents = await readFile(resolve(repoRoot, evidenceFile.path));
             expect(
@@ -316,6 +329,105 @@ if (failures.length > 0) {
 
 async function load(path) {
     return JSON.parse(await readFile(resolve(repoRoot, path), "utf8"));
+}
+
+async function validateAllowedInputs(logicalId, manifest) {
+    const expectedKeys = [
+        ...(manifest.closure.source_case_ids ?? []).map((id) => `case:${id}`),
+        ...(manifest.closure.source_id
+            ? [`source:${manifest.closure.source_id}`]
+            : []),
+        ...(manifest.closure.fixture_paths ?? []).map((path) => `path:${path}`),
+    ].sort();
+    const actualKeys = [];
+    const inputs = Array.isArray(manifest.allowed_inputs)
+        ? manifest.allowed_inputs
+        : [];
+    expect(
+        Array.isArray(manifest.allowed_inputs),
+        `${logicalId} allowed inputs must be an array`,
+    );
+
+    for (const input of inputs) {
+        const hasSourceCase = typeof input.source_case_id === "string";
+        const hasExternalSource = typeof input.source_id === "string";
+        const isFixture = !hasSourceCase && !hasExternalSource;
+        const identityCount =
+            Number(hasSourceCase) + Number(hasExternalSource) + Number(isFixture);
+        expect(
+            identityCount === 1 &&
+                typeof input.path === "string" &&
+                typeof input.sha256 === "string",
+            `${logicalId} has a malformed allowed input`,
+        );
+
+        if (hasSourceCase) {
+            const sourceCase = sourceCases.get(input.source_case_id);
+            expect(
+                Boolean(sourceCase) &&
+                    input.path === sourceCase?.source.path &&
+                    input.sha256 === sourceCase?.source.sha256,
+                `${logicalId} source-case input differs for ${input.source_case_id}`,
+            );
+            actualKeys.push(`case:${input.source_case_id}`);
+        } else if (hasExternalSource) {
+            const source = externalSources.get(input.source_id);
+            expect(
+                Boolean(source) &&
+                    input.path === source?.mirror_path &&
+                    input.sha256 === source?.sha256,
+                `${logicalId} external input differs for ${input.source_id}`,
+            );
+            if (
+                source &&
+                input.path === source.mirror_path &&
+                input.sha256 === source.sha256
+            ) {
+                await expectLocalHash(
+                    logicalId,
+                    source.mirror_path,
+                    source.sha256,
+                );
+            }
+            actualKeys.push(`source:${input.source_id}`);
+        } else {
+            const declared = (manifest.closure.fixture_paths ?? []).includes(
+                input.path,
+            );
+            expect(
+                declared,
+                `${logicalId} names undeclared fixture input ${input.path}`,
+            );
+            if (
+                declared &&
+                typeof input.path === "string" &&
+                typeof input.sha256 === "string"
+            ) {
+                await expectLocalHash(logicalId, input.path, input.sha256);
+            }
+            actualKeys.push(`path:${input.path}`);
+        }
+    }
+
+    actualKeys.sort();
+    expect(
+        JSON.stringify(actualKeys) === JSON.stringify(expectedKeys),
+        `${logicalId} allowed inputs do not exactly match its closure`,
+    );
+}
+
+async function expectLocalHash(logicalId, path, expected) {
+    try {
+        const contents = await readFile(resolve(repoRoot, path));
+        expect(
+            digest(contents) === expected,
+            `${logicalId} allowed input hash differs for ${path}`,
+        );
+    } catch (error) {
+        failures.push(
+            `${logicalId} cannot read allowed input ${path}: ${error.message}`,
+        );
+    }
 }
 
 function gitShowOptional(commit, path) {
