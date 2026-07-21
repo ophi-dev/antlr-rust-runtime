@@ -103,6 +103,11 @@ type ParseTree = NodeId;
 /// non-viable. Long expression-regression descriptors legitimately walk tens
 /// of thousands of ATN edges.
 const RECOGNITION_DEPTH_LIMIT: usize = 32_768;
+/// Preserve the recursive hot path while checking native stack capacity often
+/// enough that one unchecked group cannot cross the protected red zone.
+const FAST_RECOGNIZE_STACK_CHECK_INTERVAL: usize = 8;
+const FAST_RECOGNIZE_RED_ZONE: usize = 1024 * 1024;
+const FAST_RECOGNIZE_STACK_SIZE: usize = 4 * 1024 * 1024;
 /// Whole-rule direct adaptive execution is allowed to give up and fall back to
 /// the existing recognizer. Keep the guard at the same order of magnitude as
 /// speculative recognition so malformed cyclic ATNs cannot spin forever.
@@ -4030,6 +4035,7 @@ struct FastRecognizeScratch<'a, 'b> {
     visiting: &'b mut FxHashSet<FastRecognizeKey>,
     memo: &'b mut FxHashMap<FastRecognizeKey, Rc<[FastRecognizeOutcome]>>,
     expected: &'b mut ExpectedTokens,
+    native_depth: usize,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -6749,6 +6755,7 @@ where
                 visiting: &mut recognize_scratch.visiting,
                 memo: &mut recognize_scratch.memo,
                 expected: &mut expected,
+                native_depth: 0,
             },
         );
         recognize_scratch.release_oversized_memo();
@@ -7581,6 +7588,7 @@ where
                 visiting,
                 memo,
                 expected,
+                native_depth: 0,
             },
         )
         .into_iter()
@@ -7656,6 +7664,7 @@ where
                 visiting,
                 memo,
                 expected,
+                native_depth: 0,
             },
         )
         .into_iter()
@@ -7705,6 +7714,7 @@ where
                 visiting,
                 memo,
                 expected,
+                native_depth: 0,
             },
         )
         .into_iter()
@@ -7900,6 +7910,7 @@ where
             visiting,
             memo,
             expected,
+            native_depth,
         } = scratch;
         let lookahead = if self.fast_first_set_prefilter {
             atn.state(request.state_number).and_then(|state| {
@@ -7950,6 +7961,7 @@ where
                             visiting: &mut *visiting,
                             memo: &mut *memo,
                             expected: &mut *expected,
+                            native_depth: native_depth + 1,
                         },
                     );
                     for body in body_outcomes.into_iter().rev() {
@@ -8006,6 +8018,7 @@ where
                             visiting: &mut *visiting,
                             memo: &mut *memo,
                             expected: &mut *expected,
+                            native_depth: native_depth + 1,
                         },
                     );
                     for mut outcome in suffixes {
@@ -8027,8 +8040,33 @@ where
 
     /// Attempts to reach `stop_state` from `state_number` without committing
     /// token consumption to the parser's public stream position.
-    #[allow(clippy::too_many_lines)]
     fn recognize_state_fast(
+        &mut self,
+        atn: &Atn,
+        request: FastRecognizeRequest,
+        scratch: FastRecognizeScratch<'_, '_>,
+    ) -> Vec<FastRecognizeOutcome> {
+        if scratch.native_depth != 0 && scratch.native_depth < FAST_RECOGNIZE_STACK_CHECK_INTERVAL {
+            return self.recognize_state_fast_inner(atn, request, scratch);
+        }
+        self.recognize_state_fast_checked(atn, request, scratch)
+    }
+
+    #[inline(never)]
+    fn recognize_state_fast_checked(
+        &mut self,
+        atn: &Atn,
+        request: FastRecognizeRequest,
+        mut scratch: FastRecognizeScratch<'_, '_>,
+    ) -> Vec<FastRecognizeOutcome> {
+        scratch.native_depth = 1;
+        stacker::maybe_grow(FAST_RECOGNIZE_RED_ZONE, FAST_RECOGNIZE_STACK_SIZE, || {
+            self.recognize_state_fast_inner(atn, request, scratch)
+        })
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn recognize_state_fast_inner(
         &mut self,
         atn: &Atn,
         request: FastRecognizeRequest,
@@ -8041,6 +8079,7 @@ where
             visiting,
             memo,
             expected,
+            native_depth,
         } = scratch;
         let FastRecognizeRequest {
             mut state_number,
@@ -8206,6 +8245,7 @@ where
                     visiting: &mut *visiting,
                     memo: &mut *memo,
                     expected: &mut *expected,
+                    native_depth: native_depth + 1,
                 },
             );
             if inline_pending {
@@ -8459,6 +8499,7 @@ where
                                 visiting,
                                 memo,
                                 expected,
+                                native_depth: native_depth + 1,
                             },
                         )
                         .into_iter()
@@ -8495,6 +8536,7 @@ where
                                     visiting,
                                     memo,
                                     expected,
+                                    native_depth: native_depth + 1,
                                 },
                             )
                             .into_iter()
@@ -8533,6 +8575,7 @@ where
                                     visiting,
                                     memo,
                                     expected,
+                                    native_depth: native_depth + 1,
                                 },
                             )
                             .into_iter()
@@ -8611,6 +8654,7 @@ where
                             visiting,
                             memo,
                             expected,
+                            native_depth: native_depth + 1,
                         },
                     );
                     if children.is_empty() && self.fast_recovery_enabled {
@@ -8656,6 +8700,7 @@ where
                                 visiting,
                                 memo,
                                 expected,
+                                native_depth: native_depth + 1,
                             },
                         );
                         if follow_outcomes.is_empty() {
@@ -8727,6 +8772,7 @@ where
                                     visiting,
                                     memo,
                                     expected,
+                                    native_depth: native_depth + 1,
                                 },
                             )
                             .into_iter()
@@ -10073,52 +10119,74 @@ where
         target_state: usize,
         visited: &mut FxHashSet<usize>,
     ) -> bool {
-        if !visited.insert(state_number) {
-            return false;
+        enum Work {
+            Visit(usize),
+            RuleFollow {
+                target: usize,
+                rule_index: usize,
+                follow_state: usize,
+            },
         }
-        let Some(state) = atn.state(state_number) else {
-            return false;
-        };
-        for transition in &state.transitions() {
-            let kind = transition.kind();
-            let target = transition.target();
-            match kind {
-                ParserTransitionKind::Atom
-                | ParserTransitionKind::Range
-                | ParserTransitionKind::Set
-                | ParserTransitionKind::NotSet
-                | ParserTransitionKind::Wildcard => {}
-                ParserTransitionKind::Rule => {
-                    let rule_index = transition.arg0() as usize;
-                    let follow_state = transition.arg1() as usize;
-                    if target == target_state
-                        || self.empty_path_reaches_state(atn, target, target_state, visited)
-                    {
-                        return true;
+
+        let mut work = vec![Work::Visit(state_number)];
+        while let Some(item) = work.pop() {
+            match item {
+                Work::Visit(state_number) => {
+                    if !visited.insert(state_number) {
+                        continue;
                     }
+                    let Some(state) = atn.state(state_number) else {
+                        continue;
+                    };
+                    let transitions = state.transitions();
+                    for transition_index in (0..transitions.len()).rev() {
+                        let transition = transitions
+                            .get(transition_index)
+                            .expect("in-bounds parser transition");
+                        let kind = transition.kind();
+                        let target = transition.target();
+                        match kind {
+                            ParserTransitionKind::Atom
+                            | ParserTransitionKind::Range
+                            | ParserTransitionKind::Set
+                            | ParserTransitionKind::NotSet
+                            | ParserTransitionKind::Wildcard => {}
+                            ParserTransitionKind::Rule => {
+                                if target == target_state {
+                                    return true;
+                                }
+                                work.push(Work::RuleFollow {
+                                    target,
+                                    rule_index: transition.arg0() as usize,
+                                    follow_state: transition.arg1() as usize,
+                                });
+                                work.push(Work::Visit(target));
+                            }
+                            ParserTransitionKind::Epsilon
+                            | ParserTransitionKind::Predicate
+                            | ParserTransitionKind::Action
+                            | ParserTransitionKind::Precedence => {
+                                if target == target_state {
+                                    return true;
+                                }
+                                work.push(Work::Visit(target));
+                            }
+                        }
+                    }
+                }
+                Work::RuleFollow {
+                    target,
+                    rule_index,
+                    follow_state,
+                } => {
                     let Some(child_stop) = atn.rule_to_stop_state().get(rule_index) else {
                         continue;
                     };
-                    if self.cached_rule_first_set(atn, target, child_stop).nullable
-                        && (follow_state == target_state
-                            || self.empty_path_reaches_state(
-                                atn,
-                                follow_state,
-                                target_state,
-                                visited,
-                            ))
-                    {
-                        return true;
-                    }
-                }
-                ParserTransitionKind::Epsilon
-                | ParserTransitionKind::Predicate
-                | ParserTransitionKind::Action
-                | ParserTransitionKind::Precedence => {
-                    if target == target_state
-                        || self.empty_path_reaches_state(atn, target, target_state, visited)
-                    {
-                        return true;
+                    if self.cached_rule_first_set(atn, target, child_stop).nullable {
+                        if follow_state == target_state {
+                            return true;
+                        }
+                        work.push(Work::Visit(follow_state));
                     }
                 }
             }
@@ -12418,10 +12486,15 @@ mod tests {
     }
 
     fn nested_rule_chain_atn(depth: usize) -> Atn {
+        nested_rule_graph_atn(depth, false, false)
+    }
+
+    fn nested_rule_graph_atn(depth: usize, branching: bool, consuming_follows: bool) -> Atn {
         assert!(depth > 0);
-        let mut atn = ParserAtnBuilder::new(1);
+        let mut atn = ParserAtnBuilder::new(2);
         let mut starts = Vec::with_capacity(depth);
         let mut stops = Vec::with_capacity(depth);
+        let mut follows = Vec::with_capacity(depth.saturating_sub(1));
         for rule_index in 0..depth {
             starts.push(
                 atn.add_state(AtnStateKind::RuleStart, Some(rule_index))
@@ -12436,21 +12509,55 @@ mod tests {
                     .index(),
             );
         }
+        if consuming_follows {
+            for rule_index in 0..depth - 1 {
+                follows.push(
+                    atn.add_state(AtnStateKind::Basic, Some(rule_index))
+                        .expect("rule follow")
+                        .index(),
+                );
+            }
+        }
         atn.set_rule_to_start_state(starts.clone())
             .expect("rule start states");
         atn.set_rule_to_stop_state(stops.clone())
             .expect("rule stop states");
         for rule_index in 0..depth - 1 {
+            let follow_state = if consuming_follows {
+                follows[rule_index]
+            } else {
+                stops[rule_index]
+            };
             atn.add_transition(
                 starts[rule_index],
                 ParserTransitionSpec::Rule {
                     target: starts[rule_index + 1],
                     rule_index: rule_index + 1,
-                    follow_state: stops[rule_index],
+                    follow_state,
                     precedence: 0,
                 },
             )
             .expect("nested rule transition");
+            if branching {
+                atn.add_transition(
+                    starts[rule_index],
+                    ParserTransitionSpec::Atom {
+                        target: stops[rule_index],
+                        label: 2,
+                    },
+                )
+                .expect("dead branch transition");
+            }
+            if consuming_follows {
+                atn.add_transition(
+                    follow_state,
+                    ParserTransitionSpec::Atom {
+                        target: stops[rule_index],
+                        label: 1,
+                    },
+                )
+                .expect("consuming follow transition");
+            }
         }
         let token_set = atn.add_interval_set([(1, 1)]).expect("token set");
         atn.add_transition(
@@ -12461,6 +12568,16 @@ mod tests {
             },
         )
         .expect("terminal set transition");
+        if branching {
+            atn.add_transition(
+                starts[depth - 1],
+                ParserTransitionSpec::Atom {
+                    target: stops[depth - 1],
+                    label: 2,
+                },
+            )
+            .expect("dead leaf branch transition");
+        }
         finish_atn(atn)
     }
 
@@ -15378,26 +15495,97 @@ mod tests {
     }
 
     #[test]
-    fn nested_rule_chain_with_adaptive_set_fits_default_stack() {
-        // This depth separates the corrected frame from v0.14.0 on a 2 MiB stack.
-        const DEPTH: usize = 130;
-        const STACK_SIZE: usize = 2 * 1024 * 1024;
-
+    fn deeply_nested_rule_calls_grow_the_stack() {
+        const DEPTH: usize = 4_096;
+        const STACK_SIZE: usize = 256 * 1024;
+        let atn = nested_rule_chain_atn(DEPTH);
         std::thread::Builder::new()
             .name("nested-adaptive-set-rules".to_owned())
             .stack_size(STACK_SIZE)
-            .spawn(|| {
-                let atn = nested_rule_chain_atn(DEPTH);
+            .spawn(move || {
                 let mut parser = mini_parser(vec![TestToken::new(1).with_text("x")]);
                 parser.set_build_parse_trees(false);
+                // This test isolates recognizer depth from the separately
+                // cached FIRST-set metadata walk.
+                parser.fast_first_set_prefilter = false;
                 parser
                     .parse_atn_rule(&atn, 0)
-                    .expect("nested rule chain should parse on the default-sized stack");
+                    .expect("nested rule chain should grow the native stack");
                 assert_eq!(parser.input.index(), 1);
             })
             .expect("small-stack thread should start")
             .join()
             .expect("nested rule chain should not overflow its stack");
+    }
+
+    #[test]
+    fn deeply_nested_branching_rules_grow_the_stack() {
+        const DEPTH: usize = 4_096;
+        const STACK_SIZE: usize = 256 * 1024;
+        let atn = nested_rule_graph_atn(DEPTH, true, false);
+        std::thread::Builder::new()
+            .name("nested-branching-rules".to_owned())
+            .stack_size(STACK_SIZE)
+            .spawn(move || {
+                let mut parser = mini_parser(vec![TestToken::new(1).with_text("x")]);
+                parser.set_build_parse_trees(false);
+                parser
+                    .parse_atn_rule(&atn, 0)
+                    .expect("branching rule chain should grow the native stack");
+                assert_eq!(parser.input.index(), 1);
+            })
+            .expect("small-stack thread should start")
+            .join()
+            .expect("branching rule chain should not overflow its stack");
+    }
+
+    #[test]
+    fn deeply_nested_rule_follows_grow_the_stack() {
+        const DEPTH: usize = 4_096;
+        const STACK_SIZE: usize = 256 * 1024;
+        let atn = nested_rule_graph_atn(DEPTH, false, true);
+        std::thread::Builder::new()
+            .name("nested-rule-follows".to_owned())
+            .stack_size(STACK_SIZE)
+            .spawn(move || {
+                let mut parser = mini_parser(repeated_x_tokens(DEPTH));
+                parser.set_build_parse_trees(false);
+                parser.fast_first_set_prefilter = false;
+                parser
+                    .parse_atn_rule(&atn, 0)
+                    .expect("rule follow chain should grow the native stack");
+                assert_eq!(parser.input.index(), DEPTH);
+            })
+            .expect("small-stack thread should start")
+            .join()
+            .expect("nested rule follow chain should not overflow its stack");
+    }
+
+    #[test]
+    fn deeply_nested_recovery_grows_the_stack() {
+        const DEPTH: usize = 4_096;
+        const STACK_SIZE: usize = 256 * 1024;
+        let atn = nested_rule_chain_atn(DEPTH);
+        std::thread::Builder::new()
+            .name("nested-rule-recovery".to_owned())
+            .stack_size(STACK_SIZE)
+            .spawn(move || {
+                let mut parser = mini_parser(vec![
+                    TestToken::new(2).with_text("z"),
+                    TestToken::new(1).with_text("x"),
+                    TestToken::eof("parser-test", 2, 1, 2),
+                ]);
+                parser.set_build_parse_trees(false);
+                parser.fast_first_set_prefilter = false;
+                parser
+                    .parse_atn_rule(&atn, 0)
+                    .expect("nested recovery should grow the native stack");
+                assert_eq!(parser.input.index(), 2);
+                assert_eq!(parser.number_of_syntax_errors(), 1);
+            })
+            .expect("small-stack thread should start")
+            .join()
+            .expect("nested rule recovery should not overflow its stack");
     }
 
     #[test]
@@ -15652,6 +15840,7 @@ mod tests {
                 visiting: &mut visiting,
                 memo: &mut memo,
                 expected: &mut expected,
+                native_depth: 0,
             },
         );
 
@@ -15681,6 +15870,7 @@ mod tests {
                 visiting: &mut visiting,
                 memo: &mut memo,
                 expected: &mut expected,
+                native_depth: 0,
             },
         );
 
