@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "frontend-fail-closed-syntax",
+  "revision_id": "frontend-fail-closed-syntax-r2",
+  "cells": [
+    {
+      "test_port": "coverage-extension",
+      "test_commit": "9ce58d9d60d5ce1226c16460c22819fb0bd3b06a",
+      "implementation_port": "existing-primary-antlr-ng",
+      "implementation_commit": "8a00a3d6496779b969a42511d7e29c0d102d62d7",
+      "command": "cargo test --locked --bin antlr4-rust-gen grammar::ported_tests::frontend_tool_syntax_cases_match_upstream_outcomes",
+      "result": "green: 1 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the case-specific test passed against the existing Phase A frontend"
+}

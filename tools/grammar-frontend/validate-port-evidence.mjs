@@ -7,6 +7,8 @@ import { spawnSync } from "node:child_process";
 
 import {
     ANTLR_NG_COMMIT,
+    FRONTEND_SYNTAX_TEST_COMMIT,
+    FRONTEND_SYNTAX_TEST_PARENT,
     IMPLEMENTATION_COMMIT,
     JAVA_COMMIT,
     SCAFFOLD_COMMIT,
@@ -36,6 +38,9 @@ for (const row of testMap.rows ?? []) {
             closure: row.closure,
             closureHash: row.closure_sha256,
             evidencePath: row.evidence_path,
+            resolution: row.resolution ?? "ported",
+            testCommit: row.primary_test_commit,
+            implementationCommit: row.primary_implementation_commit,
         });
     }
 }
@@ -47,6 +52,9 @@ for (const fixture of externalMap.fixtures ?? []) {
                 closure: assertion.tdd?.closure,
                 closureHash: assertion.tdd?.closure_sha256,
                 evidencePath: assertion.tdd?.evidence_path,
+                resolution: "ported",
+                testCommit: TEST_COMMIT,
+                implementationCommit: IMPLEMENTATION_COMMIT,
             });
         }
     }
@@ -129,6 +137,10 @@ for (const [logicalId, record] of records) {
             `${logicalId} supersession edge differs`,
         );
         expect(
+            revision.closure_sha256 === manifest.closure_sha256,
+            `${logicalId} index closure hash differs`,
+        );
+        expect(
             manifest.closure_sha256 === digest(stableStringify(manifest.closure)),
             `${logicalId} manifest closure hash is invalid`,
         );
@@ -140,14 +152,17 @@ for (const [logicalId, record] of records) {
             );
         }
         for (const section of manifest.locked_oracle_sections ?? []) {
-            const checkedIn = sectionAtMarker(
-                await readFile(resolve(repoRoot, section.path), "utf8"),
-                section.marker,
-            );
-            expect(
-                digest(checkedIn) === section.sha256,
-                `${logicalId} locked oracle section hash differs`,
-            );
+            const activeRevision = revision.revision_id === record.revisionId;
+            if (activeRevision) {
+                const checkedIn = sectionAtMarker(
+                    await readFile(resolve(repoRoot, section.path), "utf8"),
+                    section.marker,
+                );
+                expect(
+                    digest(checkedIn) === section.sha256,
+                    `${logicalId} locked oracle section hash differs`,
+                );
+            }
             const testSource = gitShowOptional(
                 manifest.commits.primary_test,
                 section.path,
@@ -156,38 +171,72 @@ for (const [logicalId, record] of records) {
                 manifest.commits.primary_implementation,
                 section.path,
             );
-            if (testSource !== null && implementationSource !== null) {
+            if (testSource !== null) {
                 const locked = sectionAtMarker(testSource, section.marker);
-                const afterImplementation = sectionAtMarker(
-                    implementationSource,
-                    section.marker,
-                );
                 expect(
                     digest(locked) === section.sha256,
                     `${logicalId} historical locked oracle section hash differs`,
                 );
-                expect(
-                    locked === afterImplementation,
-                    `${logicalId} implementation commit edited its locked oracle section`,
-                );
+                if (
+                    (manifest.resolution ?? "ported") === "ported" &&
+                    implementationSource !== null
+                ) {
+                    const afterImplementation = sectionAtMarker(
+                        implementationSource,
+                        section.marker,
+                    );
+                    expect(
+                        locked === afterImplementation,
+                        `${logicalId} implementation commit edited its locked oracle section`,
+                    );
+                }
             }
         }
+        const resolution = manifest.resolution ?? "ported";
         expect(
-            manifest.commits.scaffold === SCAFFOLD_COMMIT &&
-                manifest.commits.primary_test === TEST_COMMIT &&
-                manifest.commits.primary_implementation === IMPLEMENTATION_COMMIT,
-            `${logicalId} evidence commit identities differ`,
+            ["ported", "verified-covered-existing"].includes(resolution),
+            `${logicalId} manifest resolution is invalid`,
         );
-        expect(
-            manifest.ancestry.primary_test_parent === SCAFFOLD_COMMIT &&
-                manifest.ancestry.primary_implementation_parent === TEST_COMMIT,
-            `${logicalId} recorded ancestry differs`,
-        );
-        expect(
-            manifest.demonstrated_red?.exit_code !== 0 &&
-                manifest.green_result?.exit_code === 0,
-            `${logicalId} lacks red/green execution evidence`,
-        );
+        if (resolution === "verified-covered-existing") {
+            expect(
+                manifest.commits.scaffold === SCAFFOLD_COMMIT &&
+                    manifest.commits.primary_test === FRONTEND_SYNTAX_TEST_COMMIT &&
+                    manifest.commits.primary_implementation ===
+                        IMPLEMENTATION_COMMIT,
+                `${logicalId} covered-existing commit identities differ`,
+            );
+            expect(
+                manifest.ancestry.primary_test_parent ===
+                    FRONTEND_SYNTAX_TEST_PARENT &&
+                    manifest.ancestry.primary_implementation_parent === null,
+                `${logicalId} covered-existing ancestry differs`,
+            );
+            expect(
+                manifest.verified_covered_existing?.exit_code === 0 &&
+                    manifest.verified_covered_existing
+                        ?.covering_implementation_commit === IMPLEMENTATION_COMMIT &&
+                    manifest.green_result?.exit_code === 0,
+                `${logicalId} lacks covered-existing execution evidence`,
+            );
+        } else {
+            expect(
+                manifest.commits.scaffold === SCAFFOLD_COMMIT &&
+                    manifest.commits.primary_test === TEST_COMMIT &&
+                    manifest.commits.primary_implementation ===
+                        IMPLEMENTATION_COMMIT,
+                `${logicalId} evidence commit identities differ`,
+            );
+            expect(
+                manifest.ancestry.primary_test_parent === SCAFFOLD_COMMIT &&
+                    manifest.ancestry.primary_implementation_parent === TEST_COMMIT,
+                `${logicalId} recorded ancestry differs`,
+            );
+            expect(
+                manifest.demonstrated_red?.exit_code !== 0 &&
+                    manifest.green_result?.exit_code === 0,
+                `${logicalId} lacks red/green execution evidence`,
+            );
+        }
     }
 
     const active = revisions.get(record.revisionId);
@@ -203,6 +252,13 @@ for (const [logicalId, record] of records) {
     expect(
         stableStringify(activeManifest.closure) === stableStringify(record.closure),
         `${logicalId} map and ledger closures differ`,
+    );
+    expect(
+        (activeManifest.resolution ?? "ported") === record.resolution &&
+            activeManifest.commits.primary_test === record.testCommit &&
+            activeManifest.commits.primary_implementation ===
+                record.implementationCommit,
+        `${logicalId} map and ledger resolution evidence differs`,
     );
 }
 
@@ -221,6 +277,16 @@ if (implementationParent !== null) {
     expect(
         implementationParent.trim() === TEST_COMMIT,
         "primary implementation commit is not directly based on the locked test",
+    );
+}
+const frontendSyntaxTestParent = gitOptional([
+    "rev-parse",
+    `${FRONTEND_SYNTAX_TEST_COMMIT}^`,
+]);
+if (frontendSyntaxTestParent !== null) {
+    expect(
+        frontendSyntaxTestParent.trim() === FRONTEND_SYNTAX_TEST_PARENT,
+        "frontend syntax test commit has an unexpected parent",
     );
 }
 

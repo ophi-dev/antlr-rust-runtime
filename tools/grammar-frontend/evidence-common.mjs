@@ -6,6 +6,10 @@ export const VSCODE_COMMIT = "3e9469d1d490c71b3e3b909edf1235582a3f8db8";
 export const SCAFFOLD_COMMIT = "75615945749dc93fca5d929cb22ad481f12dfdc9";
 export const TEST_COMMIT = "a4258562c44818e2ba97d206587c64d4c38408d0";
 export const IMPLEMENTATION_COMMIT = "8a00a3d6496779b969a42511d7e29c0d102d62d7";
+export const FRONTEND_SYNTAX_TEST_COMMIT =
+    "9ce58d9d60d5ce1226c16460c22819fb0bd3b06a";
+export const FRONTEND_SYNTAX_TEST_PARENT =
+    "c8a5df019c8183430febee19e9a71eb5d882b961";
 
 export function stableStringify(value) {
     if (Array.isArray(value)) {

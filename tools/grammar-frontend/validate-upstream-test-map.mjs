@@ -26,6 +26,7 @@ const TDD_STATES = new Set([
     "done",
     "blocked",
 ]);
+const RESOLUTIONS = new Set(["ported", "verified-covered-existing"]);
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "../..");
@@ -100,6 +101,7 @@ for (const row of testMap.rows ?? []) {
     }
 
     if (row.disposition === "port") {
+        const resolution = row.resolution ?? "ported";
         expect(
             typeof row.active_revision_id === "string" &&
                 !revisionIds.has(row.active_revision_id),
@@ -109,6 +111,14 @@ for (const row of testMap.rows ?? []) {
         expect(
             TDD_STATES.has(row.tdd_state),
             `${row.logical_id} has invalid TDD state ${row.tdd_state}`,
+        );
+        expect(
+            RESOLUTIONS.has(resolution),
+            `${row.logical_id} has invalid resolution ${resolution}`,
+        );
+        expect(
+            (row.closure?.resolution ?? "ported") === resolution,
+            `${row.logical_id} closure resolution differs`,
         );
         expect(
             row.closure?.logical_id === row.logical_id,
@@ -158,11 +168,21 @@ for (const row of testMap.rows ?? []) {
                     typeof row.primary_implementation_commit === "string",
                 `${row.logical_id} lacks locked test or implementation commit`,
             );
-            expect(
-                row.demonstrated_red?.exit_code !== 0 &&
-                    row.demonstrated_red?.fingerprint,
-                `${row.logical_id} lacks demonstrated red evidence`,
-            );
+            if (resolution === "verified-covered-existing") {
+                expect(
+                    row.verified_covered_existing?.exit_code === 0 &&
+                        row.verified_covered_existing?.result?.includes("passed") &&
+                        row.verified_covered_existing?.commit ===
+                            row.primary_test_commit,
+                    `${row.logical_id} lacks covered-existing evidence`,
+                );
+            } else {
+                expect(
+                    row.demonstrated_red?.exit_code !== 0 &&
+                        row.demonstrated_red?.fingerprint,
+                    `${row.logical_id} lacks demonstrated red evidence`,
+                );
+            }
             expect(
                 row.green_result?.result?.includes("passed"),
                 `${row.logical_id} lacks green evidence`,

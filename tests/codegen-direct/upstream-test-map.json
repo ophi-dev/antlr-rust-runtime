@@ -110,9 +110,10 @@
       "external_assertion_ids": [],
       "owner_phase": "A",
       "disposition": "port",
-      "active_revision_id": "frontend-fail-closed-syntax-r1",
+      "active_revision_id": "frontend-fail-closed-syntax-r2",
       "tdd_state": "done",
-      "rust_test": "grammar::frontend::tests::malformed_bootstrap_inputs_fail_closed",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::ported_tests::frontend_tool_syntax_cases_match_upstream_outcomes",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -160,20 +161,21 @@
       "prerequisites": [
         "behavior-free grammar frontend scaffold"
       ],
-      "unit_under_test": "Stage 0 lexer/parser fail-closed boundary",
-      "expected_red_failure_fingerprint": "red fingerprint: Stage 0 frontend is not installed",
-      "observable_equivalence": "grammar syntax errors and unterminated constructs return diagnostics without a usable CST",
+      "unit_under_test": "Stage 0 syntax acceptance and fail-closed boundary",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase A frontend",
+      "observable_equivalence": "ported grammar syntax cases return a CST or diagnostics according to the pinned upstream outcomes",
       "scaffold_commit": "75615945749dc93fca5d929cb22ad481f12dfdc9",
-      "primary_test_commit": "a4258562c44818e2ba97d206587c64d4c38408d0",
-      "demonstrated_red": {
-        "command": "cargo test --locked --bin antlr4-rust-gen grammar::frontend::tests::",
-        "exit_code": 101,
-        "fingerprint": "G4F000 Stage 0 frontend is not installed"
+      "primary_test_commit": "9ce58d9d60d5ce1226c16460c22819fb0bd3b06a",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::ported_tests::frontend_tool_syntax_cases_match_upstream_outcomes",
+        "commit": "9ce58d9d60d5ce1226c16460c22819fb0bd3b06a",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
       },
       "primary_implementation_commit": "8a00a3d6496779b969a42511d7e29c0d102d62d7",
       "green_result": {
-        "command": "cargo test --locked --bin antlr4-rust-gen grammar::frontend::tests::",
-        "result": "5 passed; 0 failed"
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::ported_tests::frontend_tool_syntax_cases_match_upstream_outcomes",
+        "result": "1 passed; 0 failed"
       },
       "closure": {
         "logical_id": "frontend-fail-closed-syntax",
@@ -214,13 +216,14 @@
         "fixture_paths": [],
         "owner_phase": "A",
         "disposition": "port",
-        "rust_test": "grammar::frontend::tests::malformed_bootstrap_inputs_fail_closed",
-        "unit_under_test": "Stage 0 lexer/parser fail-closed boundary",
-        "observable": "grammar syntax errors and unterminated constructs return diagnostics without a usable CST",
+        "rust_test": "grammar::ported_tests::frontend_tool_syntax_cases_match_upstream_outcomes",
+        "unit_under_test": "Stage 0 syntax acceptance and fail-closed boundary",
+        "observable": "ported grammar syntax cases return a CST or diagnostics according to the pinned upstream outcomes",
         "scaffold_commit": "75615945749dc93fca5d929cb22ad481f12dfdc9",
-        "primary_test_commit": "a4258562c44818e2ba97d206587c64d4c38408d0"
+        "primary_test_commit": "9ce58d9d60d5ce1226c16460c22819fb0bd3b06a",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "f4a57f9c7bc15974d77639bff53f823833b07fcc429ac91e11f9bb043f58bca8",
+      "closure_sha256": "3330f0e8d4f735e56d669650c168ee0c4a6b31000f5bd3071fbb3f22028553b8",
       "evidence_path": "tests/codegen-direct/port-evidence/frontend-fail-closed-syntax"
     },
     {

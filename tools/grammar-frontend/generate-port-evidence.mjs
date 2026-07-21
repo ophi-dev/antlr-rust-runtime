@@ -11,6 +11,8 @@ import { spawnSync } from "node:child_process";
 
 import {
     ANTLR_NG_COMMIT,
+    FRONTEND_SYNTAX_TEST_COMMIT,
+    FRONTEND_SYNTAX_TEST_PARENT,
     IMPLEMENTATION_COMMIT,
     JAVA_COMMIT,
     SCAFFOLD_COMMIT,
@@ -25,6 +27,11 @@ const TEST_COMMAND =
     "cargo test --locked --bin antlr4-rust-gen grammar::frontend::tests::";
 const TEST_MODULE_PATH = "src/bin_support/grammar/frontend.rs";
 const TEST_MODULE_MARKER = "#[cfg(test)]";
+const FRONTEND_SYNTAX_TEST_PATH =
+    "src/bin_support/grammar/ported_tests.rs";
+const FRONTEND_SYNTAX_TEST_MARKER = "use super::frontend";
+const FRONTEND_SYNTAX_MODULE_PATH = "src/bin_support/grammar/mod.rs";
+const FRONTEND_SYNTAX_MODULE_MARKER = "#[cfg(test)]\nmod ported_tests;";
 const SYMBOL_INFO_SHA256 =
     "df274a0dca42823cc2ef2608d98d544be53246a48c56f96050b0a987ce0890f3";
 
@@ -145,6 +152,55 @@ if (testModule !== null && implementationTestModule !== null) {
     }
 }
 const lockedTestModuleHash = digest(checkedInTestModule);
+const checkedInSyntaxTest = sectionAtMarker(
+    await readFile(resolve(repoRoot, FRONTEND_SYNTAX_TEST_PATH), "utf8"),
+    FRONTEND_SYNTAX_TEST_MARKER,
+);
+const recordedSyntaxTest = gitShowOptional(
+    FRONTEND_SYNTAX_TEST_COMMIT,
+    FRONTEND_SYNTAX_TEST_PATH,
+);
+if (
+    recordedSyntaxTest !== null &&
+    sectionAtMarker(recordedSyntaxTest, FRONTEND_SYNTAX_TEST_MARKER) !==
+        checkedInSyntaxTest
+) {
+    throw new Error("checked-in frontend syntax port differs from its test commit");
+}
+const checkedInSyntaxModule = sectionAtMarker(
+    await readFile(resolve(repoRoot, FRONTEND_SYNTAX_MODULE_PATH), "utf8"),
+    FRONTEND_SYNTAX_MODULE_MARKER,
+);
+const recordedSyntaxModule = gitShowOptional(
+    FRONTEND_SYNTAX_TEST_COMMIT,
+    FRONTEND_SYNTAX_MODULE_PATH,
+);
+if (
+    recordedSyntaxModule !== null &&
+    sectionAtMarker(recordedSyntaxModule, FRONTEND_SYNTAX_MODULE_MARKER) !==
+        checkedInSyntaxModule
+) {
+    throw new Error("checked-in frontend syntax test module differs from its test commit");
+}
+const defaultLockedSections = [
+    {
+        path: TEST_MODULE_PATH,
+        marker: TEST_MODULE_MARKER,
+        sha256: lockedTestModuleHash,
+    },
+];
+const syntaxLockedSections = [
+    {
+        path: FRONTEND_SYNTAX_TEST_PATH,
+        marker: FRONTEND_SYNTAX_TEST_MARKER,
+        sha256: digest(checkedInSyntaxTest),
+    },
+    {
+        path: FRONTEND_SYNTAX_MODULE_PATH,
+        marker: FRONTEND_SYNTAX_MODULE_MARKER,
+        sha256: digest(checkedInSyntaxModule),
+    },
+];
 
 const upstreamByLogicalId = new Map(
     phaseARows.map((row) => [row.logical_id, row]),
@@ -217,12 +273,19 @@ for (const fixture of externalMap.fixtures) {
                     alternate: definition.alternate_outcome,
                     java_compatibility_verdict: definition.java_verdict,
                 },
+                resolution: "ported",
+                testCommit: TEST_COMMIT,
+                implementationCommit: IMPLEMENTATION_COMMIT,
+                testCommand: TEST_COMMAND,
+                greenResultText: "5 passed; 0 failed",
+                lockedSections: defaultLockedSections,
             });
         }
     }
 }
 
 for (const row of phaseARows) {
+    const coveredExisting = row.resolution === "verified-covered-existing";
     await addEvidence({
         logicalId: row.logical_id,
         revisionId: row.active_revision_id,
@@ -233,13 +296,22 @@ for (const row of phaseARows) {
         primaryTestSource: row.primary_test_source,
         alternateTestSource: row.alternate_test_source,
         declaredOutcomes: {
-            primary:
-                "pinned source cases passed in the recorded JUnit/Vitest discovery or immutable fixture snapshot",
+            primary: coveredExisting
+                ? "the case-specific Rust port matches the pinned accepted and rejected syntax outcomes"
+                : "pinned source cases passed in the recorded JUnit/Vitest discovery or immutable fixture snapshot",
             alternate:
                 "alternate source cases passed in the recorded runner discovery or generated oracle",
             java_compatibility_verdict:
                 "Java-compatible syntax; antlr-ng supplies the canonical Phase A CST shape",
         },
+        resolution: row.resolution ?? "ported",
+        testCommit: row.primary_test_commit,
+        implementationCommit: row.primary_implementation_commit,
+        testCommand: row.green_result.command,
+        greenResultText: row.green_result.result,
+        lockedSections: coveredExisting
+            ? syntaxLockedSections
+            : defaultLockedSections,
     });
 }
 
@@ -274,9 +346,27 @@ async function addEvidence({
     primaryTestSource,
     alternateTestSource,
     declaredOutcomes,
+    resolution,
+    testCommit,
+    implementationCommit,
+    testCommand,
+    greenResultText,
+    lockedSections,
 }) {
     const base = `tests/codegen-direct/port-evidence/${logicalId}`;
     const revisionBase = `${base}/revisions/${revisionId}`;
+    const indexPath = `${base}/index.json`;
+    const existingIndex = await loadOptional(indexPath);
+    const existingRevision = existingIndex?.revisions?.find(
+        (revision) => revision.revision_id === revisionId,
+    );
+    const supersedesRevisionId =
+        existingRevision?.supersedes_revision_id ??
+        (existingIndex?.active_revision_id &&
+        existingIndex.active_revision_id !== revisionId
+            ? existingIndex.active_revision_id
+            : null);
+    const coveredExisting = resolution === "verified-covered-existing";
     const oracleResults = {
         schema_version: 1,
         logical_id: logicalId,
@@ -291,16 +381,19 @@ async function addEvidence({
         revision_id: revisionId,
         cells: [
             {
-                test_port: "primary",
-                test_commit: TEST_COMMIT,
-                implementation_port: "primary-antlr-ng",
-                implementation_commit: IMPLEMENTATION_COMMIT,
-                command: TEST_COMMAND,
-                result: "green: 5 passed; 0 failed",
+                test_port: coveredExisting ? "coverage-extension" : "primary",
+                test_commit: testCommit,
+                implementation_port: coveredExisting
+                    ? "existing-primary-antlr-ng"
+                    : "primary-antlr-ng",
+                implementation_commit: implementationCommit,
+                command: testCommand,
+                result: `green: ${greenResultText}`,
             },
         ],
-        escalation:
-            "not required because the primary implementation passed the locked primary tests",
+        escalation: coveredExisting
+            ? "not required because the case-specific test passed against the existing Phase A frontend"
+            : "not required because the primary implementation passed the locked primary tests",
     };
     const oraclePath = `${revisionBase}/oracle-results/declared-sources.json`;
     const matrixPath = `${revisionBase}/matrix-results/results.json`;
@@ -338,32 +431,50 @@ async function addEvidence({
         schema_version: 1,
         logical_id: logicalId,
         revision_id: revisionId,
-        supersedes_revision_id: null,
+        supersedes_revision_id: supersedesRevisionId,
         owner_phase: "A",
         state: "done",
+        ...(coveredExisting ? { resolution } : {}),
         closure,
         closure_sha256: closureHash,
         allowed_inputs: allowedInputs,
         commits: {
             scaffold: SCAFFOLD_COMMIT,
-            primary_test: TEST_COMMIT,
-            primary_implementation: IMPLEMENTATION_COMMIT,
+            primary_test: testCommit,
+            primary_implementation: implementationCommit,
         },
-        ancestry: {
-            primary_test_parent: SCAFFOLD_COMMIT,
-            primary_implementation_parent: TEST_COMMIT,
-            reachability:
-                "direct ancestry is verified when the recorded commit objects are available",
-        },
-        locked_oracle_sections: [
-            {
-                path: TEST_MODULE_PATH,
-                marker: TEST_MODULE_MARKER,
-                sha256: lockedTestModuleHash,
+        ancestry: coveredExisting
+            ? {
+                  primary_test_parent: FRONTEND_SYNTAX_TEST_PARENT,
+                  primary_implementation_parent: null,
+                  reachability:
+                      "the case-specific test passed against an implementation already present in its parent",
+              }
+            : {
+                  primary_test_parent: SCAFFOLD_COMMIT,
+                  primary_implementation_parent: TEST_COMMIT,
+                  reachability:
+                      "direct ancestry is verified when the recorded commit objects are available",
             },
-        ],
-        demonstrated_red: redResult(),
-        green_result: greenResult(),
+        locked_oracle_sections: lockedSections,
+        ...(coveredExisting
+            ? {
+                  verified_covered_existing: {
+                      command: testCommand,
+                      commit: testCommit,
+                      exit_code: 0,
+                      result: greenResultText,
+                      covering_implementation_commit: implementationCommit,
+                  },
+              }
+            : {
+                  demonstrated_red: redResult(testCommand, testCommit),
+              }),
+        green_result: greenResult(
+            testCommand,
+            coveredExisting ? testCommit : implementationCommit,
+            greenResultText,
+        ),
         implementation_sources: {
             primary: `antlr-ng@${ANTLR_NG_COMMIT}`,
             alternate: `java-antlr@${JAVA_COMMIT}`,
@@ -384,38 +495,44 @@ async function addEvidence({
         manifestPath,
         `${JSON.stringify(manifest, null, 2)}\n`,
     );
+    const revisions = (existingIndex?.revisions ?? []).filter(
+        (revision) => revision.revision_id !== revisionId,
+    );
+    revisions.push({
+        revision_id: revisionId,
+        supersedes_revision_id: supersedesRevisionId,
+        state: "done",
+        manifest_path: manifestPath,
+        closure_sha256: closureHash,
+    });
     const index = {
         schema_version: 1,
         logical_id: logicalId,
         active_revision_id: revisionId,
-        revisions: [
-            {
-                revision_id: revisionId,
-                supersedes_revision_id: null,
-                state: "done",
-                manifest_path: manifestPath,
-                closure_sha256: closureHash,
-            },
-        ],
+        revisions,
     };
-    expectedFiles.set(`${base}/index.json`, `${JSON.stringify(index, null, 2)}\n`);
+    expectedFiles.set(indexPath, `${JSON.stringify(index, null, 2)}\n`);
 }
 
-function redResult() {
+function redResult(command = TEST_COMMAND, commit = TEST_COMMIT) {
     return {
-        command: TEST_COMMAND,
-        commit: TEST_COMMIT,
+        command,
+        commit,
         exit_code: 101,
         fingerprint: "G4F000: the Stage 0 grammar frontend is not installed",
     };
 }
 
-function greenResult() {
+function greenResult(
+    command = TEST_COMMAND,
+    commit = IMPLEMENTATION_COMMIT,
+    result = "5 passed; 0 failed",
+) {
     return {
-        command: TEST_COMMAND,
-        commit: IMPLEMENTATION_COMMIT,
+        command,
+        commit,
         exit_code: 0,
-        result: "5 passed; 0 failed",
+        result,
     };
 }
 
@@ -441,4 +558,15 @@ function gitShowOptional(commit, path) {
 
 async function load(path) {
     return JSON.parse(await readFile(resolve(repoRoot, path), "utf8"));
+}
+
+async function loadOptional(path) {
+    try {
+        return await load(path);
+    } catch (error) {
+        if (error.code === "ENOENT") {
+            return null;
+        }
+        throw error;
+    }
 }

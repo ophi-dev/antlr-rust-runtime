@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import {
     ANTLR_NG_COMMIT,
+    FRONTEND_SYNTAX_TEST_COMMIT,
     IMPLEMENTATION_COMMIT,
     JAVA_COMMIT,
     SCAFFOLD_COMMIT,
@@ -16,6 +17,10 @@ import {
 } from "./evidence-common.mjs";
 
 const APPROVING_REVIEW = "merged implementation plan PR #149, section 11.5";
+const FRONTEND_TEST_COMMAND =
+    "cargo test --locked --bin antlr4-rust-gen grammar::frontend::tests::";
+const FRONTEND_SYNTAX_TEST_COMMAND =
+    "cargo test --locked --bin antlr4-rust-gen grammar::ported_tests::frontend_tool_syntax_cases_match_upstream_outcomes";
 
 const PHASE_B_SUITES = new Set([
     "TestATNConstruction",
@@ -178,10 +183,15 @@ rows.push(
         ),
         externalAssertionIds: [],
         rustTest:
-            "grammar::frontend::tests::malformed_bootstrap_inputs_fail_closed",
-        unitUnderTest: "Stage 0 lexer/parser fail-closed boundary",
+            "grammar::ported_tests::frontend_tool_syntax_cases_match_upstream_outcomes",
+        unitUnderTest: "Stage 0 syntax acceptance and fail-closed boundary",
         observable:
-            "grammar syntax errors and unterminated constructs return diagnostics without a usable CST",
+            "ported grammar syntax cases return a CST or diagnostics according to the pinned upstream outcomes",
+        revision: 2,
+        resolution: "verified-covered-existing",
+        testCommit: FRONTEND_SYNTAX_TEST_COMMIT,
+        testCommand: FRONTEND_SYNTAX_TEST_COMMAND,
+        greenResult: "1 passed; 0 failed",
     }),
 );
 rows.push(
@@ -277,6 +287,11 @@ function phaseARow({
     unitUnderTest,
     observable,
     fixturePaths = [],
+    revision = 1,
+    resolution = "ported",
+    testCommit = TEST_COMMIT,
+    testCommand = FRONTEND_TEST_COMMAND,
+    greenResult = "5 passed; 0 failed",
 }) {
     if (cases.length === 0 && fixturePaths.length === 0) {
         throw new Error(`Phase A row ${logicalId} has no source cases or fixtures`);
@@ -296,7 +311,8 @@ function phaseARow({
         unit_under_test: unitUnderTest,
         observable,
         scaffold_commit: SCAFFOLD_COMMIT,
-        primary_test_commit: TEST_COMMIT,
+        primary_test_commit: testCommit,
+        ...(resolution === "ported" ? {} : { resolution }),
     };
     const closureHash = digest(stableStringify(closure));
     const javaSource = sourceIdentity(cases, "java-antlr");
@@ -328,8 +344,9 @@ function phaseARow({
         external_assertion_ids: externalAssertionIds,
         owner_phase: "A",
         disposition: "port",
-        active_revision_id: `${logicalId}-r1`,
+        active_revision_id: `${logicalId}-r${revision}`,
         tdd_state: "done",
+        ...(resolution === "ported" ? {} : { resolution }),
         rust_test: rustTest,
         primary_test_source: primaryTestSource,
         alternate_test_source: alternateTestSource,
@@ -338,21 +355,32 @@ function phaseARow({
         prerequisites: ["behavior-free grammar frontend scaffold"],
         unit_under_test: unitUnderTest,
         expected_red_failure_fingerprint:
-            "red fingerprint: Stage 0 frontend is not installed",
+            resolution === "ported"
+                ? "red fingerprint: Stage 0 frontend is not installed"
+                : "not applicable: the case-specific port passed against the existing Phase A frontend",
         observable_equivalence: observable,
         scaffold_commit: SCAFFOLD_COMMIT,
-        primary_test_commit: TEST_COMMIT,
-        demonstrated_red: {
-            command:
-                "cargo test --locked --bin antlr4-rust-gen grammar::frontend::tests::",
-            exit_code: 101,
-            fingerprint: "G4F000 Stage 0 frontend is not installed",
-        },
+        primary_test_commit: testCommit,
+        ...(resolution === "ported"
+            ? {
+                  demonstrated_red: {
+                      command: FRONTEND_TEST_COMMAND,
+                      exit_code: 101,
+                      fingerprint: "G4F000 Stage 0 frontend is not installed",
+                  },
+              }
+            : {
+                  verified_covered_existing: {
+                      command: testCommand,
+                      commit: testCommit,
+                      exit_code: 0,
+                      result: greenResult,
+                  },
+              }),
         primary_implementation_commit: IMPLEMENTATION_COMMIT,
         green_result: {
-            command:
-                "cargo test --locked --bin antlr4-rust-gen grammar::frontend::tests::",
-            result: "5 passed; 0 failed",
+            command: testCommand,
+            result: greenResult,
         },
         closure,
         closure_sha256: closureHash,
