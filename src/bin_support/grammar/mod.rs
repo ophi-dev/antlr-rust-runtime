@@ -19,6 +19,7 @@ mod syntax;
 mod transform;
 mod transform_analysis;
 mod unicode;
+mod unicode_escape;
 
 #[cfg(test)]
 mod ported_tests;
