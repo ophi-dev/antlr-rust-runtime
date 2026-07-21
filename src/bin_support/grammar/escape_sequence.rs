@@ -1,5 +1,9 @@
 use antlr4_runtime::atn::IntervalSet;
 
+use super::unicode::property_ranges;
+
+const MAX_CODE_POINT: i32 = 0x10_ffff;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) enum EscapeSequenceResult {
     Invalid,
@@ -15,8 +19,127 @@ pub(super) enum EscapeSequenceResult {
     },
 }
 
-pub(super) fn parse_escape(_text: &str, _start: usize) -> EscapeSequenceResult {
-    EscapeSequenceResult::Invalid
+pub(super) fn parse_escape(text: &str, start: usize) -> EscapeSequenceResult {
+    let Some(tail) = text.get(start..) else {
+        return EscapeSequenceResult::Invalid;
+    };
+    let mut characters = tail.char_indices();
+    if characters.next().is_none_or(|(_, value)| value != '\\') {
+        return EscapeSequenceResult::Invalid;
+    }
+    let Some((escaped_start, escaped)) = characters.next() else {
+        return EscapeSequenceResult::Invalid;
+    };
+    let cursor = escaped_start + escaped.len_utf8();
+    match escaped {
+        'u' => parse_unicode_escape(tail, start, cursor),
+        'p' | 'P' => parse_property_escape(tail, start, cursor, escaped == 'P'),
+        _ => simple_escape(escaped).map_or(EscapeSequenceResult::Invalid, |value| {
+            EscapeSequenceResult::CodePoint {
+                value,
+                start,
+                stop: start + cursor,
+            }
+        }),
+    }
+}
+
+fn parse_unicode_escape(tail: &str, start: usize, cursor: usize) -> EscapeSequenceResult {
+    if cursor + 3 > tail.len() {
+        return EscapeSequenceResult::Invalid;
+    }
+    let (digits, stop) = if tail.as_bytes().get(cursor) == Some(&b'{') {
+        let digits_start = cursor + 1;
+        let Some(close) = tail[digits_start..].find('}') else {
+            return EscapeSequenceResult::Invalid;
+        };
+        let close = digits_start + close;
+        (&tail[digits_start..close], close + 1)
+    } else {
+        let Some(digits) = tail.get(cursor..cursor + 4) else {
+            return EscapeSequenceResult::Invalid;
+        };
+        (digits, cursor + 4)
+    };
+    let Ok(value) = i32::from_str_radix(digits, 16) else {
+        return EscapeSequenceResult::Invalid;
+    };
+    if value > MAX_CODE_POINT {
+        return EscapeSequenceResult::Invalid;
+    }
+    EscapeSequenceResult::CodePoint {
+        value,
+        start,
+        stop: start + stop,
+    }
+}
+
+fn parse_property_escape(
+    tail: &str,
+    start: usize,
+    cursor: usize,
+    inverted: bool,
+) -> EscapeSequenceResult {
+    if cursor + 3 > tail.len() || tail.as_bytes().get(cursor) != Some(&b'{') {
+        return EscapeSequenceResult::Invalid;
+    }
+    let name_start = cursor + 1;
+    let Some(close) = tail[name_start..].find('}') else {
+        return EscapeSequenceResult::Invalid;
+    };
+    let close = name_start + close;
+    let Some(ranges) =
+        property_ranges(&tail[name_start..close]).filter(|ranges| !ranges.is_empty())
+    else {
+        return EscapeSequenceResult::Invalid;
+    };
+    let code_points = if inverted {
+        complement(ranges)
+    } else {
+        interval_set(ranges)
+    };
+    EscapeSequenceResult::Property {
+        code_points,
+        start,
+        stop: start + close + 1,
+    }
+}
+
+fn simple_escape(escaped: char) -> Option<i32> {
+    match escaped {
+        'n' => Some(i32::from(b'\n')),
+        'r' => Some(i32::from(b'\r')),
+        't' => Some(i32::from(b'\t')),
+        'b' => Some(i32::from(b'\x08')),
+        'f' => Some(i32::from(b'\x0c')),
+        '\\' => Some(i32::from(b'\\')),
+        ']' => Some(i32::from(b']')),
+        '-' => Some(i32::from(b'-')),
+        _ => None,
+    }
+}
+
+fn interval_set(ranges: &[i32]) -> IntervalSet {
+    let mut result = IntervalSet::new();
+    for range in ranges.chunks_exact(2) {
+        result.add_range(range[0], range[1]);
+    }
+    result
+}
+
+fn complement(ranges: &[i32]) -> IntervalSet {
+    let mut result = IntervalSet::new();
+    let mut next = 0;
+    for range in ranges.chunks_exact(2) {
+        if next < range[0] {
+            result.add_range(next, range[0] - 1);
+        }
+        next = range[1] + 1;
+    }
+    if next <= MAX_CODE_POINT {
+        result.add_range(next, MAX_CODE_POINT);
+    }
+    result
 }
 
 #[cfg(test)]

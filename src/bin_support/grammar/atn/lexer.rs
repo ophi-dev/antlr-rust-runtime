@@ -12,6 +12,7 @@ use super::super::char_support::{
     decode_character_literal, decode_string_literal, parse_code_point_escape,
 };
 use super::super::diagnostic::{CompilationError, Diagnostic, Severity};
+use super::super::escape_sequence::{EscapeSequenceResult, parse_escape};
 use super::super::frontend::SourceSpan;
 use super::super::model::{
     Alternative, Block, BuildStateId, Element, ElementKind, ModelNodeId, Quantifier,
@@ -1420,6 +1421,29 @@ fn parse_char_set(text: &str) -> Result<ParsedCharSet, String> {
 }
 
 fn parse_char_set_escape(text: &str, start: usize) -> Result<(CharSetAtom, usize), String> {
+    match parse_escape(text, start) {
+        EscapeSequenceResult::CodePoint {
+            value,
+            start: parsed_start,
+            stop,
+        } if u32::try_from(value).ok().and_then(char::from_u32).is_some() => {
+            debug_assert_eq!(parsed_start, start);
+            return Ok((CharSetAtom::CodePoint(value), stop - start));
+        }
+        EscapeSequenceResult::Property {
+            code_points,
+            start: parsed_start,
+            stop,
+        } => {
+            debug_assert_eq!(parsed_start, start);
+            return Ok((
+                CharSetAtom::Property(code_points.ranges().to_vec()),
+                stop - start,
+            ));
+        }
+        EscapeSequenceResult::Invalid | EscapeSequenceResult::CodePoint { .. } => {}
+    }
+
     let tail = text
         .get(start..)
         .ok_or_else(|| "escape starts outside source text".to_owned())?;
