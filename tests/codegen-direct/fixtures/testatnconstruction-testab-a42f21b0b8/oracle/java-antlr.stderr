@@ -1,0 +1,2 @@
+warning(125): P.g4:2:4: implicit definition of token A in parser
+warning(125): P.g4:2:6: implicit definition of token B in parser

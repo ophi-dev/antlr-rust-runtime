@@ -1,0 +1,32 @@
+RuleStart_e_2->s7
+s7-action_1:-1->s8
+s8-ID->s9
+s9->StarLoopEntry_27
+StarLoopEntry_27->StarBlockStart_25
+StarLoopEntry_27->s28
+StarBlockStart_25->s10
+StarBlockStart_25->s13
+StarBlockStart_25->s16
+StarBlockStart_25->s22
+s28->RuleStop_e_3
+s10-5 >= _p->s11
+s13-4 >= _p->s14
+s16-3 >= _p->s17
+s22-2 >= _p->s23
+RuleStop_e_3->s5
+RuleStop_e_3->BlockEnd_26
+RuleStop_e_3->s19
+RuleStop_e_3->s21
+s11-'*'->s12
+s14-'+'->s15
+s17-'?'->s18
+s23-'='->s24
+s12-e->RuleStart_e_2
+s15-e->RuleStart_e_2
+s18-e->RuleStart_e_2
+s24-e->RuleStart_e_2
+BlockEnd_26->StarLoopBack_29
+s19-':'->s20
+StarLoopBack_29->StarLoopEntry_27
+s20-e->RuleStart_e_2
+s21->BlockEnd_26

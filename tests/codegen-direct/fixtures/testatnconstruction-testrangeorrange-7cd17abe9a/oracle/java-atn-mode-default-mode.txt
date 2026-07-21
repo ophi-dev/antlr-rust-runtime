@@ -1,0 +1,9 @@
+s0->RuleStart_A_1
+RuleStart_A_1->BlockStart_7
+BlockStart_7->s3
+BlockStart_7->s5
+s3-'a'..'c'->s4
+s5-'q'->s6
+s4-'h'->BlockEnd_8
+s6-'j'..'l'->BlockEnd_8
+BlockEnd_8->RuleStop_A_2

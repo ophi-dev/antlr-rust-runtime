@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "P.g4"
+  ],
+  "logical_ids": [
+    "testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate-3c6626e10f"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate@b00b7d301269",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestATNConstruction.spec.ts",
+      "case": "testAplusSingleAltHasPlusASTPointingAtLoopBackState",
+      "source_sha256": "41eff30b806e56d82939e1cb57ec72f260e564a6c07b0473340d705665429da4"
+    },
+    {
+      "source_case_id": "java-antlr:testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate@b00b7d301269",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestATNConstruction.java",
+      "case": "testAplusSingleAltHasPlusASTPointingAtLoopBackState",
+      "source_sha256": "4565dc4b58d7cd05fbd6a7c365adb80365552a4dfa2d1a2217b1bde9f813ace1"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate@b00b7d301269",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestATNConstruction.java",
+    "case": "testAplusSingleAltHasPlusASTPointingAtLoopBackState",
+    "source_sha256": "4565dc4b58d7cd05fbd6a7c365adb80365552a4dfa2d1a2217b1bde9f813ace1"
+  },
+  "antlr_ng_test": {
+    "source_case_id": "antlr-ng:testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate@b00b7d301269",
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/TestATNConstruction.spec.ts",
+    "case": "testAplusSingleAltHasPlusASTPointingAtLoopBackState",
+    "source_sha256": "41eff30b806e56d82939e1cb57ec72f260e564a6c07b0473340d705665429da4"
+  },
+  "expected": "success",
+  "atn_printer_oracle": {
+    "java_index": "oracle/java-atn.index",
+    "antlr_ng_index": "oracle/antlr-ng-atn.index",
+    "agreement": "identical",
+    "compatibility_verdict": "Java ANTLR 4.13.2"
+  },
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "exit_status": 0
+  },
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate-3c6626e10f --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar",
+  "files": {
+    "P.g4": "6d0a5cfe39f755e578009384874bdd08ee631b4a29469e984cd00f208e077e0d",
+    "P.interp": "669a9aa88b4d88cd8827c6a723eb5bac64163e92d13edfe5028336e505c976cd",
+    "P.tokens": "04f497bd30837c3e0dd71064956987a70058b52ea68a3d954d3aceba38f22a8a",
+    "diagnostics.json": "1043a1c52a255bb5defbd32ce1d750e0a8a7631370e42de8b68c762af4618203",
+    "oracle/antlr-ng-atn-rule-a.txt": "5f4bd4e72e1801012cdd2c995f13d458b5d9671fa613411bd42aa69e6768246d",
+    "oracle/antlr-ng-atn.index": "bf79de12bd0ca2c9847eda68ed18285abc534b26645a08235028f3bbab7ddf20",
+    "oracle/java-antlr.stderr": "d54a340f57a5ae306b262996bbcc0095cef1fc55a377bb72a6babc4d66384940",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-ast-state-map.txt": "beff4207c112f2289204f5a7d84265fb59247770628802143fc2d87c130f00a9",
+    "oracle/java-atn-rule-a.txt": "5f4bd4e72e1801012cdd2c995f13d458b5d9671fa613411bd42aa69e6768246d",
+    "oracle/java-atn.index": "87905c5446847595239f585de19da4a1b13399f3c94fd0c5c89b3f9bd5df7aab"
+  }
+}

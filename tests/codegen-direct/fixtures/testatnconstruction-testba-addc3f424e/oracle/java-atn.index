@@ -1,0 +1,2 @@
+parser	P	P.interp	rule	a	java-atn-rule-a.txt
+parser	P	P.interp	rule	b	java-atn-rule-b.txt

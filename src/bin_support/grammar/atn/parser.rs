@@ -56,6 +56,16 @@ pub(crate) fn compile_parser(
     })
 }
 
+#[cfg(test)]
+pub(super) fn build_graph_for_test(
+    grammar: &SemanticGrammar,
+    mut provenance: ProvenanceIndex,
+) -> (FinalizedAtnGraph, ProvenanceIndex) {
+    let mut factory = ParserFactory::new(grammar, &mut provenance);
+    factory.build();
+    (factory.graph.finalize(), provenance)
+}
+
 #[derive(Clone, Copy, Debug)]
 struct StatePair {
     left: super::super::model::BuildStateId,

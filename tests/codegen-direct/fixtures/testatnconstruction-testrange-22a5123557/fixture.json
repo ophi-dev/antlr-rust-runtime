@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "P.g4"
+  ],
+  "logical_ids": [
+    "testatnconstruction-testrange-22a5123557"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:testatnconstruction-testrange@14b88acefaf3",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestATNConstruction.spec.ts",
+      "case": "testRange",
+      "source_sha256": "41eff30b806e56d82939e1cb57ec72f260e564a6c07b0473340d705665429da4"
+    },
+    {
+      "source_case_id": "java-antlr:testatnconstruction-testrange@14b88acefaf3",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestATNConstruction.java",
+      "case": "testRange",
+      "source_sha256": "4565dc4b58d7cd05fbd6a7c365adb80365552a4dfa2d1a2217b1bde9f813ace1"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testatnconstruction-testrange@14b88acefaf3",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestATNConstruction.java",
+    "case": "testRange",
+    "source_sha256": "4565dc4b58d7cd05fbd6a7c365adb80365552a4dfa2d1a2217b1bde9f813ace1"
+  },
+  "antlr_ng_test": {
+    "source_case_id": "antlr-ng:testatnconstruction-testrange@14b88acefaf3",
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/TestATNConstruction.spec.ts",
+    "case": "testRange",
+    "source_sha256": "41eff30b806e56d82939e1cb57ec72f260e564a6c07b0473340d705665429da4"
+  },
+  "expected": "success",
+  "atn_printer_oracle": {
+    "java_index": "oracle/java-atn.index",
+    "antlr_ng_index": "oracle/antlr-ng-atn.index",
+    "agreement": "identical",
+    "compatibility_verdict": "Java ANTLR 4.13.2"
+  },
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "exit_status": 0
+  },
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh testatnconstruction-testrange-22a5123557 --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar",
+  "files": {
+    "P.g4": "62ed28edec118148936b6dd2fa5a257bca07c40a1cc036b3499f8cec3fa118eb",
+    "P.interp": "6d1be7da8e4c9e777fa2b86f336339ed163ad72c3e522cefb984c5a1a1b5c480",
+    "P.tokens": "91d6a3d55e9fea7911c537afae6607c77fa8bc0f3a76c375e104ac5a8cfa84db",
+    "oracle/antlr-ng-atn-mode-default-mode.txt": "ff17c9a0d8331cefffd3967bad9a2a418289d86235a8787d37767a86586272ed",
+    "oracle/antlr-ng-atn.index": "bfb5a3ff68cff94dfeb8e576177a43dee3842e1ab81ee467fe5d5870f6afc84f",
+    "oracle/java-antlr.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-atn-mode-default-mode.txt": "ff17c9a0d8331cefffd3967bad9a2a418289d86235a8787d37767a86586272ed",
+    "oracle/java-atn.index": "12229b4cb418cc208fa80f77be692d153188deaee6eb3faecc337480e73c85c7"
+  }
+}

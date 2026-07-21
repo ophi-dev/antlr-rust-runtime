@@ -1,0 +1,2 @@
+error(160): U.g4:3:4: reference to parser rule a in lexer rule A
+warning(125): U.g4:2:4: implicit definition of token A in parser

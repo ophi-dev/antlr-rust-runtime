@@ -1,0 +1,5 @@
+RuleStart_a_0->s2
+s2-A->s3
+s3-B->s4
+s4->RuleStop_a_1
+RuleStop_a_1-EOF->s5

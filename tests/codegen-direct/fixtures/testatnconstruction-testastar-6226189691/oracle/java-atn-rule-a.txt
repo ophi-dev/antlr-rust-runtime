@@ -1,0 +1,9 @@
+RuleStart_a_0->StarLoopEntry_5
+StarLoopEntry_5->StarBlockStart_3
+StarLoopEntry_5->s6
+StarBlockStart_3->s2
+s6->RuleStop_a_1
+s2-A->BlockEnd_4
+RuleStop_a_1-EOF->s8
+BlockEnd_4->StarLoopBack_7
+StarLoopBack_7->StarLoopEntry_5

@@ -1,0 +1,12 @@
+RuleStart_a_0->StarLoopEntry_7
+StarLoopEntry_7->StarBlockStart_5
+StarLoopEntry_7->s8
+StarBlockStart_5->s2
+StarBlockStart_5->s3
+s8->RuleStop_a_1
+s2-A->BlockEnd_6
+s3-B->s4
+RuleStop_a_1-EOF->s10
+BlockEnd_6->StarLoopBack_9
+s4-action_0:-1->BlockEnd_6
+StarLoopBack_9->StarLoopEntry_7

@@ -1,0 +1,8 @@
+RuleStart_a_0->BlockStart_5
+BlockStart_5->s2
+BlockStart_5->s3
+s2-A->BlockEnd_6
+s3-B->s4
+BlockEnd_6->RuleStop_a_1
+s4-action_0:-1->BlockEnd_6
+RuleStop_a_1-EOF->s7

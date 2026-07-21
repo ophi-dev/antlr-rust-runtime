@@ -1,0 +1,4 @@
+s0->RuleStart_A_1
+RuleStart_A_1->s3
+s3-{66352..66383, 69968..70015}->s4
+s4->RuleStop_A_2

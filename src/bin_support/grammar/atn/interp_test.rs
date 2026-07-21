@@ -347,6 +347,8 @@ fn usize_to_i32(value: usize) -> i32 {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::{BTreeSet, VecDeque};
+    use std::fmt::Write as _;
     use std::path::{Path, PathBuf};
     use std::rc::Rc;
 
@@ -364,7 +366,10 @@ mod tests {
 
     use super::*;
     use crate::grammar::compiler::{Compilation, compile};
-    use crate::grammar::loader::LoadOptions;
+    use crate::grammar::loader::{LoadOptions, load};
+    use crate::grammar::provenance::Origin;
+    use crate::grammar::semantics::analyze;
+    use crate::grammar::transform::integrate_loaded;
 
     #[test]
     fn parser_basic_matches_java_serialization_and_direct_packing() {
@@ -1059,6 +1064,632 @@ mod tests {
             &serialize_interp(&compiled.semantic.recognizer, &actual),
             expected_path,
         );
+    }
+
+    mod upstream_atn_construction {
+        use super::*;
+
+        macro_rules! case {
+            ($name:ident, $fixture:literal) => {
+                mod $name {
+                    use super::*;
+
+                    #[test]
+                    fn matches_java() {
+                        assert_atn_construction_fixture($fixture);
+                    }
+                }
+            };
+        }
+
+        macro_rules! partial_case {
+            ($name:ident, $fixture:literal) => {
+                mod $name {
+                    use super::*;
+
+                    #[test]
+                    fn matches_java() {
+                        assert_partial_atn_construction_fixture($fixture);
+                    }
+                }
+            };
+        }
+
+        macro_rules! error_case {
+            ($name:ident, $fixture:literal, $code:literal) => {
+                mod $name {
+                    use super::*;
+
+                    #[test]
+                    fn matches_java() {
+                        assert_atn_construction_error($fixture, $code);
+                    }
+                }
+            };
+        }
+
+        case!(a, "testatnconstruction-testa-44f6db366a");
+        case!(ab, "testatnconstruction-testab-a42f21b0b8");
+        case!(ab_or_cd, "testatnconstruction-testaborcd-b267bf19a6");
+        case!(a_optional, "testatnconstruction-testaoptional-4417b81a74");
+        case!(a_or_b, "testatnconstruction-testaorb-e4661cbc08");
+        case!(
+            a_or_b_optional,
+            "testatnconstruction-testaorboptional-5b7e48e9fa"
+        );
+        partial_case!(
+            a_or_b_or_empty_plus,
+            "testatnconstruction-testaorboremptyplus-d75dc1c5fb"
+        );
+        case!(a_or_b_plus, "testatnconstruction-testaorbplus-a9453b1daf");
+        case!(a_or_b_star, "testatnconstruction-testaorbstar-da7179ee92");
+        case!(
+            a_or_b_then_c,
+            "testatnconstruction-testaorbthenc-b185264ad6"
+        );
+        case!(
+            a_or_epsilon,
+            "testatnconstruction-testaorepsilon-799ca3b396"
+        );
+        case!(a_plus, "testatnconstruction-testaplus-f4b19d5e31");
+        case!(
+            a_plus_single_alt_has_plus_ast_pointing_at_loop_back_state,
+            "testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate-3c6626e10f"
+        );
+        case!(a_star, "testatnconstruction-testastar-6226189691");
+        case!(ba, "testatnconstruction-testba-addc3f424e");
+        case!(char_set, "testatnconstruction-testcharset-3be8423fea");
+        case!(
+            char_set_range,
+            "testatnconstruction-testcharsetrange-b5d5ea2237"
+        );
+        case!(
+            char_set_unicode_bmp_escape,
+            "testatnconstruction-testcharsetunicodebmpescape-f297bd0c00"
+        );
+        case!(
+            char_set_unicode_bmp_escape_range,
+            "testatnconstruction-testcharsetunicodebmpescaperange-cbdbffbfb6"
+        );
+        case!(
+            char_set_unicode_multiple_property_escape,
+            "testatnconstruction-testcharsetunicodemultiplepropertyescape-b3c6b5bbe8"
+        );
+        case!(
+            char_set_unicode_property_escape,
+            "testatnconstruction-testcharsetunicodepropertyescape-1ca01ebe06"
+        );
+        case!(
+            char_set_unicode_property_invert_escape,
+            "testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e"
+        );
+        case!(
+            char_set_unicode_property_overlap,
+            "testatnconstruction-testcharsetunicodepropertyoverlap-e358f7dd65"
+        );
+        case!(
+            char_set_unicode_smp_escape,
+            "testatnconstruction-testcharsetunicodesmpescape-4527f8d566"
+        );
+        case!(
+            char_set_unicode_smp_escape_range,
+            "testatnconstruction-testcharsetunicodesmpescaperange-9416df1cdc"
+        );
+        case!(
+            default_mode,
+            "testatnconstruction-testdefaultmode-a515412628"
+        );
+        case!(
+            empty_or_empty,
+            "testatnconstruction-testemptyorempty-ba4d562660"
+        );
+        case!(follow, "testatnconstruction-testfollow-335ed81c22");
+        case!(
+            repeated_transitions_to_stop_state,
+            "testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58"
+        );
+        case!(
+            lexer_is_not_set_multi_char_string,
+            "testatnconstruction-testlexerisnotsetmulticharstring-25d141ff2e"
+        );
+        case!(
+            lexer_isnt_set_multi_char_string,
+            "testatnconstruction-testlexerisntsetmulticharstring-a38c8db90d"
+        );
+        case!(mode, "testatnconstruction-testmode-19f1fe46af");
+        case!(
+            nested_a_star,
+            "testatnconstruction-testnestedastar-9175a1e843"
+        );
+        error_case!(
+            parser_rule_ref_in_lexer_rule,
+            "testatnconstruction-testparserrulerefinlexerrule-34f2000a35",
+            "G4S008"
+        );
+        case!(
+            predicated_a_or_b,
+            "testatnconstruction-testpredicatedaorb-9fe924cddd"
+        );
+        case!(range, "testatnconstruction-testrange-22a5123557");
+        case!(
+            range_or_range,
+            "testatnconstruction-testrangeorrange-7cd17abe9a"
+        );
+        case!(set_a_or_b, "testatnconstruction-testsetaorb-ee6a743346");
+        case!(
+            set_a_or_b_optional,
+            "testatnconstruction-testsetaorboptional-a3d32b77ad"
+        );
+        case!(
+            string_literal_in_parser,
+            "testatnconstruction-teststringliteralinparser-4579c9c18c"
+        );
+    }
+
+    struct GraphOracle {
+        recognizer_kind: String,
+        recognizer: String,
+        interp: String,
+        target: String,
+        selector: String,
+        expected: String,
+    }
+
+    fn assert_atn_construction_fixture(fixture_name: &str) {
+        let root = fixture_root(fixture_name);
+        let compilation = compile_fixture(fixture_name, &[&root])
+            .unwrap_or_else(|error| panic!("{fixture_name} should compile: {error:#?}"));
+        assert_graph_oracles(fixture_name, &compilation);
+    }
+
+    fn assert_partial_atn_construction_fixture(fixture_name: &str) {
+        let root = fixture_root(fixture_name);
+        let directory = fixture(fixture_name);
+        let loaded = load(LoadOptions {
+            roots: vec![directory.join(&root)],
+            library_directories: Vec::new(),
+        })
+        .expect("fixture should load");
+        let integrated = integrate_loaded(&loaded).expect("fixture should integrate");
+        let semantics = analyze(integrated).expect("fixture should pass semantic analysis");
+        let grammar = semantics
+            .grammars
+            .iter()
+            .find(|grammar| grammar.unit.name == "P")
+            .expect("fixture parser grammar");
+        let (graph, _) = super::super::parser::build_graph_for_test(
+            grammar,
+            semantics.provenance.clone(),
+        );
+        let oracles = graph_oracles(fixture_name);
+        let [oracle] = oracles.as_slice() else {
+            panic!("{fixture_name} should have one graph oracle");
+        };
+        let rule = grammar
+            .recognizer
+            .rule_names
+            .iter()
+            .position(|name| name == &oracle.selector)
+            .expect("oracle rule exists");
+        assert_eq!(
+            direct_atn_string(&grammar.recognizer, &graph, graph.rule_starts[rule]),
+            oracle.expected,
+        );
+
+        let error = compile_fixture(fixture_name, &[&root])
+            .expect_err("nullable closure must fail after ATN construction");
+        assert!(
+            error
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| diagnostic.code == "G4A001")
+        );
+    }
+
+    fn assert_atn_construction_error(fixture_name: &str, code: &str) {
+        let root = fixture_root(fixture_name);
+        let error = compile_fixture(fixture_name, &[&root])
+            .expect_err("upstream invalid grammar should fail");
+        let diagnostic = error
+            .diagnostics()
+            .iter()
+            .find(|diagnostic| diagnostic.code == code)
+            .unwrap_or_else(|| panic!("missing {code} diagnostic: {error:#?}"));
+        assert!(diagnostic.message.contains("parser rule reference"));
+        assert!(diagnostic.message.contains("lexer rule"));
+    }
+
+    fn assert_graph_oracles(fixture_name: &str, compilation: &Compilation) {
+        for oracle in graph_oracles(fixture_name) {
+            match oracle.recognizer_kind.as_str() {
+                "parser" => {
+                    assert_eq!(oracle.target, "rule");
+                    let compiled = parser_named(compilation, &oracle.recognizer);
+                    assert_parser_interp(compiled, &fixture(fixture_name).join(&oracle.interp));
+                    let rule = compiled
+                        .semantic
+                        .recognizer
+                        .rule_names
+                        .iter()
+                        .position(|name| name == &oracle.selector)
+                        .expect("oracle rule exists");
+                    assert_eq!(
+                        direct_atn_string(
+                            &compiled.semantic.recognizer,
+                            &compiled.graph,
+                            compiled.graph.rule_starts[rule],
+                        ),
+                        oracle.expected,
+                        "{fixture_name} rule {}",
+                        oracle.selector,
+                    );
+                }
+                "lexer" => {
+                    assert_eq!(oracle.target, "mode");
+                    let compiled = lexer_named(compilation, &oracle.recognizer);
+                    assert_lexer_interp(compiled, &fixture(fixture_name).join(&oracle.interp));
+                    let mode = compiled
+                        .semantic
+                        .recognizer
+                        .mode_names
+                        .iter()
+                        .position(|name| name == &oracle.selector)
+                        .expect("oracle mode exists");
+                    let start = compiled
+                        .graph
+                        .states
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, state)| state.kind == AtnStateKind::TokenStart)
+                        .nth(mode)
+                        .map(|(index, _)| index)
+                        .expect("mode start exists");
+                    assert_eq!(
+                        direct_atn_string(
+                            &compiled.semantic.recognizer,
+                            &compiled.graph,
+                            start,
+                        ),
+                        oracle.expected,
+                        "{fixture_name} mode {}",
+                        oracle.selector,
+                    );
+                }
+                other => panic!("unknown oracle recognizer kind {other}"),
+            }
+        }
+        assert_ast_state_map(fixture_name, compilation);
+    }
+
+    fn graph_oracles(fixture_name: &str) -> Vec<GraphOracle> {
+        let directory = fixture(fixture_name);
+        let index = std::fs::read_to_string(directory.join("oracle/java-atn.index"))
+            .expect("fixture ATN oracle index");
+        index
+            .lines()
+            .map(|line| {
+                let fields = line.split('\t').collect::<Vec<_>>();
+                let [kind, recognizer, interp, target, selector, expected] = fields.as_slice()
+                else {
+                    panic!("invalid ATN oracle index line {line:?}");
+                };
+                GraphOracle {
+                    recognizer_kind: (*kind).to_owned(),
+                    recognizer: (*recognizer).to_owned(),
+                    interp: (*interp).to_owned(),
+                    target: (*target).to_owned(),
+                    selector: (*selector).to_owned(),
+                    expected: std::fs::read_to_string(directory.join("oracle").join(expected))
+                        .expect("fixture ATN graph"),
+                }
+            })
+            .collect()
+    }
+
+    fn fixture_root(fixture_name: &str) -> String {
+        let mut roots = std::fs::read_dir(fixture(fixture_name))
+            .expect("fixture directory")
+            .filter_map(Result::ok)
+            .filter_map(|entry| {
+                let path = entry.path();
+                (path.extension().and_then(|extension| extension.to_str()) == Some("g4"))
+                    .then(|| entry.file_name().to_string_lossy().into_owned())
+            })
+            .collect::<Vec<_>>();
+        roots.sort();
+        let [root] = roots.as_slice() else {
+            panic!("{fixture_name} should have exactly one grammar root");
+        };
+        root.clone()
+    }
+
+    fn direct_atn_string(
+        recognizer: &RecognizerModel,
+        graph: &FinalizedAtnGraph,
+        start: usize,
+    ) -> String {
+        let transitions = transitions_by_id(graph);
+        let mut work = VecDeque::from([start]);
+        let mut marked = BTreeSet::new();
+        let mut output = String::new();
+
+        while let Some(state_number) = work.pop_front() {
+            if !marked.insert(state_number) {
+                continue;
+            }
+            let state = &graph.states[state_number];
+            for transition_id in &state.transitions {
+                let transition = transitions
+                    .get(transition_id)
+                    .expect("state transition exists");
+                if state.kind != AtnStateKind::RuleStop {
+                    match transition.kind {
+                        FinalizedTransitionKind::Rule { follow, .. } => {
+                            work.push_back(follow);
+                        }
+                        _ => work.push_back(transition.target),
+                    }
+                }
+
+                output.push_str(&state_name(recognizer, graph, state_number));
+                match &transition.kind {
+                    FinalizedTransitionKind::Epsilon => output.push_str("->"),
+                    FinalizedTransitionKind::Rule { rule_index, .. } => {
+                        write!(
+                            output,
+                            "-{}->",
+                            recognizer.rule_names[*rule_index]
+                        )
+                        .expect("writing to String cannot fail");
+                    }
+                    FinalizedTransitionKind::Predicate {
+                        rule_index,
+                        predicate_index,
+                        ..
+                    } => {
+                        write!(output, "-pred_{rule_index}:{predicate_index}->")
+                            .expect("writing to String cannot fail");
+                    }
+                    FinalizedTransitionKind::Action {
+                        rule_index,
+                        action_index,
+                        ..
+                    } => {
+                        let action = action_index.map_or(-1, |index| {
+                            i32::try_from(index).expect("action index exceeds i32")
+                        });
+                        write!(output, "-action_{rule_index}:{action}->")
+                            .expect("writing to String cannot fail");
+                    }
+                    FinalizedTransitionKind::Precedence(precedence) => {
+                        write!(output, "-{precedence} >= _p->")
+                            .expect("writing to String cannot fail");
+                    }
+                    FinalizedTransitionKind::Atom(label) => {
+                        write!(output, "-{}->", atom_name(recognizer, *label))
+                            .expect("writing to String cannot fail");
+                    }
+                    FinalizedTransitionKind::Range { start, stop } => {
+                        write!(output, "-{}->", range_name(recognizer, *start, *stop))
+                            .expect("writing to String cannot fail");
+                    }
+                    FinalizedTransitionKind::Set(ranges) => {
+                        write!(output, "-{}->", set_name(recognizer, ranges))
+                            .expect("writing to String cannot fail");
+                    }
+                    FinalizedTransitionKind::NotSet(ranges) => {
+                        write!(output, "-~{}->", set_name(recognizer, ranges))
+                            .expect("writing to String cannot fail");
+                    }
+                    FinalizedTransitionKind::Wildcard => output.push_str("-.->"),
+                }
+                output.push_str(&state_name(recognizer, graph, transition.target));
+                output.push('\n');
+            }
+        }
+        output
+    }
+
+    fn state_name(
+        recognizer: &RecognizerModel,
+        graph: &FinalizedAtnGraph,
+        state_number: usize,
+    ) -> String {
+        let state = &graph.states[state_number];
+        match state.kind {
+            AtnStateKind::StarBlockStart => format!("StarBlockStart_{state_number}"),
+            AtnStateKind::PlusBlockStart => format!("PlusBlockStart_{state_number}"),
+            AtnStateKind::BlockStart => format!("BlockStart_{state_number}"),
+            AtnStateKind::BlockEnd => format!("BlockEnd_{state_number}"),
+            AtnStateKind::RuleStart => format!(
+                "RuleStart_{}_{}",
+                recognizer.rule_names[state.rule_index.expect("rule-start index")], state_number
+            ),
+            AtnStateKind::RuleStop => format!(
+                "RuleStop_{}_{}",
+                recognizer.rule_names[state.rule_index.expect("rule-stop index")], state_number
+            ),
+            AtnStateKind::PlusLoopBack => format!("PlusLoopBack_{state_number}"),
+            AtnStateKind::StarLoopBack => format!("StarLoopBack_{state_number}"),
+            AtnStateKind::StarLoopEntry => format!("StarLoopEntry_{state_number}"),
+            _ => format!("s{state_number}"),
+        }
+    }
+
+    fn atom_name(recognizer: &RecognizerModel, label: i32) -> String {
+        if recognizer.kind == GrammarKind::Lexer {
+            antlr_char_literal(label)
+        } else {
+            token_name(recognizer, label)
+        }
+    }
+
+    fn range_name(recognizer: &RecognizerModel, start: i32, stop: i32) -> String {
+        if recognizer.kind == GrammarKind::Lexer {
+            format!("'{}'..'{}'", raw_code_point(start), raw_code_point(stop))
+        } else {
+            format!("{}..{}", token_name(recognizer, start), token_name(recognizer, stop))
+        }
+    }
+
+    fn set_name(recognizer: &RecognizerModel, ranges: &[(i32, i32)]) -> String {
+        let ranges = normalize_ranges(ranges);
+        if recognizer.kind == GrammarKind::Lexer {
+            let size = ranges.iter().fold(0_u64, |size, (start, stop)| {
+                size.saturating_add(u64::try_from(stop - start + 1).unwrap_or(u64::MAX))
+            });
+            let values = ranges
+                .iter()
+                .map(|(start, stop)| {
+                    if start == stop {
+                        if *start == EOF_TOKEN_TYPE {
+                            "<EOF>".to_owned()
+                        } else {
+                            start.to_string()
+                        }
+                    } else {
+                        format!("{start}..{stop}")
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            if size > 1 {
+                format!("{{{values}}}")
+            } else {
+                values
+            }
+        } else {
+            let values = ranges
+                .iter()
+                .flat_map(|(start, stop)| *start..=*stop)
+                .map(|token| token_name(recognizer, token))
+                .collect::<Vec<_>>();
+            if values.len() > 1 {
+                format!("{{{}}}", values.join(", "))
+            } else {
+                values.join("")
+            }
+        }
+    }
+
+    fn token_name(recognizer: &RecognizerModel, token: i32) -> String {
+        if token == EOF_TOKEN_TYPE {
+            return "EOF".to_owned();
+        }
+        if token == 0 {
+            return "<INVALID>".to_owned();
+        }
+        let index = usize::try_from(token).ok();
+        index
+            .and_then(|index| recognizer.literal_names.get(index))
+            .and_then(Clone::clone)
+            .or_else(|| {
+                index
+                    .and_then(|index| recognizer.symbolic_names.get(index))
+                    .and_then(Clone::clone)
+            })
+            .unwrap_or_else(|| token.to_string())
+    }
+
+    fn antlr_char_literal(value: i32) -> String {
+        if value == EOF_TOKEN_TYPE {
+            return "EOF".to_owned();
+        }
+        let escaped = match value {
+            0x08 => "\\b".to_owned(),
+            0x09 => "\\t".to_owned(),
+            0x0A => "\\n".to_owned(),
+            0x0C => "\\f".to_owned(),
+            0x0D => "\\r".to_owned(),
+            0x27 => "\\'".to_owned(),
+            0x5C => "\\\\".to_owned(),
+            0x20..=0x7E => raw_code_point(value),
+            0..=0xFFFF => format!("\\u{value:04X}"),
+            _ => raw_code_point(value),
+        };
+        format!("'{escaped}'")
+    }
+
+    fn raw_code_point(value: i32) -> String {
+        u32::try_from(value)
+            .ok()
+            .and_then(char::from_u32)
+            .map_or_else(|| value.to_string(), |character| character.to_string())
+    }
+
+    fn assert_ast_state_map(fixture_name: &str, compilation: &Compilation) {
+        let expected_path = fixture(fixture_name).join("oracle/java-ast-state-map.txt");
+        if !expected_path.exists() {
+            return;
+        }
+        let expected = std::fs::read_to_string(expected_path)
+            .expect("fixture AST-state map")
+            .trim()
+            .to_owned();
+        let compiled = compilation
+            .parsers
+            .values()
+            .next()
+            .expect("AST-state fixture parser");
+        let rule = compiled
+            .semantic
+            .recognizer
+            .rule_names
+            .iter()
+            .position(|name| name == "a")
+            .expect("rule a");
+        let plus_block = state_in_rule(&compiled.graph, rule, AtnStateKind::PlusBlockStart);
+        let plus_loop = state_in_rule(&compiled.graph, rule, AtnStateKind::PlusLoopBack);
+        let token = compiled.semantic.recognizer.vocabulary.by_name["A"];
+        let atom = compiled
+            .graph
+            .transitions
+            .iter()
+            .find(|transition| {
+                compiled.graph.states[transition.source].rule_index == Some(rule)
+                    && transition.kind == FinalizedTransitionKind::Atom(token)
+            })
+            .expect("A transition");
+        let actual = format!(
+            "{{RULE={}, BLOCK={plus_block}, +={plus_loop}, BLOCK={plus_block}, A={}}}",
+            compiled.graph.rule_starts[rule], atom.source,
+        );
+        assert_eq!(actual, expected);
+
+        for state in [
+            compiled.graph.rule_starts[rule],
+            plus_block,
+            plus_loop,
+            atom.source,
+        ] {
+            assert!(
+                compiled
+                    .provenance
+                    .state_origins(compiled.graph.states[state].original)
+                    .iter()
+                    .any(|origin| matches!(origin, Origin::Authored { .. })),
+                "state {state} must retain an authored origin",
+            );
+        }
+        assert!(
+            compiled
+                .provenance
+                .transition_origins(atom.original)
+                .iter()
+                .any(|origin| matches!(origin, Origin::Authored { .. }))
+        );
+    }
+
+    fn state_in_rule(
+        graph: &FinalizedAtnGraph,
+        rule: usize,
+        kind: AtnStateKind,
+    ) -> usize {
+        graph
+            .states
+            .iter()
+            .position(|state| state.rule_index == Some(rule) && state.kind == kind)
+            .unwrap_or_else(|| panic!("missing {kind:?} state in rule {rule}"))
     }
 
     fn compile_fixture(

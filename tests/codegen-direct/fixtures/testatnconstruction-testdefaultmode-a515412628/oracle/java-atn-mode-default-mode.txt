@@ -1,0 +1,8 @@
+s0->RuleStart_A_2
+s0->RuleStart_X_4
+RuleStart_A_2->s10
+RuleStart_X_4->s12
+s10-'a'->s11
+s12-'x'->s13
+s11->RuleStop_A_3
+s13->RuleStop_X_5

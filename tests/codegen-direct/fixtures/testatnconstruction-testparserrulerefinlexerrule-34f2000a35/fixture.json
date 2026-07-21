@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "U.g4"
+  ],
+  "logical_ids": [
+    "testatnconstruction-testparserrulerefinlexerrule-34f2000a35"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:testatnconstruction-testparserrulerefinlexerrule@8d02544a5dd3",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestATNConstruction.spec.ts",
+      "case": "testParserRuleRefInLexerRule",
+      "source_sha256": "41eff30b806e56d82939e1cb57ec72f260e564a6c07b0473340d705665429da4"
+    },
+    {
+      "source_case_id": "java-antlr:testatnconstruction-testparserrulerefinlexerrule@8d02544a5dd3",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestATNConstruction.java",
+      "case": "testParserRuleRefInLexerRule",
+      "source_sha256": "4565dc4b58d7cd05fbd6a7c365adb80365552a4dfa2d1a2217b1bde9f813ace1"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testatnconstruction-testparserrulerefinlexerrule@8d02544a5dd3",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestATNConstruction.java",
+    "case": "testParserRuleRefInLexerRule",
+    "source_sha256": "4565dc4b58d7cd05fbd6a7c365adb80365552a4dfa2d1a2217b1bde9f813ace1"
+  },
+  "antlr_ng_test": {
+    "source_case_id": "antlr-ng:testatnconstruction-testparserrulerefinlexerrule@8d02544a5dd3",
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/TestATNConstruction.spec.ts",
+    "case": "testParserRuleRefInLexerRule",
+    "source_sha256": "41eff30b806e56d82939e1cb57ec72f260e564a6c07b0473340d705665429da4"
+  },
+  "expected": "error",
+  "atn_printer_oracle": {
+    "java_index": null,
+    "antlr_ng_index": null,
+    "agreement": "divergent-error-surface: Java reaches semantic analysis; antlr-ng rejects during parsing",
+    "compatibility_verdict": "Java ANTLR 4.13.2"
+  },
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "exit_status": 1
+  },
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh testatnconstruction-testparserrulerefinlexerrule-34f2000a35 --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar",
+  "files": {
+    "U.g4": "8c7b9653eb357ccc1e943ffd247801d97adb890847d7e293ba1360e70cc10b16",
+    "U.tokens": "91d6a3d55e9fea7911c537afae6607c77fa8bc0f3a76c375e104ac5a8cfa84db",
+    "diagnostics.json": "9485d353de0f8c1b4ed667e52637dee71cc5aceab2ce0ac170efeb51e90a1799",
+    "oracle/antlr-ng-outcome.txt": "a7b3e22f3f06285a791925528ed1180e7ebb37595052b8f2cf7d1ae682a4d775",
+    "oracle/java-antlr.stderr": "17f0cf74f7268029fb605aa5078ef95154033a8fbc0f2fcc1605d3bf977fc047",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-outcome.txt": "b1723fa6296f21859286a794ded62f16fec364f2c2c701cd04895479eb2cc93b"
+  }
+}
