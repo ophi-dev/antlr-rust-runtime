@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnserialization-testlexerunicodeunescapedbmpsetwithrange-a91b9ab9ec",
+  "active_revision_id": "testatnserialization-testlexerunicodeunescapedbmpsetwithrange-a91b9ab9ec-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnserialization-testlexerunicodeunescapedbmpsetwithrange-a91b9ab9ec-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnserialization-testlexerunicodeunescapedbmpsetwithrange-a91b9ab9ec/revisions/testatnserialization-testlexerunicodeunescapedbmpsetwithrange-a91b9ab9ec-r1/manifest.json",
+      "closure_sha256": "c9edf872c5f2ff0f3a9c6108e24d521cd16f61adac58119b68c9262302bcfaaf"
+    }
+  ]
+}

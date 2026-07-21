@@ -11,6 +11,12 @@ export const FRONTEND_SYNTAX_TEST_COMMIT =
     "9ce58d9d60d5ce1226c16460c22819fb0bd3b06a";
 export const FRONTEND_SYNTAX_TEST_PARENT =
     "c8a5df019c8183430febee19e9a71eb5d882b961";
+export const PHASE_B_BASE_COMMIT =
+    "63e800d1236d34721b0f870d8a2c723c74edfc5e";
+export const PHASE_B_IMPLEMENTATION_COMMIT =
+    "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad";
+export const ATN_SERIALIZATION_TEST_COMMIT =
+    "5c5c82fb7879bce9d99d684855bfd07dd6405850";
 
 export function stableStringify(value) {
     if (Array.isArray(value)) {

@@ -6,9 +6,12 @@ import { fileURLToPath } from "node:url";
 
 import {
     ANTLR_NG_COMMIT,
+    ATN_SERIALIZATION_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_COMMIT,
     IMPLEMENTATION_COMMIT,
     JAVA_COMMIT,
+    PHASE_B_BASE_COMMIT,
+    PHASE_B_IMPLEMENTATION_COMMIT,
     SCAFFOLD_COMMIT,
     TEST_COMMIT,
     digest,
@@ -21,6 +24,10 @@ const FRONTEND_TEST_COMMAND =
     "cargo test --locked --bin antlr4-rust-gen grammar::frontend::tests::";
 const FRONTEND_SYNTAX_TEST_COMMAND =
     "cargo test --locked --bin antlr4-rust-gen grammar::ported_tests::frontend_tool_syntax_cases_match_upstream_outcomes";
+const ATN_SERIALIZATION_TEST_COMMAND =
+    "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::";
+const ATN_SERIALIZATION_TEST_MODULE =
+    "src/bin_support/grammar/atn/interp_test.rs";
 
 const PHASE_B_SUITES = new Set([
     "TestATNConstruction",
@@ -151,6 +158,7 @@ const externalAssertions = new Map(
         ]),
     ),
 );
+const completedPhaseBPorts = await loadCompletedPhaseBPorts();
 
 const unassigned = new Map(inventory.cases.map((testCase) => [testCase.id, testCase]));
 const rows = [];
@@ -430,6 +438,16 @@ function mappedRow(logicalId, cases, policy) {
             approving_reviewer: APPROVING_REVIEW,
         };
     }
+    const completed = completedPhaseBPorts.get(logicalId);
+    if (completed) {
+        return completedPhaseBRow(
+            logicalId,
+            cases,
+            policy,
+            externalAssertionIds,
+            completed,
+        );
+    }
 
     const closure = {
         logical_id: logicalId,
@@ -469,6 +487,115 @@ function mappedRow(logicalId, cases, policy) {
         closure_sha256: digest(stableStringify(closure)),
         evidence_path: null,
     };
+}
+
+function completedPhaseBRow(
+    logicalId,
+    cases,
+    policy,
+    externalAssertionIds,
+    completed,
+) {
+    if (policy.owner !== "B") {
+        throw new Error(`${logicalId} completed Phase B port has owner ${policy.owner}`);
+    }
+    const sourceCaseIds = cases.map((testCase) => testCase.id).sort();
+    const observable =
+        `direct Rust serialization matches the complete Java 4.13.2 .interp ` +
+        `for ${cases[0].suite}.${cases[0].name}`;
+    const closure = {
+        logical_id: logicalId,
+        source_case_ids: sourceCaseIds,
+        external_assertion_ids: externalAssertionIds,
+        ...(externalAssertionIds.length === 0
+            ? {}
+            : {
+                  external_assertion_inputs: externalAssertionIds.map(
+                      externalAssertionInput,
+                  ),
+              }),
+        fixture_paths: completed.fixturePaths,
+        owner_phase: "B",
+        disposition: "port",
+        rust_test: completed.rustTest,
+        unit_under_test: policy.unit,
+        observable,
+        scaffold_commit: PHASE_B_BASE_COMMIT,
+        primary_test_commit: ATN_SERIALIZATION_TEST_COMMIT,
+        resolution: "verified-covered-existing",
+    };
+    const greenResult = "36 passed; 0 failed";
+    return {
+        logical_id: logicalId,
+        source_case_ids: sourceCaseIds,
+        external_assertion_ids: externalAssertionIds,
+        owner_phase: "B",
+        disposition: "port",
+        active_revision_id: `${logicalId}-r1`,
+        tdd_state: "done",
+        resolution: "verified-covered-existing",
+        rust_test: completed.rustTest,
+        primary_test_source: sourceIdentity(cases, "java-antlr"),
+        alternate_test_source: sourceIdentity(cases, "antlr-ng"),
+        primary_implementation_source: `antlr-ng@${ANTLR_NG_COMMIT}`,
+        alternate_implementation_source: `java-antlr@${JAVA_COMMIT}`,
+        prerequisites: ["Phase B compiler boundary"],
+        unit_under_test: policy.unit,
+        expected_red_failure_fingerprint:
+            "not applicable: the case-specific port passed against the existing Phase B compiler",
+        observable_equivalence: observable,
+        scaffold_commit: PHASE_B_BASE_COMMIT,
+        primary_test_commit: ATN_SERIALIZATION_TEST_COMMIT,
+        verified_covered_existing: {
+            command: ATN_SERIALIZATION_TEST_COMMAND,
+            commit: ATN_SERIALIZATION_TEST_COMMIT,
+            exit_code: 0,
+            result: greenResult,
+        },
+        primary_implementation_commit: PHASE_B_IMPLEMENTATION_COMMIT,
+        green_result: {
+            command: ATN_SERIALIZATION_TEST_COMMAND,
+            result: greenResult,
+        },
+        closure,
+        closure_sha256: digest(stableStringify(closure)),
+        evidence_path: `tests/codegen-direct/port-evidence/${logicalId}`,
+    };
+}
+
+async function loadCompletedPhaseBPorts() {
+    const source = await readFile(
+        resolve(repoRoot, ATN_SERIALIZATION_TEST_MODULE),
+        "utf8",
+    );
+    const ports = new Map();
+    const pattern =
+        /case!\(\s*(\w+),\s*(parser|lexer),\s*"(testatnserialization-[^"]+)",\s*"[^"]+"\s*\);/gu;
+    for (const match of source.matchAll(pattern)) {
+        const [, moduleName, , logicalId] = match;
+        const fixtureBase = `tests/codegen-direct/fixtures/${logicalId}`;
+        const manifest = JSON.parse(
+            await readFile(resolve(repoRoot, fixtureBase, "fixture.json"), "utf8"),
+        );
+        const fixturePaths = [
+            `${fixtureBase}/fixture.json`,
+            ...Object.keys(manifest.files ?? {}).map(
+                (path) => `${fixtureBase}/${path}`,
+            ),
+        ].sort();
+        ports.set(logicalId, {
+            fixturePaths,
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_atn_serialization::" +
+                `${moduleName}::matches_java`,
+        });
+    }
+    if (ports.size !== 36) {
+        throw new Error(
+            `expected 36 completed TestATNSerialization ports, found ${ports.size}`,
+        );
+    }
+    return ports;
 }
 
 function policyFor(suite, name) {

@@ -10,10 +10,13 @@ import { fileURLToPath } from "node:url";
 
 import {
     ANTLR_NG_COMMIT,
+    ATN_SERIALIZATION_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_PARENT,
     IMPLEMENTATION_COMMIT,
     JAVA_COMMIT,
+    PHASE_B_BASE_COMMIT,
+    PHASE_B_IMPLEMENTATION_COMMIT,
     SCAFFOLD_COMMIT,
     TEST_COMMIT,
     VSCODE_COMMIT,
@@ -32,6 +35,11 @@ const FRONTEND_SYNTAX_TEST_PATH =
 const FRONTEND_SYNTAX_TEST_MARKER = "use super::frontend";
 const FRONTEND_SYNTAX_MODULE_PATH = "src/bin_support/grammar/mod.rs";
 const FRONTEND_SYNTAX_MODULE_MARKER = "#[cfg(test)]\nmod ported_tests;";
+const ATN_SERIALIZATION_TEST_PATH =
+    "src/bin_support/grammar/atn/interp_test.rs";
+const ATN_SERIALIZATION_TEST_START =
+    "    mod upstream_atn_serialization {";
+const ATN_SERIALIZATION_TEST_END = "\n    fn assert_lexer_fixture";
 const SYMBOL_INFO_SHA256 =
     "df274a0dca42823cc2ef2608d98d544be53246a48c56f96050b0a987ce0890f3";
 
@@ -122,8 +130,8 @@ const sourceCases = new Map(
 const externalSources = new Map(
     externalInventory.artifacts.map((artifact) => [artifact.source_id, artifact]),
 );
-const phaseARows = testMap.rows.filter(
-    (row) => row.disposition === "port" && row.owner_phase === "A",
+const completedRows = testMap.rows.filter(
+    (row) => row.disposition === "port" && row.tdd_state === "done",
 );
 const expectedFiles = new Map();
 
@@ -228,9 +236,44 @@ const syntaxLockedSections = [
         sha256: digest(checkedInSyntaxModule),
     },
 ];
+const checkedInAtnSerializationTests = sectionBetweenMarkers(
+    await readFile(resolve(repoRoot, ATN_SERIALIZATION_TEST_PATH), "utf8"),
+    ATN_SERIALIZATION_TEST_START,
+    ATN_SERIALIZATION_TEST_END,
+);
+const recordedAtnSerializationTests = gitShowOptional(
+    repoRoot,
+    ATN_SERIALIZATION_TEST_COMMIT,
+    ATN_SERIALIZATION_TEST_PATH,
+);
+if (recordedAtnSerializationTests === null) {
+    warnMissingHistoricalSource(
+        "ATN serialization test verification",
+        ATN_SERIALIZATION_TEST_COMMIT,
+        ATN_SERIALIZATION_TEST_PATH,
+    );
+} else if (
+    sectionBetweenMarkers(
+        recordedAtnSerializationTests,
+        ATN_SERIALIZATION_TEST_START,
+        ATN_SERIALIZATION_TEST_END,
+    ) !== checkedInAtnSerializationTests
+) {
+    throw new Error(
+        "checked-in ATN serialization ports differ from their test commit",
+    );
+}
+const atnSerializationLockedSections = [
+    {
+        path: ATN_SERIALIZATION_TEST_PATH,
+        marker: ATN_SERIALIZATION_TEST_START,
+        end_marker: ATN_SERIALIZATION_TEST_END,
+        sha256: digest(checkedInAtnSerializationTests),
+    },
+];
 
 const upstreamByLogicalId = new Map(
-    phaseARows.map((row) => [row.logical_id, row]),
+    testMap.rows.map((row) => [row.logical_id, row]),
 );
 for (const fixture of externalMap.fixtures) {
     for (const assertion of fixture.assertions) {
@@ -238,7 +281,7 @@ for (const fixture of externalMap.fixtures) {
             const logicalId = assertion.tdd_owner.slice("upstream:".length);
             const row = upstreamByLogicalId.get(logicalId);
             if (!row) {
-                throw new Error(`${assertion.id} names missing Phase A row ${logicalId}`);
+                throw new Error(`${assertion.id} names missing upstream row ${logicalId}`);
             }
             assertion.upstream_active_revision_id = row.active_revision_id;
             assertion.transitive_closure_sha256 = row.closure_sha256;
@@ -306,13 +349,25 @@ for (const fixture of externalMap.fixtures) {
                 testCommand: TEST_COMMAND,
                 greenResultText: "5 passed; 0 failed",
                 lockedSections: defaultLockedSections,
+                ownerPhase: assertion.phase,
+                scaffoldCommit: SCAFFOLD_COMMIT,
+                testParent: SCAFFOLD_COMMIT,
+                implementationParent: TEST_COMMIT,
+                reachability:
+                    "direct ancestry is verified when the recorded commit objects are available",
             });
         }
     }
 }
 
-for (const row of phaseARows) {
+for (const row of completedRows) {
     const coveredExisting = row.resolution === "verified-covered-existing";
+    const phaseBAtnSerialization = row.logical_id.startsWith(
+        "testatnserialization-",
+    );
+    if (row.owner_phase === "B" && !phaseBAtnSerialization) {
+        throw new Error(`missing Phase B evidence profile for ${row.logical_id}`);
+    }
     await addEvidence({
         logicalId: row.logical_id,
         revisionId: row.active_revision_id,
@@ -322,23 +377,53 @@ for (const row of phaseARows) {
         externalSource: null,
         primaryTestSource: row.primary_test_source,
         alternateTestSource: row.alternate_test_source,
-        declaredOutcomes: {
-            primary: coveredExisting
-                ? "the case-specific Rust port matches the pinned accepted and rejected syntax outcomes"
-                : "pinned source cases passed in the recorded JUnit/Vitest discovery or immutable fixture snapshot",
-            alternate:
-                "alternate source cases passed in the recorded runner discovery or generated oracle",
-            java_compatibility_verdict:
-                "Java-compatible syntax; antlr-ng supplies the canonical Phase A CST shape",
-        },
+        declaredOutcomes: phaseBAtnSerialization
+            ? {
+                  primary:
+                      "the complete direct Rust .interp matches the immutable Java 4.13.2 fixture",
+                  alternate:
+                      "the pinned antlr-ng TestATNSerialization case exposes the same ATN observable",
+                  java_compatibility_verdict:
+                      "exact Java 4.13.2 recognizer metadata and serialized ATN equality",
+              }
+            : {
+                  primary: coveredExisting
+                      ? "the case-specific Rust port matches the pinned accepted and rejected syntax outcomes"
+                      : "pinned source cases passed in the recorded JUnit/Vitest discovery or immutable fixture snapshot",
+                  alternate:
+                      "alternate source cases passed in the recorded runner discovery or generated oracle",
+                  java_compatibility_verdict:
+                      "Java-compatible syntax; antlr-ng supplies the canonical Phase A CST shape",
+              },
         resolution: row.resolution ?? "ported",
         testCommit: row.primary_test_commit,
         implementationCommit: row.primary_implementation_commit,
         testCommand: row.green_result.command,
         greenResultText: row.green_result.result,
-        lockedSections: coveredExisting
-            ? syntaxLockedSections
-            : defaultLockedSections,
+        lockedSections: phaseBAtnSerialization
+            ? atnSerializationLockedSections
+            : coveredExisting
+              ? syntaxLockedSections
+              : defaultLockedSections,
+        ownerPhase: row.owner_phase,
+        scaffoldCommit: phaseBAtnSerialization
+            ? PHASE_B_BASE_COMMIT
+            : SCAFFOLD_COMMIT,
+        testParent: phaseBAtnSerialization
+            ? PHASE_B_IMPLEMENTATION_COMMIT
+            : coveredExisting
+              ? FRONTEND_SYNTAX_TEST_PARENT
+              : SCAFFOLD_COMMIT,
+        implementationParent: phaseBAtnSerialization
+            ? PHASE_B_BASE_COMMIT
+            : coveredExisting
+              ? null
+              : TEST_COMMIT,
+        reachability: phaseBAtnSerialization
+            ? "the case-specific test commit is directly based on the existing Phase B implementation"
+            : coveredExisting
+              ? "the case-specific test passed against an implementation already present in its parent"
+              : "direct ancestry is verified when the recorded commit objects are available",
     });
 }
 
@@ -360,7 +445,7 @@ for (const [path, contents] of expectedFiles) {
 }
 
 console.log(
-    `${update ? "updated" : "verified"} ${phaseARows.length + Object.keys(EXTERNAL_DEFINITIONS).length} Phase A evidence ledgers`,
+    `${update ? "updated" : "verified"} ${completedRows.length + Object.keys(EXTERNAL_DEFINITIONS).length} completed evidence ledgers`,
 );
 
 async function addEvidence({
@@ -379,6 +464,11 @@ async function addEvidence({
     testCommand,
     greenResultText,
     lockedSections,
+    ownerPhase,
+    scaffoldCommit,
+    testParent,
+    implementationParent,
+    reachability,
 }) {
     const base = `tests/codegen-direct/port-evidence/${logicalId}`;
     const revisionBase = `${base}/revisions/${revisionId}`;
@@ -419,7 +509,9 @@ async function addEvidence({
             },
         ],
         escalation: coveredExisting
-            ? "not required because the case-specific test passed against the existing Phase A frontend"
+            ? ownerPhase === "A"
+                ? "not required because the case-specific test passed against the existing Phase A frontend"
+                : `not required because the case-specific test passed against the existing Phase ${ownerPhase} implementation`
             : "not required because the primary implementation passed the locked primary tests",
     };
     const oraclePath = `${revisionBase}/oracle-results/declared-sources.json`;
@@ -459,30 +551,22 @@ async function addEvidence({
         logical_id: logicalId,
         revision_id: revisionId,
         supersedes_revision_id: supersedesRevisionId,
-        owner_phase: "A",
+        owner_phase: ownerPhase,
         state: "done",
         ...(coveredExisting ? { resolution } : {}),
         closure,
         closure_sha256: closureHash,
         allowed_inputs: allowedInputs,
         commits: {
-            scaffold: SCAFFOLD_COMMIT,
+            scaffold: scaffoldCommit,
             primary_test: testCommit,
             primary_implementation: implementationCommit,
         },
-        ancestry: coveredExisting
-            ? {
-                  primary_test_parent: FRONTEND_SYNTAX_TEST_PARENT,
-                  primary_implementation_parent: null,
-                  reachability:
-                      "the case-specific test passed against an implementation already present in its parent",
-              }
-            : {
-                  primary_test_parent: SCAFFOLD_COMMIT,
-                  primary_implementation_parent: TEST_COMMIT,
-                  reachability:
-                      "direct ancestry is verified when the recorded commit objects are available",
-            },
+        ancestry: {
+            primary_test_parent: testParent,
+            primary_implementation_parent: implementationParent,
+            reachability,
+        },
         locked_oracle_sections: lockedSections,
         ...(coveredExisting
             ? {
@@ -569,6 +653,18 @@ function sectionAtMarker(text, marker) {
         throw new Error(`cannot find locked section marker ${marker}`);
     }
     return text.slice(offset);
+}
+
+function sectionBetweenMarkers(text, marker, endMarker) {
+    const offset = text.indexOf(marker);
+    if (offset < 0) {
+        throw new Error(`cannot find locked section marker ${marker}`);
+    }
+    const end = text.indexOf(endMarker, offset);
+    if (end < 0) {
+        throw new Error(`cannot find locked section end marker ${endMarker}`);
+    }
+    return text.slice(offset, end);
 }
 
 function warnMissingHistoricalSource(label, commit, path) {

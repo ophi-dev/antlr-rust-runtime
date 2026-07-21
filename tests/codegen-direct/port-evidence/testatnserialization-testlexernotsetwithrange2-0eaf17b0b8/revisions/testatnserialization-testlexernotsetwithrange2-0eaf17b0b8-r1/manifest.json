@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnserialization-testlexernotsetwithrange2-0eaf17b0b8",
+  "revision_id": "testatnserialization-testlexernotsetwithrange2-0eaf17b0b8-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "resolution": "verified-covered-existing",
+  "closure": {
+    "logical_id": "testatnserialization-testlexernotsetwithrange2-0eaf17b0b8",
+    "source_case_ids": [
+      "antlr-ng:testatnserialization-testlexernotsetwithrange2@e5f9674ba0ae",
+      "java-antlr:testatnserialization-testlexernotsetwithrange2@e5f9674ba0ae"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testatnserialization-testlexernotsetwithrange2-0eaf17b0b8/L.g4",
+      "tests/codegen-direct/fixtures/testatnserialization-testlexernotsetwithrange2-0eaf17b0b8/L.interp",
+      "tests/codegen-direct/fixtures/testatnserialization-testlexernotsetwithrange2-0eaf17b0b8/L.tokens",
+      "tests/codegen-direct/fixtures/testatnserialization-testlexernotsetwithrange2-0eaf17b0b8/fixture.json",
+      "tests/codegen-direct/fixtures/testatnserialization-testlexernotsetwithrange2-0eaf17b0b8/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testatnserialization-testlexernotsetwithrange2-0eaf17b0b8/oracle/java-antlr.stdout"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_not_set_with_range2::matches_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerNotSetWithRange2",
+    "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+    "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+    "resolution": "verified-covered-existing"
+  },
+  "closure_sha256": "fcee21abce08c0d3f42f26f0e16a76e9fb3ed80fae8a71d19c48a33342cdf742",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testatnserialization-testlexernotsetwithrange2@e5f9674ba0ae",
+      "path": "tests/TestATNSerialization.spec.ts",
+      "sha256": "e66e987e1dd70fbecda510c3929c19c7a3d7b4cdf5ab1859564a7067cb9bcc9f"
+    },
+    {
+      "source_case_id": "java-antlr:testatnserialization-testlexernotsetwithrange2@e5f9674ba0ae",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestATNSerialization.java",
+      "sha256": "10677d64d96a762304980adcb95b0cae5dee21dd16ab433ac5b46b5c0bb6d017"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnserialization-testlexernotsetwithrange2-0eaf17b0b8/L.g4",
+      "sha256": "b73d0343889524e34290d59ed31dc3b82be54f1f2de6de84f2f560a86f8f512b"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnserialization-testlexernotsetwithrange2-0eaf17b0b8/L.interp",
+      "sha256": "2b5e4e73d8ba57bd4908735dd15f0d913345c96b5f5f49497fe21dd02104730f"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnserialization-testlexernotsetwithrange2-0eaf17b0b8/L.tokens",
+      "sha256": "05e2fff4ffabf4e3b89a4096f749fc10a24a6739f8c96770a96860c3612eb3e6"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnserialization-testlexernotsetwithrange2-0eaf17b0b8/fixture.json",
+      "sha256": "c4d14b21be86761694a08b32b4b140d3d1b6b34d143931e51aebc5e56291ac0b"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnserialization-testlexernotsetwithrange2-0eaf17b0b8/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnserialization-testlexernotsetwithrange2-0eaf17b0b8/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "commits": {
+    "scaffold": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+    "primary_test": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+    "primary_implementation": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad"
+  },
+  "ancestry": {
+    "primary_test_parent": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+    "primary_implementation_parent": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+    "reachability": "the case-specific test commit is directly based on the existing Phase B implementation"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_atn_serialization {",
+      "end_marker": "\n    fn assert_lexer_fixture",
+      "sha256": "be571c0ccbfa94b5662543387e3b8eeb73709d9c984b5992d74827f5d426d5c6"
+    }
+  ],
+  "verified_covered_existing": {
+    "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+    "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+    "exit_code": 0,
+    "result": "36 passed; 0 failed",
+    "covering_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad"
+  },
+  "green_result": {
+    "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+    "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+    "exit_code": 0,
+    "result": "36 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testatnserialization-testlexernotsetwithrange2-0eaf17b0b8/revisions/testatnserialization-testlexernotsetwithrange2-0eaf17b0b8-r1/oracle-results/declared-sources.json",
+      "sha256": "3fd0e41e66e49c3f4decb3cf334dbcb6ff4d7f14febfde3235122ae285ccb28b"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testatnserialization-testlexernotsetwithrange2-0eaf17b0b8/revisions/testatnserialization-testlexernotsetwithrange2-0eaf17b0b8-r1/matrix-results/results.json",
+      "sha256": "0dede9261dd74f45f1eb4e75f4e6b5e35e5839064851a4d80ab052e01ff5593c"
+    }
+  ]
+}

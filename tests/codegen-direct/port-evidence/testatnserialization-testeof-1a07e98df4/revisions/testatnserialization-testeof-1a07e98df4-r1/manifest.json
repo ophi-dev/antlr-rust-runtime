@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnserialization-testeof-1a07e98df4",
+  "revision_id": "testatnserialization-testeof-1a07e98df4-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "resolution": "verified-covered-existing",
+  "closure": {
+    "logical_id": "testatnserialization-testeof-1a07e98df4",
+    "source_case_ids": [
+      "antlr-ng:testatnserialization-testeof@1e86876ba158",
+      "java-antlr:testatnserialization-testeof@1e86876ba158"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testatnserialization-testeof-1a07e98df4/T.g4",
+      "tests/codegen-direct/fixtures/testatnserialization-testeof-1a07e98df4/T.interp",
+      "tests/codegen-direct/fixtures/testatnserialization-testeof-1a07e98df4/T.tokens",
+      "tests/codegen-direct/fixtures/testatnserialization-testeof-1a07e98df4/diagnostics.json",
+      "tests/codegen-direct/fixtures/testatnserialization-testeof-1a07e98df4/fixture.json",
+      "tests/codegen-direct/fixtures/testatnserialization-testeof-1a07e98df4/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testatnserialization-testeof-1a07e98df4/oracle/java-antlr.stdout"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::eof::matches_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testEOF",
+    "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+    "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+    "resolution": "verified-covered-existing"
+  },
+  "closure_sha256": "dc2405c350564f465882ced9b67a32bdf152cb2cf5f47731bad91261ace583a2",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testatnserialization-testeof@1e86876ba158",
+      "path": "tests/TestATNSerialization.spec.ts",
+      "sha256": "e66e987e1dd70fbecda510c3929c19c7a3d7b4cdf5ab1859564a7067cb9bcc9f"
+    },
+    {
+      "source_case_id": "java-antlr:testatnserialization-testeof@1e86876ba158",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestATNSerialization.java",
+      "sha256": "10677d64d96a762304980adcb95b0cae5dee21dd16ab433ac5b46b5c0bb6d017"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnserialization-testeof-1a07e98df4/T.g4",
+      "sha256": "9097ebdf288e51c28e6f67be5358f9ab5b262fce1f7c5b81f3aab923bbeaf909"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnserialization-testeof-1a07e98df4/T.interp",
+      "sha256": "73031d921045c0aeaa65553af2e18565a01a1ad7bd3642f0620b94649ff37c07"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnserialization-testeof-1a07e98df4/T.tokens",
+      "sha256": "91d6a3d55e9fea7911c537afae6607c77fa8bc0f3a76c375e104ac5a8cfa84db"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnserialization-testeof-1a07e98df4/diagnostics.json",
+      "sha256": "9707210f6718963b76f625b95447361748f01560aa7f77955dd447be9f0ca66a"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnserialization-testeof-1a07e98df4/fixture.json",
+      "sha256": "f2d6d374fcb8254ae48dfd14ce02919a8947cdef8ef56019bc9c4f6f0699cdee"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnserialization-testeof-1a07e98df4/oracle/java-antlr.stderr",
+      "sha256": "60ea4bd0be50edbd4ddbbceae78cbcca1c3761d2d209e283ce99efa9a7d0566f"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnserialization-testeof-1a07e98df4/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "commits": {
+    "scaffold": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+    "primary_test": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+    "primary_implementation": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad"
+  },
+  "ancestry": {
+    "primary_test_parent": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+    "primary_implementation_parent": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+    "reachability": "the case-specific test commit is directly based on the existing Phase B implementation"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_atn_serialization {",
+      "end_marker": "\n    fn assert_lexer_fixture",
+      "sha256": "be571c0ccbfa94b5662543387e3b8eeb73709d9c984b5992d74827f5d426d5c6"
+    }
+  ],
+  "verified_covered_existing": {
+    "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+    "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+    "exit_code": 0,
+    "result": "36 passed; 0 failed",
+    "covering_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad"
+  },
+  "green_result": {
+    "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+    "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+    "exit_code": 0,
+    "result": "36 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testatnserialization-testeof-1a07e98df4/revisions/testatnserialization-testeof-1a07e98df4-r1/oracle-results/declared-sources.json",
+      "sha256": "af34dc2d1d32cd85807b59a18d0a78f291bcbb569a2d8c154dd65d98c15b7989"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testatnserialization-testeof-1a07e98df4/revisions/testatnserialization-testeof-1a07e98df4-r1/matrix-results/results.json",
+      "sha256": "803f927f71c0350d466856858569de73c178e0076677dc49beb1ed45e799ba59"
+    }
+  ]
+}

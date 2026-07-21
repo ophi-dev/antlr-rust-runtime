@@ -7698,8 +7698,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-test2modesinlexer-3039cb7f21-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-test2modesinlexer-3039cb7f21",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::two_modes_in_lexer::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -7720,8 +7721,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.test2ModesInLexer behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.test2ModesInLexer",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-test2modesinlexer-3039cb7f21",
         "source_case_ids": [
@@ -7729,14 +7743,25 @@
           "java-antlr:testatnserialization-test2modesinlexer@d704bafc9619"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-test2modesinlexer-3039cb7f21/L.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-test2modesinlexer-3039cb7f21/L.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-test2modesinlexer-3039cb7f21/L.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-test2modesinlexer-3039cb7f21/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-test2modesinlexer-3039cb7f21/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-test2modesinlexer-3039cb7f21/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-test2modesinlexer-3039cb7f21",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::two_modes_in_lexer::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.test2ModesInLexer behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.test2ModesInLexer",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "e312ab73b0667d09ddba57b2cc526c109f6b5767be20fed2a643101230634a55",
-      "evidence_path": null
+      "closure_sha256": "e564d1048cf1ea4fb813f365e185ad391397b843d0364292f46ba68026ef1a87",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-test2modesinlexer-3039cb7f21"
     },
     {
       "logical_id": "testatnserialization-test3alts-9c04d047af",
@@ -7750,8 +7775,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-test3alts-9c04d047af-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-test3alts-9c04d047af",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::three_alts::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -7772,8 +7798,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.test3Alts behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.test3Alts",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-test3alts-9c04d047af",
         "source_case_ids": [
@@ -7792,14 +7831,26 @@
             "rust_test": "grammar::atn::interp_test::tests::vscode_cpp14_combined_grammar_matches_java"
           }
         ],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-test3alts-9c04d047af/T.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-test3alts-9c04d047af/T.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-test3alts-9c04d047af/T.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-test3alts-9c04d047af/diagnostics.json",
+          "tests/codegen-direct/fixtures/testatnserialization-test3alts-9c04d047af/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-test3alts-9c04d047af/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-test3alts-9c04d047af/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-test3alts-9c04d047af",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::three_alts::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.test3Alts behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.test3Alts",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "86463a05f3ef96714d239781da5796df9d0b001f23fe6a3665ba5748bc9a7c93",
-      "evidence_path": null
+      "closure_sha256": "3f8c75d346fc64522f4946efa1388619f2b4ed59021cbc2e78bdd54c5182feac",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-test3alts-9c04d047af"
     },
     {
       "logical_id": "testatnserialization-testeof-1a07e98df4",
@@ -7811,8 +7862,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testeof-1a07e98df4-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testeof-1a07e98df4",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::eof::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -7833,8 +7885,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testEOF behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testEOF",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testeof-1a07e98df4",
         "source_case_ids": [
@@ -7842,14 +7907,26 @@
           "java-antlr:testatnserialization-testeof@1e86876ba158"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testeof-1a07e98df4/T.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testeof-1a07e98df4/T.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testeof-1a07e98df4/T.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testeof-1a07e98df4/diagnostics.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testeof-1a07e98df4/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testeof-1a07e98df4/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testeof-1a07e98df4/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testeof-1a07e98df4",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::eof::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testEOF behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testEOF",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "0e0732668f6f79fac08978ebb8091a4ee538dabce6fa8b39e38d77ae8ae3ec17",
-      "evidence_path": null
+      "closure_sha256": "dc2405c350564f465882ced9b67a32bdf152cb2cf5f47731bad91261ace583a2",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testeof-1a07e98df4"
     },
     {
       "logical_id": "testatnserialization-testeofinset-74204a5ce0",
@@ -7861,8 +7938,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testeofinset-74204a5ce0-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testeofinset-74204a5ce0",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::eof_in_set::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -7883,8 +7961,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testEOFInSet behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testEOFInSet",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testeofinset-74204a5ce0",
         "source_case_ids": [
@@ -7892,14 +7983,26 @@
           "java-antlr:testatnserialization-testeofinset@836974469751"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testeofinset-74204a5ce0/T.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testeofinset-74204a5ce0/T.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testeofinset-74204a5ce0/T.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testeofinset-74204a5ce0/diagnostics.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testeofinset-74204a5ce0/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testeofinset-74204a5ce0/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testeofinset-74204a5ce0/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testeofinset-74204a5ce0",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::eof_in_set::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testEOFInSet behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testEOFInSet",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "ac72d5dc5487c668cc3dc22fe57afb40a8cc1860da7be56aaaa1181278f422aa",
-      "evidence_path": null
+      "closure_sha256": "5ff91389f4576859e791efd62fe718601711931a4fe0a8f6992b1833c9b00c15",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testeofinset-74204a5ce0"
     },
     {
       "logical_id": "testatnserialization-testlexeraction-f8a3b073f1",
@@ -7911,8 +8014,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testlexeraction-f8a3b073f1-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexeraction-f8a3b073f1",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_action::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -7933,8 +8037,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testLexerAction behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerAction",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testlexeraction-f8a3b073f1",
         "source_case_ids": [
@@ -7942,14 +8059,25 @@
           "java-antlr:testatnserialization-testlexeraction@f6637035a909"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testlexeraction-f8a3b073f1/L.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexeraction-f8a3b073f1/L.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexeraction-f8a3b073f1/L.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexeraction-f8a3b073f1/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexeraction-f8a3b073f1/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexeraction-f8a3b073f1/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexeraction-f8a3b073f1",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_action::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testLexerAction behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerAction",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "9632b096152d43f9773ca16f80d8a0ddd9a78bc16935f9987500a8430137c5fa",
-      "evidence_path": null
+      "closure_sha256": "3ffe840537e41d335796d199d944ecce84500ff5b9cb78c8ff087e89beeb2e38",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testlexeraction-f8a3b073f1"
     },
     {
       "logical_id": "testatnserialization-testlexereof-d9c7a74fa3",
@@ -7961,8 +8089,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testlexereof-d9c7a74fa3-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexereof-d9c7a74fa3",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_eof::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -7983,8 +8112,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testLexerEOF behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerEOF",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testlexereof-d9c7a74fa3",
         "source_case_ids": [
@@ -7992,14 +8134,25 @@
           "java-antlr:testatnserialization-testlexereof@23d66d0d82f9"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testlexereof-d9c7a74fa3/L.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexereof-d9c7a74fa3/L.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexereof-d9c7a74fa3/L.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexereof-d9c7a74fa3/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexereof-d9c7a74fa3/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexereof-d9c7a74fa3/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexereof-d9c7a74fa3",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_eof::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testLexerEOF behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerEOF",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "15eeae0d8b2e5395b36a289e36dc9e1133863fc04cfc7b8f902351970ab3d687",
-      "evidence_path": null
+      "closure_sha256": "0752fb91977951533fd260ad579caef6c1ea90042fa40bc3326f07c62dbd23c0",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testlexereof-d9c7a74fa3"
     },
     {
       "logical_id": "testatnserialization-testlexereofinset-8834d9f1d9",
@@ -8011,8 +8164,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testlexereofinset-8834d9f1d9-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexereofinset-8834d9f1d9",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_eof_in_set::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -8033,8 +8187,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testLexerEOFInSet behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerEOFInSet",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testlexereofinset-8834d9f1d9",
         "source_case_ids": [
@@ -8042,14 +8209,25 @@
           "java-antlr:testatnserialization-testlexereofinset@bdd6c2a2ee04"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testlexereofinset-8834d9f1d9/L.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexereofinset-8834d9f1d9/L.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexereofinset-8834d9f1d9/L.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexereofinset-8834d9f1d9/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexereofinset-8834d9f1d9/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexereofinset-8834d9f1d9/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexereofinset-8834d9f1d9",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_eof_in_set::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testLexerEOFInSet behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerEOFInSet",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "6c0193e385aafbb3655ef9c636f20e40a63ba3d276f3305b7d19fa008ac35010",
-      "evidence_path": null
+      "closure_sha256": "a698d6ba11aed4cf0afdaf33319ba9d2b4849385f3a68723480727a4050b755e",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testlexereofinset-8834d9f1d9"
     },
     {
       "logical_id": "testatnserialization-testlexerloops-a28bd27385",
@@ -8061,8 +8239,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testlexerloops-a28bd27385-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerloops-a28bd27385",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_loops::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -8083,8 +8262,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testLexerLoops behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerLoops",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testlexerloops-a28bd27385",
         "source_case_ids": [
@@ -8092,14 +8284,25 @@
           "java-antlr:testatnserialization-testlexerloops@3ebbafc8f3f8"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerloops-a28bd27385/L.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerloops-a28bd27385/L.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerloops-a28bd27385/L.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerloops-a28bd27385/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerloops-a28bd27385/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerloops-a28bd27385/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerloops-a28bd27385",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_loops::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testLexerLoops behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerLoops",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "b5c2280bd25db452480d5ea8df97bd6fb0d81ec575d980749ecf4658af1d1802",
-      "evidence_path": null
+      "closure_sha256": "a5f84a0e0a4adeeab33d23dbb155166c79c2de01cacd838bcb926191c76b168d",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testlexerloops-a28bd27385"
     },
     {
       "logical_id": "testatnserialization-testlexernotliteral-3daee1c629",
@@ -8111,8 +8314,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testlexernotliteral-3daee1c629-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexernotliteral-3daee1c629",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_not_literal::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -8133,8 +8337,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testLexerNotLiteral behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerNotLiteral",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testlexernotliteral-3daee1c629",
         "source_case_ids": [
@@ -8142,14 +8359,25 @@
           "java-antlr:testatnserialization-testlexernotliteral@56fc84d65aa3"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testlexernotliteral-3daee1c629/L.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexernotliteral-3daee1c629/L.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexernotliteral-3daee1c629/L.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexernotliteral-3daee1c629/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexernotliteral-3daee1c629/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexernotliteral-3daee1c629/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexernotliteral-3daee1c629",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_not_literal::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testLexerNotLiteral behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerNotLiteral",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "28df9e30100a4096ad2854bd25d97c93708b86575d599086a002cc22ec887a54",
-      "evidence_path": null
+      "closure_sha256": "d07e569a1b58f842a81df720cb5d7675396aa61754283f474c4dc8e09c639e4b",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testlexernotliteral-3daee1c629"
     },
     {
       "logical_id": "testatnserialization-testlexernotset-36d16f4f79",
@@ -8161,8 +8389,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testlexernotset-36d16f4f79-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexernotset-36d16f4f79",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_not_set::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -8183,8 +8412,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testLexerNotSet behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerNotSet",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testlexernotset-36d16f4f79",
         "source_case_ids": [
@@ -8192,14 +8434,25 @@
           "java-antlr:testatnserialization-testlexernotset@510deb58b747"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testlexernotset-36d16f4f79/L.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexernotset-36d16f4f79/L.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexernotset-36d16f4f79/L.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexernotset-36d16f4f79/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexernotset-36d16f4f79/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexernotset-36d16f4f79/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexernotset-36d16f4f79",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_not_set::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testLexerNotSet behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerNotSet",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "9f1921789ad31fad7094f7fb36a6f53ca9e4500956419662e80f88ceb27c39b1",
-      "evidence_path": null
+      "closure_sha256": "9f9011524ee9f3c96b3fe5f851c6acb41c8e6d42f29218eb80c3ed54370254c1",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testlexernotset-36d16f4f79"
     },
     {
       "logical_id": "testatnserialization-testlexernotsetwithrange-f8651463b0",
@@ -8211,8 +8464,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testlexernotsetwithrange-f8651463b0-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexernotsetwithrange-f8651463b0",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_not_set_with_range::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -8233,8 +8487,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testLexerNotSetWithRange behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerNotSetWithRange",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testlexernotsetwithrange-f8651463b0",
         "source_case_ids": [
@@ -8242,14 +8509,25 @@
           "java-antlr:testatnserialization-testlexernotsetwithrange@28cb1c0226b4"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testlexernotsetwithrange-f8651463b0/L.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexernotsetwithrange-f8651463b0/L.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexernotsetwithrange-f8651463b0/L.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexernotsetwithrange-f8651463b0/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexernotsetwithrange-f8651463b0/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexernotsetwithrange-f8651463b0/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexernotsetwithrange-f8651463b0",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_not_set_with_range::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testLexerNotSetWithRange behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerNotSetWithRange",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "6978182cf6802f42503aea3291d6d7ec2e7fdd0b2c900c17372734f15e583e75",
-      "evidence_path": null
+      "closure_sha256": "2a7d26ecc36bb40958217e0dedab260ea934e5ffae2e0e7d232a411db29f3220",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testlexernotsetwithrange-f8651463b0"
     },
     {
       "logical_id": "testatnserialization-testlexernotsetwithrange2-0eaf17b0b8",
@@ -8261,8 +8539,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testlexernotsetwithrange2-0eaf17b0b8-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexernotsetwithrange2-0eaf17b0b8",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_not_set_with_range2::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -8283,8 +8562,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testLexerNotSetWithRange2 behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerNotSetWithRange2",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testlexernotsetwithrange2-0eaf17b0b8",
         "source_case_ids": [
@@ -8292,14 +8584,25 @@
           "java-antlr:testatnserialization-testlexernotsetwithrange2@e5f9674ba0ae"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testlexernotsetwithrange2-0eaf17b0b8/L.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexernotsetwithrange2-0eaf17b0b8/L.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexernotsetwithrange2-0eaf17b0b8/L.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexernotsetwithrange2-0eaf17b0b8/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexernotsetwithrange2-0eaf17b0b8/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexernotsetwithrange2-0eaf17b0b8/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexernotsetwithrange2-0eaf17b0b8",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_not_set_with_range2::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testLexerNotSetWithRange2 behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerNotSetWithRange2",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "d3047de72d2e9fc8b560be9df00f8d0f9283348ac2272e0f2d36ef1a84f0d3fa",
-      "evidence_path": null
+      "closure_sha256": "fcee21abce08c0d3f42f26f0e16a76e9fb3ed80fae8a71d19c48a33342cdf742",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testlexernotsetwithrange2-0eaf17b0b8"
     },
     {
       "logical_id": "testatnserialization-testlexerrange-02c072a36f",
@@ -8311,8 +8614,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testlexerrange-02c072a36f-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerrange-02c072a36f",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_range::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -8333,8 +8637,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testLexerRange behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerRange",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testlexerrange-02c072a36f",
         "source_case_ids": [
@@ -8342,14 +8659,25 @@
           "java-antlr:testatnserialization-testlexerrange@618b24aa35c7"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerrange-02c072a36f/L.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerrange-02c072a36f/L.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerrange-02c072a36f/L.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerrange-02c072a36f/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerrange-02c072a36f/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerrange-02c072a36f/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerrange-02c072a36f",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_range::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testLexerRange behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerRange",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "6b2fb1dd4987438334b4b41a37030f04b0df92c0bb581a110651d6e01f5ad600",
-      "evidence_path": null
+      "closure_sha256": "e8f8bbddee9b9c3a4baa435ee22abbe60d02820dc51018b17435f7aa80a1b7d4",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testlexerrange-02c072a36f"
     },
     {
       "logical_id": "testatnserialization-testlexersetwithrange-4f6560f50f",
@@ -8361,8 +8689,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testlexersetwithrange-4f6560f50f-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexersetwithrange-4f6560f50f",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_set_with_range::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -8383,8 +8712,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testLexerSetWithRange behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerSetWithRange",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testlexersetwithrange-4f6560f50f",
         "source_case_ids": [
@@ -8392,14 +8734,25 @@
           "java-antlr:testatnserialization-testlexersetwithrange@4ec9054e7207"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testlexersetwithrange-4f6560f50f/L.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexersetwithrange-4f6560f50f/L.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexersetwithrange-4f6560f50f/L.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexersetwithrange-4f6560f50f/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexersetwithrange-4f6560f50f/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexersetwithrange-4f6560f50f/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexersetwithrange-4f6560f50f",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_set_with_range::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testLexerSetWithRange behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerSetWithRange",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "99540ad28e79137658d995a814f8489b1920820ce6af0234816ee98db14c7602",
-      "evidence_path": null
+      "closure_sha256": "d582b217f2fda2063e849dbce5120249d0bee3dd67752c6ff7d41793b05c001a",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testlexersetwithrange-4f6560f50f"
     },
     {
       "logical_id": "testatnserialization-testlexertworules-1b3e930083",
@@ -8413,8 +8766,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testlexertworules-1b3e930083-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexertworules-1b3e930083",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_two_rules::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -8435,8 +8789,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testLexerTwoRules behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerTwoRules",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testlexertworules-1b3e930083",
         "source_case_ids": [
@@ -8455,14 +8822,25 @@
             "rust_test": "grammar::atn::interp_test::tests::vscode_alternate_meta_grammar_and_import_match_java"
           }
         ],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testlexertworules-1b3e930083/L.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexertworules-1b3e930083/L.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexertworules-1b3e930083/L.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexertworules-1b3e930083/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexertworules-1b3e930083/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexertworules-1b3e930083/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexertworules-1b3e930083",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_two_rules::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testLexerTwoRules behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerTwoRules",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "30f8ef4ed5976a0cb49a13b4540145cfbb643196b7d1d4351041bbb89b240af2",
-      "evidence_path": null
+      "closure_sha256": "ac72d5b315b70178ac9a7c245b994123092b9d1a7c77667927c0ebadc0893193",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testlexertworules-1b3e930083"
     },
     {
       "logical_id": "testatnserialization-testlexerunicodeescapedbmpnotset-d1fbc5a933",
@@ -8474,8 +8852,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testlexerunicodeescapedbmpnotset-d1fbc5a933-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpnotset-d1fbc5a933",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_unicode_escaped_bmp_not_set::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -8496,8 +8875,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testLexerUnicodeEscapedBMPNotSet behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerUnicodeEscapedBMPNotSet",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testlexerunicodeescapedbmpnotset-d1fbc5a933",
         "source_case_ids": [
@@ -8505,14 +8897,25 @@
           "java-antlr:testatnserialization-testlexerunicodeescapedbmpnotset@c958c6b6e2f8"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpnotset-d1fbc5a933/L.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpnotset-d1fbc5a933/L.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpnotset-d1fbc5a933/L.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpnotset-d1fbc5a933/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpnotset-d1fbc5a933/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpnotset-d1fbc5a933/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpnotset-d1fbc5a933",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_unicode_escaped_bmp_not_set::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testLexerUnicodeEscapedBMPNotSet behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerUnicodeEscapedBMPNotSet",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "8a72d2ed7f3c5306349dfdd81d5927f6f438caea4cfbb73f5f36c781420a32b9",
-      "evidence_path": null
+      "closure_sha256": "32ec2de8cc4b9653bc260f1c9dd6c44dbdee4b95ee9af10469ac792b5aee43a6",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testlexerunicodeescapedbmpnotset-d1fbc5a933"
     },
     {
       "logical_id": "testatnserialization-testlexerunicodeescapedbmpnotsetwithrange-0cc277891c",
@@ -8524,8 +8927,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testlexerunicodeescapedbmpnotsetwithrange-0cc277891c-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpnotsetwithrange-0cc277891c",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_unicode_escaped_bmp_not_set_with_range::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -8546,8 +8950,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testLexerUnicodeEscapedBMPNotSetWithRange behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerUnicodeEscapedBMPNotSetWithRange",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testlexerunicodeescapedbmpnotsetwithrange-0cc277891c",
         "source_case_ids": [
@@ -8555,14 +8972,25 @@
           "java-antlr:testatnserialization-testlexerunicodeescapedbmpnotsetwithrange@acb911268c8b"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpnotsetwithrange-0cc277891c/L.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpnotsetwithrange-0cc277891c/L.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpnotsetwithrange-0cc277891c/L.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpnotsetwithrange-0cc277891c/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpnotsetwithrange-0cc277891c/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpnotsetwithrange-0cc277891c/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpnotsetwithrange-0cc277891c",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_unicode_escaped_bmp_not_set_with_range::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testLexerUnicodeEscapedBMPNotSetWithRange behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerUnicodeEscapedBMPNotSetWithRange",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "65220d385331dadcd116f1d9e3daa19e8312a9cfdca4bf378b6fe69a3f00a801",
-      "evidence_path": null
+      "closure_sha256": "0ef49f8068dfe9e4be84894db58f0628874c563853f338c8edee2a615cdb8b8d",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testlexerunicodeescapedbmpnotsetwithrange-0cc277891c"
     },
     {
       "logical_id": "testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701",
@@ -8574,8 +9002,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_unicode_escaped_bmp_set_with_range::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -8596,8 +9025,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testLexerUnicodeEscapedBMPSetWithRange behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerUnicodeEscapedBMPSetWithRange",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701",
         "source_case_ids": [
@@ -8605,14 +9047,25 @@
           "java-antlr:testatnserialization-testlexerunicodeescapedbmpsetwithrange@3f0d721a4c24"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701/L.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701/L.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701/L.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_unicode_escaped_bmp_set_with_range::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testLexerUnicodeEscapedBMPSetWithRange behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerUnicodeEscapedBMPSetWithRange",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "9b55d9b5e2d298ff34ed2c7d968d081e415abf82932a29e3cd47ef5a005d5309",
-      "evidence_path": null
+      "closure_sha256": "eeb5006b944738cf9ab48cfa43c51e40c05929704ebbecfb8afe2ef09bfc7aee",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701"
     },
     {
       "logical_id": "testatnserialization-testlexerunicodeescapedsmpnotset-6be9938ee5",
@@ -8624,8 +9077,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testlexerunicodeescapedsmpnotset-6be9938ee5-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedsmpnotset-6be9938ee5",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_unicode_escaped_smp_not_set::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -8646,8 +9100,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testLexerUnicodeEscapedSMPNotSet behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerUnicodeEscapedSMPNotSet",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testlexerunicodeescapedsmpnotset-6be9938ee5",
         "source_case_ids": [
@@ -8655,14 +9122,25 @@
           "java-antlr:testatnserialization-testlexerunicodeescapedsmpnotset@b4882c77e0c2"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedsmpnotset-6be9938ee5/L.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedsmpnotset-6be9938ee5/L.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedsmpnotset-6be9938ee5/L.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedsmpnotset-6be9938ee5/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedsmpnotset-6be9938ee5/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedsmpnotset-6be9938ee5/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedsmpnotset-6be9938ee5",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_unicode_escaped_smp_not_set::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testLexerUnicodeEscapedSMPNotSet behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerUnicodeEscapedSMPNotSet",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "5c6415c871b96bc4752118f6207f52867cd3c820ccf9726cf0af4e0aa5af09a5",
-      "evidence_path": null
+      "closure_sha256": "6175fb5a5dc8df9d16cabddcebb04657435ccc45da85ef47f0fa5baa648a2215",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testlexerunicodeescapedsmpnotset-6be9938ee5"
     },
     {
       "logical_id": "testatnserialization-testlexerunicodeescapedsmpnotsetwithrange-4f8a23d048",
@@ -8674,8 +9152,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testlexerunicodeescapedsmpnotsetwithrange-4f8a23d048-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedsmpnotsetwithrange-4f8a23d048",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_unicode_escaped_smp_not_set_with_range::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -8696,8 +9175,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testLexerUnicodeEscapedSMPNotSetWithRange behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerUnicodeEscapedSMPNotSetWithRange",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testlexerunicodeescapedsmpnotsetwithrange-4f8a23d048",
         "source_case_ids": [
@@ -8705,14 +9197,25 @@
           "java-antlr:testatnserialization-testlexerunicodeescapedsmpnotsetwithrange@2cbcdbb034f4"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedsmpnotsetwithrange-4f8a23d048/L.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedsmpnotsetwithrange-4f8a23d048/L.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedsmpnotsetwithrange-4f8a23d048/L.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedsmpnotsetwithrange-4f8a23d048/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedsmpnotsetwithrange-4f8a23d048/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedsmpnotsetwithrange-4f8a23d048/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedsmpnotsetwithrange-4f8a23d048",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_unicode_escaped_smp_not_set_with_range::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testLexerUnicodeEscapedSMPNotSetWithRange behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerUnicodeEscapedSMPNotSetWithRange",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "c09387e79f637ce746261d4b66fd2e91fd12a404a70f93abe15c3a58d9e69b13",
-      "evidence_path": null
+      "closure_sha256": "c408ece929d4352a50940b6042b8b090a3cf85ae59a0c520ad1fe3a47cfd3aea",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testlexerunicodeescapedsmpnotsetwithrange-4f8a23d048"
     },
     {
       "logical_id": "testatnserialization-testlexerunicodeescapedsmpsetwithrange-285ba196a9",
@@ -8724,8 +9227,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testlexerunicodeescapedsmpsetwithrange-285ba196a9-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedsmpsetwithrange-285ba196a9",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_unicode_escaped_smp_set_with_range::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -8746,8 +9250,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testLexerUnicodeEscapedSMPSetWithRange behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerUnicodeEscapedSMPSetWithRange",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testlexerunicodeescapedsmpsetwithrange-285ba196a9",
         "source_case_ids": [
@@ -8755,14 +9272,25 @@
           "java-antlr:testatnserialization-testlexerunicodeescapedsmpsetwithrange@fd1f178f1b50"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedsmpsetwithrange-285ba196a9/L.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedsmpsetwithrange-285ba196a9/L.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedsmpsetwithrange-285ba196a9/L.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedsmpsetwithrange-285ba196a9/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedsmpsetwithrange-285ba196a9/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedsmpsetwithrange-285ba196a9/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedsmpsetwithrange-285ba196a9",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_unicode_escaped_smp_set_with_range::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testLexerUnicodeEscapedSMPSetWithRange behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerUnicodeEscapedSMPSetWithRange",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "7ce186fff9fc31922f30c9f4e9669268fe85bd911437fac301e6473f70420b99",
-      "evidence_path": null
+      "closure_sha256": "a1f765b194ac1896384de803e97b668a36148dcfe5e15c61ffe72d63411fe8dd",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testlexerunicodeescapedsmpsetwithrange-285ba196a9"
     },
     {
       "logical_id": "testatnserialization-testlexerunicodesmpandbmpsetserialized-146bb39ee2",
@@ -8776,8 +9304,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testlexerunicodesmpandbmpsetserialized-146bb39ee2-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerunicodesmpandbmpsetserialized-146bb39ee2",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_unicode_smp_and_bmp_set_serialized::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -8798,8 +9327,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testLexerUnicodeSMPAndBMPSetSerialized behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerUnicodeSMPAndBMPSetSerialized",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testlexerunicodesmpandbmpsetserialized-146bb39ee2",
         "source_case_ids": [
@@ -8818,14 +9360,25 @@
             "rust_test": "grammar::atn::interp_test::tests::vscode_odd_expr_large_atns_match_java_without_state_limit"
           }
         ],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodesmpandbmpsetserialized-146bb39ee2/L.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodesmpandbmpsetserialized-146bb39ee2/L.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodesmpandbmpsetserialized-146bb39ee2/L.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodesmpandbmpsetserialized-146bb39ee2/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodesmpandbmpsetserialized-146bb39ee2/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodesmpandbmpsetserialized-146bb39ee2/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerunicodesmpandbmpsetserialized-146bb39ee2",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_unicode_smp_and_bmp_set_serialized::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testLexerUnicodeSMPAndBMPSetSerialized behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerUnicodeSMPAndBMPSetSerialized",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "27a1c93cd97f8de6a9cd103df36a0a2e44b34ea32fea8cd36d9dada3b3ff3bf7",
-      "evidence_path": null
+      "closure_sha256": "c8885c7ada1913ac55887273ef66b5e1f55822ba0b70b6fa3c407f2391db4fdb",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testlexerunicodesmpandbmpsetserialized-146bb39ee2"
     },
     {
       "logical_id": "testatnserialization-testlexerunicodesmpliteralserializedtoset-e23baf8432",
@@ -8837,8 +9390,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testlexerunicodesmpliteralserializedtoset-e23baf8432-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerunicodesmpliteralserializedtoset-e23baf8432",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_unicode_smp_literal_serialized_to_set::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -8859,8 +9413,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testLexerUnicodeSMPLiteralSerializedToSet behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerUnicodeSMPLiteralSerializedToSet",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testlexerunicodesmpliteralserializedtoset-e23baf8432",
         "source_case_ids": [
@@ -8868,14 +9435,25 @@
           "java-antlr:testatnserialization-testlexerunicodesmpliteralserializedtoset@bb94697aecfb"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodesmpliteralserializedtoset-e23baf8432/L.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodesmpliteralserializedtoset-e23baf8432/L.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodesmpliteralserializedtoset-e23baf8432/L.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodesmpliteralserializedtoset-e23baf8432/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodesmpliteralserializedtoset-e23baf8432/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodesmpliteralserializedtoset-e23baf8432/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerunicodesmpliteralserializedtoset-e23baf8432",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_unicode_smp_literal_serialized_to_set::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testLexerUnicodeSMPLiteralSerializedToSet behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerUnicodeSMPLiteralSerializedToSet",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "bbd2712426bca3de7d56736be3f36831ec83a7c6fe36bd61627378d40b74f783",
-      "evidence_path": null
+      "closure_sha256": "46c5ddf2f19306325d17e47bad32166c22fb7e7459aab1e95a1b051fc7363f72",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testlexerunicodesmpliteralserializedtoset-e23baf8432"
     },
     {
       "logical_id": "testatnserialization-testlexerunicodesmprangeserializedtoset-500544d4bb",
@@ -8887,8 +9465,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testlexerunicodesmprangeserializedtoset-500544d4bb-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerunicodesmprangeserializedtoset-500544d4bb",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_unicode_smp_range_serialized_to_set::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -8909,8 +9488,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testLexerUnicodeSMPRangeSerializedToSet behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerUnicodeSMPRangeSerializedToSet",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testlexerunicodesmprangeserializedtoset-500544d4bb",
         "source_case_ids": [
@@ -8918,14 +9510,25 @@
           "java-antlr:testatnserialization-testlexerunicodesmprangeserializedtoset@3bfffd0795ee"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodesmprangeserializedtoset-500544d4bb/L.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodesmprangeserializedtoset-500544d4bb/L.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodesmprangeserializedtoset-500544d4bb/L.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodesmprangeserializedtoset-500544d4bb/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodesmprangeserializedtoset-500544d4bb/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodesmprangeserializedtoset-500544d4bb/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerunicodesmprangeserializedtoset-500544d4bb",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_unicode_smp_range_serialized_to_set::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testLexerUnicodeSMPRangeSerializedToSet behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerUnicodeSMPRangeSerializedToSet",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "50810720da1bacd1e6f370cc39230ebe32a7087c96844179b018734817106b5a",
-      "evidence_path": null
+      "closure_sha256": "061b9320a84727e5a429e9c359b28b9517b97f20f46b11a29bce5797d9b86331",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testlexerunicodesmprangeserializedtoset-500544d4bb"
     },
     {
       "logical_id": "testatnserialization-testlexerunicodeunescapedbmpnotset-8cc0c75996",
@@ -8937,8 +9540,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testlexerunicodeunescapedbmpnotset-8cc0c75996-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeunescapedbmpnotset-8cc0c75996",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_unicode_unescaped_bmp_not_set::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -8959,8 +9563,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testLexerUnicodeUnescapedBMPNotSet behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerUnicodeUnescapedBMPNotSet",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testlexerunicodeunescapedbmpnotset-8cc0c75996",
         "source_case_ids": [
@@ -8968,14 +9585,25 @@
           "java-antlr:testatnserialization-testlexerunicodeunescapedbmpnotset@7a48a889a115"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeunescapedbmpnotset-8cc0c75996/L.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeunescapedbmpnotset-8cc0c75996/L.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeunescapedbmpnotset-8cc0c75996/L.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeunescapedbmpnotset-8cc0c75996/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeunescapedbmpnotset-8cc0c75996/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeunescapedbmpnotset-8cc0c75996/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeunescapedbmpnotset-8cc0c75996",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_unicode_unescaped_bmp_not_set::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testLexerUnicodeUnescapedBMPNotSet behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerUnicodeUnescapedBMPNotSet",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "c3e79f5ea42038331232327740369df80a9175221732705067e639c997a105a7",
-      "evidence_path": null
+      "closure_sha256": "5498c705231c9f74b77742d7fe3debb51f68033a47f0f836de18affcc5df3772",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testlexerunicodeunescapedbmpnotset-8cc0c75996"
     },
     {
       "logical_id": "testatnserialization-testlexerunicodeunescapedbmpnotsetwithrange-2eab3c760f",
@@ -8987,8 +9615,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testlexerunicodeunescapedbmpnotsetwithrange-2eab3c760f-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeunescapedbmpnotsetwithrange-2eab3c760f",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_unicode_unescaped_bmp_not_set_with_range::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -9009,8 +9638,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testLexerUnicodeUnescapedBMPNotSetWithRange behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerUnicodeUnescapedBMPNotSetWithRange",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testlexerunicodeunescapedbmpnotsetwithrange-2eab3c760f",
         "source_case_ids": [
@@ -9018,14 +9660,25 @@
           "java-antlr:testatnserialization-testlexerunicodeunescapedbmpnotsetwithrange@d3d9217f196d"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeunescapedbmpnotsetwithrange-2eab3c760f/L.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeunescapedbmpnotsetwithrange-2eab3c760f/L.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeunescapedbmpnotsetwithrange-2eab3c760f/L.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeunescapedbmpnotsetwithrange-2eab3c760f/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeunescapedbmpnotsetwithrange-2eab3c760f/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeunescapedbmpnotsetwithrange-2eab3c760f/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeunescapedbmpnotsetwithrange-2eab3c760f",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_unicode_unescaped_bmp_not_set_with_range::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testLexerUnicodeUnescapedBMPNotSetWithRange behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerUnicodeUnescapedBMPNotSetWithRange",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "47b0a8d9e538d5226544fe9647297b692c24d7e1edc9517a119ec1c6ab31bb9d",
-      "evidence_path": null
+      "closure_sha256": "b6cd2cda48137c515b90c59f46e2e24b7400bf661d155a5cde3856d4d5e9a130",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testlexerunicodeunescapedbmpnotsetwithrange-2eab3c760f"
     },
     {
       "logical_id": "testatnserialization-testlexerunicodeunescapedbmpsetwithrange-a91b9ab9ec",
@@ -9037,8 +9690,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testlexerunicodeunescapedbmpsetwithrange-a91b9ab9ec-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeunescapedbmpsetwithrange-a91b9ab9ec",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_unicode_unescaped_bmp_set_with_range::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -9059,8 +9713,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testLexerUnicodeUnescapedBMPSetWithRange behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerUnicodeUnescapedBMPSetWithRange",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testlexerunicodeunescapedbmpsetwithrange-a91b9ab9ec",
         "source_case_ids": [
@@ -9068,14 +9735,25 @@
           "java-antlr:testatnserialization-testlexerunicodeunescapedbmpsetwithrange@a0bbc6d16dbf"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeunescapedbmpsetwithrange-a91b9ab9ec/L.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeunescapedbmpsetwithrange-a91b9ab9ec/L.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeunescapedbmpsetwithrange-a91b9ab9ec/L.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeunescapedbmpsetwithrange-a91b9ab9ec/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeunescapedbmpsetwithrange-a91b9ab9ec/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeunescapedbmpsetwithrange-a91b9ab9ec/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeunescapedbmpsetwithrange-a91b9ab9ec",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_unicode_unescaped_bmp_set_with_range::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testLexerUnicodeUnescapedBMPSetWithRange behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerUnicodeUnescapedBMPSetWithRange",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "67d0ba712a71cf9861fb2f24997993a6db3d802552c3572441a81baca595b3f7",
-      "evidence_path": null
+      "closure_sha256": "c9edf872c5f2ff0f3a9c6108e24d521cd16f61adac58119b68c9262302bcfaaf",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testlexerunicodeunescapedbmpsetwithrange-a91b9ab9ec"
     },
     {
       "logical_id": "testatnserialization-testlexerwildcardwithmode-76c46a8f0f",
@@ -9087,8 +9765,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testlexerwildcardwithmode-76c46a8f0f-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerwildcardwithmode-76c46a8f0f",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_wildcard_with_mode::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -9109,8 +9788,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testLexerWildcardWithMode behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerWildcardWithMode",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testlexerwildcardwithmode-76c46a8f0f",
         "source_case_ids": [
@@ -9118,14 +9810,25 @@
           "java-antlr:testatnserialization-testlexerwildcardwithmode@b89734f7a01a"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerwildcardwithmode-76c46a8f0f/L.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerwildcardwithmode-76c46a8f0f/L.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerwildcardwithmode-76c46a8f0f/L.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerwildcardwithmode-76c46a8f0f/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerwildcardwithmode-76c46a8f0f/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerwildcardwithmode-76c46a8f0f/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerwildcardwithmode-76c46a8f0f",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_wildcard_with_mode::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testLexerWildcardWithMode behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerWildcardWithMode",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "ad1136a14d8f6281dcd4051ef39e2b0f84466e01d7524758712e323a945c3094",
-      "evidence_path": null
+      "closure_sha256": "9b1e511c210405357ae7139aae2fa8e2a8c0f2f4fc17de14f8853c885853d582",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testlexerwildcardwithmode-76c46a8f0f"
     },
     {
       "logical_id": "testatnserialization-testlexerwith0xfffcinset-710d43c742",
@@ -9137,8 +9840,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testlexerwith0xfffcinset-710d43c742-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerwith0xfffcinset-710d43c742",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_with_0xfffc_in_set::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -9159,8 +9863,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testLexerWith0xFFFCInSet behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerWith0xFFFCInSet",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testlexerwith0xfffcinset-710d43c742",
         "source_case_ids": [
@@ -9168,14 +9885,25 @@
           "java-antlr:testatnserialization-testlexerwith0xfffcinset@4246de40dec8"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerwith0xfffcinset-710d43c742/L.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerwith0xfffcinset-710d43c742/L.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerwith0xfffcinset-710d43c742/L.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerwith0xfffcinset-710d43c742/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerwith0xfffcinset-710d43c742/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testlexerwith0xfffcinset-710d43c742/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testlexerwith0xfffcinset-710d43c742",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_with_0xfffc_in_set::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testLexerWith0xFFFCInSet behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerWith0xFFFCInSet",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "986cb47139b0500f6a1a8c0911c1762030b1082f28fdd4c4eb10943ad0a5e866",
-      "evidence_path": null
+      "closure_sha256": "9c26bfbd43b5697e1281d686a4dfa84e224fbbdd26d353b85118e315b43801d2",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testlexerwith0xfffcinset-710d43c742"
     },
     {
       "logical_id": "testatnserialization-testmodeinlexer-01129db88a",
@@ -9189,8 +9917,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testmodeinlexer-01129db88a-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testmodeinlexer-01129db88a",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::mode_in_lexer::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -9211,8 +9940,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testModeInLexer behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testModeInLexer",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testmodeinlexer-01129db88a",
         "source_case_ids": [
@@ -9231,14 +9973,25 @@
             "rust_test": "grammar::atn::interp_test::tests::vscode_split_grammar_matches_java"
           }
         ],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testmodeinlexer-01129db88a/L.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testmodeinlexer-01129db88a/L.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testmodeinlexer-01129db88a/L.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testmodeinlexer-01129db88a/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testmodeinlexer-01129db88a/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testmodeinlexer-01129db88a/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testmodeinlexer-01129db88a",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::mode_in_lexer::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testModeInLexer behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testModeInLexer",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "e1a65daf43c080dac3c5df2f23481cb285762e14e60413a8ec498cfe8e1b8bb4",
-      "evidence_path": null
+      "closure_sha256": "1c8dc73cbc42f9d4c17b08fc14f19bcc152d315aee7d1ce31bc1d67f878c30d9",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testmodeinlexer-01129db88a"
     },
     {
       "logical_id": "testatnserialization-testnot-ed1dd74e70",
@@ -9250,8 +10003,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testnot-ed1dd74e70-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testnot-ed1dd74e70",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::not::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -9272,8 +10026,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testNot behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testNot",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testnot-ed1dd74e70",
         "source_case_ids": [
@@ -9281,14 +10048,25 @@
           "java-antlr:testatnserialization-testnot@9bb68b481832"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testnot-ed1dd74e70/T.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testnot-ed1dd74e70/T.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testnot-ed1dd74e70/T.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testnot-ed1dd74e70/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testnot-ed1dd74e70/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testnot-ed1dd74e70/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testnot-ed1dd74e70",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::not::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testNot behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testNot",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "8fbfe8d584ad79c969eeb28f5973636f471fd849aaca89ba9576763225dfa9be",
-      "evidence_path": null
+      "closure_sha256": "5ae96b90bfebe319414c67d64650bdcf60ced6c8df4e9aea62f830aef6e9ed41",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testnot-ed1dd74e70"
     },
     {
       "logical_id": "testatnserialization-testpegachillesheel-72c27bc08f",
@@ -9300,8 +10078,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testpegachillesheel-72c27bc08f-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testpegachillesheel-72c27bc08f",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::peg_achilles_heel::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -9322,8 +10101,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testPEGAchillesHeel behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testPEGAchillesHeel",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testpegachillesheel-72c27bc08f",
         "source_case_ids": [
@@ -9331,14 +10123,26 @@
           "java-antlr:testatnserialization-testpegachillesheel@6cb7d9c1a9dc"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testpegachillesheel-72c27bc08f/T.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testpegachillesheel-72c27bc08f/T.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testpegachillesheel-72c27bc08f/T.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testpegachillesheel-72c27bc08f/diagnostics.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testpegachillesheel-72c27bc08f/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testpegachillesheel-72c27bc08f/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testpegachillesheel-72c27bc08f/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testpegachillesheel-72c27bc08f",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::peg_achilles_heel::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testPEGAchillesHeel behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testPEGAchillesHeel",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "683d4ae16caf13b131076fb200642e923c6f678977c10168cd05f4d3e61a4613",
-      "evidence_path": null
+      "closure_sha256": "07fbc7e315e370eb21661868fc2de1316ef66ac48c8faeed423a4009df62534a",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testpegachillesheel-72c27bc08f"
     },
     {
       "logical_id": "testatnserialization-testruleref-2d16d8280e",
@@ -9350,8 +10154,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testruleref-2d16d8280e-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testruleref-2d16d8280e",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::rule_ref::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -9372,8 +10177,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testRuleRef behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testRuleRef",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testruleref-2d16d8280e",
         "source_case_ids": [
@@ -9381,14 +10199,26 @@
           "java-antlr:testatnserialization-testruleref@b2f2330ae34c"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testruleref-2d16d8280e/T.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testruleref-2d16d8280e/T.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testruleref-2d16d8280e/T.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testruleref-2d16d8280e/diagnostics.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testruleref-2d16d8280e/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testruleref-2d16d8280e/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testruleref-2d16d8280e/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testruleref-2d16d8280e",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::rule_ref::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testRuleRef behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testRuleRef",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "2d6893b44169d58ae66e8dc6e2645d62ee921b5945b8a601a06ab398e8d3baf6",
-      "evidence_path": null
+      "closure_sha256": "90983941c743deaab75269351496fc5f6afea32db473461cb52185be5c12fb04",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testruleref-2d16d8280e"
     },
     {
       "logical_id": "testatnserialization-testsimpleloop-1e309afd1c",
@@ -9400,8 +10230,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testsimpleloop-1e309afd1c-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testsimpleloop-1e309afd1c",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::simple_loop::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -9422,8 +10253,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testSimpleLoop behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testSimpleLoop",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testsimpleloop-1e309afd1c",
         "source_case_ids": [
@@ -9431,14 +10275,26 @@
           "java-antlr:testatnserialization-testsimpleloop@92764ff0d508"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testsimpleloop-1e309afd1c/T.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testsimpleloop-1e309afd1c/T.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testsimpleloop-1e309afd1c/T.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testsimpleloop-1e309afd1c/diagnostics.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testsimpleloop-1e309afd1c/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testsimpleloop-1e309afd1c/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testsimpleloop-1e309afd1c/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testsimpleloop-1e309afd1c",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::simple_loop::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testSimpleLoop behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testSimpleLoop",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "82cb06dfa1d17734bf09604dc66d7864a4f7df28d3a5158c702552bb0e94adf4",
-      "evidence_path": null
+      "closure_sha256": "44aa5985fe31b514d094d5e83cbbb53cad326de1e17c97e9be6ed3ef6aa97e52",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testsimpleloop-1e309afd1c"
     },
     {
       "logical_id": "testatnserialization-testsimplenoblock-a3dba6abcf",
@@ -9450,8 +10306,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testsimplenoblock-a3dba6abcf-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testsimplenoblock-a3dba6abcf",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::simple_no_block::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -9472,8 +10329,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testSimpleNoBlock behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testSimpleNoBlock",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testsimplenoblock-a3dba6abcf",
         "source_case_ids": [
@@ -9481,14 +10351,26 @@
           "java-antlr:testatnserialization-testsimplenoblock@d095fd2c1440"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testsimplenoblock-a3dba6abcf/T.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testsimplenoblock-a3dba6abcf/T.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testsimplenoblock-a3dba6abcf/T.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testsimplenoblock-a3dba6abcf/diagnostics.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testsimplenoblock-a3dba6abcf/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testsimplenoblock-a3dba6abcf/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testsimplenoblock-a3dba6abcf/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testsimplenoblock-a3dba6abcf",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::simple_no_block::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testSimpleNoBlock behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testSimpleNoBlock",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "58463b546482047014a529ab2e19395c842c773665aa912224c5f7f0f87dd33b",
-      "evidence_path": null
+      "closure_sha256": "c02c30ad7e8e06ac232f402e7d57b0490fdaadb1e356ce102886d123cbcaa41c",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testsimplenoblock-a3dba6abcf"
     },
     {
       "logical_id": "testatnserialization-testwildcard-bc7511076a",
@@ -9500,8 +10382,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnserialization-testwildcard-bc7511076a-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testwildcard-bc7511076a",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::wildcard::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -9522,8 +10405,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNSerialization.testWildcard behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testWildcard",
+      "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+      "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "exit_code": 0,
+        "result": "36 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+        "result": "36 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnserialization-testwildcard-bc7511076a",
         "source_case_ids": [
@@ -9531,14 +10427,25 @@
           "java-antlr:testatnserialization-testwildcard@ed72fdcc8250"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnserialization-testwildcard-bc7511076a/T.g4",
+          "tests/codegen-direct/fixtures/testatnserialization-testwildcard-bc7511076a/T.interp",
+          "tests/codegen-direct/fixtures/testatnserialization-testwildcard-bc7511076a/T.tokens",
+          "tests/codegen-direct/fixtures/testatnserialization-testwildcard-bc7511076a/fixture.json",
+          "tests/codegen-direct/fixtures/testatnserialization-testwildcard-bc7511076a/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnserialization-testwildcard-bc7511076a/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnserialization-testwildcard-bc7511076a",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::wildcard::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNSerialization.testWildcard behavior"
+        "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testWildcard",
+        "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+        "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "c5fb14f24261c9bd764b4dfe5144558815755bb6243ee04c51f7af45af8aa24a",
-      "evidence_path": null
+      "closure_sha256": "03a5cc846ac5246c4e812faec15fa8c52b3c3363d6dc31dbbb3718ea5a31aea7",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnserialization-testwildcard-bc7511076a"
     },
     {
       "logical_id": "testattributechecks-testbadinlineactions-6f6958e1f6",

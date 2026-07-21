@@ -7,10 +7,13 @@ import { spawnSync } from "node:child_process";
 
 import {
     ANTLR_NG_COMMIT,
+    ATN_SERIALIZATION_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_PARENT,
     IMPLEMENTATION_COMMIT,
     JAVA_COMMIT,
+    PHASE_B_BASE_COMMIT,
+    PHASE_B_IMPLEMENTATION_COMMIT,
     SCAFFOLD_COMMIT,
     TEST_COMMIT,
     digest,
@@ -45,7 +48,7 @@ const externalSources = new Map(
 );
 
 for (const row of testMap.rows ?? []) {
-    if (row.disposition === "port" && row.owner_phase === "A") {
+    if (row.disposition === "port" && row.tdd_state === "done") {
         records.set(row.logical_id, {
             revisionId: row.active_revision_id,
             closure: row.closure,
@@ -54,6 +57,7 @@ for (const row of testMap.rows ?? []) {
             resolution: row.resolution ?? "ported",
             testCommit: row.primary_test_commit,
             implementationCommit: row.primary_implementation_commit,
+            ownerPhase: row.owner_phase,
         });
     }
 }
@@ -68,6 +72,7 @@ for (const fixture of externalMap.fixtures ?? []) {
                 resolution: "ported",
                 testCommit: TEST_COMMIT,
                 implementationCommit: IMPLEMENTATION_COMMIT,
+                ownerPhase: assertion.phase,
             });
         }
     }
@@ -80,7 +85,7 @@ const actualDirectories = (await readdir(evidenceRoot, { withFileTypes: true }))
 const expectedDirectories = [...records.keys()].sort();
 expect(
     JSON.stringify(actualDirectories) === JSON.stringify(expectedDirectories),
-    "port-evidence directories do not exactly match active Phase A records",
+    "port-evidence directories do not exactly match completed active records",
 );
 
 const globalRevisionIds = new Set();
@@ -168,9 +173,9 @@ for (const [logicalId, record] of records) {
         for (const section of manifest.locked_oracle_sections ?? []) {
             const activeRevision = revision.revision_id === record.revisionId;
             if (activeRevision) {
-                const checkedIn = sectionAtMarker(
+                const checkedIn = lockedSection(
                     await readFile(resolve(repoRoot, section.path), "utf8"),
-                    section.marker,
+                    section,
                 );
                 expect(
                     digest(checkedIn) === section.sha256,
@@ -188,7 +193,7 @@ for (const [logicalId, record] of records) {
                 section.path,
             );
             if (testSource !== null) {
-                const locked = sectionAtMarker(testSource, section.marker);
+                const locked = lockedSection(testSource, section);
                 expect(
                     digest(locked) === section.sha256,
                     `${logicalId} historical locked oracle section hash differs`,
@@ -197,9 +202,9 @@ for (const [logicalId, record] of records) {
                     (manifest.resolution ?? "ported") === "ported" &&
                     implementationSource !== null
                 ) {
-                    const afterImplementation = sectionAtMarker(
+                    const afterImplementation = lockedSection(
                         implementationSource,
-                        section.marker,
+                        section,
                     );
                     expect(
                         locked === afterImplementation,
@@ -213,24 +218,48 @@ for (const [logicalId, record] of records) {
             ["ported", "verified-covered-existing"].includes(resolution),
             `${logicalId} manifest resolution is invalid`,
         );
+        expect(
+            manifest.owner_phase === record.ownerPhase,
+            `${logicalId} manifest owner phase differs`,
+        );
         if (resolution === "verified-covered-existing") {
-            expect(
-                manifest.commits.scaffold === SCAFFOLD_COMMIT &&
-                    manifest.commits.primary_test === FRONTEND_SYNTAX_TEST_COMMIT &&
-                    manifest.commits.primary_implementation ===
-                        IMPLEMENTATION_COMMIT,
-                `${logicalId} covered-existing commit identities differ`,
-            );
-            expect(
-                manifest.ancestry.primary_test_parent ===
-                    FRONTEND_SYNTAX_TEST_PARENT &&
-                    manifest.ancestry.primary_implementation_parent === null,
-                `${logicalId} covered-existing ancestry differs`,
-            );
+            if (manifest.owner_phase === "B") {
+                expect(
+                    manifest.commits.scaffold === PHASE_B_BASE_COMMIT &&
+                        manifest.commits.primary_test ===
+                            ATN_SERIALIZATION_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            PHASE_B_IMPLEMENTATION_COMMIT,
+                    `${logicalId} Phase B covered-existing commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            PHASE_B_IMPLEMENTATION_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            PHASE_B_BASE_COMMIT,
+                    `${logicalId} Phase B covered-existing ancestry differs`,
+                );
+            } else {
+                expect(
+                    manifest.commits.scaffold === SCAFFOLD_COMMIT &&
+                        manifest.commits.primary_test ===
+                            FRONTEND_SYNTAX_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            IMPLEMENTATION_COMMIT,
+                    `${logicalId} covered-existing commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            FRONTEND_SYNTAX_TEST_PARENT &&
+                        manifest.ancestry.primary_implementation_parent === null,
+                    `${logicalId} covered-existing ancestry differs`,
+                );
+            }
             expect(
                 manifest.verified_covered_existing?.exit_code === 0 &&
                     manifest.verified_covered_existing
-                        ?.covering_implementation_commit === IMPLEMENTATION_COMMIT &&
+                        ?.covering_implementation_commit ===
+                        manifest.commits.primary_implementation &&
                     manifest.green_result?.exit_code === 0,
                 `${logicalId} lacks covered-existing execution evidence`,
             );
@@ -305,6 +334,26 @@ if (frontendSyntaxTestParent !== null) {
         "frontend syntax test commit has an unexpected parent",
     );
 }
+const atnSerializationTestParent = gitOptional([
+    "rev-parse",
+    `${ATN_SERIALIZATION_TEST_COMMIT}^`,
+]);
+if (atnSerializationTestParent !== null) {
+    expect(
+        atnSerializationTestParent.trim() === PHASE_B_IMPLEMENTATION_COMMIT,
+        "ATN serialization test commit is not based on the Phase B implementation",
+    );
+}
+const phaseBImplementationParent = gitOptional([
+    "rev-parse",
+    `${PHASE_B_IMPLEMENTATION_COMMIT}^`,
+]);
+if (phaseBImplementationParent !== null) {
+    expect(
+        phaseBImplementationParent.trim() === PHASE_B_BASE_COMMIT,
+        "Phase B implementation commit has an unexpected parent",
+    );
+}
 
 expect(
     differences.java_antlr_commit === JAVA_COMMIT,
@@ -316,7 +365,7 @@ expect(
 );
 expect(
     Array.isArray(differences.differences) && differences.differences.length === 0,
-    "Phase A has unreviewed or unexpected approved differences",
+    "active phases have unreviewed or unexpected approved differences",
 );
 
 if (failures.length > 0) {
@@ -451,6 +500,23 @@ function sectionAtMarker(text, marker) {
         throw new Error(`cannot find locked section marker ${marker}`);
     }
     return text.slice(offset);
+}
+
+function lockedSection(text, section) {
+    if (!section.end_marker) {
+        return sectionAtMarker(text, section.marker);
+    }
+    const offset = text.indexOf(section.marker);
+    if (offset < 0) {
+        throw new Error(`cannot find locked section marker ${section.marker}`);
+    }
+    const end = text.indexOf(section.end_marker, offset);
+    if (end < 0) {
+        throw new Error(
+            `cannot find locked section end marker ${section.end_marker}`,
+        );
+    }
+    return text.slice(offset, end);
 }
 
 function expect(condition, message) {

@@ -137,7 +137,7 @@
           "tdd_owner": "upstream:testatnserialization-testlexertworules-1b3e930083",
           "rust_test": "grammar::atn::interp_test::tests::vscode_alternate_meta_grammar_and_import_match_java",
           "upstream_active_revision_id": "testatnserialization-testlexertworules-1b3e930083-r1",
-          "transitive_closure_sha256": "30f8ef4ed5976a0cb49a13b4540145cfbb643196b7d1d4351041bbb89b240af2"
+          "transitive_closure_sha256": "ac72d5b315b70178ac9a7c245b994123092b9d1a7c77667927c0ebadc0893193"
         }
       ]
     },
@@ -177,7 +177,7 @@
           "tdd_owner": "upstream:testatnserialization-test3alts-9c04d047af",
           "rust_test": "grammar::atn::interp_test::tests::vscode_cpp14_combined_grammar_matches_java",
           "upstream_active_revision_id": "testatnserialization-test3alts-9c04d047af-r1",
-          "transitive_closure_sha256": "86463a05f3ef96714d239781da5796df9d0b001f23fe6a3665ba5748bc9a7c93"
+          "transitive_closure_sha256": "3f8c75d346fc64522f4946efa1388619f2b4ed59021cbc2e78bdd54c5182feac"
         }
       ]
     },
@@ -215,7 +215,7 @@
           "tdd_owner": "upstream:testatnserialization-testlexerunicodesmpandbmpsetserialized-146bb39ee2",
           "rust_test": "grammar::atn::interp_test::tests::vscode_odd_expr_large_atns_match_java_without_state_limit",
           "upstream_active_revision_id": "testatnserialization-testlexerunicodesmpandbmpsetserialized-146bb39ee2-r1",
-          "transitive_closure_sha256": "27a1c93cd97f8de6a9cd103df36a0a2e44b34ea32fea8cd36d9dada3b3ff3bf7"
+          "transitive_closure_sha256": "c8885c7ada1913ac55887273ef66b5e1f55822ba0b70b6fa3c407f2391db4fdb"
         }
       ]
     },
@@ -254,7 +254,7 @@
           "tdd_owner": "upstream:testatnserialization-testmodeinlexer-01129db88a",
           "rust_test": "grammar::atn::interp_test::tests::vscode_split_grammar_matches_java",
           "upstream_active_revision_id": "testatnserialization-testmodeinlexer-01129db88a-r1",
-          "transitive_closure_sha256": "e1a65daf43c080dac3c5df2f23481cb285762e14e60413a8ec498cfe8e1b8bb4"
+          "transitive_closure_sha256": "1c8dc73cbc42f9d4c17b08fc14f19bcc152d315aee7d1ce31bc1d67f878c30d9"
         }
       ]
     },
