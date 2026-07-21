@@ -23,6 +23,9 @@ import {
     PHASE_B_IMPLEMENTATION_COMMIT,
     SCAFFOLD_COMMIT,
     TEST_COMMIT,
+    TOKEN_POSITION_BASE_COMMIT,
+    TOKEN_POSITION_IMPLEMENTATION_COMMIT,
+    TOKEN_POSITION_TEST_COMMIT,
     digest,
     parseMode,
     stableStringify,
@@ -101,6 +104,47 @@ const ERROR_SETS_PORTS = new Map([
                 "grammar::atn::interp_test::tests::upstream_error_sets::not_char_set_with_string_matches_java",
             redFingerprint:
                 "expected G4S066 at the lexer-set member, but the compiler emitted G4L002 for the enclosing set",
+        },
+    ],
+]);
+const TOKEN_POSITION_TEST_COMMAND =
+    "cargo test --locked --bin antlr4-rust-gen upstream_token_position_options -- --test-threads=1";
+const TOKEN_POSITION_PORTS = new Map([
+    [
+        "testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91",
+        {
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_token_position_options::left_recursion_rewrite_matches_java",
+            resolution: "verified-covered-existing",
+            implementationCommit: TOKEN_POSITION_BASE_COMMIT,
+            testCommand:
+                "cargo test --locked --bin antlr4-rust-gen upstream_token_position_options::left_recursion_rewrite_matches_java -- --test-threads=1",
+            greenResult: "1 passed; 0 failed",
+        },
+    ],
+    [
+        "testtokenpositionoptions-testleftrecursionwithlabels-6e604809f0",
+        {
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_token_position_options::left_recursion_with_labels_matches_java",
+            resolution: "ported",
+            implementationCommit: TOKEN_POSITION_IMPLEMENTATION_COMMIT,
+            testCommand: TOKEN_POSITION_TEST_COMMAND,
+            greenResult: "3 passed; 0 failed",
+            redFingerprint:
+                "labeled rule and token references retained the label starts 33 and 59 instead of the Java target starts 35 and 61",
+        },
+    ],
+    [
+        "testtokenpositionoptions-testleftrecursionwithset-57f72a753d",
+        {
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_token_position_options::left_recursion_with_set_matches_java",
+            resolution: "verified-covered-existing",
+            implementationCommit: TOKEN_POSITION_BASE_COMMIT,
+            testCommand:
+                "cargo test --locked --bin antlr4-rust-gen upstream_token_position_options::left_recursion_with_set_matches_java -- --test-threads=1",
+            greenResult: "1 passed; 0 failed",
         },
     ],
 ]);
@@ -586,8 +630,11 @@ function completedPhaseBRow(
               : completed.kind === "error-sets"
                 ? `direct Rust lexer-set diagnostics match Java 4.13.2 exactly ` +
                   `for ${cases[0].suite}.${cases[0].name}`
-                : `direct Rust semantic diagnostics match Java 4.13.2 exactly ` +
-                  `for ${cases[0].suite}.${cases[0].name}`;
+                : completed.kind === "token-position-options"
+                  ? `direct Rust left-recursion source bindings and .interp match ` +
+                    `Java 4.13.2 for ${cases[0].suite}.${cases[0].name}`
+                  : `direct Rust semantic diagnostics match Java 4.13.2 exactly ` +
+                    `for ${cases[0].suite}.${cases[0].name}`;
     const coveredExisting =
         completed.resolution === "verified-covered-existing";
     const closure = {
@@ -759,8 +806,22 @@ async function loadCompletedPhaseBPorts() {
             redFingerprint: definition.redFingerprint,
         });
     }
-    if (ports.size !== 81) {
-        throw new Error(`expected 81 completed Phase B ports, found ${ports.size}`);
+    for (const [logicalId, definition] of TOKEN_POSITION_PORTS) {
+        ports.set(logicalId, {
+            fixturePaths: await fixturePaths(logicalId),
+            rustTest: definition.rustTest,
+            kind: "token-position-options",
+            resolution: definition.resolution,
+            scaffoldCommit: TOKEN_POSITION_BASE_COMMIT,
+            testCommit: TOKEN_POSITION_TEST_COMMIT,
+            implementationCommit: definition.implementationCommit,
+            testCommand: definition.testCommand,
+            greenResult: definition.greenResult,
+            redFingerprint: definition.redFingerprint,
+        });
+    }
+    if (ports.size !== 84) {
+        throw new Error(`expected 84 completed Phase B ports, found ${ports.size}`);
     }
     return ports;
 }

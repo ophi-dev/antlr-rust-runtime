@@ -25,6 +25,9 @@ import {
     PHASE_B_IMPLEMENTATION_COMMIT,
     SCAFFOLD_COMMIT,
     TEST_COMMIT,
+    TOKEN_POSITION_BASE_COMMIT,
+    TOKEN_POSITION_IMPLEMENTATION_COMMIT,
+    TOKEN_POSITION_TEST_COMMIT,
     digest,
     gitShowOptional,
     stableStringify,
@@ -243,6 +246,9 @@ for (const [logicalId, record] of records) {
         const errorSets = logicalId.startsWith(
             "testerrorsets-",
         );
+        const tokenPosition = logicalId.startsWith(
+            "testtokenpositionoptions-",
+        );
         if (resolution === "verified-covered-existing") {
             if (atnSerialization) {
                 expect(
@@ -276,6 +282,23 @@ for (const [logicalId, record] of records) {
                         manifest.ancestry.primary_implementation_parent ===
                             PHASE_B_BASE_COMMIT,
                     `${logicalId} ATN construction covered-existing ancestry differs`,
+                );
+            } else if (tokenPosition) {
+                expect(
+                    manifest.commits.scaffold ===
+                            TOKEN_POSITION_BASE_COMMIT &&
+                        manifest.commits.primary_test ===
+                            TOKEN_POSITION_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            TOKEN_POSITION_BASE_COMMIT,
+                    `${logicalId} token position covered-existing commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            TOKEN_POSITION_BASE_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            ERROR_SETS_IMPLEMENTATION_COMMIT,
+                    `${logicalId} token position covered-existing ancestry differs`,
                 );
             } else {
                 expect(
@@ -351,6 +374,23 @@ for (const [logicalId, record] of records) {
                         manifest.ancestry.primary_implementation_parent ===
                             ERROR_SETS_TEST_COMMIT,
                     `${logicalId} lexer set recorded ancestry differs`,
+                );
+            } else if (tokenPosition) {
+                expect(
+                    manifest.commits.scaffold ===
+                            TOKEN_POSITION_BASE_COMMIT &&
+                        manifest.commits.primary_test ===
+                            TOKEN_POSITION_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            TOKEN_POSITION_IMPLEMENTATION_COMMIT,
+                    `${logicalId} token position evidence commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            TOKEN_POSITION_BASE_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            TOKEN_POSITION_TEST_COMMIT,
+                    `${logicalId} token position recorded ancestry differs`,
                 );
             } else {
                 expect(
@@ -505,6 +545,27 @@ if (errorSetsImplementationParent !== null) {
     expect(
         errorSetsImplementationParent.trim() === ERROR_SETS_TEST_COMMIT,
         "lexer set implementation commit is not based on its locked tests",
+    );
+}
+const tokenPositionTestParent = gitOptional([
+    "rev-parse",
+    `${TOKEN_POSITION_TEST_COMMIT}^`,
+]);
+if (tokenPositionTestParent !== null) {
+    expect(
+        tokenPositionTestParent.trim() === TOKEN_POSITION_BASE_COMMIT,
+        "token position test commit is not based on its recorded base",
+    );
+}
+const tokenPositionImplementationParent = gitOptional([
+    "rev-parse",
+    `${TOKEN_POSITION_IMPLEMENTATION_COMMIT}^`,
+]);
+if (tokenPositionImplementationParent !== null) {
+    expect(
+        tokenPositionImplementationParent.trim() ===
+            TOKEN_POSITION_TEST_COMMIT,
+        "token position implementation commit is not based on its locked tests",
     );
 }
 

@@ -26559,8 +26559,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_token_position_options::left_recursion_rewrite_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -26581,8 +26582,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestTokenPositionOptions.testLeftRecursionRewrite behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust left-recursion source bindings and .interp match Java 4.13.2 for TestTokenPositionOptions.testLeftRecursionRewrite",
+      "scaffold_commit": "7e83b079daa595ee26314b14d3d1bffa7924771f",
+      "primary_test_commit": "a82df4a391d4bec1c355569f3e94dedafe4f0e2e",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_token_position_options::left_recursion_rewrite_matches_java -- --test-threads=1",
+        "commit": "a82df4a391d4bec1c355569f3e94dedafe4f0e2e",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "7e83b079daa595ee26314b14d3d1bffa7924771f",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_token_position_options::left_recursion_rewrite_matches_java -- --test-threads=1",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91",
         "source_case_ids": [
@@ -26590,14 +26604,27 @@
           "java-antlr:testtokenpositionoptions-testleftrecursionrewrite@5b73499bd6ac"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91/T.g4",
+          "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91/T.interp",
+          "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91/T.tokens",
+          "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91/TLexer.interp",
+          "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91/TLexer.tokens",
+          "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91/fixture.json",
+          "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_token_position_options::left_recursion_rewrite_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestTokenPositionOptions.testLeftRecursionRewrite behavior"
+        "observable": "direct Rust left-recursion source bindings and .interp match Java 4.13.2 for TestTokenPositionOptions.testLeftRecursionRewrite",
+        "scaffold_commit": "7e83b079daa595ee26314b14d3d1bffa7924771f",
+        "primary_test_commit": "a82df4a391d4bec1c355569f3e94dedafe4f0e2e",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "708b11cb17e78c52e04d10915f7260243094baee325fb1ed70230f29ab8ccee4",
-      "evidence_path": null
+      "closure_sha256": "0bd96aa475a3d50c90c8e695bc50ce3395370ae03fcc122741ef08133ca43e0f",
+      "evidence_path": "tests/codegen-direct/port-evidence/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91"
     },
     {
       "logical_id": "testtokenpositionoptions-testleftrecursionwithlabels-6e604809f0",
@@ -26611,8 +26638,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testtokenpositionoptions-testleftrecursionwithlabels-6e604809f0-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionwithlabels-6e604809f0",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_token_position_options::left_recursion_with_labels_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -26633,8 +26660,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestTokenPositionOptions.testLeftRecursionWithLabels behavior",
+      "expected_red_failure_fingerprint": "labeled rule and token references retained the label starts 33 and 59 instead of the Java target starts 35 and 61",
+      "observable_equivalence": "direct Rust left-recursion source bindings and .interp match Java 4.13.2 for TestTokenPositionOptions.testLeftRecursionWithLabels",
+      "scaffold_commit": "7e83b079daa595ee26314b14d3d1bffa7924771f",
+      "primary_test_commit": "a82df4a391d4bec1c355569f3e94dedafe4f0e2e",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_token_position_options -- --test-threads=1",
+        "exit_code": 101,
+        "fingerprint": "labeled rule and token references retained the label starts 33 and 59 instead of the Java target starts 35 and 61"
+      },
+      "primary_implementation_commit": "b058502fd73d34776cf53afd2bcff3cbb2517c3f",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_token_position_options -- --test-threads=1",
+        "result": "3 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testtokenpositionoptions-testleftrecursionwithlabels-6e604809f0",
         "source_case_ids": [
@@ -26653,14 +26692,26 @@
             "rust_test": "grammar::atn::interp_test::tests::vscode_split_grammar_matches_java"
           }
         ],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionwithlabels-6e604809f0/T.g4",
+          "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionwithlabels-6e604809f0/T.interp",
+          "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionwithlabels-6e604809f0/T.tokens",
+          "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionwithlabels-6e604809f0/TLexer.interp",
+          "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionwithlabels-6e604809f0/TLexer.tokens",
+          "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionwithlabels-6e604809f0/fixture.json",
+          "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionwithlabels-6e604809f0/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionwithlabels-6e604809f0/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionwithlabels-6e604809f0",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_token_position_options::left_recursion_with_labels_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestTokenPositionOptions.testLeftRecursionWithLabels behavior"
+        "observable": "direct Rust left-recursion source bindings and .interp match Java 4.13.2 for TestTokenPositionOptions.testLeftRecursionWithLabels",
+        "scaffold_commit": "7e83b079daa595ee26314b14d3d1bffa7924771f",
+        "primary_test_commit": "a82df4a391d4bec1c355569f3e94dedafe4f0e2e"
       },
-      "closure_sha256": "3d2a81b7b0e114e04e4978608d93c1d1b39254b77e6b8b76d44a206ac1e779fd",
-      "evidence_path": null
+      "closure_sha256": "2a12291a98e5b856dcbe577f6283d0b5f7318f4215fc198ed2048620acec686e",
+      "evidence_path": "tests/codegen-direct/port-evidence/testtokenpositionoptions-testleftrecursionwithlabels-6e604809f0"
     },
     {
       "logical_id": "testtokenpositionoptions-testleftrecursionwithset-57f72a753d",
@@ -26672,8 +26723,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testtokenpositionoptions-testleftrecursionwithset-57f72a753d-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionwithset-57f72a753d",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_token_position_options::left_recursion_with_set_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -26694,8 +26746,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestTokenPositionOptions.testLeftRecursionWithSet behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust left-recursion source bindings and .interp match Java 4.13.2 for TestTokenPositionOptions.testLeftRecursionWithSet",
+      "scaffold_commit": "7e83b079daa595ee26314b14d3d1bffa7924771f",
+      "primary_test_commit": "a82df4a391d4bec1c355569f3e94dedafe4f0e2e",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_token_position_options::left_recursion_with_set_matches_java -- --test-threads=1",
+        "commit": "a82df4a391d4bec1c355569f3e94dedafe4f0e2e",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "7e83b079daa595ee26314b14d3d1bffa7924771f",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_token_position_options::left_recursion_with_set_matches_java -- --test-threads=1",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testtokenpositionoptions-testleftrecursionwithset-57f72a753d",
         "source_case_ids": [
@@ -26703,14 +26768,27 @@
           "java-antlr:testtokenpositionoptions-testleftrecursionwithset@e34fb7811f59"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionwithset-57f72a753d/T.g4",
+          "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionwithset-57f72a753d/T.interp",
+          "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionwithset-57f72a753d/T.tokens",
+          "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionwithset-57f72a753d/TLexer.interp",
+          "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionwithset-57f72a753d/TLexer.tokens",
+          "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionwithset-57f72a753d/fixture.json",
+          "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionwithset-57f72a753d/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionwithset-57f72a753d/oracle/java-antlr.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionwithset-57f72a753d",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_token_position_options::left_recursion_with_set_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestTokenPositionOptions.testLeftRecursionWithSet behavior"
+        "observable": "direct Rust left-recursion source bindings and .interp match Java 4.13.2 for TestTokenPositionOptions.testLeftRecursionWithSet",
+        "scaffold_commit": "7e83b079daa595ee26314b14d3d1bffa7924771f",
+        "primary_test_commit": "a82df4a391d4bec1c355569f3e94dedafe4f0e2e",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "d8497d330c6357b56bd3c7ae09a3a381953fbff973f33a599e651b0145094de3",
-      "evidence_path": null
+      "closure_sha256": "93db1a9dfedea4588d99d1bb7f270981846e8dde50d62523c51cd1769af6c302",
+      "evidence_path": "tests/codegen-direct/port-evidence/testtokenpositionoptions-testleftrecursionwithset-57f72a753d"
     },
     {
       "logical_id": "testtokentypeassignment-testcombinedgrammarliterals-74842182c1",

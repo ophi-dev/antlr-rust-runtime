@@ -416,7 +416,7 @@
           "tdd_owner": "upstream:testtokenpositionoptions-testleftrecursionwithlabels-6e604809f0",
           "rust_test": "grammar::atn::interp_test::tests::vscode_split_grammar_matches_java",
           "upstream_active_revision_id": "testtokenpositionoptions-testleftrecursionwithlabels-6e604809f0-r1",
-          "transitive_closure_sha256": "3d2a81b7b0e114e04e4978608d93c1d1b39254b77e6b8b76d44a206ac1e779fd"
+          "transitive_closure_sha256": "2a12291a98e5b856dcbe577f6283d0b5f7318f4215fc198ed2048620acec686e"
         }
       ]
     },

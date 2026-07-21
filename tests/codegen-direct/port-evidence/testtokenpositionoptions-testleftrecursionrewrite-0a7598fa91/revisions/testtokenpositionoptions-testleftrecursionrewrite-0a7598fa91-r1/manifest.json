@@ -1,0 +1,125 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91",
+  "revision_id": "testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "resolution": "verified-covered-existing",
+  "closure": {
+    "logical_id": "testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91",
+    "source_case_ids": [
+      "antlr-ng:testtokenpositionoptions-testleftrecursionrewrite@5b73499bd6ac",
+      "java-antlr:testtokenpositionoptions-testleftrecursionrewrite@5b73499bd6ac"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91/T.g4",
+      "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91/T.interp",
+      "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91/T.tokens",
+      "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91/TLexer.interp",
+      "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91/TLexer.tokens",
+      "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91/fixture.json",
+      "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91/oracle/java-antlr.stdout"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_token_position_options::left_recursion_rewrite_matches_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust left-recursion source bindings and .interp match Java 4.13.2 for TestTokenPositionOptions.testLeftRecursionRewrite",
+    "scaffold_commit": "7e83b079daa595ee26314b14d3d1bffa7924771f",
+    "primary_test_commit": "a82df4a391d4bec1c355569f3e94dedafe4f0e2e",
+    "resolution": "verified-covered-existing"
+  },
+  "closure_sha256": "0bd96aa475a3d50c90c8e695bc50ce3395370ae03fcc122741ef08133ca43e0f",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testtokenpositionoptions-testleftrecursionrewrite@5b73499bd6ac",
+      "path": "tests/TestTokenPositionOptions.spec.ts",
+      "sha256": "93e59ec0b07fa150971050ae405afdd7445efca59b5667a4e628c2bd4c7d2701"
+    },
+    {
+      "source_case_id": "java-antlr:testtokenpositionoptions-testleftrecursionrewrite@5b73499bd6ac",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestTokenPositionOptions.java",
+      "sha256": "48c3a5e06556bfb0e223900a2fbcb17dc867a4ee3b9d3f20481b60d1c80f7d69"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91/T.g4",
+      "sha256": "fafb6f767dce034c0a7dcdb00bbde0750d12165f5f7f5ef5651060e13e86966b"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91/T.interp",
+      "sha256": "1f88bab2938946debcbe3bcaa40bccc5b2638db3638109ab157f772be3f47070"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91/T.tokens",
+      "sha256": "b8ed8effed0ffb336c2bd91591b3d79a3d1aca7ce4ff1d1b6d58d69a7106566a"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91/TLexer.interp",
+      "sha256": "701214d4c081c53b8add8973c2e61aa65b6c50bf68251001119537603a65431d"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91/TLexer.tokens",
+      "sha256": "b8ed8effed0ffb336c2bd91591b3d79a3d1aca7ce4ff1d1b6d58d69a7106566a"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91/fixture.json",
+      "sha256": "96efa99f97bb964affa173fe99fa551264a5b919c2a6e246f5601997365960a5"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "commits": {
+    "scaffold": "7e83b079daa595ee26314b14d3d1bffa7924771f",
+    "primary_test": "a82df4a391d4bec1c355569f3e94dedafe4f0e2e",
+    "primary_implementation": "7e83b079daa595ee26314b14d3d1bffa7924771f"
+  },
+  "ancestry": {
+    "primary_test_parent": "7e83b079daa595ee26314b14d3d1bffa7924771f",
+    "primary_implementation_parent": "181eb633a681f90b6047b649a1d190062d38aa99",
+    "reachability": "the case-specific test passed against the Phase B implementation reachable from its parent"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_token_position_options {",
+      "end_marker": "\n    struct ExpectedSemanticDiagnostic {",
+      "sha256": "bd3fdc47b9c64ed2df7b09fb2fc798234cbd500e9b495ce86edb304fc8f42fc9"
+    }
+  ],
+  "verified_covered_existing": {
+    "command": "cargo test --locked --bin antlr4-rust-gen upstream_token_position_options::left_recursion_rewrite_matches_java -- --test-threads=1",
+    "commit": "a82df4a391d4bec1c355569f3e94dedafe4f0e2e",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed",
+    "covering_implementation_commit": "7e83b079daa595ee26314b14d3d1bffa7924771f"
+  },
+  "green_result": {
+    "command": "cargo test --locked --bin antlr4-rust-gen upstream_token_position_options::left_recursion_rewrite_matches_java -- --test-threads=1",
+    "commit": "a82df4a391d4bec1c355569f3e94dedafe4f0e2e",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91/revisions/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91-r1/oracle-results/declared-sources.json",
+      "sha256": "9567deb3baeab874e5aed24075b37d010048ba98d07942794f1a157033146361"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91/revisions/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91-r1/matrix-results/results.json",
+      "sha256": "b154dada3ddd7fe73dac4f9f91022160161977e6b3d4495eeda0da089eb517ec"
+    }
+  ]
+}

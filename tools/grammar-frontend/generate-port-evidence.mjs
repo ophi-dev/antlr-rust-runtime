@@ -28,6 +28,9 @@ import {
     PHASE_B_IMPLEMENTATION_COMMIT,
     SCAFFOLD_COMMIT,
     TEST_COMMIT,
+    TOKEN_POSITION_BASE_COMMIT,
+    TOKEN_POSITION_IMPLEMENTATION_COMMIT,
+    TOKEN_POSITION_TEST_COMMIT,
     VSCODE_COMMIT,
     digest,
     gitShowOptional,
@@ -60,6 +63,10 @@ const ERROR_SETS_TEST_START =
     "    mod upstream_error_sets {";
 const ERROR_SETS_TEST_END =
     "\n        const fn expected(";
+const TOKEN_POSITION_TEST_START =
+    "    mod upstream_token_position_options {";
+const TOKEN_POSITION_TEST_END =
+    "\n    struct ExpectedSemanticDiagnostic {";
 const SYMBOL_INFO_SHA256 =
     "df274a0dca42823cc2ef2608d98d544be53246a48c56f96050b0a987ce0890f3";
 
@@ -462,6 +469,63 @@ const errorSetsLockedSections = [
         sha256: digest(checkedInErrorSetsTests),
     },
 ];
+const checkedInTokenPositionTests = sectionBetweenMarkers(
+    await readFile(resolve(repoRoot, ATN_SERIALIZATION_TEST_PATH), "utf8"),
+    TOKEN_POSITION_TEST_START,
+    TOKEN_POSITION_TEST_END,
+);
+const recordedTokenPositionTests = gitShowOptional(
+    repoRoot,
+    TOKEN_POSITION_TEST_COMMIT,
+    ATN_SERIALIZATION_TEST_PATH,
+);
+const implementedTokenPositionTests = gitShowOptional(
+    repoRoot,
+    TOKEN_POSITION_IMPLEMENTATION_COMMIT,
+    ATN_SERIALIZATION_TEST_PATH,
+);
+if (recordedTokenPositionTests === null) {
+    warnMissingHistoricalSource(
+        "token position test verification",
+        TOKEN_POSITION_TEST_COMMIT,
+        ATN_SERIALIZATION_TEST_PATH,
+    );
+} else if (
+    sectionBetweenMarkers(
+        recordedTokenPositionTests,
+        TOKEN_POSITION_TEST_START,
+        TOKEN_POSITION_TEST_END,
+    ) !== checkedInTokenPositionTests
+) {
+    throw new Error(
+        "checked-in token position ports differ from their test commit",
+    );
+}
+if (implementedTokenPositionTests === null) {
+    warnMissingHistoricalSource(
+        "token position implementation verification",
+        TOKEN_POSITION_IMPLEMENTATION_COMMIT,
+        ATN_SERIALIZATION_TEST_PATH,
+    );
+} else if (
+    sectionBetweenMarkers(
+        implementedTokenPositionTests,
+        TOKEN_POSITION_TEST_START,
+        TOKEN_POSITION_TEST_END,
+    ) !== checkedInTokenPositionTests
+) {
+    throw new Error(
+        "token position implementation changed the locked test ports",
+    );
+}
+const tokenPositionLockedSections = [
+    {
+        path: ATN_SERIALIZATION_TEST_PATH,
+        marker: TOKEN_POSITION_TEST_START,
+        end_marker: TOKEN_POSITION_TEST_END,
+        sha256: digest(checkedInTokenPositionTests),
+    },
+];
 
 const upstreamByLogicalId = new Map(
     testMap.rows.map((row) => [row.logical_id, row]),
@@ -565,12 +629,16 @@ for (const row of completedRows) {
     const phaseBErrorSets = row.logical_id.startsWith(
         "testerrorsets-",
     );
+    const phaseBTokenPosition = row.logical_id.startsWith(
+        "testtokenpositionoptions-",
+    );
     if (
         row.owner_phase === "B" &&
         !phaseBAtnSerialization &&
         !phaseBAtnConstruction &&
         !phaseBBasicSemantic &&
-        !phaseBErrorSets
+        !phaseBErrorSets &&
+        !phaseBTokenPosition
     ) {
         throw new Error(`missing Phase B evidence profile for ${row.logical_id}`);
     }
@@ -613,6 +681,18 @@ for (const row of completedRows) {
                     reachability:
                         "the implementation commit is directly based on the locked red lexer-set tests",
                 }
+              : phaseBTokenPosition
+                ? {
+                      lockedSections: tokenPositionLockedSections,
+                      scaffoldCommit: TOKEN_POSITION_BASE_COMMIT,
+                      testParent: TOKEN_POSITION_BASE_COMMIT,
+                      implementationParent: coveredExisting
+                          ? ERROR_SETS_IMPLEMENTATION_COMMIT
+                          : TOKEN_POSITION_TEST_COMMIT,
+                      reachability: coveredExisting
+                          ? "the case-specific test passed against the Phase B implementation reachable from its parent"
+                          : "the implementation commit is directly based on the locked red token-position tests",
+                  }
           : null;
     await addEvidence({
         logicalId: row.logical_id,
@@ -659,6 +739,15 @@ for (const row of completedRows) {
                         java_compatibility_verdict:
                             "exact Java 4.13.2 diagnostic severity, position, and message equality",
                     }
+                  : phaseBTokenPosition
+                    ? {
+                          primary:
+                              "the direct Rust compiler preserves Java 4.13.2 authored token positions through left-recursion rewriting and matches both complete .interp files",
+                          alternate:
+                              "the pinned antlr-ng TestTokenPositionOptions case exposes the same rewritten structure and token positions",
+                          java_compatibility_verdict:
+                              "exact Java 4.13.2 parser and lexer .interp equality plus authored token-position equality",
+                      }
             : {
                   primary: coveredExisting
                       ? "the case-specific Rust port matches the pinned accepted and rejected syntax outcomes"
@@ -698,7 +787,10 @@ for (const row of completedRows) {
               ? "the case-specific test passed against an implementation already present in its parent"
               : "direct ancestry is verified when the recorded commit objects are available",
         demonstratedRed:
-            phaseBAtnConstruction || phaseBBasicSemantic || phaseBErrorSets
+            phaseBAtnConstruction ||
+            phaseBBasicSemantic ||
+            phaseBErrorSets ||
+            (phaseBTokenPosition && !coveredExisting)
             ? row.demonstrated_red
             : undefined,
     });

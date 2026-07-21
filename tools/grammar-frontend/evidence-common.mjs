@@ -35,6 +35,12 @@ export const ERROR_SETS_TEST_COMMIT =
     "01e1d8fce4bb5638f2b4f726049a4c8c4378047a";
 export const ERROR_SETS_IMPLEMENTATION_COMMIT =
     "181eb633a681f90b6047b649a1d190062d38aa99";
+export const TOKEN_POSITION_BASE_COMMIT =
+    "7e83b079daa595ee26314b14d3d1bffa7924771f";
+export const TOKEN_POSITION_TEST_COMMIT =
+    "a82df4a391d4bec1c355569f3e94dedafe4f0e2e";
+export const TOKEN_POSITION_IMPLEMENTATION_COMMIT =
+    "b058502fd73d34776cf53afd2bcff3cbb2517c3f";
 
 export function stableStringify(value) {
     if (Array.isArray(value)) {
