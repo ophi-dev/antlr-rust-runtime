@@ -578,6 +578,240 @@ mod tests {
         assert_parser_interp(parser, &fixture("vscode-odd-expr").join("OddExpr.interp"));
     }
 
+    mod upstream_atn_serialization {
+        use super::*;
+
+        macro_rules! case {
+            ($name:ident, parser, $fixture:literal, $grammar:literal) => {
+                mod $name {
+                    use super::*;
+
+                    #[test]
+                    fn matches_java() {
+                        assert_parser_fixture($fixture, $grammar);
+                    }
+                }
+            };
+            ($name:ident, lexer, $fixture:literal, $grammar:literal) => {
+                mod $name {
+                    use super::*;
+
+                    #[test]
+                    fn matches_java() {
+                        assert_lexer_fixture($fixture, $grammar);
+                    }
+                }
+            };
+        }
+
+        case!(
+            simple_no_block,
+            parser,
+            "testatnserialization-testsimplenoblock-a3dba6abcf",
+            "T"
+        );
+        case!(eof, parser, "testatnserialization-testeof-1a07e98df4", "T");
+        case!(
+            eof_in_set,
+            parser,
+            "testatnserialization-testeofinset-74204a5ce0",
+            "T"
+        );
+        case!(not, parser, "testatnserialization-testnot-ed1dd74e70", "T");
+        case!(
+            wildcard,
+            parser,
+            "testatnserialization-testwildcard-bc7511076a",
+            "T"
+        );
+        case!(
+            peg_achilles_heel,
+            parser,
+            "testatnserialization-testpegachillesheel-72c27bc08f",
+            "T"
+        );
+        case!(
+            three_alts,
+            parser,
+            "testatnserialization-test3alts-9c04d047af",
+            "T"
+        );
+        case!(
+            simple_loop,
+            parser,
+            "testatnserialization-testsimpleloop-1e309afd1c",
+            "T"
+        );
+        case!(
+            rule_ref,
+            parser,
+            "testatnserialization-testruleref-2d16d8280e",
+            "T"
+        );
+        case!(
+            lexer_two_rules,
+            lexer,
+            "testatnserialization-testlexertworules-1b3e930083",
+            "L"
+        );
+        case!(
+            lexer_unicode_smp_literal_serialized_to_set,
+            lexer,
+            "testatnserialization-testlexerunicodesmpliteralserializedtoset-e23baf8432",
+            "L"
+        );
+        case!(
+            lexer_unicode_smp_range_serialized_to_set,
+            lexer,
+            "testatnserialization-testlexerunicodesmprangeserializedtoset-500544d4bb",
+            "L"
+        );
+        case!(
+            lexer_unicode_smp_and_bmp_set_serialized,
+            lexer,
+            "testatnserialization-testlexerunicodesmpandbmpsetserialized-146bb39ee2",
+            "L"
+        );
+        case!(
+            lexer_with_0xfffc_in_set,
+            lexer,
+            "testatnserialization-testlexerwith0xfffcinset-710d43c742",
+            "L"
+        );
+        case!(
+            lexer_not_literal,
+            lexer,
+            "testatnserialization-testlexernotliteral-3daee1c629",
+            "L"
+        );
+        case!(
+            lexer_range,
+            lexer,
+            "testatnserialization-testlexerrange-02c072a36f",
+            "L"
+        );
+        case!(
+            lexer_eof,
+            lexer,
+            "testatnserialization-testlexereof-d9c7a74fa3",
+            "L"
+        );
+        case!(
+            lexer_eof_in_set,
+            lexer,
+            "testatnserialization-testlexereofinset-8834d9f1d9",
+            "L"
+        );
+        case!(
+            lexer_loops,
+            lexer,
+            "testatnserialization-testlexerloops-a28bd27385",
+            "L"
+        );
+        case!(
+            lexer_action,
+            lexer,
+            "testatnserialization-testlexeraction-f8a3b073f1",
+            "L"
+        );
+        case!(
+            lexer_not_set,
+            lexer,
+            "testatnserialization-testlexernotset-36d16f4f79",
+            "L"
+        );
+        case!(
+            lexer_set_with_range,
+            lexer,
+            "testatnserialization-testlexersetwithrange-4f6560f50f",
+            "L"
+        );
+        case!(
+            lexer_not_set_with_range,
+            lexer,
+            "testatnserialization-testlexernotsetwithrange-f8651463b0",
+            "L"
+        );
+        case!(
+            lexer_unicode_unescaped_bmp_not_set,
+            lexer,
+            "testatnserialization-testlexerunicodeunescapedbmpnotset-8cc0c75996",
+            "L"
+        );
+        case!(
+            lexer_unicode_unescaped_bmp_set_with_range,
+            lexer,
+            "testatnserialization-testlexerunicodeunescapedbmpsetwithrange-a91b9ab9ec",
+            "L"
+        );
+        case!(
+            lexer_unicode_unescaped_bmp_not_set_with_range,
+            lexer,
+            "testatnserialization-testlexerunicodeunescapedbmpnotsetwithrange-2eab3c760f",
+            "L"
+        );
+        case!(
+            lexer_unicode_escaped_bmp_not_set,
+            lexer,
+            "testatnserialization-testlexerunicodeescapedbmpnotset-d1fbc5a933",
+            "L"
+        );
+        case!(
+            lexer_unicode_escaped_bmp_set_with_range,
+            lexer,
+            "testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701",
+            "L"
+        );
+        case!(
+            lexer_unicode_escaped_bmp_not_set_with_range,
+            lexer,
+            "testatnserialization-testlexerunicodeescapedbmpnotsetwithrange-0cc277891c",
+            "L"
+        );
+        case!(
+            lexer_unicode_escaped_smp_not_set,
+            lexer,
+            "testatnserialization-testlexerunicodeescapedsmpnotset-6be9938ee5",
+            "L"
+        );
+        case!(
+            lexer_unicode_escaped_smp_set_with_range,
+            lexer,
+            "testatnserialization-testlexerunicodeescapedsmpsetwithrange-285ba196a9",
+            "L"
+        );
+        case!(
+            lexer_unicode_escaped_smp_not_set_with_range,
+            lexer,
+            "testatnserialization-testlexerunicodeescapedsmpnotsetwithrange-4f8a23d048",
+            "L"
+        );
+        case!(
+            lexer_wildcard_with_mode,
+            lexer,
+            "testatnserialization-testlexerwildcardwithmode-76c46a8f0f",
+            "L"
+        );
+        case!(
+            lexer_not_set_with_range2,
+            lexer,
+            "testatnserialization-testlexernotsetwithrange2-0eaf17b0b8",
+            "L"
+        );
+        case!(
+            mode_in_lexer,
+            lexer,
+            "testatnserialization-testmodeinlexer-01129db88a",
+            "L"
+        );
+        case!(
+            two_modes_in_lexer,
+            lexer,
+            "testatnserialization-test2modesinlexer-3039cb7f21",
+            "L"
+        );
+    }
+
     fn assert_lexer_fixture(fixture_name: &str, grammar_name: &str) -> Compilation {
         let compilation =
             compile_lexer_fixture(fixture_name, grammar_name).expect("lexer ATN should compile");

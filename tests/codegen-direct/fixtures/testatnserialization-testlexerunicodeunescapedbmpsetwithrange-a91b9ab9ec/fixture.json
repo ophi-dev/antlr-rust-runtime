@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "L.g4"
+  ],
+  "logical_ids": [
+    "testatnserialization-testlexerunicodeunescapedbmpsetwithrange-a91b9ab9ec"
+  ],
+  "upstream_test": {
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestATNSerialization.java",
+    "case": "testLexerUnicodeUnescapedBMPSetWithRange",
+    "source_case_id": "java-antlr:testatnserialization-testlexerunicodeunescapedbmpsetwithrange@a0bbc6d16dbf",
+    "source_sha256": "10677d64d96a762304980adcb95b0cae5dee21dd16ab433ac5b46b5c0bb6d017"
+  },
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "exit_status": 0
+  },
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh testatnserialization-testlexerunicodeunescapedbmpsetwithrange-a91b9ab9ec --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar",
+  "files": {
+    "L.g4": "0c46dbf39c3e2e74ac474f9e415b13c556bc0665b2ac35bcab83f33edba80fdb",
+    "L.interp": "b64ff8afbebc89623c359b6e33a5e32e55aba3c634a26dc63daeab8f7a2018a4",
+    "L.tokens": "05e2fff4ffabf4e3b89a4096f749fc10a24a6739f8c96770a96860c3612eb3e6",
+    "oracle/java-antlr.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}
