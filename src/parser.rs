@@ -1117,6 +1117,8 @@ pub struct BaseParser<S, H = NoSemanticHooks> {
     reported_prediction_diagnostics: BTreeSet<(usize, usize, String)>,
     generated_parser_diagnostics: Vec<ParserDiagnostic>,
     generated_sync_expected: Option<TokenBitSet>,
+    generated_recovery_error_index: Option<usize>,
+    generated_recovery_error_states: BTreeSet<isize>,
     int_members: BTreeMap<usize, i64>,
     rule_context_stack: Vec<RuleContextFrame>,
     rule_context_version: usize,
@@ -4681,6 +4683,8 @@ where
             reported_prediction_diagnostics: BTreeSet::new(),
             generated_parser_diagnostics: Vec::new(),
             generated_sync_expected: None,
+            generated_recovery_error_index: None,
+            generated_recovery_error_states: BTreeSet::new(),
             int_members: BTreeMap::new(),
             rule_context_stack: Vec::new(),
             rule_context_version: 0,
@@ -4736,6 +4740,7 @@ where
         self.reported_prediction_diagnostics.clear();
         self.generated_parser_diagnostics.clear();
         self.generated_sync_expected = None;
+        self.reset_generated_recovery_state();
         self.rule_context_stack.clear();
         self.advance_rule_context_version();
         self.left_recursive_caller_overlap_cache = std::array::from_fn(|_| None);
@@ -5205,6 +5210,7 @@ where
         })?;
         let current_type = self.token_type_for_id(current);
         if current_type == token_type {
+            self.reset_generated_recovery_state();
             self.consume();
             Ok(self.terminal_tree(current))
         } else {
@@ -5232,6 +5238,7 @@ where
         let current_type = self.token_type_for_id(current);
         if current_type == token_type {
             self.generated_sync_expected = None;
+            self.reset_generated_recovery_state();
             let consumed_eof = current_type == TOKEN_EOF;
             self.consume();
             return Ok(GeneratedMatch {
@@ -5264,6 +5271,7 @@ where
         let current_type = self.token_type_for_id(current);
         if interval_set_contains(intervals, current_type) {
             self.generated_sync_expected = None;
+            self.reset_generated_recovery_state();
             let consumed_eof = current_type == TOKEN_EOF;
             self.consume();
             return Ok(GeneratedMatch {
@@ -5295,6 +5303,7 @@ where
         let current_type = self.token_type_for_id(current);
         if set.contains(current_type) {
             self.generated_sync_expected = None;
+            self.reset_generated_recovery_state();
             let consumed_eof = current_type == TOKEN_EOF;
             self.consume();
             return Ok(GeneratedMatch {
@@ -5329,6 +5338,7 @@ where
             && !interval_set_contains(intervals, current_type)
         {
             self.generated_sync_expected = None;
+            self.reset_generated_recovery_state();
             let consumed_eof = current_type == TOKEN_EOF;
             self.consume();
             return Ok(GeneratedMatch {
@@ -5367,6 +5377,7 @@ where
         if (min_vocabulary..=max_vocabulary).contains(&current_type) && !set.contains(current_type)
         {
             self.generated_sync_expected = None;
+            self.reset_generated_recovery_state();
             let consumed_eof = current_type == TOKEN_EOF;
             self.consume();
             return Ok(GeneratedMatch {
@@ -5433,6 +5444,7 @@ where
             let consumed_eof = self.token_type_for_id(next) == TOKEN_EOF;
             self.consume();
             self.consume();
+            self.reset_generated_recovery_state();
             return Ok(GeneratedMatch {
                 children: GeneratedMatchChildren::Many(vec![
                     self.error_tree(current),
@@ -5547,6 +5559,7 @@ where
         })?;
         let current_type = self.token_type_for_id(current);
         if matches(current_type) {
+            self.reset_generated_recovery_state();
             self.consume();
             Ok(self.terminal_tree(current))
         } else {
@@ -5703,6 +5716,27 @@ where
         let diagnostic = self.generated_rule_error_diagnostic(error);
         self.push_generated_parser_diagnostic(diagnostic);
         self.generated_sync_expected = None;
+        let error_index = self.input.index();
+        let error_state = self.data.state();
+        // Match ANTLR's lastErrorIndex/lastErrorStates failsafe: a recovery
+        // token can also be in the caller's follow set, leaving the cursor
+        // unchanged and allowing generated outer decisions to revisit the same
+        // failed state forever.
+        if self.generated_recovery_error_index == Some(error_index)
+            && self.generated_recovery_error_states.contains(&error_state)
+            && self.la(1) != TOKEN_EOF
+            && let Some(token) = self.input.lt_id(1)
+        {
+            self.consume();
+            let child = self.error_tree(token);
+            self.add_parse_child(context, child);
+        }
+        let recovery_index = self.input.index();
+        if self.generated_recovery_error_index != Some(recovery_index) {
+            self.generated_recovery_error_index = Some(recovery_index);
+            self.generated_recovery_error_states.clear();
+        }
+        self.generated_recovery_error_states.insert(error_state);
         let recovery_symbols = self.context_expected_symbols(atn);
         loop {
             let symbol = self.la(1);
@@ -5717,6 +5751,13 @@ where
             self.add_parse_child(context, child);
         }
         self.record_syntax_errors(1);
+    }
+
+    fn reset_generated_recovery_state(&mut self) {
+        if self.generated_recovery_error_index.is_some() {
+            self.generated_recovery_error_index = None;
+            self.generated_recovery_error_states.clear();
+        }
     }
 
     fn push_generated_parser_diagnostic(&mut self, diagnostic: ParserDiagnostic) {
@@ -6077,6 +6118,7 @@ where
                 found: self.vocabulary().display_name(TOKEN_EOF),
             });
         }
+        self.reset_generated_recovery_state();
         self.consume();
         Ok(self.terminal_tree(current))
     }
@@ -6219,6 +6261,9 @@ where
                             self.consume();
                             children.push(self.error_tree(token));
                         }
+                    }
+                    if !loop_sync {
+                        self.reset_generated_recovery_state();
                     }
                     return Ok(children);
                 }
@@ -15390,6 +15435,72 @@ mod tests {
             }]
         );
         parser.exit_rule();
+    }
+
+    #[test]
+    fn generated_rule_recovery_forces_progress_after_repeated_error_state() {
+        let atn = nested_nullable_context_atn();
+        let mut parser = mini_parser(vec![
+            TestToken::new(1).with_text("x"),
+            TestToken::eof("parser-test", 1, 1, 1),
+        ]);
+        parser.rule_context_stack = vec![
+            RuleContextFrame {
+                rule_index: 0,
+                invoking_state: 0,
+            },
+            RuleContextFrame {
+                rule_index: 1,
+                invoking_state: 1,
+            },
+            RuleContextFrame {
+                rule_index: 2,
+                invoking_state: 2,
+            },
+        ];
+        parser.set_state(20);
+        let mut context = ParserRuleContext::new(2, 2);
+
+        parser.recover_generated_rule(
+            &mut context,
+            &atn,
+            AntlrError::NoViableAlternative {
+                input: "'x'".to_owned(),
+            },
+        );
+        assert_eq!(parser.input.index(), 0);
+
+        parser.set_state(21);
+        parser.recover_generated_rule(
+            &mut context,
+            &atn,
+            AntlrError::NoViableAlternative {
+                input: "'x'".to_owned(),
+            },
+        );
+        assert_eq!(parser.input.index(), 0);
+        assert_eq!(
+            parser.generated_recovery_error_states,
+            BTreeSet::from([20, 21])
+        );
+
+        parser.set_state(20);
+        parser.recover_generated_rule(
+            &mut context,
+            &atn,
+            AntlrError::NoViableAlternative {
+                input: "'x'".to_owned(),
+            },
+        );
+
+        assert_eq!(parser.input.index(), 1);
+        assert_eq!(parser.la(1), TOKEN_EOF);
+        assert!(context.has_matched_child());
+        assert_eq!(parser.generated_recovery_error_states, BTreeSet::from([20]));
+
+        parser.match_eof().expect("EOF should match");
+        assert_eq!(parser.generated_recovery_error_index, None);
+        assert!(parser.generated_recovery_error_states.is_empty());
     }
 
     #[test]
