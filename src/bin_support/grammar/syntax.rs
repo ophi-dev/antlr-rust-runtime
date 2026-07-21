@@ -1183,6 +1183,55 @@ finally { finish(); }
     }
 
     #[test]
+    fn nested_actions_match_upstream() {
+        let source = r#"
+grammar T;
+@definitions {
+}
+@members {
+static isIdentifierChar (c: string) {
+    return c.match(/^[0-9a-zA-Z_]+$/);
+}
+}
+s : a ;
+a : a ID {false}?<fail='custom message'>
+  | ID
+  ;
+ID : 'a'..'z'+ ;
+WS : (' '|'\n') -> skip ;
+"#;
+        let file = parse_source(SourceId::new(4), "T.g4", source).expect("valid combined grammar");
+        let mut ids = ModelIdAllocator::after_loaded_grammars(1);
+        let mut provenance = ProvenanceIndex::default();
+        let unit = parse_grammar_unit(&file, GrammarId::new(0), &mut ids, &mut provenance);
+
+        let members = unit
+            .actions
+            .iter()
+            .find(|action| action.name == "members")
+            .expect("members action");
+        assert!(members.body.contains("return c.match(/^[0-9a-zA-Z_]+$/);"));
+
+        let rule = unit
+            .rules
+            .iter()
+            .find(|rule| rule.name == "a")
+            .expect("rule a");
+        let (body, fail) = rule
+            .block
+            .alternatives
+            .iter()
+            .flat_map(|alternative| &alternative.elements)
+            .find_map(|element| match &element.kind {
+                ElementKind::Predicate { body, fail, .. } => Some((body.as_str(), fail.as_deref())),
+                _ => None,
+            })
+            .expect("semantic predicate");
+        assert_eq!(body, "false");
+        assert_eq!(fail, Some("custom message"));
+    }
+
+    #[test]
     fn converts_lexer_modes_sets_and_commands() {
         let source = r#"
 lexer grammar L;
