@@ -27,6 +27,14 @@ impl Vocabulary {
         }
     }
 
+    pub const fn empty() -> Self {
+        Self {
+            literal: Vec::new(),
+            symbolic: Vec::new(),
+            display: Vec::new(),
+        }
+    }
+
     pub fn from_token_names(
         token_names: impl IntoIterator<Item = Option<impl Into<String>>>,
     ) -> Self {
