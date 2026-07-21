@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnconstruction-testaorbstar-da7179ee92",
+  "active_revision_id": "testatnconstruction-testaorbstar-da7179ee92-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnconstruction-testaorbstar-da7179ee92-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnconstruction-testaorbstar-da7179ee92/revisions/testatnconstruction-testaorbstar-da7179ee92-r1/manifest.json",
+      "closure_sha256": "b343b66837496c4701b1fd2a4acb084d2329c1c36caf90bd5527c65a9ad02b9e"
+    }
+  ]
+}

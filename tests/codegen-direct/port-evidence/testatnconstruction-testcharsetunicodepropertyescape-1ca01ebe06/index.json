@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnconstruction-testcharsetunicodepropertyescape-1ca01ebe06",
+  "active_revision_id": "testatnconstruction-testcharsetunicodepropertyescape-1ca01ebe06-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnconstruction-testcharsetunicodepropertyescape-1ca01ebe06-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnconstruction-testcharsetunicodepropertyescape-1ca01ebe06/revisions/testatnconstruction-testcharsetunicodepropertyescape-1ca01ebe06-r1/manifest.json",
+      "closure_sha256": "580cd6c5f7e85aca2bc6b3f0b865f60ab5be1b399884b063b84fa733e6b73f4f"
+    }
+  ]
+}

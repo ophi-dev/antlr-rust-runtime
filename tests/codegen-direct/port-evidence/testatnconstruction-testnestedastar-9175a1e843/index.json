@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnconstruction-testnestedastar-9175a1e843",
+  "active_revision_id": "testatnconstruction-testnestedastar-9175a1e843-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnconstruction-testnestedastar-9175a1e843-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnconstruction-testnestedastar-9175a1e843/revisions/testatnconstruction-testnestedastar-9175a1e843-r1/manifest.json",
+      "closure_sha256": "bd6f6e1f269c9a6c7dd17e497ef6f44ccf1e8f683f19d6e3d562aeb9c014b1b4"
+    }
+  ]
+}

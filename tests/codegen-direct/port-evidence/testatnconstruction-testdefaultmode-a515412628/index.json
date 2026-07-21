@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnconstruction-testdefaultmode-a515412628",
+  "active_revision_id": "testatnconstruction-testdefaultmode-a515412628-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnconstruction-testdefaultmode-a515412628-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnconstruction-testdefaultmode-a515412628/revisions/testatnconstruction-testdefaultmode-a515412628-r1/manifest.json",
+      "closure_sha256": "def24dcca5130df90953d536578b67a103628cdc81525835d42c1f1411f24a8a"
+    }
+  ]
+}

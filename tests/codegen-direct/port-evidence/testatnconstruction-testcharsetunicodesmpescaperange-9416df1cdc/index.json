@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnconstruction-testcharsetunicodesmpescaperange-9416df1cdc",
+  "active_revision_id": "testatnconstruction-testcharsetunicodesmpescaperange-9416df1cdc-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnconstruction-testcharsetunicodesmpescaperange-9416df1cdc-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnconstruction-testcharsetunicodesmpescaperange-9416df1cdc/revisions/testatnconstruction-testcharsetunicodesmpescaperange-9416df1cdc-r1/manifest.json",
+      "closure_sha256": "18868291c9a94c5ac567a2545e7205d08094677953066fd84b91b551f138f7ee"
+    }
+  ]
+}

@@ -7,6 +7,9 @@ import { spawnSync } from "node:child_process";
 
 import {
     ANTLR_NG_COMMIT,
+    ATN_CONSTRUCTION_BASE_COMMIT,
+    ATN_CONSTRUCTION_IMPLEMENTATION_COMMIT,
+    ATN_CONSTRUCTION_TEST_COMMIT,
     ATN_SERIALIZATION_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_PARENT,
@@ -222,8 +225,14 @@ for (const [logicalId, record] of records) {
             manifest.owner_phase === record.ownerPhase,
             `${logicalId} manifest owner phase differs`,
         );
+        const atnSerialization = logicalId.startsWith(
+            "testatnserialization-",
+        );
+        const atnConstruction = logicalId.startsWith(
+            "testatnconstruction-",
+        );
         if (resolution === "verified-covered-existing") {
-            if (manifest.owner_phase === "B") {
+            if (atnSerialization) {
                 expect(
                     manifest.commits.scaffold === PHASE_B_BASE_COMMIT &&
                         manifest.commits.primary_test ===
@@ -238,6 +247,23 @@ for (const [logicalId, record] of records) {
                         manifest.ancestry.primary_implementation_parent ===
                             PHASE_B_BASE_COMMIT,
                     `${logicalId} Phase B covered-existing ancestry differs`,
+                );
+            } else if (atnConstruction) {
+                expect(
+                    manifest.commits.scaffold ===
+                            ATN_CONSTRUCTION_BASE_COMMIT &&
+                        manifest.commits.primary_test ===
+                            ATN_CONSTRUCTION_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            PHASE_B_IMPLEMENTATION_COMMIT,
+                    `${logicalId} ATN construction covered-existing commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            ATN_CONSTRUCTION_BASE_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            PHASE_B_BASE_COMMIT,
+                    `${logicalId} ATN construction covered-existing ancestry differs`,
                 );
             } else {
                 expect(
@@ -264,18 +290,38 @@ for (const [logicalId, record] of records) {
                 `${logicalId} lacks covered-existing execution evidence`,
             );
         } else {
-            expect(
-                manifest.commits.scaffold === SCAFFOLD_COMMIT &&
-                    manifest.commits.primary_test === TEST_COMMIT &&
-                    manifest.commits.primary_implementation ===
-                        IMPLEMENTATION_COMMIT,
-                `${logicalId} evidence commit identities differ`,
-            );
-            expect(
-                manifest.ancestry.primary_test_parent === SCAFFOLD_COMMIT &&
-                    manifest.ancestry.primary_implementation_parent === TEST_COMMIT,
-                `${logicalId} recorded ancestry differs`,
-            );
+            if (atnConstruction) {
+                expect(
+                    manifest.commits.scaffold ===
+                            ATN_CONSTRUCTION_BASE_COMMIT &&
+                        manifest.commits.primary_test ===
+                            ATN_CONSTRUCTION_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            ATN_CONSTRUCTION_IMPLEMENTATION_COMMIT,
+                    `${logicalId} ATN construction evidence commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            ATN_CONSTRUCTION_BASE_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            ATN_CONSTRUCTION_TEST_COMMIT,
+                    `${logicalId} ATN construction recorded ancestry differs`,
+                );
+            } else {
+                expect(
+                    manifest.commits.scaffold === SCAFFOLD_COMMIT &&
+                        manifest.commits.primary_test === TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            IMPLEMENTATION_COMMIT,
+                    `${logicalId} evidence commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent === SCAFFOLD_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            TEST_COMMIT,
+                    `${logicalId} recorded ancestry differs`,
+                );
+            }
             expect(
                 manifest.demonstrated_red?.exit_code !== 0 &&
                     manifest.green_result?.exit_code === 0,
@@ -352,6 +398,27 @@ if (phaseBImplementationParent !== null) {
     expect(
         phaseBImplementationParent.trim() === PHASE_B_BASE_COMMIT,
         "Phase B implementation commit has an unexpected parent",
+    );
+}
+const atnConstructionTestParent = gitOptional([
+    "rev-parse",
+    `${ATN_CONSTRUCTION_TEST_COMMIT}^`,
+]);
+if (atnConstructionTestParent !== null) {
+    expect(
+        atnConstructionTestParent.trim() === ATN_CONSTRUCTION_BASE_COMMIT,
+        "ATN construction test commit has an unexpected parent",
+    );
+}
+const atnConstructionImplementationParent = gitOptional([
+    "rev-parse",
+    `${ATN_CONSTRUCTION_IMPLEMENTATION_COMMIT}^`,
+]);
+if (atnConstructionImplementationParent !== null) {
+    expect(
+        atnConstructionImplementationParent.trim() ===
+            ATN_CONSTRUCTION_TEST_COMMIT,
+        "ATN construction implementation commit is not based on its locked tests",
     );
 }
 

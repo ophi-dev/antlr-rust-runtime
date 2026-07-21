@@ -1575,8 +1575,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testa-44f6db366a-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testa-44f6db366a",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::a::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -1597,8 +1598,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testA behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testA",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testa-44f6db366a",
         "source_case_ids": [
@@ -1606,14 +1620,30 @@
           "java-antlr:testatnconstruction-testa@14b7cba79571"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testa-44f6db366a/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testa-44f6db366a/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testa-44f6db366a/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testa-44f6db366a/diagnostics.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testa-44f6db366a/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testa-44f6db366a/oracle/antlr-ng-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testa-44f6db366a/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testa-44f6db366a/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testa-44f6db366a/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testa-44f6db366a/oracle/java-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testa-44f6db366a/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testa-44f6db366a",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::a::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testA behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testA",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "dc7a218af5bcb442e03d8908150bcd60842636d9234d471e7948b28d5ccce9a6",
-      "evidence_path": null
+      "closure_sha256": "b32f2901a62e3b0c986f1bb25faeec846cc656254edd57464fffcbee2d6904fe",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testa-44f6db366a"
     },
     {
       "logical_id": "testatnconstruction-testab-a42f21b0b8",
@@ -1625,8 +1655,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testab-a42f21b0b8-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testab-a42f21b0b8",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::ab::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -1647,8 +1678,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testAB behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testAB",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testab-a42f21b0b8",
         "source_case_ids": [
@@ -1656,14 +1700,30 @@
           "java-antlr:testatnconstruction-testab@695c49aab568"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testab-a42f21b0b8/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testab-a42f21b0b8/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testab-a42f21b0b8/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testab-a42f21b0b8/diagnostics.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testab-a42f21b0b8/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testab-a42f21b0b8/oracle/antlr-ng-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testab-a42f21b0b8/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testab-a42f21b0b8/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testab-a42f21b0b8/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testab-a42f21b0b8/oracle/java-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testab-a42f21b0b8/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testab-a42f21b0b8",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::ab::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testAB behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testAB",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "d137f65567aad4f634837d018c1274fa10e94a8fe62c91f126332cdc6dfe0555",
-      "evidence_path": null
+      "closure_sha256": "3a39cc839f13f9bf4413979559807ef7f8f89712aad4b93c6319ebbfdc74da0d",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testab-a42f21b0b8"
     },
     {
       "logical_id": "testatnconstruction-testaborcd-b267bf19a6",
@@ -1675,8 +1735,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testaborcd-b267bf19a6-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testaborcd-b267bf19a6",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::ab_or_cd::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -1697,8 +1758,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testABorCD behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testABorCD",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testaborcd-b267bf19a6",
         "source_case_ids": [
@@ -1706,14 +1780,30 @@
           "java-antlr:testatnconstruction-testaborcd@ebd225441ccb"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testaborcd-b267bf19a6/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaborcd-b267bf19a6/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaborcd-b267bf19a6/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaborcd-b267bf19a6/diagnostics.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaborcd-b267bf19a6/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaborcd-b267bf19a6/oracle/antlr-ng-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaborcd-b267bf19a6/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaborcd-b267bf19a6/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaborcd-b267bf19a6/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaborcd-b267bf19a6/oracle/java-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaborcd-b267bf19a6/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testaborcd-b267bf19a6",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::ab_or_cd::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testABorCD behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testABorCD",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "1fbe1a18270735572f7a78fbf646a399a840b56882ee1d6d7b7eb28012581163",
-      "evidence_path": null
+      "closure_sha256": "69d99e9b6a2a851079683539b1b719106559647a5db0688d065e12a4f8f772b7",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testaborcd-b267bf19a6"
     },
     {
       "logical_id": "testatnconstruction-testaoptional-4417b81a74",
@@ -1725,8 +1815,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testaoptional-4417b81a74-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testaoptional-4417b81a74",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::a_optional::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -1747,8 +1838,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testAOptional behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testAOptional",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testaoptional-4417b81a74",
         "source_case_ids": [
@@ -1756,14 +1860,30 @@
           "java-antlr:testatnconstruction-testaoptional@912fd3132488"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testaoptional-4417b81a74/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaoptional-4417b81a74/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaoptional-4417b81a74/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaoptional-4417b81a74/diagnostics.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaoptional-4417b81a74/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaoptional-4417b81a74/oracle/antlr-ng-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaoptional-4417b81a74/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaoptional-4417b81a74/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaoptional-4417b81a74/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaoptional-4417b81a74/oracle/java-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaoptional-4417b81a74/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testaoptional-4417b81a74",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::a_optional::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testAOptional behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testAOptional",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "269c267a2b9fe7051510d5b92e5c2761ebe7810e0443d539fd281f70e0b25212",
-      "evidence_path": null
+      "closure_sha256": "d1fe4dfcb94c0502b8433425ef543a73504920091a0c9039fd4ca5ca42d1ea68",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testaoptional-4417b81a74"
     },
     {
       "logical_id": "testatnconstruction-testaorb-e4661cbc08",
@@ -1775,8 +1895,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testaorb-e4661cbc08-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testaorb-e4661cbc08",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::a_or_b::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -1797,8 +1918,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testAorB behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testAorB",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testaorb-e4661cbc08",
         "source_case_ids": [
@@ -1806,14 +1940,30 @@
           "java-antlr:testatnconstruction-testaorb@a57f9f482a4a"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorb-e4661cbc08/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorb-e4661cbc08/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorb-e4661cbc08/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorb-e4661cbc08/diagnostics.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorb-e4661cbc08/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorb-e4661cbc08/oracle/antlr-ng-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorb-e4661cbc08/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorb-e4661cbc08/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorb-e4661cbc08/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorb-e4661cbc08/oracle/java-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorb-e4661cbc08/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testaorb-e4661cbc08",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::a_or_b::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testAorB behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testAorB",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "8e21ba504788b4b2cc357d4d923252e1bf2a15d2132213c7719e78db6965c0c5",
-      "evidence_path": null
+      "closure_sha256": "e04e67aa83b5b119c5ca5f113ab37c129f361835609e340bd4697f7e0d6b96fe",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testaorb-e4661cbc08"
     },
     {
       "logical_id": "testatnconstruction-testaorboptional-5b7e48e9fa",
@@ -1825,8 +1975,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testaorboptional-5b7e48e9fa-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testaorboptional-5b7e48e9fa",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::a_or_b_optional::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -1847,8 +1998,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testAorBoptional behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testAorBoptional",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testaorboptional-5b7e48e9fa",
         "source_case_ids": [
@@ -1856,14 +2020,30 @@
           "java-antlr:testatnconstruction-testaorboptional@6cb9598405be"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorboptional-5b7e48e9fa/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorboptional-5b7e48e9fa/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorboptional-5b7e48e9fa/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorboptional-5b7e48e9fa/diagnostics.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorboptional-5b7e48e9fa/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorboptional-5b7e48e9fa/oracle/antlr-ng-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorboptional-5b7e48e9fa/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorboptional-5b7e48e9fa/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorboptional-5b7e48e9fa/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorboptional-5b7e48e9fa/oracle/java-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorboptional-5b7e48e9fa/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testaorboptional-5b7e48e9fa",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::a_or_b_optional::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testAorBoptional behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testAorBoptional",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "25d2585de9770030e46c6176ce0fed47b788d3fd431b9ef447bfabf3a77ceeb3",
-      "evidence_path": null
+      "closure_sha256": "faf6140220b944a23d23b85f5869e29b80a3acfd34d680c0f457bc5afe3a16ab",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testaorboptional-5b7e48e9fa"
     },
     {
       "logical_id": "testatnconstruction-testaorboremptyplus-d75dc1c5fb",
@@ -1875,8 +2055,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testaorboremptyplus-d75dc1c5fb-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testaorboremptyplus-d75dc1c5fb",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::a_or_b_or_empty_plus::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -1897,8 +2078,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testAorBorEmptyPlus behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testAorBorEmptyPlus",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testaorboremptyplus-d75dc1c5fb",
         "source_case_ids": [
@@ -1906,14 +2100,28 @@
           "java-antlr:testatnconstruction-testaorboremptyplus@08086331a027"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorboremptyplus-d75dc1c5fb/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorboremptyplus-d75dc1c5fb/diagnostics.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorboremptyplus-d75dc1c5fb/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorboremptyplus-d75dc1c5fb/oracle/antlr-ng-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorboremptyplus-d75dc1c5fb/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorboremptyplus-d75dc1c5fb/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorboremptyplus-d75dc1c5fb/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorboremptyplus-d75dc1c5fb/oracle/java-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorboremptyplus-d75dc1c5fb/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testaorboremptyplus-d75dc1c5fb",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::a_or_b_or_empty_plus::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testAorBorEmptyPlus behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testAorBorEmptyPlus",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "591124910ba91ec79865e9f995276454ee12c18cb659afde4deb88484f95f3d6",
-      "evidence_path": null
+      "closure_sha256": "4f40cd10f9fe63b8ed102fdca02a8c02df9c63c290665bcbc11b5443e1f051b8",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testaorboremptyplus-d75dc1c5fb"
     },
     {
       "logical_id": "testatnconstruction-testaorbplus-a9453b1daf",
@@ -1925,8 +2133,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testaorbplus-a9453b1daf-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testaorbplus-a9453b1daf",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::a_or_b_plus::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -1947,8 +2156,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testAorBplus behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testAorBplus",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testaorbplus-a9453b1daf",
         "source_case_ids": [
@@ -1956,14 +2178,30 @@
           "java-antlr:testatnconstruction-testaorbplus@39cb86e74ee9"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbplus-a9453b1daf/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbplus-a9453b1daf/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbplus-a9453b1daf/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbplus-a9453b1daf/diagnostics.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbplus-a9453b1daf/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbplus-a9453b1daf/oracle/antlr-ng-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbplus-a9453b1daf/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbplus-a9453b1daf/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbplus-a9453b1daf/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbplus-a9453b1daf/oracle/java-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbplus-a9453b1daf/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testaorbplus-a9453b1daf",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::a_or_b_plus::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testAorBplus behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testAorBplus",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "34545b6f54e491d6b3a65c3bf3193ed4e4778376d63ea7d9ad82c0fdd1a2081a",
-      "evidence_path": null
+      "closure_sha256": "30b0dd04d9098deae612f7166a83a879c064becc12f9fa8348ab18bedc42e657",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testaorbplus-a9453b1daf"
     },
     {
       "logical_id": "testatnconstruction-testaorbstar-da7179ee92",
@@ -1975,8 +2213,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testaorbstar-da7179ee92-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testaorbstar-da7179ee92",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::a_or_b_star::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -1997,8 +2236,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testAorBstar behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testAorBstar",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testaorbstar-da7179ee92",
         "source_case_ids": [
@@ -2006,14 +2258,30 @@
           "java-antlr:testatnconstruction-testaorbstar@155bca34ed15"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbstar-da7179ee92/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbstar-da7179ee92/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbstar-da7179ee92/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbstar-da7179ee92/diagnostics.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbstar-da7179ee92/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbstar-da7179ee92/oracle/antlr-ng-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbstar-da7179ee92/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbstar-da7179ee92/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbstar-da7179ee92/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbstar-da7179ee92/oracle/java-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbstar-da7179ee92/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testaorbstar-da7179ee92",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::a_or_b_star::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testAorBstar behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testAorBstar",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "456cbccff3c227d7d431fd817aa325e98e34322741baa8f271b853774d35ef52",
-      "evidence_path": null
+      "closure_sha256": "b343b66837496c4701b1fd2a4acb084d2329c1c36caf90bd5527c65a9ad02b9e",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testaorbstar-da7179ee92"
     },
     {
       "logical_id": "testatnconstruction-testaorbthenc-b185264ad6",
@@ -2025,8 +2293,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testaorbthenc-b185264ad6-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testaorbthenc-b185264ad6",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::a_or_b_then_c::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -2047,8 +2316,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testAorBthenC behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testAorBthenC",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testaorbthenc-b185264ad6",
         "source_case_ids": [
@@ -2056,14 +2338,30 @@
           "java-antlr:testatnconstruction-testaorbthenc@0803e58ad1c5"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbthenc-b185264ad6/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbthenc-b185264ad6/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbthenc-b185264ad6/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbthenc-b185264ad6/diagnostics.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbthenc-b185264ad6/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbthenc-b185264ad6/oracle/antlr-ng-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbthenc-b185264ad6/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbthenc-b185264ad6/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbthenc-b185264ad6/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbthenc-b185264ad6/oracle/java-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorbthenc-b185264ad6/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testaorbthenc-b185264ad6",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::a_or_b_then_c::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testAorBthenC behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testAorBthenC",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "dec951009c6dc5481974eeede4196655b28ad8ab49d670e02e68beec7d58b1c1",
-      "evidence_path": null
+      "closure_sha256": "c4f5011359970ef0d44e68be15020fea333e2182d8443b19d565126dfb64f32c",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testaorbthenc-b185264ad6"
     },
     {
       "logical_id": "testatnconstruction-testaorepsilon-799ca3b396",
@@ -2075,8 +2373,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testaorepsilon-799ca3b396-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testaorepsilon-799ca3b396",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::a_or_epsilon::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -2097,8 +2396,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testAorEpsilon behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testAorEpsilon",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testaorepsilon-799ca3b396",
         "source_case_ids": [
@@ -2106,14 +2418,30 @@
           "java-antlr:testatnconstruction-testaorepsilon@bea5e20a589b"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorepsilon-799ca3b396/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorepsilon-799ca3b396/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorepsilon-799ca3b396/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorepsilon-799ca3b396/diagnostics.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorepsilon-799ca3b396/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorepsilon-799ca3b396/oracle/antlr-ng-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorepsilon-799ca3b396/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorepsilon-799ca3b396/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorepsilon-799ca3b396/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorepsilon-799ca3b396/oracle/java-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaorepsilon-799ca3b396/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testaorepsilon-799ca3b396",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::a_or_epsilon::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testAorEpsilon behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testAorEpsilon",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "f11ebb91b1d3a906e6e72234e0dc000dbd8ae1148da324f287b13ae07a01b3ec",
-      "evidence_path": null
+      "closure_sha256": "ae5e2c7e521ff3918b6dec6a651968f204bbc4d0be372d0de985f87ee13d1e2c",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testaorepsilon-799ca3b396"
     },
     {
       "logical_id": "testatnconstruction-testaplus-f4b19d5e31",
@@ -2125,8 +2453,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testaplus-f4b19d5e31-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testaplus-f4b19d5e31",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::a_plus::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -2147,8 +2476,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testAplus behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testAplus",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testaplus-f4b19d5e31",
         "source_case_ids": [
@@ -2156,14 +2498,30 @@
           "java-antlr:testatnconstruction-testaplus@81808d443662"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testaplus-f4b19d5e31/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaplus-f4b19d5e31/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaplus-f4b19d5e31/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaplus-f4b19d5e31/diagnostics.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaplus-f4b19d5e31/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaplus-f4b19d5e31/oracle/antlr-ng-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaplus-f4b19d5e31/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaplus-f4b19d5e31/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaplus-f4b19d5e31/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaplus-f4b19d5e31/oracle/java-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaplus-f4b19d5e31/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testaplus-f4b19d5e31",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::a_plus::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testAplus behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testAplus",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "8c0cdace41777f878d462a05d5acf6ac603cd8ad840a8634809327d18a2df72c",
-      "evidence_path": null
+      "closure_sha256": "5f7fd129662e840ff88c934985ee84de145f9a757fc38debb8cfc1e35c4dcd66",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testaplus-f4b19d5e31"
     },
     {
       "logical_id": "testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate-3c6626e10f",
@@ -2175,8 +2533,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate-3c6626e10f-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate-3c6626e10f",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::a_plus_single_alt_has_plus_ast_pointing_at_loop_back_state::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -2197,8 +2556,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testAplusSingleAltHasPlusASTPointingAtLoopBackState behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testAplusSingleAltHasPlusASTPointingAtLoopBackState",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate-3c6626e10f",
         "source_case_ids": [
@@ -2206,14 +2578,31 @@
           "java-antlr:testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate@b00b7d301269"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate-3c6626e10f/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate-3c6626e10f/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate-3c6626e10f/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate-3c6626e10f/diagnostics.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate-3c6626e10f/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate-3c6626e10f/oracle/antlr-ng-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate-3c6626e10f/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate-3c6626e10f/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate-3c6626e10f/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate-3c6626e10f/oracle/java-ast-state-map.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate-3c6626e10f/oracle/java-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate-3c6626e10f/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate-3c6626e10f",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::a_plus_single_alt_has_plus_ast_pointing_at_loop_back_state::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testAplusSingleAltHasPlusASTPointingAtLoopBackState behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testAplusSingleAltHasPlusASTPointingAtLoopBackState",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "5715dceec311fddb6e749008d562c61a9219d1ee47bf78f4ba40c5f7052d2c9f",
-      "evidence_path": null
+      "closure_sha256": "c4e452f7434ad7a5840d9267f68c11807ff85d5cc5d076f217361df2d32acd92",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate-3c6626e10f"
     },
     {
       "logical_id": "testatnconstruction-testastar-6226189691",
@@ -2225,8 +2614,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testastar-6226189691-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testastar-6226189691",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::a_star::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -2247,8 +2637,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testAStar behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testAStar",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testastar-6226189691",
         "source_case_ids": [
@@ -2256,14 +2659,30 @@
           "java-antlr:testatnconstruction-testastar@3b8e1b9edca6"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testastar-6226189691/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testastar-6226189691/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testastar-6226189691/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testastar-6226189691/diagnostics.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testastar-6226189691/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testastar-6226189691/oracle/antlr-ng-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testastar-6226189691/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testastar-6226189691/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testastar-6226189691/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testastar-6226189691/oracle/java-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testastar-6226189691/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testastar-6226189691",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::a_star::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testAStar behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testAStar",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "74261db082ae58b13e315c0fe2550c2d80705711bcab33510ecac338097ae1ea",
-      "evidence_path": null
+      "closure_sha256": "af4223666f9ced2d3b5c66a6104edba6d88b48b15bec9e4b4e4ced4ea13b8aa0",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testastar-6226189691"
     },
     {
       "logical_id": "testatnconstruction-testba-addc3f424e",
@@ -2275,8 +2694,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testba-addc3f424e-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::ba::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -2297,8 +2717,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testbA behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testbA",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testba-addc3f424e",
         "source_case_ids": [
@@ -2306,14 +2739,32 @@
           "java-antlr:testatnconstruction-testba@751d1d912368"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/diagnostics.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/oracle/antlr-ng-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/oracle/antlr-ng-atn-rule-b.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/oracle/java-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/oracle/java-atn-rule-b.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::ba::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testbA behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testbA",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "920b81b1781ba51afdfc9de30c895b164db523d3ce691d0ca53b2c6d2ed11f20",
-      "evidence_path": null
+      "closure_sha256": "d09b3064a3b95669fcbf187bfa92777798c2244889dd2e56518958a06e4c784c",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testba-addc3f424e"
     },
     {
       "logical_id": "testatnconstruction-testcharset-3be8423fea",
@@ -2325,8 +2776,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testcharset-3be8423fea-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testcharset-3be8423fea",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::char_set::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -2347,8 +2799,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testCharSet behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testCharSet",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testcharset-3be8423fea",
         "source_case_ids": [
@@ -2356,14 +2821,29 @@
           "java-antlr:testatnconstruction-testcharset@92b4dbd5ba70"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharset-3be8423fea/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharset-3be8423fea/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharset-3be8423fea/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharset-3be8423fea/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharset-3be8423fea/oracle/antlr-ng-atn-mode-default-mode.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharset-3be8423fea/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharset-3be8423fea/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharset-3be8423fea/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharset-3be8423fea/oracle/java-atn-mode-default-mode.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharset-3be8423fea/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testcharset-3be8423fea",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::char_set::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testCharSet behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testCharSet",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "9d6b85c3a2928f0f6d1fd2cd50fa7836703bc2cf75a0f8e1eb7cf69c8aeb1368",
-      "evidence_path": null
+      "closure_sha256": "658589bef21224f33b329b2b16851dd9e15bcfb112e9c67656c5a81d7932f32e",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testcharset-3be8423fea"
     },
     {
       "logical_id": "testatnconstruction-testcharsetrange-b5d5ea2237",
@@ -2375,8 +2855,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testcharsetrange-b5d5ea2237-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testcharsetrange-b5d5ea2237",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::char_set_range::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -2397,8 +2878,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testCharSetRange behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testCharSetRange",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testcharsetrange-b5d5ea2237",
         "source_case_ids": [
@@ -2406,14 +2900,29 @@
           "java-antlr:testatnconstruction-testcharsetrange@3bf0e1ca2528"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetrange-b5d5ea2237/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetrange-b5d5ea2237/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetrange-b5d5ea2237/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetrange-b5d5ea2237/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetrange-b5d5ea2237/oracle/antlr-ng-atn-mode-default-mode.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetrange-b5d5ea2237/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetrange-b5d5ea2237/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetrange-b5d5ea2237/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetrange-b5d5ea2237/oracle/java-atn-mode-default-mode.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetrange-b5d5ea2237/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testcharsetrange-b5d5ea2237",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::char_set_range::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testCharSetRange behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testCharSetRange",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "aaba0628acab2fe9794d91a0c9b463041e52c8f6a30f51f4c01a4a37ea23bc52",
-      "evidence_path": null
+      "closure_sha256": "4c352631c62c23cedd5cf44f0f2e354dd5ed65a9450fc34fffad38a1d713b926",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testcharsetrange-b5d5ea2237"
     },
     {
       "logical_id": "testatnconstruction-testcharsetunicodebmpescape-f297bd0c00",
@@ -2425,8 +2934,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testcharsetunicodebmpescape-f297bd0c00-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodebmpescape-f297bd0c00",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::char_set_unicode_bmp_escape::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -2447,8 +2957,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testCharSetUnicodeBMPEscape behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testCharSetUnicodeBMPEscape",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testcharsetunicodebmpescape-f297bd0c00",
         "source_case_ids": [
@@ -2456,14 +2979,29 @@
           "java-antlr:testatnconstruction-testcharsetunicodebmpescape@974b31afc1f5"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodebmpescape-f297bd0c00/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodebmpescape-f297bd0c00/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodebmpescape-f297bd0c00/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodebmpescape-f297bd0c00/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodebmpescape-f297bd0c00/oracle/antlr-ng-atn-mode-default-mode.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodebmpescape-f297bd0c00/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodebmpescape-f297bd0c00/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodebmpescape-f297bd0c00/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodebmpescape-f297bd0c00/oracle/java-atn-mode-default-mode.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodebmpescape-f297bd0c00/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodebmpescape-f297bd0c00",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::char_set_unicode_bmp_escape::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testCharSetUnicodeBMPEscape behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testCharSetUnicodeBMPEscape",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "de98a4c3bfdbc0491f9173003852639d4f479ce14c14fc20e07d93c1e4a4d00e",
-      "evidence_path": null
+      "closure_sha256": "74da6c5f272e46f3a0333eaf91733d792ab8bb39a00727ebf009175c5d555757",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testcharsetunicodebmpescape-f297bd0c00"
     },
     {
       "logical_id": "testatnconstruction-testcharsetunicodebmpescaperange-cbdbffbfb6",
@@ -2475,8 +3013,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testcharsetunicodebmpescaperange-cbdbffbfb6-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodebmpescaperange-cbdbffbfb6",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::char_set_unicode_bmp_escape_range::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -2497,8 +3036,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testCharSetUnicodeBMPEscapeRange behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testCharSetUnicodeBMPEscapeRange",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testcharsetunicodebmpescaperange-cbdbffbfb6",
         "source_case_ids": [
@@ -2506,14 +3058,29 @@
           "java-antlr:testatnconstruction-testcharsetunicodebmpescaperange@722c4ea29f55"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodebmpescaperange-cbdbffbfb6/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodebmpescaperange-cbdbffbfb6/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodebmpescaperange-cbdbffbfb6/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodebmpescaperange-cbdbffbfb6/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodebmpescaperange-cbdbffbfb6/oracle/antlr-ng-atn-mode-default-mode.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodebmpescaperange-cbdbffbfb6/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodebmpescaperange-cbdbffbfb6/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodebmpescaperange-cbdbffbfb6/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodebmpescaperange-cbdbffbfb6/oracle/java-atn-mode-default-mode.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodebmpescaperange-cbdbffbfb6/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodebmpescaperange-cbdbffbfb6",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::char_set_unicode_bmp_escape_range::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testCharSetUnicodeBMPEscapeRange behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testCharSetUnicodeBMPEscapeRange",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "bddb08ba0b51d582bc72789335672b38e96f21aa4b9fa8302a7a9ba6445fe696",
-      "evidence_path": null
+      "closure_sha256": "d9e7179640bfb4118b262236039f0745b55d98232a5d9952285189e5875a417a",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testcharsetunicodebmpescaperange-cbdbffbfb6"
     },
     {
       "logical_id": "testatnconstruction-testcharsetunicodemultiplepropertyescape-b3c6b5bbe8",
@@ -2525,8 +3092,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testcharsetunicodemultiplepropertyescape-b3c6b5bbe8-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodemultiplepropertyescape-b3c6b5bbe8",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::char_set_unicode_multiple_property_escape::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -2547,8 +3115,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testCharSetUnicodeMultiplePropertyEscape behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testCharSetUnicodeMultiplePropertyEscape",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testcharsetunicodemultiplepropertyescape-b3c6b5bbe8",
         "source_case_ids": [
@@ -2556,14 +3137,29 @@
           "java-antlr:testatnconstruction-testcharsetunicodemultiplepropertyescape@26d6295a9e20"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodemultiplepropertyescape-b3c6b5bbe8/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodemultiplepropertyescape-b3c6b5bbe8/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodemultiplepropertyescape-b3c6b5bbe8/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodemultiplepropertyescape-b3c6b5bbe8/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodemultiplepropertyescape-b3c6b5bbe8/oracle/antlr-ng-atn-mode-default-mode.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodemultiplepropertyescape-b3c6b5bbe8/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodemultiplepropertyescape-b3c6b5bbe8/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodemultiplepropertyescape-b3c6b5bbe8/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodemultiplepropertyescape-b3c6b5bbe8/oracle/java-atn-mode-default-mode.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodemultiplepropertyescape-b3c6b5bbe8/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodemultiplepropertyescape-b3c6b5bbe8",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::char_set_unicode_multiple_property_escape::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testCharSetUnicodeMultiplePropertyEscape behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testCharSetUnicodeMultiplePropertyEscape",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "6074cb5530b93ed2f0d4c9d7a1ecf22e05bc8df82ca1e39245884736509ee434",
-      "evidence_path": null
+      "closure_sha256": "5c5c1c80f85213133621c49ab208cb96c03b6c3c9b4edbb04f1a7d2c9dea8068",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testcharsetunicodemultiplepropertyescape-b3c6b5bbe8"
     },
     {
       "logical_id": "testatnconstruction-testcharsetunicodepropertyescape-1ca01ebe06",
@@ -2577,8 +3173,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testcharsetunicodepropertyescape-1ca01ebe06-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyescape-1ca01ebe06",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::char_set_unicode_property_escape::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -2599,8 +3196,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testCharSetUnicodePropertyEscape behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testCharSetUnicodePropertyEscape",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testcharsetunicodepropertyescape-1ca01ebe06",
         "source_case_ids": [
@@ -2619,14 +3229,29 @@
             "rust_test": "grammar::atn::interp_test::tests::vscode_sentences_combined_parser_and_unicode_lexer_match_java"
           }
         ],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyescape-1ca01ebe06/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyescape-1ca01ebe06/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyescape-1ca01ebe06/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyescape-1ca01ebe06/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyescape-1ca01ebe06/oracle/antlr-ng-atn-mode-default-mode.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyescape-1ca01ebe06/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyescape-1ca01ebe06/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyescape-1ca01ebe06/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyescape-1ca01ebe06/oracle/java-atn-mode-default-mode.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyescape-1ca01ebe06/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyescape-1ca01ebe06",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::char_set_unicode_property_escape::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testCharSetUnicodePropertyEscape behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testCharSetUnicodePropertyEscape",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "57333464e9f98b17703408c050659328a0c7603b93168ecf97f614734b240b39",
-      "evidence_path": null
+      "closure_sha256": "580cd6c5f7e85aca2bc6b3f0b865f60ab5be1b399884b063b84fa733e6b73f4f",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testcharsetunicodepropertyescape-1ca01ebe06"
     },
     {
       "logical_id": "testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e",
@@ -2638,8 +3263,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::char_set_unicode_property_invert_escape::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -2660,8 +3286,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testCharSetUnicodePropertyInvertEscape behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testCharSetUnicodePropertyInvertEscape",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e",
         "source_case_ids": [
@@ -2669,14 +3308,29 @@
           "java-antlr:testatnconstruction-testcharsetunicodepropertyinvertescape@14016dfc4902"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e/oracle/antlr-ng-atn-mode-default-mode.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e/oracle/java-atn-mode-default-mode.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::char_set_unicode_property_invert_escape::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testCharSetUnicodePropertyInvertEscape behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testCharSetUnicodePropertyInvertEscape",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "aba66fe4aa18a37291b105fe5e7899a6795272956513b352fc9b39a22a1bfd61",
-      "evidence_path": null
+      "closure_sha256": "70e91a8dc6ccbbd30372cde0090a37a7af89c09fbdfcb627cfcb04b695acf8f8",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e"
     },
     {
       "logical_id": "testatnconstruction-testcharsetunicodepropertyoverlap-e358f7dd65",
@@ -2688,8 +3342,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testcharsetunicodepropertyoverlap-e358f7dd65-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyoverlap-e358f7dd65",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::char_set_unicode_property_overlap::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -2710,8 +3365,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testCharSetUnicodePropertyOverlap behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testCharSetUnicodePropertyOverlap",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testcharsetunicodepropertyoverlap-e358f7dd65",
         "source_case_ids": [
@@ -2719,14 +3387,29 @@
           "java-antlr:testatnconstruction-testcharsetunicodepropertyoverlap@9a0b20ce62e7"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyoverlap-e358f7dd65/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyoverlap-e358f7dd65/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyoverlap-e358f7dd65/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyoverlap-e358f7dd65/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyoverlap-e358f7dd65/oracle/antlr-ng-atn-mode-default-mode.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyoverlap-e358f7dd65/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyoverlap-e358f7dd65/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyoverlap-e358f7dd65/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyoverlap-e358f7dd65/oracle/java-atn-mode-default-mode.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyoverlap-e358f7dd65/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodepropertyoverlap-e358f7dd65",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::char_set_unicode_property_overlap::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testCharSetUnicodePropertyOverlap behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testCharSetUnicodePropertyOverlap",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "8d4082938758369aaf70a365dd9b6923846d7389afbbe6b4a1a734a3fd9e9dc9",
-      "evidence_path": null
+      "closure_sha256": "6bbb7f03431027e7cff275eceb91b4d9ab000910e9422a0749183be059c2ede6",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testcharsetunicodepropertyoverlap-e358f7dd65"
     },
     {
       "logical_id": "testatnconstruction-testcharsetunicodesmpescape-4527f8d566",
@@ -2738,8 +3421,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testcharsetunicodesmpescape-4527f8d566-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodesmpescape-4527f8d566",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::char_set_unicode_smp_escape::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -2760,8 +3444,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testCharSetUnicodeSMPEscape behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testCharSetUnicodeSMPEscape",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testcharsetunicodesmpescape-4527f8d566",
         "source_case_ids": [
@@ -2769,14 +3466,29 @@
           "java-antlr:testatnconstruction-testcharsetunicodesmpescape@682684c3c732"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodesmpescape-4527f8d566/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodesmpescape-4527f8d566/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodesmpescape-4527f8d566/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodesmpescape-4527f8d566/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodesmpescape-4527f8d566/oracle/antlr-ng-atn-mode-default-mode.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodesmpescape-4527f8d566/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodesmpescape-4527f8d566/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodesmpescape-4527f8d566/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodesmpescape-4527f8d566/oracle/java-atn-mode-default-mode.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodesmpescape-4527f8d566/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodesmpescape-4527f8d566",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::char_set_unicode_smp_escape::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testCharSetUnicodeSMPEscape behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testCharSetUnicodeSMPEscape",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "61989e2081ae4fd9531ec86f46cc65b1b3d3de9c907648b23b5f159bbcab696e",
-      "evidence_path": null
+      "closure_sha256": "5ce5f8a088f9f252b35ae8cf6c23ac030d5e3a16d3533cfe843e86bc2e790b6f",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testcharsetunicodesmpescape-4527f8d566"
     },
     {
       "logical_id": "testatnconstruction-testcharsetunicodesmpescaperange-9416df1cdc",
@@ -2788,8 +3500,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testcharsetunicodesmpescaperange-9416df1cdc-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodesmpescaperange-9416df1cdc",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::char_set_unicode_smp_escape_range::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -2810,8 +3523,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testCharSetUnicodeSMPEscapeRange behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testCharSetUnicodeSMPEscapeRange",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testcharsetunicodesmpescaperange-9416df1cdc",
         "source_case_ids": [
@@ -2819,14 +3545,29 @@
           "java-antlr:testatnconstruction-testcharsetunicodesmpescaperange@e9ad3567b8b1"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodesmpescaperange-9416df1cdc/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodesmpescaperange-9416df1cdc/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodesmpescaperange-9416df1cdc/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodesmpescaperange-9416df1cdc/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodesmpescaperange-9416df1cdc/oracle/antlr-ng-atn-mode-default-mode.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodesmpescaperange-9416df1cdc/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodesmpescaperange-9416df1cdc/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodesmpescaperange-9416df1cdc/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodesmpescaperange-9416df1cdc/oracle/java-atn-mode-default-mode.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodesmpescaperange-9416df1cdc/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testcharsetunicodesmpescaperange-9416df1cdc",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::char_set_unicode_smp_escape_range::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testCharSetUnicodeSMPEscapeRange behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testCharSetUnicodeSMPEscapeRange",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "e594d3b6b395fe5416a29aac51e6211e34e0a70663ec58f3f5e03252b5e1325a",
-      "evidence_path": null
+      "closure_sha256": "18868291c9a94c5ac567a2545e7205d08094677953066fd84b91b551f138f7ee",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testcharsetunicodesmpescaperange-9416df1cdc"
     },
     {
       "logical_id": "testatnconstruction-testdefaultmode-a515412628",
@@ -2838,8 +3579,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testdefaultmode-a515412628-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testdefaultmode-a515412628",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::default_mode::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -2860,8 +3602,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testDefaultMode behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testDefaultMode",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testdefaultmode-a515412628",
         "source_case_ids": [
@@ -2869,14 +3624,29 @@
           "java-antlr:testatnconstruction-testdefaultmode@962fda6051bc"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testdefaultmode-a515412628/L.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testdefaultmode-a515412628/L.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testdefaultmode-a515412628/L.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testdefaultmode-a515412628/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testdefaultmode-a515412628/oracle/antlr-ng-atn-mode-default-mode.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testdefaultmode-a515412628/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testdefaultmode-a515412628/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testdefaultmode-a515412628/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testdefaultmode-a515412628/oracle/java-atn-mode-default-mode.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testdefaultmode-a515412628/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testdefaultmode-a515412628",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::default_mode::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testDefaultMode behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testDefaultMode",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "c05c01e831e5a9034ec6cbd8a4e1a3d373090a7eb2c57053eb8d532b0d8d941d",
-      "evidence_path": null
+      "closure_sha256": "def24dcca5130df90953d536578b67a103628cdc81525835d42c1f1411f24a8a",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testdefaultmode-a515412628"
     },
     {
       "logical_id": "testatnconstruction-testemptyorempty-ba4d562660",
@@ -2888,8 +3658,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testemptyorempty-ba4d562660-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testemptyorempty-ba4d562660",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::empty_or_empty::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -2910,8 +3681,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testEmptyOrEmpty behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testEmptyOrEmpty",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testemptyorempty-ba4d562660",
         "source_case_ids": [
@@ -2919,14 +3703,29 @@
           "java-antlr:testatnconstruction-testemptyorempty@16fd36f0787f"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testemptyorempty-ba4d562660/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testemptyorempty-ba4d562660/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testemptyorempty-ba4d562660/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testemptyorempty-ba4d562660/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testemptyorempty-ba4d562660/oracle/antlr-ng-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testemptyorempty-ba4d562660/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testemptyorempty-ba4d562660/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testemptyorempty-ba4d562660/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testemptyorempty-ba4d562660/oracle/java-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testemptyorempty-ba4d562660/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testemptyorempty-ba4d562660",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::empty_or_empty::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testEmptyOrEmpty behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testEmptyOrEmpty",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "bcb4eed1ea464bc43f9b83b81386d52f205909b7cd7a59b6d6d2a95eb0261bd9",
-      "evidence_path": null
+      "closure_sha256": "af107fde1886966a866020b73ff3b48e324f17325cb4a2786be055be83b46c7c",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testemptyorempty-ba4d562660"
     },
     {
       "logical_id": "testatnconstruction-testfollow-335ed81c22",
@@ -2938,8 +3737,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testfollow-335ed81c22-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::follow::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -2960,8 +3760,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testFollow behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testFollow",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testfollow-335ed81c22",
         "source_case_ids": [
@@ -2969,14 +3782,30 @@
           "java-antlr:testatnconstruction-testfollow@98f5c81b1880"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/diagnostics.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/oracle/antlr-ng-atn-rule-b.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/oracle/java-atn-rule-b.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::follow::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testFollow behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testFollow",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "642a3bcb86d81adc74eb627b469fa96cdfdd4afe829c904492f9ed36883842a6",
-      "evidence_path": null
+      "closure_sha256": "542b8b6bf342b1233c789f5eafbd60d6f550c15c948f470bae86463df2b3330c",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testfollow-335ed81c22"
     },
     {
       "logical_id": "testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58",
@@ -2988,8 +3817,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::repeated_transitions_to_stop_state::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -3010,8 +3839,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testForRepeatedTransitionsToStopState behavior",
+      "expected_red_failure_fingerprint": "ATN graph contained RuleStop_e_3->BlockEnd_26 three times instead of once",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testForRepeatedTransitionsToStopState",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_construction::repeated_transitions_to_stop_state",
+        "exit_code": 101,
+        "fingerprint": "ATN graph contained RuleStop_e_3->BlockEnd_26 three times instead of once"
+      },
+      "primary_implementation_commit": "5d0729a84eac4b89012e31819eb00f5acb654c3a",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_construction::repeated_transitions_to_stop_state",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58",
         "source_case_ids": [
@@ -3019,14 +3860,30 @@
           "java-antlr:testatnconstruction-testforrepeatedtransitionstostopstate@3e8db27d6a5a"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/T.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/T.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/T.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/TLexer.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/TLexer.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/oracle/antlr-ng-atn-rule-e.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/oracle/java-atn-rule-e.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::repeated_transitions_to_stop_state::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testForRepeatedTransitionsToStopState behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testForRepeatedTransitionsToStopState",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690"
       },
-      "closure_sha256": "8e46703a0e88c83792242bc225f0475d22d0af2a0146a3079e5139afc92779eb",
-      "evidence_path": null
+      "closure_sha256": "abaef4f65f235c730c8784e26809610b1f40221f29ab61b621ca475cd801de34",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58"
     },
     {
       "logical_id": "testatnconstruction-testlexerisnotsetmulticharstring-25d141ff2e",
@@ -3037,8 +3894,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testlexerisnotsetmulticharstring-25d141ff2e-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testlexerisnotsetmulticharstring-25d141ff2e",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::lexer_is_not_set_multi_char_string::matches_java",
       "primary_test_source": {
         "implementation": "independent-generated-oracle",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -3058,22 +3916,50 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testLexerIsNotSetMultiCharString behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testLexerIsNotSetMultiCharString",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testlexerisnotsetmulticharstring-25d141ff2e",
         "source_case_ids": [
           "antlr-ng:testatnconstruction-testlexerisnotsetmulticharstring@10168c524c66"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testlexerisnotsetmulticharstring-25d141ff2e/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testlexerisnotsetmulticharstring-25d141ff2e/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testlexerisnotsetmulticharstring-25d141ff2e/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testlexerisnotsetmulticharstring-25d141ff2e/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testlexerisnotsetmulticharstring-25d141ff2e/oracle/antlr-ng-atn-mode-default-mode.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testlexerisnotsetmulticharstring-25d141ff2e/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testlexerisnotsetmulticharstring-25d141ff2e/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testlexerisnotsetmulticharstring-25d141ff2e/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testlexerisnotsetmulticharstring-25d141ff2e/oracle/java-atn-mode-default-mode.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testlexerisnotsetmulticharstring-25d141ff2e/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testlexerisnotsetmulticharstring-25d141ff2e",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::lexer_is_not_set_multi_char_string::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testLexerIsNotSetMultiCharString behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testLexerIsNotSetMultiCharString",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "f213e26d5776a823bc7e483fa60ab1c3a7c41dde0b6e3b1177065719686fd3ba",
-      "evidence_path": null
+      "closure_sha256": "349a74f2ba57194b1ad3318987dc67ac94770ccd77d3ad4d1e2c78fa38f786b8",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testlexerisnotsetmulticharstring-25d141ff2e"
     },
     {
       "logical_id": "testatnconstruction-testlexerisntsetmulticharstring-a38c8db90d",
@@ -3084,8 +3970,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testlexerisntsetmulticharstring-a38c8db90d-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testlexerisntsetmulticharstring-a38c8db90d",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::lexer_isnt_set_multi_char_string::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -3105,22 +3992,48 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testLexerIsntSetMultiCharString behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testLexerIsntSetMultiCharString",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testlexerisntsetmulticharstring-a38c8db90d",
         "source_case_ids": [
           "java-antlr:testatnconstruction-testlexerisntsetmulticharstring@8f874206f7d6"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testlexerisntsetmulticharstring-a38c8db90d/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testlexerisntsetmulticharstring-a38c8db90d/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testlexerisntsetmulticharstring-a38c8db90d/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testlexerisntsetmulticharstring-a38c8db90d/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testlexerisntsetmulticharstring-a38c8db90d/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testlexerisntsetmulticharstring-a38c8db90d/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testlexerisntsetmulticharstring-a38c8db90d/oracle/java-atn-mode-default-mode.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testlexerisntsetmulticharstring-a38c8db90d/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testlexerisntsetmulticharstring-a38c8db90d",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::lexer_isnt_set_multi_char_string::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testLexerIsntSetMultiCharString behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testLexerIsntSetMultiCharString",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "8ef74dba16cdd8600faecdb7268898efb6869ce5f4523e5551a3f3da618259ab",
-      "evidence_path": null
+      "closure_sha256": "aa8ad34f42ea10f04108ac203b506e3e8585102b760c97f7aba3a397186edf92",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testlexerisntsetmulticharstring-a38c8db90d"
     },
     {
       "logical_id": "testatnconstruction-testmode-19f1fe46af",
@@ -3132,8 +4045,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testmode-19f1fe46af-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testmode-19f1fe46af",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::mode::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -3154,8 +4068,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testMode behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testMode",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testmode-19f1fe46af",
         "source_case_ids": [
@@ -3163,14 +4090,29 @@
           "java-antlr:testatnconstruction-testmode@8cd7aadf52df"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testmode-19f1fe46af/L.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testmode-19f1fe46af/L.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testmode-19f1fe46af/L.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testmode-19f1fe46af/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testmode-19f1fe46af/oracle/antlr-ng-atn-mode-foo.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testmode-19f1fe46af/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testmode-19f1fe46af/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testmode-19f1fe46af/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testmode-19f1fe46af/oracle/java-atn-mode-foo.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testmode-19f1fe46af/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testmode-19f1fe46af",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::mode::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testMode behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testMode",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "36fdd2adf133764f0b3ac671eb7fdbb4dbe4eedee9d5c4ae395712346a19af23",
-      "evidence_path": null
+      "closure_sha256": "01acd06eca6400cd2ec71006f524c06114d42362a2628c22c585b1233b1ef763",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testmode-19f1fe46af"
     },
     {
       "logical_id": "testatnconstruction-testnestedastar-9175a1e843",
@@ -3182,8 +4124,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testnestedastar-9175a1e843-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testnestedastar-9175a1e843",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::nested_a_star::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -3204,8 +4147,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testNestedAstar behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testNestedAstar",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testnestedastar-9175a1e843",
         "source_case_ids": [
@@ -3213,14 +4169,30 @@
           "java-antlr:testatnconstruction-testnestedastar@4bf01bb09a69"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testnestedastar-9175a1e843/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testnestedastar-9175a1e843/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testnestedastar-9175a1e843/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testnestedastar-9175a1e843/diagnostics.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testnestedastar-9175a1e843/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testnestedastar-9175a1e843/oracle/antlr-ng-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testnestedastar-9175a1e843/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testnestedastar-9175a1e843/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testnestedastar-9175a1e843/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testnestedastar-9175a1e843/oracle/java-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testnestedastar-9175a1e843/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testnestedastar-9175a1e843",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::nested_a_star::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testNestedAstar behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testNestedAstar",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "73de5948b767b04edfff52526ad15911f9265c1c62eb9faec1a3375aa55457cd",
-      "evidence_path": null
+      "closure_sha256": "bd6f6e1f269c9a6c7dd17e497ef6f44ccf1e8f683f19d6e3d562aeb9c014b1b4",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testnestedastar-9175a1e843"
     },
     {
       "logical_id": "testatnconstruction-testparserrulerefinlexerrule-34f2000a35",
@@ -3232,8 +4204,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testparserrulerefinlexerrule-34f2000a35-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testparserrulerefinlexerrule-34f2000a35",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::parser_rule_ref_in_lexer_rule::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -3254,8 +4226,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testParserRuleRefInLexerRule behavior",
+      "expected_red_failure_fingerprint": "missing G4S008 diagnostic; Stage 0 reported G4F003 no viable alternative at input 'a'",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testParserRuleRefInLexerRule",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_construction::parser_rule_ref_in_lexer_rule",
+        "exit_code": 101,
+        "fingerprint": "missing G4S008 diagnostic; Stage 0 reported G4F003 no viable alternative at input 'a'"
+      },
+      "primary_implementation_commit": "5d0729a84eac4b89012e31819eb00f5acb654c3a",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_construction::parser_rule_ref_in_lexer_rule",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testparserrulerefinlexerrule-34f2000a35",
         "source_case_ids": [
@@ -3263,14 +4247,26 @@
           "java-antlr:testatnconstruction-testparserrulerefinlexerrule@8d02544a5dd3"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testparserrulerefinlexerrule-34f2000a35/U.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testparserrulerefinlexerrule-34f2000a35/U.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testparserrulerefinlexerrule-34f2000a35/diagnostics.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testparserrulerefinlexerrule-34f2000a35/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testparserrulerefinlexerrule-34f2000a35/oracle/antlr-ng-outcome.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testparserrulerefinlexerrule-34f2000a35/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testparserrulerefinlexerrule-34f2000a35/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testparserrulerefinlexerrule-34f2000a35/oracle/java-outcome.txt"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testparserrulerefinlexerrule-34f2000a35",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::parser_rule_ref_in_lexer_rule::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testParserRuleRefInLexerRule behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testParserRuleRefInLexerRule",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690"
       },
-      "closure_sha256": "903f23546ef95a71e5b7d8105078f40b70ddf2ee07f4ddcdfbd68548dd0cef69",
-      "evidence_path": null
+      "closure_sha256": "9f7e6c494d3200bce6c1f2fb3780c87ec13e259e8ef96ffd1c8d6cf99048e5cf",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testparserrulerefinlexerrule-34f2000a35"
     },
     {
       "logical_id": "testatnconstruction-testpredicatedaorb-9fe924cddd",
@@ -3282,8 +4278,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testpredicatedaorb-9fe924cddd-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testpredicatedaorb-9fe924cddd",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::predicated_a_or_b::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -3304,8 +4301,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testPredicatedAorB behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testPredicatedAorB",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testpredicatedaorb-9fe924cddd",
         "source_case_ids": [
@@ -3313,14 +4323,30 @@
           "java-antlr:testatnconstruction-testpredicatedaorb@c38590021d50"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testpredicatedaorb-9fe924cddd/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testpredicatedaorb-9fe924cddd/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testpredicatedaorb-9fe924cddd/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testpredicatedaorb-9fe924cddd/diagnostics.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testpredicatedaorb-9fe924cddd/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testpredicatedaorb-9fe924cddd/oracle/antlr-ng-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testpredicatedaorb-9fe924cddd/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testpredicatedaorb-9fe924cddd/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testpredicatedaorb-9fe924cddd/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testpredicatedaorb-9fe924cddd/oracle/java-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testpredicatedaorb-9fe924cddd/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testpredicatedaorb-9fe924cddd",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::predicated_a_or_b::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testPredicatedAorB behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testPredicatedAorB",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "d3f8d3e7c351842b4cdc629d19b2053beeca99d9594e6b2e7ba7c2173cfaf9d5",
-      "evidence_path": null
+      "closure_sha256": "ab6cfcf99c1b951abb58d46ccc5d60928457f6583c5fe9c38b27ba3906ed1f98",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testpredicatedaorb-9fe924cddd"
     },
     {
       "logical_id": "testatnconstruction-testrange-22a5123557",
@@ -3332,8 +4358,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testrange-22a5123557-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testrange-22a5123557",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::range::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -3354,8 +4381,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testRange behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testRange",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testrange-22a5123557",
         "source_case_ids": [
@@ -3363,14 +4403,29 @@
           "java-antlr:testatnconstruction-testrange@14b88acefaf3"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testrange-22a5123557/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testrange-22a5123557/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testrange-22a5123557/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testrange-22a5123557/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testrange-22a5123557/oracle/antlr-ng-atn-mode-default-mode.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testrange-22a5123557/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testrange-22a5123557/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testrange-22a5123557/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testrange-22a5123557/oracle/java-atn-mode-default-mode.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testrange-22a5123557/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testrange-22a5123557",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::range::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testRange behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testRange",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "dd85ea2199c044312353a459f9d35dd88676e565f1b35fd220b873824efd47b1",
-      "evidence_path": null
+      "closure_sha256": "16c8d28cc168c70c366d5fdf225f3547e3682f4adf01f0da43eb3a7f2a2968bf",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testrange-22a5123557"
     },
     {
       "logical_id": "testatnconstruction-testrangeorrange-7cd17abe9a",
@@ -3382,8 +4437,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testrangeorrange-7cd17abe9a-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testrangeorrange-7cd17abe9a",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::range_or_range::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -3404,8 +4460,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testRangeOrRange behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testRangeOrRange",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testrangeorrange-7cd17abe9a",
         "source_case_ids": [
@@ -3413,14 +4482,29 @@
           "java-antlr:testatnconstruction-testrangeorrange@9d29b8c32574"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testrangeorrange-7cd17abe9a/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testrangeorrange-7cd17abe9a/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testrangeorrange-7cd17abe9a/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testrangeorrange-7cd17abe9a/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testrangeorrange-7cd17abe9a/oracle/antlr-ng-atn-mode-default-mode.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testrangeorrange-7cd17abe9a/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testrangeorrange-7cd17abe9a/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testrangeorrange-7cd17abe9a/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testrangeorrange-7cd17abe9a/oracle/java-atn-mode-default-mode.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testrangeorrange-7cd17abe9a/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testrangeorrange-7cd17abe9a",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::range_or_range::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testRangeOrRange behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testRangeOrRange",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "a26e04b45ff265e32f17e09fe8a97e45c397b4db70a478788923d13db7d6fcef",
-      "evidence_path": null
+      "closure_sha256": "94cad365042e0cdd648414034532805ee6f79a62dbea36c020a9e242a73ca486",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testrangeorrange-7cd17abe9a"
     },
     {
       "logical_id": "testatnconstruction-testsetaorb-ee6a743346",
@@ -3432,8 +4516,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testsetaorb-ee6a743346-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testsetaorb-ee6a743346",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::set_a_or_b::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -3454,8 +4539,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testSetAorB behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testSetAorB",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testsetaorb-ee6a743346",
         "source_case_ids": [
@@ -3463,14 +4561,30 @@
           "java-antlr:testatnconstruction-testsetaorb@f3c688884f64"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testsetaorb-ee6a743346/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testsetaorb-ee6a743346/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testsetaorb-ee6a743346/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testsetaorb-ee6a743346/diagnostics.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testsetaorb-ee6a743346/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testsetaorb-ee6a743346/oracle/antlr-ng-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testsetaorb-ee6a743346/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testsetaorb-ee6a743346/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testsetaorb-ee6a743346/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testsetaorb-ee6a743346/oracle/java-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testsetaorb-ee6a743346/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testsetaorb-ee6a743346",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::set_a_or_b::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testSetAorB behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testSetAorB",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "a50c424e4f60e38fe2db196863989adbca8208f66e166430069d1ca0dc027c1b",
-      "evidence_path": null
+      "closure_sha256": "12cbfa8f1edcf720d72f580069b79c882b097a23f149df8ad593982601aedc20",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testsetaorb-ee6a743346"
     },
     {
       "logical_id": "testatnconstruction-testsetaorboptional-a3d32b77ad",
@@ -3482,8 +4596,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-testsetaorboptional-a3d32b77ad-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testsetaorboptional-a3d32b77ad",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::set_a_or_b_optional::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -3504,8 +4619,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testSetAorBoptional behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testSetAorBoptional",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-testsetaorboptional-a3d32b77ad",
         "source_case_ids": [
@@ -3513,14 +4641,30 @@
           "java-antlr:testatnconstruction-testsetaorboptional@e6f6e3e46b4e"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-testsetaorboptional-a3d32b77ad/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-testsetaorboptional-a3d32b77ad/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-testsetaorboptional-a3d32b77ad/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-testsetaorboptional-a3d32b77ad/diagnostics.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testsetaorboptional-a3d32b77ad/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-testsetaorboptional-a3d32b77ad/oracle/antlr-ng-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testsetaorboptional-a3d32b77ad/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-testsetaorboptional-a3d32b77ad/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-testsetaorboptional-a3d32b77ad/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-testsetaorboptional-a3d32b77ad/oracle/java-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-testsetaorboptional-a3d32b77ad/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-testsetaorboptional-a3d32b77ad",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::set_a_or_b_optional::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testSetAorBoptional behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testSetAorBoptional",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "3d8afeadb380a6e2091e9c399111885ffbef64ba29d1bd815fec960b5a56b0f6",
-      "evidence_path": null
+      "closure_sha256": "f432c523d61e12a0bf7c3945c47c80fc5bf4c0d463cd7904ec08293370c062a9",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-testsetaorboptional-a3d32b77ad"
     },
     {
       "logical_id": "testatnconstruction-teststringliteralinparser-4579c9c18c",
@@ -3532,8 +4676,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testatnconstruction-teststringliteralinparser-4579c9c18c-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-teststringliteralinparser-4579c9c18c",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::string_literal_in_parser::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -3554,8 +4699,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestATNConstruction.testStringLiteralInParser behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testStringLiteralInParser",
+      "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+      "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "exit_code": 0,
+        "result": "38 passed; 0 failed"
+      },
+      "primary_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+        "result": "38 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testatnconstruction-teststringliteralinparser-4579c9c18c",
         "source_case_ids": [
@@ -3563,14 +4721,32 @@
           "java-antlr:testatnconstruction-teststringliteralinparser@1a9681b2b9b7"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testatnconstruction-teststringliteralinparser-4579c9c18c/P.g4",
+          "tests/codegen-direct/fixtures/testatnconstruction-teststringliteralinparser-4579c9c18c/P.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-teststringliteralinparser-4579c9c18c/P.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-teststringliteralinparser-4579c9c18c/PLexer.interp",
+          "tests/codegen-direct/fixtures/testatnconstruction-teststringliteralinparser-4579c9c18c/PLexer.tokens",
+          "tests/codegen-direct/fixtures/testatnconstruction-teststringliteralinparser-4579c9c18c/diagnostics.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-teststringliteralinparser-4579c9c18c/fixture.json",
+          "tests/codegen-direct/fixtures/testatnconstruction-teststringliteralinparser-4579c9c18c/oracle/antlr-ng-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-teststringliteralinparser-4579c9c18c/oracle/antlr-ng-atn.index",
+          "tests/codegen-direct/fixtures/testatnconstruction-teststringliteralinparser-4579c9c18c/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testatnconstruction-teststringliteralinparser-4579c9c18c/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testatnconstruction-teststringliteralinparser-4579c9c18c/oracle/java-atn-rule-a.txt",
+          "tests/codegen-direct/fixtures/testatnconstruction-teststringliteralinparser-4579c9c18c/oracle/java-atn.index"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testatnconstruction-teststringliteralinparser-4579c9c18c",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::string_literal_in_parser::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestATNConstruction.testStringLiteralInParser behavior"
+        "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testStringLiteralInParser",
+        "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+        "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "cb4e70a1ea546989449c9864faba6860193e8b3d7610ed15a04282af9e995101",
-      "evidence_path": null
+      "closure_sha256": "007e673143a9c793f86f508db60236ca87ca47c67b1d60c7cf31447fa56f7aa6",
+      "evidence_path": "tests/codegen-direct/port-evidence/testatnconstruction-teststringliteralinparser-4579c9c18c"
     },
     {
       "logical_id": "testatndeserialization-test2modesinlexer-f309dabed8",

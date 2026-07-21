@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnconstruction-testcharsetunicodebmpescaperange-cbdbffbfb6",
+  "active_revision_id": "testatnconstruction-testcharsetunicodebmpescaperange-cbdbffbfb6-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnconstruction-testcharsetunicodebmpescaperange-cbdbffbfb6-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnconstruction-testcharsetunicodebmpescaperange-cbdbffbfb6/revisions/testatnconstruction-testcharsetunicodebmpescaperange-cbdbffbfb6-r1/manifest.json",
+      "closure_sha256": "d9e7179640bfb4118b262236039f0745b55d98232a5d9952285189e5875a417a"
+    }
+  ]
+}

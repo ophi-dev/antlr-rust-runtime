@@ -6,6 +6,9 @@ import { fileURLToPath } from "node:url";
 
 import {
     ANTLR_NG_COMMIT,
+    ATN_CONSTRUCTION_BASE_COMMIT,
+    ATN_CONSTRUCTION_IMPLEMENTATION_COMMIT,
+    ATN_CONSTRUCTION_TEST_COMMIT,
     ATN_SERIALIZATION_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_COMMIT,
     IMPLEMENTATION_COMMIT,
@@ -28,6 +31,20 @@ const ATN_SERIALIZATION_TEST_COMMAND =
     "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::";
 const ATN_SERIALIZATION_TEST_MODULE =
     "src/bin_support/grammar/atn/interp_test.rs";
+const ATN_CONSTRUCTION_TEST_COMMAND =
+    "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_construction::";
+const ATN_CONSTRUCTION_COVERED_COMMAND =
+    "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state";
+const ATN_CONSTRUCTION_RED_CASES = new Map([
+    [
+        "testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58",
+        "ATN graph contained RuleStop_e_3->BlockEnd_26 three times instead of once",
+    ],
+    [
+        "testatnconstruction-testparserrulerefinlexerrule-34f2000a35",
+        "missing G4S008 diagnostic; Stage 0 reported G4F003 no viable alternative at input 'a'",
+    ],
+]);
 
 const PHASE_B_SUITES = new Set([
     "TestATNConstruction",
@@ -501,8 +518,13 @@ function completedPhaseBRow(
     }
     const sourceCaseIds = cases.map((testCase) => testCase.id).sort();
     const observable =
-        `direct Rust serialization matches the complete Java 4.13.2 .interp ` +
-        `for ${cases[0].suite}.${cases[0].name}`;
+        completed.kind === "atn-serialization"
+            ? `direct Rust serialization matches the complete Java 4.13.2 .interp ` +
+              `for ${cases[0].suite}.${cases[0].name}`
+            : `direct Rust ATN construction matches the Java 4.13.2 graph, ` +
+              `.interp, or diagnostic for ${cases[0].suite}.${cases[0].name}`;
+    const coveredExisting =
+        completed.resolution === "verified-covered-existing";
     const closure = {
         logical_id: logicalId,
         source_case_ids: sourceCaseIds,
@@ -520,11 +542,12 @@ function completedPhaseBRow(
         rust_test: completed.rustTest,
         unit_under_test: policy.unit,
         observable,
-        scaffold_commit: PHASE_B_BASE_COMMIT,
-        primary_test_commit: ATN_SERIALIZATION_TEST_COMMIT,
-        resolution: "verified-covered-existing",
+        scaffold_commit: completed.scaffoldCommit,
+        primary_test_commit: completed.testCommit,
+        ...(coveredExisting
+            ? { resolution: "verified-covered-existing" }
+            : {}),
     };
-    const greenResult = "36 passed; 0 failed";
     return {
         logical_id: logicalId,
         source_case_ids: sourceCaseIds,
@@ -533,7 +556,9 @@ function completedPhaseBRow(
         disposition: "port",
         active_revision_id: `${logicalId}-r1`,
         tdd_state: "done",
-        resolution: "verified-covered-existing",
+        ...(coveredExisting
+            ? { resolution: "verified-covered-existing" }
+            : {}),
         rust_test: completed.rustTest,
         primary_test_source: sourceIdentity(cases, "java-antlr"),
         alternate_test_source: sourceIdentity(cases, "antlr-ng"),
@@ -541,21 +566,32 @@ function completedPhaseBRow(
         alternate_implementation_source: `java-antlr@${JAVA_COMMIT}`,
         prerequisites: ["Phase B compiler boundary"],
         unit_under_test: policy.unit,
-        expected_red_failure_fingerprint:
-            "not applicable: the case-specific port passed against the existing Phase B compiler",
+        expected_red_failure_fingerprint: coveredExisting
+            ? "not applicable: the case-specific port passed against the existing Phase B compiler"
+            : completed.redFingerprint,
         observable_equivalence: observable,
-        scaffold_commit: PHASE_B_BASE_COMMIT,
-        primary_test_commit: ATN_SERIALIZATION_TEST_COMMIT,
-        verified_covered_existing: {
-            command: ATN_SERIALIZATION_TEST_COMMAND,
-            commit: ATN_SERIALIZATION_TEST_COMMIT,
-            exit_code: 0,
-            result: greenResult,
-        },
-        primary_implementation_commit: PHASE_B_IMPLEMENTATION_COMMIT,
+        scaffold_commit: completed.scaffoldCommit,
+        primary_test_commit: completed.testCommit,
+        ...(coveredExisting
+            ? {
+                  verified_covered_existing: {
+                      command: completed.testCommand,
+                      commit: completed.testCommit,
+                      exit_code: 0,
+                      result: completed.greenResult,
+                  },
+              }
+            : {
+                  demonstrated_red: {
+                      command: completed.testCommand,
+                      exit_code: 101,
+                      fingerprint: completed.redFingerprint,
+                  },
+              }),
+        primary_implementation_commit: completed.implementationCommit,
         green_result: {
-            command: ATN_SERIALIZATION_TEST_COMMAND,
-            result: greenResult,
+            command: completed.testCommand,
+            result: completed.greenResult,
         },
         closure,
         closure_sha256: digest(stableStringify(closure)),
@@ -569,33 +605,83 @@ async function loadCompletedPhaseBPorts() {
         "utf8",
     );
     const ports = new Map();
-    const pattern =
+    const serializationPattern =
         /case!\(\s*(\w+),\s*(parser|lexer),\s*"(testatnserialization-[^"]+)",\s*"[^"]+"\s*\);/gu;
-    for (const match of source.matchAll(pattern)) {
+    for (const match of source.matchAll(serializationPattern)) {
         const [, moduleName, , logicalId] = match;
-        const fixtureBase = `tests/codegen-direct/fixtures/${logicalId}`;
-        const manifest = JSON.parse(
-            await readFile(resolve(repoRoot, fixtureBase, "fixture.json"), "utf8"),
-        );
-        const fixturePaths = [
-            `${fixtureBase}/fixture.json`,
-            ...Object.keys(manifest.files ?? {}).map(
-                (path) => `${fixtureBase}/${path}`,
-            ),
-        ].sort();
         ports.set(logicalId, {
-            fixturePaths,
+            fixturePaths: await fixturePaths(logicalId),
             rustTest:
                 "grammar::atn::interp_test::tests::upstream_atn_serialization::" +
                 `${moduleName}::matches_java`,
+            kind: "atn-serialization",
+            resolution: "verified-covered-existing",
+            scaffoldCommit: PHASE_B_BASE_COMMIT,
+            testCommit: ATN_SERIALIZATION_TEST_COMMIT,
+            implementationCommit: PHASE_B_IMPLEMENTATION_COMMIT,
+            testCommand: ATN_SERIALIZATION_TEST_COMMAND,
+            greenResult: "36 passed; 0 failed",
         });
     }
-    if (ports.size !== 36) {
+    const serializationCount = ports.size;
+    if (serializationCount !== 36) {
         throw new Error(
-            `expected 36 completed TestATNSerialization ports, found ${ports.size}`,
+            `expected 36 completed TestATNSerialization ports, found ${serializationCount}`,
         );
     }
+
+    const constructionPattern =
+        /(?:case|partial_case|error_case)!\(\s*(\w+),\s*"(testatnconstruction-[^"]+)"(?:,\s*"[^"]+")?\s*\);/gu;
+    let constructionCount = 0;
+    for (const match of source.matchAll(constructionPattern)) {
+        const [, moduleName, logicalId] = match;
+        const redFingerprint = ATN_CONSTRUCTION_RED_CASES.get(logicalId);
+        ports.set(logicalId, {
+            fixturePaths: await fixturePaths(logicalId),
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_atn_construction::" +
+                `${moduleName}::matches_java`,
+            kind: "atn-construction",
+            resolution: redFingerprint
+                ? "ported"
+                : "verified-covered-existing",
+            scaffoldCommit: ATN_CONSTRUCTION_BASE_COMMIT,
+            testCommit: ATN_CONSTRUCTION_TEST_COMMIT,
+            implementationCommit: redFingerprint
+                ? ATN_CONSTRUCTION_IMPLEMENTATION_COMMIT
+                : PHASE_B_IMPLEMENTATION_COMMIT,
+            testCommand: redFingerprint
+                ? `${ATN_CONSTRUCTION_TEST_COMMAND}${moduleName}`
+                : ATN_CONSTRUCTION_COVERED_COMMAND,
+            greenResult: redFingerprint
+                ? "1 passed; 0 failed"
+                : "38 passed; 0 failed",
+            redFingerprint,
+        });
+        constructionCount += 1;
+    }
+    if (constructionCount !== 40) {
+        throw new Error(
+            `expected 40 completed TestATNConstruction ports, found ${constructionCount}`,
+        );
+    }
+    if (ports.size !== 76) {
+        throw new Error(`expected 76 completed Phase B ports, found ${ports.size}`);
+    }
     return ports;
+}
+
+async function fixturePaths(logicalId) {
+    const fixtureBase = `tests/codegen-direct/fixtures/${logicalId}`;
+    const manifest = JSON.parse(
+        await readFile(resolve(repoRoot, fixtureBase, "fixture.json"), "utf8"),
+    );
+    return [
+        `${fixtureBase}/fixture.json`,
+        ...Object.keys(manifest.files ?? {}).map(
+            (path) => `${fixtureBase}/${path}`,
+        ),
+    ].sort();
 }
 
 function policyFor(suite, name) {

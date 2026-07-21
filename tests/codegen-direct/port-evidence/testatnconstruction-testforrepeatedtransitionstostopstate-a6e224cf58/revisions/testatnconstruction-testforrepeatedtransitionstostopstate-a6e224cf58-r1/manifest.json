@@ -1,0 +1,142 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58",
+  "revision_id": "testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "closure": {
+    "logical_id": "testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58",
+    "source_case_ids": [
+      "antlr-ng:testatnconstruction-testforrepeatedtransitionstostopstate@3e8db27d6a5a",
+      "java-antlr:testatnconstruction-testforrepeatedtransitionstostopstate@3e8db27d6a5a"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/T.g4",
+      "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/T.interp",
+      "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/T.tokens",
+      "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/TLexer.interp",
+      "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/TLexer.tokens",
+      "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/fixture.json",
+      "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/oracle/antlr-ng-atn-rule-e.txt",
+      "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/oracle/antlr-ng-atn.index",
+      "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/oracle/java-atn-rule-e.txt",
+      "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/oracle/java-atn.index"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::repeated_transitions_to_stop_state::matches_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testForRepeatedTransitionsToStopState",
+    "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+    "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690"
+  },
+  "closure_sha256": "abaef4f65f235c730c8784e26809610b1f40221f29ab61b621ca475cd801de34",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testatnconstruction-testforrepeatedtransitionstostopstate@3e8db27d6a5a",
+      "path": "tests/TestATNConstruction.spec.ts",
+      "sha256": "41eff30b806e56d82939e1cb57ec72f260e564a6c07b0473340d705665429da4"
+    },
+    {
+      "source_case_id": "java-antlr:testatnconstruction-testforrepeatedtransitionstostopstate@3e8db27d6a5a",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestATNConstruction.java",
+      "sha256": "4565dc4b58d7cd05fbd6a7c365adb80365552a4dfa2d1a2217b1bde9f813ace1"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/T.g4",
+      "sha256": "30c5f8139d622221aa34a339c1801b34d510d17e73b62c090994c3876bad6071"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/T.interp",
+      "sha256": "b0217869fd50d8e3adee952f6209419d9dba347d280017d515661158e87cd43b"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/T.tokens",
+      "sha256": "b88663a779a8405d2d143976793bc3efb1042b04368bdfb2f7c392a70e00e289"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/TLexer.interp",
+      "sha256": "74560931fd987fe9b2c5ec2c3febd7e1c64525f99ad3d7643f8381251c772439"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/TLexer.tokens",
+      "sha256": "b88663a779a8405d2d143976793bc3efb1042b04368bdfb2f7c392a70e00e289"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/fixture.json",
+      "sha256": "04a4304623eb0ea2330d264daa3fb2950d32d0a2fba84132595cc1876cf463f9"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/oracle/antlr-ng-atn-rule-e.txt",
+      "sha256": "11ca0f421998ffc2a34f8271b3af66cdbd94bf797617f37da14f5b8d93026c36"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/oracle/antlr-ng-atn.index",
+      "sha256": "1a3e37b9d986973839f0d9ae55e536ed7984a43a9e8ec23533d1bf240d04fe92"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/oracle/java-atn-rule-e.txt",
+      "sha256": "11ca0f421998ffc2a34f8271b3af66cdbd94bf797617f37da14f5b8d93026c36"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/oracle/java-atn.index",
+      "sha256": "23e126825fbbda3ed62047e3db14ae0ddacbdf10b93c31336b3343a70ce4b5df"
+    }
+  ],
+  "commits": {
+    "scaffold": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+    "primary_test": "62111d633ccc4bddcc85ab7126591febbeb18690",
+    "primary_implementation": "5d0729a84eac4b89012e31819eb00f5acb654c3a"
+  },
+  "ancestry": {
+    "primary_test_parent": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+    "primary_implementation_parent": "62111d633ccc4bddcc85ab7126591febbeb18690",
+    "reachability": "the implementation commit is directly based on the locked red construction tests"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_atn_construction {",
+      "end_marker": "\n    struct GraphOracle",
+      "sha256": "9f3b3c6e42504097e621875ec8769be29d614fa951a9bc13f59a82eb16a3b4f1"
+    }
+  ],
+  "demonstrated_red": {
+    "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_construction::repeated_transitions_to_stop_state",
+    "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+    "exit_code": 101,
+    "fingerprint": "ATN graph contained RuleStop_e_3->BlockEnd_26 three times instead of once"
+  },
+  "green_result": {
+    "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_construction::repeated_transitions_to_stop_state",
+    "commit": "5d0729a84eac4b89012e31819eb00f5acb654c3a",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/revisions/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58-r1/oracle-results/declared-sources.json",
+      "sha256": "94da8cae965302c93b363f5663f501e2053ef0e2aa11790c146dee7737f197ba"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/revisions/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58-r1/matrix-results/results.json",
+      "sha256": "228964cabac6b602c67d77e85dac7e7948e9bc513b51070b78a98851fa90bb6c"
+    }
+  ]
+}

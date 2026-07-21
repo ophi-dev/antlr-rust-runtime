@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnconstruction-testfollow-335ed81c22",
+  "revision_id": "testatnconstruction-testfollow-335ed81c22-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "resolution": "verified-covered-existing",
+  "closure": {
+    "logical_id": "testatnconstruction-testfollow-335ed81c22",
+    "source_case_ids": [
+      "antlr-ng:testatnconstruction-testfollow@98f5c81b1880",
+      "java-antlr:testatnconstruction-testfollow@98f5c81b1880"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/P.g4",
+      "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/P.interp",
+      "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/P.tokens",
+      "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/diagnostics.json",
+      "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/fixture.json",
+      "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/oracle/antlr-ng-atn-rule-b.txt",
+      "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/oracle/antlr-ng-atn.index",
+      "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/oracle/java-atn-rule-b.txt",
+      "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/oracle/java-atn.index"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::follow::matches_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testFollow",
+    "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+    "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+    "resolution": "verified-covered-existing"
+  },
+  "closure_sha256": "542b8b6bf342b1233c789f5eafbd60d6f550c15c948f470bae86463df2b3330c",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testatnconstruction-testfollow@98f5c81b1880",
+      "path": "tests/TestATNConstruction.spec.ts",
+      "sha256": "41eff30b806e56d82939e1cb57ec72f260e564a6c07b0473340d705665429da4"
+    },
+    {
+      "source_case_id": "java-antlr:testatnconstruction-testfollow@98f5c81b1880",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestATNConstruction.java",
+      "sha256": "4565dc4b58d7cd05fbd6a7c365adb80365552a4dfa2d1a2217b1bde9f813ace1"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/P.g4",
+      "sha256": "55ea0bfedec3cf78eb08c97edf750070dda4ac3afb0e2d2c6e285dd264f6b578"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/P.interp",
+      "sha256": "4afdba2a7e2fc3ecde53e477de8ac8ecec12b2b007020439d25a3f49f1b563dd"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/P.tokens",
+      "sha256": "f52b5d61960c17821646b850c260c0f4c29b0629885a55c52c7652185b854b8f"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/diagnostics.json",
+      "sha256": "57793a7c0661368cd61b8c8d36d0523fb4b2ab87edaa59cecc70e16236f5efe5"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/fixture.json",
+      "sha256": "a7e58e24cc01b5b4c38fdaeff81422f784abbe466998154f30afdcb042e6b7db"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/oracle/antlr-ng-atn-rule-b.txt",
+      "sha256": "ba282fefb64ba9cb33297f86a70488507b8ef9bc2099d545637e89a481120543"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/oracle/antlr-ng-atn.index",
+      "sha256": "b83c73f27af3fd8cd6186eb0c08e4fe9fac6f7c65fdf11c5138dd4fc84c64836"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/oracle/java-antlr.stderr",
+      "sha256": "7ce26be87d9e566fbc11e2f2f77284d775b0dfba317e3285d3e61d38cc092b20"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/oracle/java-atn-rule-b.txt",
+      "sha256": "ba282fefb64ba9cb33297f86a70488507b8ef9bc2099d545637e89a481120543"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testfollow-335ed81c22/oracle/java-atn.index",
+      "sha256": "6fe1f7455004d057af3d28cdfca52e6a2760061ea0df9b932ef243691314c92c"
+    }
+  ],
+  "commits": {
+    "scaffold": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+    "primary_test": "62111d633ccc4bddcc85ab7126591febbeb18690",
+    "primary_implementation": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad"
+  },
+  "ancestry": {
+    "primary_test_parent": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+    "primary_implementation_parent": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+    "reachability": "the case-specific test passed against the Phase B implementation already reachable from its parent"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_atn_construction {",
+      "end_marker": "\n    struct GraphOracle",
+      "sha256": "9f3b3c6e42504097e621875ec8769be29d614fa951a9bc13f59a82eb16a3b4f1"
+    }
+  ],
+  "verified_covered_existing": {
+    "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+    "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+    "exit_code": 0,
+    "result": "38 passed; 0 failed",
+    "covering_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad"
+  },
+  "green_result": {
+    "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+    "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+    "exit_code": 0,
+    "result": "38 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testatnconstruction-testfollow-335ed81c22/revisions/testatnconstruction-testfollow-335ed81c22-r1/oracle-results/declared-sources.json",
+      "sha256": "a818fc64133250e1d02e052e2931481a42ab29e98a097b2870be4b48bbc1300a"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testatnconstruction-testfollow-335ed81c22/revisions/testatnconstruction-testfollow-335ed81c22-r1/matrix-results/results.json",
+      "sha256": "2c8213b208bf8f3c7d6142ba267a77716c29d6f4ff2fc0be62ed3e26121e753f"
+    }
+  ]
+}

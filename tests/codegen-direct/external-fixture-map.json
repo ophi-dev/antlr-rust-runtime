@@ -492,7 +492,7 @@
           "tdd_owner": "upstream:testatnconstruction-testcharsetunicodepropertyescape-1ca01ebe06",
           "rust_test": "grammar::atn::interp_test::tests::vscode_sentences_combined_parser_and_unicode_lexer_match_java",
           "upstream_active_revision_id": "testatnconstruction-testcharsetunicodepropertyescape-1ca01ebe06-r1",
-          "transitive_closure_sha256": "57333464e9f98b17703408c050659328a0c7603b93168ecf97f614734b240b39"
+          "transitive_closure_sha256": "580cd6c5f7e85aca2bc6b3f0b865f60ab5be1b399884b063b84fa733e6b73f4f"
         }
       ]
     },

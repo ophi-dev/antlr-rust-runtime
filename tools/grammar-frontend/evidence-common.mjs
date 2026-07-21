@@ -17,6 +17,12 @@ export const PHASE_B_IMPLEMENTATION_COMMIT =
     "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad";
 export const ATN_SERIALIZATION_TEST_COMMIT =
     "5c5c82fb7879bce9d99d684855bfd07dd6405850";
+export const ATN_CONSTRUCTION_BASE_COMMIT =
+    "9bf1d7b5892bd03af02f2824d977d15a6cb43d20";
+export const ATN_CONSTRUCTION_TEST_COMMIT =
+    "62111d633ccc4bddcc85ab7126591febbeb18690";
+export const ATN_CONSTRUCTION_IMPLEMENTATION_COMMIT =
+    "5d0729a84eac4b89012e31819eb00f5acb654c3a";
 
 export function stableStringify(value) {
     if (Array.isArray(value)) {

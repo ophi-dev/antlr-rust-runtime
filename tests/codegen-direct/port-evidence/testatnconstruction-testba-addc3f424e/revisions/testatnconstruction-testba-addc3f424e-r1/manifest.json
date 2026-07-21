@@ -1,0 +1,150 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnconstruction-testba-addc3f424e",
+  "revision_id": "testatnconstruction-testba-addc3f424e-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "resolution": "verified-covered-existing",
+  "closure": {
+    "logical_id": "testatnconstruction-testba-addc3f424e",
+    "source_case_ids": [
+      "antlr-ng:testatnconstruction-testba@44780772c73b",
+      "java-antlr:testatnconstruction-testba@751d1d912368"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/P.g4",
+      "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/P.interp",
+      "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/P.tokens",
+      "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/diagnostics.json",
+      "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/fixture.json",
+      "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/oracle/antlr-ng-atn-rule-a.txt",
+      "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/oracle/antlr-ng-atn-rule-b.txt",
+      "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/oracle/antlr-ng-atn.index",
+      "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/oracle/java-atn-rule-a.txt",
+      "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/oracle/java-atn-rule-b.txt",
+      "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/oracle/java-atn.index"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_atn_construction::ba::matches_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust ATN construction matches the Java 4.13.2 graph, .interp, or diagnostic for TestATNConstruction.testbA",
+    "scaffold_commit": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+    "primary_test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+    "resolution": "verified-covered-existing"
+  },
+  "closure_sha256": "d09b3064a3b95669fcbf187bfa92777798c2244889dd2e56518958a06e4c784c",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testatnconstruction-testba@44780772c73b",
+      "path": "tests/TestATNConstruction.spec.ts",
+      "sha256": "41eff30b806e56d82939e1cb57ec72f260e564a6c07b0473340d705665429da4"
+    },
+    {
+      "source_case_id": "java-antlr:testatnconstruction-testba@751d1d912368",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestATNConstruction.java",
+      "sha256": "4565dc4b58d7cd05fbd6a7c365adb80365552a4dfa2d1a2217b1bde9f813ace1"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/P.g4",
+      "sha256": "caadb7ac73cdad13739e3586e09b4feaedc1dd674d9193eceff6317b5317bffc"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/P.interp",
+      "sha256": "b9d72ac1a70994b54c618c402b96a2d06461413528e7bc545c486c031ca48fe3"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/P.tokens",
+      "sha256": "beb5f2519a8d4a22ff19d6b4ba05806c75710dc1ad7e2ef37ee1d1a950d4b074"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/diagnostics.json",
+      "sha256": "1043a1c52a255bb5defbd32ce1d750e0a8a7631370e42de8b68c762af4618203"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/fixture.json",
+      "sha256": "9a44d3fd500cd82048512caa454c452c5f998dc48f5f00de50c81202a85e81a4"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/oracle/antlr-ng-atn-rule-a.txt",
+      "sha256": "71dbf823022ea66815148c2f03c019e1f82f64404e41cb13cf273d4b1a4f4d99"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/oracle/antlr-ng-atn-rule-b.txt",
+      "sha256": "050083f78780010b0a398de110f78df92bd4adc971920837d1f4d34a7373c0f7"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/oracle/antlr-ng-atn.index",
+      "sha256": "aab7f671aaaf27d93833b389c1866aa46d06edf10bdde55a143a7f1d67159893"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/oracle/java-antlr.stderr",
+      "sha256": "2be51b1adeb0e2e1861e0f71de7e6efe4d1c006b1d55e997afc574d632e1674e"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/oracle/java-atn-rule-a.txt",
+      "sha256": "71dbf823022ea66815148c2f03c019e1f82f64404e41cb13cf273d4b1a4f4d99"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/oracle/java-atn-rule-b.txt",
+      "sha256": "050083f78780010b0a398de110f78df92bd4adc971920837d1f4d34a7373c0f7"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnconstruction-testba-addc3f424e/oracle/java-atn.index",
+      "sha256": "4c6590af257b3e8cc64cd1110e6c5bbf3090f2a239c4e5c9a95c0d4281fe1e16"
+    }
+  ],
+  "commits": {
+    "scaffold": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+    "primary_test": "62111d633ccc4bddcc85ab7126591febbeb18690",
+    "primary_implementation": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad"
+  },
+  "ancestry": {
+    "primary_test_parent": "9bf1d7b5892bd03af02f2824d977d15a6cb43d20",
+    "primary_implementation_parent": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+    "reachability": "the case-specific test passed against the Phase B implementation already reachable from its parent"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_atn_construction {",
+      "end_marker": "\n    struct GraphOracle",
+      "sha256": "9f3b3c6e42504097e621875ec8769be29d614fa951a9bc13f59a82eb16a3b4f1"
+    }
+  ],
+  "verified_covered_existing": {
+    "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+    "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+    "exit_code": 0,
+    "result": "38 passed; 0 failed",
+    "covering_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad"
+  },
+  "green_result": {
+    "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+    "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+    "exit_code": 0,
+    "result": "38 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testatnconstruction-testba-addc3f424e/revisions/testatnconstruction-testba-addc3f424e-r1/oracle-results/declared-sources.json",
+      "sha256": "2c1fbce9ed9bb0600a330cfff672d2cee2e692f1a3bd56198553495f56b9b689"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testatnconstruction-testba-addc3f424e/revisions/testatnconstruction-testba-addc3f424e-r1/matrix-results/results.json",
+      "sha256": "bcfeace9d764e88954591459227566e12fbc23d952d219664013870fb7402518"
+    }
+  ]
+}

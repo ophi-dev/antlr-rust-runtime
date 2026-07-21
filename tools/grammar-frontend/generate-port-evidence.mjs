@@ -10,6 +10,9 @@ import { fileURLToPath } from "node:url";
 
 import {
     ANTLR_NG_COMMIT,
+    ATN_CONSTRUCTION_BASE_COMMIT,
+    ATN_CONSTRUCTION_IMPLEMENTATION_COMMIT,
+    ATN_CONSTRUCTION_TEST_COMMIT,
     ATN_SERIALIZATION_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_PARENT,
@@ -40,6 +43,9 @@ const ATN_SERIALIZATION_TEST_PATH =
 const ATN_SERIALIZATION_TEST_START =
     "    mod upstream_atn_serialization {";
 const ATN_SERIALIZATION_TEST_END = "\n    fn assert_lexer_fixture";
+const ATN_CONSTRUCTION_TEST_START =
+    "    mod upstream_atn_construction {";
+const ATN_CONSTRUCTION_TEST_END = "\n    struct GraphOracle";
 const SYMBOL_INFO_SHA256 =
     "df274a0dca42823cc2ef2608d98d544be53246a48c56f96050b0a987ce0890f3";
 
@@ -271,6 +277,63 @@ const atnSerializationLockedSections = [
         sha256: digest(checkedInAtnSerializationTests),
     },
 ];
+const checkedInAtnConstructionTests = sectionBetweenMarkers(
+    await readFile(resolve(repoRoot, ATN_SERIALIZATION_TEST_PATH), "utf8"),
+    ATN_CONSTRUCTION_TEST_START,
+    ATN_CONSTRUCTION_TEST_END,
+);
+const recordedAtnConstructionTests = gitShowOptional(
+    repoRoot,
+    ATN_CONSTRUCTION_TEST_COMMIT,
+    ATN_SERIALIZATION_TEST_PATH,
+);
+const implementedAtnConstructionTests = gitShowOptional(
+    repoRoot,
+    ATN_CONSTRUCTION_IMPLEMENTATION_COMMIT,
+    ATN_SERIALIZATION_TEST_PATH,
+);
+if (recordedAtnConstructionTests === null) {
+    warnMissingHistoricalSource(
+        "ATN construction test verification",
+        ATN_CONSTRUCTION_TEST_COMMIT,
+        ATN_SERIALIZATION_TEST_PATH,
+    );
+} else if (
+    sectionBetweenMarkers(
+        recordedAtnConstructionTests,
+        ATN_CONSTRUCTION_TEST_START,
+        ATN_CONSTRUCTION_TEST_END,
+    ) !== checkedInAtnConstructionTests
+) {
+    throw new Error(
+        "checked-in ATN construction ports differ from their test commit",
+    );
+}
+if (implementedAtnConstructionTests === null) {
+    warnMissingHistoricalSource(
+        "ATN construction implementation verification",
+        ATN_CONSTRUCTION_IMPLEMENTATION_COMMIT,
+        ATN_SERIALIZATION_TEST_PATH,
+    );
+} else if (
+    sectionBetweenMarkers(
+        implementedAtnConstructionTests,
+        ATN_CONSTRUCTION_TEST_START,
+        ATN_CONSTRUCTION_TEST_END,
+    ) !== checkedInAtnConstructionTests
+) {
+    throw new Error(
+        "ATN construction implementation changed the locked test ports",
+    );
+}
+const atnConstructionLockedSections = [
+    {
+        path: ATN_SERIALIZATION_TEST_PATH,
+        marker: ATN_CONSTRUCTION_TEST_START,
+        end_marker: ATN_CONSTRUCTION_TEST_END,
+        sha256: digest(checkedInAtnConstructionTests),
+    },
+];
 
 const upstreamByLogicalId = new Map(
     testMap.rows.map((row) => [row.logical_id, row]),
@@ -365,9 +428,38 @@ for (const row of completedRows) {
     const phaseBAtnSerialization = row.logical_id.startsWith(
         "testatnserialization-",
     );
-    if (row.owner_phase === "B" && !phaseBAtnSerialization) {
+    const phaseBAtnConstruction = row.logical_id.startsWith(
+        "testatnconstruction-",
+    );
+    if (
+        row.owner_phase === "B" &&
+        !phaseBAtnSerialization &&
+        !phaseBAtnConstruction
+    ) {
         throw new Error(`missing Phase B evidence profile for ${row.logical_id}`);
     }
+    const phaseBProfile = phaseBAtnSerialization
+        ? {
+              lockedSections: atnSerializationLockedSections,
+              scaffoldCommit: PHASE_B_BASE_COMMIT,
+              testParent: PHASE_B_IMPLEMENTATION_COMMIT,
+              implementationParent: PHASE_B_BASE_COMMIT,
+              reachability:
+                  "the case-specific test commit is directly based on the existing Phase B implementation",
+          }
+        : phaseBAtnConstruction
+          ? {
+                lockedSections: atnConstructionLockedSections,
+                scaffoldCommit: ATN_CONSTRUCTION_BASE_COMMIT,
+                testParent: ATN_CONSTRUCTION_BASE_COMMIT,
+                implementationParent: coveredExisting
+                    ? PHASE_B_BASE_COMMIT
+                    : ATN_CONSTRUCTION_TEST_COMMIT,
+                reachability: coveredExisting
+                    ? "the case-specific test passed against the Phase B implementation already reachable from its parent"
+                    : "the implementation commit is directly based on the locked red construction tests",
+            }
+          : null;
     await addEvidence({
         logicalId: row.logical_id,
         revisionId: row.active_revision_id,
@@ -386,6 +478,15 @@ for (const row of completedRows) {
                   java_compatibility_verdict:
                       "exact Java 4.13.2 recognizer metadata and serialized ATN equality",
               }
+            : phaseBAtnConstruction
+              ? {
+                    primary:
+                        "the direct Rust ATN graph, complete .interp, or semantic diagnostic matches the immutable Java 4.13.2 oracle",
+                    alternate:
+                        "the pinned antlr-ng TestATNConstruction case and retained divergence artifacts expose the alternate outcome",
+                    java_compatibility_verdict:
+                        "Java 4.13.2 supplies the compatibility verdict for graph, serialization, Unicode, and diagnostic differences",
+                }
             : {
                   primary: coveredExisting
                       ? "the case-specific Rust port matches the pinned accepted and rejected syntax outcomes"
@@ -400,30 +501,33 @@ for (const row of completedRows) {
         implementationCommit: row.primary_implementation_commit,
         testCommand: row.green_result.command,
         greenResultText: row.green_result.result,
-        lockedSections: phaseBAtnSerialization
-            ? atnSerializationLockedSections
+        lockedSections: phaseBProfile
+            ? phaseBProfile.lockedSections
             : coveredExisting
               ? syntaxLockedSections
               : defaultLockedSections,
         ownerPhase: row.owner_phase,
-        scaffoldCommit: phaseBAtnSerialization
-            ? PHASE_B_BASE_COMMIT
+        scaffoldCommit: phaseBProfile
+            ? phaseBProfile.scaffoldCommit
             : SCAFFOLD_COMMIT,
-        testParent: phaseBAtnSerialization
-            ? PHASE_B_IMPLEMENTATION_COMMIT
+        testParent: phaseBProfile
+            ? phaseBProfile.testParent
             : coveredExisting
               ? FRONTEND_SYNTAX_TEST_PARENT
               : SCAFFOLD_COMMIT,
-        implementationParent: phaseBAtnSerialization
-            ? PHASE_B_BASE_COMMIT
+        implementationParent: phaseBProfile
+            ? phaseBProfile.implementationParent
             : coveredExisting
               ? null
               : TEST_COMMIT,
-        reachability: phaseBAtnSerialization
-            ? "the case-specific test commit is directly based on the existing Phase B implementation"
+        reachability: phaseBProfile
+            ? phaseBProfile.reachability
             : coveredExisting
               ? "the case-specific test passed against an implementation already present in its parent"
               : "direct ancestry is verified when the recorded commit objects are available",
+        demonstratedRed: phaseBAtnConstruction
+            ? row.demonstrated_red
+            : undefined,
     });
 }
 
@@ -469,6 +573,7 @@ async function addEvidence({
     testParent,
     implementationParent,
     reachability,
+    demonstratedRed,
 }) {
     const base = `tests/codegen-direct/port-evidence/${logicalId}`;
     const revisionBase = `${base}/revisions/${revisionId}`;
@@ -579,7 +684,12 @@ async function addEvidence({
                   },
               }
             : {
-                  demonstrated_red: redResult(testCommand, testCommit),
+                  demonstrated_red: redResult(
+                      demonstratedRed?.command ?? testCommand,
+                      testCommit,
+                      demonstratedRed?.exit_code ?? 101,
+                      demonstratedRed?.fingerprint,
+                  ),
               }),
         green_result: greenResult(
             testCommand,
@@ -625,12 +735,17 @@ async function addEvidence({
     expectedFiles.set(indexPath, `${JSON.stringify(index, null, 2)}\n`);
 }
 
-function redResult(command = TEST_COMMAND, commit = TEST_COMMIT) {
+function redResult(
+    command = TEST_COMMAND,
+    commit = TEST_COMMIT,
+    exitCode = 101,
+    fingerprint = "G4F000: the Stage 0 grammar frontend is not installed",
+) {
     return {
         command,
         commit,
-        exit_code: 101,
-        fingerprint: "G4F000: the Stage 0 grammar frontend is not installed",
+        exit_code: exitCode,
+        fingerprint,
     };
 }
 

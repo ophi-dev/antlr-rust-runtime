@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58",
+  "revision_id": "testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58-r1",
+  "cells": [
+    {
+      "test_port": "primary",
+      "test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "implementation_port": "primary-antlr-ng",
+      "implementation_commit": "5d0729a84eac4b89012e31819eb00f5acb654c3a",
+      "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_construction::repeated_transitions_to_stop_state",
+      "result": "green: 1 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the primary implementation passed the locked primary tests"
+}

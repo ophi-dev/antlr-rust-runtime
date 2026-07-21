@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnconstruction-testlexerisntsetmulticharstring-a38c8db90d",
+  "active_revision_id": "testatnconstruction-testlexerisntsetmulticharstring-a38c8db90d-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnconstruction-testlexerisntsetmulticharstring-a38c8db90d-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnconstruction-testlexerisntsetmulticharstring-a38c8db90d/revisions/testatnconstruction-testlexerisntsetmulticharstring-a38c8db90d-r1/manifest.json",
+      "closure_sha256": "aa8ad34f42ea10f04108ac203b506e3e8585102b760c97f7aba3a397186edf92"
+    }
+  ]
+}
