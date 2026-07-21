@@ -27,6 +27,9 @@ import {
     FRONTEND_SYNTAX_TEST_PARENT,
     IMPLEMENTATION_COMMIT,
     JAVA_COMMIT,
+    NESTED_ACTION_BASE_COMMIT,
+    NESTED_ACTION_IMPLEMENTATION_COMMIT,
+    NESTED_ACTION_TEST_COMMIT,
     PHASE_B_BASE_COMMIT,
     PHASE_B_IMPLEMENTATION_COMMIT,
     SCAFFOLD_COMMIT,
@@ -51,6 +54,8 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "../..");
 const EMPTY_VOCABULARY_LOGICAL_ID =
     "testvocabulary-testemptyvocabulary-66d31ad014";
+const NESTED_ACTION_LOGICAL_ID =
+    "testlexeractions-nested-actions-3d175db5e5";
 const evidenceRoot = resolve(
     repoRoot,
     "tests/codegen-direct/port-evidence",
@@ -277,6 +282,8 @@ for (const [logicalId, record] of records) {
         const charSupport = logicalId.startsWith(
             "testcharsupport-",
         );
+        const nestedAction =
+            logicalId === NESTED_ACTION_LOGICAL_ID;
         if (resolution === "verified-covered-existing") {
             if (atnSerialization) {
                 expect(
@@ -499,6 +506,23 @@ for (const [logicalId, record] of records) {
                         manifest.ancestry.primary_implementation_parent ===
                             CHAR_SUPPORT_TEST_COMMIT,
                     `${logicalId} character support recorded ancestry differs`,
+                );
+            } else if (nestedAction) {
+                expect(
+                    manifest.commits.scaffold ===
+                            NESTED_ACTION_BASE_COMMIT &&
+                        manifest.commits.primary_test ===
+                            NESTED_ACTION_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            NESTED_ACTION_IMPLEMENTATION_COMMIT,
+                    `${logicalId} nested action evidence commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            NESTED_ACTION_BASE_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            NESTED_ACTION_TEST_COMMIT,
+                    `${logicalId} nested action recorded ancestry differs`,
                 );
             } else {
                 expect(
@@ -727,6 +751,27 @@ if (emptyVocabularyImplementationParent !== null) {
         emptyVocabularyImplementationParent.trim() ===
             EMPTY_VOCABULARY_TEST_COMMIT,
         "empty vocabulary implementation commit is not based on its locked test",
+    );
+}
+const nestedActionTestParent = gitOptional([
+    "rev-parse",
+    `${NESTED_ACTION_TEST_COMMIT}^`,
+]);
+if (nestedActionTestParent !== null) {
+    expect(
+        nestedActionTestParent.trim() === NESTED_ACTION_BASE_COMMIT,
+        "nested action test commit is not based on its recorded base",
+    );
+}
+const nestedActionImplementationParent = gitOptional([
+    "rev-parse",
+    `${NESTED_ACTION_IMPLEMENTATION_COMMIT}^`,
+]);
+if (nestedActionImplementationParent !== null) {
+    expect(
+        nestedActionImplementationParent.trim() ===
+            NESTED_ACTION_TEST_COMMIT,
+        "nested action implementation commit is not based on its locked test",
     );
 }
 

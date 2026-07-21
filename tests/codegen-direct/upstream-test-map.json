@@ -20507,8 +20507,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testlexeractions-nested-actions-3d175db5e5-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testlexeractions-nested-actions-3d175db5e5",
+      "tdd_state": "done",
+      "rust_test": "grammar::syntax::tests::nested_actions_match_upstream",
       "primary_test_source": {
         "implementation": "independent-generated-oracle",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -20528,22 +20528,37 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "structural lexer action collection",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestLexerActions.Nested actions behavior",
+      "expected_red_failure_fingerprint": "predicate fail message retained grammar quotes: left Some(\"'custom message'\"), right Some(\"custom message\")",
+      "observable_equivalence": "direct Rust grammar modeling preserves nested member actions and normalizes predicate fail messages for TestLexerActions.Nested actions",
+      "scaffold_commit": "98219b854f02c72685ea13546c5b491a59b6d384",
+      "primary_test_commit": "8ab5c20ff8a99514d51672268b632f6b2bac7678",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::syntax::tests::nested_actions_match_upstream -- --exact",
+        "exit_code": 101,
+        "fingerprint": "predicate fail message retained grammar quotes: left Some(\"'custom message'\"), right Some(\"custom message\")"
+      },
+      "primary_implementation_commit": "78c6d271b6379fa230bb9de133307785a6877587",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::syntax::tests::nested_actions_match_upstream -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testlexeractions-nested-actions-3d175db5e5",
         "source_case_ids": [
           "antlr-ng:testlexeractions-nested-actions@9de183fdb922"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testlexeractions-nested-actions-3d175db5e5",
+        "rust_test": "grammar::syntax::tests::nested_actions_match_upstream",
         "unit_under_test": "structural lexer action collection",
-        "observable": "pinned TestLexerActions.Nested actions behavior"
+        "observable": "direct Rust grammar modeling preserves nested member actions and normalizes predicate fail messages for TestLexerActions.Nested actions",
+        "scaffold_commit": "98219b854f02c72685ea13546c5b491a59b6d384",
+        "primary_test_commit": "8ab5c20ff8a99514d51672268b632f6b2bac7678"
       },
-      "closure_sha256": "d2c234c38deb595b33ba153c400ff12aa6da45e4e0846c5bf93177b9a21d39ef",
-      "evidence_path": null
+      "closure_sha256": "8f14b2807084b2f8f5a454be14aacdef09d61674511923f6d6ecfc00d3a1dee3",
+      "evidence_path": "tests/codegen-direct/port-evidence/testlexeractions-nested-actions-3d175db5e5"
     },
     {
       "logical_id": "testlexeractions-test2actionsin1rule-710bd0bd7b",

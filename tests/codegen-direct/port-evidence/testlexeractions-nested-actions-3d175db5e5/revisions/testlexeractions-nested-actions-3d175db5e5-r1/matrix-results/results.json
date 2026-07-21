@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testlexeractions-nested-actions-3d175db5e5",
+  "revision_id": "testlexeractions-nested-actions-3d175db5e5-r1",
+  "cells": [
+    {
+      "test_port": "primary",
+      "test_commit": "8ab5c20ff8a99514d51672268b632f6b2bac7678",
+      "implementation_port": "primary-antlr-ng",
+      "implementation_commit": "78c6d271b6379fa230bb9de133307785a6877587",
+      "command": "cargo test --locked --bin antlr4-rust-gen grammar::syntax::tests::nested_actions_match_upstream -- --exact",
+      "result": "green: 1 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the primary implementation passed the locked primary tests"
+}

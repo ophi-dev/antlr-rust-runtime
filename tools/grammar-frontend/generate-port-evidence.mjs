@@ -30,6 +30,9 @@ import {
     FRONTEND_SYNTAX_TEST_PARENT,
     IMPLEMENTATION_COMMIT,
     JAVA_COMMIT,
+    NESTED_ACTION_BASE_COMMIT,
+    NESTED_ACTION_IMPLEMENTATION_COMMIT,
+    NESTED_ACTION_TEST_COMMIT,
     PHASE_B_BASE_COMMIT,
     PHASE_B_IMPLEMENTATION_COMMIT,
     SCAFFOLD_COMMIT,
@@ -104,6 +107,11 @@ const SCOPE_PARSING_TEST_END =
 const CHAR_SUPPORT_TEST_PATH =
     "src/bin_support/grammar/char_support.rs";
 const CHAR_SUPPORT_TEST_MARKER = "#[cfg(test)]\nmod tests {";
+const NESTED_ACTION_TEST_PATH =
+    "src/bin_support/grammar/syntax.rs";
+const NESTED_ACTION_TEST_MARKER = "#[cfg(test)]\nmod tests {";
+const NESTED_ACTION_LOGICAL_ID =
+    "testlexeractions-nested-actions-3d175db5e5";
 const EMPTY_VOCABULARY_LOGICAL_ID =
     "testvocabulary-testemptyvocabulary-66d31ad014";
 const SYMBOL_INFO_SHA256 =
@@ -784,6 +792,49 @@ const charSupportLockedSections = [
         sha256: digest(checkedInCharSupportTests),
     },
 ];
+const checkedInNestedActionTests = sectionAtMarker(
+    await readFile(resolve(repoRoot, NESTED_ACTION_TEST_PATH), "utf8"),
+    NESTED_ACTION_TEST_MARKER,
+);
+const recordedNestedActionTests = gitShowOptional(
+    repoRoot,
+    NESTED_ACTION_TEST_COMMIT,
+    NESTED_ACTION_TEST_PATH,
+);
+const implementedNestedActionTests = gitShowOptional(
+    repoRoot,
+    NESTED_ACTION_IMPLEMENTATION_COMMIT,
+    NESTED_ACTION_TEST_PATH,
+);
+if (
+    recordedNestedActionTests === null ||
+    sectionAtMarker(
+        recordedNestedActionTests,
+        NESTED_ACTION_TEST_MARKER,
+    ) !== checkedInNestedActionTests
+) {
+    throw new Error(
+        "checked-in nested action port differs from its test commit",
+    );
+}
+if (
+    implementedNestedActionTests === null ||
+    sectionAtMarker(
+        implementedNestedActionTests,
+        NESTED_ACTION_TEST_MARKER,
+    ) !== checkedInNestedActionTests
+) {
+    throw new Error(
+        "nested action implementation changed the locked test port",
+    );
+}
+const nestedActionLockedSections = [
+    {
+        path: NESTED_ACTION_TEST_PATH,
+        marker: NESTED_ACTION_TEST_MARKER,
+        sha256: digest(checkedInNestedActionTests),
+    },
+];
 
 const upstreamByLogicalId = new Map(
     testMap.rows.map((row) => [row.logical_id, row]),
@@ -902,6 +953,8 @@ for (const row of completedRows) {
     const phaseBCharSupport = row.logical_id.startsWith(
         "testcharsupport-",
     );
+    const phaseBNestedAction =
+        row.logical_id === NESTED_ACTION_LOGICAL_ID;
     if (
         row.owner_phase === "B" &&
         !phaseBAtnSerialization &&
@@ -912,7 +965,8 @@ for (const row of completedRows) {
         !phaseBTopologicalSort &&
         !phaseBVocabulary &&
         !phaseBScopeParsing &&
-        !phaseBCharSupport
+        !phaseBCharSupport &&
+        !phaseBNestedAction
     ) {
         throw new Error(`missing Phase B evidence profile for ${row.logical_id}`);
     }
@@ -1021,6 +1075,19 @@ for (const row of completedRows) {
                               reachability:
                                   "the character support implementation commit is directly based on its locked red tests",
                           }
+                        : phaseBNestedAction
+                          ? {
+                                lockedSections:
+                                    nestedActionLockedSections,
+                                scaffoldCommit:
+                                    NESTED_ACTION_BASE_COMMIT,
+                                testParent:
+                                    NESTED_ACTION_BASE_COMMIT,
+                                implementationParent:
+                                    NESTED_ACTION_TEST_COMMIT,
+                                reachability:
+                                    "the nested action implementation commit is directly based on its locked red test",
+                            }
           : null;
     await addEvidence({
         logicalId: row.logical_id,
@@ -1112,6 +1179,15 @@ for (const row of completedRows) {
                                   java_compatibility_verdict:
                                       "exact Java 4.13.2 TestCharSupport outputs",
                               }
+                            : phaseBNestedAction
+                              ? {
+                                    primary:
+                                        "the direct Rust grammar model preserves the nested members body and decodes the generated Java predicate fail-message oracle",
+                                    alternate:
+                                        "the pinned antlr-ng Nested actions case exposes the same nested action and predicate option observable",
+                                    java_compatibility_verdict:
+                                        "Java 4.13.2 supplies the predicate fail-message compatibility verdict",
+                                }
             : {
                   primary: coveredExisting
                       ? "the case-specific Rust port matches the pinned accepted and rejected syntax outcomes"
@@ -1157,6 +1233,7 @@ for (const row of completedRows) {
             phaseBVocabulary ||
             phaseBScopeParsing ||
             phaseBCharSupport ||
+            phaseBNestedAction ||
             (phaseBTokenPosition && !coveredExisting)
             ? row.demonstrated_red
             : undefined,

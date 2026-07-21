@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "logical_id": "testlexeractions-nested-actions-3d175db5e5",
+  "revision_id": "testlexeractions-nested-actions-3d175db5e5-r1",
+  "primary_test_source": {
+    "implementation": "independent-generated-oracle",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "source_case_ids": [],
+    "reason": "no java-antlr source case exposes this exact observable"
+  },
+  "alternate_test_source": {
+    "implementation": "antlr-ng",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "source_case_ids": [
+      "antlr-ng:testlexeractions-nested-actions@9de183fdb922"
+    ]
+  },
+  "outcomes": {
+    "primary": "the direct Rust grammar model preserves the nested members body and decodes the generated Java predicate fail-message oracle",
+    "alternate": "the pinned antlr-ng Nested actions case exposes the same nested action and predicate option observable",
+    "java_compatibility_verdict": "Java 4.13.2 supplies the predicate fail-message compatibility verdict"
+  }
+}

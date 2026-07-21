@@ -25,6 +25,9 @@ import {
     FRONTEND_SYNTAX_TEST_COMMIT,
     IMPLEMENTATION_COMMIT,
     JAVA_COMMIT,
+    NESTED_ACTION_BASE_COMMIT,
+    NESTED_ACTION_IMPLEMENTATION_COMMIT,
+    NESTED_ACTION_TEST_COMMIT,
     PHASE_B_BASE_COMMIT,
     PHASE_B_IMPLEMENTATION_COMMIT,
     SCAFFOLD_COMMIT,
@@ -224,6 +227,10 @@ const SCOPE_PARSING_TEST_COMMAND =
     "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java";
 const CHAR_SUPPORT_TEST_COMMAND =
     "cargo test --locked --bin antlr4-rust-gen grammar::char_support::tests::";
+const NESTED_ACTION_LOGICAL_ID =
+    "testlexeractions-nested-actions-3d175db5e5";
+const NESTED_ACTION_TEST_COMMAND =
+    "cargo test --locked --bin antlr4-rust-gen grammar::syntax::tests::nested_actions_match_upstream -- --exact";
 const CHAR_SUPPORT_PORTS = new Map([
     [
         "testcharsupport-testcapitalize-25cbf55e21",
@@ -779,6 +786,9 @@ function completedPhaseBRow(
                         : completed.kind === "char-support"
                           ? `direct Rust character literal support matches Java 4.13.2 ` +
                             `for ${cases[0].suite}.${cases[0].name}`
+                          : completed.kind === "nested-action"
+                            ? `direct Rust grammar modeling preserves nested member actions and ` +
+                              `normalizes predicate fail messages for ${cases[0].suite}.${cases[0].name}`
                         : `direct Rust semantic diagnostics match Java 4.13.2 exactly ` +
                           `for ${cases[0].suite}.${cases[0].name}`;
     const coveredExisting =
@@ -1011,6 +1021,20 @@ async function loadCompletedPhaseBPorts() {
                 "in this scope",
         });
     }
+    ports.set(NESTED_ACTION_LOGICAL_ID, {
+        fixturePaths: [],
+        rustTest: "grammar::syntax::tests::nested_actions_match_upstream",
+        kind: "nested-action",
+        resolution: "ported",
+        scaffoldCommit: NESTED_ACTION_BASE_COMMIT,
+        testCommit: NESTED_ACTION_TEST_COMMIT,
+        implementationCommit: NESTED_ACTION_IMPLEMENTATION_COMMIT,
+        testCommand: NESTED_ACTION_TEST_COMMAND,
+        greenResult: "1 passed; 0 failed",
+        redFingerprint:
+            "predicate fail message retained grammar quotes: " +
+            "left Some(\"'custom message'\"), right Some(\"custom message\")",
+    });
     const scopeGroups = new Map();
     for (const testCase of inventory.cases) {
         if (testCase.suite !== "TestScopeParsing") {
@@ -1049,8 +1073,8 @@ async function loadCompletedPhaseBPorts() {
             `expected 47 completed TestScopeParsing ports, found ${scopeGroups.size}`,
         );
     }
-    if (ports.size !== 146) {
-        throw new Error(`expected 146 completed Phase B ports, found ${ports.size}`);
+    if (ports.size !== 147) {
+        throw new Error(`expected 147 completed Phase B ports, found ${ports.size}`);
     }
     return ports;
 }

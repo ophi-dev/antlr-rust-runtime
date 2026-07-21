@@ -69,6 +69,12 @@ export const CHAR_SUPPORT_TEST_COMMIT =
     "8970016dbac6705533db4d9ad55d996b61bed026";
 export const CHAR_SUPPORT_IMPLEMENTATION_COMMIT =
     "28b8fe8bf72608dc19752d8cb39feab7ecb21fc3";
+export const NESTED_ACTION_BASE_COMMIT =
+    "98219b854f02c72685ea13546c5b491a59b6d384";
+export const NESTED_ACTION_TEST_COMMIT =
+    "8ab5c20ff8a99514d51672268b632f6b2bac7678";
+export const NESTED_ACTION_IMPLEMENTATION_COMMIT =
+    "78c6d271b6379fa230bb9de133307785a6877587";
 
 export function stableStringify(value) {
     if (Array.isArray(value)) {
