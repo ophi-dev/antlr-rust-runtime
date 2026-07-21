@@ -1,0 +1,384 @@
+{
+  "schema_version": 1,
+  "repository": "https://github.com/mike-lischke/vscode-antlr4.git",
+  "commit": "3e9469d1d490c71b3e3b909edf1235582a3f8db8",
+  "repository_license": {
+    "id": "vscode-antlr4:repository-license",
+    "source_id": "vscode-antlr4:License.txt",
+    "spdx": "MIT",
+    "mirror_path": "tests/codegen-direct/external/vscode-antlr4/License.txt"
+  },
+  "shared_oracles": {
+    "antlr_ng_frontend": {
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "command": "node tools/grammar-frontend/snapshot-frontend.mjs --antlr-ng-root <checkout>",
+      "raw_outcome": "tests/codegen-direct/frontend-snapshots.tsv"
+    },
+    "java_antlr": {
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "command": "tools/grammar-frontend/update-interp-fixtures.sh (Phase B)",
+      "raw_outcome": "deferred-to-phase-B because Java does not expose the Phase A canonical CST observable"
+    }
+  },
+  "fixtures": [
+    {
+      "id": "vscode-antlr4-antlr-v4-lexer",
+      "source_id": "vscode-antlr4:grammars/ANTLRv4Lexer.g4",
+      "mirror_path": "tests/codegen-direct/external/vscode-antlr4/grammars/ANTLRv4Lexer.g4",
+      "licenses": [
+        "vscode-antlr4:repository-license",
+        "per-file:BSD-3-Clause"
+      ],
+      "selected_extension_assertions": [
+        "tests/backend/sentence-generation.spec.ts:Generate sentences (lexer)"
+      ],
+      "owner_phase": "A",
+      "compiler_outcome": "valid",
+      "phase_contracts": {
+        "A": "token-and-cst-snapshot",
+        "B": "alternate-meta-grammar lexer loading and Java serializer fixture",
+        "C": "source-only Rust generation succeeds"
+      },
+      "assertions": [
+        {
+          "id": "vscode-antlr4:grammars/ANTLRv4Lexer.g4:syntax",
+          "phase": "A",
+          "observable": "complete token stream and canonical CST",
+          "tdd_owner": "upstream:frontend-token-cst-parity",
+          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles"
+        }
+      ]
+    },
+    {
+      "id": "vscode-antlr4-antlr-v4-parser",
+      "source_id": "vscode-antlr4:grammars/ANTLRv4Parser.g4",
+      "mirror_path": "tests/codegen-direct/external/vscode-antlr4/grammars/ANTLRv4Parser.g4",
+      "licenses": [
+        "vscode-antlr4:repository-license",
+        "per-file:BSD-3-Clause"
+      ],
+      "selected_extension_assertions": [
+        "tests/backend/atn.spec.ts:ATN graph",
+        "tests/backend/sentence-generation.spec.ts:Generate sentences (parser)"
+      ],
+      "owner_phase": "A",
+      "compiler_outcome": "valid",
+      "phase_contracts": {
+        "A": "token-and-cst-snapshot",
+        "B": "alternate-meta-grammar parser loading and Java serializer fixture",
+        "C": "source-only Rust generation succeeds"
+      },
+      "assertions": [
+        {
+          "id": "vscode-antlr4:grammars/ANTLRv4Parser.g4:syntax",
+          "phase": "A",
+          "observable": "complete token stream and canonical CST",
+          "tdd_owner": "upstream:frontend-token-cst-parity",
+          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles"
+        }
+      ]
+    },
+    {
+      "id": "vscode-antlr4-lex-basic",
+      "source_id": "vscode-antlr4:grammars/LexBasic.g4",
+      "mirror_path": "tests/codegen-direct/external/vscode-antlr4/grammars/LexBasic.g4",
+      "licenses": [
+        "vscode-antlr4:repository-license",
+        "per-file:BSD-3-Clause"
+      ],
+      "selected_extension_assertions": [
+        "tests/backend/sentence-generation.spec.ts:Generate sentences (basic lexer)"
+      ],
+      "owner_phase": "A",
+      "compiler_outcome": "valid",
+      "phase_contracts": {
+        "A": "token-and-cst-snapshot",
+        "B": "alternate-meta-grammar import and lexer serializer fixture",
+        "C": "source-only Rust generation succeeds"
+      },
+      "assertions": [
+        {
+          "id": "vscode-antlr4:grammars/LexBasic.g4:syntax",
+          "phase": "A",
+          "observable": "complete token stream and canonical CST",
+          "tdd_owner": "upstream:frontend-token-cst-parity",
+          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles"
+        }
+      ]
+    },
+    {
+      "id": "vscode-antlr4-cpp14",
+      "source_id": "vscode-antlr4:tests/backend/test-data/CPP14.g4",
+      "mirror_path": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/CPP14.g4",
+      "licenses": [
+        "vscode-antlr4:repository-license",
+        "per-file:MIT"
+      ],
+      "selected_extension_assertions": [
+        "tests/backend/debugger.spec.ts:Debugger creation",
+        "tests/backend/advanced-symbol-info.spec.ts:Large grammar symbols"
+      ],
+      "owner_phase": "A",
+      "compiler_outcome": "valid",
+      "phase_contracts": {
+        "A": "token-and-cst-snapshot",
+        "B": "combined grammar split and parser/lexer ATN fixtures",
+        "C": "source-only Rust generation and emitted parser compile"
+      },
+      "assertions": [
+        {
+          "id": "vscode-antlr4:tests/backend/test-data/CPP14.g4:syntax",
+          "phase": "A",
+          "observable": "complete token stream and canonical CST",
+          "tdd_owner": "upstream:frontend-token-cst-parity",
+          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles"
+        }
+      ]
+    },
+    {
+      "id": "vscode-antlr4-odd-expr",
+      "source_id": "vscode-antlr4:tests/backend/test-data/OddExpr.g4",
+      "mirror_path": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/OddExpr.g4",
+      "licenses": [
+        "vscode-antlr4:repository-license"
+      ],
+      "selected_extension_assertions": [
+        "tests/backend/code-generation.spec.ts:Generation with Java exception"
+      ],
+      "owner_phase": "A",
+      "compiler_outcome": "valid",
+      "phase_contracts": {
+        "A": "token-and-cst-snapshot",
+        "B": "large lexer ATN and serializer stress fixture",
+        "C": "source-only Rust generation succeeds without 16-bit serialization limits"
+      },
+      "assertions": [
+        {
+          "id": "vscode-antlr4:tests/backend/test-data/OddExpr.g4:syntax",
+          "phase": "A",
+          "observable": "complete token stream and canonical CST",
+          "tdd_owner": "upstream:frontend-token-cst-parity",
+          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles"
+        }
+      ]
+    },
+    {
+      "id": "vscode-antlr4-t-lexer",
+      "source_id": "vscode-antlr4:tests/backend/test-data/TLexer.g4",
+      "mirror_path": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/TLexer.g4",
+      "licenses": [
+        "vscode-antlr4:repository-license"
+      ],
+      "selected_extension_assertions": [
+        "tests/backend/code-generation.spec.ts:A standard generation run, split grammar",
+        "tests/backend/symbol-info.spec.ts:Symbol Listing 2"
+      ],
+      "owner_phase": "A",
+      "compiler_outcome": "valid",
+      "phase_contracts": {
+        "A": "token-and-cst-snapshot",
+        "B": "split dependency, channels, modes, actions, commands, and lexer ATN",
+        "C": "source-only Rust split generation succeeds"
+      },
+      "assertions": [
+        {
+          "id": "vscode-antlr4:tests/backend/test-data/TLexer.g4:syntax",
+          "phase": "A",
+          "observable": "complete token stream and canonical CST",
+          "tdd_owner": "upstream:frontend-token-cst-parity",
+          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles"
+        }
+      ]
+    },
+    {
+      "id": "vscode-antlr4-t-lexer-2",
+      "source_id": "vscode-antlr4:tests/backend/test-data/TLexer2.g4",
+      "mirror_path": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/TLexer2.g4",
+      "licenses": [
+        "vscode-antlr4:repository-license"
+      ],
+      "selected_extension_assertions": [
+        "tests/backend/code-generation.spec.ts:Generation with errors, split grammar"
+      ],
+      "owner_phase": "A",
+      "compiler_outcome": "dependency-error",
+      "phase_contracts": {
+        "A": "token-and-cst-snapshot",
+        "B": "missing tokenVocab diagnostic fixture",
+        "C": "source-only Rust generation fails without partial output"
+      },
+      "assertions": [
+        {
+          "id": "vscode-antlr4:tests/backend/test-data/TLexer2.g4:syntax",
+          "phase": "A",
+          "observable": "complete token stream and canonical CST",
+          "tdd_owner": "upstream:frontend-token-cst-parity",
+          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles"
+        }
+      ]
+    },
+    {
+      "id": "vscode-antlr4-t-parser",
+      "source_id": "vscode-antlr4:tests/backend/test-data/TParser.g4",
+      "mirror_path": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/TParser.g4",
+      "licenses": [
+        "vscode-antlr4:repository-license"
+      ],
+      "selected_extension_assertions": [
+        "tests/backend/code-generation.spec.ts:A standard generation run, split grammar",
+        "tests/backend/symbol-info.spec.ts:Symbol ranges"
+      ],
+      "owner_phase": "A",
+      "compiler_outcome": "valid",
+      "phase_contracts": {
+        "A": "token-and-cst-snapshot",
+        "B": "split dependency, labels, immediate left recursion, actions, predicates, and parser ATN",
+        "C": "Java-verdict source-only Rust split generation succeeds"
+      },
+      "assertions": [
+        {
+          "id": "vscode-antlr4:tests/backend/test-data/TParser.g4:syntax",
+          "phase": "A",
+          "observable": "complete token stream and canonical CST",
+          "tdd_owner": "upstream:frontend-token-cst-parity",
+          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles"
+        },
+        {
+          "id": "vscode-tparser-source-spans",
+          "phase": "A",
+          "observable": "exact named-action, parser-rule, and argument-block byte spans",
+          "tdd_owner": "external:vscode-tparser-source-spans",
+          "active_revision_id": "external-vscode-tparser-source-spans-r1",
+          "rust_test": "grammar::frontend::tests::tparser_preserves_named_action_rule_and_argument_spans"
+        }
+      ]
+    },
+    {
+      "id": "vscode-antlr4-t-parser-2",
+      "source_id": "vscode-antlr4:tests/backend/test-data/TParser2.g4",
+      "mirror_path": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/TParser2.g4",
+      "licenses": [
+        "vscode-antlr4:repository-license"
+      ],
+      "selected_extension_assertions": [
+        "tests/backend/code-generation.spec.ts:Generation with errors, split grammar"
+      ],
+      "owner_phase": "A",
+      "compiler_outcome": "dependency-error",
+      "phase_contracts": {
+        "A": "token-and-cst-snapshot",
+        "B": "missing tokenVocab dependency diagnostic fixture",
+        "C": "source-only Rust generation fails without partial output"
+      },
+      "assertions": [
+        {
+          "id": "vscode-antlr4:tests/backend/test-data/TParser2.g4:syntax",
+          "phase": "A",
+          "observable": "complete token stream and canonical CST",
+          "tdd_owner": "upstream:frontend-token-cst-parity",
+          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles"
+        }
+      ]
+    },
+    {
+      "id": "vscode-antlr4-sentences",
+      "source_id": "vscode-antlr4:tests/backend/test-data/sentences.g4",
+      "mirror_path": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/sentences.g4",
+      "licenses": [
+        "vscode-antlr4:repository-license"
+      ],
+      "selected_extension_assertions": [
+        "tests/backend/sentence-generation.spec.ts:Generate sentences"
+      ],
+      "owner_phase": "A",
+      "compiler_outcome": "valid",
+      "phase_contracts": {
+        "A": "token-and-cst-snapshot",
+        "B": "Unicode, EBNF, and immediate-left-recursion ATN fixture",
+        "C": "source-only Rust generation and parser execution succeed"
+      },
+      "assertions": [
+        {
+          "id": "vscode-antlr4:tests/backend/test-data/sentences.g4:syntax",
+          "phase": "A",
+          "observable": "complete token stream and canonical CST",
+          "tdd_owner": "upstream:frontend-token-cst-parity",
+          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles"
+        }
+      ]
+    },
+    {
+      "id": "vscode-antlr4-t",
+      "source_id": "vscode-antlr4:tests/backend/test-data/t.g4",
+      "mirror_path": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/t.g4",
+      "licenses": [
+        "vscode-antlr4:repository-license"
+      ],
+      "selected_extension_assertions": [
+        "tests/backend/symbol-info.spec.ts:Diagnostics 1",
+        "tests/backend/symbol-info.spec.ts:reparse"
+      ],
+      "owner_phase": "A",
+      "compiler_outcome": "semantic-error",
+      "phase_contracts": {
+        "A": "token-and-cst-snapshot",
+        "B": "unknown token, unknown channel, and undefined-rule diagnostic fixture",
+        "C": "source-only Rust generation fails without partial output"
+      },
+      "assertions": [
+        {
+          "id": "vscode-antlr4:tests/backend/test-data/t.g4:syntax",
+          "phase": "A",
+          "observable": "complete token stream and canonical CST",
+          "tdd_owner": "upstream:frontend-token-cst-parity",
+          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles"
+        },
+        {
+          "id": "vscode-symbol-info-malformed-edit",
+          "phase": "A",
+          "observable": "the a:: edit fails closed at exact byte spans",
+          "tdd_owner": "external:vscode-symbol-info-malformed-edit",
+          "active_revision_id": "external-vscode-symbol-info-malformed-edit-r1",
+          "rust_test": "grammar::frontend::tests::malformed_editor_edit_fails_but_valid_undefined_rules_return_a_tree"
+        },
+        {
+          "id": "vscode-symbol-info-valid-undefined-edit",
+          "phase": "A",
+          "observable": "the syntactically valid undefined-b edit returns a CST",
+          "tdd_owner": "external:vscode-symbol-info-valid-undefined-edit",
+          "active_revision_id": "external-vscode-symbol-info-valid-undefined-edit-r1",
+          "rust_test": "grammar::frontend::tests::malformed_editor_edit_fails_but_valid_undefined_rules_return_a_tree"
+        }
+      ]
+    },
+    {
+      "id": "vscode-antlr4-t-2",
+      "source_id": "vscode-antlr4:tests/backend/test-data/t2.g4",
+      "mirror_path": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/t2.g4",
+      "licenses": [
+        "vscode-antlr4:repository-license"
+      ],
+      "selected_extension_assertions": [
+        "tests/backend/code-generation.spec.ts:Generation with semantic error, combined grammar"
+      ],
+      "owner_phase": "A",
+      "compiler_outcome": "semantic-error",
+      "phase_contracts": {
+        "A": "token-and-cst-snapshot",
+        "B": "indirect-left-recursion diagnostic fixture",
+        "C": "source-only Rust generation fails without partial output"
+      },
+      "assertions": [
+        {
+          "id": "vscode-antlr4:tests/backend/test-data/t2.g4:syntax",
+          "phase": "A",
+          "observable": "complete token stream and canonical CST",
+          "tdd_owner": "upstream:frontend-token-cst-parity",
+          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles"
+        }
+      ]
+    }
+  ]
+}
