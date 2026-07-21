@@ -139,9 +139,23 @@ impl SemanticHooks for LexerAdaptor {
 
 #[cfg(test)]
 mod tests {
+    use super::super::frontend::{SourceId, parse_source};
     use super::super::generated::antlr_v4_lexer::AntlRv4Lexer;
     use super::*;
     use antlr4_runtime::{CommonTokenStream, InputStream, Token};
+
+    #[test]
+    fn parser_rule_options_preserve_argument_mode() {
+        let grammar = concat!(
+            "grammar G;\n",
+            "a options { k=1; } : T b[0];\n",
+            "b[int value] : T;\n",
+            "T: 'x';\n",
+        );
+
+        parse_source(SourceId::new(0), "memory:parser-rule-options", grammar)
+            .expect("parser-rule options must not turn later arguments into lexer char sets");
+    }
 
     #[test]
     fn uncased_initials_are_rule_references() {
