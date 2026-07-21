@@ -1,0 +1,13 @@
+version = 1
+
+[[helper]]
+kind = "lexer-action"
+name = "handleBeginArgument"
+returns = "unit"
+lower = "hook"
+
+[[helper]]
+kind = "lexer-action"
+name = "handleEndArgument"
+returns = "unit"
+lower = "hook"

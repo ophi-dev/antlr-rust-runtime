@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "antlr_ng": {
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1"
+  },
+  "cases": [
+    {
+      "id": "bootstrap:src/grammars/ANTLRv4Lexer.g4",
+      "path": "tests/codegen-direct/bootstrap/src/grammars/ANTLRv4Lexer.g4"
+    },
+    {
+      "id": "bootstrap:src/grammars/ANTLRv4Parser.g4",
+      "path": "tests/codegen-direct/bootstrap/src/grammars/ANTLRv4Parser.g4"
+    },
+    {
+      "id": "bootstrap:src/grammars/ActionSplitter.g4",
+      "path": "tests/codegen-direct/bootstrap/src/grammars/ActionSplitter.g4"
+    },
+    {
+      "id": "bootstrap:tests/bugs/data/GoLexer.g4",
+      "path": "tests/codegen-direct/bootstrap/tests/bugs/data/GoLexer.g4"
+    },
+    {
+      "id": "bootstrap:tests/bugs/data/abbLexer.g4",
+      "path": "tests/codegen-direct/bootstrap/tests/bugs/data/abbLexer.g4"
+    },
+    {
+      "id": "bootstrap:tests/grammars/Java.g4",
+      "path": "tests/codegen-direct/bootstrap/tests/grammars/Java.g4"
+    },
+    {
+      "id": "bootstrap:tests/grammars/JavaLR.g4",
+      "path": "tests/codegen-direct/bootstrap/tests/grammars/JavaLR.g4"
+    },
+    {
+      "id": "bootstrap:tests/grammars/PositionAdjustingLexer.g4",
+      "path": "tests/codegen-direct/bootstrap/tests/grammars/PositionAdjustingLexer.g4"
+    },
+    {
+      "id": "bootstrap:tests/grammars/Psl.g4",
+      "path": "tests/codegen-direct/bootstrap/tests/grammars/Psl.g4"
+    },
+    {
+      "id": "vscode-antlr4:grammars/ANTLRv4Lexer.g4",
+      "path": "tests/codegen-direct/external/vscode-antlr4/grammars/ANTLRv4Lexer.g4"
+    },
+    {
+      "id": "vscode-antlr4:grammars/ANTLRv4Parser.g4",
+      "path": "tests/codegen-direct/external/vscode-antlr4/grammars/ANTLRv4Parser.g4"
+    },
+    {
+      "id": "vscode-antlr4:grammars/LexBasic.g4",
+      "path": "tests/codegen-direct/external/vscode-antlr4/grammars/LexBasic.g4"
+    },
+    {
+      "id": "vscode-antlr4:tests/backend/test-data/CPP14.g4",
+      "path": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/CPP14.g4"
+    },
+    {
+      "id": "vscode-antlr4:tests/backend/test-data/OddExpr.g4",
+      "path": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/OddExpr.g4"
+    },
+    {
+      "id": "vscode-antlr4:tests/backend/test-data/TLexer.g4",
+      "path": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/TLexer.g4"
+    },
+    {
+      "id": "vscode-antlr4:tests/backend/test-data/TLexer2.g4",
+      "path": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/TLexer2.g4"
+    },
+    {
+      "id": "vscode-antlr4:tests/backend/test-data/TParser.g4",
+      "path": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/TParser.g4"
+    },
+    {
+      "id": "vscode-antlr4:tests/backend/test-data/TParser2.g4",
+      "path": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/TParser2.g4"
+    },
+    {
+      "id": "vscode-antlr4:tests/backend/test-data/sentences.g4",
+      "path": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/sentences.g4"
+    },
+    {
+      "id": "vscode-antlr4:tests/backend/test-data/t.g4",
+      "path": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/t.g4"
+    },
+    {
+      "id": "vscode-antlr4:tests/backend/test-data/t2.g4",
+      "path": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/t2.g4"
+    }
+  ]
+}
