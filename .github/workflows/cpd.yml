@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PMD_VERSION: 7.24.0
+  PMD_VERSION: 7.26.0
   CPD_TOKENS: "100"
   COMMENT_MARKER: <!-- cpd-report -->
 
