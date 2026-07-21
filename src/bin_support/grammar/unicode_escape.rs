@@ -5,8 +5,25 @@ pub(super) enum UnicodeEscapeStyle {
     BracedScalar,
 }
 
-pub(super) fn escape_code_point(_code_point: i32, _style: UnicodeEscapeStyle) -> String {
-    String::new()
+pub(super) fn escape_code_point(code_point: i32, style: UnicodeEscapeStyle) -> String {
+    assert!(
+        (0..=0x10_ffff).contains(&code_point),
+        "Unicode code point is out of range"
+    );
+    match style {
+        UnicodeEscapeStyle::Utf16CodeUnits if code_point > 0xffff => {
+            let supplementary = code_point - 0x1_0000;
+            let high = 0xd800 + (supplementary >> 10);
+            let low = 0xdc00 + (supplementary & 0x3ff);
+            format!("\\u{high:04X}\\u{low:04X}")
+        }
+        UnicodeEscapeStyle::Utf16CodeUnits => format!("\\u{code_point:04X}"),
+        UnicodeEscapeStyle::FixedWidthScalar if code_point > 0xffff => {
+            format!("\\U{code_point:08X}")
+        }
+        UnicodeEscapeStyle::FixedWidthScalar => format!("\\u{code_point:04X}"),
+        UnicodeEscapeStyle::BracedScalar => format!("\\u{{{code_point:04X}}}"),
+    }
 }
 
 #[cfg(test)]
