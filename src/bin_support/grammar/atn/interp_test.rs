@@ -1692,6 +1692,217 @@ mod tests {
             .unwrap_or_else(|| panic!("missing {kind:?} state in rule {rule}"))
     }
 
+    mod upstream_basic_semantic_errors {
+        use super::*;
+        use crate::grammar::diagnostic::Severity::{Error, Warning};
+
+        #[test]
+        fn u_matches_java() {
+            assert_basic_semantic_errors(
+                "testbasicsemanticerrors-testu-c17a76a27e",
+                "U.g4",
+                &[
+                    expected("G4S014", Warning, 2, 10, "unsupported option foo"),
+                    expected("G4S014", Warning, 2, 19, "unsupported option k"),
+                    expected(
+                        "G4S017",
+                        Error,
+                        5,
+                        8,
+                        "token name f must start with an uppercase letter",
+                    ),
+                    expected("G4S014", Warning, 9, 10, "unsupported option x"),
+                    expected(
+                        "G4S054",
+                        Error,
+                        9,
+                        0,
+                        "repeated grammar prequel spec (options, tokens, or import); please merge",
+                    ),
+                    expected(
+                        "G4S054",
+                        Error,
+                        8,
+                        0,
+                        "repeated grammar prequel spec (options, tokens, or import); please merge",
+                    ),
+                    expected("G4S014", Warning, 12, 10, "unsupported option blech"),
+                    expected("G4S014", Warning, 12, 21, "unsupported option greedy"),
+                    expected("G4S014", Warning, 15, 16, "unsupported option ick"),
+                    expected("G4S014", Warning, 15, 25, "unsupported option greedy"),
+                    expected("G4S014", Warning, 16, 16, "unsupported option x"),
+                ],
+            );
+        }
+
+        #[test]
+        fn illegal_non_set_label_matches_java() {
+            assert_basic_semantic_errors(
+                "testbasicsemanticerrors-testillegalnonsetlabel-5c18487902",
+                "T.g4",
+                &[expected(
+                    "G4S055",
+                    Error,
+                    2,
+                    5,
+                    "label op assigned to a block which is not a set",
+                )],
+            );
+        }
+
+        #[test]
+        fn argument_retval_local_conflicts_match_java() {
+            assert_basic_semantic_errors(
+                "testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44",
+                "T.g4",
+                &[
+                    expected(
+                        "G4S056",
+                        Error,
+                        2,
+                        7,
+                        "parameter expr conflicts with rule with same name",
+                    ),
+                    expected(
+                        "G4S057",
+                        Error,
+                        2,
+                        26,
+                        "return value expr conflicts with rule with same name",
+                    ),
+                    expected(
+                        "G4S058",
+                        Error,
+                        3,
+                        12,
+                        "local expr conflicts with rule with same name",
+                    ),
+                    expected(
+                        "G4S059",
+                        Error,
+                        2,
+                        26,
+                        "return value expr conflicts with parameter with same name",
+                    ),
+                    expected(
+                        "G4S060",
+                        Error,
+                        3,
+                        12,
+                        "local expr conflicts with parameter with same name",
+                    ),
+                    expected(
+                        "G4S061",
+                        Error,
+                        3,
+                        12,
+                        "local expr conflicts with return value with same name",
+                    ),
+                    expected(
+                        "G4S038",
+                        Error,
+                        4,
+                        4,
+                        "label expr conflicts with rule with same name",
+                    ),
+                    expected(
+                        "G4S062",
+                        Error,
+                        4,
+                        4,
+                        "label expr conflicts with parameter with same name",
+                    ),
+                    expected(
+                        "G4S063",
+                        Error,
+                        4,
+                        4,
+                        "label expr conflicts with return value with same name",
+                    ),
+                    expected(
+                        "G4S064",
+                        Error,
+                        4,
+                        4,
+                        "label expr conflicts with local with same name",
+                    ),
+                ],
+            );
+        }
+
+        const fn expected(
+            code: &'static str,
+            severity: crate::grammar::diagnostic::Severity,
+            line: usize,
+            column: usize,
+            message: &'static str,
+        ) -> ExpectedSemanticDiagnostic {
+            ExpectedSemanticDiagnostic {
+                code,
+                severity,
+                line,
+                column,
+                message,
+            }
+        }
+    }
+
+    struct ExpectedSemanticDiagnostic {
+        code: &'static str,
+        severity: crate::grammar::diagnostic::Severity,
+        line: usize,
+        column: usize,
+        message: &'static str,
+    }
+
+    fn assert_basic_semantic_errors(
+        fixture_name: &str,
+        root: &str,
+        expected: &[ExpectedSemanticDiagnostic],
+    ) {
+        let error = compile_fixture(fixture_name, &[root])
+            .expect_err("upstream invalid grammar should fail semantic analysis");
+        assert_eq!(
+            error.diagnostics().len(),
+            expected.len(),
+            "{fixture_name}: {error:#?}",
+        );
+        let source = std::fs::read_to_string(fixture(fixture_name).join(root))
+            .expect("semantic fixture source");
+        for (actual, expected) in error.diagnostics().iter().zip(expected) {
+            assert_eq!(actual.code, expected.code, "{fixture_name}: {actual:#?}");
+            assert_eq!(
+                actual.severity, expected.severity,
+                "{fixture_name}: {actual:#?}",
+            );
+            assert_eq!(
+                actual.primary.bytes.start,
+                fixture_byte_offset(&source, expected.line, expected.column),
+                "{fixture_name}: expected {}:{} for {actual:#?}",
+                expected.line,
+                expected.column,
+            );
+            assert_eq!(
+                actual.message, expected.message,
+                "{fixture_name}: {actual:#?}",
+            );
+        }
+    }
+
+    fn fixture_byte_offset(text: &str, line: usize, column: usize) -> u32 {
+        let line_start = text
+            .split_inclusive('\n')
+            .take(line.saturating_sub(1))
+            .map(str::len)
+            .sum::<usize>();
+        let byte_column = text[line_start..]
+            .chars()
+            .take(column)
+            .map(char::len_utf8)
+            .sum::<usize>();
+        u32::try_from(line_start + byte_column).expect("fixture offset exceeds u32")
+    }
+
     fn compile_fixture(
         fixture_name: &str,
         roots: &[&str],

@@ -1,0 +1,10 @@
+error(138): T.g4:2:7: parameter expr conflicts with rule with same name
+error(136): T.g4:2:26: return value expr conflicts with rule with same name
+error(140): T.g4:3:12: local expr conflicts with rule with same name
+error(76): T.g4:2:26: return value expr conflicts with parameter with same name
+error(142): T.g4:3:12: local expr conflicts with parameter with same name
+error(143): T.g4:3:12: local expr conflicts with return value with same name
+error(69): T.g4:4:4: label expr conflicts with rule with same name
+error(72): T.g4:4:4: label expr conflicts with parameter with same name
+error(73): T.g4:4:4: label expr conflicts with return value with same name
+error(74): T.g4:4:4: label expr conflicts with local with same name

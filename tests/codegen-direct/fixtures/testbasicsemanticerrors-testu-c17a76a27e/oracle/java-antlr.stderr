@@ -1,0 +1,11 @@
+warning(83): U.g4:2:10: unsupported option foo
+warning(83): U.g4:2:19: unsupported option k
+error(60): U.g4:5:8: token names must start with an uppercase letter: f
+warning(83): U.g4:9:10: unsupported option x
+error(54): U.g4:9:0: repeated grammar prequel spec (options, tokens, or import); please merge
+error(54): U.g4:8:0: repeated grammar prequel spec (options, tokens, or import); please merge
+warning(83): U.g4:12:10: unsupported option blech
+warning(83): U.g4:12:21: unsupported option greedy
+warning(83): U.g4:15:16: unsupported option ick
+warning(83): U.g4:15:25: unsupported option greedy
+warning(83): U.g4:16:16: unsupported option x

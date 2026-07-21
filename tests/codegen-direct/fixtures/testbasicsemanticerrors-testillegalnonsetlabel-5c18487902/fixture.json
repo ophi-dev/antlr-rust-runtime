@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "T.g4"
+  ],
+  "logical_ids": [
+    "testbasicsemanticerrors-testillegalnonsetlabel-5c18487902"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:testbasicsemanticerrors-testillegalnonsetlabel@783e32f2af06",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestBasicSemanticErrors.spec.ts",
+      "case": "testIllegalNonSetLabel",
+      "source_sha256": "074aff6e9a006420110fbd883d45039887bee9663a3e089d3767269b7fab5dd4"
+    },
+    {
+      "source_case_id": "java-antlr:testbasicsemanticerrors-testillegalnonsetlabel@783e32f2af06",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestBasicSemanticErrors.java",
+      "case": "testIllegalNonSetLabel",
+      "source_sha256": "5f739f16bdcbd8a3c519a49b91c1c02f22e12c0cc718c881c7239f8abc8385ac"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testbasicsemanticerrors-testillegalnonsetlabel@783e32f2af06",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestBasicSemanticErrors.java",
+    "case": "testIllegalNonSetLabel",
+    "source_sha256": "5f739f16bdcbd8a3c519a49b91c1c02f22e12c0cc718c881c7239f8abc8385ac"
+  },
+  "antlr_ng_test": {
+    "source_case_id": "antlr-ng:testbasicsemanticerrors-testillegalnonsetlabel@783e32f2af06",
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/TestBasicSemanticErrors.spec.ts",
+    "case": "testIllegalNonSetLabel",
+    "source_sha256": "074aff6e9a006420110fbd883d45039887bee9663a3e089d3767269b7fab5dd4"
+  },
+  "expected": "error",
+  "diagnostic_oracle": {
+    "agreement": "Java ANTLR and antlr-ng expect the same diagnostic category and source position",
+    "compatibility_verdict": "Java ANTLR 4.13.2"
+  },
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "exit_status": 1
+  },
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh testbasicsemanticerrors-testillegalnonsetlabel-5c18487902 --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar",
+  "files": {
+    "T.g4": "39e2b5049a35746aba8aadd56c9a4e4167563ba0f51bb79495f2446f9deeb5c5",
+    "TLexer.interp": "77c61117be5dfa71f381ac443728d9320a2f36d965f21e230d141afe8c3d3484",
+    "TLexer.tokens": "c925e7e5c36baccef7a321e0dbbef02ebf0c4fe21a2e97c3fd2270e17c1ed382",
+    "diagnostics.json": "7ed5a16dfc7689e237de53585943dda6a514c4069bd6e31f29df7dc0f0314a03",
+    "oracle/java-antlr.stderr": "8649e0969aa14a3b2ff2c1d1ee8a0b71ff1f133fc6eb8cf51028777f49a99880",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

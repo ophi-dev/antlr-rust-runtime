@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "U.g4"
+  ],
+  "logical_ids": [
+    "testbasicsemanticerrors-testu-c17a76a27e"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:testbasicsemanticerrors-testu@bfbbf710db94",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestBasicSemanticErrors.spec.ts",
+      "case": "testU",
+      "source_sha256": "074aff6e9a006420110fbd883d45039887bee9663a3e089d3767269b7fab5dd4"
+    },
+    {
+      "source_case_id": "java-antlr:testbasicsemanticerrors-testu@bfbbf710db94",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestBasicSemanticErrors.java",
+      "case": "testU",
+      "source_sha256": "5f739f16bdcbd8a3c519a49b91c1c02f22e12c0cc718c881c7239f8abc8385ac"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testbasicsemanticerrors-testu@bfbbf710db94",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestBasicSemanticErrors.java",
+    "case": "testU",
+    "source_sha256": "5f739f16bdcbd8a3c519a49b91c1c02f22e12c0cc718c881c7239f8abc8385ac"
+  },
+  "antlr_ng_test": {
+    "source_case_id": "antlr-ng:testbasicsemanticerrors-testu@bfbbf710db94",
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/TestBasicSemanticErrors.spec.ts",
+    "case": "testU",
+    "source_sha256": "074aff6e9a006420110fbd883d45039887bee9663a3e089d3767269b7fab5dd4"
+  },
+  "expected": "error",
+  "diagnostic_oracle": {
+    "agreement": "Java ANTLR and antlr-ng expect the same ordered diagnostic categories and source positions",
+    "compatibility_verdict": "Java ANTLR 4.13.2"
+  },
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "exit_status": 1
+  },
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh testbasicsemanticerrors-testu-c17a76a27e --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar",
+  "files": {
+    "U.g4": "0277c07c33cb76cb6d445a31139fa362df56390ba834cfe0b1f0a556c03e3492",
+    "diagnostics.json": "cd0ff54917c8b68fc5b88ed1fe049c78cf017160a51bc20ff03cdc1f56ba02bb",
+    "oracle/java-antlr.stderr": "b4e232c04debce8bd4157eb3b6ca1a1b38b34a6c8ed3fc15c4817437a7bc744d",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}
