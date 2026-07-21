@@ -31665,8 +31665,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodeescapes-bmpjavaescape-299139ad49-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodeescapes-bmpjavaescape-299139ad49",
+      "tdd_state": "done",
+      "rust_test": "grammar::unicode_escape::tests::bmp_java_escape_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -31687,8 +31687,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeEscapes.bmpJavaEscape behavior",
+      "expected_red_failure_fingerprint": "left empty string, right \"\\\\uABCD\"",
+      "observable_equivalence": "direct Rust Unicode escape rendering matches Java 4.13.2 for TestUnicodeEscapes.bmpJavaEscape",
+      "scaffold_commit": "c6c99c9781702e3a88763f3478a593a8781af53a",
+      "primary_test_commit": "602ef46199b845536abdf339f9507c82fff99c1c",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode_escape::tests::bmp_java_escape_matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "left empty string, right \"\\\\uABCD\""
+      },
+      "primary_implementation_commit": "247896246d88bfca50208b84e271dc907da220f7",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode_escape::tests::bmp_java_escape_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodeescapes-bmpjavaescape-299139ad49",
         "source_case_ids": [
@@ -31696,14 +31708,17 @@
           "java-antlr:testunicodeescapes-bmpjavaescape@db50917f3ff8"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodeescapes-bmpjavaescape-299139ad49",
+        "rust_test": "grammar::unicode_escape::tests::bmp_java_escape_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeEscapes.bmpJavaEscape behavior"
+        "observable": "direct Rust Unicode escape rendering matches Java 4.13.2 for TestUnicodeEscapes.bmpJavaEscape",
+        "scaffold_commit": "c6c99c9781702e3a88763f3478a593a8781af53a",
+        "primary_test_commit": "602ef46199b845536abdf339f9507c82fff99c1c"
       },
-      "closure_sha256": "596b1048839f8c6b6d9c193ff489ae942942dd38d5b175eead77b631704ea623",
-      "evidence_path": null
+      "closure_sha256": "a679dfa1a2a7976db232ddd558832cf499403a03f49f5d97bd83f62917f9eb13",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodeescapes-bmpjavaescape-299139ad49"
     },
     {
       "logical_id": "testunicodeescapes-bmppythonescape-c5234a8aa5",
@@ -31715,8 +31730,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodeescapes-bmppythonescape-c5234a8aa5-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodeescapes-bmppythonescape-c5234a8aa5",
+      "tdd_state": "done",
+      "rust_test": "grammar::unicode_escape::tests::bmp_python_escape_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -31737,8 +31752,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeEscapes.bmpPythonEscape behavior",
+      "expected_red_failure_fingerprint": "left empty string, right \"\\\\uABCD\"",
+      "observable_equivalence": "direct Rust Unicode escape rendering matches Java 4.13.2 for TestUnicodeEscapes.bmpPythonEscape",
+      "scaffold_commit": "c6c99c9781702e3a88763f3478a593a8781af53a",
+      "primary_test_commit": "602ef46199b845536abdf339f9507c82fff99c1c",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode_escape::tests::bmp_python_escape_matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "left empty string, right \"\\\\uABCD\""
+      },
+      "primary_implementation_commit": "247896246d88bfca50208b84e271dc907da220f7",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode_escape::tests::bmp_python_escape_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodeescapes-bmppythonescape-c5234a8aa5",
         "source_case_ids": [
@@ -31746,14 +31773,17 @@
           "java-antlr:testunicodeescapes-bmppythonescape@31fa713ec4a0"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodeescapes-bmppythonescape-c5234a8aa5",
+        "rust_test": "grammar::unicode_escape::tests::bmp_python_escape_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeEscapes.bmpPythonEscape behavior"
+        "observable": "direct Rust Unicode escape rendering matches Java 4.13.2 for TestUnicodeEscapes.bmpPythonEscape",
+        "scaffold_commit": "c6c99c9781702e3a88763f3478a593a8781af53a",
+        "primary_test_commit": "602ef46199b845536abdf339f9507c82fff99c1c"
       },
-      "closure_sha256": "b4168e636547b397bc1714adbea73d39189bedbe8ece8b7377c38411f438ab1e",
-      "evidence_path": null
+      "closure_sha256": "0a8425e740339d4da4bda0aad9a0f1220fd36a7cb6944a1f44317d7294f917c4",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodeescapes-bmppythonescape-c5234a8aa5"
     },
     {
       "logical_id": "testunicodeescapes-bmpswiftescape-e6754132b6",
@@ -31765,8 +31795,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodeescapes-bmpswiftescape-e6754132b6-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodeescapes-bmpswiftescape-e6754132b6",
+      "tdd_state": "done",
+      "rust_test": "grammar::unicode_escape::tests::bmp_swift_escape_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -31787,8 +31817,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeEscapes.bmpSwiftEscape behavior",
+      "expected_red_failure_fingerprint": "left empty string, right \"\\\\u{ABCD}\"",
+      "observable_equivalence": "direct Rust Unicode escape rendering matches Java 4.13.2 for TestUnicodeEscapes.bmpSwiftEscape",
+      "scaffold_commit": "c6c99c9781702e3a88763f3478a593a8781af53a",
+      "primary_test_commit": "602ef46199b845536abdf339f9507c82fff99c1c",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode_escape::tests::bmp_swift_escape_matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "left empty string, right \"\\\\u{ABCD}\""
+      },
+      "primary_implementation_commit": "247896246d88bfca50208b84e271dc907da220f7",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode_escape::tests::bmp_swift_escape_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodeescapes-bmpswiftescape-e6754132b6",
         "source_case_ids": [
@@ -31796,14 +31838,17 @@
           "java-antlr:testunicodeescapes-bmpswiftescape@e5a441603503"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodeescapes-bmpswiftescape-e6754132b6",
+        "rust_test": "grammar::unicode_escape::tests::bmp_swift_escape_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeEscapes.bmpSwiftEscape behavior"
+        "observable": "direct Rust Unicode escape rendering matches Java 4.13.2 for TestUnicodeEscapes.bmpSwiftEscape",
+        "scaffold_commit": "c6c99c9781702e3a88763f3478a593a8781af53a",
+        "primary_test_commit": "602ef46199b845536abdf339f9507c82fff99c1c"
       },
-      "closure_sha256": "b9769c652a6003c47d74b01576bdfe0ac1099205861bc463fa277dbc65c9a85e",
-      "evidence_path": null
+      "closure_sha256": "1c8162572dd5e50da924a7d500dd4beab02face75e7d7e518948a855b363ae1c",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodeescapes-bmpswiftescape-e6754132b6"
     },
     {
       "logical_id": "testunicodeescapes-latinjavaescape-da2311f9d3",
@@ -31815,8 +31860,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodeescapes-latinjavaescape-da2311f9d3-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodeescapes-latinjavaescape-da2311f9d3",
+      "tdd_state": "done",
+      "rust_test": "grammar::unicode_escape::tests::latin_java_escape_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -31837,8 +31882,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeEscapes.latinJavaEscape behavior",
+      "expected_red_failure_fingerprint": "left empty string, right \"\\\\u0061\"",
+      "observable_equivalence": "direct Rust Unicode escape rendering matches Java 4.13.2 for TestUnicodeEscapes.latinJavaEscape",
+      "scaffold_commit": "c6c99c9781702e3a88763f3478a593a8781af53a",
+      "primary_test_commit": "602ef46199b845536abdf339f9507c82fff99c1c",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode_escape::tests::latin_java_escape_matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "left empty string, right \"\\\\u0061\""
+      },
+      "primary_implementation_commit": "247896246d88bfca50208b84e271dc907da220f7",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode_escape::tests::latin_java_escape_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodeescapes-latinjavaescape-da2311f9d3",
         "source_case_ids": [
@@ -31846,14 +31903,17 @@
           "java-antlr:testunicodeescapes-latinjavaescape@27a4e5049723"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodeescapes-latinjavaescape-da2311f9d3",
+        "rust_test": "grammar::unicode_escape::tests::latin_java_escape_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeEscapes.latinJavaEscape behavior"
+        "observable": "direct Rust Unicode escape rendering matches Java 4.13.2 for TestUnicodeEscapes.latinJavaEscape",
+        "scaffold_commit": "c6c99c9781702e3a88763f3478a593a8781af53a",
+        "primary_test_commit": "602ef46199b845536abdf339f9507c82fff99c1c"
       },
-      "closure_sha256": "ab4d57b87e1e4cfc40a4de35741149114be23a490a73cd390a0213455e83ba31",
-      "evidence_path": null
+      "closure_sha256": "5e7f26b03db2cbd7cea00357dc68e5dc348052ded6832bfdc6639359dda37f69",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodeescapes-latinjavaescape-da2311f9d3"
     },
     {
       "logical_id": "testunicodeescapes-latinpythonescape-5943a4d6ed",
@@ -31865,8 +31925,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodeescapes-latinpythonescape-5943a4d6ed-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodeescapes-latinpythonescape-5943a4d6ed",
+      "tdd_state": "done",
+      "rust_test": "grammar::unicode_escape::tests::latin_python_escape_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -31887,8 +31947,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeEscapes.latinPythonEscape behavior",
+      "expected_red_failure_fingerprint": "left empty string, right \"\\\\u0061\"",
+      "observable_equivalence": "direct Rust Unicode escape rendering matches Java 4.13.2 for TestUnicodeEscapes.latinPythonEscape",
+      "scaffold_commit": "c6c99c9781702e3a88763f3478a593a8781af53a",
+      "primary_test_commit": "602ef46199b845536abdf339f9507c82fff99c1c",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode_escape::tests::latin_python_escape_matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "left empty string, right \"\\\\u0061\""
+      },
+      "primary_implementation_commit": "247896246d88bfca50208b84e271dc907da220f7",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode_escape::tests::latin_python_escape_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodeescapes-latinpythonescape-5943a4d6ed",
         "source_case_ids": [
@@ -31896,14 +31968,17 @@
           "java-antlr:testunicodeescapes-latinpythonescape@d784924c640b"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodeescapes-latinpythonescape-5943a4d6ed",
+        "rust_test": "grammar::unicode_escape::tests::latin_python_escape_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeEscapes.latinPythonEscape behavior"
+        "observable": "direct Rust Unicode escape rendering matches Java 4.13.2 for TestUnicodeEscapes.latinPythonEscape",
+        "scaffold_commit": "c6c99c9781702e3a88763f3478a593a8781af53a",
+        "primary_test_commit": "602ef46199b845536abdf339f9507c82fff99c1c"
       },
-      "closure_sha256": "bb0c594df2642a55eaba05ae8527aba762f317158aaf15f8d0d363ca47e870ba",
-      "evidence_path": null
+      "closure_sha256": "cf0ec49d06cd858ad4f4f5fc2e1d90a19887a07849890c25450d858a85323a3e",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodeescapes-latinpythonescape-5943a4d6ed"
     },
     {
       "logical_id": "testunicodeescapes-latinswiftescape-1db7f94b84",
@@ -31915,8 +31990,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodeescapes-latinswiftescape-1db7f94b84-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodeescapes-latinswiftescape-1db7f94b84",
+      "tdd_state": "done",
+      "rust_test": "grammar::unicode_escape::tests::latin_swift_escape_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -31937,8 +32012,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeEscapes.latinSwiftEscape behavior",
+      "expected_red_failure_fingerprint": "left empty string, right \"\\\\u{0061}\"",
+      "observable_equivalence": "direct Rust Unicode escape rendering matches Java 4.13.2 for TestUnicodeEscapes.latinSwiftEscape",
+      "scaffold_commit": "c6c99c9781702e3a88763f3478a593a8781af53a",
+      "primary_test_commit": "602ef46199b845536abdf339f9507c82fff99c1c",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode_escape::tests::latin_swift_escape_matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "left empty string, right \"\\\\u{0061}\""
+      },
+      "primary_implementation_commit": "247896246d88bfca50208b84e271dc907da220f7",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode_escape::tests::latin_swift_escape_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodeescapes-latinswiftescape-1db7f94b84",
         "source_case_ids": [
@@ -31946,14 +32033,17 @@
           "java-antlr:testunicodeescapes-latinswiftescape@3cf294684060"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodeescapes-latinswiftescape-1db7f94b84",
+        "rust_test": "grammar::unicode_escape::tests::latin_swift_escape_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeEscapes.latinSwiftEscape behavior"
+        "observable": "direct Rust Unicode escape rendering matches Java 4.13.2 for TestUnicodeEscapes.latinSwiftEscape",
+        "scaffold_commit": "c6c99c9781702e3a88763f3478a593a8781af53a",
+        "primary_test_commit": "602ef46199b845536abdf339f9507c82fff99c1c"
       },
-      "closure_sha256": "eb05570c635f813ba9b9dca2f4c9966baea174a78fdb7ad9134faca060255b9b",
-      "evidence_path": null
+      "closure_sha256": "7430aadbc8bdbbffab4ceca36ed542c85b2043df4ac433f24f668135fbb92ac3",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodeescapes-latinswiftescape-1db7f94b84"
     },
     {
       "logical_id": "testunicodeescapes-smpjavaescape-51cb96898e",
@@ -31965,8 +32055,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodeescapes-smpjavaescape-51cb96898e-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodeescapes-smpjavaescape-51cb96898e",
+      "tdd_state": "done",
+      "rust_test": "grammar::unicode_escape::tests::smp_java_escape_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -31987,8 +32077,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeEscapes.smpJavaEscape behavior",
+      "expected_red_failure_fingerprint": "left empty string, right \"\\\\uD83D\\\\uDCA9\"",
+      "observable_equivalence": "direct Rust Unicode escape rendering matches Java 4.13.2 for TestUnicodeEscapes.smpJavaEscape",
+      "scaffold_commit": "c6c99c9781702e3a88763f3478a593a8781af53a",
+      "primary_test_commit": "602ef46199b845536abdf339f9507c82fff99c1c",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode_escape::tests::smp_java_escape_matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "left empty string, right \"\\\\uD83D\\\\uDCA9\""
+      },
+      "primary_implementation_commit": "247896246d88bfca50208b84e271dc907da220f7",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode_escape::tests::smp_java_escape_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodeescapes-smpjavaescape-51cb96898e",
         "source_case_ids": [
@@ -31996,14 +32098,17 @@
           "java-antlr:testunicodeescapes-smpjavaescape@36549b22c6a4"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodeescapes-smpjavaescape-51cb96898e",
+        "rust_test": "grammar::unicode_escape::tests::smp_java_escape_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeEscapes.smpJavaEscape behavior"
+        "observable": "direct Rust Unicode escape rendering matches Java 4.13.2 for TestUnicodeEscapes.smpJavaEscape",
+        "scaffold_commit": "c6c99c9781702e3a88763f3478a593a8781af53a",
+        "primary_test_commit": "602ef46199b845536abdf339f9507c82fff99c1c"
       },
-      "closure_sha256": "223423394577310cfd1d82588d2dc11f3c8b48ea348d7bf454524d92ef218962",
-      "evidence_path": null
+      "closure_sha256": "df1bfe52e79fd199df2fe391985ad08453d03032277ce19d6f00ba9eb87f5aaf",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodeescapes-smpjavaescape-51cb96898e"
     },
     {
       "logical_id": "testunicodeescapes-smppythonescape-4f37d6fbe9",
@@ -32015,8 +32120,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodeescapes-smppythonescape-4f37d6fbe9-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodeescapes-smppythonescape-4f37d6fbe9",
+      "tdd_state": "done",
+      "rust_test": "grammar::unicode_escape::tests::smp_python_escape_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -32037,8 +32142,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeEscapes.smpPythonEscape behavior",
+      "expected_red_failure_fingerprint": "left empty string, right \"\\\\U0001F4A9\"",
+      "observable_equivalence": "direct Rust Unicode escape rendering matches Java 4.13.2 for TestUnicodeEscapes.smpPythonEscape",
+      "scaffold_commit": "c6c99c9781702e3a88763f3478a593a8781af53a",
+      "primary_test_commit": "602ef46199b845536abdf339f9507c82fff99c1c",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode_escape::tests::smp_python_escape_matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "left empty string, right \"\\\\U0001F4A9\""
+      },
+      "primary_implementation_commit": "247896246d88bfca50208b84e271dc907da220f7",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode_escape::tests::smp_python_escape_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodeescapes-smppythonescape-4f37d6fbe9",
         "source_case_ids": [
@@ -32046,14 +32163,17 @@
           "java-antlr:testunicodeescapes-smppythonescape@f4b99dabc2bc"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodeescapes-smppythonescape-4f37d6fbe9",
+        "rust_test": "grammar::unicode_escape::tests::smp_python_escape_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeEscapes.smpPythonEscape behavior"
+        "observable": "direct Rust Unicode escape rendering matches Java 4.13.2 for TestUnicodeEscapes.smpPythonEscape",
+        "scaffold_commit": "c6c99c9781702e3a88763f3478a593a8781af53a",
+        "primary_test_commit": "602ef46199b845536abdf339f9507c82fff99c1c"
       },
-      "closure_sha256": "537189b65d81bd302740b1773d62bf94ceb890ffd0d7932acba6c69899f9dd97",
-      "evidence_path": null
+      "closure_sha256": "d7613ad272516b672367d890bb18d219ab5ba5873a0235e1558d7034f3a73a8f",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodeescapes-smppythonescape-4f37d6fbe9"
     },
     {
       "logical_id": "testunicodeescapes-smpswiftescape-6f7be753b4",
@@ -32065,8 +32185,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodeescapes-smpswiftescape-6f7be753b4-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodeescapes-smpswiftescape-6f7be753b4",
+      "tdd_state": "done",
+      "rust_test": "grammar::unicode_escape::tests::smp_swift_escape_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -32087,8 +32207,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeEscapes.smpSwiftEscape behavior",
+      "expected_red_failure_fingerprint": "left empty string, right \"\\\\u{1F4A9}\"",
+      "observable_equivalence": "direct Rust Unicode escape rendering matches Java 4.13.2 for TestUnicodeEscapes.smpSwiftEscape",
+      "scaffold_commit": "c6c99c9781702e3a88763f3478a593a8781af53a",
+      "primary_test_commit": "602ef46199b845536abdf339f9507c82fff99c1c",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode_escape::tests::smp_swift_escape_matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "left empty string, right \"\\\\u{1F4A9}\""
+      },
+      "primary_implementation_commit": "247896246d88bfca50208b84e271dc907da220f7",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode_escape::tests::smp_swift_escape_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodeescapes-smpswiftescape-6f7be753b4",
         "source_case_ids": [
@@ -32096,14 +32228,17 @@
           "java-antlr:testunicodeescapes-smpswiftescape@4584a3619ae2"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodeescapes-smpswiftescape-6f7be753b4",
+        "rust_test": "grammar::unicode_escape::tests::smp_swift_escape_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeEscapes.smpSwiftEscape behavior"
+        "observable": "direct Rust Unicode escape rendering matches Java 4.13.2 for TestUnicodeEscapes.smpSwiftEscape",
+        "scaffold_commit": "c6c99c9781702e3a88763f3478a593a8781af53a",
+        "primary_test_commit": "602ef46199b845536abdf339f9507c82fff99c1c"
       },
-      "closure_sha256": "ebc22330494dd81398732bdb55370addfaa95b6d591e471822623049e857c1de",
-      "evidence_path": null
+      "closure_sha256": "b37803720040e3eac59ffd7fc73d1d302193236755ab233ff7d8ee4a2d0769f5",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodeescapes-smpswiftescape-6f7be753b4"
     },
     {
       "logical_id": "testunicodegrammar-binarygrammar-611ebe1d6f",

@@ -49,6 +49,9 @@ import {
     TOKEN_POSITION_TEST_COMMIT,
     TOPOLOGICAL_SORT_BASE_COMMIT,
     TOPOLOGICAL_SORT_TEST_COMMIT,
+    UNICODE_ESCAPE_IMPLEMENTATION_COMMIT,
+    UNICODE_ESCAPE_SCAFFOLD_COMMIT,
+    UNICODE_ESCAPE_TEST_COMMIT,
     VOCABULARY_BASE_COMMIT,
     VOCABULARY_IMPLEMENTATION_COMMIT,
     VOCABULARY_TEST_COMMIT,
@@ -119,6 +122,9 @@ const NESTED_ACTION_LOGICAL_ID =
 const ESCAPE_SEQUENCE_TEST_PATH =
     "src/bin_support/grammar/escape_sequence.rs";
 const ESCAPE_SEQUENCE_TEST_MARKER = "#[cfg(test)]\nmod tests {";
+const UNICODE_ESCAPE_TEST_PATH =
+    "src/bin_support/grammar/unicode_escape.rs";
+const UNICODE_ESCAPE_TEST_MARKER = "#[cfg(test)]\nmod tests {";
 const EMPTY_VOCABULARY_LOGICAL_ID =
     "testvocabulary-testemptyvocabulary-66d31ad014";
 const SYMBOL_INFO_SHA256 =
@@ -885,6 +891,49 @@ const escapeSequenceLockedSections = [
         sha256: digest(checkedInEscapeSequenceTests),
     },
 ];
+const checkedInUnicodeEscapeTests = sectionAtMarker(
+    await readFile(resolve(repoRoot, UNICODE_ESCAPE_TEST_PATH), "utf8"),
+    UNICODE_ESCAPE_TEST_MARKER,
+);
+const recordedUnicodeEscapeTests = gitShowOptional(
+    repoRoot,
+    UNICODE_ESCAPE_TEST_COMMIT,
+    UNICODE_ESCAPE_TEST_PATH,
+);
+const implementedUnicodeEscapeTests = gitShowOptional(
+    repoRoot,
+    UNICODE_ESCAPE_IMPLEMENTATION_COMMIT,
+    UNICODE_ESCAPE_TEST_PATH,
+);
+if (
+    recordedUnicodeEscapeTests === null ||
+    sectionAtMarker(
+        recordedUnicodeEscapeTests,
+        UNICODE_ESCAPE_TEST_MARKER,
+    ) !== checkedInUnicodeEscapeTests
+) {
+    throw new Error(
+        "checked-in Unicode escape ports differ from their test commit",
+    );
+}
+if (
+    implementedUnicodeEscapeTests === null ||
+    sectionAtMarker(
+        implementedUnicodeEscapeTests,
+        UNICODE_ESCAPE_TEST_MARKER,
+    ) !== checkedInUnicodeEscapeTests
+) {
+    throw new Error(
+        "Unicode escape implementation changed the locked test ports",
+    );
+}
+const unicodeEscapeLockedSections = [
+    {
+        path: UNICODE_ESCAPE_TEST_PATH,
+        marker: UNICODE_ESCAPE_TEST_MARKER,
+        sha256: digest(checkedInUnicodeEscapeTests),
+    },
+];
 
 const upstreamByLogicalId = new Map(
     testMap.rows.map((row) => [row.logical_id, row]),
@@ -1008,6 +1057,9 @@ for (const row of completedRows) {
     const phaseBEscapeSequence = row.logical_id.startsWith(
         "testescapesequenceparsing-",
     );
+    const phaseBUnicodeEscape = row.logical_id.startsWith(
+        "testunicodeescapes-",
+    );
     if (
         row.owner_phase === "B" &&
         !phaseBAtnSerialization &&
@@ -1020,7 +1072,8 @@ for (const row of completedRows) {
         !phaseBScopeParsing &&
         !phaseBCharSupport &&
         !phaseBNestedAction &&
-        !phaseBEscapeSequence
+        !phaseBEscapeSequence &&
+        !phaseBUnicodeEscape
     ) {
         throw new Error(`missing Phase B evidence profile for ${row.logical_id}`);
     }
@@ -1157,6 +1210,19 @@ for (const row of completedRows) {
                                       ? "the case-specific invalid-input test passed against the behavior-free escape parser scaffold"
                                       : "the escape sequence implementation commit is directly based on its locked red tests",
                               }
+                            : phaseBUnicodeEscape
+                              ? {
+                                    lockedSections:
+                                        unicodeEscapeLockedSections,
+                                    scaffoldCommit:
+                                        UNICODE_ESCAPE_SCAFFOLD_COMMIT,
+                                    testParent:
+                                        UNICODE_ESCAPE_SCAFFOLD_COMMIT,
+                                    implementationParent:
+                                        UNICODE_ESCAPE_TEST_COMMIT,
+                                    reachability:
+                                        "the Unicode escape implementation commit is directly based on its locked red tests",
+                                }
           : null;
     await addEvidence({
         logicalId: row.logical_id,
@@ -1266,6 +1332,15 @@ for (const row of completedRows) {
                                       java_compatibility_verdict:
                                           "exact Java 4.13.2 TestEscapeSequenceParsing result equality",
                                   }
+                                : phaseBUnicodeEscape
+                                  ? {
+                                        primary:
+                                            "the direct Rust Unicode formatter matches Java 4.13.2 UTF-16, fixed-width scalar, and braced scalar escapes",
+                                        alternate:
+                                            "the pinned antlr-ng TestUnicodeEscapes case exposes the same rendered escape",
+                                        java_compatibility_verdict:
+                                            "exact Java 4.13.2 TestUnicodeEscapes output equality",
+                                    }
             : {
                   primary: coveredExisting
                       ? "the case-specific Rust port matches the pinned accepted and rejected syntax outcomes"
@@ -1313,6 +1388,7 @@ for (const row of completedRows) {
             phaseBCharSupport ||
             phaseBNestedAction ||
             (phaseBEscapeSequence && !coveredExisting) ||
+            phaseBUnicodeEscape ||
             (phaseBTokenPosition && !coveredExisting)
             ? row.demonstrated_red
             : undefined,

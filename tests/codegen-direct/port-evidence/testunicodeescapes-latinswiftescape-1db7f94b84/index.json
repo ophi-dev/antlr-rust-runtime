@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodeescapes-latinswiftescape-1db7f94b84",
+  "active_revision_id": "testunicodeescapes-latinswiftescape-1db7f94b84-r1",
+  "revisions": [
+    {
+      "revision_id": "testunicodeescapes-latinswiftescape-1db7f94b84-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testunicodeescapes-latinswiftescape-1db7f94b84/revisions/testunicodeescapes-latinswiftescape-1db7f94b84-r1/manifest.json",
+      "closure_sha256": "7430aadbc8bdbbffab4ceca36ed542c85b2043df4ac433f24f668135fbb92ac3"
+    }
+  ]
+}

@@ -46,6 +46,10 @@ import {
     TOKEN_POSITION_TEST_COMMIT,
     TOPOLOGICAL_SORT_BASE_COMMIT,
     TOPOLOGICAL_SORT_TEST_COMMIT,
+    UNICODE_ESCAPE_IMPLEMENTATION_COMMIT,
+    UNICODE_ESCAPE_SCAFFOLD_COMMIT,
+    UNICODE_ESCAPE_SCAFFOLD_PARENT_COMMIT,
+    UNICODE_ESCAPE_TEST_COMMIT,
     VOCABULARY_BASE_COMMIT,
     VOCABULARY_IMPLEMENTATION_COMMIT,
     VOCABULARY_TEST_COMMIT,
@@ -290,6 +294,9 @@ for (const [logicalId, record] of records) {
             logicalId === NESTED_ACTION_LOGICAL_ID;
         const escapeSequence = logicalId.startsWith(
             "testescapesequenceparsing-",
+        );
+        const unicodeEscape = logicalId.startsWith(
+            "testunicodeescapes-",
         );
         if (resolution === "verified-covered-existing") {
             if (atnSerialization) {
@@ -564,6 +571,23 @@ for (const [logicalId, record] of records) {
                         manifest.ancestry.primary_implementation_parent ===
                             ESCAPE_SEQUENCE_TEST_COMMIT,
                     `${logicalId} escape sequence recorded ancestry differs`,
+                );
+            } else if (unicodeEscape) {
+                expect(
+                    manifest.commits.scaffold ===
+                            UNICODE_ESCAPE_SCAFFOLD_COMMIT &&
+                        manifest.commits.primary_test ===
+                            UNICODE_ESCAPE_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            UNICODE_ESCAPE_IMPLEMENTATION_COMMIT,
+                    `${logicalId} Unicode escape evidence commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            UNICODE_ESCAPE_SCAFFOLD_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            UNICODE_ESCAPE_TEST_COMMIT,
+                    `${logicalId} Unicode escape recorded ancestry differs`,
                 );
             } else {
                 expect(
@@ -846,6 +870,39 @@ if (escapeSequenceImplementationParent !== null) {
         escapeSequenceImplementationParent.trim() ===
             ESCAPE_SEQUENCE_TEST_COMMIT,
         "escape sequence implementation commit is not based on its locked tests",
+    );
+}
+const unicodeEscapeScaffoldParent = gitOptional([
+    "rev-parse",
+    `${UNICODE_ESCAPE_SCAFFOLD_COMMIT}^`,
+]);
+if (unicodeEscapeScaffoldParent !== null) {
+    expect(
+        unicodeEscapeScaffoldParent.trim() ===
+            UNICODE_ESCAPE_SCAFFOLD_PARENT_COMMIT,
+        "Unicode escape scaffold commit has an unexpected parent",
+    );
+}
+const unicodeEscapeTestParent = gitOptional([
+    "rev-parse",
+    `${UNICODE_ESCAPE_TEST_COMMIT}^`,
+]);
+if (unicodeEscapeTestParent !== null) {
+    expect(
+        unicodeEscapeTestParent.trim() ===
+            UNICODE_ESCAPE_SCAFFOLD_COMMIT,
+        "Unicode escape test commit is not based on its scaffold",
+    );
+}
+const unicodeEscapeImplementationParent = gitOptional([
+    "rev-parse",
+    `${UNICODE_ESCAPE_IMPLEMENTATION_COMMIT}^`,
+]);
+if (unicodeEscapeImplementationParent !== null) {
+    expect(
+        unicodeEscapeImplementationParent.trim() ===
+            UNICODE_ESCAPE_TEST_COMMIT,
+        "Unicode escape implementation commit is not based on its locked tests",
     );
 }
 

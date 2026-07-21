@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodeescapes-bmpswiftescape-e6754132b6",
+  "active_revision_id": "testunicodeescapes-bmpswiftescape-e6754132b6-r1",
+  "revisions": [
+    {
+      "revision_id": "testunicodeescapes-bmpswiftescape-e6754132b6-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testunicodeescapes-bmpswiftescape-e6754132b6/revisions/testunicodeescapes-bmpswiftescape-e6754132b6-r1/manifest.json",
+      "closure_sha256": "1c8162572dd5e50da924a7d500dd4beab02face75e7d7e518948a855b363ae1c"
+    }
+  ]
+}

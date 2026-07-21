@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodeescapes-smpjavaescape-51cb96898e",
+  "revision_id": "testunicodeescapes-smpjavaescape-51cb96898e-r1",
+  "cells": [
+    {
+      "test_port": "primary",
+      "test_commit": "602ef46199b845536abdf339f9507c82fff99c1c",
+      "implementation_port": "primary-antlr-ng",
+      "implementation_commit": "247896246d88bfca50208b84e271dc907da220f7",
+      "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode_escape::tests::smp_java_escape_matches_java -- --exact",
+      "result": "green: 1 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the primary implementation passed the locked primary tests"
+}

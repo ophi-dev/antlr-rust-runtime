@@ -43,6 +43,9 @@ import {
     TOKEN_POSITION_TEST_COMMIT,
     TOPOLOGICAL_SORT_BASE_COMMIT,
     TOPOLOGICAL_SORT_TEST_COMMIT,
+    UNICODE_ESCAPE_IMPLEMENTATION_COMMIT,
+    UNICODE_ESCAPE_SCAFFOLD_COMMIT,
+    UNICODE_ESCAPE_TEST_COMMIT,
     VOCABULARY_BASE_COMMIT,
     VOCABULARY_IMPLEMENTATION_COMMIT,
     VOCABULARY_TEST_COMMIT,
@@ -262,6 +265,19 @@ const ESCAPE_SEQUENCE_RED_CASES = new Map([
         "left Invalid, right Property with ranges [(0, 66559), (66640, 1114111)]",
     ],
 ]);
+const UNICODE_ESCAPE_EXPECTED = new Map([
+    ["latinJavaEscape", "\\u0061"],
+    ["latinPythonEscape", "\\u0061"],
+    ["latinSwiftEscape", "\\u{0061}"],
+    ["bmpJavaEscape", "\\uABCD"],
+    ["bmpPythonEscape", "\\uABCD"],
+    ["bmpSwiftEscape", "\\u{ABCD}"],
+    ["smpJavaEscape", "\\uD83D\\uDCA9"],
+    ["smpPythonEscape", "\\U0001F4A9"],
+    ["smpSwiftEscape", "\\u{1F4A9}"],
+]);
+const UNICODE_ESCAPE_TEST_PREFIX =
+    "cargo test --locked --bin antlr4-rust-gen grammar::unicode_escape::tests::";
 const CHAR_SUPPORT_PORTS = new Map([
     [
         "testcharsupport-testcapitalize-25cbf55e21",
@@ -823,6 +839,9 @@ function completedPhaseBRow(
                             : completed.kind === "escape-sequence"
                               ? `direct Rust escape parsing matches Java 4.13.2 result kind, ` +
                                 `value or property set, and consumed span for ${cases[0].suite}.${cases[0].name}`
+                              : completed.kind === "unicode-escape"
+                                ? `direct Rust Unicode escape rendering matches Java 4.13.2 ` +
+                                  `for ${cases[0].suite}.${cases[0].name}`
                         : `direct Rust semantic diagnostics match Java 4.13.2 exactly ` +
                           `for ${cases[0].suite}.${cases[0].name}`;
     const coveredExisting =
@@ -1115,6 +1134,53 @@ async function loadCompletedPhaseBPorts() {
             `expected 17 completed TestEscapeSequenceParsing ports, found ${escapeSequenceGroups.size}`,
         );
     }
+    const unicodeEscapeGroups = new Map();
+    for (const testCase of inventory.cases) {
+        if (testCase.suite !== "TestUnicodeEscapes") {
+            continue;
+        }
+        const key =
+            `${testCase.suite}\0${canonicalName(testCase.name)}` +
+            `\0${parameterKey(testCase)}`;
+        const group = unicodeEscapeGroups.get(key) ?? [];
+        group.push(testCase);
+        unicodeEscapeGroups.set(key, group);
+    }
+    for (const [key, cases] of unicodeEscapeGroups) {
+        const logicalId = logicalCaseId(
+            cases[0].suite,
+            cases[0].name,
+            key,
+        );
+        const testName = escapeSequenceRustTestName(cases[0].name);
+        const expected = UNICODE_ESCAPE_EXPECTED.get(cases[0].name);
+        if (expected === undefined) {
+            throw new Error(
+                `missing Unicode escape expectation for ${cases[0].name}`,
+            );
+        }
+        ports.set(logicalId, {
+            fixturePaths: [],
+            rustTest:
+                `grammar::unicode_escape::tests::${testName}`,
+            kind: "unicode-escape",
+            resolution: "ported",
+            scaffoldCommit: UNICODE_ESCAPE_SCAFFOLD_COMMIT,
+            testCommit: UNICODE_ESCAPE_TEST_COMMIT,
+            implementationCommit:
+                UNICODE_ESCAPE_IMPLEMENTATION_COMMIT,
+            testCommand:
+                `${UNICODE_ESCAPE_TEST_PREFIX}${testName} -- --exact`,
+            greenResult: "1 passed; 0 failed",
+            redFingerprint:
+                `left empty string, right ${JSON.stringify(expected)}`,
+        });
+    }
+    if (unicodeEscapeGroups.size !== 9) {
+        throw new Error(
+            `expected 9 completed TestUnicodeEscapes ports, found ${unicodeEscapeGroups.size}`,
+        );
+    }
     const scopeGroups = new Map();
     for (const testCase of inventory.cases) {
         if (testCase.suite !== "TestScopeParsing") {
@@ -1153,8 +1219,8 @@ async function loadCompletedPhaseBPorts() {
             `expected 47 completed TestScopeParsing ports, found ${scopeGroups.size}`,
         );
     }
-    if (ports.size !== 164) {
-        throw new Error(`expected 164 completed Phase B ports, found ${ports.size}`);
+    if (ports.size !== 173) {
+        throw new Error(`expected 173 completed Phase B ports, found ${ports.size}`);
     }
     return ports;
 }

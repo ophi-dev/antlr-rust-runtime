@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodeescapes-bmpjavaescape-299139ad49",
+  "active_revision_id": "testunicodeescapes-bmpjavaescape-299139ad49-r1",
+  "revisions": [
+    {
+      "revision_id": "testunicodeescapes-bmpjavaescape-299139ad49-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testunicodeescapes-bmpjavaescape-299139ad49/revisions/testunicodeescapes-bmpjavaescape-299139ad49-r1/manifest.json",
+      "closure_sha256": "a679dfa1a2a7976db232ddd558832cf499403a03f49f5d97bd83f62917f9eb13"
+    }
+  ]
+}

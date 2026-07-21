@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodeescapes-bmpswiftescape-e6754132b6",
+  "revision_id": "testunicodeescapes-bmpswiftescape-e6754132b6-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "closure": {
+    "logical_id": "testunicodeescapes-bmpswiftescape-e6754132b6",
+    "source_case_ids": [
+      "antlr-ng:testunicodeescapes-bmpswiftescape@e5a441603503",
+      "java-antlr:testunicodeescapes-bmpswiftescape@e5a441603503"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::unicode_escape::tests::bmp_swift_escape_matches_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust Unicode escape rendering matches Java 4.13.2 for TestUnicodeEscapes.bmpSwiftEscape",
+    "scaffold_commit": "c6c99c9781702e3a88763f3478a593a8781af53a",
+    "primary_test_commit": "602ef46199b845536abdf339f9507c82fff99c1c"
+  },
+  "closure_sha256": "1c8162572dd5e50da924a7d500dd4beab02face75e7d7e518948a855b363ae1c",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testunicodeescapes-bmpswiftescape@e5a441603503",
+      "path": "tests/TestUnicodeEscapes.spec.ts",
+      "sha256": "ce877bfd8afff0a5b480385b02a5bf3a674ac4de63d69244a461eb0c23e4ef2e"
+    },
+    {
+      "source_case_id": "java-antlr:testunicodeescapes-bmpswiftescape@e5a441603503",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestUnicodeEscapes.java",
+      "sha256": "04431890bcf41b4c1f89259050466bf09aa95287086a839063035873db11219f"
+    }
+  ],
+  "commits": {
+    "scaffold": "c6c99c9781702e3a88763f3478a593a8781af53a",
+    "primary_test": "602ef46199b845536abdf339f9507c82fff99c1c",
+    "primary_implementation": "247896246d88bfca50208b84e271dc907da220f7"
+  },
+  "ancestry": {
+    "primary_test_parent": "c6c99c9781702e3a88763f3478a593a8781af53a",
+    "primary_implementation_parent": "602ef46199b845536abdf339f9507c82fff99c1c",
+    "reachability": "the Unicode escape implementation commit is directly based on its locked red tests"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/unicode_escape.rs",
+      "marker": "#[cfg(test)]\nmod tests {",
+      "sha256": "f49b7e499bbbfba8ba5ea37ebf39e19fe630b45a7afc5ef61a26d282ded55d02"
+    }
+  ],
+  "demonstrated_red": {
+    "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode_escape::tests::bmp_swift_escape_matches_java -- --exact",
+    "commit": "602ef46199b845536abdf339f9507c82fff99c1c",
+    "exit_code": 101,
+    "fingerprint": "left empty string, right \"\\\\u{ABCD}\""
+  },
+  "green_result": {
+    "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode_escape::tests::bmp_swift_escape_matches_java -- --exact",
+    "commit": "247896246d88bfca50208b84e271dc907da220f7",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testunicodeescapes-bmpswiftescape-e6754132b6/revisions/testunicodeescapes-bmpswiftescape-e6754132b6-r1/oracle-results/declared-sources.json",
+      "sha256": "e06bc348d3348ca38ee014fb3dba867ffdca950e7647aba6e04a01829d439765"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testunicodeescapes-bmpswiftescape-e6754132b6/revisions/testunicodeescapes-bmpswiftescape-e6754132b6-r1/matrix-results/results.json",
+      "sha256": "b712dea395f044dd40caf7599ae3aa030a6040c9fd7254d5cd25e99363ca6203"
+    }
+  ]
+}

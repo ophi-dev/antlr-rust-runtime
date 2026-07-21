@@ -83,6 +83,14 @@ export const ESCAPE_SEQUENCE_TEST_COMMIT =
     "ed8396cd044c5e9893f7076f0fddf92c2e77d16e";
 export const ESCAPE_SEQUENCE_IMPLEMENTATION_COMMIT =
     "56d2ac6a31671f9d786f2c3fa6323fffa6474375";
+export const UNICODE_ESCAPE_SCAFFOLD_PARENT_COMMIT =
+    "d377eaff7257c5f0fa9f739c5ed6b4eab5c25e7c";
+export const UNICODE_ESCAPE_SCAFFOLD_COMMIT =
+    "c6c99c9781702e3a88763f3478a593a8781af53a";
+export const UNICODE_ESCAPE_TEST_COMMIT =
+    "602ef46199b845536abdf339f9507c82fff99c1c";
+export const UNICODE_ESCAPE_IMPLEMENTATION_COMMIT =
+    "247896246d88bfca50208b84e271dc907da220f7";
 
 export function stableStringify(value) {
     if (Array.isArray(value)) {

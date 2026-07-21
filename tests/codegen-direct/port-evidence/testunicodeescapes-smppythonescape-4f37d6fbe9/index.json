@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodeescapes-smppythonescape-4f37d6fbe9",
+  "active_revision_id": "testunicodeescapes-smppythonescape-4f37d6fbe9-r1",
+  "revisions": [
+    {
+      "revision_id": "testunicodeescapes-smppythonescape-4f37d6fbe9-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testunicodeescapes-smppythonescape-4f37d6fbe9/revisions/testunicodeescapes-smppythonescape-4f37d6fbe9-r1/manifest.json",
+      "closure_sha256": "d7613ad272516b672367d890bb18d219ab5ba5873a0235e1558d7034f3a73a8f"
+    }
+  ]
+}
