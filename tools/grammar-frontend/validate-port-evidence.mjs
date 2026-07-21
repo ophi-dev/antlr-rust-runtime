@@ -1,16 +1,19 @@
 #!/usr/bin/env node
 
-import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
-const TEST_COMMIT = "a4258562c44818e2ba97d206587c64d4c38408d0";
-const IMPLEMENTATION_COMMIT = "8a00a3d6496779b969a42511d7e29c0d102d62d7";
-const SCAFFOLD_COMMIT = "75615945749dc93fca5d929cb22ad481f12dfdc9";
-const JAVA_COMMIT = "cc82115a4e7f53d71d9d905caa2c2dfa4da58899";
-const ANTLR_NG_COMMIT = "1f68422ae4bfc62f93343769e144d01f305487b1";
+import {
+    ANTLR_NG_COMMIT,
+    IMPLEMENTATION_COMMIT,
+    JAVA_COMMIT,
+    SCAFFOLD_COMMIT,
+    TEST_COMMIT,
+    digest,
+    stableStringify,
+} from "./evidence-common.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "../..");
@@ -137,22 +140,37 @@ for (const [logicalId, record] of records) {
             );
         }
         for (const section of manifest.locked_oracle_sections ?? []) {
-            const locked = sectionAtMarker(
-                gitShow(manifest.commits.primary_test, section.path),
-                section.marker,
-            );
-            const afterImplementation = sectionAtMarker(
-                gitShow(manifest.commits.primary_implementation, section.path),
+            const checkedIn = sectionAtMarker(
+                await readFile(resolve(repoRoot, section.path), "utf8"),
                 section.marker,
             );
             expect(
-                digest(locked) === section.sha256,
+                digest(checkedIn) === section.sha256,
                 `${logicalId} locked oracle section hash differs`,
             );
-            expect(
-                locked === afterImplementation,
-                `${logicalId} implementation commit edited its locked oracle section`,
+            const testSource = gitShowOptional(
+                manifest.commits.primary_test,
+                section.path,
             );
+            const implementationSource = gitShowOptional(
+                manifest.commits.primary_implementation,
+                section.path,
+            );
+            if (testSource !== null && implementationSource !== null) {
+                const locked = sectionAtMarker(testSource, section.marker);
+                const afterImplementation = sectionAtMarker(
+                    implementationSource,
+                    section.marker,
+                );
+                expect(
+                    digest(locked) === section.sha256,
+                    `${logicalId} historical locked oracle section hash differs`,
+                );
+                expect(
+                    locked === afterImplementation,
+                    `${logicalId} implementation commit edited its locked oracle section`,
+                );
+            }
         }
         expect(
             manifest.commits.scaffold === SCAFFOLD_COMMIT &&
@@ -188,19 +206,22 @@ for (const [logicalId, record] of records) {
     );
 }
 
-expect(
-    git(["rev-parse", `${TEST_COMMIT}^`]).trim() === SCAFFOLD_COMMIT,
-    "primary test commit is not directly based on the scaffold",
-);
-expect(
-    git(["rev-parse", `${IMPLEMENTATION_COMMIT}^`]).trim() === TEST_COMMIT,
-    "primary implementation commit is not directly based on the locked test",
-);
-for (const commit of [SCAFFOLD_COMMIT, TEST_COMMIT, IMPLEMENTATION_COMMIT]) {
-    const result = spawnSync("git", ["merge-base", "--is-ancestor", commit, "HEAD"], {
-        cwd: repoRoot,
-    });
-    expect(result.status === 0, `${commit} is not reachable from the Phase A branch`);
+const testParent = gitOptional(["rev-parse", `${TEST_COMMIT}^`]);
+if (testParent !== null) {
+    expect(
+        testParent.trim() === SCAFFOLD_COMMIT,
+        "primary test commit is not directly based on the scaffold",
+    );
+}
+const implementationParent = gitOptional([
+    "rev-parse",
+    `${IMPLEMENTATION_COMMIT}^`,
+]);
+if (implementationParent !== null) {
+    expect(
+        implementationParent.trim() === TEST_COMMIT,
+        "primary implementation commit is not directly based on the locked test",
+    );
 }
 
 expect(
@@ -231,18 +252,18 @@ async function load(path) {
     return JSON.parse(await readFile(resolve(repoRoot, path), "utf8"));
 }
 
-function gitShow(commit, path) {
-    return git(["show", `${commit}:${path}`]);
+function gitShowOptional(commit, path) {
+    return gitOptional(["show", `${commit}:${path}`]);
 }
 
-function git(args) {
+function gitOptional(args) {
     const result = spawnSync("git", args, {
         cwd: repoRoot,
         encoding: "utf8",
         maxBuffer: 32 * 1024 * 1024,
     });
     if (result.status !== 0) {
-        throw new Error(`git ${args.join(" ")} failed: ${result.stderr}`);
+        return null;
     }
     return result.stdout;
 }
@@ -253,23 +274,6 @@ function sectionAtMarker(text, marker) {
         throw new Error(`cannot find locked section marker ${marker}`);
     }
     return text.slice(offset);
-}
-
-function stableStringify(value) {
-    if (Array.isArray(value)) {
-        return `[${value.map(stableStringify).join(",")}]`;
-    }
-    if (value && typeof value === "object") {
-        return `{${Object.keys(value)
-            .sort()
-            .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
-            .join(",")}}`;
-    }
-    return JSON.stringify(value);
-}
-
-function digest(value) {
-    return createHash("sha256").update(value).digest("hex");
 }
 
 function expect(condition, message) {

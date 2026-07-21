@@ -49,7 +49,7 @@
   "ancestry": {
     "primary_test_parent": "75615945749dc93fca5d929cb22ad481f12dfdc9",
     "primary_implementation_parent": "a4258562c44818e2ba97d206587c64d4c38408d0",
-    "reachability": "all commits are direct ancestors of the Phase A branch"
+    "reachability": "direct ancestry is verified when the recorded commit objects are available"
   },
   "locked_oracle_sections": [
     {

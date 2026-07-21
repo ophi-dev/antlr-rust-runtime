@@ -316,28 +316,17 @@ pub(crate) fn parse_source(
 }
 
 fn line_starts(source: SourceId, text: &str) -> Result<Box<[u32]>, FrontendError> {
+    const LIMIT_EXCEEDED: &str = "grammar source exceeds the 4 GiB frontend limit";
+
     let mut starts = vec![0];
     for (index, byte) in text.bytes().enumerate() {
         if byte == b'\n' {
-            let start = u32::try_from(index + 1).map_err(|_| FrontendError {
-                diagnostics: vec![SyntaxDiagnostic {
-                    code: "G4F001",
-                    stage: DiagnosticStage::Source,
-                    span: SourceSpan::empty(source),
-                    message: "grammar source exceeds the 4 GiB frontend limit".to_owned(),
-                }],
-            })?;
+            let start =
+                u32::try_from(index + 1).map_err(|_| invalid_span(source, LIMIT_EXCEEDED))?;
             starts.push(start);
         }
     }
-    u32::try_from(text.len()).map_err(|_| FrontendError {
-        diagnostics: vec![SyntaxDiagnostic {
-            code: "G4F001",
-            stage: DiagnosticStage::Source,
-            span: SourceSpan::empty(source),
-            message: "grammar source exceeds the 4 GiB frontend limit".to_owned(),
-        }],
-    })?;
+    u32::try_from(text.len()).map_err(|_| invalid_span(source, LIMIT_EXCEEDED))?;
     Ok(starts.into_boxed_slice())
 }
 

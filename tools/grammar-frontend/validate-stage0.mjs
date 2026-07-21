@@ -50,6 +50,11 @@ expectEqual(
     "provided ANTLR jar hash",
 );
 
+if (options.update && failures.length > 0) {
+    reportFailures();
+    process.exit(1);
+}
+
 if (options.update) {
     for (const input of manifest.inputs) {
         input.sha256 = await sha256(resolve(repoRoot, input.path));
@@ -105,9 +110,7 @@ for (const output of manifest.outputs) {
 }
 
 if (failures.length > 0) {
-    for (const failure of failures) {
-        console.error(failure);
-    }
+    reportFailures();
     process.exitCode = 1;
 } else {
     console.log(
@@ -157,5 +160,11 @@ async function sha256(path) {
 function expectEqual(actual, expected, label) {
     if (actual !== expected) {
         failures.push(`${label}: expected ${expected}, got ${actual}`);
+    }
+}
+
+function reportFailures() {
+    for (const failure of failures) {
+        console.error(failure);
     }
 }

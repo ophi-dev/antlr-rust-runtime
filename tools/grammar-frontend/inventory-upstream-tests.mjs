@@ -135,6 +135,15 @@ async function inventoryJava(javaRoot) {
     if (report.cases.length !== 690) {
         throw new Error(`expected 690 JUnit cases, found ${report.cases.length}`);
     }
+    const failedCases = report.cases.filter(
+        (runnerCase) => !["passed", "skipped"].includes(runnerCase.status),
+    );
+    if (failedCases.length > 0) {
+        const first = failedCases[0];
+        throw new Error(
+            `JUnit report contains ${failedCases.length} failed/error case(s); first: ${first.classname}.${first.name} (${first.status})`,
+        );
+    }
 
     const runnerKeys = new Set();
     const identityCounts = new Map();
@@ -235,9 +244,11 @@ async function inventoryAntlrNg(antlrNgRoot, vitestReportPath) {
     const cases = [];
     const identityCounts = new Map();
     const sourceCatalog = new Map();
+    const reportPaths = new Map();
     for (const result of testResults) {
         const absolutePath = await realpath(result.name);
         const sourcePath = relative(realRoot, absolutePath).replaceAll("\\", "/");
+        reportPaths.set(result, sourcePath);
         const sourceText = gitText(antlrNgRoot, [
             "show",
             `${ANTLR_NG_COMMIT}:${sourcePath}`,
@@ -255,10 +266,7 @@ async function inventoryAntlrNg(antlrNgRoot, vitestReportPath) {
 
     const matchedCallSites = new Set();
     for (const result of testResults) {
-        const reportPath = relative(realRoot, await realpath(result.name)).replaceAll(
-            "\\",
-            "/",
-        );
+        const reportPath = reportPaths.get(result);
         for (const assertion of result.assertionResults) {
             const suite = assertion.ancestorTitles.at(-1) ?? reportPath;
             const source = sourceCatalog.get(suite);
@@ -276,6 +284,11 @@ async function inventoryAntlrNg(antlrNgRoot, vitestReportPath) {
             const disabled = ["pending", "skipped", "todo"].includes(
                 assertion.status,
             );
+            if (!disabled && assertion.status !== "passed") {
+                throw new Error(
+                    `Vitest report contains a failed assertion: ${reportPath}: ${assertion.title} (${assertion.status})`,
+                );
+            }
             cases.push({
                 id: stableId("antlr-ng", identity, occurrence),
                 implementation: "antlr-ng",

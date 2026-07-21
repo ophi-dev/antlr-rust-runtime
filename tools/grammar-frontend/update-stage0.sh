@@ -83,9 +83,10 @@ cargo build \
     --quiet \
     --locked \
     --manifest-path "$repo_root/Cargo.toml" \
+    --target-dir "$work_dir/target" \
     --bin antlr4-rust-gen
 
-generator="$repo_root/target/debug/antlr4-rust-gen"
+generator="$work_dir/target/debug/antlr4-rust-gen"
 "$generator" \
     --lexer "$work_dir/interp/ANTLRv4Lexer.interp" \
     --grammar "$work_dir/ANTLRv4Lexer.g4" \

@@ -23,14 +23,29 @@ def main() -> None:
             }
         for testcase in suite.findall("testcase"):
             skipped = testcase.find("skipped")
+            failure = testcase.find("failure")
+            error = testcase.find("error")
+            if failure is not None:
+                status = "failed"
+                failure_message = failure.attrib.get("message", "")
+            elif error is not None:
+                status = "error"
+                failure_message = error.attrib.get("message", "")
+            elif skipped is not None:
+                status = "skipped"
+                failure_message = None
+            else:
+                status = "passed"
+                failure_message = None
             cases.append(
                 {
                     "classname": testcase.attrib["classname"],
                     "name": testcase.attrib["name"],
-                    "status": "skipped" if skipped is not None else "passed",
+                    "status": status,
                     "skip_reason": (
                         skipped.attrib.get("message", "") if skipped is not None else None
                     ),
+                    "failure_message": failure_message,
                 }
             )
 

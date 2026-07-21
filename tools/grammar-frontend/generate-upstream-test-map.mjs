@@ -1,15 +1,20 @@
 #!/usr/bin/env node
 
-import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const JAVA_COMMIT = "cc82115a4e7f53d71d9d905caa2c2dfa4da58899";
-const ANTLR_NG_COMMIT = "1f68422ae4bfc62f93343769e144d01f305487b1";
-const TEST_COMMIT = "a4258562c44818e2ba97d206587c64d4c38408d0";
-const IMPLEMENTATION_COMMIT = "8a00a3d6496779b969a42511d7e29c0d102d62d7";
-const SCAFFOLD_COMMIT = "75615945749dc93fca5d929cb22ad481f12dfdc9";
+import {
+    ANTLR_NG_COMMIT,
+    IMPLEMENTATION_COMMIT,
+    JAVA_COMMIT,
+    SCAFFOLD_COMMIT,
+    TEST_COMMIT,
+    digest,
+    parseMode,
+    stableStringify,
+} from "./evidence-common.mjs";
+
 const APPROVING_REVIEW = "merged implementation plan PR #149, section 11.5";
 
 const PHASE_B_SUITES = new Set([
@@ -121,7 +126,10 @@ const outputPath = resolve(
     repoRoot,
     "tests/codegen-direct/upstream-test-map.json",
 );
-const update = parseMode(process.argv.slice(2));
+const update = parseMode(
+    process.argv.slice(2),
+    "generate-upstream-test-map.mjs",
+);
 const inventory = JSON.parse(await readFile(inventoryPath, "utf8"));
 const externalMap = JSON.parse(await readFile(externalMapPath, "utf8"));
 const externalInventory = JSON.parse(
@@ -529,28 +537,4 @@ function compareSourceCases(left, right) {
         left.source.line - right.source.line ||
         left.id.localeCompare(right.id)
     );
-}
-
-function stableStringify(value) {
-    if (Array.isArray(value)) {
-        return `[${value.map(stableStringify).join(",")}]`;
-    }
-    if (value && typeof value === "object") {
-        return `{${Object.keys(value)
-            .sort()
-            .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
-            .join(",")}}`;
-    }
-    return JSON.stringify(value);
-}
-
-function digest(value) {
-    return createHash("sha256").update(value).digest("hex");
-}
-
-function parseMode(args) {
-    if (args.length !== 1 || !["--check", "--update"].includes(args[0])) {
-        throw new Error("usage: generate-upstream-test-map.mjs --check|--update");
-    }
-    return args[0] === "--update";
 }

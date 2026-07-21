@@ -35,10 +35,12 @@
       "--quiet",
       "--locked",
       "--bin",
-      "antlr4-rust-gen"
+      "antlr4-rust-gen",
+      "--target-dir",
+      "${WORK_DIR}/target"
     ],
     "lexer_codegen": [
-      "target/debug/antlr4-rust-gen",
+      "${WORK_DIR}/target/debug/antlr4-rust-gen",
       "--lexer",
       "${WORK_DIR}/interp/ANTLRv4Lexer.interp",
       "--grammar",
@@ -54,7 +56,7 @@
       "--require-full-semantics"
     ],
     "parser_codegen": [
-      "target/debug/antlr4-rust-gen",
+      "${WORK_DIR}/target/debug/antlr4-rust-gen",
       "--parser",
       "${WORK_DIR}/interp/ANTLRv4Parser.interp",
       "--grammar",

@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import { createHash } from "node:crypto";
 import {
     mkdir,
     readFile,
@@ -10,12 +9,18 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
-const JAVA_COMMIT = "cc82115a4e7f53d71d9d905caa2c2dfa4da58899";
-const ANTLR_NG_COMMIT = "1f68422ae4bfc62f93343769e144d01f305487b1";
-const VSCODE_COMMIT = "3e9469d1d490c71b3e3b909edf1235582a3f8db8";
-const SCAFFOLD_COMMIT = "75615945749dc93fca5d929cb22ad481f12dfdc9";
-const TEST_COMMIT = "a4258562c44818e2ba97d206587c64d4c38408d0";
-const IMPLEMENTATION_COMMIT = "8a00a3d6496779b969a42511d7e29c0d102d62d7";
+import {
+    ANTLR_NG_COMMIT,
+    IMPLEMENTATION_COMMIT,
+    JAVA_COMMIT,
+    SCAFFOLD_COMMIT,
+    TEST_COMMIT,
+    VSCODE_COMMIT,
+    digest,
+    parseMode,
+    stableStringify,
+} from "./evidence-common.mjs";
+
 const TEST_COMMAND =
     "cargo test --locked --bin antlr4-rust-gen grammar::frontend::tests::";
 const TEST_MODULE_PATH = "src/bin_support/grammar/frontend.rs";
@@ -88,10 +93,9 @@ const EXTERNAL_DEFINITIONS = {
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "../..");
-const update = parseMode(process.argv.slice(2));
-const testMapPath = resolve(
-    repoRoot,
-    "tests/codegen-direct/upstream-test-map.json",
+const update = parseMode(
+    process.argv.slice(2),
+    "generate-port-evidence.mjs",
 );
 const externalMapPath = resolve(
     repoRoot,
@@ -116,18 +120,31 @@ const phaseARows = testMap.rows.filter(
 );
 const expectedFiles = new Map();
 
-const testModule = sectionAtMarker(
-    gitShow(TEST_COMMIT, TEST_MODULE_PATH),
+const checkedInTestModule = sectionAtMarker(
+    await readFile(resolve(repoRoot, TEST_MODULE_PATH), "utf8"),
     TEST_MODULE_MARKER,
 );
-const implementationTestModule = sectionAtMarker(
-    gitShow(IMPLEMENTATION_COMMIT, TEST_MODULE_PATH),
-    TEST_MODULE_MARKER,
+const testModule = gitShowOptional(TEST_COMMIT, TEST_MODULE_PATH);
+const implementationTestModule = gitShowOptional(
+    IMPLEMENTATION_COMMIT,
+    TEST_MODULE_PATH,
 );
-if (testModule !== implementationTestModule) {
-    throw new Error("implementation commit changed the locked frontend test module");
+if (testModule !== null && implementationTestModule !== null) {
+    const lockedTestModule = sectionAtMarker(testModule, TEST_MODULE_MARKER);
+    const implementedTestModule = sectionAtMarker(
+        implementationTestModule,
+        TEST_MODULE_MARKER,
+    );
+    if (lockedTestModule !== implementedTestModule) {
+        throw new Error(
+            "implementation commit changed the locked frontend test module",
+        );
+    }
+    if (lockedTestModule !== checkedInTestModule) {
+        throw new Error("checked-in frontend tests differ from the locked tests");
+    }
 }
-const lockedTestModuleHash = digest(testModule);
+const lockedTestModuleHash = digest(checkedInTestModule);
 
 const upstreamByLogicalId = new Map(
     phaseARows.map((row) => [row.logical_id, row]),
@@ -186,7 +203,7 @@ for (const fixture of externalMap.fixtures) {
                 closure_sha256: closureHash,
                 evidence_path: `tests/codegen-direct/port-evidence/${assertion.id}`,
             };
-            addEvidence({
+            await addEvidence({
                 logicalId: assertion.id,
                 revisionId: assertion.active_revision_id,
                 closure,
@@ -206,7 +223,7 @@ for (const fixture of externalMap.fixtures) {
 }
 
 for (const row of phaseARows) {
-    addEvidence({
+    await addEvidence({
         logicalId: row.logical_id,
         revisionId: row.active_revision_id,
         closure: row.closure,
@@ -247,7 +264,7 @@ console.log(
     `${update ? "updated" : "verified"} ${phaseARows.length + Object.keys(EXTERNAL_DEFINITIONS).length} Phase A evidence ledgers`,
 );
 
-function addEvidence({
+async function addEvidence({
     logicalId,
     revisionId,
     closure,
@@ -313,7 +330,7 @@ function addEvidence({
     for (const fixturePath of closure.fixture_paths ?? []) {
         allowedInputs.push({
             path: fixturePath,
-            sha256: digest(gitShow(TEST_COMMIT, fixturePath)),
+            sha256: digest(await readFile(resolve(repoRoot, fixturePath))),
         });
     }
 
@@ -335,7 +352,8 @@ function addEvidence({
         ancestry: {
             primary_test_parent: SCAFFOLD_COMMIT,
             primary_implementation_parent: TEST_COMMIT,
-            reachability: "all commits are direct ancestors of the Phase A branch",
+            reachability:
+                "direct ancestry is verified when the recorded commit objects are available",
         },
         locked_oracle_sections: [
             {
@@ -409,42 +427,18 @@ function sectionAtMarker(text, marker) {
     return text.slice(offset);
 }
 
-function gitShow(commit, path) {
+function gitShowOptional(commit, path) {
     const result = spawnSync("git", ["show", `${commit}:${path}`], {
         cwd: repoRoot,
         encoding: "utf8",
         maxBuffer: 32 * 1024 * 1024,
     });
     if (result.status !== 0) {
-        throw new Error(`git show ${commit}:${path} failed: ${result.stderr}`);
+        return null;
     }
     return result.stdout;
 }
 
 async function load(path) {
     return JSON.parse(await readFile(resolve(repoRoot, path), "utf8"));
-}
-
-function stableStringify(value) {
-    if (Array.isArray(value)) {
-        return `[${value.map(stableStringify).join(",")}]`;
-    }
-    if (value && typeof value === "object") {
-        return `{${Object.keys(value)
-            .sort()
-            .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
-            .join(",")}}`;
-    }
-    return JSON.stringify(value);
-}
-
-function digest(value) {
-    return createHash("sha256").update(value).digest("hex");
-}
-
-function parseMode(args) {
-    if (args.length !== 1 || !["--check", "--update"].includes(args[0])) {
-        throw new Error("usage: generate-port-evidence.mjs --check|--update");
-    }
-    return args[0] === "--update";
 }

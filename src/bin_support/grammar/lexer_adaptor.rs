@@ -118,7 +118,7 @@ impl SemanticHooks for LexerAdaptor {
         } else if token_type == ID {
             let text = ctx.token_text();
             let first = text.chars().next().expect("ID tokens are non-empty");
-            let classified = if first.to_uppercase().eq(first.to_string().chars()) {
+            let classified = if first.is_uppercase() {
                 TOKEN_REF
             } else {
                 RULE_REF
@@ -134,5 +134,34 @@ impl SemanticHooks for LexerAdaptor {
 
     fn lexer_token_emitted(&mut self, token: TokenView<'_>) {
         self.0.lexer_token_emitted(token);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::generated::antlr_v4_lexer::AntlRv4Lexer;
+    use super::*;
+    use antlr4_runtime::{CommonTokenStream, InputStream, Token};
+
+    #[test]
+    fn uncased_initials_are_rule_references() {
+        let lexer = AntlRv4Lexer::with_hooks(
+            InputStream::new("文: 'x'; ÄToken: 'z';"),
+            LexerAdaptor::default(),
+        );
+        let tokens = CommonTokenStream::new(lexer);
+        let references = tokens
+            .tokens()
+            .filter(|token| matches!(token.token_type(), RULE_REF | TOKEN_REF))
+            .map(|token| (token.text().to_owned(), token.token_type()))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            references,
+            [
+                ("文".to_owned(), RULE_REF),
+                ("ÄToken".to_owned(), TOKEN_REF),
+            ]
+        );
     }
 }

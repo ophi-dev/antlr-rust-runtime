@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 
-import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const JAVA_COMMIT = "cc82115a4e7f53d71d9d905caa2c2dfa4da58899";
-const ANTLR_NG_COMMIT = "1f68422ae4bfc62f93343769e144d01f305487b1";
+import {
+    ANTLR_NG_COMMIT,
+    JAVA_COMMIT,
+    digest,
+    stableStringify,
+} from "./evidence-common.mjs";
 const PHASES = new Set(["A", "B", "C", "existing"]);
 const DISPOSITIONS = new Set([
     "port",
@@ -290,23 +293,6 @@ function uniqueValues(values, label) {
         result.add(value);
     }
     return result;
-}
-
-function stableStringify(value) {
-    if (Array.isArray(value)) {
-        return `[${value.map(stableStringify).join(",")}]`;
-    }
-    if (value && typeof value === "object") {
-        return `{${Object.keys(value)
-            .sort()
-            .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
-            .join(",")}}`;
-    }
-    return JSON.stringify(value);
-}
-
-function digest(value) {
-    return createHash("sha256").update(value).digest("hex");
 }
 
 function expect(condition, message) {
