@@ -16,6 +16,9 @@ use antlr4_runtime::token::TOKEN_EOF;
 
 #[path = "../bin_support/embedded.rs"]
 mod embedded;
+#[allow(dead_code)]
+#[path = "../bin_support/grammar/mod.rs"]
+mod grammar;
 #[path = "../bin_support/rust_names.rs"]
 mod rust_names;
 #[path = "../bin_support/templates.rs"]
