@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "logical_id": "vscode-tparser-source-spans",
+  "revision_id": "external-vscode-tparser-source-spans-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "A",
+  "state": "done",
+  "closure": {
+    "assertion_id": "vscode-tparser-source-spans",
+    "source_id": "vscode-antlr4:tests/backend/test-data/TParser.g4",
+    "source_sha256": "4e85ed4c929eb98083cdae3304307c9388b35f23fad02d1755c18cc8f655ba27",
+    "owner_phase": "A",
+    "observable": "exact named-action, parser-rule, and argument-block byte spans",
+    "rust_test": "grammar::frontend::tests::tparser_preserves_named_action_rule_and_argument_spans",
+    "canonical_input": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/TParser.g4",
+    "expected_observable": {
+      "named_action_bytes": [
+        1090,
+        1264
+      ],
+      "parser_rule_bytes": [
+        3421,
+        3650
+      ],
+      "argument_block_bytes": [
+        3484,
+        3511
+      ]
+    },
+    "primary_test_source": {
+      "repository": "https://github.com/mike-lischke/vscode-antlr4.git",
+      "commit": "3e9469d1d490c71b3e3b909edf1235582a3f8db8",
+      "path": "tests/backend/symbol-info.spec.ts",
+      "case": "Symbol ranges",
+      "sha256": "df274a0dca42823cc2ef2608d98d544be53246a48c56f96050b0a987ce0890f3"
+    },
+    "alternate_test_source": {
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "oracle": "independent grammar frontend token/tree/diagnostic observation"
+    },
+    "scaffold_commit": "75615945749dc93fca5d929cb22ad481f12dfdc9",
+    "primary_test_commit": "a4258562c44818e2ba97d206587c64d4c38408d0"
+  },
+  "closure_sha256": "d6c2867064a0b7cd37fcd5605c025926aa0782d92cd36c6fbbe3851b69e3bf9a",
+  "allowed_inputs": [
+    {
+      "source_id": "vscode-antlr4:tests/backend/test-data/TParser.g4",
+      "path": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/TParser.g4",
+      "sha256": "4e85ed4c929eb98083cdae3304307c9388b35f23fad02d1755c18cc8f655ba27"
+    }
+  ],
+  "commits": {
+    "scaffold": "75615945749dc93fca5d929cb22ad481f12dfdc9",
+    "primary_test": "a4258562c44818e2ba97d206587c64d4c38408d0",
+    "primary_implementation": "8a00a3d6496779b969a42511d7e29c0d102d62d7"
+  },
+  "ancestry": {
+    "primary_test_parent": "75615945749dc93fca5d929cb22ad481f12dfdc9",
+    "primary_implementation_parent": "a4258562c44818e2ba97d206587c64d4c38408d0",
+    "reachability": "all commits are direct ancestors of the Phase A branch"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/frontend.rs",
+      "marker": "#[cfg(test)]",
+      "sha256": "898c44fb501a8d1daec3ff9307e7678b1fd5abae52d928091e6f496f410337fa"
+    }
+  ],
+  "demonstrated_red": {
+    "command": "cargo test --locked --bin antlr4-rust-gen grammar::frontend::tests::",
+    "commit": "a4258562c44818e2ba97d206587c64d4c38408d0",
+    "exit_code": 101,
+    "fingerprint": "G4F000: the Stage 0 grammar frontend is not installed"
+  },
+  "green_result": {
+    "command": "cargo test --locked --bin antlr4-rust-gen grammar::frontend::tests::",
+    "commit": "8a00a3d6496779b969a42511d7e29c0d102d62d7",
+    "exit_code": 0,
+    "result": "5 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/vscode-tparser-source-spans/revisions/external-vscode-tparser-source-spans-r1/oracle-results/declared-sources.json",
+      "sha256": "80ecbcad104eac9f8775deee1958f0e2b44c6d7b23b84ac9a0e231251d390305"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/vscode-tparser-source-spans/revisions/external-vscode-tparser-source-spans-r1/matrix-results/results.json",
+      "sha256": "5f2cff9b98599f1f7ca929bc5af537e5fcd66d72c49f9d054abc44dc7ef88222"
+    }
+  ]
+}

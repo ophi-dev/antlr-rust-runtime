@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "logical_id": "vscode-symbol-info-valid-undefined-edit",
+  "revision_id": "external-vscode-symbol-info-valid-undefined-edit-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "A",
+  "state": "done",
+  "closure": {
+    "assertion_id": "vscode-symbol-info-valid-undefined-edit",
+    "source_id": "vscode-antlr4:tests/backend/test-data/t.g4",
+    "source_sha256": "0c1da889ca65acbcd9af3d3b0b07649d00c8af25c0da9804daaf57b82b991d4b",
+    "owner_phase": "A",
+    "observable": "the syntactically valid undefined-b edit returns a CST",
+    "rust_test": "grammar::frontend::tests::malformed_editor_edit_fails_but_valid_undefined_rules_return_a_tree",
+    "canonical_input": "grammar A; a: b \n| c; c: b+;",
+    "expected_observable": {
+      "result": "usable-cst",
+      "root_bytes": [
+        0,
+        28
+      ]
+    },
+    "primary_test_source": {
+      "repository": "https://github.com/mike-lischke/vscode-antlr4.git",
+      "commit": "3e9469d1d490c71b3e3b909edf1235582a3f8db8",
+      "path": "tests/backend/symbol-info.spec.ts",
+      "case": "reparse: valid undefined-b edit",
+      "sha256": "df274a0dca42823cc2ef2608d98d544be53246a48c56f96050b0a987ce0890f3"
+    },
+    "alternate_test_source": {
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "oracle": "independent grammar frontend token/tree/diagnostic observation"
+    },
+    "scaffold_commit": "75615945749dc93fca5d929cb22ad481f12dfdc9",
+    "primary_test_commit": "a4258562c44818e2ba97d206587c64d4c38408d0"
+  },
+  "closure_sha256": "0f3aea6c744bc31456fb4e92600976aa50d8ba8e8e1d7165c2869b73efea38d4",
+  "allowed_inputs": [
+    {
+      "source_id": "vscode-antlr4:tests/backend/test-data/t.g4",
+      "path": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/t.g4",
+      "sha256": "0c1da889ca65acbcd9af3d3b0b07649d00c8af25c0da9804daaf57b82b991d4b"
+    }
+  ],
+  "commits": {
+    "scaffold": "75615945749dc93fca5d929cb22ad481f12dfdc9",
+    "primary_test": "a4258562c44818e2ba97d206587c64d4c38408d0",
+    "primary_implementation": "8a00a3d6496779b969a42511d7e29c0d102d62d7"
+  },
+  "ancestry": {
+    "primary_test_parent": "75615945749dc93fca5d929cb22ad481f12dfdc9",
+    "primary_implementation_parent": "a4258562c44818e2ba97d206587c64d4c38408d0",
+    "reachability": "all commits are direct ancestors of the Phase A branch"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/frontend.rs",
+      "marker": "#[cfg(test)]",
+      "sha256": "898c44fb501a8d1daec3ff9307e7678b1fd5abae52d928091e6f496f410337fa"
+    }
+  ],
+  "demonstrated_red": {
+    "command": "cargo test --locked --bin antlr4-rust-gen grammar::frontend::tests::",
+    "commit": "a4258562c44818e2ba97d206587c64d4c38408d0",
+    "exit_code": 101,
+    "fingerprint": "G4F000: the Stage 0 grammar frontend is not installed"
+  },
+  "green_result": {
+    "command": "cargo test --locked --bin antlr4-rust-gen grammar::frontend::tests::",
+    "commit": "8a00a3d6496779b969a42511d7e29c0d102d62d7",
+    "exit_code": 0,
+    "result": "5 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/vscode-symbol-info-valid-undefined-edit/revisions/external-vscode-symbol-info-valid-undefined-edit-r1/oracle-results/declared-sources.json",
+      "sha256": "7e3dbca25312054c2df3b56f7f9ac9a348560a6c14890f3cfb93dd18c7860941"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/vscode-symbol-info-valid-undefined-edit/revisions/external-vscode-symbol-info-valid-undefined-edit-r1/matrix-results/results.json",
+      "sha256": "d33b22f543b696a9604210bae58b7c78310b2f36a8281cc36bed4caab418af68"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "frontend-source-regressions",
+  "active_revision_id": "frontend-source-regressions-r1",
+  "revisions": [
+    {
+      "revision_id": "frontend-source-regressions-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/frontend-source-regressions/revisions/frontend-source-regressions-r1/manifest.json",
+      "closure_sha256": "1b4cd4ac98594887b89c19902b37e9605b6b03f4b65a0988d6e3cacabd11b2cd"
+    }
+  ]
+}

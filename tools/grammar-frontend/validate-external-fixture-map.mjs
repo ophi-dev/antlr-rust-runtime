@@ -14,6 +14,7 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "../..");
 const inventory = await load("tests/codegen-direct/external-source-inventory.json");
 const fixtureMap = await load("tests/codegen-direct/external-fixture-map.json");
+const upstreamMap = await load("tests/codegen-direct/upstream-test-map.json");
 const failures = [];
 
 expect(inventory.schema_version === 1, "inventory schema_version must be 1");
@@ -61,6 +62,9 @@ for (const artifact of inventory.artifacts ?? []) {
 
 const fixtureIds = new Set();
 const assertionIds = new Set();
+const upstreamRows = new Map(
+    (upstreamMap.rows ?? []).map((row) => [row.logical_id, row]),
+);
 for (const fixture of fixtureMap.fixtures ?? []) {
     expect(
         typeof fixture.id === "string" && !fixtureIds.has(fixture.id),
@@ -129,6 +133,36 @@ for (const fixture of fixtureMap.fixtures ?? []) {
                 typeof assertion.active_revision_id === "string",
                 `${assertion.id} lacks active_revision_id`,
             );
+            expect(
+                assertion.tdd?.active_revision_id === assertion.active_revision_id &&
+                    assertion.tdd?.state === "done",
+                `${assertion.id} external TDD record is not done`,
+            );
+            expect(
+                assertion.tdd?.closure_sha256 ===
+                    digestText(stableStringify(assertion.tdd?.closure)),
+                `${assertion.id} external closure hash differs`,
+            );
+            expect(
+                assertion.tdd?.closure?.source_id === fixture.source_id,
+                `${assertion.id} closure source differs`,
+            );
+            expect(
+                typeof assertion.tdd?.evidence_path === "string",
+                `${assertion.id} lacks durable evidence path`,
+            );
+        } else if (assertion.tdd_owner.startsWith("upstream:")) {
+            const logicalId = assertion.tdd_owner.slice("upstream:".length);
+            const row = upstreamRows.get(logicalId);
+            expect(Boolean(row), `${assertion.id} names missing upstream row`);
+            expect(
+                assertion.upstream_active_revision_id === row?.active_revision_id,
+                `${assertion.id} upstream revision differs`,
+            );
+            expect(
+                assertion.transitive_closure_sha256 === row?.closure_sha256,
+                `${assertion.id} transitive closure hash differs`,
+            );
         }
     }
 }
@@ -170,6 +204,23 @@ function uniqueMap(entries, field, label) {
 
 function digest(contents) {
     return createHash("sha256").update(contents).digest("hex");
+}
+
+function digestText(contents) {
+    return createHash("sha256").update(contents).digest("hex");
+}
+
+function stableStringify(value) {
+    if (Array.isArray(value)) {
+        return `[${value.map(stableStringify).join(",")}]`;
+    }
+    if (value && typeof value === "object") {
+        return `{${Object.keys(value)
+            .sort()
+            .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
+            .join(",")}}`;
+    }
+    return JSON.stringify(value);
 }
 
 function expect(condition, message) {

@@ -47,7 +47,9 @@
           "phase": "A",
           "observable": "complete token stream and canonical CST",
           "tdd_owner": "upstream:frontend-token-cst-parity",
-          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles"
+          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles",
+          "upstream_active_revision_id": "frontend-token-cst-parity-r1",
+          "transitive_closure_sha256": "a409bb9aec5a84548c338069061cbebd193b588ea676643871c22db2898a40b5"
         }
       ]
     },
@@ -76,7 +78,9 @@
           "phase": "A",
           "observable": "complete token stream and canonical CST",
           "tdd_owner": "upstream:frontend-token-cst-parity",
-          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles"
+          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles",
+          "upstream_active_revision_id": "frontend-token-cst-parity-r1",
+          "transitive_closure_sha256": "a409bb9aec5a84548c338069061cbebd193b588ea676643871c22db2898a40b5"
         }
       ]
     },
@@ -104,7 +108,9 @@
           "phase": "A",
           "observable": "complete token stream and canonical CST",
           "tdd_owner": "upstream:frontend-token-cst-parity",
-          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles"
+          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles",
+          "upstream_active_revision_id": "frontend-token-cst-parity-r1",
+          "transitive_closure_sha256": "a409bb9aec5a84548c338069061cbebd193b588ea676643871c22db2898a40b5"
         }
       ]
     },
@@ -133,7 +139,9 @@
           "phase": "A",
           "observable": "complete token stream and canonical CST",
           "tdd_owner": "upstream:frontend-token-cst-parity",
-          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles"
+          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles",
+          "upstream_active_revision_id": "frontend-token-cst-parity-r1",
+          "transitive_closure_sha256": "a409bb9aec5a84548c338069061cbebd193b588ea676643871c22db2898a40b5"
         }
       ]
     },
@@ -160,7 +168,9 @@
           "phase": "A",
           "observable": "complete token stream and canonical CST",
           "tdd_owner": "upstream:frontend-token-cst-parity",
-          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles"
+          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles",
+          "upstream_active_revision_id": "frontend-token-cst-parity-r1",
+          "transitive_closure_sha256": "a409bb9aec5a84548c338069061cbebd193b588ea676643871c22db2898a40b5"
         }
       ]
     },
@@ -188,7 +198,9 @@
           "phase": "A",
           "observable": "complete token stream and canonical CST",
           "tdd_owner": "upstream:frontend-token-cst-parity",
-          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles"
+          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles",
+          "upstream_active_revision_id": "frontend-token-cst-parity-r1",
+          "transitive_closure_sha256": "a409bb9aec5a84548c338069061cbebd193b588ea676643871c22db2898a40b5"
         }
       ]
     },
@@ -215,7 +227,9 @@
           "phase": "A",
           "observable": "complete token stream and canonical CST",
           "tdd_owner": "upstream:frontend-token-cst-parity",
-          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles"
+          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles",
+          "upstream_active_revision_id": "frontend-token-cst-parity-r1",
+          "transitive_closure_sha256": "a409bb9aec5a84548c338069061cbebd193b588ea676643871c22db2898a40b5"
         }
       ]
     },
@@ -243,7 +257,9 @@
           "phase": "A",
           "observable": "complete token stream and canonical CST",
           "tdd_owner": "upstream:frontend-token-cst-parity",
-          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles"
+          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles",
+          "upstream_active_revision_id": "frontend-token-cst-parity-r1",
+          "transitive_closure_sha256": "a409bb9aec5a84548c338069061cbebd193b588ea676643871c22db2898a40b5"
         },
         {
           "id": "vscode-tparser-source-spans",
@@ -251,7 +267,84 @@
           "observable": "exact named-action, parser-rule, and argument-block byte spans",
           "tdd_owner": "external:vscode-tparser-source-spans",
           "active_revision_id": "external-vscode-tparser-source-spans-r1",
-          "rust_test": "grammar::frontend::tests::tparser_preserves_named_action_rule_and_argument_spans"
+          "rust_test": "grammar::frontend::tests::tparser_preserves_named_action_rule_and_argument_spans",
+          "tdd": {
+            "active_revision_id": "external-vscode-tparser-source-spans-r1",
+            "state": "done",
+            "prerequisites": [
+              "behavior-free grammar frontend scaffold"
+            ],
+            "unit_under_test": "Stage 0 source spans and fail-closed boundary",
+            "failure_fingerprint": "G4F000 Stage 0 frontend is not installed",
+            "primary_test_source": {
+              "repository": "https://github.com/mike-lischke/vscode-antlr4.git",
+              "commit": "3e9469d1d490c71b3e3b909edf1235582a3f8db8",
+              "path": "tests/backend/symbol-info.spec.ts",
+              "case": "Symbol ranges",
+              "sha256": "df274a0dca42823cc2ef2608d98d544be53246a48c56f96050b0a987ce0890f3"
+            },
+            "alternate_test_source": {
+              "repository": "https://github.com/mike-lischke/antlr-ng.git",
+              "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+              "oracle": "independent grammar frontend token/tree/diagnostic observation"
+            },
+            "primary_implementation_source": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+            "alternate_implementation_source": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+            "scaffold_commit": "75615945749dc93fca5d929cb22ad481f12dfdc9",
+            "primary_test_commit": "a4258562c44818e2ba97d206587c64d4c38408d0",
+            "demonstrated_red": {
+              "command": "cargo test --locked --bin antlr4-rust-gen grammar::frontend::tests::",
+              "commit": "a4258562c44818e2ba97d206587c64d4c38408d0",
+              "exit_code": 101,
+              "fingerprint": "G4F000: the Stage 0 grammar frontend is not installed"
+            },
+            "primary_implementation_commit": "8a00a3d6496779b969a42511d7e29c0d102d62d7",
+            "green_result": {
+              "command": "cargo test --locked --bin antlr4-rust-gen grammar::frontend::tests::",
+              "commit": "8a00a3d6496779b969a42511d7e29c0d102d62d7",
+              "exit_code": 0,
+              "result": "5 passed; 0 failed"
+            },
+            "closure": {
+              "assertion_id": "vscode-tparser-source-spans",
+              "source_id": "vscode-antlr4:tests/backend/test-data/TParser.g4",
+              "source_sha256": "4e85ed4c929eb98083cdae3304307c9388b35f23fad02d1755c18cc8f655ba27",
+              "owner_phase": "A",
+              "observable": "exact named-action, parser-rule, and argument-block byte spans",
+              "rust_test": "grammar::frontend::tests::tparser_preserves_named_action_rule_and_argument_spans",
+              "canonical_input": "tests/codegen-direct/external/vscode-antlr4/tests/backend/test-data/TParser.g4",
+              "expected_observable": {
+                "named_action_bytes": [
+                  1090,
+                  1264
+                ],
+                "parser_rule_bytes": [
+                  3421,
+                  3650
+                ],
+                "argument_block_bytes": [
+                  3484,
+                  3511
+                ]
+              },
+              "primary_test_source": {
+                "repository": "https://github.com/mike-lischke/vscode-antlr4.git",
+                "commit": "3e9469d1d490c71b3e3b909edf1235582a3f8db8",
+                "path": "tests/backend/symbol-info.spec.ts",
+                "case": "Symbol ranges",
+                "sha256": "df274a0dca42823cc2ef2608d98d544be53246a48c56f96050b0a987ce0890f3"
+              },
+              "alternate_test_source": {
+                "repository": "https://github.com/mike-lischke/antlr-ng.git",
+                "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+                "oracle": "independent grammar frontend token/tree/diagnostic observation"
+              },
+              "scaffold_commit": "75615945749dc93fca5d929cb22ad481f12dfdc9",
+              "primary_test_commit": "a4258562c44818e2ba97d206587c64d4c38408d0"
+            },
+            "closure_sha256": "d6c2867064a0b7cd37fcd5605c025926aa0782d92cd36c6fbbe3851b69e3bf9a",
+            "evidence_path": "tests/codegen-direct/port-evidence/vscode-tparser-source-spans"
+          }
         }
       ]
     },
@@ -278,7 +371,9 @@
           "phase": "A",
           "observable": "complete token stream and canonical CST",
           "tdd_owner": "upstream:frontend-token-cst-parity",
-          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles"
+          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles",
+          "upstream_active_revision_id": "frontend-token-cst-parity-r1",
+          "transitive_closure_sha256": "a409bb9aec5a84548c338069061cbebd193b588ea676643871c22db2898a40b5"
         }
       ]
     },
@@ -305,7 +400,9 @@
           "phase": "A",
           "observable": "complete token stream and canonical CST",
           "tdd_owner": "upstream:frontend-token-cst-parity",
-          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles"
+          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles",
+          "upstream_active_revision_id": "frontend-token-cst-parity-r1",
+          "transitive_closure_sha256": "a409bb9aec5a84548c338069061cbebd193b588ea676643871c22db2898a40b5"
         }
       ]
     },
@@ -333,7 +430,9 @@
           "phase": "A",
           "observable": "complete token stream and canonical CST",
           "tdd_owner": "upstream:frontend-token-cst-parity",
-          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles"
+          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles",
+          "upstream_active_revision_id": "frontend-token-cst-parity-r1",
+          "transitive_closure_sha256": "a409bb9aec5a84548c338069061cbebd193b588ea676643871c22db2898a40b5"
         },
         {
           "id": "vscode-symbol-info-malformed-edit",
@@ -341,7 +440,87 @@
           "observable": "the a:: edit fails closed at exact byte spans",
           "tdd_owner": "external:vscode-symbol-info-malformed-edit",
           "active_revision_id": "external-vscode-symbol-info-malformed-edit-r1",
-          "rust_test": "grammar::frontend::tests::malformed_editor_edit_fails_but_valid_undefined_rules_return_a_tree"
+          "rust_test": "grammar::frontend::tests::malformed_editor_edit_fails_but_valid_undefined_rules_return_a_tree",
+          "tdd": {
+            "active_revision_id": "external-vscode-symbol-info-malformed-edit-r1",
+            "state": "done",
+            "prerequisites": [
+              "behavior-free grammar frontend scaffold"
+            ],
+            "unit_under_test": "Stage 0 source spans and fail-closed boundary",
+            "failure_fingerprint": "G4F000 Stage 0 frontend is not installed",
+            "primary_test_source": {
+              "repository": "https://github.com/mike-lischke/vscode-antlr4.git",
+              "commit": "3e9469d1d490c71b3e3b909edf1235582a3f8db8",
+              "path": "tests/backend/symbol-info.spec.ts",
+              "case": "reparse: malformed a:: edit",
+              "sha256": "df274a0dca42823cc2ef2608d98d544be53246a48c56f96050b0a987ce0890f3"
+            },
+            "alternate_test_source": {
+              "repository": "https://github.com/mike-lischke/antlr-ng.git",
+              "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+              "oracle": "independent grammar frontend token/tree/diagnostic observation"
+            },
+            "primary_implementation_source": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+            "alternate_implementation_source": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+            "scaffold_commit": "75615945749dc93fca5d929cb22ad481f12dfdc9",
+            "primary_test_commit": "a4258562c44818e2ba97d206587c64d4c38408d0",
+            "demonstrated_red": {
+              "command": "cargo test --locked --bin antlr4-rust-gen grammar::frontend::tests::",
+              "commit": "a4258562c44818e2ba97d206587c64d4c38408d0",
+              "exit_code": 101,
+              "fingerprint": "G4F000: the Stage 0 grammar frontend is not installed"
+            },
+            "primary_implementation_commit": "8a00a3d6496779b969a42511d7e29c0d102d62d7",
+            "green_result": {
+              "command": "cargo test --locked --bin antlr4-rust-gen grammar::frontend::tests::",
+              "commit": "8a00a3d6496779b969a42511d7e29c0d102d62d7",
+              "exit_code": 0,
+              "result": "5 passed; 0 failed"
+            },
+            "closure": {
+              "assertion_id": "vscode-symbol-info-malformed-edit",
+              "source_id": "vscode-antlr4:tests/backend/test-data/t.g4",
+              "source_sha256": "0c1da889ca65acbcd9af3d3b0b07649d00c8af25c0da9804daaf57b82b991d4b",
+              "owner_phase": "A",
+              "observable": "the a:: edit fails closed at exact byte spans",
+              "rust_test": "grammar::frontend::tests::malformed_editor_edit_fails_but_valid_undefined_rules_return_a_tree",
+              "canonical_input": "grammar A; a:: b \n| c; c: b+;",
+              "expected_observable": {
+                "result": "fail-closed",
+                "parser_diagnostic_bytes": [
+                  [
+                    12,
+                    14
+                  ],
+                  [
+                    18,
+                    19
+                  ],
+                  [
+                    21,
+                    22
+                  ]
+                ]
+              },
+              "primary_test_source": {
+                "repository": "https://github.com/mike-lischke/vscode-antlr4.git",
+                "commit": "3e9469d1d490c71b3e3b909edf1235582a3f8db8",
+                "path": "tests/backend/symbol-info.spec.ts",
+                "case": "reparse: malformed a:: edit",
+                "sha256": "df274a0dca42823cc2ef2608d98d544be53246a48c56f96050b0a987ce0890f3"
+              },
+              "alternate_test_source": {
+                "repository": "https://github.com/mike-lischke/antlr-ng.git",
+                "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+                "oracle": "independent grammar frontend token/tree/diagnostic observation"
+              },
+              "scaffold_commit": "75615945749dc93fca5d929cb22ad481f12dfdc9",
+              "primary_test_commit": "a4258562c44818e2ba97d206587c64d4c38408d0"
+            },
+            "closure_sha256": "a662ee52228b1a627062efe6506cabcd18f681b293819a6c3297ce24923df643",
+            "evidence_path": "tests/codegen-direct/port-evidence/vscode-symbol-info-malformed-edit"
+          }
         },
         {
           "id": "vscode-symbol-info-valid-undefined-edit",
@@ -349,7 +528,77 @@
           "observable": "the syntactically valid undefined-b edit returns a CST",
           "tdd_owner": "external:vscode-symbol-info-valid-undefined-edit",
           "active_revision_id": "external-vscode-symbol-info-valid-undefined-edit-r1",
-          "rust_test": "grammar::frontend::tests::malformed_editor_edit_fails_but_valid_undefined_rules_return_a_tree"
+          "rust_test": "grammar::frontend::tests::malformed_editor_edit_fails_but_valid_undefined_rules_return_a_tree",
+          "tdd": {
+            "active_revision_id": "external-vscode-symbol-info-valid-undefined-edit-r1",
+            "state": "done",
+            "prerequisites": [
+              "behavior-free grammar frontend scaffold"
+            ],
+            "unit_under_test": "Stage 0 source spans and fail-closed boundary",
+            "failure_fingerprint": "G4F000 Stage 0 frontend is not installed",
+            "primary_test_source": {
+              "repository": "https://github.com/mike-lischke/vscode-antlr4.git",
+              "commit": "3e9469d1d490c71b3e3b909edf1235582a3f8db8",
+              "path": "tests/backend/symbol-info.spec.ts",
+              "case": "reparse: valid undefined-b edit",
+              "sha256": "df274a0dca42823cc2ef2608d98d544be53246a48c56f96050b0a987ce0890f3"
+            },
+            "alternate_test_source": {
+              "repository": "https://github.com/mike-lischke/antlr-ng.git",
+              "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+              "oracle": "independent grammar frontend token/tree/diagnostic observation"
+            },
+            "primary_implementation_source": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+            "alternate_implementation_source": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+            "scaffold_commit": "75615945749dc93fca5d929cb22ad481f12dfdc9",
+            "primary_test_commit": "a4258562c44818e2ba97d206587c64d4c38408d0",
+            "demonstrated_red": {
+              "command": "cargo test --locked --bin antlr4-rust-gen grammar::frontend::tests::",
+              "commit": "a4258562c44818e2ba97d206587c64d4c38408d0",
+              "exit_code": 101,
+              "fingerprint": "G4F000: the Stage 0 grammar frontend is not installed"
+            },
+            "primary_implementation_commit": "8a00a3d6496779b969a42511d7e29c0d102d62d7",
+            "green_result": {
+              "command": "cargo test --locked --bin antlr4-rust-gen grammar::frontend::tests::",
+              "commit": "8a00a3d6496779b969a42511d7e29c0d102d62d7",
+              "exit_code": 0,
+              "result": "5 passed; 0 failed"
+            },
+            "closure": {
+              "assertion_id": "vscode-symbol-info-valid-undefined-edit",
+              "source_id": "vscode-antlr4:tests/backend/test-data/t.g4",
+              "source_sha256": "0c1da889ca65acbcd9af3d3b0b07649d00c8af25c0da9804daaf57b82b991d4b",
+              "owner_phase": "A",
+              "observable": "the syntactically valid undefined-b edit returns a CST",
+              "rust_test": "grammar::frontend::tests::malformed_editor_edit_fails_but_valid_undefined_rules_return_a_tree",
+              "canonical_input": "grammar A; a: b \n| c; c: b+;",
+              "expected_observable": {
+                "result": "usable-cst",
+                "root_bytes": [
+                  0,
+                  28
+                ]
+              },
+              "primary_test_source": {
+                "repository": "https://github.com/mike-lischke/vscode-antlr4.git",
+                "commit": "3e9469d1d490c71b3e3b909edf1235582a3f8db8",
+                "path": "tests/backend/symbol-info.spec.ts",
+                "case": "reparse: valid undefined-b edit",
+                "sha256": "df274a0dca42823cc2ef2608d98d544be53246a48c56f96050b0a987ce0890f3"
+              },
+              "alternate_test_source": {
+                "repository": "https://github.com/mike-lischke/antlr-ng.git",
+                "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+                "oracle": "independent grammar frontend token/tree/diagnostic observation"
+              },
+              "scaffold_commit": "75615945749dc93fca5d929cb22ad481f12dfdc9",
+              "primary_test_commit": "a4258562c44818e2ba97d206587c64d4c38408d0"
+            },
+            "closure_sha256": "0f3aea6c744bc31456fb4e92600976aa50d8ba8e8e1d7165c2869b73efea38d4",
+            "evidence_path": "tests/codegen-direct/port-evidence/vscode-symbol-info-valid-undefined-edit"
+          }
         }
       ]
     },
@@ -376,7 +625,9 @@
           "phase": "A",
           "observable": "complete token stream and canonical CST",
           "tdd_owner": "upstream:frontend-token-cst-parity",
-          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles"
+          "rust_test": "grammar::frontend::tests::pinned_frontend_corpus_matches_token_and_tree_oracles",
+          "upstream_active_revision_id": "frontend-token-cst-parity-r1",
+          "transitive_closure_sha256": "a409bb9aec5a84548c338069061cbebd193b588ea676643871c22db2898a40b5"
         }
       ]
     }

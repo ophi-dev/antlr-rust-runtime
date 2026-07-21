@@ -1,0 +1,249 @@
+{
+  "schema_version": 1,
+  "logical_id": "frontend-fail-closed-syntax",
+  "revision_id": "frontend-fail-closed-syntax-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "A",
+  "state": "done",
+  "closure": {
+    "logical_id": "frontend-fail-closed-syntax",
+    "source_case_ids": [
+      "antlr-ng:testtoolsyntaxerrors-testa@b70d3582bdbf",
+      "antlr-ng:testtoolsyntaxerrors-testextracolon@a241a35e58b3",
+      "antlr-ng:testtoolsyntaxerrors-testmissingrulesemi@742753592b0c",
+      "antlr-ng:testtoolsyntaxerrors-testmissingrulesemi2@3919fbf58f8f",
+      "antlr-ng:testtoolsyntaxerrors-testmissingrulesemi3@d0fae8ce37dd",
+      "antlr-ng:testtoolsyntaxerrors-testmissingrulesemi4@0e7f5dd29b17",
+      "antlr-ng:testtoolsyntaxerrors-testmissingrulesemi5@0e07a49605bd",
+      "antlr-ng:testtoolsyntaxerrors-testbadruleprequelstart@d52a6b13d477",
+      "antlr-ng:testtoolsyntaxerrors-testbadruleprequelstart2@c34a72a729ad",
+      "antlr-ng:testtoolsyntaxerrors-testunterminatedstringliteral@686cb320a608",
+      "antlr-ng:testtoolsyntaxerrors-testparserrulenamestartingwithunderscore@a3c848cb72c0",
+      "antlr-ng:testtoolsyntaxerrors-testemptygrammaroptions@efc27899492e",
+      "antlr-ng:testtoolsyntaxerrors-testemptyruleoptions@e6704d177f9a",
+      "antlr-ng:testtoolsyntaxerrors-testemptyblockoptions@b149dbfbc843",
+      "antlr-ng:testtoolsyntaxerrors-testemptytokensblock@755c9832e57f",
+      "java-antlr:testtoolsyntaxerrors-testa@b70d3582bdbf",
+      "java-antlr:testtoolsyntaxerrors-testextracolon@a241a35e58b3",
+      "java-antlr:testtoolsyntaxerrors-testmissingrulesemi@742753592b0c",
+      "java-antlr:testtoolsyntaxerrors-testmissingrulesemi2@3919fbf58f8f",
+      "java-antlr:testtoolsyntaxerrors-testmissingrulesemi3@d0fae8ce37dd",
+      "java-antlr:testtoolsyntaxerrors-testmissingrulesemi4@0e7f5dd29b17",
+      "java-antlr:testtoolsyntaxerrors-testmissingrulesemi5@0e07a49605bd",
+      "java-antlr:testtoolsyntaxerrors-testbadruleprequelstart@d52a6b13d477",
+      "java-antlr:testtoolsyntaxerrors-testbadruleprequelstart2@c34a72a729ad",
+      "java-antlr:testtoolsyntaxerrors-testunterminatedstringliteral@686cb320a608",
+      "java-antlr:testtoolsyntaxerrors-testparserrulenamestartingwithunderscore@a3c848cb72c0",
+      "java-antlr:testtoolsyntaxerrors-testemptygrammaroptions@efc27899492e",
+      "java-antlr:testtoolsyntaxerrors-testemptyruleoptions@e6704d177f9a",
+      "java-antlr:testtoolsyntaxerrors-testemptyblockoptions@b149dbfbc843",
+      "java-antlr:testtoolsyntaxerrors-testemptytokensblock@755c9832e57f"
+    ],
+    "external_assertion_ids": [],
+    "external_assertion_inputs": [],
+    "fixture_paths": [],
+    "owner_phase": "A",
+    "disposition": "port",
+    "rust_test": "grammar::frontend::tests::malformed_bootstrap_inputs_fail_closed",
+    "unit_under_test": "Stage 0 lexer/parser fail-closed boundary",
+    "observable": "grammar syntax errors and unterminated constructs return diagnostics without a usable CST",
+    "scaffold_commit": "75615945749dc93fca5d929cb22ad481f12dfdc9",
+    "primary_test_commit": "a4258562c44818e2ba97d206587c64d4c38408d0"
+  },
+  "closure_sha256": "f4a57f9c7bc15974d77639bff53f823833b07fcc429ac91e11f9bb043f58bca8",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testtoolsyntaxerrors-testa@b70d3582bdbf",
+      "path": "tests/TestToolSyntaxErrors.spec.ts",
+      "sha256": "5c9ad90476e381cb1658e11568bb5282258ab04da3a0d56e04db46f995d54e85"
+    },
+    {
+      "source_case_id": "antlr-ng:testtoolsyntaxerrors-testextracolon@a241a35e58b3",
+      "path": "tests/TestToolSyntaxErrors.spec.ts",
+      "sha256": "5c9ad90476e381cb1658e11568bb5282258ab04da3a0d56e04db46f995d54e85"
+    },
+    {
+      "source_case_id": "antlr-ng:testtoolsyntaxerrors-testmissingrulesemi@742753592b0c",
+      "path": "tests/TestToolSyntaxErrors.spec.ts",
+      "sha256": "5c9ad90476e381cb1658e11568bb5282258ab04da3a0d56e04db46f995d54e85"
+    },
+    {
+      "source_case_id": "antlr-ng:testtoolsyntaxerrors-testmissingrulesemi2@3919fbf58f8f",
+      "path": "tests/TestToolSyntaxErrors.spec.ts",
+      "sha256": "5c9ad90476e381cb1658e11568bb5282258ab04da3a0d56e04db46f995d54e85"
+    },
+    {
+      "source_case_id": "antlr-ng:testtoolsyntaxerrors-testmissingrulesemi3@d0fae8ce37dd",
+      "path": "tests/TestToolSyntaxErrors.spec.ts",
+      "sha256": "5c9ad90476e381cb1658e11568bb5282258ab04da3a0d56e04db46f995d54e85"
+    },
+    {
+      "source_case_id": "antlr-ng:testtoolsyntaxerrors-testmissingrulesemi4@0e7f5dd29b17",
+      "path": "tests/TestToolSyntaxErrors.spec.ts",
+      "sha256": "5c9ad90476e381cb1658e11568bb5282258ab04da3a0d56e04db46f995d54e85"
+    },
+    {
+      "source_case_id": "antlr-ng:testtoolsyntaxerrors-testmissingrulesemi5@0e07a49605bd",
+      "path": "tests/TestToolSyntaxErrors.spec.ts",
+      "sha256": "5c9ad90476e381cb1658e11568bb5282258ab04da3a0d56e04db46f995d54e85"
+    },
+    {
+      "source_case_id": "antlr-ng:testtoolsyntaxerrors-testbadruleprequelstart@d52a6b13d477",
+      "path": "tests/TestToolSyntaxErrors.spec.ts",
+      "sha256": "5c9ad90476e381cb1658e11568bb5282258ab04da3a0d56e04db46f995d54e85"
+    },
+    {
+      "source_case_id": "antlr-ng:testtoolsyntaxerrors-testbadruleprequelstart2@c34a72a729ad",
+      "path": "tests/TestToolSyntaxErrors.spec.ts",
+      "sha256": "5c9ad90476e381cb1658e11568bb5282258ab04da3a0d56e04db46f995d54e85"
+    },
+    {
+      "source_case_id": "antlr-ng:testtoolsyntaxerrors-testunterminatedstringliteral@686cb320a608",
+      "path": "tests/TestToolSyntaxErrors.spec.ts",
+      "sha256": "5c9ad90476e381cb1658e11568bb5282258ab04da3a0d56e04db46f995d54e85"
+    },
+    {
+      "source_case_id": "antlr-ng:testtoolsyntaxerrors-testparserrulenamestartingwithunderscore@a3c848cb72c0",
+      "path": "tests/TestToolSyntaxErrors.spec.ts",
+      "sha256": "5c9ad90476e381cb1658e11568bb5282258ab04da3a0d56e04db46f995d54e85"
+    },
+    {
+      "source_case_id": "antlr-ng:testtoolsyntaxerrors-testemptygrammaroptions@efc27899492e",
+      "path": "tests/TestToolSyntaxErrors.spec.ts",
+      "sha256": "5c9ad90476e381cb1658e11568bb5282258ab04da3a0d56e04db46f995d54e85"
+    },
+    {
+      "source_case_id": "antlr-ng:testtoolsyntaxerrors-testemptyruleoptions@e6704d177f9a",
+      "path": "tests/TestToolSyntaxErrors.spec.ts",
+      "sha256": "5c9ad90476e381cb1658e11568bb5282258ab04da3a0d56e04db46f995d54e85"
+    },
+    {
+      "source_case_id": "antlr-ng:testtoolsyntaxerrors-testemptyblockoptions@b149dbfbc843",
+      "path": "tests/TestToolSyntaxErrors.spec.ts",
+      "sha256": "5c9ad90476e381cb1658e11568bb5282258ab04da3a0d56e04db46f995d54e85"
+    },
+    {
+      "source_case_id": "antlr-ng:testtoolsyntaxerrors-testemptytokensblock@755c9832e57f",
+      "path": "tests/TestToolSyntaxErrors.spec.ts",
+      "sha256": "5c9ad90476e381cb1658e11568bb5282258ab04da3a0d56e04db46f995d54e85"
+    },
+    {
+      "source_case_id": "java-antlr:testtoolsyntaxerrors-testa@b70d3582bdbf",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestToolSyntaxErrors.java",
+      "sha256": "d20fdd17605ec4419dea95b8734f6768d54b6a3a13c3f592e75653690b5808e0"
+    },
+    {
+      "source_case_id": "java-antlr:testtoolsyntaxerrors-testextracolon@a241a35e58b3",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestToolSyntaxErrors.java",
+      "sha256": "d20fdd17605ec4419dea95b8734f6768d54b6a3a13c3f592e75653690b5808e0"
+    },
+    {
+      "source_case_id": "java-antlr:testtoolsyntaxerrors-testmissingrulesemi@742753592b0c",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestToolSyntaxErrors.java",
+      "sha256": "d20fdd17605ec4419dea95b8734f6768d54b6a3a13c3f592e75653690b5808e0"
+    },
+    {
+      "source_case_id": "java-antlr:testtoolsyntaxerrors-testmissingrulesemi2@3919fbf58f8f",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestToolSyntaxErrors.java",
+      "sha256": "d20fdd17605ec4419dea95b8734f6768d54b6a3a13c3f592e75653690b5808e0"
+    },
+    {
+      "source_case_id": "java-antlr:testtoolsyntaxerrors-testmissingrulesemi3@d0fae8ce37dd",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestToolSyntaxErrors.java",
+      "sha256": "d20fdd17605ec4419dea95b8734f6768d54b6a3a13c3f592e75653690b5808e0"
+    },
+    {
+      "source_case_id": "java-antlr:testtoolsyntaxerrors-testmissingrulesemi4@0e7f5dd29b17",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestToolSyntaxErrors.java",
+      "sha256": "d20fdd17605ec4419dea95b8734f6768d54b6a3a13c3f592e75653690b5808e0"
+    },
+    {
+      "source_case_id": "java-antlr:testtoolsyntaxerrors-testmissingrulesemi5@0e07a49605bd",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestToolSyntaxErrors.java",
+      "sha256": "d20fdd17605ec4419dea95b8734f6768d54b6a3a13c3f592e75653690b5808e0"
+    },
+    {
+      "source_case_id": "java-antlr:testtoolsyntaxerrors-testbadruleprequelstart@d52a6b13d477",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestToolSyntaxErrors.java",
+      "sha256": "d20fdd17605ec4419dea95b8734f6768d54b6a3a13c3f592e75653690b5808e0"
+    },
+    {
+      "source_case_id": "java-antlr:testtoolsyntaxerrors-testbadruleprequelstart2@c34a72a729ad",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestToolSyntaxErrors.java",
+      "sha256": "d20fdd17605ec4419dea95b8734f6768d54b6a3a13c3f592e75653690b5808e0"
+    },
+    {
+      "source_case_id": "java-antlr:testtoolsyntaxerrors-testunterminatedstringliteral@686cb320a608",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestToolSyntaxErrors.java",
+      "sha256": "d20fdd17605ec4419dea95b8734f6768d54b6a3a13c3f592e75653690b5808e0"
+    },
+    {
+      "source_case_id": "java-antlr:testtoolsyntaxerrors-testparserrulenamestartingwithunderscore@a3c848cb72c0",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestToolSyntaxErrors.java",
+      "sha256": "d20fdd17605ec4419dea95b8734f6768d54b6a3a13c3f592e75653690b5808e0"
+    },
+    {
+      "source_case_id": "java-antlr:testtoolsyntaxerrors-testemptygrammaroptions@efc27899492e",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestToolSyntaxErrors.java",
+      "sha256": "d20fdd17605ec4419dea95b8734f6768d54b6a3a13c3f592e75653690b5808e0"
+    },
+    {
+      "source_case_id": "java-antlr:testtoolsyntaxerrors-testemptyruleoptions@e6704d177f9a",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestToolSyntaxErrors.java",
+      "sha256": "d20fdd17605ec4419dea95b8734f6768d54b6a3a13c3f592e75653690b5808e0"
+    },
+    {
+      "source_case_id": "java-antlr:testtoolsyntaxerrors-testemptyblockoptions@b149dbfbc843",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestToolSyntaxErrors.java",
+      "sha256": "d20fdd17605ec4419dea95b8734f6768d54b6a3a13c3f592e75653690b5808e0"
+    },
+    {
+      "source_case_id": "java-antlr:testtoolsyntaxerrors-testemptytokensblock@755c9832e57f",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestToolSyntaxErrors.java",
+      "sha256": "d20fdd17605ec4419dea95b8734f6768d54b6a3a13c3f592e75653690b5808e0"
+    }
+  ],
+  "commits": {
+    "scaffold": "75615945749dc93fca5d929cb22ad481f12dfdc9",
+    "primary_test": "a4258562c44818e2ba97d206587c64d4c38408d0",
+    "primary_implementation": "8a00a3d6496779b969a42511d7e29c0d102d62d7"
+  },
+  "ancestry": {
+    "primary_test_parent": "75615945749dc93fca5d929cb22ad481f12dfdc9",
+    "primary_implementation_parent": "a4258562c44818e2ba97d206587c64d4c38408d0",
+    "reachability": "all commits are direct ancestors of the Phase A branch"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/frontend.rs",
+      "marker": "#[cfg(test)]",
+      "sha256": "898c44fb501a8d1daec3ff9307e7678b1fd5abae52d928091e6f496f410337fa"
+    }
+  ],
+  "demonstrated_red": {
+    "command": "cargo test --locked --bin antlr4-rust-gen grammar::frontend::tests::",
+    "commit": "a4258562c44818e2ba97d206587c64d4c38408d0",
+    "exit_code": 101,
+    "fingerprint": "G4F000: the Stage 0 grammar frontend is not installed"
+  },
+  "green_result": {
+    "command": "cargo test --locked --bin antlr4-rust-gen grammar::frontend::tests::",
+    "commit": "8a00a3d6496779b969a42511d7e29c0d102d62d7",
+    "exit_code": 0,
+    "result": "5 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/frontend-fail-closed-syntax/revisions/frontend-fail-closed-syntax-r1/oracle-results/declared-sources.json",
+      "sha256": "fbcceb01ae8d88d10b0bb0b9b5ec993a5050bb365ffe6e4eb55a6653201ad51e"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/frontend-fail-closed-syntax/revisions/frontend-fail-closed-syntax-r1/matrix-results/results.json",
+      "sha256": "ae79e583f90517229c48d018a99c2514b5af0b37eb494290aad60b7ae0b44f3d"
+    }
+  ]
+}

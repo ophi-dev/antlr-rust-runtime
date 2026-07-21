@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "frontend-fail-closed-syntax",
+  "active_revision_id": "frontend-fail-closed-syntax-r1",
+  "revisions": [
+    {
+      "revision_id": "frontend-fail-closed-syntax-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/frontend-fail-closed-syntax/revisions/frontend-fail-closed-syntax-r1/manifest.json",
+      "closure_sha256": "f4a57f9c7bc15974d77639bff53f823833b07fcc429ac91e11f9bb043f58bca8"
+    }
+  ]
+}

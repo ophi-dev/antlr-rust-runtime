@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "frontend-token-cst-parity",
+  "active_revision_id": "frontend-token-cst-parity-r1",
+  "revisions": [
+    {
+      "revision_id": "frontend-token-cst-parity-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/frontend-token-cst-parity/revisions/frontend-token-cst-parity-r1/manifest.json",
+      "closure_sha256": "a409bb9aec5a84548c338069061cbebd193b588ea676643871c22db2898a40b5"
+    }
+  ]
+}

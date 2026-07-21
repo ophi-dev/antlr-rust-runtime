@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "vscode-symbol-info-valid-undefined-edit",
+  "active_revision_id": "external-vscode-symbol-info-valid-undefined-edit-r1",
+  "revisions": [
+    {
+      "revision_id": "external-vscode-symbol-info-valid-undefined-edit-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/vscode-symbol-info-valid-undefined-edit/revisions/external-vscode-symbol-info-valid-undefined-edit-r1/manifest.json",
+      "closure_sha256": "0f3aea6c744bc31456fb4e92600976aa50d8ba8e8e1d7165c2869b73efea38d4"
+    }
+  ]
+}

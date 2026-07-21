@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "logical_id": "vscode-symbol-info-malformed-edit",
+  "revision_id": "external-vscode-symbol-info-malformed-edit-r1",
+  "primary_test_source": {
+    "repository": "https://github.com/mike-lischke/vscode-antlr4.git",
+    "commit": "3e9469d1d490c71b3e3b909edf1235582a3f8db8",
+    "path": "tests/backend/symbol-info.spec.ts",
+    "case": "reparse: malformed a:: edit",
+    "sha256": "df274a0dca42823cc2ef2608d98d544be53246a48c56f96050b0a987ce0890f3"
+  },
+  "alternate_test_source": {
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "oracle": "independent grammar frontend token/tree/diagnostic observation"
+  },
+  "outcomes": {
+    "primary": {
+      "result": "fail-closed",
+      "parser_diagnostic_bytes": [
+        [
+          12,
+          14
+        ],
+        [
+          18,
+          19
+        ],
+        [
+          21,
+          22
+        ]
+      ]
+    },
+    "alternate": "antlr-ng reports grammar syntax errors and does not supply a transformable CST",
+    "java_compatibility_verdict": "Java 4.13.2 also rejects the malformed grammar; exact editor ranges are extension-owned"
+  }
+}

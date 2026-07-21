@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "frontend-bootstrap-corpus",
+  "active_revision_id": "frontend-bootstrap-corpus-r1",
+  "revisions": [
+    {
+      "revision_id": "frontend-bootstrap-corpus-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/frontend-bootstrap-corpus/revisions/frontend-bootstrap-corpus-r1/manifest.json",
+      "closure_sha256": "8528bc56e4a1267c2759345a961aee387a9a74bb9c1e86d696ba37ac4198e52b"
+    }
+  ]
+}
