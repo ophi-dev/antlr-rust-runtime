@@ -239,11 +239,13 @@ fn rewrite_rule(
 
     let primary_block = Block {
         alternatives: primary,
+        options: Vec::new(),
         syntax: rule.block.syntax,
         span: rule.block.span.clone(),
     };
     let operator_block = Block {
         alternatives: operators,
+        options: Vec::new(),
         syntax: rule.block.syntax,
         span: rule.block.span.clone(),
     };
@@ -514,6 +516,7 @@ impl LeftRecursionCloner<'_> {
                     .iter()
                     .map(|alternative| self.alternative(alternative, 0))
                     .collect(),
+                options: block.options.clone(),
                 syntax: block.syntax,
                 span: block.span.clone(),
             }),

@@ -1,11 +1,11 @@
 use super::frontend::{Cst, SourceFile, SourceSpan, SyntaxId, SyntaxNodeKind, SyntaxToken};
 use super::generated::antlr_v4_parser as p;
 use super::model::{
-    Alternative, Authored, Block, ChannelDeclaration, Element, ElementId, ElementKind,
-    ExceptionHandler, GrammarHeader, GrammarId, GrammarKind, GrammarUnit, ImportDecl, Label,
-    LabelKind, LexerCommand, Mode, ModelIdAllocator, ModelNodeId, NamedAction, OptionDecl,
-    ParsedGrammarUnit, Quantifier, Rule, RuleCall, RuleKind, SetElement, Terminal,
-    TokenDeclaration,
+    Alternative, AttributeClause, Authored, Block, ChannelDeclaration, Element, ElementId,
+    ElementKind, ExceptionHandler, GrammarHeader, GrammarId, GrammarKind, GrammarPrequel,
+    GrammarUnit, ImportDecl, Label, LabelKind, LexerCommand, Mode, ModelIdAllocator, ModelNodeId,
+    NamedAction, OptionDecl, ParsedGrammarUnit, Quantifier, Rule, RuleCall, RuleKind, SetElement,
+    Terminal, TokenDeclaration,
 };
 use super::provenance::{Origin, ProvenanceIndex};
 
@@ -262,53 +262,66 @@ impl ModelBuilder<'_> {
         let prequels = root
             .child_rules(p::RULE_PREQUEL_CONSTRUCT)
             .collect::<Vec<_>>();
-        let options = prequels
-            .iter()
-            .filter_map(|prequel| prequel.child_rule(p::RULE_OPTIONS_SPEC))
-            .flat_map(|options| options.child_rules(p::RULE_OPTION))
-            .filter_map(parse_option)
-            .collect();
-        let tokens = prequels
-            .iter()
-            .filter_map(|prequel| prequel.child_rule(p::RULE_TOKENS_SPEC))
-            .flat_map(|spec| {
-                spec.child_rule(p::RULE_ID_LIST)
+        let mut grammar_prequels = Vec::new();
+        let mut options = Vec::new();
+        let mut tokens = Vec::new();
+        let mut channels = Vec::new();
+        let mut actions = Vec::new();
+        for prequel in prequels {
+            if let Some(spec) = prequel.child_rule(p::RULE_OPTIONS_SPEC) {
+                let start = options.len();
+                options.extend(spec.child_rules(p::RULE_OPTION).filter_map(parse_option));
+                grammar_prequels.push(GrammarPrequel::Options {
+                    declarations: start..options.len(),
+                    span: spec.span(),
+                });
+            }
+            if let Some(imports) = prequel.child_rule(p::RULE_DELEGATE_GRAMMARS) {
+                grammar_prequels.push(GrammarPrequel::Imports {
+                    span: imports.span(),
+                });
+            }
+            if let Some(spec) = prequel.child_rule(p::RULE_TOKENS_SPEC) {
+                let start = tokens.len();
+                let names = spec
+                    .child_rule(p::RULE_ID_LIST)
                     .into_iter()
                     .flat_map(|list| list.child_rules(p::RULE_IDENTIFIER))
-            })
-            .filter_map(SyntaxNodeRef::first_terminal)
-            .map(|node| {
-                let declaration = TokenDeclaration {
-                    id: self.ids.token(),
-                    name: authored_text(node),
-                };
-                self.authored(ModelNodeId::Token(declaration.id), node);
-                declaration
-            })
-            .collect();
-        let channels = prequels
-            .iter()
-            .filter_map(|prequel| prequel.child_rule(p::RULE_CHANNELS_SPEC))
-            .flat_map(|spec| {
-                spec.child_rule(p::RULE_ID_LIST)
+                    .filter_map(SyntaxNodeRef::first_terminal);
+                for node in names {
+                    let declaration = TokenDeclaration {
+                        id: self.ids.token(),
+                        name: authored_text(node),
+                    };
+                    self.authored(ModelNodeId::Token(declaration.id), node);
+                    tokens.push(declaration);
+                }
+                grammar_prequels.push(GrammarPrequel::Tokens {
+                    declarations: start..tokens.len(),
+                    span: spec.span(),
+                });
+            }
+            if let Some(spec) = prequel.child_rule(p::RULE_CHANNELS_SPEC) {
+                let names = spec
+                    .child_rule(p::RULE_ID_LIST)
                     .into_iter()
                     .flat_map(|list| list.child_rules(p::RULE_IDENTIFIER))
-            })
-            .filter_map(SyntaxNodeRef::first_terminal)
-            .map(|node| {
-                let declaration = ChannelDeclaration {
-                    id: self.ids.channel(),
-                    name: authored_text(node),
-                };
-                self.authored(ModelNodeId::Channel(declaration.id), node);
-                declaration
-            })
-            .collect();
-        let actions = prequels
-            .iter()
-            .filter_map(|prequel| prequel.child_rule(p::RULE_ACTION))
-            .filter_map(|action| self.named_action(action, None))
-            .collect();
+                    .filter_map(SyntaxNodeRef::first_terminal);
+                for node in names {
+                    let declaration = ChannelDeclaration {
+                        id: self.ids.channel(),
+                        name: authored_text(node),
+                    };
+                    self.authored(ModelNodeId::Channel(declaration.id), node);
+                    channels.push(declaration);
+                }
+            }
+            if let Some(action) = prequel.child_rule(p::RULE_ACTION) {
+                if let Some(action) = self.named_action(action, None) {
+                    actions.push(action);
+                }
+            }
+        }
 
         let mut rules = Vec::new();
         if let Some(rule_list) = root.child_rule(p::RULE_RULES) {
@@ -350,6 +363,7 @@ impl ModelBuilder<'_> {
             source: self.file.id(),
             name: loader.header.name.value,
             kind: loader.header.kind,
+            prequels: grammar_prequels,
             options,
             tokens,
             channels,
@@ -375,15 +389,15 @@ impl ModelBuilder<'_> {
             .collect::<Vec<_>>();
         let arguments = node
             .child_rule(p::RULE_ARG_ACTION_BLOCK)
-            .map(|argument| delimited_contents(argument.text(), '[', ']'));
+            .map(attribute_clause);
         let returns = node
             .child_rule(p::RULE_RULE_RETURNS)
             .and_then(|returns| returns.child_rule(p::RULE_ARG_ACTION_BLOCK))
-            .map(|value| delimited_contents(value.text(), '[', ']'));
+            .map(attribute_clause);
         let locals = node
             .child_rule(p::RULE_LOCALS_SPEC)
             .and_then(|locals| locals.child_rule(p::RULE_ARG_ACTION_BLOCK))
-            .map(|value| delimited_contents(value.text(), '[', ']'));
+            .map(attribute_clause);
         let throws = node
             .child_rule(p::RULE_THROWS_SPEC)
             .into_iter()
@@ -500,12 +514,19 @@ impl ModelBuilder<'_> {
             .collect();
         Block {
             alternatives,
+            options: Vec::new(),
             syntax: node.id(),
             span: node.span(),
         }
     }
 
     fn parser_block(&mut self, node: SyntaxNodeRef<'_>) -> Block {
+        let options = node
+            .child_rule(p::RULE_OPTIONS_SPEC)
+            .into_iter()
+            .flat_map(|spec| spec.child_rules(p::RULE_OPTION))
+            .filter_map(parse_option)
+            .collect();
         let alternatives = node
             .child_rule(p::RULE_ALT_LIST)
             .into_iter()
@@ -514,6 +535,7 @@ impl ModelBuilder<'_> {
             .collect();
         Block {
             alternatives,
+            options,
             syntax: node.id(),
             span: node.span(),
         }
@@ -528,6 +550,7 @@ impl ModelBuilder<'_> {
             .collect();
         Block {
             alternatives,
+            options: Vec::new(),
             syntax: node.id(),
             span: node.span(),
         }
@@ -542,6 +565,7 @@ impl ModelBuilder<'_> {
             .collect();
         Block {
             alternatives,
+            options: Vec::new(),
             syntax: node.id(),
             span: node.span(),
         }
@@ -649,8 +673,13 @@ impl ModelBuilder<'_> {
                 .expect("parser element has a recognized shape");
             (self.action_or_predicate(node, action), Quantifier::One)
         };
-        let options = node
-            .descendants()
+        let option_owner = node
+            .child_rule(p::RULE_LABELED_ELEMENT)
+            .and_then(|labeled| labeled.child_rule(p::RULE_ATOM))
+            .or_else(|| node.child_rule(p::RULE_ATOM));
+        let options = option_owner
+            .into_iter()
+            .flat_map(SyntaxNodeRef::descendants)
             .find(|child| child.rule_index() == Some(p::RULE_ELEMENT_OPTIONS))
             .map(parse_element_options)
             .unwrap_or_default();
@@ -689,7 +718,9 @@ impl ModelBuilder<'_> {
             },
         );
         let options = node
-            .descendants()
+            .child_rule(p::RULE_LEXER_ATOM)
+            .into_iter()
+            .flat_map(SyntaxNodeRef::descendants)
             .find(|child| child.rule_index() == Some(p::RULE_ELEMENT_OPTIONS))
             .map(parse_element_options)
             .unwrap_or_default();
@@ -1036,6 +1067,13 @@ fn predicate_fail_message(node: SyntaxNodeRef<'_>) -> Option<String> {
         })
 }
 
+fn attribute_clause(node: SyntaxNodeRef<'_>) -> AttributeClause {
+    AttributeClause {
+        text: delimited_contents(node.text(), '[', ']'),
+        span: node.span(),
+    }
+}
+
 fn delimited_contents(text: &str, open: char, close: char) -> String {
     let text = text.trim();
     text.strip_prefix(open)
@@ -1078,9 +1116,18 @@ finally { finish(); }
         assert_eq!(unit.tokens[0].name.value, "EXTRA");
         assert_eq!(unit.actions[0].scope.as_deref(), Some("parser"));
         let rule = &unit.rules[0];
-        assert_eq!(rule.arguments.as_deref(), Some("int x"));
-        assert_eq!(rule.returns.as_deref(), Some("int y"));
-        assert_eq!(rule.locals.as_deref(), Some("int z"));
+        assert_eq!(
+            rule.arguments.as_ref().map(|clause| clause.text.as_str()),
+            Some("int x")
+        );
+        assert_eq!(
+            rule.returns.as_ref().map(|clause| clause.text.as_str()),
+            Some("int y")
+        );
+        assert_eq!(
+            rule.locals.as_ref().map(|clause| clause.text.as_str()),
+            Some("int z")
+        );
         assert_eq!(rule.throws[0].value, "Error");
         assert_eq!(rule.actions[0].name, "init");
         assert_eq!(rule.catches[0].argument, "Error error");

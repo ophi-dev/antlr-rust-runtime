@@ -31,6 +31,12 @@ pub(crate) struct AttrDecl {
     pub(crate) ty: String,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct LocatedAttrDecl {
+    pub(crate) declaration: AttrDecl,
+    pub(crate) name_offset: usize,
+}
+
 /// One element reference inside an alternative: a rule ref, token ref, or a
 /// labeled sub-block, in source order.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -160,21 +166,43 @@ fn map_attr_type(raw: &str) -> String {
 /// Parses `[a: i32, int b, String s]`-style attribute declarations, accepting
 /// both the rendered Rust `name: type` form and raw `type name` descriptors.
 pub(crate) fn parse_attr_decls(clause: &str) -> Vec<AttrDecl> {
+    parse_attr_decls_with_offsets(clause)
+        .into_iter()
+        .map(|located| located.declaration)
+        .collect()
+}
+
+pub(crate) fn parse_attr_decls_with_offsets(clause: &str) -> Vec<LocatedAttrDecl> {
     let mut decls = Vec::new();
-    for part in split_top_level(clause, ',') {
-        let part = strip_default_initializer(part.trim());
+    for (raw_offset, raw_part) in split_top_level(clause, ',') {
+        let leading = raw_part.len() - raw_part.trim_start().len();
+        let part_offset = raw_offset + leading;
+        let part = strip_default_initializer(raw_part.trim());
         if part.is_empty() {
             continue;
         }
         if let Some((name, ty)) = split_name_colon_type(part) {
-            decls.push(AttrDecl {
-                name: name.to_owned(),
-                ty: map_attr_type(ty),
+            let name_source = part
+                .split_once(':')
+                .map_or(part, |(name_source, _)| name_source);
+            let name_offset = part_offset + name_source.len() - name_source.trim_start().len();
+            decls.push(LocatedAttrDecl {
+                declaration: AttrDecl {
+                    name: name.to_owned(),
+                    ty: map_attr_type(ty),
+                },
+                name_offset,
             });
-        } else if let Some((ty, name)) = part.rsplit_once(char::is_whitespace) {
-            decls.push(AttrDecl {
-                name: name.trim().to_owned(),
-                ty: map_attr_type(ty),
+        } else if let Some((ty, name_source)) = part.rsplit_once(char::is_whitespace) {
+            let name = name_source.trim();
+            let name_offset = part_offset + part.len() - name_source.len() + name_source.len()
+                - name_source.trim_start().len();
+            decls.push(LocatedAttrDecl {
+                declaration: AttrDecl {
+                    name: name.to_owned(),
+                    ty: map_attr_type(ty),
+                },
+                name_offset,
             });
         }
     }
@@ -227,7 +255,7 @@ fn split_name_colon_type(part: &str) -> Option<(&str, &str)> {
 
 /// Splits on `separator` at zero bracket/paren/angle/brace depth outside
 /// string literals.
-fn split_top_level(text: &str, separator: char) -> Vec<&str> {
+fn split_top_level(text: &str, separator: char) -> Vec<(usize, &str)> {
     let mut parts = Vec::new();
     let mut depth = 0_i32;
     let mut start = 0;
@@ -244,13 +272,13 @@ fn split_top_level(text: &str, separator: char) -> Vec<&str> {
             '(' | '[' | '{' | '<' if !quoted => depth += 1,
             ')' | ']' | '}' | '>' if !quoted => depth -= 1,
             _ if ch == separator && !quoted && depth == 0 => {
-                parts.push(&text[start..index]);
+                parts.push((start, &text[start..index]));
                 start = index + ch.len_utf8();
             }
             _ => {}
         }
     }
-    parts.push(&text[start..]);
+    parts.push((start, &text[start..]));
     parts
 }
 
@@ -1308,6 +1336,26 @@ mod tests {
                 name: "s".into(),
                 ty: "String".into()
             }
+        );
+    }
+
+    #[test]
+    fn locates_rust_and_java_style_attr_names() {
+        let clause = "  value: i32, int expr, String name";
+        let declarations = parse_attr_decls_with_offsets(clause);
+        assert_eq!(
+            declarations
+                .iter()
+                .map(|declaration| (
+                    declaration.declaration.name.as_str(),
+                    declaration.name_offset
+                ))
+                .collect::<Vec<_>>(),
+            [
+                ("value", clause.find("value").expect("value offset")),
+                ("expr", clause.find("expr").expect("expr offset")),
+                ("name", clause.find("name").expect("name offset")),
+            ],
         );
     }
 

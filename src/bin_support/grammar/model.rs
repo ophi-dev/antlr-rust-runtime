@@ -182,6 +182,21 @@ pub(crate) struct OptionDecl {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum GrammarPrequel {
+    Options {
+        declarations: std::ops::Range<usize>,
+        span: SourceSpan,
+    },
+    Imports {
+        span: SourceSpan,
+    },
+    Tokens {
+        declarations: std::ops::Range<usize>,
+        span: SourceSpan,
+    },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct ParsedGrammarUnit {
     pub(crate) source: SourceId,
     pub(crate) header: GrammarHeader,
@@ -357,6 +372,7 @@ pub(crate) struct Alternative {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct Block {
     pub(crate) alternatives: Vec<Alternative>,
+    pub(crate) options: Vec<OptionDecl>,
     pub(crate) syntax: SyntaxId,
     pub(crate) span: SourceSpan,
 }
@@ -385,6 +401,12 @@ pub(crate) struct ExceptionHandler {
     pub(crate) span: SourceSpan,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct AttributeClause {
+    pub(crate) text: String,
+    pub(crate) span: SourceSpan,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum LeftRecursiveAlternativeKind {
     Primary,
@@ -407,9 +429,9 @@ pub(crate) struct Rule {
     pub(crate) kind: RuleKind,
     pub(crate) fragment: bool,
     pub(crate) modifiers: Vec<Authored<String>>,
-    pub(crate) arguments: Option<String>,
-    pub(crate) returns: Option<String>,
-    pub(crate) locals: Option<String>,
+    pub(crate) arguments: Option<AttributeClause>,
+    pub(crate) returns: Option<AttributeClause>,
+    pub(crate) locals: Option<AttributeClause>,
     pub(crate) throws: Vec<Authored<String>>,
     pub(crate) options: Vec<OptionDecl>,
     pub(crate) actions: Vec<NamedAction>,
@@ -450,6 +472,7 @@ pub(crate) struct GrammarUnit {
     pub(crate) source: SourceId,
     pub(crate) name: String,
     pub(crate) kind: GrammarKind,
+    pub(crate) prequels: Vec<GrammarPrequel>,
     pub(crate) options: Vec<OptionDecl>,
     pub(crate) tokens: Vec<TokenDeclaration>,
     pub(crate) channels: Vec<ChannelDeclaration>,
@@ -537,6 +560,7 @@ pub(crate) struct RuleAttributes {
 pub(crate) struct AttributeSymbol {
     pub(crate) name: String,
     pub(crate) ty: String,
+    pub(crate) span: SourceSpan,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

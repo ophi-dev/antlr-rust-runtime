@@ -590,6 +590,7 @@ impl ImportedCloner<'_> {
                 .iter()
                 .map(|alternative| self.alternative(alternative))
                 .collect(),
+            options: source.options.clone(),
             syntax: source.syntax,
             span: source.span.clone(),
         }
@@ -787,13 +788,16 @@ fn reduce_top_level_block(
 }
 
 fn block_set_members(block: &Block, lexer: bool) -> Option<(Vec<SetElement>, Vec<ModelNodeId>)> {
-    if block.alternatives.len() < 2 {
+    if !block.options.is_empty() || block.alternatives.len() < 2 {
         return None;
     }
     let mut members = Vec::with_capacity(block.alternatives.len());
     let mut inputs = Vec::with_capacity(block.alternatives.len());
     for alternative in &block.alternatives {
-        if alternative.label.is_some() || alternative.elements.len() != 1 {
+        if alternative.label.is_some()
+            || !alternative.options.is_empty()
+            || alternative.elements.len() != 1
+        {
             return None;
         }
         let element = &alternative.elements[0];
@@ -983,6 +987,7 @@ fn split_combined(
             source: combined.source,
             name: format!("{base_name}Lexer"),
             kind: GrammarKind::Lexer,
+            prequels: Vec::new(),
             options: combined
                 .options
                 .iter()
@@ -1184,6 +1189,7 @@ fn implicit_literal_rule(
                 syntax: original.syntax,
                 span: original.span.clone(),
             }],
+            options: Vec::new(),
             syntax: original.syntax,
             span: original.span.clone(),
         },
