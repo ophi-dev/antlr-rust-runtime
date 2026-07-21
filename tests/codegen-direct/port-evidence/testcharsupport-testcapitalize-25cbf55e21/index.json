@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcharsupport-testcapitalize-25cbf55e21",
+  "active_revision_id": "testcharsupport-testcapitalize-25cbf55e21-r1",
+  "revisions": [
+    {
+      "revision_id": "testcharsupport-testcapitalize-25cbf55e21-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testcharsupport-testcapitalize-25cbf55e21/revisions/testcharsupport-testcapitalize-25cbf55e21-r1/manifest.json",
+      "closure_sha256": "5363eddae12820667be83f48366745880e405af26ceb18d9f974757fa1e3ccad"
+    }
+  ]
+}

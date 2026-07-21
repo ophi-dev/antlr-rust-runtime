@@ -13,6 +13,9 @@ import {
     BASIC_SEMANTIC_BASE_COMMIT,
     BASIC_SEMANTIC_IMPLEMENTATION_COMMIT,
     BASIC_SEMANTIC_TEST_COMMIT,
+    CHAR_SUPPORT_BASE_COMMIT,
+    CHAR_SUPPORT_IMPLEMENTATION_COMMIT,
+    CHAR_SUPPORT_TEST_COMMIT,
     EMPTY_VOCABULARY_BASE_COMMIT,
     EMPTY_VOCABULARY_IMPLEMENTATION_COMMIT,
     EMPTY_VOCABULARY_TEST_COMMIT,
@@ -219,6 +222,66 @@ const VOCABULARY_PORTS = new Map([
 ]);
 const SCOPE_PARSING_TEST_COMMAND =
     "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java";
+const CHAR_SUPPORT_TEST_COMMAND =
+    "cargo test --locked --bin antlr4-rust-gen grammar::char_support::tests::";
+const CHAR_SUPPORT_PORTS = new Map([
+    [
+        "testcharsupport-testcapitalize-25cbf55e21",
+        {
+            testName: "capitalize_matches_java",
+            missingFunction: "capitalize",
+        },
+    ],
+    [
+        "testcharsupport-testgetantlrcharliteralforchar-5f81e9b4e6",
+        {
+            testName: "antlr_char_literal_for_char_matches_java",
+            missingFunction: "get_antlr_char_literal_for_char",
+        },
+    ],
+    [
+        "testcharsupport-testgetcharvaluefromcharingrammarliteral-94ddda545b",
+        {
+            testName: "char_value_from_char_in_grammar_literal_matches_java",
+            missingFunction: "get_char_value_from_char_in_grammar_literal",
+        },
+    ],
+    [
+        "testcharsupport-testgetcharvaluefromgrammarcharliteral-7e17776ef5",
+        {
+            testName: "char_value_from_grammar_char_literal_matches_java",
+            missingFunction: "get_char_value_from_grammar_char_literal",
+        },
+    ],
+    [
+        "testcharsupport-testgetintervalsetescapedstring-6bc4eb94c4",
+        {
+            testName: "interval_set_escaped_string_matches_java",
+            missingFunction: "get_interval_set_escaped_string",
+        },
+    ],
+    [
+        "testcharsupport-testgetrangeescapedstring-ecd6bf8c9f",
+        {
+            testName: "range_escaped_string_matches_java",
+            missingFunction: "get_range_escaped_string",
+        },
+    ],
+    [
+        "testcharsupport-testgetstringfromgrammarstringliteral-601aa92456",
+        {
+            testName: "string_from_grammar_string_literal_matches_java",
+            missingFunction: "get_string_from_grammar_string_literal",
+        },
+    ],
+    [
+        "testcharsupport-testparsehexvalue-de6de267d9",
+        {
+            testName: "parse_hex_value_matches_java",
+            missingFunction: "parse_hex_value",
+        },
+    ],
+]);
 
 const PHASE_B_SUITES = new Set([
     "TestATNConstruction",
@@ -713,6 +776,9 @@ function completedPhaseBRow(
                       : completed.kind === "scope-parsing"
                         ? `direct Rust declaration parsing matches Java 4.13.2 names, ` +
                           `types, and initializers for ${cases[0].suite}.${cases[0].name}`
+                        : completed.kind === "char-support"
+                          ? `direct Rust character literal support matches Java 4.13.2 ` +
+                            `for ${cases[0].suite}.${cases[0].name}`
                         : `direct Rust semantic diagnostics match Java 4.13.2 exactly ` +
                           `for ${cases[0].suite}.${cases[0].name}`;
     const coveredExisting =
@@ -929,6 +995,22 @@ async function loadCompletedPhaseBPorts() {
             redFingerprint: definition.redFingerprint,
         });
     }
+    for (const [logicalId, definition] of CHAR_SUPPORT_PORTS) {
+        ports.set(logicalId, {
+            fixturePaths: [],
+            rustTest: "grammar::char_support::tests::" + definition.testName,
+            kind: "char-support",
+            resolution: "ported",
+            scaffoldCommit: CHAR_SUPPORT_BASE_COMMIT,
+            testCommit: CHAR_SUPPORT_TEST_COMMIT,
+            implementationCommit: CHAR_SUPPORT_IMPLEMENTATION_COMMIT,
+            testCommand: CHAR_SUPPORT_TEST_COMMAND,
+            greenResult: "8 passed; 0 failed",
+            redFingerprint:
+                `E0425: cannot find function \`${definition.missingFunction}\` ` +
+                "in this scope",
+        });
+    }
     const scopeGroups = new Map();
     for (const testCase of inventory.cases) {
         if (testCase.suite !== "TestScopeParsing") {
@@ -967,8 +1049,8 @@ async function loadCompletedPhaseBPorts() {
             `expected 47 completed TestScopeParsing ports, found ${scopeGroups.size}`,
         );
     }
-    if (ports.size !== 138) {
-        throw new Error(`expected 138 completed Phase B ports, found ${ports.size}`);
+    if (ports.size !== 146) {
+        throw new Error(`expected 146 completed Phase B ports, found ${ports.size}`);
     }
     return ports;
 }

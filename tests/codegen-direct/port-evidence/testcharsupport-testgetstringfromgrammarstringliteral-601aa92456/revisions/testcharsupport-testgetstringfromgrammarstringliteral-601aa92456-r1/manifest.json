@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcharsupport-testgetstringfromgrammarstringliteral-601aa92456",
+  "revision_id": "testcharsupport-testgetstringfromgrammarstringliteral-601aa92456-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "closure": {
+    "logical_id": "testcharsupport-testgetstringfromgrammarstringliteral-601aa92456",
+    "source_case_ids": [
+      "antlr-ng:testcharsupport-testgetstringfromgrammarstringliteral@e64022eede98",
+      "java-antlr:testcharsupport-testgetstringfromgrammarstringliteral@e64022eede98"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::char_support::tests::string_from_grammar_string_literal_matches_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust character literal support matches Java 4.13.2 for TestCharSupport.testGetStringFromGrammarStringLiteral",
+    "scaffold_commit": "d29eacaf62e6c1afc5f3461025a53bc7bd26e1c4",
+    "primary_test_commit": "8970016dbac6705533db4d9ad55d996b61bed026"
+  },
+  "closure_sha256": "71d7b64f60dbb686ff625e586a8595251225dc0f078d41ad3d4578dd9969a9ae",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testcharsupport-testgetstringfromgrammarstringliteral@e64022eede98",
+      "path": "tests/TestCharSupport.spec.ts",
+      "sha256": "3d1ac9249a2e8c3e9b6fb94882c0e29ec1cbf28fd67c9bed143662e1dcda82e1"
+    },
+    {
+      "source_case_id": "java-antlr:testcharsupport-testgetstringfromgrammarstringliteral@e64022eede98",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestCharSupport.java",
+      "sha256": "0e6d5a06bcbadf41c3ce33a25547c848a5df406cdc5fb978036a08bdd9f7cde2"
+    }
+  ],
+  "commits": {
+    "scaffold": "d29eacaf62e6c1afc5f3461025a53bc7bd26e1c4",
+    "primary_test": "8970016dbac6705533db4d9ad55d996b61bed026",
+    "primary_implementation": "28b8fe8bf72608dc19752d8cb39feab7ecb21fc3"
+  },
+  "ancestry": {
+    "primary_test_parent": "d29eacaf62e6c1afc5f3461025a53bc7bd26e1c4",
+    "primary_implementation_parent": "8970016dbac6705533db4d9ad55d996b61bed026",
+    "reachability": "the character support implementation commit is directly based on its locked red tests"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/char_support.rs",
+      "marker": "#[cfg(test)]\nmod tests {",
+      "sha256": "03410ba18785ae5c29b1ebf2fbdde44c97fae47447e7a05a308b2b06fb9a6a5a"
+    }
+  ],
+  "demonstrated_red": {
+    "command": "cargo test --locked --bin antlr4-rust-gen grammar::char_support::tests::",
+    "commit": "8970016dbac6705533db4d9ad55d996b61bed026",
+    "exit_code": 101,
+    "fingerprint": "E0425: cannot find function `get_string_from_grammar_string_literal` in this scope"
+  },
+  "green_result": {
+    "command": "cargo test --locked --bin antlr4-rust-gen grammar::char_support::tests::",
+    "commit": "28b8fe8bf72608dc19752d8cb39feab7ecb21fc3",
+    "exit_code": 0,
+    "result": "8 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testcharsupport-testgetstringfromgrammarstringliteral-601aa92456/revisions/testcharsupport-testgetstringfromgrammarstringliteral-601aa92456-r1/oracle-results/declared-sources.json",
+      "sha256": "5d4ffdaf3cdffcde72592912d03bd96c182485a2a514b9c30ef878d546cb2146"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testcharsupport-testgetstringfromgrammarstringliteral-601aa92456/revisions/testcharsupport-testgetstringfromgrammarstringliteral-601aa92456-r1/matrix-results/results.json",
+      "sha256": "11d0224cb5482e675737d5b7b29a054c816d09ddcec810ec1e6b4db38ecd9eca"
+    }
+  ]
+}

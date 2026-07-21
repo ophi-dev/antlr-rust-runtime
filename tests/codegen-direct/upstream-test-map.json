@@ -14249,8 +14249,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcharsupport-testcapitalize-25cbf55e21-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcharsupport-testcapitalize-25cbf55e21",
+      "tdd_state": "done",
+      "rust_test": "grammar::char_support::tests::capitalize_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -14271,8 +14271,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCharSupport.testCapitalize behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `capitalize` in this scope",
+      "observable_equivalence": "direct Rust character literal support matches Java 4.13.2 for TestCharSupport.testCapitalize",
+      "scaffold_commit": "d29eacaf62e6c1afc5f3461025a53bc7bd26e1c4",
+      "primary_test_commit": "8970016dbac6705533db4d9ad55d996b61bed026",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::char_support::tests::",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `capitalize` in this scope"
+      },
+      "primary_implementation_commit": "28b8fe8bf72608dc19752d8cb39feab7ecb21fc3",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::char_support::tests::",
+        "result": "8 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcharsupport-testcapitalize-25cbf55e21",
         "source_case_ids": [
@@ -14280,14 +14292,17 @@
           "java-antlr:testcharsupport-testcapitalize@5c7cf235b4b7"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcharsupport-testcapitalize-25cbf55e21",
+        "rust_test": "grammar::char_support::tests::capitalize_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCharSupport.testCapitalize behavior"
+        "observable": "direct Rust character literal support matches Java 4.13.2 for TestCharSupport.testCapitalize",
+        "scaffold_commit": "d29eacaf62e6c1afc5f3461025a53bc7bd26e1c4",
+        "primary_test_commit": "8970016dbac6705533db4d9ad55d996b61bed026"
       },
-      "closure_sha256": "16693accecd4f1baacac8eb65768df397680f8ec22e86a16f89e74255a6e8eba",
-      "evidence_path": null
+      "closure_sha256": "5363eddae12820667be83f48366745880e405af26ceb18d9f974757fa1e3ccad",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcharsupport-testcapitalize-25cbf55e21"
     },
     {
       "logical_id": "testcharsupport-testgetantlrcharliteralforchar-5f81e9b4e6",
@@ -14299,8 +14314,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcharsupport-testgetantlrcharliteralforchar-5f81e9b4e6-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcharsupport-testgetantlrcharliteralforchar-5f81e9b4e6",
+      "tdd_state": "done",
+      "rust_test": "grammar::char_support::tests::antlr_char_literal_for_char_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -14321,8 +14336,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCharSupport.testGetANTLRCharLiteralForChar behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `get_antlr_char_literal_for_char` in this scope",
+      "observable_equivalence": "direct Rust character literal support matches Java 4.13.2 for TestCharSupport.testGetANTLRCharLiteralForChar",
+      "scaffold_commit": "d29eacaf62e6c1afc5f3461025a53bc7bd26e1c4",
+      "primary_test_commit": "8970016dbac6705533db4d9ad55d996b61bed026",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::char_support::tests::",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `get_antlr_char_literal_for_char` in this scope"
+      },
+      "primary_implementation_commit": "28b8fe8bf72608dc19752d8cb39feab7ecb21fc3",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::char_support::tests::",
+        "result": "8 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcharsupport-testgetantlrcharliteralforchar-5f81e9b4e6",
         "source_case_ids": [
@@ -14330,14 +14357,17 @@
           "java-antlr:testcharsupport-testgetantlrcharliteralforchar@f04ab0adc267"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcharsupport-testgetantlrcharliteralforchar-5f81e9b4e6",
+        "rust_test": "grammar::char_support::tests::antlr_char_literal_for_char_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCharSupport.testGetANTLRCharLiteralForChar behavior"
+        "observable": "direct Rust character literal support matches Java 4.13.2 for TestCharSupport.testGetANTLRCharLiteralForChar",
+        "scaffold_commit": "d29eacaf62e6c1afc5f3461025a53bc7bd26e1c4",
+        "primary_test_commit": "8970016dbac6705533db4d9ad55d996b61bed026"
       },
-      "closure_sha256": "82b201ede8bb8591e4efcaad9a529da897498a5c8114c58d9f73d52d24553b21",
-      "evidence_path": null
+      "closure_sha256": "234cc52b21e0c041d4483e4a432e17e1543ca87320c47cec9d2d3e1b8894a98e",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcharsupport-testgetantlrcharliteralforchar-5f81e9b4e6"
     },
     {
       "logical_id": "testcharsupport-testgetcharvaluefromcharingrammarliteral-94ddda545b",
@@ -14349,8 +14379,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcharsupport-testgetcharvaluefromcharingrammarliteral-94ddda545b-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcharsupport-testgetcharvaluefromcharingrammarliteral-94ddda545b",
+      "tdd_state": "done",
+      "rust_test": "grammar::char_support::tests::char_value_from_char_in_grammar_literal_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -14371,8 +14401,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCharSupport.testGetCharValueFromCharInGrammarLiteral behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `get_char_value_from_char_in_grammar_literal` in this scope",
+      "observable_equivalence": "direct Rust character literal support matches Java 4.13.2 for TestCharSupport.testGetCharValueFromCharInGrammarLiteral",
+      "scaffold_commit": "d29eacaf62e6c1afc5f3461025a53bc7bd26e1c4",
+      "primary_test_commit": "8970016dbac6705533db4d9ad55d996b61bed026",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::char_support::tests::",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `get_char_value_from_char_in_grammar_literal` in this scope"
+      },
+      "primary_implementation_commit": "28b8fe8bf72608dc19752d8cb39feab7ecb21fc3",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::char_support::tests::",
+        "result": "8 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcharsupport-testgetcharvaluefromcharingrammarliteral-94ddda545b",
         "source_case_ids": [
@@ -14380,14 +14422,17 @@
           "java-antlr:testcharsupport-testgetcharvaluefromcharingrammarliteral@0b6e8d776225"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcharsupport-testgetcharvaluefromcharingrammarliteral-94ddda545b",
+        "rust_test": "grammar::char_support::tests::char_value_from_char_in_grammar_literal_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCharSupport.testGetCharValueFromCharInGrammarLiteral behavior"
+        "observable": "direct Rust character literal support matches Java 4.13.2 for TestCharSupport.testGetCharValueFromCharInGrammarLiteral",
+        "scaffold_commit": "d29eacaf62e6c1afc5f3461025a53bc7bd26e1c4",
+        "primary_test_commit": "8970016dbac6705533db4d9ad55d996b61bed026"
       },
-      "closure_sha256": "06d12c63d376a2dc37c15b42c91fad86b42e40da476a57f35eb651a64fdbd720",
-      "evidence_path": null
+      "closure_sha256": "540586e0109141d54002621b3e3afb7b2c13bcecfb1cd2eac53b829611dbc366",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcharsupport-testgetcharvaluefromcharingrammarliteral-94ddda545b"
     },
     {
       "logical_id": "testcharsupport-testgetcharvaluefromgrammarcharliteral-7e17776ef5",
@@ -14399,8 +14444,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcharsupport-testgetcharvaluefromgrammarcharliteral-7e17776ef5-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcharsupport-testgetcharvaluefromgrammarcharliteral-7e17776ef5",
+      "tdd_state": "done",
+      "rust_test": "grammar::char_support::tests::char_value_from_grammar_char_literal_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -14421,8 +14466,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCharSupport.testGetCharValueFromGrammarCharLiteral behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `get_char_value_from_grammar_char_literal` in this scope",
+      "observable_equivalence": "direct Rust character literal support matches Java 4.13.2 for TestCharSupport.testGetCharValueFromGrammarCharLiteral",
+      "scaffold_commit": "d29eacaf62e6c1afc5f3461025a53bc7bd26e1c4",
+      "primary_test_commit": "8970016dbac6705533db4d9ad55d996b61bed026",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::char_support::tests::",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `get_char_value_from_grammar_char_literal` in this scope"
+      },
+      "primary_implementation_commit": "28b8fe8bf72608dc19752d8cb39feab7ecb21fc3",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::char_support::tests::",
+        "result": "8 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcharsupport-testgetcharvaluefromgrammarcharliteral-7e17776ef5",
         "source_case_ids": [
@@ -14430,14 +14487,17 @@
           "java-antlr:testcharsupport-testgetcharvaluefromgrammarcharliteral@d8f2935de92c"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcharsupport-testgetcharvaluefromgrammarcharliteral-7e17776ef5",
+        "rust_test": "grammar::char_support::tests::char_value_from_grammar_char_literal_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCharSupport.testGetCharValueFromGrammarCharLiteral behavior"
+        "observable": "direct Rust character literal support matches Java 4.13.2 for TestCharSupport.testGetCharValueFromGrammarCharLiteral",
+        "scaffold_commit": "d29eacaf62e6c1afc5f3461025a53bc7bd26e1c4",
+        "primary_test_commit": "8970016dbac6705533db4d9ad55d996b61bed026"
       },
-      "closure_sha256": "53c97d70faaab307660bfaf14f9cc0f849b9c113af617d2c4c25d514b17a1044",
-      "evidence_path": null
+      "closure_sha256": "d135846f0ae7221cb1deeed9a7ae8a6f53c876a9791b9cc72ca3bec82dac7e7c",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcharsupport-testgetcharvaluefromgrammarcharliteral-7e17776ef5"
     },
     {
       "logical_id": "testcharsupport-testgetintervalsetescapedstring-6bc4eb94c4",
@@ -14449,8 +14509,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcharsupport-testgetintervalsetescapedstring-6bc4eb94c4-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcharsupport-testgetintervalsetescapedstring-6bc4eb94c4",
+      "tdd_state": "done",
+      "rust_test": "grammar::char_support::tests::interval_set_escaped_string_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -14471,8 +14531,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCharSupport.testGetIntervalSetEscapedString behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `get_interval_set_escaped_string` in this scope",
+      "observable_equivalence": "direct Rust character literal support matches Java 4.13.2 for TestCharSupport.testGetIntervalSetEscapedString",
+      "scaffold_commit": "d29eacaf62e6c1afc5f3461025a53bc7bd26e1c4",
+      "primary_test_commit": "8970016dbac6705533db4d9ad55d996b61bed026",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::char_support::tests::",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `get_interval_set_escaped_string` in this scope"
+      },
+      "primary_implementation_commit": "28b8fe8bf72608dc19752d8cb39feab7ecb21fc3",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::char_support::tests::",
+        "result": "8 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcharsupport-testgetintervalsetescapedstring-6bc4eb94c4",
         "source_case_ids": [
@@ -14480,14 +14552,17 @@
           "java-antlr:testcharsupport-testgetintervalsetescapedstring@cd604fa3fc49"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcharsupport-testgetintervalsetescapedstring-6bc4eb94c4",
+        "rust_test": "grammar::char_support::tests::interval_set_escaped_string_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCharSupport.testGetIntervalSetEscapedString behavior"
+        "observable": "direct Rust character literal support matches Java 4.13.2 for TestCharSupport.testGetIntervalSetEscapedString",
+        "scaffold_commit": "d29eacaf62e6c1afc5f3461025a53bc7bd26e1c4",
+        "primary_test_commit": "8970016dbac6705533db4d9ad55d996b61bed026"
       },
-      "closure_sha256": "a4f5b46475d031722b13c65ce38e5ee40eb8a4749d1d6a9334e48813354e0571",
-      "evidence_path": null
+      "closure_sha256": "772c1b252e9bbf1492c2827bb5631733512a0ada8eb3544b0948d3de2096a36d",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcharsupport-testgetintervalsetescapedstring-6bc4eb94c4"
     },
     {
       "logical_id": "testcharsupport-testgetrangeescapedstring-ecd6bf8c9f",
@@ -14499,8 +14574,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcharsupport-testgetrangeescapedstring-ecd6bf8c9f-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcharsupport-testgetrangeescapedstring-ecd6bf8c9f",
+      "tdd_state": "done",
+      "rust_test": "grammar::char_support::tests::range_escaped_string_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -14521,8 +14596,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCharSupport.testGetRangeEscapedString behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `get_range_escaped_string` in this scope",
+      "observable_equivalence": "direct Rust character literal support matches Java 4.13.2 for TestCharSupport.testGetRangeEscapedString",
+      "scaffold_commit": "d29eacaf62e6c1afc5f3461025a53bc7bd26e1c4",
+      "primary_test_commit": "8970016dbac6705533db4d9ad55d996b61bed026",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::char_support::tests::",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `get_range_escaped_string` in this scope"
+      },
+      "primary_implementation_commit": "28b8fe8bf72608dc19752d8cb39feab7ecb21fc3",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::char_support::tests::",
+        "result": "8 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcharsupport-testgetrangeescapedstring-ecd6bf8c9f",
         "source_case_ids": [
@@ -14530,14 +14617,17 @@
           "java-antlr:testcharsupport-testgetrangeescapedstring@1a7a2798623b"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcharsupport-testgetrangeescapedstring-ecd6bf8c9f",
+        "rust_test": "grammar::char_support::tests::range_escaped_string_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCharSupport.testGetRangeEscapedString behavior"
+        "observable": "direct Rust character literal support matches Java 4.13.2 for TestCharSupport.testGetRangeEscapedString",
+        "scaffold_commit": "d29eacaf62e6c1afc5f3461025a53bc7bd26e1c4",
+        "primary_test_commit": "8970016dbac6705533db4d9ad55d996b61bed026"
       },
-      "closure_sha256": "367ddb7409c1da5cff21c35a49fac7ec63c865222b3b0ba408cf22c5c7f4c490",
-      "evidence_path": null
+      "closure_sha256": "9d105e92b85ac6c4d12e34678476c9825a7813c50060181a7950b6e04fadf49e",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcharsupport-testgetrangeescapedstring-ecd6bf8c9f"
     },
     {
       "logical_id": "testcharsupport-testgetstringfromgrammarstringliteral-601aa92456",
@@ -14549,8 +14639,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcharsupport-testgetstringfromgrammarstringliteral-601aa92456-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcharsupport-testgetstringfromgrammarstringliteral-601aa92456",
+      "tdd_state": "done",
+      "rust_test": "grammar::char_support::tests::string_from_grammar_string_literal_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -14571,8 +14661,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCharSupport.testGetStringFromGrammarStringLiteral behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `get_string_from_grammar_string_literal` in this scope",
+      "observable_equivalence": "direct Rust character literal support matches Java 4.13.2 for TestCharSupport.testGetStringFromGrammarStringLiteral",
+      "scaffold_commit": "d29eacaf62e6c1afc5f3461025a53bc7bd26e1c4",
+      "primary_test_commit": "8970016dbac6705533db4d9ad55d996b61bed026",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::char_support::tests::",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `get_string_from_grammar_string_literal` in this scope"
+      },
+      "primary_implementation_commit": "28b8fe8bf72608dc19752d8cb39feab7ecb21fc3",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::char_support::tests::",
+        "result": "8 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcharsupport-testgetstringfromgrammarstringliteral-601aa92456",
         "source_case_ids": [
@@ -14580,14 +14682,17 @@
           "java-antlr:testcharsupport-testgetstringfromgrammarstringliteral@e64022eede98"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcharsupport-testgetstringfromgrammarstringliteral-601aa92456",
+        "rust_test": "grammar::char_support::tests::string_from_grammar_string_literal_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCharSupport.testGetStringFromGrammarStringLiteral behavior"
+        "observable": "direct Rust character literal support matches Java 4.13.2 for TestCharSupport.testGetStringFromGrammarStringLiteral",
+        "scaffold_commit": "d29eacaf62e6c1afc5f3461025a53bc7bd26e1c4",
+        "primary_test_commit": "8970016dbac6705533db4d9ad55d996b61bed026"
       },
-      "closure_sha256": "ab834a1d4a30fe11206ad6c421ac046365410bbfb185af5c60045560e3e0e2ab",
-      "evidence_path": null
+      "closure_sha256": "71d7b64f60dbb686ff625e586a8595251225dc0f078d41ad3d4578dd9969a9ae",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcharsupport-testgetstringfromgrammarstringliteral-601aa92456"
     },
     {
       "logical_id": "testcharsupport-testparsehexvalue-de6de267d9",
@@ -14599,8 +14704,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcharsupport-testparsehexvalue-de6de267d9-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcharsupport-testparsehexvalue-de6de267d9",
+      "tdd_state": "done",
+      "rust_test": "grammar::char_support::tests::parse_hex_value_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -14621,8 +14726,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCharSupport.testParseHexValue behavior",
+      "expected_red_failure_fingerprint": "E0425: cannot find function `parse_hex_value` in this scope",
+      "observable_equivalence": "direct Rust character literal support matches Java 4.13.2 for TestCharSupport.testParseHexValue",
+      "scaffold_commit": "d29eacaf62e6c1afc5f3461025a53bc7bd26e1c4",
+      "primary_test_commit": "8970016dbac6705533db4d9ad55d996b61bed026",
+      "demonstrated_red": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::char_support::tests::",
+        "exit_code": 101,
+        "fingerprint": "E0425: cannot find function `parse_hex_value` in this scope"
+      },
+      "primary_implementation_commit": "28b8fe8bf72608dc19752d8cb39feab7ecb21fc3",
+      "green_result": {
+        "command": "cargo test --locked --bin antlr4-rust-gen grammar::char_support::tests::",
+        "result": "8 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcharsupport-testparsehexvalue-de6de267d9",
         "source_case_ids": [
@@ -14630,14 +14747,17 @@
           "java-antlr:testcharsupport-testparsehexvalue@faba617ceefc"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcharsupport-testparsehexvalue-de6de267d9",
+        "rust_test": "grammar::char_support::tests::parse_hex_value_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCharSupport.testParseHexValue behavior"
+        "observable": "direct Rust character literal support matches Java 4.13.2 for TestCharSupport.testParseHexValue",
+        "scaffold_commit": "d29eacaf62e6c1afc5f3461025a53bc7bd26e1c4",
+        "primary_test_commit": "8970016dbac6705533db4d9ad55d996b61bed026"
       },
-      "closure_sha256": "d40540f8c821cc5323f51b381fe211cb8292c4289e12c383f426a931d8fdbab5",
-      "evidence_path": null
+      "closure_sha256": "94bb7902d90e541fb4c5bfa51b1586c660fae677a5a4bc035858845556970ed6",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcharsupport-testparsehexvalue-de6de267d9"
     },
     {
       "logical_id": "testcodegeneration-assigntokennamestostringliteralarraysingeneratedparserrulecontexts-cd2030bed9",

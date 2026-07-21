@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcharsupport-testgetintervalsetescapedstring-6bc4eb94c4",
+  "active_revision_id": "testcharsupport-testgetintervalsetescapedstring-6bc4eb94c4-r1",
+  "revisions": [
+    {
+      "revision_id": "testcharsupport-testgetintervalsetescapedstring-6bc4eb94c4-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testcharsupport-testgetintervalsetescapedstring-6bc4eb94c4/revisions/testcharsupport-testgetintervalsetescapedstring-6bc4eb94c4-r1/manifest.json",
+      "closure_sha256": "772c1b252e9bbf1492c2827bb5631733512a0ada8eb3544b0948d3de2096a36d"
+    }
+  ]
+}

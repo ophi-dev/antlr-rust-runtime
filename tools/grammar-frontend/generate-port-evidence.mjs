@@ -17,6 +17,9 @@ import {
     BASIC_SEMANTIC_BASE_COMMIT,
     BASIC_SEMANTIC_IMPLEMENTATION_COMMIT,
     BASIC_SEMANTIC_TEST_COMMIT,
+    CHAR_SUPPORT_BASE_COMMIT,
+    CHAR_SUPPORT_IMPLEMENTATION_COMMIT,
+    CHAR_SUPPORT_TEST_COMMIT,
     EMPTY_VOCABULARY_BASE_COMMIT,
     EMPTY_VOCABULARY_IMPLEMENTATION_COMMIT,
     EMPTY_VOCABULARY_TEST_COMMIT,
@@ -98,6 +101,9 @@ const SCOPE_PARSING_TEST_START =
     "    mod upstream_scope_parsing {";
 const SCOPE_PARSING_TEST_END =
     "\n    #[test]\n    fn translates_attr_and_rule_reads()";
+const CHAR_SUPPORT_TEST_PATH =
+    "src/bin_support/grammar/char_support.rs";
+const CHAR_SUPPORT_TEST_MARKER = "#[cfg(test)]\nmod tests {";
 const EMPTY_VOCABULARY_LOGICAL_ID =
     "testvocabulary-testemptyvocabulary-66d31ad014";
 const SYMBOL_INFO_SHA256 =
@@ -735,6 +741,49 @@ const scopeParsingLockedSections = [
         sha256: digest(checkedInScopeParsingTest),
     },
 ];
+const checkedInCharSupportTests = sectionAtMarker(
+    await readFile(resolve(repoRoot, CHAR_SUPPORT_TEST_PATH), "utf8"),
+    CHAR_SUPPORT_TEST_MARKER,
+);
+const recordedCharSupportTests = gitShowOptional(
+    repoRoot,
+    CHAR_SUPPORT_TEST_COMMIT,
+    CHAR_SUPPORT_TEST_PATH,
+);
+const implementedCharSupportTests = gitShowOptional(
+    repoRoot,
+    CHAR_SUPPORT_IMPLEMENTATION_COMMIT,
+    CHAR_SUPPORT_TEST_PATH,
+);
+if (
+    recordedCharSupportTests === null ||
+    sectionAtMarker(
+        recordedCharSupportTests,
+        CHAR_SUPPORT_TEST_MARKER,
+    ) !== checkedInCharSupportTests
+) {
+    throw new Error(
+        "checked-in character support ports differ from their test commit",
+    );
+}
+if (
+    implementedCharSupportTests === null ||
+    sectionAtMarker(
+        implementedCharSupportTests,
+        CHAR_SUPPORT_TEST_MARKER,
+    ) !== checkedInCharSupportTests
+) {
+    throw new Error(
+        "character support implementation changed the locked test ports",
+    );
+}
+const charSupportLockedSections = [
+    {
+        path: CHAR_SUPPORT_TEST_PATH,
+        marker: CHAR_SUPPORT_TEST_MARKER,
+        sha256: digest(checkedInCharSupportTests),
+    },
+];
 
 const upstreamByLogicalId = new Map(
     testMap.rows.map((row) => [row.logical_id, row]),
@@ -850,6 +899,9 @@ for (const row of completedRows) {
     const phaseBScopeParsing = row.logical_id.startsWith(
         "testscopeparsing-",
     );
+    const phaseBCharSupport = row.logical_id.startsWith(
+        "testcharsupport-",
+    );
     if (
         row.owner_phase === "B" &&
         !phaseBAtnSerialization &&
@@ -859,7 +911,8 @@ for (const row of completedRows) {
         !phaseBTokenPosition &&
         !phaseBTopologicalSort &&
         !phaseBVocabulary &&
-        !phaseBScopeParsing
+        !phaseBScopeParsing &&
+        !phaseBCharSupport
     ) {
         throw new Error(`missing Phase B evidence profile for ${row.logical_id}`);
     }
@@ -958,6 +1011,16 @@ for (const row of completedRows) {
                             reachability:
                                 "the scope parsing implementation commit is directly based on its locked red test",
                         }
+                      : phaseBCharSupport
+                        ? {
+                              lockedSections: charSupportLockedSections,
+                              scaffoldCommit: CHAR_SUPPORT_BASE_COMMIT,
+                              testParent: CHAR_SUPPORT_BASE_COMMIT,
+                              implementationParent:
+                                  CHAR_SUPPORT_TEST_COMMIT,
+                              reachability:
+                                  "the character support implementation commit is directly based on its locked red tests",
+                          }
           : null;
     await addEvidence({
         logicalId: row.logical_id,
@@ -1040,6 +1103,15 @@ for (const row of completedRows) {
                                 java_compatibility_verdict:
                                     "exact Java 4.13.2 scope declaration parsing",
                             }
+                          : phaseBCharSupport
+                            ? {
+                                  primary:
+                                      "the shared Rust character support matches Java 4.13.2 literal parsing, escaping, ranges, and capitalization",
+                                  alternate:
+                                      "the paired pinned antlr-ng TestCharSupport cases expose the same utility behavior",
+                                  java_compatibility_verdict:
+                                      "exact Java 4.13.2 TestCharSupport outputs",
+                              }
             : {
                   primary: coveredExisting
                       ? "the case-specific Rust port matches the pinned accepted and rejected syntax outcomes"
@@ -1084,6 +1156,7 @@ for (const row of completedRows) {
             phaseBErrorSets ||
             phaseBVocabulary ||
             phaseBScopeParsing ||
+            phaseBCharSupport ||
             (phaseBTokenPosition && !coveredExisting)
             ? row.demonstrated_red
             : undefined,

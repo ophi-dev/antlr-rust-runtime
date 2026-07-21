@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcharsupport-testgetstringfromgrammarstringliteral-601aa92456",
+  "revision_id": "testcharsupport-testgetstringfromgrammarstringliteral-601aa92456-r1",
+  "primary_test_source": {
+    "implementation": "java-antlr",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "source_case_ids": [
+      "java-antlr:testcharsupport-testgetstringfromgrammarstringliteral@e64022eede98"
+    ]
+  },
+  "alternate_test_source": {
+    "implementation": "antlr-ng",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "source_case_ids": [
+      "antlr-ng:testcharsupport-testgetstringfromgrammarstringliteral@e64022eede98"
+    ]
+  },
+  "outcomes": {
+    "primary": "the shared Rust character support matches Java 4.13.2 literal parsing, escaping, ranges, and capitalization",
+    "alternate": "the paired pinned antlr-ng TestCharSupport cases expose the same utility behavior",
+    "java_compatibility_verdict": "exact Java 4.13.2 TestCharSupport outputs"
+  }
+}

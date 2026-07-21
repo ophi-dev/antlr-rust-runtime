@@ -14,6 +14,9 @@ import {
     BASIC_SEMANTIC_BASE_COMMIT,
     BASIC_SEMANTIC_IMPLEMENTATION_COMMIT,
     BASIC_SEMANTIC_TEST_COMMIT,
+    CHAR_SUPPORT_BASE_COMMIT,
+    CHAR_SUPPORT_IMPLEMENTATION_COMMIT,
+    CHAR_SUPPORT_TEST_COMMIT,
     EMPTY_VOCABULARY_BASE_COMMIT,
     EMPTY_VOCABULARY_IMPLEMENTATION_COMMIT,
     EMPTY_VOCABULARY_TEST_COMMIT,
@@ -271,6 +274,9 @@ for (const [logicalId, record] of records) {
         const scopeParsing = logicalId.startsWith(
             "testscopeparsing-",
         );
+        const charSupport = logicalId.startsWith(
+            "testcharsupport-",
+        );
         if (resolution === "verified-covered-existing") {
             if (atnSerialization) {
                 expect(
@@ -476,6 +482,23 @@ for (const [logicalId, record] of records) {
                         manifest.ancestry.primary_implementation_parent ===
                             SCOPE_PARSING_TEST_COMMIT,
                     `${logicalId} scope parsing recorded ancestry differs`,
+                );
+            } else if (charSupport) {
+                expect(
+                    manifest.commits.scaffold ===
+                            CHAR_SUPPORT_BASE_COMMIT &&
+                        manifest.commits.primary_test ===
+                            CHAR_SUPPORT_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            CHAR_SUPPORT_IMPLEMENTATION_COMMIT,
+                    `${logicalId} character support evidence commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            CHAR_SUPPORT_BASE_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            CHAR_SUPPORT_TEST_COMMIT,
+                    `${logicalId} character support recorded ancestry differs`,
                 );
             } else {
                 expect(
