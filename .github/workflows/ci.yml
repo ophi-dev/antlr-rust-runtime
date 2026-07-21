@@ -33,3 +33,9 @@ jobs:
 
       - name: Run unit tests
         run: cargo test --locked
+
+      - uses: ophi-dev/mehen@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          paths: |
+            src
