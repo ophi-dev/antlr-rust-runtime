@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 
-use crate::embedded::parse_attr_decls_with_offsets;
+use crate::embedded::parse_scope_decls;
 
 use super::diagnostic::{CompilationError, Diagnostic, Severity};
 use super::left_recursion::rewrite_immediate_left_recursion;
@@ -954,13 +954,13 @@ fn assign_modes(
 }
 
 fn attribute_symbols(clause: &AttributeClause) -> Vec<AttributeSymbol> {
-    parse_attr_decls_with_offsets(&clause.text)
+    parse_scope_decls(&clause.text)
         .into_iter()
-        .map(|located| {
+        .map(|declaration| {
             let offset =
-                u32::try_from(located.name_offset).expect("attribute name offset exceeds u32");
-            let length = u32::try_from(located.declaration.name.len())
-                .expect("attribute name length exceeds u32");
+                u32::try_from(declaration.name_offset).expect("attribute name offset exceeds u32");
+            let length =
+                u32::try_from(declaration.name.len()).expect("attribute name length exceeds u32");
             let start = clause
                 .span
                 .bytes
@@ -972,8 +972,8 @@ fn attribute_symbols(clause: &AttributeClause) -> Vec<AttributeSymbol> {
                 .checked_add(length)
                 .expect("attribute name span exceeds u32");
             AttributeSymbol {
-                name: located.declaration.name,
-                ty: located.declaration.ty,
+                name: declaration.name,
+                ty: declaration.ty.unwrap_or_default(),
                 span: super::frontend::SourceSpan {
                     source: clause.span.source,
                     bytes: start..end,
