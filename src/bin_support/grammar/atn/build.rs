@@ -152,6 +152,13 @@ impl BuildGraph {
             kind,
             prepend,
         } = spec;
+        if let Some(existing) = self.state(source).transitions.iter().copied().find(|id| {
+            let transition = self.transition(*id);
+            transition.target == target && transition.kind == kind
+        }) {
+            provenance.record_transition(existing, origins);
+            return existing;
+        }
         let id = BuildTransitionId::new(
             u32::try_from(self.transitions.len()).expect("ATN transition count exceeds u32"),
         );

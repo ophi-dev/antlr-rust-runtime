@@ -731,6 +731,13 @@ impl ModelBuilder<'_> {
         if let Some(terminal) = node.child_rule(p::RULE_TERMINAL_DEF) {
             return terminal_kind(terminal, true);
         }
+        if let Some(reference) = node.child_terminal(p::RULE_REF) {
+            return ElementKind::RuleCall(RuleCall {
+                name: reference.text().to_owned(),
+                arguments: None,
+                precedence: None,
+            });
+        }
         if let Some(not_set) = node.child_rule(p::RULE_NOT_SET) {
             return ElementKind::Set {
                 inverted: true,

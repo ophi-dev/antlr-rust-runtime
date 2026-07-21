@@ -78,7 +78,7 @@
     },
     {
       "path": "third_party/antlr-v4-grammar/ANTLRv4Parser.g4",
-      "sha256": "99cbd18892749a718323c9a8b96c988cecc55eff34ac9addde1971e55c607990"
+      "sha256": "1286e542499e4480b3ab5ff60e4a4a7faf21134ca4c4f8f1f468f30095fa25cb"
     },
     {
       "path": "third_party/antlr-v4-grammar/predefined.tokens",
@@ -96,7 +96,7 @@
     },
     {
       "seed_path": "interp/ANTLRv4Parser.interp",
-      "sha256": "6e5424ed23ffe75b6a0bbae24492bd2aab6bc5a425ef99ac8ff2ddefccdbf906"
+      "sha256": "b36dd7cd2f6c425dd837376a9f73cf4e6450b7a1be2dac3290db1ca2c93fcaa6"
     }
   ],
   "outputs": [
@@ -108,7 +108,7 @@
     {
       "seed_path": "generated/antl_rv4_parser.rs",
       "checked_in_path": "src/bin_support/grammar/generated/antlr_v4_parser.rs",
-      "sha256": "c47f81e147f0152164320da3f863d4381426d753762fc5259f6a9bf812aea45a"
+      "sha256": "87f4dc3c1962204a7f9d99368c2be3377a5508b3d32be74d8dcee29d99a0890c"
     }
   ]
 }
