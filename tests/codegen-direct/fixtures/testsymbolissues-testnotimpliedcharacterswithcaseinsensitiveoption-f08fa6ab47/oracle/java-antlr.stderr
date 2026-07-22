@@ -1,0 +1,1 @@
+warning(185): Test.g4:3:7: Range A..z probably contains not implied characters [\]^_`. Both bounds should be defined in lower or UPPER case

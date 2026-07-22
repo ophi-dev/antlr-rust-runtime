@@ -1,0 +1,2 @@
+error(75): L.g4:3:0: label left type mismatch with previous definition: TOKEN_LABEL!=RULE_LABEL
+error(75): L.g4:3:0: label right type mismatch with previous definition: RULE_LABEL!=TOKEN_LABEL

@@ -2510,6 +2510,444 @@ mod tests {
         }
     }
 
+    mod upstream_symbol_issues {
+        use super::*;
+        use crate::grammar::diagnostic::Severity::{Error, Warning};
+
+        #[derive(Clone, Copy)]
+        enum FixtureKind {
+            Combined,
+            Lexer,
+            Parser,
+        }
+
+        macro_rules! case {
+            (
+                $name:ident,
+                $fixture:literal,
+                $root:literal,
+                $kind:ident,
+                [$($expected:expr),* $(,)?]
+            ) => {
+                mod $name {
+                    use super::*;
+
+                    #[test]
+                    fn matches_java() {
+                        assert_symbol_fixture(
+                            $fixture,
+                            $root,
+                            FixtureKind::$kind,
+                            &[$($expected),*],
+                        );
+                    }
+                }
+            };
+        }
+
+        case!(
+            a,
+            "testsymbolissues-testa-2e644f226d",
+            "A.g4",
+            Combined,
+            [
+                at("G4S016", Error, 5, 1),
+                at("G4S016", Error, 7, 1),
+                at("G4S014", Warning, 2, 10),
+                at("G4S014", Warning, 2, 21),
+                at("G4S016", Error, 5, 1),
+                at("G4S030", Warning, 9, 27),
+                at("G4S030", Warning, 10, 20),
+                at("G4S030", Warning, 11, 4),
+                at("G4S042", Error, 9, 37),
+                at("G4S043", Error, 10, 31),
+            ]
+        );
+        case!(
+            b,
+            "testsymbolissues-testb-9ccf14c21c",
+            "B.g4",
+            Parser,
+            [
+                at("G4S038", Error, 4, 4),
+                at("G4S038", Error, 4, 9),
+                at("G4S039", Error, 4, 15),
+                at("G4S041", Error, 6, 9),
+                at("G4S031", Error, 4, 20),
+            ]
+        );
+        case!(
+            case_insensitive_chars_collision,
+            "testsymbolissues-testcaseinsensitivecharscollision-1c64211182",
+            "L.g4",
+            Lexer,
+            [
+                at("G4S068", Warning, 3, 18),
+                at("G4S068", Warning, 4, 32),
+                unlocated("G4S068", Warning),
+                unlocated("G4S068", Warning),
+            ]
+        );
+        case!(
+            case_insensitive_option_in_parser_rule,
+            "testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149",
+            "G.g4",
+            Combined,
+            [at("G4S014", Warning, 2, 15)]
+        );
+        case!(
+            case_insensitive_with_unicode_ranges,
+            "testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea",
+            "L.g4",
+            Lexer,
+            []
+        );
+        case!(
+            chars_collision,
+            "testsymbolissues-testcharscollision-2c32d921bf",
+            "L.g4",
+            Lexer,
+            [
+                at("G4S068", Warning, 2, 18),
+                at("G4S068", Warning, 3, 18),
+                at("G4S068", Warning, 4, 38),
+                unlocated("G4S068", Warning),
+                unlocated("G4S068", Warning),
+            ]
+        );
+        case!(
+            d,
+            "testsymbolissues-testd-8d77089073",
+            "D.g4",
+            Parser,
+            [at("G4S062", Error, 4, 21), at("G4S059", Error, 6, 22),]
+        );
+        case!(
+            duplicated_commands,
+            "testsymbolissues-testduplicatedcommands-e809cd0730",
+            "Lexer.g4",
+            Lexer,
+            [
+                at("G4S046", Warning, 4, 27),
+                at("G4S046", Warning, 12, 34),
+                at("G4S046", Warning, 13, 40),
+                at("G4S046", Warning, 13, 59),
+            ]
+        );
+        case!(
+            e,
+            "testsymbolissues-teste-cd9e1fc41d",
+            "E.g4",
+            Combined,
+            [at("G4S019", Warning, 3, 4)]
+        );
+        case!(
+            empty_lexer_mode_detection,
+            "testsymbolissues-testemptylexermodedetection-1e410b0d53",
+            "L.g4",
+            Lexer,
+            [at("G4S026", Error, 3, 5)]
+        );
+        case!(
+            empty_lexer_rule_detection,
+            "testsymbolissues-testemptylexerruledetection-f95b017788",
+            "L.g4",
+            Lexer,
+            [at("G4A006", Warning, 3, 0), at("G4A006", Warning, 5, 2),]
+        );
+        case!(
+            f,
+            "testsymbolissues-testf-d585f92343",
+            "F.g4",
+            Lexer,
+            [at("G4S034", Error, 3, 0)]
+        );
+        case!(
+            illegal_case_insensitive_option_value,
+            "testsymbolissues-testillegalcaseinsensitiveoptionvalue-3c5253859c",
+            "L.g4",
+            Lexer,
+            [at("G4S015", Warning, 2, 28), at("G4S015", Warning, 3, 36),]
+        );
+        case!(
+            incompatible_commands,
+            "testsymbolissues-testincompatiblecommands-43fa4a3fd8",
+            "L.g4",
+            Lexer,
+            [
+                at("G4S047", Warning, 5, 20),
+                at("G4S047", Warning, 6, 20),
+                at("G4S047", Warning, 7, 20),
+                at("G4S047", Warning, 8, 20),
+                at("G4S047", Warning, 9, 20),
+                at("G4S047", Warning, 10, 20),
+                at("G4S047", Warning, 11, 27),
+                at("G4S047", Warning, 12, 27),
+                at("G4S047", Warning, 13, 33),
+                at("G4S047", Warning, 14, 33),
+            ]
+        );
+        case!(
+            labels_for_tokens_with_mixed_types,
+            "testsymbolissues-testlabelsfortokenswithmixedtypes-0a6a086afc",
+            "L.g4",
+            Combined,
+            [
+                at("G4S041", Error, 8, 13),
+                at("G4S041", Error, 11, 15),
+                at("G4S041", Error, 24, 0),
+                at("G4S041", Error, 24, 0),
+                at("G4S041", Error, 24, 0),
+            ]
+        );
+        case!(
+            labels_for_tokens_with_mixed_types_lr_with_labels,
+            "testsymbolissues-testlabelsfortokenswithmixedtypeslrwithlabels-5841a22629",
+            "L.g4",
+            Combined,
+            []
+        );
+        case!(
+            labels_for_tokens_with_mixed_types_lr_without_labels,
+            "testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e",
+            "L.g4",
+            Combined,
+            [at("G4S041", Error, 3, 0), at("G4S041", Error, 3, 0),]
+        );
+        case!(
+            not_implied_characters,
+            "testsymbolissues-testnotimpliedcharacters-4c3481ae89",
+            "Test.g4",
+            Lexer,
+            [at("G4S070", Warning, 2, 8), at("G4S070", Warning, 3, 8),]
+        );
+        case!(
+            not_implied_characters_with_case_insensitive_option,
+            "testsymbolissues-testnotimpliedcharacterswithcaseinsensitiveoption-f08fa6ab47",
+            "Test.g4",
+            Lexer,
+            [at("G4S070", Warning, 3, 7)]
+        );
+        case!(
+            redundant_case_insensitive_lexer_rule_option_true,
+            "testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c",
+            "L.g4",
+            Lexer,
+            [at("G4S067", Warning, 3, 16)]
+        );
+        case!(
+            redundant_case_insensitive_lexer_rule_option_false,
+            "testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c-variant-2",
+            "L.g4",
+            Lexer,
+            [at("G4S067", Warning, 3, 16)]
+        );
+        case!(
+            string_literal_redefinitions,
+            "testsymbolissues-teststringliteralredefs-9b1f541902",
+            "L.g4",
+            Lexer,
+            []
+        );
+        case!(
+            declaration_conflicts_with_reserved_names,
+            "testsymbolissues-testtokensmodeschannelsdeclarationconflictswithreserved-9319caf796",
+            "L.g4",
+            Lexer,
+            [
+                at("G4S003", Error, 5, 0),
+                at("G4S024", Error, 4, 0),
+                at("G4S021", Error, 2, 11),
+                at("G4S021", Error, 2, 17),
+            ]
+        );
+        case!(
+            command_arguments_conflict_with_reserved_names,
+            "testsymbolissues-testtokensmodeschannelsusingconflictswithreserved-c8a93f7227",
+            "L.g4",
+            Lexer,
+            [
+                at("G4S021", Error, 2, 18),
+                at("G4S018", Error, 3, 15),
+                at("G4S024", Error, 4, 15),
+            ]
+        );
+        case!(
+            undefined_label_regression,
+            "testsymbolissues-testundefinedlabel-d2fa215436",
+            "Test.g4",
+            Combined,
+            [at("G4S042", Error, 3, 6)]
+        );
+        case!(
+            unreachable_tokens,
+            "testsymbolissues-testunreachabletokens-43df5f5f59",
+            "Test.g4",
+            Lexer,
+            [
+                at("G4S069", Warning, 4, 0),
+                at("G4S069", Warning, 5, 0),
+                at("G4S069", Warning, 7, 0),
+                at("G4S069", Warning, 7, 0),
+                at("G4S069", Warning, 9, 0),
+                at("G4S069", Warning, 11, 0),
+                at("G4S069", Warning, 12, 0),
+                at("G4S069", Warning, 13, 0),
+                at("G4S069", Warning, 13, 0),
+            ]
+        );
+        case!(
+            wrong_id_for_type_channel_mode_command,
+            "testsymbolissues-testwrongidfortypechannelmodecommand-5245d6d5c3",
+            "L.g4",
+            Lexer,
+            [
+                at("G4S052", Error, 4, 22),
+                at("G4S053", Error, 4, 41),
+                at("G4S051", Error, 4, 54),
+            ]
+        );
+
+        #[derive(Clone, Copy)]
+        struct ExpectedDiagnostic {
+            code: &'static str,
+            severity: crate::grammar::diagnostic::Severity,
+            position: Option<(usize, usize)>,
+        }
+
+        const fn at(
+            code: &'static str,
+            severity: crate::grammar::diagnostic::Severity,
+            line: usize,
+            column: usize,
+        ) -> ExpectedDiagnostic {
+            ExpectedDiagnostic {
+                code,
+                severity,
+                position: Some((line, column)),
+            }
+        }
+
+        const fn unlocated(
+            code: &'static str,
+            severity: crate::grammar::diagnostic::Severity,
+        ) -> ExpectedDiagnostic {
+            ExpectedDiagnostic {
+                code,
+                severity,
+                position: None,
+            }
+        }
+
+        fn assert_symbol_fixture(
+            fixture_name: &str,
+            root: &str,
+            kind: FixtureKind,
+            expected: &[ExpectedDiagnostic],
+        ) {
+            let expects_error = expected
+                .iter()
+                .any(|diagnostic| diagnostic.severity == Error);
+            match compile_fixture(fixture_name, &[root]) {
+                Ok(compilation) => {
+                    assert!(!expects_error, "{fixture_name}: expected semantic failure");
+                    assert_diagnostics(fixture_name, root, &compilation.diagnostics, expected);
+                    assert_artifacts(fixture_name, root, kind, &compilation);
+                }
+                Err(error) => {
+                    assert!(expects_error, "{fixture_name}: {error:#?}");
+                    assert_diagnostics(fixture_name, root, error.diagnostics(), expected);
+                }
+            }
+        }
+
+        fn assert_diagnostics(
+            fixture_name: &str,
+            root: &str,
+            actual: &[crate::grammar::diagnostic::Diagnostic],
+            expected: &[ExpectedDiagnostic],
+        ) {
+            assert_eq!(actual.len(), expected.len(), "{fixture_name}: {actual:#?}");
+            let source = std::fs::read_to_string(fixture(fixture_name).join(root))
+                .expect("symbol fixture source");
+            for (actual, expected) in actual.iter().zip(expected) {
+                assert_eq!(actual.code, expected.code, "{fixture_name}: {actual:#?}");
+                assert_eq!(
+                    actual.severity, expected.severity,
+                    "{fixture_name}: {actual:#?}",
+                );
+                if let Some((line, column)) = expected.position {
+                    assert_eq!(
+                        actual.primary.bytes.start,
+                        fixture_byte_offset(&source, line, column),
+                        "{fixture_name}: expected {line}:{column} for {actual:#?}",
+                    );
+                }
+            }
+        }
+
+        fn assert_artifacts(
+            fixture_name: &str,
+            root: &str,
+            kind: FixtureKind,
+            compilation: &Compilation,
+        ) {
+            let directory = fixture(fixture_name);
+            let grammar_name = root
+                .strip_suffix(".g4")
+                .expect("symbol fixture root ends in .g4");
+            match kind {
+                FixtureKind::Lexer => {
+                    let lexer = lexer_named(compilation, grammar_name);
+                    assert_lexer_interp(lexer, &directory.join(format!("{grammar_name}.interp")));
+                    assert_tokens(
+                        &lexer.semantic.recognizer,
+                        &directory.join(format!("{grammar_name}.tokens")),
+                    );
+                }
+                FixtureKind::Parser => {
+                    let parser = parser_named(compilation, grammar_name);
+                    assert_parser_interp(parser, &directory.join(format!("{grammar_name}.interp")));
+                    assert_tokens(
+                        &parser.semantic.recognizer,
+                        &directory.join(format!("{grammar_name}.tokens")),
+                    );
+                }
+                FixtureKind::Combined => {
+                    let parser = parser_named(compilation, &format!("{grammar_name}Parser"));
+                    assert_parser_interp(parser, &directory.join(format!("{grammar_name}.interp")));
+                    assert_tokens(
+                        &parser.semantic.recognizer,
+                        &directory.join(format!("{grammar_name}.tokens")),
+                    );
+                    let lexer_interp = directory.join(format!("{grammar_name}Lexer.interp"));
+                    if lexer_interp.is_file() {
+                        let lexer = lexer_named(compilation, &format!("{grammar_name}Lexer"));
+                        assert_lexer_interp(lexer, &lexer_interp);
+                        assert_tokens(
+                            &lexer.semantic.recognizer,
+                            &directory.join(format!("{grammar_name}Lexer.tokens")),
+                        );
+                    }
+                }
+            }
+        }
+
+        fn assert_tokens(recognizer: &RecognizerModel, expected_path: &Path) {
+            let expected = std::fs::read_to_string(expected_path).expect("fixture tokens");
+            let mut actual = String::new();
+            for name in &recognizer.vocabulary.name_order {
+                let number = recognizer.vocabulary.by_name[name];
+                writeln!(actual, "{name}={number}").expect("writing to String cannot fail");
+            }
+            for literal in &recognizer.vocabulary.literal_order {
+                let number = recognizer.vocabulary.by_literal[literal];
+                writeln!(actual, "{literal}={number}").expect("writing to String cannot fail");
+            }
+            assert_eq!(actual, expected, "{}", expected_path.display());
+        }
+    }
+
     mod upstream_token_position_options {
         use super::*;
         use crate::grammar::model::{Block, ElementKind, SetElement, Terminal};

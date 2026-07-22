@@ -1,0 +1,10 @@
+error(94): A.g4:5:1: redefinition of members action
+error(94): A.g4:7:1: redefinition of header action
+warning(83): A.g4:2:10: unsupported option opt
+warning(83): A.g4:2:21: unsupported option k
+error(94): A.g4:5:1: redefinition of members action
+warning(125): A.g4:9:27: implicit definition of token X in parser
+warning(125): A.g4:10:20: implicit definition of token Y in parser
+warning(125): A.g4:11:4: implicit definition of token FJKD in parser
+error(80): A.g4:9:37: rule b has no defined parameters
+error(79): A.g4:10:31: missing argument(s) on rule reference: a

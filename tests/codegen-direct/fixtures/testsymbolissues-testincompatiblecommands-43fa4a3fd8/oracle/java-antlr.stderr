@@ -1,0 +1,10 @@
+warning(179): L.g4:5:20: incompatible commands skip and more
+warning(179): L.g4:6:20: incompatible commands skip and type
+warning(179): L.g4:7:20: incompatible commands skip and channel
+warning(179): L.g4:8:20: incompatible commands more and type
+warning(179): L.g4:9:20: incompatible commands more and channel
+warning(179): L.g4:10:20: incompatible commands more and skip
+warning(179): L.g4:11:27: incompatible commands type and skip
+warning(179): L.g4:12:27: incompatible commands type and more
+warning(179): L.g4:13:33: incompatible commands channel and skip
+warning(179): L.g4:14:33: incompatible commands channel and more

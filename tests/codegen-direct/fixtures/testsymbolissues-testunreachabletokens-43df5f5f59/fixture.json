@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "Test.g4"
+  ],
+  "logical_ids": [
+    "testsymbolissues-testunreachabletokens-43df5f5f59"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:testsymbolissues-testunreachabletokens@810ac1c78fa8",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestSymbolIssues.spec.ts",
+      "case": "testUnreachableTokens",
+      "source_sha256": "8f7a08f5a51689c74a7de052bc8dd7253a7ccb58f4658fdbc1d99f674e5d5b15"
+    },
+    {
+      "source_case_id": "java-antlr:testsymbolissues-testunreachabletokens@810ac1c78fa8",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestSymbolIssues.java",
+      "case": "testUnreachableTokens",
+      "source_sha256": "777564e24248da6e2789fe6c223c0b91d2df65b1b6b5000505cb011113d27c0d"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testsymbolissues-testunreachabletokens@810ac1c78fa8",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestSymbolIssues.java",
+    "case": "testUnreachableTokens",
+    "source_sha256": "777564e24248da6e2789fe6c223c0b91d2df65b1b6b5000505cb011113d27c0d"
+  },
+  "antlr_ng_test": {
+    "source_case_id": "antlr-ng:testsymbolissues-testunreachabletokens@810ac1c78fa8",
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/TestSymbolIssues.spec.ts",
+    "case": "testUnreachableTokens",
+    "source_sha256": "8f7a08f5a51689c74a7de052bc8dd7253a7ccb58f4658fdbc1d99f674e5d5b15"
+  },
+  "expected": "success",
+  "symbol_issues_oracle": {
+    "artifacts": [
+      ".interp",
+      ".tokens",
+      "diagnostics"
+    ],
+    "agreement": "Java and antlr-ng use the same grammar input and expected diagnostic categories",
+    "compatibility_verdict": "Java ANTLR 4.13.2"
+  },
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "unicode_data": {
+      "generator": "org.antlr.v4.unicode.UnicodeDataTemplateController",
+      "helper": "tools/grammar-frontend/oracle/GenerateUnicodeData.java",
+      "helper_sha256": "9adec4f06cb31c7c7e408336e8fe935741f6d4ec5e8113e76450551ec1e3967f",
+      "icu4j_version": "78.1.0.0",
+      "icu4j_jar_sha256": "bbb70d3be23110d7295823eee0c2e896ac3b619b3c0f26168f65eb972df51d2a",
+      "unicode_version": "17.0.0.0"
+    },
+    "exit_status": 0
+  },
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh testsymbolissues-testunreachabletokens-43df5f5f59 --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar --icu-jar /tmp/antlr-cleanroom/tools/icu4j-78.1.jar",
+  "files": {
+    "Test.g4": "def840cf55ae51e546e1f0d86822af95178d355736abf6db86a7c9f58a85410c",
+    "Test.interp": "dd03c987ed5f69f938791d69535eff197a950acb93235d05a9ad198b5824364b",
+    "Test.tokens": "44f132271a97826fe4851c75934151cb7ae563909d8f28c8f5e94d7f58ca1df3",
+    "diagnostics.json": "486f6adb4bffeb0789c4618c2deafbd588897d1014268464b4ef01ba57e9519e",
+    "oracle/java-antlr.stderr": "dc0c67f52b2666a93b20a271fad1fe11018b6ab401da22eb3f05b4432a23d75e",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stdout": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+  }
+}

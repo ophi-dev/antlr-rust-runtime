@@ -1,0 +1,4 @@
+warning(178): Lexer.g4:4:27: duplicated command mode
+warning(178): Lexer.g4:12:34: duplicated command type
+warning(178): Lexer.g4:13:40: duplicated command channel
+warning(178): Lexer.g4:13:59: duplicated command channel

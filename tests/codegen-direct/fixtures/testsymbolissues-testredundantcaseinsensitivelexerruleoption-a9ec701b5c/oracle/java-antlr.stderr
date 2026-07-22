@@ -1,0 +1,1 @@
+warning(187): L.g4:3:16: caseInsensitive lexer rule option is redundant because its value equals to global value (true)

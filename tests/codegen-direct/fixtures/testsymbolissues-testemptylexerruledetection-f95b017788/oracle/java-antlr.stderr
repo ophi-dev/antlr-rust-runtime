@@ -1,0 +1,2 @@
+warning(146): L.g4:3:0: non-fragment lexer rule WS can match the empty string
+warning(146): L.g4:5:2: non-fragment lexer rule B can match the empty string

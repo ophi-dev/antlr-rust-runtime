@@ -1,0 +1,3 @@
+error(172): L.g4:2:18: cannot use or declare channel with reserved name SKIP
+error(171): L.g4:3:15: cannot use or declare token with reserved name MORE
+error(173): L.g4:4:15: cannot use or declare mode with reserved name SKIP
