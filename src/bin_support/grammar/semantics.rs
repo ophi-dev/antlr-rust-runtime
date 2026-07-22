@@ -3,13 +3,14 @@ use std::fs;
 
 use crate::embedded::parse_scope_decls;
 
+use super::char_support::decode_string_literal;
 use super::diagnostic::{CompilationError, Diagnostic, Severity};
 use super::left_recursion::rewrite_immediate_left_recursion;
 use super::model::{
     ActionBinding, ActionId, Alternative, AttributeClause, AttributeSymbol, Block, Element,
-    ElementKind, GrammarId, GrammarKind, GrammarPrequel, GrammarUnit, LabelBinding, LabelKind,
-    LexerCommandBinding, ModelIdAllocator, PredicateBinding, Quantifier, RecognizerModel,
-    ResolvedLexerCommand, Rule, RuleAttributes, RuleCallBinding, RuleId, RuleKind,
+    ElementKind, GrammarId, GrammarKind, GrammarPrequel, GrammarUnit, Label, LabelBinding,
+    LabelKind, LexerCommandBinding, ModelIdAllocator, PredicateBinding, Quantifier,
+    RecognizerModel, ResolvedLexerCommand, Rule, RuleAttributes, RuleCallBinding, RuleId, RuleKind,
     SemanticBindings, SemanticGrammar, SetElement, Terminal, TerminalBinding, TokenDeclaration,
     TokenSymbol, TokenSymbolId, Vocabulary,
 };
@@ -59,26 +60,33 @@ pub(crate) fn analyze(
 ) -> Result<SemanticGrammarSet, CompilationError> {
     let mut diagnostics = std::mem::take(&mut integrated.diagnostics);
     diagnostics.extend(basic_checks(&integrated.grammar.units));
-    if has_errors(&diagnostics) {
+    if has_blocking_basic_errors(&diagnostics) {
         return Err(CompilationError::new(diagnostics));
     }
 
+    let symbol_units = integrated
+        .grammar
+        .units
+        .iter()
+        .map(|unit| (unit.id, unit.clone()))
+        .collect::<BTreeMap<_, _>>();
     diagnostics.extend(rewrite_immediate_left_recursion(
         &mut integrated.grammar.units,
         &mut integrated.ids,
         &mut integrated.grammar.provenance,
     ));
-    if has_errors(&diagnostics) {
+    if has_blocking_basic_errors(&diagnostics) {
         return Err(CompilationError::new(diagnostics));
     }
 
     let mut vocabularies = BTreeMap::new();
     let mut grammars = Vec::with_capacity(integrated.grammar.units.len());
     for unit in std::mem::take(&mut integrated.grammar.units) {
+        let unit_id = unit.id;
         let dependencies = integrated
             .vocabularies
             .iter()
-            .filter(|dependency| dependency.consumer == unit.id)
+            .filter(|dependency| dependency.consumer == unit_id)
             .collect::<Vec<_>>();
         let mut imported = VocabularyBuilder::new();
         for dependency in dependencies {
@@ -91,7 +99,13 @@ pub(crate) fn analyze(
             );
         }
 
-        let semantic = analyze_unit(unit, imported, &mut integrated.ids, &mut diagnostics);
+        let semantic = analyze_unit(
+            unit,
+            &symbol_units[&unit_id],
+            imported,
+            &mut integrated.ids,
+            &mut diagnostics,
+        );
         vocabularies.insert(semantic.unit.id, semantic.recognizer.vocabulary.clone());
         grammars.push(semantic);
     }
@@ -113,6 +127,12 @@ fn has_errors(diagnostics: &[Diagnostic]) -> bool {
     diagnostics
         .iter()
         .any(|diagnostic| diagnostic.severity == Severity::Error)
+}
+
+fn has_blocking_basic_errors(diagnostics: &[Diagnostic]) -> bool {
+    diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.severity == Severity::Error && diagnostic.code != "G4S016")
 }
 
 fn basic_checks(units: &[GrammarUnit]) -> Vec<Diagnostic> {
@@ -182,7 +202,7 @@ fn check_unit_basics(unit: &GrammarUnit, diagnostics: &mut Vec<Diagnostic>) {
 
     let rule_names = rules.keys().copied().collect::<BTreeSet<_>>();
     for rule in &unit.rules {
-        check_rule_options(rule, diagnostics);
+        check_rule_options(unit, rule, diagnostics);
         check_block_options(&rule.block, diagnostics);
         visit_elements(&rule.block, &mut |_, _, element| {
             if let ElementKind::RuleCall(call) = &element.kind {
@@ -250,8 +270,8 @@ fn check_unit_basics(unit: &GrammarUnit, diagnostics: &mut Vec<Diagnostic>) {
     }
 
     check_named_actions(unit, diagnostics);
-    check_channel_declarations(unit, diagnostics);
     check_modes(unit, diagnostics);
+    check_channel_declarations(unit, diagnostics);
 }
 
 fn check_alt_labels(rule: &Rule, rules: &BTreeMap<&str, &Rule>, diagnostics: &mut Vec<Diagnostic>) {
@@ -306,11 +326,11 @@ fn check_source_prequels(unit: &GrammarUnit, diagnostics: &mut Vec<Diagnostic>) 
     for prequel in &unit.prequels {
         match prequel {
             GrammarPrequel::Options { declarations, .. } => {
-                check_options(
-                    &unit.options[declarations.clone()],
-                    GRAMMAR_OPTIONS,
-                    diagnostics,
-                );
+                let options = &unit.options[declarations.clone()];
+                check_options(options, GRAMMAR_OPTIONS, diagnostics);
+                for option in options {
+                    check_case_insensitive_value(option, diagnostics);
+                }
             }
             GrammarPrequel::Tokens { declarations, .. } => {
                 for token in &unit.tokens[declarations.clone()] {
@@ -360,25 +380,60 @@ fn check_repeated_prequels(prequels: &[GrammarPrequel], diagnostics: &mut Vec<Di
     }
 }
 
-fn check_rule_options(rule: &Rule, diagnostics: &mut Vec<Diagnostic>) {
+fn check_rule_options(unit: &GrammarUnit, rule: &Rule, diagnostics: &mut Vec<Diagnostic>) {
     let legal = match rule.kind {
         RuleKind::Parser => &[][..],
         RuleKind::Lexer => &["caseInsensitive", "p", "tokenIndex"][..],
     };
     check_options(&rule.options, legal, diagnostics);
+    let global_case_insensitive = unit
+        .options
+        .iter()
+        .find(|option| option.name.value == "caseInsensitive")
+        .and_then(|option| parse_boolean_option(&option.value.value))
+        .unwrap_or(false);
     for option in &rule.options {
-        if option.name.value == "caseInsensitive"
-            && !matches!(option.value.value.as_str(), "true" | "false")
-        {
-            diagnostics.push(Diagnostic::warning(
-                "G4S015",
-                option.value.span.clone(),
-                format!(
-                    "unsupported option value caseInsensitive={}",
-                    option.value.value
-                ),
-            ));
+        if option.name.value != "caseInsensitive" {
+            continue;
         }
+        if let Some(value) = parse_boolean_option(&option.value.value) {
+            if rule.kind == RuleKind::Lexer && value == global_case_insensitive {
+                diagnostics.push(Diagnostic::warning(
+                    "G4S067",
+                    option.name.span.clone(),
+                    format!(
+                        "caseInsensitive lexer rule option is redundant because its value equals the global value ({value})"
+                    ),
+                ));
+            }
+        } else {
+            check_case_insensitive_value(option, diagnostics);
+        }
+    }
+}
+
+fn check_case_insensitive_value(
+    option: &super::model::OptionDecl,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    if option.name.value == "caseInsensitive" && parse_boolean_option(&option.value.value).is_none()
+    {
+        diagnostics.push(Diagnostic::warning(
+            "G4S015",
+            option.value.span.clone(),
+            format!(
+                "unsupported option value caseInsensitive={}",
+                option.value.value
+            ),
+        ));
+    }
+}
+
+fn parse_boolean_option(value: &str) -> Option<bool> {
+    match value {
+        "true" => Some(true),
+        "false" => Some(false),
+        _ => None,
     }
 }
 
@@ -471,12 +526,23 @@ fn check_named_actions(unit: &GrammarUnit, diagnostics: &mut Vec<Diagnostic>) {
             diagnostics.push(
                 Diagnostic::error(
                     "G4S016",
-                    action.span.clone(),
+                    named_action_diagnostic_span(action),
                     format!("action {} is redefined", action.name),
                 )
-                .with_related(previous.span.clone(), "first action is here"),
+                .with_related(
+                    named_action_diagnostic_span(previous),
+                    "first action is here",
+                ),
             );
         }
+    }
+}
+
+fn named_action_diagnostic_span(action: &super::model::NamedAction) -> super::frontend::SourceSpan {
+    let start = action.span.bytes.start.saturating_add(1);
+    super::frontend::SourceSpan {
+        source: action.span.source,
+        bytes: start..action.span.bytes.end.max(start),
     }
 }
 
@@ -559,7 +625,7 @@ fn check_modes(unit: &GrammarUnit, diagnostics: &mut Vec<Diagnostic>) {
     }
     let mut names = BTreeMap::new();
     for mode in &unit.modes {
-        if COMMON_CONSTANTS.contains(&mode.name.as_str()) {
+        if mode.name != "DEFAULT_MODE" && COMMON_CONSTANTS.contains(&mode.name.as_str()) {
             diagnostics.push(Diagnostic::error(
                 "G4S024",
                 mode.span.clone(),
@@ -585,7 +651,7 @@ fn check_modes(unit: &GrammarUnit, diagnostics: &mut Vec<Diagnostic>) {
         if !has_non_fragment {
             diagnostics.push(Diagnostic::error(
                 "G4S026",
-                mode.span.clone(),
+                mode.name_span.clone(),
                 format!(
                     "lexer mode {} must contain at least one non-fragment rule",
                     mode.name
@@ -691,14 +757,17 @@ fn import_dependency(
 
 fn analyze_unit(
     unit: GrammarUnit,
+    symbol_unit: &GrammarUnit,
     mut vocabulary: VocabularyBuilder,
     ids: &mut ModelIdAllocator,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> SemanticGrammar {
+    let imported_names = vocabulary.by_name.keys().cloned().collect::<BTreeSet<_>>();
+    let mut token_diagnostics = Vec::new();
     vocabulary.define_builtin_eof();
     for declaration in &unit.tokens {
-        if vocabulary.by_name.contains_key(&declaration.name.value) {
-            diagnostics.push(Diagnostic::warning(
+        if imported_names.contains(&declaration.name.value) {
+            token_diagnostics.push(Diagnostic::warning(
                 "G4S019",
                 declaration.name.span.clone(),
                 format!("token {} is already defined", declaration.name.value),
@@ -710,7 +779,7 @@ fn analyze_unit(
     match unit.kind {
         GrammarKind::Lexer => assign_lexer_tokens(&unit, &mut vocabulary, ids),
         GrammarKind::Parser => {
-            assign_parser_tokens(&unit, &mut vocabulary, ids, diagnostics);
+            assign_parser_tokens(&unit, &mut vocabulary, ids, &mut token_diagnostics);
         }
         GrammarKind::Combined => unreachable!("combined grammar is split before semantics"),
     }
@@ -733,17 +802,29 @@ fn analyze_unit(
         .map(|rule| (rule.name.as_str(), rule.id))
         .collect::<BTreeMap<_, _>>();
 
-    let (channel_names, channel_numbers) = assign_channels(&unit, &vocabulary, diagnostics);
-    let (mode_names, mode_numbers) = assign_modes(&unit, &vocabulary, diagnostics);
+    let symbol_diagnostics = check_symbol_conflicts(symbol_unit, &vocabulary);
+    let mut mode_diagnostics = Vec::new();
+    let (mode_names, mode_numbers) = assign_modes(&unit, &vocabulary, &mut mode_diagnostics);
+    let unreachable_diagnostics = check_unreachable_tokens(&unit);
+    let mut channel_diagnostics = Vec::new();
+    let (channel_names, channel_numbers) =
+        assign_channels(&unit, &vocabulary, &mut channel_diagnostics);
+    let mut binding_diagnostics = Vec::new();
     let collection = BindingCollector::new(
         &unit,
         &vocabulary,
         &rules_by_name,
         &channel_numbers,
         &mode_numbers,
-        diagnostics,
+        &mut binding_diagnostics,
     )
     .collect();
+    diagnostics.extend(symbol_diagnostics);
+    diagnostics.extend(token_diagnostics);
+    diagnostics.extend(mode_diagnostics);
+    diagnostics.extend(unreachable_diagnostics);
+    diagnostics.extend(channel_diagnostics);
+    diagnostics.extend(binding_diagnostics);
 
     let literal_names = name_table(vocabulary.max_token_type(), &vocabulary.by_literal);
     let symbolic_names = symbolic_name_table(&vocabulary);
@@ -953,6 +1034,437 @@ fn assign_modes(
     (names, numbers)
 }
 
+fn check_symbol_conflicts(unit: &GrammarUnit, vocabulary: &Vocabulary) -> Vec<Diagnostic> {
+    let rule_names = unit
+        .rules
+        .iter()
+        .map(|rule| rule.name.as_str())
+        .collect::<BTreeSet<_>>();
+    let mut diagnostics = Vec::new();
+    for rule in &unit.rules {
+        let attributes = rule_attributes(rule);
+        check_attribute_names(
+            &attributes.arguments,
+            &rule_names,
+            vocabulary,
+            ("parameter", "G4S056"),
+            rule,
+            &mut diagnostics,
+        );
+        check_attribute_names(
+            &attributes.returns,
+            &rule_names,
+            vocabulary,
+            ("return value", "G4S057"),
+            rule,
+            &mut diagnostics,
+        );
+        check_attribute_names(
+            &attributes.locals,
+            &rule_names,
+            vocabulary,
+            ("local", "G4S058"),
+            rule,
+            &mut diagnostics,
+        );
+        check_attribute_overlap(
+            &attributes.returns,
+            &attributes.arguments,
+            "return value",
+            "parameter",
+            "G4S059",
+            &mut diagnostics,
+        );
+        check_attribute_overlap(
+            &attributes.locals,
+            &attributes.arguments,
+            "local",
+            "parameter",
+            "G4S060",
+            &mut diagnostics,
+        );
+        check_attribute_overlap(
+            &attributes.locals,
+            &attributes.returns,
+            "local",
+            "return value",
+            "G4S061",
+            &mut diagnostics,
+        );
+        check_rule_labels(rule, &rule_names, vocabulary, &attributes, &mut diagnostics);
+    }
+    diagnostics
+}
+
+fn rule_attributes(rule: &Rule) -> RuleAttributes {
+    RuleAttributes {
+        arguments: rule
+            .arguments
+            .as_ref()
+            .map(attribute_symbols)
+            .unwrap_or_default(),
+        returns: rule
+            .returns
+            .as_ref()
+            .map(attribute_symbols)
+            .unwrap_or_default(),
+        locals: rule
+            .locals
+            .as_ref()
+            .map(attribute_symbols)
+            .unwrap_or_default(),
+    }
+}
+
+fn check_attribute_names(
+    attributes: &[AttributeSymbol],
+    rule_names: &BTreeSet<&str>,
+    vocabulary: &Vocabulary,
+    conflict: (&str, &'static str),
+    rule: &Rule,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let (kind, rule_code) = conflict;
+    for attribute in attributes {
+        if rule_names.contains(attribute.name.as_str()) {
+            diagnostics.push(Diagnostic::error(
+                rule_code,
+                attribute.span.clone(),
+                format!(
+                    "{kind} {} conflicts with rule with same name",
+                    attribute.name
+                ),
+            ));
+        }
+    }
+    for attribute in attributes {
+        if vocabulary.by_name.contains_key(&attribute.name) {
+            diagnostics.push(Diagnostic::error(
+                "G4S037",
+                attribute.span.clone(),
+                format!(
+                    "{kind} {} conflicts with token with same name in rule {}",
+                    attribute.name, rule.name
+                ),
+            ));
+        }
+    }
+}
+
+fn check_attribute_overlap(
+    attributes: &[AttributeSymbol],
+    reference: &[AttributeSymbol],
+    kind: &str,
+    reference_kind: &str,
+    code: &'static str,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    for attribute in attributes {
+        if reference
+            .iter()
+            .any(|candidate| candidate.name == attribute.name)
+        {
+            diagnostics.push(Diagnostic::error(
+                code,
+                attribute.span.clone(),
+                format!(
+                    "{kind} {} conflicts with {reference_kind} with same name",
+                    attribute.name
+                ),
+            ));
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LabelValueKind {
+    Token,
+    Rule,
+    Other,
+}
+
+#[derive(Clone, Debug)]
+struct LabelSignature {
+    assignment: LabelKind,
+    value_kind: LabelValueKind,
+    target: Option<String>,
+    span: super::frontend::SourceSpan,
+}
+
+fn check_rule_labels(
+    rule: &Rule,
+    rule_names: &BTreeSet<&str>,
+    vocabulary: &Vocabulary,
+    attributes: &RuleAttributes,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let context_scoped = rule
+        .block
+        .alternatives
+        .iter()
+        .any(|alternative| alternative.label.is_some());
+    let left_recursive = rule.block.alternatives.iter().any(|alternative| {
+        alternative.elements.first().is_some_and(|element| {
+            matches!(
+                &element.kind,
+                ElementKind::RuleCall(call)
+                    if element.quantifier == Quantifier::One && call.name == rule.name
+            )
+        })
+    });
+    let mut namespaces = BTreeMap::<String, BTreeMap<String, LabelSignature>>::new();
+    for alternative in &rule.block.alternatives {
+        let context = if context_scoped {
+            alternative
+                .label
+                .as_ref()
+                .map_or_else(String::new, |label| label.value.clone())
+        } else {
+            String::new()
+        };
+        check_alternative_labels(
+            rule,
+            alternative,
+            &context,
+            left_recursive,
+            rule_names,
+            vocabulary,
+            attributes,
+            &mut namespaces,
+            diagnostics,
+        );
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn check_alternative_labels(
+    rule: &Rule,
+    alternative: &Alternative,
+    context: &str,
+    left_recursive: bool,
+    rule_names: &BTreeSet<&str>,
+    vocabulary: &Vocabulary,
+    attributes: &RuleAttributes,
+    namespaces: &mut BTreeMap<String, BTreeMap<String, LabelSignature>>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    for element in &alternative.elements {
+        if let Some(label) = &element.label {
+            check_label_name(label, rule_names, vocabulary, attributes, diagnostics);
+            let signature = label_signature(label, &element.kind);
+            let namespace = namespaces.entry(context.to_owned()).or_default();
+            if let Some(previous) = namespace.get(&label.name) {
+                let primary = if left_recursive {
+                    rule.span.clone()
+                } else {
+                    label.span.clone()
+                };
+                if previous.assignment != signature.assignment
+                    || previous.value_kind != signature.value_kind
+                {
+                    diagnostics.push(
+                        Diagnostic::error(
+                            "G4S041",
+                            primary.clone(),
+                            format!("label {} has a conflicting type", label.name),
+                        )
+                        .with_related(previous.span.clone(), "first label is here"),
+                    );
+                }
+                if previous.value_kind == LabelValueKind::Rule
+                    && signature.value_kind == LabelValueKind::Rule
+                    && previous.target != signature.target
+                {
+                    diagnostics.push(
+                        Diagnostic::error(
+                            "G4S041",
+                            primary,
+                            format!("label {} refers to different rules", label.name),
+                        )
+                        .with_related(previous.span.clone(), "first label is here"),
+                    );
+                }
+            } else {
+                namespace.insert(label.name.clone(), signature);
+            }
+        }
+        if let ElementKind::Block(block) = &element.kind {
+            for nested in &block.alternatives {
+                check_alternative_labels(
+                    rule,
+                    nested,
+                    context,
+                    left_recursive,
+                    rule_names,
+                    vocabulary,
+                    attributes,
+                    namespaces,
+                    diagnostics,
+                );
+            }
+        }
+    }
+}
+
+fn check_label_name(
+    label: &Label,
+    rule_names: &BTreeSet<&str>,
+    vocabulary: &Vocabulary,
+    attributes: &RuleAttributes,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    if rule_names.contains(label.name.as_str()) {
+        diagnostics.push(Diagnostic::error(
+            "G4S038",
+            label.span.clone(),
+            format!("label {} conflicts with rule with same name", label.name),
+        ));
+    }
+    if vocabulary.by_name.contains_key(&label.name) {
+        diagnostics.push(Diagnostic::error(
+            "G4S039",
+            label.span.clone(),
+            format!("label {} conflicts with token with same name", label.name),
+        ));
+    }
+    for (symbols, code, kind) in [
+        (&attributes.arguments, "G4S062", "parameter"),
+        (&attributes.returns, "G4S063", "return value"),
+        (&attributes.locals, "G4S064", "local"),
+    ] {
+        if symbols.iter().any(|attribute| attribute.name == label.name) {
+            diagnostics.push(Diagnostic::error(
+                code,
+                label.span.clone(),
+                format!("label {} conflicts with {kind} with same name", label.name),
+            ));
+        }
+    }
+}
+
+fn label_signature(label: &Label, kind: &ElementKind) -> LabelSignature {
+    let (value_kind, target) = match kind {
+        ElementKind::RuleCall(call) => (LabelValueKind::Rule, Some(call.name.clone())),
+        ElementKind::Terminal(_) | ElementKind::Range(..) | ElementKind::Set { .. } => {
+            (LabelValueKind::Token, None)
+        }
+        ElementKind::Block(_)
+        | ElementKind::Action { .. }
+        | ElementKind::Predicate { .. }
+        | ElementKind::Epsilon => (LabelValueKind::Other, None),
+    };
+    LabelSignature {
+        assignment: label.kind,
+        value_kind,
+        target,
+        span: label.span.clone(),
+    }
+}
+
+fn check_unreachable_tokens(unit: &GrammarUnit) -> Vec<Diagnostic> {
+    if unit.kind != GrammarKind::Lexer {
+        return Vec::new();
+    }
+    let default_rules = unit
+        .rules
+        .iter()
+        .filter(|rule| rule.mode.is_none())
+        .collect::<Vec<_>>();
+    let mut modes = vec![default_rules];
+    for mode in &unit.modes {
+        modes.push(
+            mode.rules
+                .iter()
+                .filter_map(|id| unit.rules.iter().find(|rule| rule.id == *id))
+                .collect(),
+        );
+    }
+
+    let mut diagnostics = Vec::new();
+    for rules in modes {
+        let literal_rules = rules
+            .into_iter()
+            .filter(|rule| !rule.name.starts_with("T__"))
+            .filter_map(|rule| {
+                let values = simple_literal_alternatives(rule);
+                (!values.is_empty()).then_some((rule, values))
+            })
+            .collect::<Vec<_>>();
+        for (index, (first_rule, first_values)) in literal_rules.iter().enumerate() {
+            report_literal_overlaps(
+                first_rule,
+                first_rule,
+                first_values,
+                first_values,
+                &mut diagnostics,
+            );
+            if first_rule.fragment {
+                continue;
+            }
+            for (second_rule, second_values) in &literal_rules[index + 1..] {
+                if !second_rule.fragment {
+                    report_literal_overlaps(
+                        first_rule,
+                        second_rule,
+                        first_values,
+                        second_values,
+                        &mut diagnostics,
+                    );
+                }
+            }
+        }
+    }
+    diagnostics
+}
+
+fn simple_literal_alternatives(rule: &Rule) -> Vec<Vec<i32>> {
+    rule.block
+        .alternatives
+        .iter()
+        .filter_map(|alternative| {
+            let mut value = Vec::new();
+            for element in &alternative.elements {
+                let ElementKind::Terminal(Terminal::Literal(literal)) = &element.kind else {
+                    return None;
+                };
+                if element.quantifier != Quantifier::One {
+                    return None;
+                }
+                value.extend(decode_string_literal(literal).ok()?);
+            }
+            Some(value)
+        })
+        .collect()
+}
+
+fn report_literal_overlaps(
+    first_rule: &Rule,
+    second_rule: &Rule,
+    first_values: &[Vec<i32>],
+    second_values: &[Vec<i32>],
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    for (first_index, first) in first_values.iter().enumerate() {
+        let second_start = if first_rule.id == second_rule.id {
+            first_index + 1
+        } else {
+            0
+        };
+        for second in &second_values[second_start..] {
+            if first == second {
+                diagnostics.push(Diagnostic::warning(
+                    "G4S069",
+                    second_rule.name_span.clone(),
+                    format!(
+                        "token {} is unreachable because value is matched by {}",
+                        second_rule.name, first_rule.name
+                    ),
+                ));
+            }
+        }
+    }
+}
+
 fn attribute_symbols(clause: &AttributeClause) -> Vec<AttributeSymbol> {
     parse_scope_decls(&clause.text)
         .into_iter()
@@ -1043,214 +1555,27 @@ impl<'a> BindingCollector<'a> {
     }
 
     fn collect_rule(&mut self, rule: &Rule) {
-        let attributes = self.collect_attributes(rule);
-        self.bindings.attributes.insert(rule.id, attributes.clone());
+        let attributes = rule_attributes(rule);
+        self.bindings.attributes.insert(rule.id, attributes);
         self.call_graph.entry(rule.id).or_default();
 
-        let mut label_types =
-            BTreeMap::<String, (LabelKind, String, super::frontend::SourceSpan)>::new();
-        self.collect_block(rule, &rule.block, &attributes, &mut label_types);
+        self.collect_block(rule, &rule.block);
         if rule.kind == RuleKind::Lexer {
             self.collect_commands(rule);
         }
     }
 
-    fn collect_attributes(&mut self, rule: &Rule) -> RuleAttributes {
-        let attributes = RuleAttributes {
-            arguments: rule
-                .arguments
-                .as_ref()
-                .map(attribute_symbols)
-                .unwrap_or_default(),
-            returns: rule
-                .returns
-                .as_ref()
-                .map(attribute_symbols)
-                .unwrap_or_default(),
-            locals: rule
-                .locals
-                .as_ref()
-                .map(attribute_symbols)
-                .unwrap_or_default(),
-        };
-
-        self.check_attribute_name_conflicts(&attributes.arguments, "parameter", "G4S056", rule);
-        self.check_attribute_name_conflicts(&attributes.returns, "return value", "G4S057", rule);
-        self.check_attribute_name_conflicts(&attributes.locals, "local", "G4S058", rule);
-        self.check_attribute_overlap(
-            &attributes.returns,
-            &attributes.arguments,
-            "return value",
-            "parameter",
-            "G4S059",
-        );
-        self.check_attribute_overlap(
-            &attributes.locals,
-            &attributes.arguments,
-            "local",
-            "parameter",
-            "G4S060",
-        );
-        self.check_attribute_overlap(
-            &attributes.locals,
-            &attributes.returns,
-            "local",
-            "return value",
-            "G4S061",
-        );
-        attributes
-    }
-
-    fn check_attribute_name_conflicts(
-        &mut self,
-        attributes: &[AttributeSymbol],
-        kind: &str,
-        rule_code: &'static str,
-        rule: &Rule,
-    ) {
-        for attribute in attributes {
-            if self.rules_by_name.contains_key(attribute.name.as_str()) {
-                self.diagnostics.push(Diagnostic::error(
-                    rule_code,
-                    attribute.span.clone(),
-                    format!(
-                        "{kind} {} conflicts with rule with same name",
-                        attribute.name
-                    ),
-                ));
-            }
-            if self.vocabulary.by_name.contains_key(&attribute.name) {
-                self.diagnostics.push(Diagnostic::error(
-                    "G4S037",
-                    attribute.span.clone(),
-                    format!(
-                        "{kind} {} conflicts with token with same name in rule {}",
-                        attribute.name, rule.name
-                    ),
-                ));
-            }
-        }
-    }
-
-    fn check_attribute_overlap(
-        &mut self,
-        attributes: &[AttributeSymbol],
-        reference: &[AttributeSymbol],
-        kind: &str,
-        reference_kind: &str,
-        code: &'static str,
-    ) {
-        for attribute in attributes {
-            if reference
-                .iter()
-                .any(|candidate| candidate.name == attribute.name)
-            {
-                self.diagnostics.push(Diagnostic::error(
-                    code,
-                    attribute.span.clone(),
-                    format!(
-                        "{kind} {} conflicts with {reference_kind} with same name",
-                        attribute.name
-                    ),
-                ));
-            }
-        }
-    }
-
-    fn collect_block(
-        &mut self,
-        rule: &Rule,
-        block: &Block,
-        attributes: &RuleAttributes,
-        label_types: &mut BTreeMap<String, (LabelKind, String, super::frontend::SourceSpan)>,
-    ) {
+    fn collect_block(&mut self, rule: &Rule, block: &Block) {
         for alternative in &block.alternatives {
             self.bindings.alternatives.insert(alternative.id, rule.id);
             for element in &alternative.elements {
-                self.collect_element(rule, alternative, element, attributes, label_types);
+                self.collect_element(rule, alternative, element);
             }
         }
     }
 
-    fn collect_element(
-        &mut self,
-        rule: &Rule,
-        alternative: &Alternative,
-        element: &Element,
-        attributes: &RuleAttributes,
-        label_types: &mut BTreeMap<String, (LabelKind, String, super::frontend::SourceSpan)>,
-    ) {
+    fn collect_element(&mut self, rule: &Rule, alternative: &Alternative, element: &Element) {
         if let Some(label) = &element.label {
-            if self.rules_by_name.contains_key(label.name.as_str()) {
-                self.diagnostics.push(Diagnostic::error(
-                    "G4S038",
-                    label.span.clone(),
-                    format!("label {} conflicts with rule with same name", label.name),
-                ));
-            }
-            if self.vocabulary.by_name.contains_key(&label.name) {
-                self.diagnostics.push(Diagnostic::error(
-                    "G4S039",
-                    label.span.clone(),
-                    format!("label {} conflicts with token with same name", label.name),
-                ));
-            }
-            if attributes
-                .arguments
-                .iter()
-                .any(|attribute| attribute.name == label.name)
-            {
-                self.diagnostics.push(Diagnostic::error(
-                    "G4S062",
-                    label.span.clone(),
-                    format!(
-                        "label {} conflicts with parameter with same name",
-                        label.name
-                    ),
-                ));
-            }
-            if attributes
-                .returns
-                .iter()
-                .any(|attribute| attribute.name == label.name)
-            {
-                self.diagnostics.push(Diagnostic::error(
-                    "G4S063",
-                    label.span.clone(),
-                    format!(
-                        "label {} conflicts with return value with same name",
-                        label.name
-                    ),
-                ));
-            }
-            if attributes
-                .locals
-                .iter()
-                .any(|attribute| attribute.name == label.name)
-            {
-                self.diagnostics.push(Diagnostic::error(
-                    "G4S064",
-                    label.span.clone(),
-                    format!("label {} conflicts with local with same name", label.name),
-                ));
-            }
-            let target = label_target(&element.kind);
-            if let Some((previous_kind, previous_target, previous_span)) =
-                label_types.get(&label.name)
-            {
-                if *previous_kind != label.kind || previous_target != &target {
-                    self.diagnostics.push(
-                        Diagnostic::error(
-                            "G4S041",
-                            label.span.clone(),
-                            format!("label {} has a conflicting type", label.name),
-                        )
-                        .with_related(previous_span.clone(), "first label is here"),
-                    );
-                }
-            } else {
-                label_types.insert(label.name.clone(), (label.kind, target, label.span.clone()));
-            }
             self.bindings.labels.insert(
                 label.id,
                 LabelBinding {
@@ -1305,7 +1630,7 @@ impl<'a> BindingCollector<'a> {
                 self.validate_set(elements, element);
             }
             ElementKind::Block(nested) => {
-                self.collect_block(rule, nested, attributes, label_types);
+                self.collect_block(rule, nested);
             }
             ElementKind::Action { id, body } => {
                 let index = self.action_numbers.len();
@@ -1495,6 +1820,17 @@ impl<'a> BindingCollector<'a> {
 
         match command.name.as_str() {
             "mode" | "pushMode" => {
+                if argument != "DEFAULT_MODE" && COMMON_CONSTANTS.contains(&argument) {
+                    self.diagnostics.push(Diagnostic::error(
+                        "G4S024",
+                        command
+                            .argument_span
+                            .clone()
+                            .unwrap_or_else(|| command.span.clone()),
+                        format!("mode {argument} uses a reserved name"),
+                    ));
+                    return None;
+                }
                 let value = self
                     .mode_numbers
                     .get(argument)
@@ -1520,6 +1856,16 @@ impl<'a> BindingCollector<'a> {
             "type" => {
                 let value = if argument == "EOF" {
                     Some(EOF_TOKEN_TYPE)
+                } else if COMMON_CONSTANTS.contains(&argument) {
+                    self.diagnostics.push(Diagnostic::error(
+                        "G4S018",
+                        command
+                            .argument_span
+                            .clone()
+                            .unwrap_or_else(|| command.span.clone()),
+                        format!("token {argument} uses a reserved name"),
+                    ));
+                    return None;
                 } else {
                     self.vocabulary
                         .by_name
@@ -1540,6 +1886,19 @@ impl<'a> BindingCollector<'a> {
                 })
             }
             "channel" => {
+                if !matches!(argument, "HIDDEN" | "DEFAULT_TOKEN_CHANNEL")
+                    && COMMON_CONSTANTS.contains(&argument)
+                {
+                    self.diagnostics.push(Diagnostic::error(
+                        "G4S021",
+                        command
+                            .argument_span
+                            .clone()
+                            .unwrap_or_else(|| command.span.clone()),
+                        format!("channel {argument} uses a reserved name"),
+                    ));
+                    return None;
+                }
                 let value = self
                     .channel_numbers
                     .get(argument)
@@ -1809,7 +2168,12 @@ fn lexer_literal_alias(rule: &Rule) -> Option<&str> {
                 ..
             }]
         );
-    let command_alias = rest.is_empty() && matches!(alternative.commands.as_slice(), [_] | [_, _]);
+    let command_alias = rest.is_empty()
+        && match alternative.commands.as_slice() {
+            [_] => true,
+            [first, second] => first.argument.is_none() || second.argument.is_none(),
+            _ => false,
+        };
     (plain_alias || command_alias)
         .then_some(literal)
         .map(String::as_str)
@@ -1832,23 +2196,6 @@ fn visit_elements(block: &Block, visitor: &mut impl FnMut(&Alternative, usize, &
                 visit_elements(nested, visitor);
             }
         }
-    }
-}
-
-fn label_target(kind: &ElementKind) -> String {
-    match kind {
-        ElementKind::Terminal(Terminal::Token(name)) => format!("token:{name}"),
-        ElementKind::Terminal(Terminal::Literal(literal)) => format!("literal:{literal}"),
-        ElementKind::Terminal(Terminal::LexerCharSet(set)) => format!("charset:{set}"),
-        ElementKind::Terminal(Terminal::Wildcard) => "wildcard".to_owned(),
-        ElementKind::Terminal(Terminal::Eof) => "eof".to_owned(),
-        ElementKind::RuleCall(call) => format!("rule:{}", call.name),
-        ElementKind::Range(start, stop) => format!("range:{start}:{stop}"),
-        ElementKind::Set { inverted, .. } => format!("set:{inverted}"),
-        ElementKind::Block(_) => "block".to_owned(),
-        ElementKind::Action { .. } => "action".to_owned(),
-        ElementKind::Predicate { .. } => "predicate".to_owned(),
-        ElementKind::Epsilon => "epsilon".to_owned(),
     }
 }
 

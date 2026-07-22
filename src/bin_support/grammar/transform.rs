@@ -832,6 +832,7 @@ fn block_set_members(block: &Block, lexer: bool) -> Option<(Vec<SetElement>, Vec
                     source: element.id,
                     start: start.clone(),
                     stop: stop.clone(),
+                    span: range_operator_span(&element.span, start),
                     options: element.options.clone(),
                 }
             }
@@ -886,6 +887,20 @@ fn tombstone_block(provenance: &mut ProvenanceIndex, block: &Block, replacements
 fn grammar_literal_code_point(literal: &str) -> Option<i32> {
     let value = get_char_value_from_grammar_char_literal(Some(literal));
     (value >= 0).then_some(value)
+}
+
+fn range_operator_span(
+    span: &super::frontend::SourceSpan,
+    start: &str,
+) -> super::frontend::SourceSpan {
+    let operator_start = span
+        .bytes
+        .start
+        .saturating_add(u32::try_from(start.len()).unwrap_or(0));
+    super::frontend::SourceSpan {
+        source: span.source,
+        bytes: operator_start..operator_start.saturating_add(2),
+    }
 }
 
 fn split_combined(
@@ -1137,6 +1152,7 @@ fn implicit_literal_rule(
     Rule {
         id: rule_id,
         name,
+        name_span: original.span.clone(),
         kind: RuleKind::Lexer,
         fragment: false,
         modifiers: Vec::new(),

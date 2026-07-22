@@ -62,7 +62,11 @@ pub(crate) fn compile_lexer(
     if has_errors(&factory.diagnostics) {
         return Err(CompilationError::new(factory.diagnostics));
     }
-    collapse_lexer_sets(&mut factory.graph, factory.provenance);
+    collapse_lexer_sets(
+        &mut factory.graph,
+        factory.provenance,
+        &mut factory.diagnostics,
+    );
 
     let closure_sites = std::mem::take(&mut factory.epsilon_closures);
     let mut diagnostics = std::mem::take(&mut factory.diagnostics);
@@ -424,7 +428,7 @@ impl<'a> LexerFactory<'a> {
                         ParsedCharSet::default()
                     }
                 };
-                let ranges = self.finalize_char_set(char_set);
+                let ranges = self.finalize_char_set(char_set, &element.span);
                 let pair = self.basic_pair(owner);
                 self.authored_transition(
                     pair.left,
@@ -509,7 +513,10 @@ impl<'a> LexerFactory<'a> {
         let start = decode_character_literal(start);
         let stop = decode_character_literal(stop);
         match (start, stop) {
-            (Ok(start), Ok(stop)) if start <= stop => self.character_pair(owner, start, stop),
+            (Ok(start), Ok(stop)) if start <= stop => {
+                self.report_not_implied_characters(start, stop, span);
+                self.character_pair(owner, start, stop)
+            }
             (Ok(start), Ok(stop)) => {
                 self.diagnostics.push(Diagnostic::error(
                     "G4L001",
@@ -533,7 +540,7 @@ impl<'a> LexerFactory<'a> {
         elements: &[SetElement],
         span: &SourceSpan,
     ) -> StatePair {
-        let mut char_set = ParsedCharSet::default();
+        let mut ranges = Vec::new();
         for element in elements {
             match element {
                 SetElement::Terminal {
@@ -542,7 +549,9 @@ impl<'a> LexerFactory<'a> {
                     ..
                 } => match value {
                     Terminal::Literal(literal) => match decode_character_literal(literal) {
-                        Ok(value) => char_set.explicit.push((value, value)),
+                        Ok(value) => {
+                            self.add_explicit_ranges(&mut ranges, &[(value, value)], member_span);
+                        }
                         Err(_) => self.diagnostics.push(Diagnostic::error(
                             "G4S066",
                             member_span.clone(),
@@ -552,7 +561,10 @@ impl<'a> LexerFactory<'a> {
                         )),
                     },
                     Terminal::LexerCharSet(text) => match parse_char_set(text) {
-                        Ok(parsed) => char_set.extend(parsed),
+                        Ok(parsed) => {
+                            self.add_explicit_ranges(&mut ranges, &parsed.explicit, member_span);
+                            ranges.extend(parsed.properties);
+                        }
                         Err(message) => self.diagnostics.push(Diagnostic::error(
                             "G4L002",
                             member_span.clone(),
@@ -565,17 +577,26 @@ impl<'a> LexerFactory<'a> {
                         format!("rule reference {name} is not currently supported in a set"),
                     )),
                     Terminal::Eof => {
-                        char_set.explicit.push((EOF_CODE_POINT, EOF_CODE_POINT));
+                        self.add_explicit_ranges(
+                            &mut ranges,
+                            &[(EOF_CODE_POINT, EOF_CODE_POINT)],
+                            member_span,
+                        );
                     }
                     Terminal::Wildcard => {}
                 },
-                SetElement::Range { start, stop, .. } => {
+                SetElement::Range {
+                    start,
+                    stop,
+                    span: member_span,
+                    ..
+                } => {
                     match (
                         decode_character_literal(start),
                         decode_character_literal(stop),
                     ) {
                         (Ok(start), Ok(stop)) if start <= stop => {
-                            char_set.explicit.push((start, stop));
+                            self.add_explicit_ranges(&mut ranges, &[(start, stop)], member_span);
                         }
                         (Ok(start), Ok(stop)) => self.diagnostics.push(Diagnostic::error(
                             "G4L001",
@@ -593,7 +614,7 @@ impl<'a> LexerFactory<'a> {
                 }
             }
         }
-        let ranges = self.finalize_char_set(char_set);
+        let ranges = normalize_ranges(&ranges);
         let pair = self.basic_pair(owner);
         let kind = if inverted {
             BuildTransitionKind::NotSet(ranges)
@@ -604,10 +625,68 @@ impl<'a> LexerFactory<'a> {
         pair
     }
 
-    fn finalize_char_set(&self, char_set: ParsedCharSet) -> Vec<(i32, i32)> {
-        let mut ranges = self.case_fold_ranges(&char_set.explicit);
+    fn finalize_char_set(&mut self, char_set: ParsedCharSet, span: &SourceSpan) -> Vec<(i32, i32)> {
+        let mut ranges = Vec::new();
+        self.add_explicit_ranges(&mut ranges, &char_set.explicit, span);
         ranges.extend(char_set.properties);
         normalize_ranges(&ranges)
+    }
+
+    fn add_explicit_ranges(
+        &mut self,
+        destination: &mut Vec<(i32, i32)>,
+        ranges: &[(i32, i32)],
+        span: &SourceSpan,
+    ) {
+        for &(start, stop) in ranges {
+            self.report_not_implied_characters(start, stop, span);
+            let expanded = self.case_fold_range(start, stop).0;
+            if expanded.iter().any(|&(expanded_start, expanded_stop)| {
+                destination.iter().any(|&(seen_start, seen_stop)| {
+                    ranges_overlap(expanded_start, expanded_stop, seen_start, seen_stop)
+                })
+            }) {
+                self.diagnostics.push(Diagnostic::warning(
+                    "G4S068",
+                    span.clone(),
+                    format!(
+                        "characters {start:#x}..{stop:#x} are used multiple times in a lexer set"
+                    ),
+                ));
+            }
+            destination.extend(expanded);
+        }
+    }
+
+    fn report_not_implied_characters(&mut self, start: i32, stop: i32, span: &SourceSpan) {
+        if !(0..=0x7f).contains(&start) || !(0..=0x7f).contains(&stop) {
+            return;
+        }
+        let lower_start = simple_lowercase(start);
+        let lower_stop = simple_lowercase(stop);
+        if (lower_start == start) == (lower_stop == stop) {
+            return;
+        }
+        let characters = (start..stop)
+            .filter_map(|value| {
+                let character = char::from_u32(u32::try_from(value).ok()?)?;
+                (!character.is_alphabetic()).then_some(character)
+            })
+            .collect::<String>();
+        if characters.is_empty() {
+            return;
+        }
+        let start = char::from_u32(u32::try_from(start).expect("ASCII code point"))
+            .expect("ASCII code point");
+        let stop = char::from_u32(u32::try_from(stop).expect("ASCII code point"))
+            .expect("ASCII code point");
+        self.diagnostics.push(Diagnostic::warning(
+            "G4S070",
+            span.clone(),
+            format!(
+                "range {start}..{stop} probably contains not implied characters {characters}; both bounds should use the same case"
+            ),
+        ));
     }
 
     fn character_pair(&mut self, owner: ModelNodeId, start: i32, stop: i32) -> StatePair {
@@ -621,17 +700,6 @@ impl<'a> LexerFactory<'a> {
         };
         self.authored_transition(pair.left, pair.right, kind, owner);
         pair
-    }
-
-    fn case_fold_ranges(&self, ranges: &[(i32, i32)]) -> Vec<(i32, i32)> {
-        if !self.current_case_insensitive() {
-            return ranges.to_vec();
-        }
-        let mut result = Vec::new();
-        for &(start, stop) in ranges {
-            result.extend(self.case_fold_range(start, stop).0);
-        }
-        result
     }
 
     fn case_fold_range(&self, start: i32, stop: i32) -> (Vec<(i32, i32)>, bool) {
@@ -1337,11 +1405,6 @@ impl ParsedCharSet {
     const fn is_empty(&self) -> bool {
         self.explicit.is_empty() && self.properties.is_empty()
     }
-
-    fn extend(&mut self, other: Self) {
-        self.explicit.extend(other.explicit);
-        self.properties.extend(other.properties);
-    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1415,8 +1478,6 @@ fn parse_char_set(text: &str) -> Result<ParsedCharSet, String> {
         }
     }
     append_char_set_atom(&mut result, pending);
-    result.explicit = normalize_ranges(&result.explicit);
-    result.properties = normalize_ranges(&result.properties);
     Ok(result)
 }
 
@@ -1521,6 +1582,15 @@ fn normalize_ranges(ranges: &[(i32, i32)]) -> Vec<(i32, i32)> {
         }
     }
     normalized
+}
+
+const fn ranges_overlap(
+    left_start: i32,
+    left_stop: i32,
+    right_start: i32,
+    right_stop: i32,
+) -> bool {
+    left_start <= right_stop && right_start <= left_stop
 }
 
 fn encode_lexer_atn(atn: &LexerAtn) -> Vec<i32> {

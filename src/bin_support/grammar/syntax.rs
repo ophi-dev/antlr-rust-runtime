@@ -338,10 +338,11 @@ impl ModelBuilder<'_> {
         let mut modes = Vec::new();
         for mode_node in root.child_rules(p::RULE_MODE_SPEC) {
             let mode_id = self.ids.mode();
-            let name = mode_node
+            let name_node = mode_node
                 .child_rule(p::RULE_IDENTIFIER)
-                .and_then(SyntaxNodeRef::first_terminal)
-                .map_or_else(String::new, |node| node.text().to_owned());
+                .and_then(SyntaxNodeRef::first_terminal);
+            let name = name_node.map_or_else(String::new, |node| node.text().to_owned());
+            let name_span = name_node.map_or_else(|| mode_node.span(), SyntaxNodeRef::span);
             let mut mode_rules = Vec::new();
             for rule_node in mode_node.child_rules(p::RULE_LEXER_RULE_SPEC) {
                 let rule = self.lexer_rule(rule_node, Some(mode_id));
@@ -352,6 +353,7 @@ impl ModelBuilder<'_> {
             modes.push(Mode {
                 id: mode_id,
                 name,
+                name_span,
                 rules: mode_rules,
                 syntax: mode_node.id(),
                 span: mode_node.span(),
@@ -378,9 +380,9 @@ impl ModelBuilder<'_> {
 
     fn parser_rule(&mut self, node: SyntaxNodeRef<'_>) -> Rule {
         let id = self.ids.rule();
-        let name = node
-            .child_terminal(p::RULE_REF)
-            .map_or_else(String::new, |name| name.text().to_owned());
+        let name_node = node.child_terminal(p::RULE_REF);
+        let name = name_node.map_or_else(String::new, |name| name.text().to_owned());
+        let name_span = name_node.map_or_else(|| node.span(), SyntaxNodeRef::span);
         let modifiers = node
             .child_rule(p::RULE_RULE_MODIFIERS)
             .into_iter()
@@ -438,6 +440,7 @@ impl ModelBuilder<'_> {
         Rule {
             id,
             name,
+            name_span,
             kind: RuleKind::Parser,
             fragment: false,
             modifiers,
@@ -460,9 +463,9 @@ impl ModelBuilder<'_> {
 
     fn lexer_rule(&mut self, node: SyntaxNodeRef<'_>, mode: Option<super::model::ModeId>) -> Rule {
         let id = self.ids.rule();
-        let name = node
-            .child_terminal(p::TOKEN_REF)
-            .map_or_else(String::new, |name| name.text().to_owned());
+        let name_node = node.child_terminal(p::TOKEN_REF);
+        let name = name_node.map_or_else(String::new, |name| name.text().to_owned());
+        let name_span = name_node.map_or_else(|| node.span(), SyntaxNodeRef::span);
         let fragment = node.has_terminal(p::FRAGMENT);
         let options = node
             .child_rule(p::RULE_OPTIONS_SPEC)
@@ -486,6 +489,7 @@ impl ModelBuilder<'_> {
         Rule {
             id,
             name,
+            name_span,
             kind: RuleKind::Lexer,
             fragment,
             modifiers: Vec::new(),
@@ -988,6 +992,9 @@ fn parse_set_element(node: SyntaxNodeRef<'_>, source: ElementId) -> Option<SetEl
                 source,
                 start: start.clone(),
                 stop: stop.clone(),
+                span: range
+                    .child_terminal(p::RANGE)
+                    .map_or_else(|| range.span(), SyntaxNodeRef::span),
                 options: parse_set_member_options(node),
             }),
             _ => None,

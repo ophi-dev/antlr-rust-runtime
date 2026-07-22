@@ -312,6 +312,7 @@ pub(crate) enum SetElement {
         source: ElementId,
         start: String,
         stop: String,
+        span: SourceSpan,
         options: Vec<OptionDecl>,
     },
 }
@@ -428,6 +429,7 @@ pub(crate) struct LeftRecursionInfo {
 pub(crate) struct Rule {
     pub(crate) id: RuleId,
     pub(crate) name: String,
+    pub(crate) name_span: SourceSpan,
     pub(crate) kind: RuleKind,
     pub(crate) fragment: bool,
     pub(crate) modifiers: Vec<Authored<String>>,
@@ -451,6 +453,7 @@ pub(crate) struct Rule {
 pub(crate) struct Mode {
     pub(crate) id: ModeId,
     pub(crate) name: String,
+    pub(crate) name_span: SourceSpan,
     pub(crate) rules: Vec<RuleId>,
     pub(crate) syntax: SyntaxId,
     pub(crate) span: SourceSpan,

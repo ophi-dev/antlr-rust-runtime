@@ -2,13 +2,18 @@ use std::collections::BTreeSet;
 
 use antlr4_runtime::atn::AtnStateKind;
 
+use super::super::diagnostic::Diagnostic;
 use super::super::model::{BuildStateId, BuildTransitionId};
-use super::super::provenance::ProvenanceIndex;
+use super::super::provenance::{Origin, ProvenanceIndex};
 use super::build::{BuildGraph, BuildTransitionKind};
 
-pub(crate) fn collapse_lexer_sets(graph: &mut BuildGraph, provenance: &mut ProvenanceIndex) {
+pub(crate) fn collapse_lexer_sets(
+    graph: &mut BuildGraph,
+    provenance: &mut ProvenanceIndex,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
     for decision in graph.decisions.clone() {
-        collapse_decision_sets(graph, decision, provenance);
+        collapse_decision_sets(graph, decision, provenance, diagnostics);
     }
 }
 
@@ -16,6 +21,7 @@ fn collapse_decision_sets(
     graph: &mut BuildGraph,
     decision: BuildStateId,
     provenance: &mut ProvenanceIndex,
+    diagnostics: &mut Vec<Diagnostic>,
 ) {
     let branches = graph.state(decision).transitions.clone();
     let mut run = Vec::new();
@@ -23,11 +29,11 @@ fn collapse_decision_sets(
         if let Some(alternative) = collapsible_set_alternative(graph, branch) {
             run.push(alternative);
         } else {
-            collapse_set_run(graph, &run, provenance);
+            collapse_set_run(graph, &run, provenance, diagnostics);
             run.clear();
         }
     }
-    collapse_set_run(graph, &run, provenance);
+    collapse_set_run(graph, &run, provenance, diagnostics);
 }
 
 #[derive(Clone, Debug)]
@@ -72,6 +78,7 @@ fn collapse_set_run(
     graph: &mut BuildGraph,
     alternatives: &[SetAlternative],
     provenance: &mut ProvenanceIndex,
+    diagnostics: &mut Vec<Diagnostic>,
 ) {
     if alternatives.len() < 2 {
         return;
@@ -85,6 +92,7 @@ fn collapse_set_run(
     }
 
     let first = &alternatives[0];
+    report_collisions(alternatives, provenance, diagnostics);
     let ranges = normalize_ranges(
         alternatives
             .iter()
@@ -107,6 +115,48 @@ fn collapse_set_run(
     for alternative in &alternatives[1..] {
         graph.remove_state(alternative.branch_state);
     }
+}
+
+fn report_collisions(
+    alternatives: &[SetAlternative],
+    provenance: &ProvenanceIndex,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let mut seen = Vec::new();
+    for alternative in alternatives {
+        if let Some(span) = provenance
+            .transition_origins(alternative.match_transition)
+            .iter()
+            .find_map(|origin| match origin {
+                Origin::Authored { span, .. } => Some(span),
+                _ => None,
+            })
+        {
+            for &(start, stop) in &alternative.ranges {
+                if seen.iter().any(|&(seen_start, seen_stop)| {
+                    ranges_overlap(start, stop, seen_start, seen_stop)
+                }) {
+                    diagnostics.push(Diagnostic::warning(
+                        "G4S068",
+                        span.clone(),
+                        format!(
+                            "characters {start:#x}..{stop:#x} are used multiple times in a lexer set"
+                        ),
+                    ));
+                }
+            }
+        }
+        seen.extend(alternative.ranges.iter().copied());
+    }
+}
+
+const fn ranges_overlap(
+    left_start: i32,
+    left_stop: i32,
+    right_start: i32,
+    right_stop: i32,
+) -> bool {
+    left_start <= right_stop && right_start <= left_stop
 }
 
 fn collapsed_set_kind(ranges: Vec<(i32, i32)>) -> BuildTransitionKind {
