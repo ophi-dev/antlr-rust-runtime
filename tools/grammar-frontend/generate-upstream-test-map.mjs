@@ -26,6 +26,9 @@ import {
     ESCAPE_SEQUENCE_SCAFFOLD_COMMIT,
     ESCAPE_SEQUENCE_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_COMMIT,
+    GRAPH_NODES_BASE_COMMIT,
+    GRAPH_NODES_IMPLEMENTATION_COMMIT,
+    GRAPH_NODES_TEST_COMMIT,
     IMPLEMENTATION_COMMIT,
     JAVA_COMMIT,
     LEFT_RECURSION_BASE_COMMIT,
@@ -581,6 +584,19 @@ const LOOKAHEAD_TREE_PORTS = new Map([
                 'decision 0, alternative 2 produced "(e:1 a . b <EOF>)" instead of "(e:2 a . b <EOF>)"',
         },
     ],
+]);
+const GRAPH_NODES_TEST =
+    "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot";
+const GRAPH_NODES_RED_LOGICAL_IDS = new Set([
+    "testgraphnodes-test-a-ax-fd976a340d",
+    "testgraphnodes-test-a-ax-fullctx-502155fcf9",
+    "testgraphnodes-test-ax-a-62a48f251b",
+    "testgraphnodes-test-aa-a-fullctx-8e728ea773",
+    "testgraphnodes-test-ax-a-fullctx-7ef9c1d6b2",
+    "testgraphnodes-test-abx-acx-a3af7f90fa",
+    "testgraphnodes-test-aax-aay-c0f9b80842",
+    "testgraphnodes-test-aaxc-aayd-a73533f64d",
+    "testgraphnodes-test-aaubv-abwdx-7953c9b489",
 ]);
 const CHAR_SUPPORT_PORTS = new Map([
     [
@@ -1159,9 +1175,12 @@ function completedPhaseBRow(
                                           "left-recursion-tool-issues"
                                         ? `direct Rust left-recursion diagnostics and accepted serialization match ` +
                                           `Java 4.13.2 for ${cases[0].suite}.${cases[0].name}`
-                                        : completed.kind === "lookahead-trees"
-                                          ? `direct Rust forced-alternative parse trees and complete serialization match ` +
-                                            `Java 4.13.2 for ${cases[0].suite}.${cases[0].name}`
+                                        : completed.kind === "graph-nodes"
+                                          ? `Rust prediction-context merging matches the Java 4.13.2 DOT graph ` +
+                                            `for ${cases[0].suite}.${cases[0].name}`
+                                          : completed.kind === "lookahead-trees"
+                                            ? `direct Rust forced-alternative parse trees and complete serialization match ` +
+                                              `Java 4.13.2 for ${cases[0].suite}.${cases[0].name}`
                         : `direct Rust semantic diagnostics match Java 4.13.2 exactly ` +
                           `for ${cases[0].suite}.${cases[0].name}`;
     const coveredExisting =
@@ -1621,6 +1640,58 @@ async function loadCompletedPhaseBPorts() {
             `expected 7 completed TestLeftRecursionToolIssues ports, found ${LEFT_RECURSION_PORTS.size}`,
         );
     }
+    const graphNodeGroups = new Map();
+    for (const testCase of inventory.cases) {
+        if (testCase.suite !== "TestGraphNodes") {
+            continue;
+        }
+        const key =
+            `${testCase.suite}\0${canonicalName(testCase.name)}` +
+            `\0${parameterKey(testCase)}`;
+        const group = graphNodeGroups.get(key) ?? [];
+        group.push(testCase);
+        graphNodeGroups.set(key, group);
+    }
+    const remainingGraphNodeRedIds = new Set(
+        GRAPH_NODES_RED_LOGICAL_IDS,
+    );
+    for (const [key, cases] of graphNodeGroups) {
+        const logicalId = logicalCaseId(
+            cases[0].suite,
+            cases[0].name,
+            key,
+        );
+        const ported = GRAPH_NODES_RED_LOGICAL_IDS.has(logicalId);
+        remainingGraphNodeRedIds.delete(logicalId);
+        ports.set(logicalId, {
+            fixturePaths: [],
+            rustTest: GRAPH_NODES_TEST,
+            kind: "graph-nodes",
+            resolution: ported
+                ? "ported"
+                : "verified-covered-existing",
+            scaffoldCommit: GRAPH_NODES_BASE_COMMIT,
+            testCommit: GRAPH_NODES_TEST_COMMIT,
+            implementationCommit: ported
+                ? GRAPH_NODES_IMPLEMENTATION_COMMIT
+                : GRAPH_NODES_BASE_COMMIT,
+            testCommand:
+                `ANTLR_GRAPH_NODE_CASE=${logicalId} cargo test --locked --lib ` +
+                `${GRAPH_NODES_TEST} -- --exact`,
+            greenResult: "1 passed; 0 failed",
+            redFingerprint: ported
+                ? `logical_id=${logicalId}`
+                : undefined,
+        });
+    }
+    if (
+        graphNodeGroups.size !== 36 ||
+        remainingGraphNodeRedIds.size !== 0
+    ) {
+        throw new Error(
+            "expected 36 completed TestGraphNodes ports with all recorded red cases",
+        );
+    }
     for (const [logicalId, definition] of LOOKAHEAD_TREE_PORTS) {
         ports.set(logicalId, {
             fixturePaths: await fixturePaths(logicalId),
@@ -1681,8 +1752,8 @@ async function loadCompletedPhaseBPorts() {
             `expected 47 completed TestScopeParsing ports, found ${scopeGroups.size}`,
         );
     }
-    if (ports.size !== 219) {
-        throw new Error(`expected 219 completed Phase B ports, found ${ports.size}`);
+    if (ports.size !== 255) {
+        throw new Error(`expected 255 completed Phase B ports, found ${ports.size}`);
     }
     return ports;
 }
@@ -1733,6 +1804,13 @@ function policyFor(suite, name) {
             unit: structural
                 ? "structural lexer action collection"
                 : "compiled lexer action behavior",
+        };
+    }
+    if (suite === "TestGraphNodes") {
+        return {
+            owner: "B",
+            disposition: "port",
+            unit: "prediction-context graph merging",
         };
     }
     if (PHASE_B_SUITES.has(suite)) {

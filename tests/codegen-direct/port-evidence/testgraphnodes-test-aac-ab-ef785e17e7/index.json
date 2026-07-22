@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testgraphnodes-test-aac-ab-ef785e17e7",
+  "active_revision_id": "testgraphnodes-test-aac-ab-ef785e17e7-r1",
+  "revisions": [
+    {
+      "revision_id": "testgraphnodes-test-aac-ab-ef785e17e7-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-aac-ab-ef785e17e7/revisions/testgraphnodes-test-aac-ab-ef785e17e7-r1/manifest.json",
+      "closure_sha256": "5673affd22ee7573924aa9b730f82e9d719fa3b3d2f10079f8a20ec2eeac6f53"
+    }
+  ]
+}

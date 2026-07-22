@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testgraphnodes-test-ax-ax-48f57578fa",
+  "revision_id": "testgraphnodes-test-ax-ax-48f57578fa-r1",
+  "cells": [
+    {
+      "test_port": "coverage-extension",
+      "test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "implementation_port": "existing-primary-antlr-ng",
+      "implementation_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-ax-ax-48f57578fa cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+      "result": "green: 1 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the case-specific test passed against the existing Phase B implementation"
+}

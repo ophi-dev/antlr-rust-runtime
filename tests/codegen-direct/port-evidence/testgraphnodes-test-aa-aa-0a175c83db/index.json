@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testgraphnodes-test-aa-aa-0a175c83db",
+  "active_revision_id": "testgraphnodes-test-aa-aa-0a175c83db-r1",
+  "revisions": [
+    {
+      "revision_id": "testgraphnodes-test-aa-aa-0a175c83db-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-aa-aa-0a175c83db/revisions/testgraphnodes-test-aa-aa-0a175c83db-r1/manifest.json",
+      "closure_sha256": "c6dd3adae8c8f71ca98cde01c96591f0beb49f41a42b748ab4a5446de34f8d53"
+    }
+  ]
+}

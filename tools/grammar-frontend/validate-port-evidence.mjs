@@ -29,6 +29,10 @@ import {
     ESCAPE_SEQUENCE_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_PARENT,
+    GRAPH_NODES_BASE_COMMIT,
+    GRAPH_NODES_BASE_PARENT_COMMIT,
+    GRAPH_NODES_IMPLEMENTATION_COMMIT,
+    GRAPH_NODES_TEST_COMMIT,
     IMPLEMENTATION_COMMIT,
     JAVA_COMMIT,
     LEFT_RECURSION_BASE_COMMIT,
@@ -333,6 +337,9 @@ for (const [logicalId, record] of records) {
         const lookaheadTree = logicalId.startsWith(
             "testlookaheadtrees-",
         );
+        const graphNodes = logicalId.startsWith(
+            "testgraphnodes-",
+        );
         if (resolution === "verified-covered-existing") {
             if (atnSerialization) {
                 expect(
@@ -485,6 +492,23 @@ for (const [logicalId, record] of records) {
                         manifest.ancestry.primary_implementation_parent ===
                             LEFT_RECURSION_BASE_PARENT_COMMIT,
                     `${logicalId} left recursion covered-existing ancestry differs`,
+                );
+            } else if (graphNodes) {
+                expect(
+                    manifest.commits.scaffold ===
+                            GRAPH_NODES_BASE_COMMIT &&
+                        manifest.commits.primary_test ===
+                            GRAPH_NODES_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            GRAPH_NODES_BASE_COMMIT,
+                    `${logicalId} GraphNodes covered-existing commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            GRAPH_NODES_BASE_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            GRAPH_NODES_BASE_PARENT_COMMIT,
+                    `${logicalId} GraphNodes covered-existing ancestry differs`,
                 );
             } else {
                 expect(
@@ -742,6 +766,23 @@ for (const [logicalId, record] of records) {
                         manifest.ancestry.primary_implementation_parent ===
                             LEFT_RECURSION_TEST_COMMIT,
                     `${logicalId} left recursion recorded ancestry differs`,
+                );
+            } else if (graphNodes) {
+                expect(
+                    manifest.commits.scaffold ===
+                            GRAPH_NODES_BASE_COMMIT &&
+                        manifest.commits.primary_test ===
+                            GRAPH_NODES_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            GRAPH_NODES_IMPLEMENTATION_COMMIT,
+                    `${logicalId} GraphNodes evidence commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            GRAPH_NODES_BASE_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            GRAPH_NODES_TEST_COMMIT,
+                    `${logicalId} GraphNodes recorded ancestry differs`,
                 );
             } else if (lookaheadTree) {
                 expect(
@@ -1214,6 +1255,37 @@ if (leftRecursionImplementationParent !== null) {
         leftRecursionImplementationParent.trim() ===
             LEFT_RECURSION_TEST_COMMIT,
         "left recursion implementation commit is not based on its locked tests",
+    );
+}
+const graphNodesBaseParent = gitOptional([
+    "rev-parse",
+    `${GRAPH_NODES_BASE_COMMIT}^`,
+]);
+if (graphNodesBaseParent !== null) {
+    expect(
+        graphNodesBaseParent.trim() === GRAPH_NODES_BASE_PARENT_COMMIT,
+        "GraphNodes base commit has an unexpected parent",
+    );
+}
+const graphNodesTestParent = gitOptional([
+    "rev-parse",
+    `${GRAPH_NODES_TEST_COMMIT}^`,
+]);
+if (graphNodesTestParent !== null) {
+    expect(
+        graphNodesTestParent.trim() === GRAPH_NODES_BASE_COMMIT,
+        "GraphNodes test commit is not based on its recorded base",
+    );
+}
+const graphNodesImplementationParent = gitOptional([
+    "rev-parse",
+    `${GRAPH_NODES_IMPLEMENTATION_COMMIT}^`,
+]);
+if (graphNodesImplementationParent !== null) {
+    expect(
+        graphNodesImplementationParent.trim() ===
+            GRAPH_NODES_TEST_COMMIT,
+        "GraphNodes implementation commit is not based on its locked tests",
     );
 }
 

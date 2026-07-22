@@ -32,6 +32,10 @@ import {
     ESCAPE_SEQUENCE_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_PARENT,
+    GRAPH_NODES_BASE_COMMIT,
+    GRAPH_NODES_BASE_PARENT_COMMIT,
+    GRAPH_NODES_IMPLEMENTATION_COMMIT,
+    GRAPH_NODES_TEST_COMMIT,
     IMPLEMENTATION_COMMIT,
     JAVA_COMMIT,
     LEFT_RECURSION_BASE_COMMIT,
@@ -172,6 +176,9 @@ const LOOKAHEAD_TREE_TEST_START =
     "    mod upstream_lookahead_trees {";
 const LOOKAHEAD_TREE_TEST_END =
     "\n    mod upstream_left_recursion_tool_issues {";
+const GRAPH_NODES_TEST_PATH = "src/prediction.rs";
+const GRAPH_NODES_TEST_MARKER =
+    "    mod upstream_graph_nodes {";
 const EMPTY_VOCABULARY_LOGICAL_ID =
     "testvocabulary-testemptyvocabulary-66d31ad014";
 const SYMBOL_INFO_SHA256 =
@@ -1196,6 +1203,45 @@ const lookaheadTreeLockedSections = [
         sha256: digest(checkedInLookaheadTreeTests),
     },
 ];
+const checkedInGraphNodesTests = sectionAtMarker(
+    await readFile(resolve(repoRoot, GRAPH_NODES_TEST_PATH), "utf8"),
+    GRAPH_NODES_TEST_MARKER,
+);
+const recordedGraphNodesTests = gitShowOptional(
+    repoRoot,
+    GRAPH_NODES_TEST_COMMIT,
+    GRAPH_NODES_TEST_PATH,
+);
+const implementedGraphNodesTests = gitShowOptional(
+    repoRoot,
+    GRAPH_NODES_IMPLEMENTATION_COMMIT,
+    GRAPH_NODES_TEST_PATH,
+);
+if (
+    recordedGraphNodesTests === null ||
+    sectionAtMarker(recordedGraphNodesTests, GRAPH_NODES_TEST_MARKER) !==
+        checkedInGraphNodesTests
+) {
+    throw new Error(
+        "checked-in GraphNodes ports differ from their test commit",
+    );
+}
+if (
+    implementedGraphNodesTests === null ||
+    sectionAtMarker(implementedGraphNodesTests, GRAPH_NODES_TEST_MARKER) !==
+        checkedInGraphNodesTests
+) {
+    throw new Error(
+        "GraphNodes implementation changed the locked test ports",
+    );
+}
+const graphNodesLockedSections = [
+    {
+        path: GRAPH_NODES_TEST_PATH,
+        marker: GRAPH_NODES_TEST_MARKER,
+        sha256: digest(checkedInGraphNodesTests),
+    },
+];
 
 const upstreamByLogicalId = new Map(
     testMap.rows.map((row) => [row.logical_id, row]),
@@ -1337,6 +1383,9 @@ for (const row of completedRows) {
     const phaseBLookaheadTree = row.logical_id.startsWith(
         "testlookaheadtrees-",
     );
+    const phaseBGraphNodes = row.logical_id.startsWith(
+        "testgraphnodes-",
+    );
     if (
         row.owner_phase === "B" &&
         !phaseBAtnSerialization &&
@@ -1355,7 +1404,8 @@ for (const row of completedRows) {
         !phaseBUnicodeGrammar &&
         !phaseBTokenAssignment &&
         !phaseBLeftRecursion &&
-        !phaseBLookaheadTree
+        !phaseBLookaheadTree &&
+        !phaseBGraphNodes
     ) {
         throw new Error(`missing Phase B evidence profile for ${row.logical_id}`);
     }
@@ -1566,6 +1616,22 @@ for (const row of completedRows) {
                                                 ? "the accepted primary-rule-argument .interp test passed against the direct compiler implementation already present at the batch base"
                                                 : "the left-recursion implementation commit is directly based on the locked red diagnostic tests",
                                         }
+                                      : phaseBGraphNodes
+                                        ? {
+                                              lockedSections:
+                                                  graphNodesLockedSections,
+                                              scaffoldCommit:
+                                                  GRAPH_NODES_BASE_COMMIT,
+                                              testParent:
+                                                  GRAPH_NODES_BASE_COMMIT,
+                                              implementationParent:
+                                                  coveredExisting
+                                                      ? GRAPH_NODES_BASE_PARENT_COMMIT
+                                                      : GRAPH_NODES_TEST_COMMIT,
+                                              reachability: coveredExisting
+                                                  ? "the case-specific DOT assertion passed against prediction-context merging already present at the batch base"
+                                                  : "the recursive parent-merge implementation commit is directly based on the locked red DOT assertions",
+                                          }
                                       : phaseBLookaheadTree
                                         ? {
                                               lockedSections:
@@ -1733,6 +1799,15 @@ for (const row of completedRows) {
                                                 java_compatibility_verdict:
                                                     "exact Java 4.13.2 diagnostic severity, position, and message equality or complete accepted recognizer metadata and serialized ATN equality",
                                             }
+                                          : phaseBGraphNodes
+                                            ? {
+                                                  primary:
+                                                      "the Rust prediction-context merge produces the exact deterministic DOT graph expected by Java 4.13.2",
+                                                  alternate:
+                                                      "the pinned antlr-ng TestGraphNodes case exercises the same singleton and array prediction-context merge behavior",
+                                                  java_compatibility_verdict:
+                                                      "exact Java 4.13.2 TestGraphNodes DOT graph equality",
+                                              }
                                           : phaseBLookaheadTree
                                             ? {
                                                   primary:
@@ -1794,6 +1869,7 @@ for (const row of completedRows) {
             (phaseBTokenAssignment && !coveredExisting) ||
             (phaseBTokenPosition && !coveredExisting) ||
             (phaseBLeftRecursion && !coveredExisting) ||
+            (phaseBGraphNodes && !coveredExisting) ||
             phaseBLookaheadTree
             ? row.demonstrated_red
             : undefined,

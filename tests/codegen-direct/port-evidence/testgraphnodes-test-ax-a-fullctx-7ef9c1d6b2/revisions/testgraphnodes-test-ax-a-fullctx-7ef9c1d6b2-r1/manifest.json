@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "logical_id": "testgraphnodes-test-ax-a-fullctx-7ef9c1d6b2",
+  "revision_id": "testgraphnodes-test-ax-a-fullctx-7ef9c1d6b2-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "closure": {
+    "logical_id": "testgraphnodes-test-ax-a-fullctx-7ef9c1d6b2",
+    "source_case_ids": [
+      "antlr-ng:testgraphnodes-test-ax-a-fullctx@aabca4e4dbd2",
+      "java-antlr:testgraphnodes-test-ax-a-fullctx@aabca4e4dbd2"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+    "unit_under_test": "prediction-context graph merging",
+    "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_ax$_a$_fullctx",
+    "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+    "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c"
+  },
+  "closure_sha256": "593c0c49fa7ecea3dd03509fe270cb8e4a7134ff14dcb3f02437107cda096992",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testgraphnodes-test-ax-a-fullctx@aabca4e4dbd2",
+      "path": "tests/TestGraphNodes.spec.ts",
+      "sha256": "c0312768aa10c8b0da1a5cf1ffae74370067ed7a9a42fcf0ceb6a7414266638c"
+    },
+    {
+      "source_case_id": "java-antlr:testgraphnodes-test-ax-a-fullctx@aabca4e4dbd2",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestGraphNodes.java",
+      "sha256": "c33fb05046296906d9ab708650d338035199791db37a111c2864b0ffb4fd0022"
+    }
+  ],
+  "commits": {
+    "scaffold": "b2b1830785748af7bf758f576f6051a748148eda",
+    "primary_test": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+    "primary_implementation": "0d2729880d113dc8b61222e9bb38f6a41ba44d6a"
+  },
+  "ancestry": {
+    "primary_test_parent": "b2b1830785748af7bf758f576f6051a748148eda",
+    "primary_implementation_parent": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+    "reachability": "the recursive parent-merge implementation commit is directly based on the locked red DOT assertions"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/prediction.rs",
+      "marker": "    mod upstream_graph_nodes {",
+      "sha256": "3690e29ecfdc3a109eb772a04584e65cf4c97759b9a6b0e6b035ff92e9cbda09"
+    }
+  ],
+  "demonstrated_red": {
+    "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-ax-a-fullctx-7ef9c1d6b2 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+    "commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+    "exit_code": 101,
+    "fingerprint": "logical_id=testgraphnodes-test-ax-a-fullctx-7ef9c1d6b2"
+  },
+  "green_result": {
+    "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-ax-a-fullctx-7ef9c1d6b2 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+    "commit": "0d2729880d113dc8b61222e9bb38f6a41ba44d6a",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testgraphnodes-test-ax-a-fullctx-7ef9c1d6b2/revisions/testgraphnodes-test-ax-a-fullctx-7ef9c1d6b2-r1/oracle-results/declared-sources.json",
+      "sha256": "ce109085db859cc47088e768f49c22ad11053dd901170f86370ce574d0e2e082"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testgraphnodes-test-ax-a-fullctx-7ef9c1d6b2/revisions/testgraphnodes-test-ax-a-fullctx-7ef9c1d6b2-r1/matrix-results/results.json",
+      "sha256": "14a5fd2821d4b3f74ad8973ceb3078d7a043da8ab2505eca01631a2943e1022a"
+    }
+  ]
+}

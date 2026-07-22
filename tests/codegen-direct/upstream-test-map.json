@@ -18049,8 +18049,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-9ea85e6b69-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-9ea85e6b69",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18070,9 +18071,22 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_$_$ behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_$_$",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "verified_covered_existing": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-9ea85e6b69 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-9ea85e6b69 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-9ea85e6b69",
         "source_case_ids": [
@@ -18080,14 +18094,18 @@
           "java-antlr:testgraphnodes-test@13deff4e064f"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-9ea85e6b69",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_$_$ behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_$_$",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "1427b8804b6837c1e8256fe7f9ed024d44d64c47524b3e54447cfefff79753aa",
-      "evidence_path": null
+      "closure_sha256": "79ed6245b097a05606e8015812d902bd6a30669da1ed9c92cb7399142fc37218",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-9ea85e6b69"
     },
     {
       "logical_id": "testgraphnodes-test-a-a-429589e373",
@@ -18099,8 +18117,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-a-a-429589e373-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-a-a-429589e373",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18120,9 +18139,22 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_a_a behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_a_a",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "verified_covered_existing": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-a-a-429589e373 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-a-a-429589e373 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-a-a-429589e373",
         "source_case_ids": [
@@ -18130,14 +18162,18 @@
           "java-antlr:testgraphnodes-test-a-a@80ff45e96840"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-a-a-429589e373",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_a_a behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_a_a",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "aba25107f5b551c3e777a0e60427a772023576cdb4c9688aeb6a1908a4bde538",
-      "evidence_path": null
+      "closure_sha256": "10141a49886040af44536c3064bba74c8a1842f5d2bb57c79b31526079363870",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-a-a-429589e373"
     },
     {
       "logical_id": "testgraphnodes-test-a-a-fullctx-b023f64b6c",
@@ -18149,8 +18185,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-a-a-fullctx-b023f64b6c-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-a-a-fullctx-b023f64b6c",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18170,9 +18207,22 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_A$_A$_fullctx behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_A$_A$_fullctx",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "verified_covered_existing": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-a-a-fullctx-b023f64b6c cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-a-a-fullctx-b023f64b6c cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-a-a-fullctx-b023f64b6c",
         "source_case_ids": [
@@ -18180,14 +18230,18 @@
           "java-antlr:testgraphnodes-test-a-a-fullctx@f98b21c2e79c"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-a-a-fullctx-b023f64b6c",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_A$_A$_fullctx behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_A$_A$_fullctx",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "95073929ce12dee094e705d4747b881ad1875ae3f344708110a8fe776b8e6187",
-      "evidence_path": null
+      "closure_sha256": "5016b59343a65cbb87f845e531fa10d40c1200dcba0739f15dca3ef6308761c7",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-a-a-fullctx-b023f64b6c"
     },
     {
       "logical_id": "testgraphnodes-test-a-ax-fd976a340d",
@@ -18199,8 +18253,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-a-ax-fd976a340d-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-a-ax-fd976a340d",
+      "tdd_state": "done",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18220,9 +18274,21 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_a$_ax behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "logical_id=testgraphnodes-test-a-ax-fd976a340d",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_a$_ax",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "demonstrated_red": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-a-ax-fd976a340d cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "exit_code": 101,
+        "fingerprint": "logical_id=testgraphnodes-test-a-ax-fd976a340d"
+      },
+      "primary_implementation_commit": "0d2729880d113dc8b61222e9bb38f6a41ba44d6a",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-a-ax-fd976a340d cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-a-ax-fd976a340d",
         "source_case_ids": [
@@ -18230,14 +18296,17 @@
           "java-antlr:testgraphnodes-test-a-ax@ac92a9bbf13c"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-a-ax-fd976a340d",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_a$_ax behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_a$_ax",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c"
       },
-      "closure_sha256": "9cda3324c0d51d697f8a59f00099db4069004e902b876d0a8d118ae0c4ce667e",
-      "evidence_path": null
+      "closure_sha256": "7ebfdcce3c5b72533aa0cb102efa1d4aa4465f3eb9825a44afbb8389c80f6858",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-a-ax-fd976a340d"
     },
     {
       "logical_id": "testgraphnodes-test-a-ax-fullctx-502155fcf9",
@@ -18249,8 +18318,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-a-ax-fullctx-502155fcf9-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-a-ax-fullctx-502155fcf9",
+      "tdd_state": "done",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18270,9 +18339,21 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_a$_ax_fullctx behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "logical_id=testgraphnodes-test-a-ax-fullctx-502155fcf9",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_a$_ax_fullctx",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "demonstrated_red": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-a-ax-fullctx-502155fcf9 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "exit_code": 101,
+        "fingerprint": "logical_id=testgraphnodes-test-a-ax-fullctx-502155fcf9"
+      },
+      "primary_implementation_commit": "0d2729880d113dc8b61222e9bb38f6a41ba44d6a",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-a-ax-fullctx-502155fcf9 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-a-ax-fullctx-502155fcf9",
         "source_case_ids": [
@@ -18280,14 +18361,17 @@
           "java-antlr:testgraphnodes-test-a-ax-fullctx@1f1a72678112"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-a-ax-fullctx-502155fcf9",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_a$_ax_fullctx behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_a$_ax_fullctx",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c"
       },
-      "closure_sha256": "6ace8f2f940efd5332aae50350f92884429f208c7762331fbff34b6120fde93f",
-      "evidence_path": null
+      "closure_sha256": "d9a52b1c0ae847c726d61c9c2fe5b6cf7f4795d4404b715211fa4cc48b9b6d23",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-a-ax-fullctx-502155fcf9"
     },
     {
       "logical_id": "testgraphnodes-test-a-b-080058428f",
@@ -18299,8 +18383,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-a-b-080058428f-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-a-b-080058428f",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18320,9 +18405,22 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_a_b behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_a_b",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "verified_covered_existing": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-a-b-080058428f cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-a-b-080058428f cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-a-b-080058428f",
         "source_case_ids": [
@@ -18330,14 +18428,18 @@
           "java-antlr:testgraphnodes-test-a-b@8fb8e639de0f"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-a-b-080058428f",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_a_b behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_a_b",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "9b2d7882f5aa4fbf4fd7316fa4aeec2782a113c7a5d797609475fb0946ad31e1",
-      "evidence_path": null
+      "closure_sha256": "031988b710616eec5e547353622698b5a97d478982278b677c91c523a0562c54",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-a-b-080058428f"
     },
     {
       "logical_id": "testgraphnodes-test-a-bx-b15f7b876f",
@@ -18349,8 +18451,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-a-bx-b15f7b876f-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-a-bx-b15f7b876f",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18370,9 +18473,22 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_a$_bx behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_a$_bx",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "verified_covered_existing": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-a-bx-b15f7b876f cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-a-bx-b15f7b876f cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-a-bx-b15f7b876f",
         "source_case_ids": [
@@ -18380,14 +18496,18 @@
           "java-antlr:testgraphnodes-test-a-bx@9001eec86122"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-a-bx-b15f7b876f",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_a$_bx behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_a$_bx",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "496396a95b92e8ae3a3fc0b989a7588e213de64b399f6a32ba7d53b19877c5be",
-      "evidence_path": null
+      "closure_sha256": "5228fb739848e5d6b3cffffb7d82eb05a0fa8edeed129c6c9a2f170850a2137f",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-a-bx-b15f7b876f"
     },
     {
       "logical_id": "testgraphnodes-test-a-bx-fullctx-a35242b6cf",
@@ -18399,8 +18519,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-a-bx-fullctx-a35242b6cf-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-a-bx-fullctx-a35242b6cf",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18420,9 +18541,22 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_a$_bx_fullctx behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_a$_bx_fullctx",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "verified_covered_existing": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-a-bx-fullctx-a35242b6cf cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-a-bx-fullctx-a35242b6cf cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-a-bx-fullctx-a35242b6cf",
         "source_case_ids": [
@@ -18430,14 +18564,18 @@
           "java-antlr:testgraphnodes-test-a-bx-fullctx@a14919a2b8ad"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-a-bx-fullctx-a35242b6cf",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_a$_bx_fullctx behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_a$_bx_fullctx",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "edb70f8d9d4e968b3b356849a7e74617bb2c3c29612123c789d1f457f994baaa",
-      "evidence_path": null
+      "closure_sha256": "f4836d05558e7b12c0215303fddfe72b7d847f5bc674ab60c99417064716fef3",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-a-bx-fullctx-a35242b6cf"
     },
     {
       "logical_id": "testgraphnodes-test-aa-a-fullctx-8e728ea773",
@@ -18449,8 +18587,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-aa-a-fullctx-8e728ea773-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aa-a-fullctx-8e728ea773",
+      "tdd_state": "done",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18470,9 +18608,21 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_aa$_a$_$_fullCtx behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "logical_id=testgraphnodes-test-aa-a-fullctx-8e728ea773",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_aa$_a$_$_fullCtx",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "demonstrated_red": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aa-a-fullctx-8e728ea773 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "exit_code": 101,
+        "fingerprint": "logical_id=testgraphnodes-test-aa-a-fullctx-8e728ea773"
+      },
+      "primary_implementation_commit": "0d2729880d113dc8b61222e9bb38f6a41ba44d6a",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aa-a-fullctx-8e728ea773 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-aa-a-fullctx-8e728ea773",
         "source_case_ids": [
@@ -18480,14 +18630,17 @@
           "java-antlr:testgraphnodes-test-aa-a-fullctx@20b37c047046"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aa-a-fullctx-8e728ea773",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_aa$_a$_$_fullCtx behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_aa$_a$_$_fullCtx",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c"
       },
-      "closure_sha256": "4e26bf6cc3362f90cfb622104eb24096a7f9466f84e5ecdc34696d511ab6fc80",
-      "evidence_path": null
+      "closure_sha256": "1c05633fe22c342f29e91c9ce1f3ac54436579fde52bb45f351e030f63e198d5",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-aa-a-fullctx-8e728ea773"
     },
     {
       "logical_id": "testgraphnodes-test-aa-aa-0a175c83db",
@@ -18499,8 +18652,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-aa-aa-0a175c83db-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aa-aa-0a175c83db",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18520,9 +18674,22 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_Aa_Aa behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_Aa_Aa",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "verified_covered_existing": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aa-aa-0a175c83db cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aa-aa-0a175c83db cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-aa-aa-0a175c83db",
         "source_case_ids": [
@@ -18530,14 +18697,18 @@
           "java-antlr:testgraphnodes-test-aa-aa@8f23cbb407c8"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aa-aa-0a175c83db",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_Aa_Aa behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_Aa_Aa",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "e63b14772263075edd2356c1a7fe6e8086cb91f7c2c53f0d948aaf12c8a9af04",
-      "evidence_path": null
+      "closure_sha256": "c6dd3adae8c8f71ca98cde01c96591f0beb49f41a42b748ab4a5446de34f8d53",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-aa-aa-0a175c83db"
     },
     {
       "logical_id": "testgraphnodes-test-aa-abc-db12d99894",
@@ -18549,8 +18720,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-aa-abc-db12d99894-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aa-abc-db12d99894",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18570,9 +18742,22 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_Aa_Abc behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_Aa_Abc",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "verified_covered_existing": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aa-abc-db12d99894 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aa-abc-db12d99894 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-aa-abc-db12d99894",
         "source_case_ids": [
@@ -18580,14 +18765,18 @@
           "java-antlr:testgraphnodes-test-aa-abc@251870b4ca13"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aa-abc-db12d99894",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_Aa_Abc behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_Aa_Abc",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "01ed9c63137a35f365f0d02473ef4e8c680479cb997ffae049647bc0cb1d692b",
-      "evidence_path": null
+      "closure_sha256": "41be7b38807278f031de750f147bf3b74271c415e2ced2881db186ba565cf34a",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-aa-abc-db12d99894"
     },
     {
       "logical_id": "testgraphnodes-test-aab-aa-d90d8d54f0",
@@ -18599,8 +18788,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-aab-aa-d90d8d54f0-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aab-aa-d90d8d54f0",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18620,9 +18810,22 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_Aab_Aa behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_Aab_Aa",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "verified_covered_existing": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aab-aa-d90d8d54f0 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aab-aa-d90d8d54f0 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-aab-aa-d90d8d54f0",
         "source_case_ids": [
@@ -18630,14 +18833,18 @@
           "java-antlr:testgraphnodes-test-aab-aa@50f7306cbae1"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aab-aa-d90d8d54f0",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_Aab_Aa behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_Aab_Aa",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "37e4d226b6bb13b2337a5b25c736c37e8227d474e7ab0e89db1e2875a1905de2",
-      "evidence_path": null
+      "closure_sha256": "0238e18908a30658c01e027067418e0538c695e681bfac0518df6e2b10068034",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-aab-aa-d90d8d54f0"
     },
     {
       "logical_id": "testgraphnodes-test-aab-ab-e2d46352b4",
@@ -18649,8 +18856,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-aab-ab-e2d46352b4-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aab-ab-e2d46352b4",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18670,9 +18878,22 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_Aab_Ab behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_Aab_Ab",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "verified_covered_existing": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aab-ab-e2d46352b4 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aab-ab-e2d46352b4 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-aab-ab-e2d46352b4",
         "source_case_ids": [
@@ -18680,14 +18901,18 @@
           "java-antlr:testgraphnodes-test-aab-ab@19eb6112f510"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aab-ab-e2d46352b4",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_Aab_Ab behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_Aab_Ab",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "da11e6f530ed6a5fecc8324bf1677603fa14763ddc6098fd802a85d5c86b4721",
-      "evidence_path": null
+      "closure_sha256": "a26e162e1b6a5295009796a7a90ddae2ee5b8d6e966f7f8f38115b046b7adfb1",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-aab-ab-e2d46352b4"
     },
     {
       "logical_id": "testgraphnodes-test-aab-ac-139c5b709d",
@@ -18699,8 +18924,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-aab-ac-139c5b709d-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aab-ac-139c5b709d",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18720,9 +18946,22 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_Aab_Ac behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_Aab_Ac",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "verified_covered_existing": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aab-ac-139c5b709d cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aab-ac-139c5b709d cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-aab-ac-139c5b709d",
         "source_case_ids": [
@@ -18730,14 +18969,18 @@
           "java-antlr:testgraphnodes-test-aab-ac@40caa1ccc99d"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aab-ac-139c5b709d",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_Aab_Ac behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_Aab_Ac",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "dad188626431625e37062c8a9d9e8d4ab1c5fb3b743c28323a4b3254f1a4edc2",
-      "evidence_path": null
+      "closure_sha256": "b618ce8527f2181d28c327c8b317884f5a5fa4c78bff96da5ecd4680dbc5b246",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-aab-ac-139c5b709d"
     },
     {
       "logical_id": "testgraphnodes-test-aac-ab-ef785e17e7",
@@ -18749,8 +18992,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-aac-ab-ef785e17e7-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aac-ab-ef785e17e7",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18770,9 +19014,22 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_Aac_Ab behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_Aac_Ab",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "verified_covered_existing": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aac-ab-ef785e17e7 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aac-ab-ef785e17e7 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-aac-ab-ef785e17e7",
         "source_case_ids": [
@@ -18780,14 +19037,18 @@
           "java-antlr:testgraphnodes-test-aac-ab@758a53ba423c"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aac-ab-ef785e17e7",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_Aac_Ab behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_Aac_Ab",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "eb7f246b03403abc0423762df82158b267b02baa9aff6eab5d8c9b9460e101e0",
-      "evidence_path": null
+      "closure_sha256": "5673affd22ee7573924aa9b730f82e9d719fa3b3d2f10079f8a20ec2eeac6f53",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-aac-ab-ef785e17e7"
     },
     {
       "logical_id": "testgraphnodes-test-aaubu-acudu-7cb798b616",
@@ -18799,8 +19060,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-aaubu-acudu-7cb798b616-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aaubu-acudu-7cb798b616",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18820,9 +19082,22 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_Aaubu_Acudu behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_Aaubu_Acudu",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "verified_covered_existing": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aaubu-acudu-7cb798b616 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aaubu-acudu-7cb798b616 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-aaubu-acudu-7cb798b616",
         "source_case_ids": [
@@ -18830,14 +19105,18 @@
           "java-antlr:testgraphnodes-test-aaubu-acudu@ad8eab582ec5"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aaubu-acudu-7cb798b616",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_Aaubu_Acudu behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_Aaubu_Acudu",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "2745486286fd402070f57d7911b12e0f8e21330596c7a2447c5a2b0bc9bfbf0c",
-      "evidence_path": null
+      "closure_sha256": "df60baf29d6a7a3209b78a32ff309947be42f36b76158f9ba613776cb4cc9f30",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-aaubu-acudu-7cb798b616"
     },
     {
       "logical_id": "testgraphnodes-test-aaubv-abvdu-ecc8850384",
@@ -18849,8 +19128,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-aaubv-abvdu-ecc8850384-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aaubv-abvdu-ecc8850384",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18870,9 +19150,22 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_Aaubv_Abvdu behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_Aaubv_Abvdu",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "verified_covered_existing": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aaubv-abvdu-ecc8850384 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aaubv-abvdu-ecc8850384 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-aaubv-abvdu-ecc8850384",
         "source_case_ids": [
@@ -18880,14 +19173,18 @@
           "java-antlr:testgraphnodes-test-aaubv-abvdu@ccc91be44cff"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aaubv-abvdu-ecc8850384",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_Aaubv_Abvdu behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_Aaubv_Abvdu",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "5a04c67c3ae8c17d764255b3c9facbacbdebb5d027043353ca02fcffb7bf33e7",
-      "evidence_path": null
+      "closure_sha256": "73b2193c38fb7585056042befc28a03362878a7601607eb0bf2640c05bcf0085",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-aaubv-abvdu-ecc8850384"
     },
     {
       "logical_id": "testgraphnodes-test-aaubv-abvdx-01eb5714fe",
@@ -18899,8 +19196,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-aaubv-abvdx-01eb5714fe-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aaubv-abvdx-01eb5714fe",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18920,9 +19218,22 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_Aaubv_Abvdx behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_Aaubv_Abvdx",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "verified_covered_existing": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aaubv-abvdx-01eb5714fe cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aaubv-abvdx-01eb5714fe cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-aaubv-abvdx-01eb5714fe",
         "source_case_ids": [
@@ -18930,14 +19241,18 @@
           "java-antlr:testgraphnodes-test-aaubv-abvdx@ab2878e15d25"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aaubv-abvdx-01eb5714fe",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_Aaubv_Abvdx behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_Aaubv_Abvdx",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "51f4afc4d945b2f0cb92a7cc9f13cb7b0addce419d07f0d4796885cae69c61bc",
-      "evidence_path": null
+      "closure_sha256": "1f75af7d4955935aed8533ab4dc5238cea3bfcb8a5c7da035e4a3559bfbaa4a3",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-aaubv-abvdx-01eb5714fe"
     },
     {
       "logical_id": "testgraphnodes-test-aaubv-abwdx-7953c9b489",
@@ -18949,8 +19264,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-aaubv-abwdx-7953c9b489-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aaubv-abwdx-7953c9b489",
+      "tdd_state": "done",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18970,9 +19285,21 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_Aaubv_Abwdx behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "logical_id=testgraphnodes-test-aaubv-abwdx-7953c9b489",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_Aaubv_Abwdx",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "demonstrated_red": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aaubv-abwdx-7953c9b489 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "exit_code": 101,
+        "fingerprint": "logical_id=testgraphnodes-test-aaubv-abwdx-7953c9b489"
+      },
+      "primary_implementation_commit": "0d2729880d113dc8b61222e9bb38f6a41ba44d6a",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aaubv-abwdx-7953c9b489 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-aaubv-abwdx-7953c9b489",
         "source_case_ids": [
@@ -18980,14 +19307,17 @@
           "java-antlr:testgraphnodes-test-aaubv-abwdx@fad3e8053ea1"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aaubv-abwdx-7953c9b489",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_Aaubv_Abwdx behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_Aaubv_Abwdx",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c"
       },
-      "closure_sha256": "682144ab57240b166e33c8c06e22ed4f67e3759a1969732992b9b2b059dab164",
-      "evidence_path": null
+      "closure_sha256": "cb219d84fb3e294edd314e00a77475eecf96b81e11c70ba9d6c3d34cc897d621",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-aaubv-abwdx-7953c9b489"
     },
     {
       "logical_id": "testgraphnodes-test-aaubv-acwdx-f479c849df",
@@ -18999,8 +19329,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-aaubv-acwdx-f479c849df-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aaubv-acwdx-f479c849df",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -19020,9 +19351,22 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_Aaubv_Acwdx behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_Aaubv_Acwdx",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "verified_covered_existing": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aaubv-acwdx-f479c849df cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aaubv-acwdx-f479c849df cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-aaubv-acwdx-f479c849df",
         "source_case_ids": [
@@ -19030,14 +19374,18 @@
           "java-antlr:testgraphnodes-test-aaubv-acwdx@8e7637141908"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aaubv-acwdx-f479c849df",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_Aaubv_Acwdx behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_Aaubv_Acwdx",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "676bbe0c2ab5d41c9430eed79107d5adedbfd0c55cc49739c3a5d4fec82f90c9",
-      "evidence_path": null
+      "closure_sha256": "55ac19867abe3df74a98a2be142bd68ec1fb8256715f920441c57c62ab7595b0",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-aaubv-acwdx-f479c849df"
     },
     {
       "logical_id": "testgraphnodes-test-aax-aay-c0f9b80842",
@@ -19049,8 +19397,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-aax-aay-c0f9b80842-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aax-aay-c0f9b80842",
+      "tdd_state": "done",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -19070,9 +19418,21 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_Aax_Aay behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "logical_id=testgraphnodes-test-aax-aay-c0f9b80842",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_Aax_Aay",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "demonstrated_red": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aax-aay-c0f9b80842 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "exit_code": 101,
+        "fingerprint": "logical_id=testgraphnodes-test-aax-aay-c0f9b80842"
+      },
+      "primary_implementation_commit": "0d2729880d113dc8b61222e9bb38f6a41ba44d6a",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aax-aay-c0f9b80842 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-aax-aay-c0f9b80842",
         "source_case_ids": [
@@ -19080,14 +19440,17 @@
           "java-antlr:testgraphnodes-test-aax-aay@6a5a8645084a"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aax-aay-c0f9b80842",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_Aax_Aay behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_Aax_Aay",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c"
       },
-      "closure_sha256": "dbe7a2f1ea2e96ac737661acd025e2551843506738c89fdbf3d7281e3f7ffb15",
-      "evidence_path": null
+      "closure_sha256": "fc97e6819d64f7c5c1b167f1f6040f6ba602d0778ab3525647d3a4430f55689d",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-aax-aay-c0f9b80842"
     },
     {
       "logical_id": "testgraphnodes-test-aax-aby-cccf935759",
@@ -19099,8 +19462,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-aax-aby-cccf935759-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aax-aby-cccf935759",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -19120,9 +19484,22 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_Aax_Aby behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_Aax_Aby",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "verified_covered_existing": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aax-aby-cccf935759 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aax-aby-cccf935759 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-aax-aby-cccf935759",
         "source_case_ids": [
@@ -19130,14 +19507,18 @@
           "java-antlr:testgraphnodes-test-aax-aby@6e9512b5159f"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aax-aby-cccf935759",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_Aax_Aby behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_Aax_Aby",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "b9319d58969ad6c6e56e2608fd3268d8925597aa12cefe99fdc1de8289c5622b",
-      "evidence_path": null
+      "closure_sha256": "a5829171a5eecb100be2e10576d315d86cd4a771634d736d4175933f7fc328a7",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-aax-aby-cccf935759"
     },
     {
       "logical_id": "testgraphnodes-test-aaxc-aayd-a73533f64d",
@@ -19149,8 +19530,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-aaxc-aayd-a73533f64d-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aaxc-aayd-a73533f64d",
+      "tdd_state": "done",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -19170,9 +19551,21 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_Aaxc_Aayd behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "logical_id=testgraphnodes-test-aaxc-aayd-a73533f64d",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_Aaxc_Aayd",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "demonstrated_red": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aaxc-aayd-a73533f64d cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "exit_code": 101,
+        "fingerprint": "logical_id=testgraphnodes-test-aaxc-aayd-a73533f64d"
+      },
+      "primary_implementation_commit": "0d2729880d113dc8b61222e9bb38f6a41ba44d6a",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aaxc-aayd-a73533f64d cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-aaxc-aayd-a73533f64d",
         "source_case_ids": [
@@ -19180,14 +19573,17 @@
           "java-antlr:testgraphnodes-test-aaxc-aayd@937cfce2c7ff"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aaxc-aayd-a73533f64d",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_Aaxc_Aayd behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_Aaxc_Aayd",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c"
       },
-      "closure_sha256": "6e41ddcf1fcf61bac0a8aea19a59f19b13e78e5587f5e4a936173c494f5a2b33",
-      "evidence_path": null
+      "closure_sha256": "e36c241b43e615d3dcbccb082de38b7eb8316827d7a7c638dc5f799b33c28b29",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-aaxc-aayd-a73533f64d"
     },
     {
       "logical_id": "testgraphnodes-test-abx-abx-77366e32e9",
@@ -19199,8 +19595,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-abx-abx-77366e32e9-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-abx-abx-77366e32e9",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -19220,9 +19617,22 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_abx_abx behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_abx_abx",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "verified_covered_existing": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-abx-abx-77366e32e9 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-abx-abx-77366e32e9 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-abx-abx-77366e32e9",
         "source_case_ids": [
@@ -19230,14 +19640,18 @@
           "java-antlr:testgraphnodes-test-abx-abx@96c06e76ab98"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-abx-abx-77366e32e9",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_abx_abx behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_abx_abx",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "ace756ba664c2fd89a7735842710f4082999d17a80396a91cb345a7b7fb6d7a3",
-      "evidence_path": null
+      "closure_sha256": "302842ca508d6a41c49440bb11a738c631637854ef38840fdb6c039f50aae9b2",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-abx-abx-77366e32e9"
     },
     {
       "logical_id": "testgraphnodes-test-abx-acx-a3af7f90fa",
@@ -19249,8 +19663,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-abx-acx-a3af7f90fa-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-abx-acx-a3af7f90fa",
+      "tdd_state": "done",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -19270,9 +19684,21 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_abx_acx behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "logical_id=testgraphnodes-test-abx-acx-a3af7f90fa",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_abx_acx",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "demonstrated_red": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-abx-acx-a3af7f90fa cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "exit_code": 101,
+        "fingerprint": "logical_id=testgraphnodes-test-abx-acx-a3af7f90fa"
+      },
+      "primary_implementation_commit": "0d2729880d113dc8b61222e9bb38f6a41ba44d6a",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-abx-acx-a3af7f90fa cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-abx-acx-a3af7f90fa",
         "source_case_ids": [
@@ -19280,14 +19706,17 @@
           "java-antlr:testgraphnodes-test-abx-acx@e45d715a765c"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-abx-acx-a3af7f90fa",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_abx_acx behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_abx_acx",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c"
       },
-      "closure_sha256": "4e138270627656e7f75d2ae1b96d3a06092f0c37c0ea68e7ea004655aec645ec",
-      "evidence_path": null
+      "closure_sha256": "86689ef47b5e676112abee6c4b2d476309f414f73641fc4e63430f98a285dfc2",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-abx-acx-a3af7f90fa"
     },
     {
       "logical_id": "testgraphnodes-test-aex-bfx-07ad9de126",
@@ -19299,8 +19728,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-aex-bfx-07ad9de126-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aex-bfx-07ad9de126",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -19320,9 +19750,22 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_aex_bfx behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_aex_bfx",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "verified_covered_existing": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aex-bfx-07ad9de126 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aex-bfx-07ad9de126 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-aex-bfx-07ad9de126",
         "source_case_ids": [
@@ -19330,14 +19773,18 @@
           "java-antlr:testgraphnodes-test-aex-bfx@5a90557c42c2"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-aex-bfx-07ad9de126",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_aex_bfx behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_aex_bfx",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "eeab9ae59c1da41561b7c6f994830c38c6c3940a74f984b931a8c88e0add605c",
-      "evidence_path": null
+      "closure_sha256": "5a41efdbb026fb39d7fa79d87bd3795852143d0e6e5b594f539232861ef9a993",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-aex-bfx-07ad9de126"
     },
     {
       "logical_id": "testgraphnodes-test-ax-a-62a48f251b",
@@ -19349,8 +19796,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-ax-a-62a48f251b-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-ax-a-62a48f251b",
+      "tdd_state": "done",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -19370,9 +19817,21 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_ax$_a$ behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "logical_id=testgraphnodes-test-ax-a-62a48f251b",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_ax$_a$",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "demonstrated_red": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-ax-a-62a48f251b cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "exit_code": 101,
+        "fingerprint": "logical_id=testgraphnodes-test-ax-a-62a48f251b"
+      },
+      "primary_implementation_commit": "0d2729880d113dc8b61222e9bb38f6a41ba44d6a",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-ax-a-62a48f251b cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-ax-a-62a48f251b",
         "source_case_ids": [
@@ -19380,14 +19839,17 @@
           "java-antlr:testgraphnodes-test-ax-a@309b19879a50"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-ax-a-62a48f251b",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_ax$_a$ behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_ax$_a$",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c"
       },
-      "closure_sha256": "09d5348396f5a38c78ebed196282727a07039f79ecbb418d973d8e868c3b7deb",
-      "evidence_path": null
+      "closure_sha256": "377b34b4e41b5087f9b5bfbdf25338f2259f37eac7804641adb384b8cc6b78e8",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-ax-a-62a48f251b"
     },
     {
       "logical_id": "testgraphnodes-test-ax-a-fullctx-7ef9c1d6b2",
@@ -19399,8 +19861,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-ax-a-fullctx-7ef9c1d6b2-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-ax-a-fullctx-7ef9c1d6b2",
+      "tdd_state": "done",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -19420,9 +19882,21 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_ax$_a$_fullctx behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "logical_id=testgraphnodes-test-ax-a-fullctx-7ef9c1d6b2",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_ax$_a$_fullctx",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "demonstrated_red": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-ax-a-fullctx-7ef9c1d6b2 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "exit_code": 101,
+        "fingerprint": "logical_id=testgraphnodes-test-ax-a-fullctx-7ef9c1d6b2"
+      },
+      "primary_implementation_commit": "0d2729880d113dc8b61222e9bb38f6a41ba44d6a",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-ax-a-fullctx-7ef9c1d6b2 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-ax-a-fullctx-7ef9c1d6b2",
         "source_case_ids": [
@@ -19430,14 +19904,17 @@
           "java-antlr:testgraphnodes-test-ax-a-fullctx@aabca4e4dbd2"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-ax-a-fullctx-7ef9c1d6b2",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_ax$_a$_fullctx behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_ax$_a$_fullctx",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c"
       },
-      "closure_sha256": "ad6e43c17f41ecdbba65a7cb634d8a5b567c42285efee5312b3a63d52aac926c",
-      "evidence_path": null
+      "closure_sha256": "593c0c49fa7ecea3dd03509fe270cb8e4a7134ff14dcb3f02437107cda096992",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-ax-a-fullctx-7ef9c1d6b2"
     },
     {
       "logical_id": "testgraphnodes-test-ax-ax-48f57578fa",
@@ -19449,8 +19926,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-ax-ax-48f57578fa-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-ax-ax-48f57578fa",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -19470,9 +19948,22 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_ax_ax behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_ax_ax",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "verified_covered_existing": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-ax-ax-48f57578fa cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-ax-ax-48f57578fa cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-ax-ax-48f57578fa",
         "source_case_ids": [
@@ -19480,14 +19971,18 @@
           "java-antlr:testgraphnodes-test-ax-ax@45d09e1537e4"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-ax-ax-48f57578fa",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_ax_ax behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_ax_ax",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "4c7b8e287f6e6ef39448112ef4b9a5b82a432bc256715978197a66957f03051d",
-      "evidence_path": null
+      "closure_sha256": "0759ba1fd4639961a7e90b977ce12d245abfdf2c2ce6f1f042c203f50afcfbb3",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-ax-ax-48f57578fa"
     },
     {
       "logical_id": "testgraphnodes-test-ax-ax-same-1504dc3dd3",
@@ -19499,8 +19994,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-ax-ax-same-1504dc3dd3-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-ax-ax-same-1504dc3dd3",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -19520,9 +20016,22 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_ax_ax_same behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_ax_ax_same",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "verified_covered_existing": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-ax-ax-same-1504dc3dd3 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-ax-ax-same-1504dc3dd3 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-ax-ax-same-1504dc3dd3",
         "source_case_ids": [
@@ -19530,14 +20039,18 @@
           "java-antlr:testgraphnodes-test-ax-ax-same@59ab1cb32d49"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-ax-ax-same-1504dc3dd3",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_ax_ax_same behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_ax_ax_same",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "cd656b7789f6374bb9b57c92c6502ddfd7b918e317678aa141e598dbbe44ddce",
-      "evidence_path": null
+      "closure_sha256": "4d8949d655f0c4e05d86fd0f17d743ea3132912f419e686d8f41bc020f7f21f3",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-ax-ax-same-1504dc3dd3"
     },
     {
       "logical_id": "testgraphnodes-test-ax-bx-1ea2df9a04",
@@ -19549,8 +20062,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-ax-bx-1ea2df9a04-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-ax-bx-1ea2df9a04",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -19570,9 +20084,22 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_ax_bx behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_ax_bx",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "verified_covered_existing": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-ax-bx-1ea2df9a04 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-ax-bx-1ea2df9a04 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-ax-bx-1ea2df9a04",
         "source_case_ids": [
@@ -19580,14 +20107,18 @@
           "java-antlr:testgraphnodes-test-ax-bx@09c2951d4a80"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-ax-bx-1ea2df9a04",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_ax_bx behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_ax_bx",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "fcba99dd8f500177b31ed4ad6bfa1fcc7f7fb24fca8ffaaa2edd4773b672c87d",
-      "evidence_path": null
+      "closure_sha256": "845f6b95de86c354eaaf40351dd78f1c1cbab85e912ec5678bcd5441d7e67c46",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-ax-bx-1ea2df9a04"
     },
     {
       "logical_id": "testgraphnodes-test-ax-bx-same-d0506bf7a9",
@@ -19599,8 +20130,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-ax-bx-same-d0506bf7a9-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-ax-bx-same-d0506bf7a9",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -19620,9 +20152,22 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_ax_bx_same behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_ax_bx_same",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "verified_covered_existing": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-ax-bx-same-d0506bf7a9 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-ax-bx-same-d0506bf7a9 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-ax-bx-same-d0506bf7a9",
         "source_case_ids": [
@@ -19630,14 +20175,18 @@
           "java-antlr:testgraphnodes-test-ax-bx-same@b66ad85a523b"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-ax-bx-same-d0506bf7a9",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_ax_bx_same behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_ax_bx_same",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "aaf5b4891afd506d5ef8b7b295fc7691097b9722cb1dbb64e80551edc7652d68",
-      "evidence_path": null
+      "closure_sha256": "b1ab7cff90194d61d771ef28a2bc3a582da3754b6b6db9578a8a2a640520269c",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-ax-bx-same-d0506bf7a9"
     },
     {
       "logical_id": "testgraphnodes-test-ax-by-47815d59d2",
@@ -19649,8 +20198,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-ax-by-47815d59d2-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-ax-by-47815d59d2",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -19670,9 +20220,22 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_ax_by behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_ax_by",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "verified_covered_existing": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-ax-by-47815d59d2 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-ax-by-47815d59d2 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-ax-by-47815d59d2",
         "source_case_ids": [
@@ -19680,14 +20243,18 @@
           "java-antlr:testgraphnodes-test-ax-by@864572162df1"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-ax-by-47815d59d2",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_ax_by behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_ax_by",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "4f8a28e8ba99e803ea50bd7004d03c401c6603688a473582ba8baa718b04aed5",
-      "evidence_path": null
+      "closure_sha256": "963ceafef893a7c84d3a285aa18b4b80da934df4b0c9a232bc4e23c37caa31fa",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-ax-by-47815d59d2"
     },
     {
       "logical_id": "testgraphnodes-test-fullctx-3a6b2d8201",
@@ -19699,8 +20266,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-fullctx-3a6b2d8201-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-fullctx-3a6b2d8201",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -19720,9 +20288,22 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_$_$_fullctx behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_$_$_fullctx",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "verified_covered_existing": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-fullctx-3a6b2d8201 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-fullctx-3a6b2d8201 cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-fullctx-3a6b2d8201",
         "source_case_ids": [
@@ -19730,14 +20311,18 @@
           "java-antlr:testgraphnodes-test-fullctx@cdd55340db8b"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-fullctx-3a6b2d8201",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_$_$_fullctx behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_$_$_fullctx",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "1dfbb5e13e8cf090a80caca8fc016b17ea6fdce32d9ed008ac827fabdbe91ab8",
-      "evidence_path": null
+      "closure_sha256": "191ab8f93528dfebed64ad2693ae86c0a93d9e8609f9c9a662c5711f9f3996c2",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-fullctx-3a6b2d8201"
     },
     {
       "logical_id": "testgraphnodes-test-x-546922b23c",
@@ -19751,8 +20336,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-x-546922b23c-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-x-546922b23c",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -19774,9 +20360,22 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_x_$ behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_x_$",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "verified_covered_existing": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-x-546922b23c cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-x-546922b23c cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-x-546922b23c",
         "source_case_ids": [
@@ -19786,14 +20385,18 @@
           "java-antlr:testgraphnodes-test-x@cea5dbc07aff"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-x-546922b23c",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_x_$ behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_x_$",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "db4dc8f74c179dc52be420f37f5fd3ddf37fdd214f375613d2ace8a28f152d64",
-      "evidence_path": null
+      "closure_sha256": "a0a67e2f9f40a8b1b14d244c583b10d161dc8c7517907333a24381ab42a4abaa",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-x-546922b23c"
     },
     {
       "logical_id": "testgraphnodes-test-x-fullctx-7fdaaf473e",
@@ -19807,8 +20410,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testgraphnodes-test-x-fullctx-7fdaaf473e-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-x-fullctx-7fdaaf473e",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -19830,9 +20434,22 @@
       "prerequisites": [
         "Phase B compiler boundary"
       ],
-      "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestGraphNodes.test_x_$_fullctx behavior",
+      "unit_under_test": "prediction-context graph merging",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_x_$_fullctx",
+      "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "verified_covered_existing": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-x-fullctx-7fdaaf473e cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+      "green_result": {
+        "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-x-fullctx-7fdaaf473e cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testgraphnodes-test-x-fullctx-7fdaaf473e",
         "source_case_ids": [
@@ -19842,14 +20459,18 @@
           "java-antlr:testgraphnodes-test-x-fullctx@664a109643f0"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testgraphnodes-test-x-fullctx-7fdaaf473e",
-        "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestGraphNodes.test_x_$_fullctx behavior"
+        "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+        "unit_under_test": "prediction-context graph merging",
+        "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_x_$_fullctx",
+        "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+        "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "1513305d633c8ef0de0329daa234cba7bf70192a7a04f2fbe51b712c118242ce",
-      "evidence_path": null
+      "closure_sha256": "8604913be60aeb108248d6afca31cb85a8598ead1b16af671d087312d737a4ab",
+      "evidence_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-x-fullctx-7fdaaf473e"
     },
     {
       "logical_id": "testintervalset-testcomplement-8ea8a9ace0",

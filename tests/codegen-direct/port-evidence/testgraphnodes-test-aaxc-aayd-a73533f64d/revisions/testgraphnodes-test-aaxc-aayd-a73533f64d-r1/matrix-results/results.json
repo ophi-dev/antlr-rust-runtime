@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testgraphnodes-test-aaxc-aayd-a73533f64d",
+  "revision_id": "testgraphnodes-test-aaxc-aayd-a73533f64d-r1",
+  "cells": [
+    {
+      "test_port": "primary",
+      "test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+      "implementation_port": "primary-antlr-ng",
+      "implementation_commit": "0d2729880d113dc8b61222e9bb38f6a41ba44d6a",
+      "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-aaxc-aayd-a73533f64d cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+      "result": "green: 1 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the primary implementation passed the locked primary tests"
+}
