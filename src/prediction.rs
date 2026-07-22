@@ -240,11 +240,9 @@ impl ContextArena {
                 }
             }
             _ => {
-                debug_assert!(
-                    entries
-                        .windows(2)
-                        .all(|pair| { compare_entries(pair[0], pair[1]) == Ordering::Less })
-                );
+                debug_assert!(entries
+                    .windows(2)
+                    .all(|pair| { compare_entries(pair[0], pair[1]) == Ordering::Less }));
                 #[cfg(feature = "perf-counters")]
                 crate::perf::record_context_cache_call();
                 let cached_hash = prediction_context_array_hash(self, entries);
@@ -348,7 +346,7 @@ impl ContextArena {
         let merged = if root_is_wildcard && (left == EMPTY_CONTEXT || right == EMPTY_CONTEXT) {
             EMPTY_CONTEXT
         } else {
-            self.merge_uncached(left, right, workspace)
+            self.merge_uncached(left, right, root_is_wildcard, workspace)
         };
         workspace.merge_cache.insert(key, merged);
         merged
@@ -358,19 +356,27 @@ impl ContextArena {
         &mut self,
         left: ContextId,
         right: ContextId,
+        root_is_wildcard: bool,
         workspace: &mut PredictionWorkspace,
     ) -> ContextId {
         match (self.tag(left), self.tag(right)) {
-            (ContextTag::Array, ContextTag::Array) => self.merge_arrays(left, right, workspace),
+            (ContextTag::Array, ContextTag::Array) => {
+                self.merge_arrays(left, right, root_is_wildcard, workspace)
+            }
             (ContextTag::Array, _) => {
                 let entry = self.first_entry(right);
-                self.merge_array_with_entry(left, entry, false, workspace)
+                self.merge_array_with_entry(left, entry, root_is_wildcard, workspace)
             }
             (_, ContextTag::Array) => {
                 let entry = self.first_entry(left);
-                self.merge_array_with_entry(right, entry, true, workspace)
+                self.merge_array_with_entry(right, entry, root_is_wildcard, workspace)
             }
-            _ => self.merge_two_entries(self.first_entry(left), self.first_entry(right), workspace),
+            _ => self.merge_two_entries(
+                self.first_entry(left),
+                self.first_entry(right),
+                root_is_wildcard,
+                workspace,
+            ),
         }
     }
 
@@ -378,47 +384,81 @@ impl ContextArena {
         &mut self,
         left: (ContextId, u32),
         right: (ContextId, u32),
+        root_is_wildcard: bool,
         workspace: &mut PredictionWorkspace,
     ) -> ContextId {
-        if left == right {
-            return self.intern_entries(std::slice::from_ref(&left));
+        if left.1 == right.1 {
+            let parent = if left.0 == right.0 {
+                left.0
+            } else {
+                self.merge(left.0, right.0, root_is_wildcard, workspace)
+            };
+            return self.intern_entries(&[(parent, left.1)]);
         }
-        workspace.entries.clear();
-        if compare_entries(right, left) == Ordering::Less {
+
+        let start = workspace.entries.len();
+        if right.1 < left.1 {
             workspace.entries.extend([right, left]);
         } else {
             workspace.entries.extend([left, right]);
         }
-        self.intern_entries(&workspace.entries)
+        self.intern_workspace_entries(workspace, start)
+    }
+
+    fn intern_workspace_entries(
+        &mut self,
+        workspace: &mut PredictionWorkspace,
+        start: usize,
+    ) -> ContextId {
+        let context = self.intern_entries(&workspace.entries[start..]);
+        workspace.entries.truncate(start);
+        context
     }
 
     fn merge_array_with_entry(
         &mut self,
         array: ContextId,
         entry: (ContextId, u32),
-        entry_on_left: bool,
+        root_is_wildcard: bool,
         workspace: &mut PredictionWorkspace,
     ) -> ContextId {
         let array_len = self.len(array);
         let mut insert_index = array_len;
         for index in 0..array_len {
             let current = self.entry(array, index).expect("array entry in range");
-            let ordering = compare_entries(entry, current);
-            if ordering == Ordering::Equal {
-                return array;
-            }
-            let should_insert = if entry_on_left {
-                ordering != Ordering::Greater
-            } else {
-                ordering == Ordering::Less
-            };
-            if should_insert {
-                insert_index = index;
-                break;
+            match entry.1.cmp(&current.1) {
+                Ordering::Less => {
+                    insert_index = index;
+                    break;
+                }
+                Ordering::Equal => {
+                    let parent = if entry.0 == current.0 {
+                        current.0
+                    } else {
+                        self.merge(entry.0, current.0, root_is_wildcard, workspace)
+                    };
+                    if parent == current.0 {
+                        return array;
+                    }
+
+                    let start = workspace.entries.len();
+                    for entry_index in 0..array_len {
+                        let array_entry = self
+                            .entry(array, entry_index)
+                            .expect("array entry in range");
+                        workspace.entries.push(if entry_index == index {
+                            (parent, current.1)
+                        } else {
+                            array_entry
+                        });
+                    }
+                    return self.intern_workspace_entries(workspace, start);
+                }
+                Ordering::Greater => {}
             }
         }
 
-        workspace.entries.clear();
+        let start = workspace.entries.len();
         for index in 0..insert_index {
             workspace
                 .entries
@@ -430,24 +470,27 @@ impl ContextArena {
                 .entries
                 .push(self.entry(array, index).expect("array entry in range"));
         }
-        self.intern_entries(&workspace.entries)
+        self.intern_workspace_entries(workspace, start)
     }
 
     fn merge_arrays(
         &mut self,
         left: ContextId,
         right: ContextId,
+        root_is_wildcard: bool,
         workspace: &mut PredictionWorkspace,
     ) -> ContextId {
-        workspace.entries.clear();
+        let start = workspace.entries.len();
+        let left_len = self.len(left);
+        let right_len = self.len(right);
         let mut left_index = 0;
         let mut right_index = 0;
-        while left_index < self.len(left) && right_index < self.len(right) {
+        while left_index < left_len && right_index < right_len {
             let left_entry = self.entry(left, left_index).expect("array entry in range");
             let right_entry = self
                 .entry(right, right_index)
                 .expect("array entry in range");
-            match compare_entries(left_entry, right_entry) {
+            match left_entry.1.cmp(&right_entry.1) {
                 Ordering::Less => {
                     workspace.entries.push(left_entry);
                     left_index += 1;
@@ -457,26 +500,31 @@ impl ContextArena {
                     right_index += 1;
                 }
                 Ordering::Equal => {
-                    workspace.entries.push(left_entry);
+                    let parent = if left_entry.0 == right_entry.0 {
+                        left_entry.0
+                    } else {
+                        self.merge(left_entry.0, right_entry.0, root_is_wildcard, workspace)
+                    };
+                    workspace.entries.push((parent, left_entry.1));
                     left_index += 1;
                     right_index += 1;
                 }
             }
         }
-        while left_index < self.len(left) {
+        while left_index < left_len {
             workspace
                 .entries
                 .push(self.entry(left, left_index).expect("array entry in range"));
             left_index += 1;
         }
-        while right_index < self.len(right) {
+        while right_index < right_len {
             workspace.entries.push(
                 self.entry(right, right_index)
                     .expect("array entry in range"),
             );
             right_index += 1;
         }
-        self.intern_entries(&workspace.entries)
+        self.intern_workspace_entries(workspace, start)
     }
 
     pub(crate) fn len(&self, context: ContextId) -> usize {
@@ -577,6 +625,7 @@ impl ContextArena {
         source: &Self,
         workspace: &mut PredictionWorkspace,
     ) -> Vec<ContextId> {
+        workspace.entries.clear();
         let mut remap = Vec::with_capacity(source.records.len());
         remap.push(EMPTY_CONTEXT);
         for source_index in 1..source.records.len() {
@@ -596,7 +645,7 @@ impl ContextArena {
                     self.singleton(remap[parent_index], expand_return_state(return_state))
                 }
                 ContextTag::Array => {
-                    workspace.entries.clear();
+                    let start = workspace.entries.len();
                     for entry_index in 0..source.len(source_id) {
                         let (parent, return_state) = source
                             .entry(source_id, entry_index)
@@ -613,7 +662,7 @@ impl ContextArena {
                         .entries
                         .sort_unstable_by(|left, right| compare_entries(*left, *right));
                     workspace.entries.dedup();
-                    self.intern_entries(&workspace.entries)
+                    self.intern_workspace_entries(workspace, start)
                 }
             };
             remap.push(imported);
@@ -629,7 +678,7 @@ impl Default for ContextArena {
 }
 
 fn compare_entries(left: (ContextId, u32), right: (ContextId, u32)) -> Ordering {
-    left.1.cmp(&right.1).then_with(|| left.0.cmp(&right.0))
+    left.1.cmp(&right.1)
 }
 
 fn expand_return_state(return_state: u32) -> usize {
@@ -1232,7 +1281,11 @@ mod tests {
         let right_left = arena.merge(right, left, false, &mut workspace);
 
         assert_eq!(left_right, right_left);
-        assert_eq!(arena.len(left_right), 2);
+        assert_eq!(arena.len(left_right), 1);
+        let merged_parent = arena.parent(left_right, 0).expect("merged parent");
+        assert_eq!(arena.len(merged_parent), 2);
+        assert_eq!(arena.return_state(merged_parent, 0), Some(100));
+        assert_eq!(arena.return_state(merged_parent, 1), Some(200));
     }
 
     #[test]
