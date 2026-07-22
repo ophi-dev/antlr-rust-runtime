@@ -1,0 +1,34 @@
+suppress_unstable_features_warning = true
+model_reasoning_effort = "max"
+web_search = "live"
+
+
+[shell_environment_policy]
+inherit = "core"
+
+[shell_environment_policy.set]
+CARGO_TERM_COLOR = "never"
+CLICOLOR = "0"
+CLICOLOR_FORCE = "0"
+GH_PAGER = "cat"
+MAX_THINKING_TOKENS = "32000"
+NEXTEST_COLOR = "0"
+
+[agents]
+max_threads = 6
+max_depth = 1
+
+[features]
+goals = true
+child_agents_md = true
+hooks = true
+apply_patch_freeform = true
+default_mode_request_user_input = true
+fast_mode = true
+multi_agent = true
+# realtime_conversation = true
+responses_websockets_v2 = true
+shell_snapshot = true
+steer = true
+unified_exec = true
+voice_transcription = true
