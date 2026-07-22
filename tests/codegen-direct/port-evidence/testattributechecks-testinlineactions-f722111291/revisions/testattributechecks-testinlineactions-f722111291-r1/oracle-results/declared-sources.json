@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "logical_id": "testattributechecks-testinlineactions-f722111291",
+  "revision_id": "testattributechecks-testinlineactions-f722111291-r1",
+  "primary_test_source": {
+    "implementation": "independent-generated-oracle",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "source_case_ids": [],
+    "reason": "no java-antlr source case exposes this exact observable"
+  },
+  "alternate_test_source": {
+    "implementation": "antlr-ng",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "source_case_ids": [
+      "antlr-ng:testattributechecks-testinlineactions@01e320be8225",
+      "antlr-ng:testattributechecks-testinlineactions@51df52bdf8f9",
+      "antlr-ng:testattributechecks-testinlineactions@599621145360",
+      "antlr-ng:testattributechecks-testinlineactions@649b8efa96aa",
+      "antlr-ng:testattributechecks-testinlineactions@68ff63f80984",
+      "antlr-ng:testattributechecks-testinlineactions@7e0f2262b1f4",
+      "antlr-ng:testattributechecks-testinlineactions@7e7d9a941fcd",
+      "antlr-ng:testattributechecks-testinlineactions@9b8a66ae8067",
+      "antlr-ng:testattributechecks-testinlineactions@9dbefaa17e30",
+      "antlr-ng:testattributechecks-testinlineactions@ab6b380bca60",
+      "antlr-ng:testattributechecks-testinlineactions@ae6c1a6b4b99",
+      "antlr-ng:testattributechecks-testinlineactions@be12b2fcfe63",
+      "antlr-ng:testattributechecks-testinlineactions@d85b3cab4a42",
+      "antlr-ng:testattributechecks-testinlineactions@e35a3ae054b2",
+      "antlr-ng:testattributechecks-testinlineactions@ec3a7e892277",
+      "antlr-ng:testattributechecks-testinlineactions@f47d60b70426"
+    ]
+  },
+  "outcomes": {
+    "primary": "the direct Rust compiler matches the immutable Java 4.13.2 action-attribute diagnostics and accepted .interp and .tokens fixtures",
+    "alternate": "the pinned antlr-ng TestAttributeChecks case uses the same rendered grammar and diagnostic expectation",
+    "java_compatibility_verdict": "exact Java 4.13.2 diagnostic code, message, ordering, and position or complete accepted recognizer metadata equality"
+  }
+}

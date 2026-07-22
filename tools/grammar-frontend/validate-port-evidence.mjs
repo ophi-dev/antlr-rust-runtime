@@ -7,6 +7,10 @@ import { spawnSync } from "node:child_process";
 
 import {
     ANTLR_NG_COMMIT,
+    ATTRIBUTE_CHECKS_BASE_COMMIT,
+    ATTRIBUTE_CHECKS_BASE_PARENT_COMMIT,
+    ATTRIBUTE_CHECKS_IMPLEMENTATION_COMMIT,
+    ATTRIBUTE_CHECKS_TEST_COMMIT,
     ATN_CONSTRUCTION_BASE_COMMIT,
     ATN_CONSTRUCTION_IMPLEMENTATION_COMMIT,
     ATN_CONSTRUCTION_TEST_COMMIT,
@@ -347,6 +351,9 @@ for (const [logicalId, record] of records) {
         const symbolIssues = logicalId.startsWith(
             "testsymbolissues-",
         );
+        const attributeChecks = logicalId.startsWith(
+            "testattributechecks-",
+        );
         if (resolution === "verified-covered-existing") {
             if (atnSerialization) {
                 expect(
@@ -533,6 +540,23 @@ for (const [logicalId, record] of records) {
                         manifest.ancestry.primary_implementation_parent ===
                             SYMBOL_ISSUES_BASE_PARENT_COMMIT,
                     `${logicalId} symbol issues covered-existing ancestry differs`,
+                );
+            } else if (attributeChecks) {
+                expect(
+                    manifest.commits.scaffold ===
+                            ATTRIBUTE_CHECKS_BASE_COMMIT &&
+                        manifest.commits.primary_test ===
+                            ATTRIBUTE_CHECKS_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            ATTRIBUTE_CHECKS_BASE_COMMIT,
+                    `${logicalId} attribute checks covered-existing commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            ATTRIBUTE_CHECKS_BASE_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            ATTRIBUTE_CHECKS_BASE_PARENT_COMMIT,
+                    `${logicalId} attribute checks covered-existing ancestry differs`,
                 );
             } else {
                 expect(
@@ -824,6 +848,23 @@ for (const [logicalId, record] of records) {
                         manifest.ancestry.primary_implementation_parent ===
                             SYMBOL_ISSUES_TEST_COMMIT,
                     `${logicalId} symbol issues recorded ancestry differs`,
+                );
+            } else if (attributeChecks) {
+                expect(
+                    manifest.commits.scaffold ===
+                            ATTRIBUTE_CHECKS_BASE_COMMIT &&
+                        manifest.commits.primary_test ===
+                            ATTRIBUTE_CHECKS_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            ATTRIBUTE_CHECKS_IMPLEMENTATION_COMMIT,
+                    `${logicalId} attribute checks evidence commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            ATTRIBUTE_CHECKS_BASE_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            ATTRIBUTE_CHECKS_TEST_COMMIT,
+                    `${logicalId} attribute checks recorded ancestry differs`,
                 );
             } else if (lookaheadTree) {
                 expect(
@@ -1359,6 +1400,39 @@ if (symbolIssuesImplementationParent !== null) {
         symbolIssuesImplementationParent.trim() ===
             SYMBOL_ISSUES_TEST_COMMIT,
         "symbol issues implementation commit is not based on its locked tests",
+    );
+}
+const attributeChecksBaseParent = gitOptional([
+    "rev-parse",
+    `${ATTRIBUTE_CHECKS_BASE_COMMIT}^`,
+]);
+if (attributeChecksBaseParent !== null) {
+    expect(
+        attributeChecksBaseParent.trim() ===
+            ATTRIBUTE_CHECKS_BASE_PARENT_COMMIT,
+        "attribute checks base commit has an unexpected parent",
+    );
+}
+const attributeChecksTestParent = gitOptional([
+    "rev-parse",
+    `${ATTRIBUTE_CHECKS_TEST_COMMIT}^`,
+]);
+if (attributeChecksTestParent !== null) {
+    expect(
+        attributeChecksTestParent.trim() ===
+            ATTRIBUTE_CHECKS_BASE_COMMIT,
+        "attribute checks test commit is not based on its recorded base",
+    );
+}
+const attributeChecksImplementationParent = gitOptional([
+    "rev-parse",
+    `${ATTRIBUTE_CHECKS_IMPLEMENTATION_COMMIT}^`,
+]);
+if (attributeChecksImplementationParent !== null) {
+    expect(
+        attributeChecksImplementationParent.trim() ===
+            ATTRIBUTE_CHECKS_TEST_COMMIT,
+        "attribute checks implementation commit is not based on its locked tests",
     );
 }
 

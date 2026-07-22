@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "logical_id": "testattributechecks-testdynamicinlineactions-9b9383b3a1",
+  "revision_id": "testattributechecks-testdynamicinlineactions-9b9383b3a1-r1",
+  "primary_test_source": {
+    "implementation": "independent-generated-oracle",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "source_case_ids": [],
+    "reason": "no java-antlr source case exposes this exact observable"
+  },
+  "alternate_test_source": {
+    "implementation": "antlr-ng",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "source_case_ids": [
+      "antlr-ng:testattributechecks-testdynamicinlineactions@0819dbda1b94",
+      "antlr-ng:testattributechecks-testdynamicinlineactions@0fa4e5470d2c",
+      "antlr-ng:testattributechecks-testdynamicinlineactions@11129703f2bc",
+      "antlr-ng:testattributechecks-testdynamicinlineactions@2257ffc79fea",
+      "antlr-ng:testattributechecks-testdynamicinlineactions@230dc97192ca",
+      "antlr-ng:testattributechecks-testdynamicinlineactions@24fb3c34bdb9",
+      "antlr-ng:testattributechecks-testdynamicinlineactions@252e65eb187a",
+      "antlr-ng:testattributechecks-testdynamicinlineactions@3d301f48e26e",
+      "antlr-ng:testattributechecks-testdynamicinlineactions@42ab656182d8",
+      "antlr-ng:testattributechecks-testdynamicinlineactions@4b687362b950",
+      "antlr-ng:testattributechecks-testdynamicinlineactions@4bb7867da30a",
+      "antlr-ng:testattributechecks-testdynamicinlineactions@57d779d5b55f",
+      "antlr-ng:testattributechecks-testdynamicinlineactions@59c0e4f1c107",
+      "antlr-ng:testattributechecks-testdynamicinlineactions@5e06ffca0b12",
+      "antlr-ng:testattributechecks-testdynamicinlineactions@61b7deda4ebb",
+      "antlr-ng:testattributechecks-testdynamicinlineactions@70959aa67447",
+      "antlr-ng:testattributechecks-testdynamicinlineactions@72da2488f1f0",
+      "antlr-ng:testattributechecks-testdynamicinlineactions@77455f371de5",
+      "antlr-ng:testattributechecks-testdynamicinlineactions@7f1d1727c018",
+      "antlr-ng:testattributechecks-testdynamicinlineactions@91de64a3a640",
+      "antlr-ng:testattributechecks-testdynamicinlineactions@99a76090b968",
+      "antlr-ng:testattributechecks-testdynamicinlineactions@b01015278376",
+      "antlr-ng:testattributechecks-testdynamicinlineactions@b41a449f5109",
+      "antlr-ng:testattributechecks-testdynamicinlineactions@d44e396d1544",
+      "antlr-ng:testattributechecks-testdynamicinlineactions@e92d2a9f9919",
+      "antlr-ng:testattributechecks-testdynamicinlineactions@f193dd3e228e",
+      "antlr-ng:testattributechecks-testdynamicinlineactions@f816e6dff248"
+    ]
+  },
+  "outcomes": {
+    "primary": "the direct Rust compiler matches the immutable Java 4.13.2 action-attribute diagnostics and accepted .interp and .tokens fixtures",
+    "alternate": "the pinned antlr-ng TestAttributeChecks case uses the same rendered grammar and diagnostic expectation",
+    "java_compatibility_verdict": "exact Java 4.13.2 diagnostic code, message, ordering, and position or complete accepted recognizer metadata equality"
+  }
+}

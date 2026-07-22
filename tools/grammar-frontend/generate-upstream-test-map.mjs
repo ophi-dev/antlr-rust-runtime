@@ -6,6 +6,9 @@ import { fileURLToPath } from "node:url";
 
 import {
     ANTLR_NG_COMMIT,
+    ATTRIBUTE_CHECKS_BASE_COMMIT,
+    ATTRIBUTE_CHECKS_IMPLEMENTATION_COMMIT,
+    ATTRIBUTE_CHECKS_TEST_COMMIT,
     ATN_CONSTRUCTION_BASE_COMMIT,
     ATN_CONSTRUCTION_IMPLEMENTATION_COMMIT,
     ATN_CONSTRUCTION_TEST_COMMIT,
@@ -83,6 +86,11 @@ const ATN_SERIALIZATION_TEST_COMMAND =
     "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::";
 const ATN_SERIALIZATION_TEST_MODULE =
     "src/bin_support/grammar/atn/interp_test.rs";
+const ATTRIBUTE_CHECKS_CASES =
+    "tests/codegen-direct/generated/attribute-checks-cases.inc.rs";
+const ATTRIBUTE_CHECKS_TEST_COMMAND =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen " +
+    "grammar::atn::interp_test::tests::upstream_attribute_checks";
 const ATN_CONSTRUCTION_TEST_COMMAND =
     "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_construction::";
 const ATN_CONSTRUCTION_COVERED_COMMAND =
@@ -1257,6 +1265,9 @@ function completedPhaseBRow(
                                         : completed.kind === "symbol-issues"
                                           ? `direct Rust symbol diagnostics, token metadata, and serialization match ` +
                                             `Java 4.13.2 for ${cases[0].suite}.${cases[0].name}`
+                                        : completed.kind === "attribute-checks"
+                                          ? `direct Rust action attribute diagnostics and accepted serialization match ` +
+                                            `Java 4.13.2 for ${cases[0].suite}.${cases[0].name}`
                                         : completed.kind === "graph-nodes"
                                           ? `Rust prediction-context merging matches the Java 4.13.2 DOT graph ` +
                                             `for ${cases[0].suite}.${cases[0].name}`
@@ -1839,6 +1850,81 @@ async function loadCompletedPhaseBPorts() {
             "expected 27 completed TestSymbolIssues ports with all recorded red cases",
         );
     }
+    const attributeCasesSource = await readFile(
+        resolve(repoRoot, ATTRIBUTE_CHECKS_CASES),
+        "utf8",
+    );
+    const attributePattern =
+        /case!\(\s*(\w+),\s*"([^"]+)"/gu;
+    const attributeRows = new Map();
+    let attributeCaseCount = 0;
+    let attributeErrorCount = 0;
+    for (const match of attributeCasesSource.matchAll(attributePattern)) {
+        const [, testName, fixtureName] = match;
+        const fixtureBase =
+            `tests/codegen-direct/fixtures/${fixtureName}`;
+        const manifest = JSON.parse(
+            await readFile(
+                resolve(repoRoot, fixtureBase, "fixture.json"),
+                "utf8",
+            ),
+        );
+        const expectedError = manifest.expected === "error";
+        attributeCaseCount += 1;
+        attributeErrorCount += Number(expectedError);
+        for (const logicalId of manifest.logical_ids ?? []) {
+            const row = attributeRows.get(logicalId) ?? {
+                fixturePaths: new Set(),
+                fixtureNames: [],
+                firstTestName: testName,
+                firstErrorFixture: null,
+            };
+            for (const fixturePath of await fixturePaths(fixtureName)) {
+                row.fixturePaths.add(fixturePath);
+            }
+            row.fixtureNames.push(fixtureName);
+            if (expectedError && row.firstErrorFixture === null) {
+                row.firstErrorFixture = fixtureName;
+            }
+            attributeRows.set(logicalId, row);
+        }
+    }
+    for (const [logicalId, row] of attributeRows) {
+        const ported = row.firstErrorFixture !== null;
+        ports.set(logicalId, {
+            fixturePaths: [...row.fixturePaths].sort(),
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_attribute_checks",
+            kind: "attribute-checks",
+            resolution: ported
+                ? "ported"
+                : "verified-covered-existing",
+            scaffoldCommit: ATTRIBUTE_CHECKS_BASE_COMMIT,
+            testCommit: ATTRIBUTE_CHECKS_TEST_COMMIT,
+            implementationCommit: ported
+                ? ATTRIBUTE_CHECKS_IMPLEMENTATION_COMMIT
+                : ATTRIBUTE_CHECKS_BASE_COMMIT,
+            testCommand:
+                row.fixtureNames.length === 1
+                    ? `${ATTRIBUTE_CHECKS_TEST_COMMAND}::${row.firstTestName}` +
+                      "::matches_java -- --exact"
+                    : `${ATTRIBUTE_CHECKS_TEST_COMMAND}::${row.firstTestName}`,
+            greenResult:
+                `${row.fixtureNames.length} passed; 0 failed`,
+            redFingerprint: ported
+                ? `${row.firstErrorFixture}: expected semantic failure`
+                : undefined,
+        });
+    }
+    if (
+        attributeCaseCount !== 121 ||
+        attributeErrorCount !== 87 ||
+        attributeRows.size !== 44
+    ) {
+        throw new Error(
+            "expected 121 TestAttributeChecks fixtures with 87 errors covering 44 completed ports",
+        );
+    }
     for (const [logicalId, definition] of LOOKAHEAD_TREE_PORTS) {
         ports.set(logicalId, {
             fixturePaths: await fixturePaths(logicalId),
@@ -1899,8 +1985,8 @@ async function loadCompletedPhaseBPorts() {
             `expected 47 completed TestScopeParsing ports, found ${scopeGroups.size}`,
         );
     }
-    if (ports.size !== 281) {
-        throw new Error(`expected 281 completed Phase B ports, found ${ports.size}`);
+    if (ports.size !== 325) {
+        throw new Error(`expected 325 completed Phase B ports, found ${ports.size}`);
     }
     return ports;
 }

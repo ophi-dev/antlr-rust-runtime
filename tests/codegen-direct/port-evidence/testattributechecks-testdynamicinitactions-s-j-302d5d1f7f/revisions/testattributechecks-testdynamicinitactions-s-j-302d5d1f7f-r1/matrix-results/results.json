@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testattributechecks-testdynamicinitactions-s-j-302d5d1f7f",
+  "revision_id": "testattributechecks-testdynamicinitactions-s-j-302d5d1f7f-r1",
+  "cells": [
+    {
+      "test_port": "primary",
+      "test_commit": "6f7ab4b7f7829f0e5a7bd80542fb394831e5ffe1",
+      "implementation_port": "primary-antlr-ng",
+      "implementation_commit": "ede783206bb4dfc3d8f5d031fdfea9feab507763",
+      "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_attribute_checks::testattributechecks_testdynamicinitactions_dd2faf4937_variant_9::matches_java -- --exact",
+      "result": "green: 1 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the primary implementation passed the locked primary tests"
+}

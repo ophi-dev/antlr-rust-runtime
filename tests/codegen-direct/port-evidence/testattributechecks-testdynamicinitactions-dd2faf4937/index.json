@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testattributechecks-testdynamicinitactions-dd2faf4937",
+  "active_revision_id": "testattributechecks-testdynamicinitactions-dd2faf4937-r1",
+  "revisions": [
+    {
+      "revision_id": "testattributechecks-testdynamicinitactions-dd2faf4937-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testattributechecks-testdynamicinitactions-dd2faf4937/revisions/testattributechecks-testdynamicinitactions-dd2faf4937-r1/manifest.json",
+      "closure_sha256": "5f5c1a5ad126bbc9aaf3b87d753c6acaf86e71e993bcd1ffed0904463a727a92"
+    }
+  ]
+}

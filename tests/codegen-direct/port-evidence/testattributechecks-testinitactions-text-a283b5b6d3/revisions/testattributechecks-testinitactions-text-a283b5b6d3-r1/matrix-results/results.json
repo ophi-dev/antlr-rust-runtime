@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testattributechecks-testinitactions-text-a283b5b6d3",
+  "revision_id": "testattributechecks-testinitactions-text-a283b5b6d3-r1",
+  "cells": [
+    {
+      "test_port": "coverage-extension",
+      "test_commit": "6f7ab4b7f7829f0e5a7bd80542fb394831e5ffe1",
+      "implementation_port": "existing-primary-antlr-ng",
+      "implementation_commit": "893e9e599ba046fabbad2d0e92bd9561b400b467",
+      "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_attribute_checks::testattributechecks_testinitactions_1c2e33025c::matches_java -- --exact",
+      "result": "green: 1 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the case-specific test passed against the existing Phase B implementation"
+}

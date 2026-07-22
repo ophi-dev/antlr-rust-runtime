@@ -1,0 +1,936 @@
+{
+  "schema_version": 1,
+  "logical_id": "testattributechecks-testfinallyactions-fbdc1a7648",
+  "revision_id": "testattributechecks-testfinallyactions-fbdc1a7648-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "closure": {
+    "logical_id": "testattributechecks-testfinallyactions-fbdc1a7648",
+    "source_case_ids": [
+      "java-antlr:testattributechecks-testfinallyactions@6bb5793cc471"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/A.g4",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/A.interp",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/A.tokens",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/fixture.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/oracle/java-unicode-data.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-11/A.g4",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-11/diagnostics.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-11/fixture.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-11/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-11/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-11/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-11/oracle/java-unicode-data.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-12/A.g4",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-12/diagnostics.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-12/fixture.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-12/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-12/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-12/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-12/oracle/java-unicode-data.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-13/A.g4",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-13/diagnostics.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-13/fixture.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-13/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-13/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-13/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-13/oracle/java-unicode-data.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-14/A.g4",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-14/diagnostics.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-14/fixture.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-14/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-14/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-14/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-14/oracle/java-unicode-data.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-15/A.g4",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-15/diagnostics.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-15/fixture.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-15/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-15/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-15/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-15/oracle/java-unicode-data.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-16/A.g4",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-16/diagnostics.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-16/fixture.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-16/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-16/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-16/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-16/oracle/java-unicode-data.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-17/A.g4",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-17/diagnostics.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-17/fixture.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-17/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-17/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-17/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-17/oracle/java-unicode-data.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-18/A.g4",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-18/diagnostics.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-18/fixture.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-18/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-18/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-18/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-18/oracle/java-unicode-data.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-19/A.g4",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-19/diagnostics.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-19/fixture.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-19/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-19/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-19/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-19/oracle/java-unicode-data.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/A.g4",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/A.interp",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/A.tokens",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/fixture.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/oracle/java-unicode-data.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-20/A.g4",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-20/diagnostics.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-20/fixture.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-20/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-20/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-20/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-20/oracle/java-unicode-data.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-21/A.g4",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-21/diagnostics.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-21/fixture.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-21/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-21/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-21/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-21/oracle/java-unicode-data.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-22/A.g4",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-22/diagnostics.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-22/fixture.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-22/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-22/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-22/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-22/oracle/java-unicode-data.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-23/A.g4",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-23/diagnostics.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-23/fixture.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-23/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-23/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-23/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-23/oracle/java-unicode-data.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/A.g4",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/A.interp",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/A.tokens",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/fixture.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/oracle/java-unicode-data.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/A.g4",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/A.interp",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/A.tokens",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/fixture.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/oracle/java-unicode-data.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/A.g4",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/A.interp",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/A.tokens",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/fixture.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/oracle/java-unicode-data.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/A.g4",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/A.interp",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/A.tokens",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/fixture.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/oracle/java-unicode-data.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/A.g4",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/A.interp",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/A.tokens",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/fixture.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/oracle/java-unicode-data.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/A.g4",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/A.interp",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/A.tokens",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/fixture.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/oracle/java-unicode-data.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/A.g4",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/A.interp",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/A.tokens",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/fixture.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/oracle/java-unicode-data.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/A.g4",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/A.interp",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/A.tokens",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/fixture.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/oracle/java-unicode-data.stdout"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_attribute_checks",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust action attribute diagnostics and accepted serialization match Java 4.13.2 for TestAttributeChecks.testFinallyActions",
+    "scaffold_commit": "893e9e599ba046fabbad2d0e92bd9561b400b467",
+    "primary_test_commit": "6f7ab4b7f7829f0e5a7bd80542fb394831e5ffe1"
+  },
+  "closure_sha256": "2dc419470f7fd9e4e940f1431d56cdc70b836f431515ab8f1c92e93fe737893c",
+  "allowed_inputs": [
+    {
+      "source_case_id": "java-antlr:testattributechecks-testfinallyactions@6bb5793cc471",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestAttributeChecks.java",
+      "sha256": "7e267fd9a376f7d8d63161d3caac6c4289c80136c3957146c419323cd87b6d4a"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/A.g4",
+      "sha256": "b808d85632175e12d74c186fe3e78cb2a7615cf30a13e7c763dc92e11311f6e7"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/A.interp",
+      "sha256": "d71b2caefc8e97d771a530a9858e3ddf7f0a7ab5c75ddfff0104ba6a07581b63"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/A.tokens",
+      "sha256": "05e2fff4ffabf4e3b89a4096f749fc10a24a6739f8c96770a96860c3612eb3e6"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/fixture.json",
+      "sha256": "e9d694e24506921a1aff2369b3ff90f1072c68d91a8121c8229b9085cdeae881"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-10/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-11/A.g4",
+      "sha256": "f2796c6d1bf98f9306c82e3e7c664cacdeeb245a40e98ab1de84a0eb2e67756b"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-11/diagnostics.json",
+      "sha256": "04e9e35dcb2543fc6d61d3414d4b1b8bc5443383b214f9b72870d2c0f08d0e4a"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-11/fixture.json",
+      "sha256": "a3017b4d2ac3922f507694ca0aa6be950d723073f79bc5e98c3d77b9d7d98370"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-11/oracle/java-antlr.stderr",
+      "sha256": "0302a489fcb9eb2b7007fb517f90e30b13103076390c4edef9b6988e8f0fea0f"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-11/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-11/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-11/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-12/A.g4",
+      "sha256": "9f9ccd0be6f75cc8cee4c47bf2bf0abbe012c05b5a32e3753a4a78d6dc1d1bf5"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-12/diagnostics.json",
+      "sha256": "faba611b4c24e7ebdba97d5b6526a8ba1f85cd821f1b6e0ccbb01287caf5ae2c"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-12/fixture.json",
+      "sha256": "de08d852bd86609d6107279b284a6dce3db4e6a93267aa49477d2ce02afc7804"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-12/oracle/java-antlr.stderr",
+      "sha256": "0db63773976d6d9c2bb5bcb8ea262984ab00fd5405bf779997abe768a73fb200"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-12/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-12/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-12/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-13/A.g4",
+      "sha256": "f45678a39ad9efa272cdaaffd2fe084c9b3b26e887fa8b19f50583a9f671a578"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-13/diagnostics.json",
+      "sha256": "f6c392a71f54486eb785037df343191cfe467e87aea5b22808878149874e2dbe"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-13/fixture.json",
+      "sha256": "c0ed899280c571c824a9259eecbf6969ac2e040555d931a5121d639e0d2bafe3"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-13/oracle/java-antlr.stderr",
+      "sha256": "f25577d15b37155752dbc59749535cec4f795eebfeec577da417906660ba084c"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-13/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-13/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-13/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-14/A.g4",
+      "sha256": "d5c8c240901f6af6c7a0c0aae40d1fa39f7b86649746c2cdd96aa086842002b1"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-14/diagnostics.json",
+      "sha256": "faba611b4c24e7ebdba97d5b6526a8ba1f85cd821f1b6e0ccbb01287caf5ae2c"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-14/fixture.json",
+      "sha256": "6d935a1bd3c1778710e8596850cfb40b1e05462fb2d9af34b70f62947331c425"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-14/oracle/java-antlr.stderr",
+      "sha256": "0db63773976d6d9c2bb5bcb8ea262984ab00fd5405bf779997abe768a73fb200"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-14/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-14/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-14/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-15/A.g4",
+      "sha256": "8f0c71e299aaa03ac7a66e436b4b89021f11423b5ff5156c768dedbd73b51b70"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-15/diagnostics.json",
+      "sha256": "2db81e3e34a29b51c7e3d6b54acd1543d9312ec61bc10b84f5169bb4381d48df"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-15/fixture.json",
+      "sha256": "bbbefdf217d416f94afa08808b63b7ce0def42f858857f77a66cd367e311c74a"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-15/oracle/java-antlr.stderr",
+      "sha256": "1cd16b48359d602dd143ad8e76ff29750c6022eff926db9c259b2425f2e4d87b"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-15/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-15/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-15/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-16/A.g4",
+      "sha256": "3c1b1c56339f97eeab83999098c6e041ee29472826861eadc2838f416028b885"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-16/diagnostics.json",
+      "sha256": "f6c392a71f54486eb785037df343191cfe467e87aea5b22808878149874e2dbe"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-16/fixture.json",
+      "sha256": "3f5e66e80f8ec8012feb52ebc3363360d60d45f366ae13ef2a009e39cc230531"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-16/oracle/java-antlr.stderr",
+      "sha256": "f25577d15b37155752dbc59749535cec4f795eebfeec577da417906660ba084c"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-16/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-16/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-16/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-17/A.g4",
+      "sha256": "1ffef2d2662e1c6783667368d5a1b4a66286722cc4329d7baac4d0ab48836d0f"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-17/diagnostics.json",
+      "sha256": "c971371aac941a2b0b949693c7d008771fc572988ef1ceac0f33063668b6a0ac"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-17/fixture.json",
+      "sha256": "240421f47df800b60e53c8c28bcb806b2fff541609f0693c4457b92636af4230"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-17/oracle/java-antlr.stderr",
+      "sha256": "4eed8b4279075172bbd3807165fe965470151ed347d5b86d2c5a8bd1c7d4ed04"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-17/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-17/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-17/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-18/A.g4",
+      "sha256": "170c98bbd2e9e0b4037fc3cc6b7f7f47cc0ae0a7f7005485eb79d6f90193882c"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-18/diagnostics.json",
+      "sha256": "df9b90674c2a4c766bf3cafe9badfd5dab6e5437f56dec4e12592abe3bb81098"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-18/fixture.json",
+      "sha256": "c2ca73e68dff331241a1acedf44a170fb3a11196264b8d5d5262573fa4c7218f"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-18/oracle/java-antlr.stderr",
+      "sha256": "ad085baec24eb9d2189bd12d370bc53a310bd486717980fe95e680b0948144a8"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-18/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-18/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-18/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-19/A.g4",
+      "sha256": "91c02ea12f70109d89b9423aba509e003899bf871ae4cae19c7d108176df21da"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-19/diagnostics.json",
+      "sha256": "df9b90674c2a4c766bf3cafe9badfd5dab6e5437f56dec4e12592abe3bb81098"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-19/fixture.json",
+      "sha256": "f27c168a3147b3790655c9525f07fd1ea68beecb8fe5977c05ac0c38d858075c"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-19/oracle/java-antlr.stderr",
+      "sha256": "ad085baec24eb9d2189bd12d370bc53a310bd486717980fe95e680b0948144a8"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-19/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-19/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-19/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/A.g4",
+      "sha256": "6e726308cd407aa7abf221a7d0391795a1561b87ff0f9d1b0be87a45522520ef"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/A.interp",
+      "sha256": "d71b2caefc8e97d771a530a9858e3ddf7f0a7ab5c75ddfff0104ba6a07581b63"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/A.tokens",
+      "sha256": "05e2fff4ffabf4e3b89a4096f749fc10a24a6739f8c96770a96860c3612eb3e6"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/fixture.json",
+      "sha256": "33863f3d00296c997895df4c2278438c4e83372508128aae920508cd5633d962"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-2/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-20/A.g4",
+      "sha256": "04979fa8af8053b7fb50008dfb5dc9394a29c1f545856a1793b367f62cacf7c4"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-20/diagnostics.json",
+      "sha256": "03884faddfa4503e77058714a13f9b0149ac0111cb8ec6e5848c0a6e66f00f20"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-20/fixture.json",
+      "sha256": "ad2183966067e8d5d3ecacaf343fdea6412636a65c4dfafb74980d3cc2db6e07"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-20/oracle/java-antlr.stderr",
+      "sha256": "e463d4d25cadaf3aca19a611e63dd70ceaf0cc3a6d75548f568042e4272cefa2"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-20/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-20/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-20/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-21/A.g4",
+      "sha256": "2b37a19477cc616f2e3aa93e4677e2118dc5832cc6b6d7c554f3f00658fd5e07"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-21/diagnostics.json",
+      "sha256": "25f7bca9489a7f3d5bcc3215a6d67d4d671c9c1d36e201b7154391061b84eef4"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-21/fixture.json",
+      "sha256": "0acd9b10c9563aeb32e6c6429cdd635485590d4afd64d6b69a6abb7afbbb1abe"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-21/oracle/java-antlr.stderr",
+      "sha256": "653475445d51203acaa5f33a2238901d1401ade55f637ed8f1b6da7d10369afc"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-21/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-21/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-21/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-22/A.g4",
+      "sha256": "f950499bf13b44c0a31145c2f6e127693a482be3a91b6f86a6d95059d5eff0e4"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-22/diagnostics.json",
+      "sha256": "b1a41d5451e7d7a09821a4cee27cebd8e4553718f4402c31011dc60bc784847a"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-22/fixture.json",
+      "sha256": "f65c6f0ccf979f447e550427b6f0b47c9fa7cd9b265dea6fdc065fa74b9ab4af"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-22/oracle/java-antlr.stderr",
+      "sha256": "9e582ac1c52659c96d1fe9d7cbc9ea897da84242d2aebffbd8713c4f8a1dc339"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-22/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-22/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-22/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-23/A.g4",
+      "sha256": "2370631cf4903ab2c74cfa5811c048c03f3afa29afa3d6bf1166a82e01489661"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-23/diagnostics.json",
+      "sha256": "5fb5309210c360bf0455f2fd8584471cf2f6d704922542cf4e30fd607f2a165b"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-23/fixture.json",
+      "sha256": "3ff84fa2cd1a6fe7b6199670de8d8557a20d4c03ee86b3b40fc59647972204ff"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-23/oracle/java-antlr.stderr",
+      "sha256": "e9db94e2fb7a07c54e043460530d04749004f2dcd84b8c766fcc7bf2aeb913a1"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-23/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-23/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-23/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/A.g4",
+      "sha256": "979c86c9bd5935961eb59202bda1f084a1517ee46d137fb99458cc9893c14b95"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/A.interp",
+      "sha256": "d71b2caefc8e97d771a530a9858e3ddf7f0a7ab5c75ddfff0104ba6a07581b63"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/A.tokens",
+      "sha256": "05e2fff4ffabf4e3b89a4096f749fc10a24a6739f8c96770a96860c3612eb3e6"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/fixture.json",
+      "sha256": "5dbb9ae530c11c5667bdb701f12294d77c308ccfc57c339b7b8672d861f035b8"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-3/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/A.g4",
+      "sha256": "b27646a6c805109150d2ddb52132dec3aab903272e99c7f8d6d50469056d5b92"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/A.interp",
+      "sha256": "d71b2caefc8e97d771a530a9858e3ddf7f0a7ab5c75ddfff0104ba6a07581b63"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/A.tokens",
+      "sha256": "05e2fff4ffabf4e3b89a4096f749fc10a24a6739f8c96770a96860c3612eb3e6"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/fixture.json",
+      "sha256": "085a8b3ccaf29b96e5c31ec9d61521d7ad248ad521c0edd5ed6ba192694fdf6d"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-4/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/A.g4",
+      "sha256": "9bb734ab95b5f378f8e956097bde81a6d19d60d517e9580b7ad24edb1af9f475"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/A.interp",
+      "sha256": "d71b2caefc8e97d771a530a9858e3ddf7f0a7ab5c75ddfff0104ba6a07581b63"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/A.tokens",
+      "sha256": "05e2fff4ffabf4e3b89a4096f749fc10a24a6739f8c96770a96860c3612eb3e6"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/fixture.json",
+      "sha256": "d677d5e42276c99ca954ec50d921b0691fe1a606ec8aa099a912250189328388"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-5/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/A.g4",
+      "sha256": "572eeee92f9a599c721a14789c3b87831b1732eff220fd3524e56f8e142f1294"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/A.interp",
+      "sha256": "d71b2caefc8e97d771a530a9858e3ddf7f0a7ab5c75ddfff0104ba6a07581b63"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/A.tokens",
+      "sha256": "05e2fff4ffabf4e3b89a4096f749fc10a24a6739f8c96770a96860c3612eb3e6"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/fixture.json",
+      "sha256": "3e0bc3e4ccea50dc2c491edaad9ea879d30a152ccd7642538d3b6dfd751be3d5"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-6/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/A.g4",
+      "sha256": "10d7581f7a950684b5182c6ef06cdc0c3c6847282953655e61378159664d3fc1"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/A.interp",
+      "sha256": "d71b2caefc8e97d771a530a9858e3ddf7f0a7ab5c75ddfff0104ba6a07581b63"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/A.tokens",
+      "sha256": "05e2fff4ffabf4e3b89a4096f749fc10a24a6739f8c96770a96860c3612eb3e6"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/fixture.json",
+      "sha256": "dd206342cf6aa18d7bcbe7c3036f2e674ca939c891ea97da199a642a52f51a5c"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-7/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/A.g4",
+      "sha256": "59efe93da4ac6429e49f1d5e16d2ea25f428abaef0d95e5e454a9fe63e7877b5"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/A.interp",
+      "sha256": "d71b2caefc8e97d771a530a9858e3ddf7f0a7ab5c75ddfff0104ba6a07581b63"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/A.tokens",
+      "sha256": "05e2fff4ffabf4e3b89a4096f749fc10a24a6739f8c96770a96860c3612eb3e6"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/fixture.json",
+      "sha256": "251aeaa118e66de4a246eb5073385e0c3bcacf4e4f1492071e342411557b3722"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-8/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/A.g4",
+      "sha256": "18687112f6de7c214e7b69aac782837938712f09c7fc2249744bd50d82748b59"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/A.interp",
+      "sha256": "d71b2caefc8e97d771a530a9858e3ddf7f0a7ab5c75ddfff0104ba6a07581b63"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/A.tokens",
+      "sha256": "05e2fff4ffabf4e3b89a4096f749fc10a24a6739f8c96770a96860c3612eb3e6"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/fixture.json",
+      "sha256": "c4f59008f42e800703846fba988e474a816a8c73fe6b407c91818704616af496"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648-variant-9/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/A.g4",
+      "sha256": "360964ee4f86dd98c9086631b7232d25e08ee608a7a7da76ae3db6eb64c4b7f3"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/A.interp",
+      "sha256": "d71b2caefc8e97d771a530a9858e3ddf7f0a7ab5c75ddfff0104ba6a07581b63"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/A.tokens",
+      "sha256": "05e2fff4ffabf4e3b89a4096f749fc10a24a6739f8c96770a96860c3612eb3e6"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/fixture.json",
+      "sha256": "52f22bf58db946fea5db5c5a536a27a8b28082433892b742dcb9f319d613b62a"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testfinallyactions-fbdc1a7648/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    }
+  ],
+  "commits": {
+    "scaffold": "893e9e599ba046fabbad2d0e92bd9561b400b467",
+    "primary_test": "6f7ab4b7f7829f0e5a7bd80542fb394831e5ffe1",
+    "primary_implementation": "ede783206bb4dfc3d8f5d031fdfea9feab507763"
+  },
+  "ancestry": {
+    "primary_test_parent": "893e9e599ba046fabbad2d0e92bd9561b400b467",
+    "primary_implementation_parent": "6f7ab4b7f7829f0e5a7bd80542fb394831e5ffe1",
+    "reachability": "the action attribute implementation commit is directly based on the locked red parity tests"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_attribute_checks {",
+      "end_marker": "\n    mod upstream_symbol_issues {",
+      "sha256": "9a702c53ed62affffdd100dd10595a4f32419df1a8aef05e4f03347047b371f5"
+    },
+    {
+      "path": "tests/codegen-direct/generated/attribute-checks-cases.inc.rs",
+      "marker": "// Generated by tools/grammar-frontend/generate-attribute-checks-fixtures.mjs.",
+      "sha256": "3da2bd6944363db668fd6bddc34c446ccf240c9a12b9ee3990da38d346dba045"
+    }
+  ],
+  "demonstrated_red": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_attribute_checks::testattributechecks_testfinallyactions_fbdc1a7648",
+    "commit": "6f7ab4b7f7829f0e5a7bd80542fb394831e5ffe1",
+    "exit_code": 101,
+    "fingerprint": "testattributechecks-testfinallyactions-fbdc1a7648-variant-11: expected semantic failure"
+  },
+  "green_result": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_attribute_checks::testattributechecks_testfinallyactions_fbdc1a7648",
+    "commit": "ede783206bb4dfc3d8f5d031fdfea9feab507763",
+    "exit_code": 0,
+    "result": "23 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testattributechecks-testfinallyactions-fbdc1a7648/revisions/testattributechecks-testfinallyactions-fbdc1a7648-r1/oracle-results/declared-sources.json",
+      "sha256": "3ee6bfe6768483790367c8e08031d9e0a5ed6637d20789468e11308084168a84"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testattributechecks-testfinallyactions-fbdc1a7648/revisions/testattributechecks-testfinallyactions-fbdc1a7648-r1/matrix-results/results.json",
+      "sha256": "5b0f0394c6b805555d0918d6deb6e8d2d6556b503af6755b647822283d4da928"
+    }
+  ]
+}

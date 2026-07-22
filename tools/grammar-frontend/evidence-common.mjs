@@ -147,6 +147,14 @@ export const SYMBOL_ISSUES_TEST_COMMIT =
     "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b";
 export const SYMBOL_ISSUES_IMPLEMENTATION_COMMIT =
     "8ddba8f5bd603b78e8eea0497cea9c4fe1328208";
+export const ATTRIBUTE_CHECKS_BASE_PARENT_COMMIT =
+    SYMBOL_ISSUES_IMPLEMENTATION_COMMIT;
+export const ATTRIBUTE_CHECKS_BASE_COMMIT =
+    "893e9e599ba046fabbad2d0e92bd9561b400b467";
+export const ATTRIBUTE_CHECKS_TEST_COMMIT =
+    "6f7ab4b7f7829f0e5a7bd80542fb394831e5ffe1";
+export const ATTRIBUTE_CHECKS_IMPLEMENTATION_COMMIT =
+    "ede783206bb4dfc3d8f5d031fdfea9feab507763";
 
 export function stableStringify(value) {
     if (Array.isArray(value)) {

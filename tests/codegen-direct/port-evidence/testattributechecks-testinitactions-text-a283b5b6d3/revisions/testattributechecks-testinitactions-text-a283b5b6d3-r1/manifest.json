@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "logical_id": "testattributechecks-testinitactions-text-a283b5b6d3",
+  "revision_id": "testattributechecks-testinitactions-text-a283b5b6d3-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "resolution": "verified-covered-existing",
+  "closure": {
+    "logical_id": "testattributechecks-testinitactions-text-a283b5b6d3",
+    "source_case_ids": [
+      "antlr-ng:testattributechecks-testinitactions-text@f07286d13049"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testattributechecks-testinitactions-1c2e33025c/A.g4",
+      "tests/codegen-direct/fixtures/testattributechecks-testinitactions-1c2e33025c/A.interp",
+      "tests/codegen-direct/fixtures/testattributechecks-testinitactions-1c2e33025c/A.tokens",
+      "tests/codegen-direct/fixtures/testattributechecks-testinitactions-1c2e33025c/fixture.json",
+      "tests/codegen-direct/fixtures/testattributechecks-testinitactions-1c2e33025c/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testinitactions-1c2e33025c/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testattributechecks-testinitactions-1c2e33025c/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testattributechecks-testinitactions-1c2e33025c/oracle/java-unicode-data.stdout"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_attribute_checks",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust action attribute diagnostics and accepted serialization match Java 4.13.2 for TestAttributeChecks.testInitActions: $text",
+    "scaffold_commit": "893e9e599ba046fabbad2d0e92bd9561b400b467",
+    "primary_test_commit": "6f7ab4b7f7829f0e5a7bd80542fb394831e5ffe1",
+    "resolution": "verified-covered-existing"
+  },
+  "closure_sha256": "561aeab1ba3173dab400f76baf941e826342e4ce90c89d4d2712fc2c260fdab4",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testattributechecks-testinitactions-text@f07286d13049",
+      "path": "tests/TestAttributeChecks.spec.ts",
+      "sha256": "fa9ddfee1540fdee030868888a0f368dfa3bb6eef53bdcdeae2eb33b84f3d26b"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testinitactions-1c2e33025c/A.g4",
+      "sha256": "82cd85c0f2231f19e26fd854d78969133e209d43880d08323611eec5bffea8cf"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testinitactions-1c2e33025c/A.interp",
+      "sha256": "d71b2caefc8e97d771a530a9858e3ddf7f0a7ab5c75ddfff0104ba6a07581b63"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testinitactions-1c2e33025c/A.tokens",
+      "sha256": "05e2fff4ffabf4e3b89a4096f749fc10a24a6739f8c96770a96860c3612eb3e6"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testinitactions-1c2e33025c/fixture.json",
+      "sha256": "155a7a4b092ae9206dc9b0df46f3e877d6ce6f3b5dad9ecd33fcf1e8fc4c9196"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testinitactions-1c2e33025c/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testinitactions-1c2e33025c/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testinitactions-1c2e33025c/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testattributechecks-testinitactions-1c2e33025c/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    }
+  ],
+  "commits": {
+    "scaffold": "893e9e599ba046fabbad2d0e92bd9561b400b467",
+    "primary_test": "6f7ab4b7f7829f0e5a7bd80542fb394831e5ffe1",
+    "primary_implementation": "893e9e599ba046fabbad2d0e92bd9561b400b467"
+  },
+  "ancestry": {
+    "primary_test_parent": "893e9e599ba046fabbad2d0e92bd9561b400b467",
+    "primary_implementation_parent": "8ddba8f5bd603b78e8eea0497cea9c4fe1328208",
+    "reachability": "the case-specific accepted-action assertions passed against the direct compiler implementation already present at the batch base"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_attribute_checks {",
+      "end_marker": "\n    mod upstream_symbol_issues {",
+      "sha256": "9a702c53ed62affffdd100dd10595a4f32419df1a8aef05e4f03347047b371f5"
+    },
+    {
+      "path": "tests/codegen-direct/generated/attribute-checks-cases.inc.rs",
+      "marker": "// Generated by tools/grammar-frontend/generate-attribute-checks-fixtures.mjs.",
+      "sha256": "3da2bd6944363db668fd6bddc34c446ccf240c9a12b9ee3990da38d346dba045"
+    }
+  ],
+  "verified_covered_existing": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_attribute_checks::testattributechecks_testinitactions_1c2e33025c::matches_java -- --exact",
+    "commit": "6f7ab4b7f7829f0e5a7bd80542fb394831e5ffe1",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed",
+    "covering_implementation_commit": "893e9e599ba046fabbad2d0e92bd9561b400b467"
+  },
+  "green_result": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_attribute_checks::testattributechecks_testinitactions_1c2e33025c::matches_java -- --exact",
+    "commit": "6f7ab4b7f7829f0e5a7bd80542fb394831e5ffe1",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testattributechecks-testinitactions-text-a283b5b6d3/revisions/testattributechecks-testinitactions-text-a283b5b6d3-r1/oracle-results/declared-sources.json",
+      "sha256": "8891c00b5aef90a6bc023cf7f58f4acd00b14da3c097be4934fd73ff573f9b57"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testattributechecks-testinitactions-text-a283b5b6d3/revisions/testattributechecks-testinitactions-text-a283b5b6d3-r1/matrix-results/results.json",
+      "sha256": "217ee7946e17a85b4b11ea9159cd13891077047f1659e21b46193f4c564e3bc1"
+    }
+  ]
+}
