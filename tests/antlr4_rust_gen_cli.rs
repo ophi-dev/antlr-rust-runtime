@@ -324,7 +324,7 @@ fn visitor_and_typed_walk_dispatch_labeled_left_recursion() {
 mod typed_tree_tests {
     use super::calculator_lexer::CalculatorLexer;
     use super::calculator_parser::*;
-    use antlr4_runtime::{CommonTokenStream, InputStream, Parser as _};
+    use antlr4_runtime::{AsRuleNode as _, CommonTokenStream, InputStream, Parser as _};
 
     struct Eval;
 
@@ -428,7 +428,13 @@ mod typed_tree_tests {
 
         let start = parsed.tree().as_rule().expect("start rule");
         let expression = start.child_rule(1).expect("top-level expression");
-        assert!(expression.downcast_ref::<AddLabelContext>().is_some());
+        let add = expression
+            .downcast_ref::<AddLabelContext>()
+            .expect("top-level expression is addition");
+        assert_eq!(
+            add.as_rule_node().expect("stored typed context").node().id(),
+            expression.node().id()
+        );
         assert!(expression.downcast_ref::<MultiplyLabelContext>().is_none());
 
         let right = expression

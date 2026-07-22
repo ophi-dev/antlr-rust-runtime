@@ -4,15 +4,15 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use antlr4_runtime::{
-    CommonTokenStream, ErrorListener, InputStream, Node, NodeKind, Parser, Recognizer,
-    TOKEN_EOF as RUNTIME_TOKEN_EOF, Token,
+    AsRuleNode, CommonTokenStream, ErrorListener, InputStream, Node, NodeId, NodeKind, Parser,
+    Recognizer, TOKEN_EOF as RUNTIME_TOKEN_EOF, Token,
 };
 
 use super::generated::antlr_v4_lexer::{
     AntlRv4Lexer, BLOCK_COMMENT, COLON, DOC_COMMENT, MODE, RANGE, RULE_REF, SEMI, STRING_LITERAL,
     UNTERMINATED_ARGUMENT, UNTERMINATED_CHAR_SET, UNTERMINATED_STRING_LITERAL,
 };
-use super::generated::antlr_v4_parser::AntlRv4Parser;
+use super::generated::antlr_v4_parser::{self as grammar_parser, ANTLRv4Listener, AntlRv4Parser};
 use super::lexer_adaptor::LexerAdaptor;
 
 #[repr(transparent)]
@@ -632,62 +632,277 @@ fn copy_cst(
     tokens: &[SyntaxToken],
     root: Node<'_>,
 ) -> Result<Cst, FrontendError> {
-    let mut nodes = Vec::new();
-    let mut children = Vec::new();
-    let root = copy_node(source, tokens, root, &mut nodes, &mut children)?;
-    Ok(Cst {
-        nodes: nodes.into_boxed_slice(),
-        children: children.into_boxed_slice(),
-        root,
-    })
+    let mut builder = TypedCstBuilder::new(source, tokens);
+    builder
+        .walk(root)
+        .map_err(|error| invalid_span(source, &format!("typed CST traversal failed: {error}")))?;
+    builder.finish()
 }
 
-fn copy_node(
-    source: SourceId,
-    tokens: &[SyntaxToken],
-    node: Node<'_>,
-    nodes: &mut Vec<SyntaxNode>,
-    children: &mut Vec<SyntaxId>,
-) -> Result<SyntaxId, FrontendError> {
-    let node_index =
-        u32::try_from(nodes.len()).map_err(|_| invalid_span(source, "CST exceeds 2^32 nodes"))?;
-    let kind = match node.kind() {
-        NodeKind::Rule => SyntaxNodeKind::Rule {
-            rule_index: node.as_rule().expect("rule node kind checked").rule_index(),
-        },
-        NodeKind::Terminal => SyntaxNodeKind::Terminal {
-            token_index: node
-                .as_terminal()
-                .expect("terminal node kind checked")
-                .token_id()
-                .index(),
-        },
-        NodeKind::Error => SyntaxNodeKind::Error {
-            token_index: node
-                .as_error()
-                .expect("error node kind checked")
-                .token_id()
-                .index(),
-        },
-    };
-    let span = node_span(source, tokens, node)?;
-    nodes.push(SyntaxNode {
-        kind,
-        span,
-        child_ids: 0..0,
-    });
+struct OpenRule {
+    syntax: SyntaxId,
+    runtime: NodeId,
+    rule_index: usize,
+    children: Vec<SyntaxId>,
+}
 
-    let mut direct_children = Vec::new();
-    for child in node.children() {
-        direct_children.push(copy_node(source, tokens, child, nodes, children)?);
+struct TypedCstBuilder<'tokens> {
+    source: SourceId,
+    tokens: &'tokens [SyntaxToken],
+    nodes: Vec<SyntaxNode>,
+    children: Vec<SyntaxId>,
+    open_rules: Vec<OpenRule>,
+    root: Option<SyntaxId>,
+    error: Option<FrontendError>,
+}
+
+impl<'tokens> TypedCstBuilder<'tokens> {
+    const fn new(source: SourceId, tokens: &'tokens [SyntaxToken]) -> Self {
+        Self {
+            source,
+            tokens,
+            nodes: Vec::new(),
+            children: Vec::new(),
+            open_rules: Vec::new(),
+            root: None,
+            error: None,
+        }
     }
-    let child_start = u32::try_from(children.len())
-        .map_err(|_| invalid_span(source, "CST exceeds 2^32 edges"))?;
-    children.extend(direct_children);
-    let child_end = u32::try_from(children.len())
-        .map_err(|_| invalid_span(source, "CST exceeds 2^32 edges"))?;
-    nodes[node_index as usize].child_ids = child_start..child_end;
-    Ok(SyntaxId::for_source(source, node_index))
+
+    fn finish(self) -> Result<Cst, FrontendError> {
+        if let Some(error) = self.error {
+            return Err(error);
+        }
+        if !self.open_rules.is_empty() {
+            return Err(invalid_span(
+                self.source,
+                "typed CST traversal left parser rules open",
+            ));
+        }
+        let root = self
+            .root
+            .ok_or_else(|| invalid_span(self.source, "typed CST traversal produced no root"))?;
+        Ok(Cst {
+            nodes: self.nodes.into_boxed_slice(),
+            children: self.children.into_boxed_slice(),
+            root,
+        })
+    }
+
+    fn enter_rule_context<'tree>(
+        &mut self,
+        context: &impl AsRuleNode<'tree>,
+        expected_rule_index: usize,
+    ) {
+        if self.error.is_some() {
+            return;
+        }
+        let Some(rule) = context.as_rule_node() else {
+            self.fail("typed listener received an active parser context");
+            return;
+        };
+        if rule.rule_index() != expected_rule_index {
+            self.fail(format!(
+                "typed listener dispatched rule {} as {expected_rule_index}",
+                rule.rule_index()
+            ));
+            return;
+        }
+        let node = rule.node();
+        let span = match node_span(self.source, self.tokens, node) {
+            Ok(span) => span,
+            Err(error) => {
+                self.error = Some(error);
+                return;
+            }
+        };
+        let Some(syntax) = self.push_node(
+            SyntaxNodeKind::Rule {
+                rule_index: expected_rule_index,
+            },
+            span,
+        ) else {
+            return;
+        };
+        self.open_rules.push(OpenRule {
+            syntax,
+            runtime: node.id(),
+            rule_index: expected_rule_index,
+            children: Vec::new(),
+        });
+    }
+
+    fn exit_rule_context<'tree>(
+        &mut self,
+        context: &impl AsRuleNode<'tree>,
+        expected_rule_index: usize,
+    ) {
+        if self.error.is_some() {
+            return;
+        }
+        let Some(rule) = context.as_rule_node() else {
+            self.fail("typed listener exited an active parser context");
+            return;
+        };
+        let Some(frame) = self.open_rules.pop() else {
+            self.fail("typed CST traversal exited a rule that was not entered");
+            return;
+        };
+        if frame.runtime != rule.node().id() || frame.rule_index != expected_rule_index {
+            self.fail("typed CST traversal exited parser rules out of order");
+            return;
+        }
+        let Ok(child_start) = u32::try_from(self.children.len()) else {
+            self.fail("CST exceeds 2^32 edges");
+            return;
+        };
+        self.children.extend(frame.children);
+        let Ok(child_end) = u32::try_from(self.children.len()) else {
+            self.fail("CST exceeds 2^32 edges");
+            return;
+        };
+        self.nodes[frame.syntax.index()].child_ids = child_start..child_end;
+    }
+
+    fn push_token(&mut self, token_index: usize, error: bool) {
+        if self.error.is_some() {
+            return;
+        }
+        let Some(token) = self.tokens.get(token_index) else {
+            self.fail("CST references a missing token");
+            return;
+        };
+        let kind = if error {
+            SyntaxNodeKind::Error { token_index }
+        } else {
+            SyntaxNodeKind::Terminal { token_index }
+        };
+        let _ = self.push_node(kind, token.span.clone());
+    }
+
+    fn push_node(&mut self, kind: SyntaxNodeKind, span: SourceSpan) -> Option<SyntaxId> {
+        let Ok(node_index) = u32::try_from(self.nodes.len()) else {
+            self.fail("CST exceeds 2^32 nodes");
+            return None;
+        };
+        let syntax = SyntaxId::for_source(self.source, node_index);
+        self.nodes.push(SyntaxNode {
+            kind,
+            span,
+            child_ids: 0..0,
+        });
+        if let Some(parent) = self.open_rules.last_mut() {
+            parent.children.push(syntax);
+        } else if self.root.is_none() {
+            self.root = Some(syntax);
+        } else {
+            self.fail("typed CST traversal produced multiple roots");
+            return None;
+        }
+        Some(syntax)
+    }
+
+    fn fail(&mut self, message: impl Into<String>) {
+        if self.error.is_some() {
+            return;
+        }
+        let message = message.into();
+        self.error = Some(invalid_span(self.source, &message));
+    }
+}
+
+macro_rules! typed_cst_rule_callbacks {
+    ($( $enter:ident, $exit:ident => $context:ident, $rule:ident; )+) => {
+        $(
+            fn $enter(&mut self, context: &grammar_parser::$context<'_>) {
+                self.enter_rule_context(context, grammar_parser::$rule);
+            }
+
+            fn $exit(&mut self, context: &grammar_parser::$context<'_>) {
+                self.exit_rule_context(context, grammar_parser::$rule);
+            }
+        )+
+    };
+}
+
+impl ANTLRv4Listener for TypedCstBuilder<'_> {
+    typed_cst_rule_callbacks! {
+        enter_grammar_spec, exit_grammar_spec => GrammarSpecContext, RULE_GRAMMAR_SPEC;
+        enter_grammar_decl, exit_grammar_decl => GrammarDeclContext, RULE_GRAMMAR_DECL;
+        enter_grammar_type, exit_grammar_type => GrammarTypeContext, RULE_GRAMMAR_TYPE;
+        enter_prequel_construct, exit_prequel_construct => PrequelConstructContext, RULE_PREQUEL_CONSTRUCT;
+        enter_options_spec, exit_options_spec => OptionsSpecContext, RULE_OPTIONS_SPEC;
+        enter_option, exit_option => OptionContext, RULE_OPTION;
+        enter_option_value, exit_option_value => OptionValueContext, RULE_OPTION_VALUE;
+        enter_delegate_grammars, exit_delegate_grammars => DelegateGrammarsContext, RULE_DELEGATE_GRAMMARS;
+        enter_delegate_grammar, exit_delegate_grammar => DelegateGrammarContext, RULE_DELEGATE_GRAMMAR;
+        enter_tokens_spec, exit_tokens_spec => TokensSpecContext, RULE_TOKENS_SPEC;
+        enter_channels_spec, exit_channels_spec => ChannelsSpecContext, RULE_CHANNELS_SPEC;
+        enter_id_list, exit_id_list => IdListContext, RULE_ID_LIST;
+        enter_action, exit_action => ActionContext, RULE_ACTION;
+        enter_action_scope_name, exit_action_scope_name => ActionScopeNameContext, RULE_ACTION_SCOPE_NAME;
+        enter_action_block, exit_action_block => ActionBlockContext, RULE_ACTION_BLOCK;
+        enter_arg_action_block, exit_arg_action_block => ArgActionBlockContext, RULE_ARG_ACTION_BLOCK;
+        enter_mode_spec, exit_mode_spec => ModeSpecContext, RULE_MODE_SPEC;
+        enter_rules, exit_rules => RulesContext, RULE_RULES;
+        enter_rule_spec, exit_rule_spec => RuleSpecContext, RULE_RULE_SPEC;
+        enter_parser_rule_spec, exit_parser_rule_spec => ParserRuleSpecContext, RULE_PARSER_RULE_SPEC;
+        enter_exception_group, exit_exception_group => ExceptionGroupContext, RULE_EXCEPTION_GROUP;
+        enter_exception_handler, exit_exception_handler => ExceptionHandlerContext, RULE_EXCEPTION_HANDLER;
+        enter_finally_clause, exit_finally_clause => FinallyClauseContext, RULE_FINALLY_CLAUSE;
+        enter_rule_prequel, exit_rule_prequel => RulePrequelContext, RULE_RULE_PREQUEL;
+        enter_rule_returns, exit_rule_returns => RuleReturnsContext, RULE_RULE_RETURNS;
+        enter_throws_spec, exit_throws_spec => ThrowsSpecContext, RULE_THROWS_SPEC;
+        enter_locals_spec, exit_locals_spec => LocalsSpecContext, RULE_LOCALS_SPEC;
+        enter_rule_action, exit_rule_action => RuleActionContext, RULE_RULE_ACTION;
+        enter_rule_modifiers, exit_rule_modifiers => RuleModifiersContext, RULE_RULE_MODIFIERS;
+        enter_rule_modifier, exit_rule_modifier => RuleModifierContext, RULE_RULE_MODIFIER;
+        enter_rule_block, exit_rule_block => RuleBlockContext, RULE_RULE_BLOCK;
+        enter_rule_alt_list, exit_rule_alt_list => RuleAltListContext, RULE_RULE_ALT_LIST;
+        enter_labeled_alt, exit_labeled_alt => LabeledAltContext, RULE_LABELED_ALT;
+        enter_lexer_rule_spec, exit_lexer_rule_spec => LexerRuleSpecContext, RULE_LEXER_RULE_SPEC;
+        enter_lexer_rule_block, exit_lexer_rule_block => LexerRuleBlockContext, RULE_LEXER_RULE_BLOCK;
+        enter_lexer_alt_list, exit_lexer_alt_list => LexerAltListContext, RULE_LEXER_ALT_LIST;
+        enter_lexer_alt, exit_lexer_alt => LexerAltContext, RULE_LEXER_ALT;
+        enter_lexer_elements, exit_lexer_elements => LexerElementsContext, RULE_LEXER_ELEMENTS;
+        enter_lexer_element, exit_lexer_element => LexerElementContext, RULE_LEXER_ELEMENT;
+        enter_lexer_block, exit_lexer_block => LexerBlockContext, RULE_LEXER_BLOCK;
+        enter_lexer_commands, exit_lexer_commands => LexerCommandsContext, RULE_LEXER_COMMANDS;
+        enter_lexer_command, exit_lexer_command => LexerCommandContext, RULE_LEXER_COMMAND;
+        enter_lexer_command_name, exit_lexer_command_name => LexerCommandNameContext, RULE_LEXER_COMMAND_NAME;
+        enter_lexer_command_expr, exit_lexer_command_expr => LexerCommandExprContext, RULE_LEXER_COMMAND_EXPR;
+        enter_alt_list, exit_alt_list => AltListContext, RULE_ALT_LIST;
+        enter_alternative, exit_alternative => AlternativeContext, RULE_ALTERNATIVE;
+        enter_element, exit_element => ElementContext, RULE_ELEMENT;
+        enter_predicate_options, exit_predicate_options => PredicateOptionsContext, RULE_PREDICATE_OPTIONS;
+        enter_predicate_option, exit_predicate_option => PredicateOptionContext, RULE_PREDICATE_OPTION;
+        enter_labeled_element, exit_labeled_element => LabeledElementContext, RULE_LABELED_ELEMENT;
+        enter_ebnf, exit_ebnf => EbnfContext, RULE_EBNF;
+        enter_block_suffix, exit_block_suffix => BlockSuffixContext, RULE_BLOCK_SUFFIX;
+        enter_ebnf_suffix, exit_ebnf_suffix => EbnfSuffixContext, RULE_EBNF_SUFFIX;
+        enter_lexer_atom, exit_lexer_atom => LexerAtomContext, RULE_LEXER_ATOM;
+        enter_atom, exit_atom => AtomContext, RULE_ATOM;
+        enter_wildcard, exit_wildcard => WildcardContext, RULE_WILDCARD;
+        enter_not_set, exit_not_set => NotSetContext, RULE_NOT_SET;
+        enter_block_set, exit_block_set => BlockSetContext, RULE_BLOCK_SET;
+        enter_set_element, exit_set_element => SetElementContext, RULE_SET_ELEMENT;
+        enter_block, exit_block => BlockContext, RULE_BLOCK;
+        enter_ruleref, exit_ruleref => RulerefContext, RULE_RULEREF;
+        enter_character_range, exit_character_range => CharacterRangeContext, RULE_CHARACTER_RANGE;
+        enter_terminal_def, exit_terminal_def => TerminalDefContext, RULE_TERMINAL_DEF;
+        enter_element_options, exit_element_options => ElementOptionsContext, RULE_ELEMENT_OPTIONS;
+        enter_element_option, exit_element_option => ElementOptionContext, RULE_ELEMENT_OPTION;
+        enter_identifier, exit_identifier => IdentifierContext, RULE_IDENTIFIER;
+        enter_qualified_identifier, exit_qualified_identifier => QualifiedIdentifierContext, RULE_QUALIFIED_IDENTIFIER;
+    }
+
+    fn visit_terminal(&mut self, node: &grammar_parser::TerminalNode<'_>) {
+        self.push_token(node.symbol().token_id().index(), false);
+    }
+
+    fn visit_error_node(&mut self, node: &grammar_parser::ErrorNode<'_>) {
+        self.push_token(node.symbol().token_id().index(), true);
+    }
 }
 
 fn node_span(

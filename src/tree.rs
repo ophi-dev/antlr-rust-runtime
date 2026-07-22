@@ -1233,6 +1233,20 @@ pub trait FromRuleNode<'tree>: Sized {
     fn from_rule_node(node: RuleNodeView<'tree>) -> Option<Self>;
 }
 
+/// Exposes the stored rule node behind a generated typed context.
+///
+/// Contexts used while a parser rule is still active do not have a completed
+/// tree node yet and return `None`.
+pub trait AsRuleNode<'tree> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'tree>>;
+}
+
+impl<'tree> AsRuleNode<'tree> for RuleNodeView<'tree> {
+    fn as_rule_node(&self) -> Option<Self> {
+        Some(*self)
+    }
+}
+
 pub trait ParseTreeListener {
     fn enter_every_rule(&mut self, _ctx: RuleNodeView<'_>) -> Result<(), AntlrError> {
         Ok(())

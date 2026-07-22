@@ -7847,7 +7847,7 @@ fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
         );
         let _ = writeln!(
             out,
-            "impl<'a> FromRuleNode<'a> for {view_name}<'a> {{\n    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {{\n        if node.rule_index() != {rule_index}{stored_kind_guard} {{ return None; }}\n        Some(Self::__from_node(node))\n    }}\n}}\n\nimpl<'a> __FromActiveRuleContext<'a> for {view_name}<'a> {{\n    fn __from_active(\n        context: &'a antlr4_runtime::ParserRuleContext,\n        invocation_states: Vec<isize>,\n        storage: &'a antlr4_runtime::ParseTreeStorage,\n        tokens: &'a antlr4_runtime::TokenStore,\n    ) -> Option<Self> {{\n        if context.rule_index() != {rule_index}{active_kind_guard} {{ return None; }}\n        let __default = {attrs_struct}::default();\n        let __attrs = context.generated_attrs::<{attrs_struct}>().unwrap_or(&__default);\n        Some(Self {{\n            __node: __GeneratedRuleContext::Active {{ context, storage, tokens }},\n            __invocation_states: invocation_states,\n{field_inits}        }})\n    }}\n}}\n"
+            "impl<'a> FromRuleNode<'a> for {view_name}<'a> {{\n    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {{\n        if node.rule_index() != {rule_index}{stored_kind_guard} {{ return None; }}\n        Some(Self::__from_node(node))\n    }}\n}}\n\nimpl<'a> AsRuleNode<'a> for {view_name}<'a> {{\n    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {{\n        match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => Some(*node),\n            __GeneratedRuleContext::Active {{ .. }} => None,\n        }}\n    }}\n}}\n\nimpl<'a> __FromActiveRuleContext<'a> for {view_name}<'a> {{\n    fn __from_active(\n        context: &'a antlr4_runtime::ParserRuleContext,\n        invocation_states: Vec<isize>,\n        storage: &'a antlr4_runtime::ParseTreeStorage,\n        tokens: &'a antlr4_runtime::TokenStore,\n    ) -> Option<Self> {{\n        if context.rule_index() != {rule_index}{active_kind_guard} {{ return None; }}\n        let __default = {attrs_struct}::default();\n        let __attrs = context.generated_attrs::<{attrs_struct}>().unwrap_or(&__default);\n        Some(Self {{\n            __node: __GeneratedRuleContext::Active {{ context, storage, tokens }},\n            __invocation_states: invocation_states,\n{field_inits}        }})\n    }}\n}}\n"
         );
         let mut accessors = String::new();
         if options.generate_visitor {
@@ -8552,7 +8552,7 @@ fn render_parser_with_options(
     let generated_footer = GENERATED_MODULE_FOOTER;
 
     let embedded_imports = if embedded_data.is_some() || structural_surface.is_some() {
-        "#[allow(unused_imports)]\nuse std::io::Write as _;\n#[allow(unused_imports)]\nuse antlr4_runtime::{java_style_list, PredictionMode, BailErrorStrategy, TerminalNodeView as RuntimeTerminalNode, ErrorNodeView as RuntimeErrorNode, RuleNodeView, FromRuleNode, Token as _};\n"
+        "#[allow(unused_imports)]\nuse std::io::Write as _;\n#[allow(unused_imports)]\nuse antlr4_runtime::{java_style_list, PredictionMode, BailErrorStrategy, TerminalNodeView as RuntimeTerminalNode, ErrorNodeView as RuntimeErrorNode, RuleNodeView, AsRuleNode, FromRuleNode, Token as _};\n"
     } else {
         ""
     };

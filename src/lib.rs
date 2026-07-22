@@ -44,9 +44,10 @@ pub use token::{
 };
 pub use token_stream::CommonTokenStream;
 pub use tree::{
-    ErrorNodeView, FromRuleNode, GeneratedAttrs, Node, NodeChildren, NodeId, NodeKind, ParseTree,
-    ParseTreeDescendants, ParseTreeListener, ParseTreeStats, ParseTreeStorage, ParseTreeVisitor,
-    ParseTreeWalker, ParsedFile, ParserRuleContext, RuleNodeView, TerminalNodeView,
+    AsRuleNode, ErrorNodeView, FromRuleNode, GeneratedAttrs, Node, NodeChildren, NodeId, NodeKind,
+    ParseTree, ParseTreeDescendants, ParseTreeListener, ParseTreeStats, ParseTreeStorage,
+    ParseTreeVisitor, ParseTreeWalker, ParsedFile, ParserRuleContext, RuleNodeView,
+    TerminalNodeView,
 };
 pub use vocabulary::Vocabulary;
 

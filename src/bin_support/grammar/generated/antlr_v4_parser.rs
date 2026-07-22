@@ -13,7 +13,7 @@ use std::sync::OnceLock;
 #[allow(unused_imports)]
 use std::io::Write as _;
 #[allow(unused_imports)]
-use antlr4_runtime::{java_style_list, PredictionMode, BailErrorStrategy, TerminalNodeView as RuntimeTerminalNode, ErrorNodeView as RuntimeErrorNode, RuleNodeView, FromRuleNode, Token as _};
+use antlr4_runtime::{java_style_list, PredictionMode, BailErrorStrategy, TerminalNodeView as RuntimeTerminalNode, ErrorNodeView as RuntimeErrorNode, RuleNodeView, AsRuleNode, FromRuleNode, Token as _};
 
 
 pub const EOF: i32 = antlr4_runtime::TOKEN_EOF;
@@ -669,6 +669,15 @@ impl<'a> FromRuleNode<'a> for GrammarSpecContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for GrammarSpecContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for GrammarSpecContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -808,6 +817,15 @@ impl<'a> FromRuleNode<'a> for GrammarDeclContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for GrammarDeclContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for GrammarDeclContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -932,6 +950,15 @@ impl<'a> FromRuleNode<'a> for GrammarTypeContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 2 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for GrammarTypeContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -1063,6 +1090,15 @@ impl<'a> FromRuleNode<'a> for PrequelConstructContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 3 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for PrequelConstructContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -1219,6 +1255,15 @@ impl<'a> FromRuleNode<'a> for OptionsSpecContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for OptionsSpecContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for OptionsSpecContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -1364,6 +1409,15 @@ impl<'a> FromRuleNode<'a> for OptionContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for OptionContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for OptionContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -1488,6 +1542,15 @@ impl<'a> FromRuleNode<'a> for OptionValueContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 6 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for OptionValueContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -1650,6 +1713,15 @@ impl<'a> FromRuleNode<'a> for DelegateGrammarsContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for DelegateGrammarsContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for DelegateGrammarsContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -1795,6 +1867,15 @@ impl<'a> FromRuleNode<'a> for DelegateGrammarContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for DelegateGrammarContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for DelegateGrammarContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -1905,6 +1986,15 @@ impl<'a> FromRuleNode<'a> for TokensSpecContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 9 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for TokensSpecContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -2037,6 +2127,15 @@ impl<'a> FromRuleNode<'a> for ChannelsSpecContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for ChannelsSpecContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for ChannelsSpecContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -2166,6 +2265,15 @@ impl<'a> FromRuleNode<'a> for IdListContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for IdListContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for IdListContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -2276,6 +2384,15 @@ impl<'a> FromRuleNode<'a> for ActionContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 12 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for ActionContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -2436,6 +2553,15 @@ impl<'a> FromRuleNode<'a> for ActionScopeNameContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for ActionScopeNameContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for ActionScopeNameContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -2565,6 +2691,15 @@ impl<'a> FromRuleNode<'a> for ActionBlockContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for ActionBlockContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for ActionBlockContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -2661,6 +2796,15 @@ impl<'a> FromRuleNode<'a> for ArgActionBlockContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 15 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for ArgActionBlockContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -2792,6 +2936,15 @@ impl<'a> FromRuleNode<'a> for ModeSpecContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 16 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for ModeSpecContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -2938,6 +3091,15 @@ impl<'a> FromRuleNode<'a> for RulesContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for RulesContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for RulesContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -3032,6 +3194,15 @@ impl<'a> FromRuleNode<'a> for RuleSpecContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 18 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for RuleSpecContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -3143,6 +3314,15 @@ impl<'a> FromRuleNode<'a> for ParserRuleSpecContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 19 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for ParserRuleSpecContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -3389,6 +3569,15 @@ impl<'a> FromRuleNode<'a> for ExceptionGroupContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for ExceptionGroupContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for ExceptionGroupContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -3497,6 +3686,15 @@ impl<'a> FromRuleNode<'a> for ExceptionHandlerContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 21 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for ExceptionHandlerContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -3627,6 +3825,15 @@ impl<'a> FromRuleNode<'a> for FinallyClauseContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for FinallyClauseContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for FinallyClauseContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -3737,6 +3944,15 @@ impl<'a> FromRuleNode<'a> for RulePrequelContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 23 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for RulePrequelContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -3851,6 +4067,15 @@ impl<'a> FromRuleNode<'a> for RuleReturnsContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for RuleReturnsContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for RuleReturnsContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -3961,6 +4186,15 @@ impl<'a> FromRuleNode<'a> for ThrowsSpecContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 25 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for ThrowsSpecContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -4093,6 +4327,15 @@ impl<'a> FromRuleNode<'a> for LocalsSpecContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for LocalsSpecContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for LocalsSpecContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -4203,6 +4446,15 @@ impl<'a> FromRuleNode<'a> for RuleActionContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 27 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for RuleActionContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -4333,6 +4585,15 @@ impl<'a> FromRuleNode<'a> for RuleModifiersContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for RuleModifiersContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for RuleModifiersContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -4430,6 +4691,15 @@ impl<'a> FromRuleNode<'a> for RuleModifierContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for RuleModifierContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for RuleModifierContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -4510,6 +4780,15 @@ impl<'a> FromRuleNode<'a> for RuleBlockContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 30 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for RuleBlockContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -4607,6 +4886,15 @@ impl<'a> FromRuleNode<'a> for RuleAltListContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 31 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for RuleAltListContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -4720,6 +5008,15 @@ impl<'a> FromRuleNode<'a> for LabeledAltContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 32 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for LabeledAltContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -4847,6 +5144,15 @@ impl<'a> FromRuleNode<'a> for LexerRuleSpecContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 33 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for LexerRuleSpecContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -5025,6 +5331,15 @@ impl<'a> FromRuleNode<'a> for LexerRuleBlockContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for LexerRuleBlockContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for LexerRuleBlockContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -5119,6 +5434,15 @@ impl<'a> FromRuleNode<'a> for LexerAltListContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 35 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for LexerAltListContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -5235,6 +5559,15 @@ impl<'a> FromRuleNode<'a> for LexerAltContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for LexerAltContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for LexerAltContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -5346,6 +5679,15 @@ impl<'a> FromRuleNode<'a> for LexerElementsContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for LexerElementsContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for LexerElementsContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -5440,6 +5782,15 @@ impl<'a> FromRuleNode<'a> for LexerElementContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 38 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for LexerElementContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -5598,6 +5949,15 @@ impl<'a> FromRuleNode<'a> for LexerBlockContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for LexerBlockContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for LexerBlockContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -5727,6 +6087,15 @@ impl<'a> FromRuleNode<'a> for LexerCommandsContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for LexerCommandsContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for LexerCommandsContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -5853,6 +6222,15 @@ impl<'a> FromRuleNode<'a> for LexerCommandContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 41 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for LexerCommandContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -5999,6 +6377,15 @@ impl<'a> FromRuleNode<'a> for LexerCommandNameContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for LexerCommandNameContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for LexerCommandNameContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -6109,6 +6496,15 @@ impl<'a> FromRuleNode<'a> for LexerCommandExprContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 43 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for LexerCommandExprContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -6225,6 +6621,15 @@ impl<'a> FromRuleNode<'a> for AltListContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for AltListContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for AltListContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -6338,6 +6743,15 @@ impl<'a> FromRuleNode<'a> for AlternativeContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for AlternativeContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for AlternativeContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -6446,6 +6860,15 @@ impl<'a> FromRuleNode<'a> for ElementContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 46 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for ElementContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -6632,6 +7055,15 @@ impl<'a> FromRuleNode<'a> for PredicateOptionsContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for PredicateOptionsContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for PredicateOptionsContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -6774,6 +7206,15 @@ impl<'a> FromRuleNode<'a> for PredicateOptionContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 48 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for PredicateOptionContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -6950,6 +7391,15 @@ impl<'a> FromRuleNode<'a> for LabeledElementContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for LabeledElementContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for LabeledElementContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -7075,6 +7525,15 @@ impl<'a> FromRuleNode<'a> for EbnfContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for EbnfContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for EbnfContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -7186,6 +7645,15 @@ impl<'a> FromRuleNode<'a> for BlockSuffixContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for BlockSuffixContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for BlockSuffixContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -7280,6 +7748,15 @@ impl<'a> FromRuleNode<'a> for EbnfSuffixContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 52 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for EbnfSuffixContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -7411,6 +7888,15 @@ impl<'a> FromRuleNode<'a> for LexerAtomContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 53 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for LexerAtomContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -7585,6 +8071,15 @@ impl<'a> FromRuleNode<'a> for AtomContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for AtomContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for AtomContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -7724,6 +8219,15 @@ impl<'a> FromRuleNode<'a> for WildcardContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for WildcardContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for WildcardContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -7834,6 +8338,15 @@ impl<'a> FromRuleNode<'a> for NotSetContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 56 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for NotSetContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -7961,6 +8474,15 @@ impl<'a> FromRuleNode<'a> for BlockSetContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 57 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for BlockSetContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -8106,6 +8628,15 @@ impl<'a> FromRuleNode<'a> for SetElementContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 58 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for SetElementContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -8265,6 +8796,15 @@ impl<'a> FromRuleNode<'a> for BlockContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 59 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for BlockContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -8441,6 +8981,15 @@ impl<'a> FromRuleNode<'a> for RulerefContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for RulerefContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for RulerefContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -8568,6 +9117,15 @@ impl<'a> FromRuleNode<'a> for CharacterRangeContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for CharacterRangeContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for CharacterRangeContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -8680,6 +9238,15 @@ impl<'a> FromRuleNode<'a> for TerminalDefContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 62 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for TerminalDefContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -8809,6 +9376,15 @@ impl<'a> FromRuleNode<'a> for ElementOptionsContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 63 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for ElementOptionsContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -8954,6 +9530,15 @@ impl<'a> FromRuleNode<'a> for ElementOptionContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 64 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for ElementOptionContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
@@ -9116,6 +9701,15 @@ impl<'a> FromRuleNode<'a> for IdentifierContext<'a> {
     }
 }
 
+impl<'a> AsRuleNode<'a> for IdentifierContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
+    }
+}
+
 impl<'a> __FromActiveRuleContext<'a> for IdentifierContext<'a> {
     fn __from_active(
         context: &'a antlr4_runtime::ParserRuleContext,
@@ -9196,6 +9790,15 @@ impl<'a> FromRuleNode<'a> for QualifiedIdentifierContext<'a> {
     fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
         if node.rule_index() != 66 { return None; }
         Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> AsRuleNode<'a> for QualifiedIdentifierContext<'a> {
+    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => Some(*node),
+            __GeneratedRuleContext::Active { .. } => None,
+        }
     }
 }
 
