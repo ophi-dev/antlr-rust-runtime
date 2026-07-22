@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtokentypeassignment-testpreddoesnothidenametoliteralmapinlexer-a1fc06a563",
+  "active_revision_id": "testtokentypeassignment-testpreddoesnothidenametoliteralmapinlexer-a1fc06a563-r1",
+  "revisions": [
+    {
+      "revision_id": "testtokentypeassignment-testpreddoesnothidenametoliteralmapinlexer-a1fc06a563-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testtokentypeassignment-testpreddoesnothidenametoliteralmapinlexer-a1fc06a563/revisions/testtokentypeassignment-testpreddoesnothidenametoliteralmapinlexer-a1fc06a563-r1/manifest.json",
+      "closure_sha256": "7dbd64493748c603ba8ae54a1b7a28e23da6e6ab931f029cfbbc90c5089a0485"
+    }
+  ]
+}

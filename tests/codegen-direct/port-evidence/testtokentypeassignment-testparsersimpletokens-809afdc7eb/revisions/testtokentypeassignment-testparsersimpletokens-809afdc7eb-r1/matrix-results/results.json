@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtokentypeassignment-testparsersimpletokens-809afdc7eb",
+  "revision_id": "testtokentypeassignment-testparsersimpletokens-809afdc7eb-r1",
+  "cells": [
+    {
+      "test_port": "coverage-extension",
+      "test_commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+      "implementation_port": "existing-primary-antlr-ng",
+      "implementation_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+      "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_token_type_assignment::parser_simple_tokens::matches_java_interps_and_tokens -- --exact",
+      "result": "green: 1 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the case-specific test passed against the existing Phase B implementation"
+}

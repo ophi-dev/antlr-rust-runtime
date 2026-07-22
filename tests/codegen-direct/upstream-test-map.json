@@ -27928,8 +27928,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testtokentypeassignment-testcombinedgrammarliterals-74842182c1-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_token_type_assignment::combined_grammar_literals::matches_java_interps_and_tokens",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -27950,8 +27951,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestTokenTypeAssignment.testCombinedGrammarLiterals behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust recognizer metadata and token vocabulary text match Java 4.13.2 exactly for TestTokenTypeAssignment.testCombinedGrammarLiterals",
+      "scaffold_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+      "primary_test_commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_token_type_assignment::combined_grammar_literals::matches_java_interps_and_tokens -- --exact",
+        "commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_token_type_assignment::combined_grammar_literals::matches_java_interps_and_tokens -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testtokentypeassignment-testcombinedgrammarliterals-74842182c1",
         "source_case_ids": [
@@ -27959,14 +27973,30 @@
           "java-antlr:testtokentypeassignment-testcombinedgrammarliterals@62afa78a168a"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/diagnostics.json",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/fixture.json",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/oracle/java-unicode-data.stdout",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/t.g4",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/t.interp",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/t.tokens",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/tLexer.interp",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/tLexer.tokens"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_token_type_assignment::combined_grammar_literals::matches_java_interps_and_tokens",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestTokenTypeAssignment.testCombinedGrammarLiterals behavior"
+        "observable": "direct Rust recognizer metadata and token vocabulary text match Java 4.13.2 exactly for TestTokenTypeAssignment.testCombinedGrammarLiterals",
+        "scaffold_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+        "primary_test_commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "e6d0e1b7298e81ad5bad0578051c645cbcae439d3c778817ea14992f729e7bca",
-      "evidence_path": null
+      "closure_sha256": "c7f5e4304e979216bb94fbbee345a465669e09d91be54c117148e76850ac2e11",
+      "evidence_path": "tests/codegen-direct/port-evidence/testtokentypeassignment-testcombinedgrammarliterals-74842182c1"
     },
     {
       "logical_id": "testtokentypeassignment-testcombinedgrammarwithreftoliteralbutnotokenidref-fd2391c14b",
@@ -27978,8 +28008,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testtokentypeassignment-testcombinedgrammarwithreftoliteralbutnotokenidref-fd2391c14b-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarwithreftoliteralbutnotokenidref-fd2391c14b",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_token_type_assignment::combined_grammar_with_ref_to_literal_but_no_token_id_ref::matches_java_interps_and_tokens",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -28000,8 +28031,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestTokenTypeAssignment.testCombinedGrammarWithRefToLiteralButNoTokenIDRef behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust recognizer metadata and token vocabulary text match Java 4.13.2 exactly for TestTokenTypeAssignment.testCombinedGrammarWithRefToLiteralButNoTokenIDRef",
+      "scaffold_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+      "primary_test_commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_token_type_assignment::combined_grammar_with_ref_to_literal_but_no_token_id_ref::matches_java_interps_and_tokens -- --exact",
+        "commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_token_type_assignment::combined_grammar_with_ref_to_literal_but_no_token_id_ref::matches_java_interps_and_tokens -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testtokentypeassignment-testcombinedgrammarwithreftoliteralbutnotokenidref-fd2391c14b",
         "source_case_ids": [
@@ -28009,14 +28053,29 @@
           "java-antlr:testtokentypeassignment-testcombinedgrammarwithreftoliteralbutnotokenidr@69305f711e92"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarwithreftoliteralbutnotokenidref-fd2391c14b/fixture.json",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarwithreftoliteralbutnotokenidref-fd2391c14b/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarwithreftoliteralbutnotokenidref-fd2391c14b/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarwithreftoliteralbutnotokenidref-fd2391c14b/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarwithreftoliteralbutnotokenidref-fd2391c14b/oracle/java-unicode-data.stdout",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarwithreftoliteralbutnotokenidref-fd2391c14b/t.g4",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarwithreftoliteralbutnotokenidref-fd2391c14b/t.interp",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarwithreftoliteralbutnotokenidref-fd2391c14b/t.tokens",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarwithreftoliteralbutnotokenidref-fd2391c14b/tLexer.interp",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarwithreftoliteralbutnotokenidref-fd2391c14b/tLexer.tokens"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarwithreftoliteralbutnotokenidref-fd2391c14b",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_token_type_assignment::combined_grammar_with_ref_to_literal_but_no_token_id_ref::matches_java_interps_and_tokens",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestTokenTypeAssignment.testCombinedGrammarWithRefToLiteralButNoTokenIDRef behavior"
+        "observable": "direct Rust recognizer metadata and token vocabulary text match Java 4.13.2 exactly for TestTokenTypeAssignment.testCombinedGrammarWithRefToLiteralButNoTokenIDRef",
+        "scaffold_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+        "primary_test_commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "85b20c7ac095e8bec4c60253935bb444b083994eb07a265d21d7570235540021",
-      "evidence_path": null
+      "closure_sha256": "75e661ff569aceff2b63d10c512206600c2f2e1519d544820e3d57a82fb8f3d9",
+      "evidence_path": "tests/codegen-direct/port-evidence/testtokentypeassignment-testcombinedgrammarwithreftoliteralbutnotokenidref-fd2391c14b"
     },
     {
       "logical_id": "testtokentypeassignment-testlexertokenssection-67f7fb02d9",
@@ -28028,8 +28087,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testtokentypeassignment-testlexertokenssection-67f7fb02d9-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testtokentypeassignment-testlexertokenssection-67f7fb02d9",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_token_type_assignment::lexer_tokens_section::matches_java_interps_and_tokens",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -28050,8 +28109,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestTokenTypeAssignment.testLexerTokensSection behavior",
+      "expected_red_failure_fingerprint": "left: \"C=1\\nD=2\\nA=3\\n'c'=1\\n'a'=3\\n\"; right: \"C=1\\nD=2\\nA=3\\n'a'=3\\n'c'=1\\n\"",
+      "observable_equivalence": "direct Rust recognizer metadata and token vocabulary text match Java 4.13.2 exactly for TestTokenTypeAssignment.testLexerTokensSection",
+      "scaffold_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+      "primary_test_commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_token_type_assignment::lexer_tokens_section::matches_java_interps_and_tokens -- --exact",
+        "exit_code": 101,
+        "fingerprint": "left: \"C=1\\nD=2\\nA=3\\n'c'=1\\n'a'=3\\n\"; right: \"C=1\\nD=2\\nA=3\\n'a'=3\\n'c'=1\\n\""
+      },
+      "primary_implementation_commit": "dc507ce0e934eac246301577db1aad16a34909b9",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_token_type_assignment::lexer_tokens_section::matches_java_interps_and_tokens -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testtokentypeassignment-testlexertokenssection-67f7fb02d9",
         "source_case_ids": [
@@ -28059,14 +28130,26 @@
           "java-antlr:testtokentypeassignment-testlexertokenssection@fdc810dee6d5"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testlexertokenssection-67f7fb02d9/fixture.json",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testlexertokenssection-67f7fb02d9/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testlexertokenssection-67f7fb02d9/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testlexertokenssection-67f7fb02d9/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testlexertokenssection-67f7fb02d9/oracle/java-unicode-data.stdout",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testlexertokenssection-67f7fb02d9/t.g4",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testlexertokenssection-67f7fb02d9/t.interp",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testlexertokenssection-67f7fb02d9/t.tokens"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testtokentypeassignment-testlexertokenssection-67f7fb02d9",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_token_type_assignment::lexer_tokens_section::matches_java_interps_and_tokens",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestTokenTypeAssignment.testLexerTokensSection behavior"
+        "observable": "direct Rust recognizer metadata and token vocabulary text match Java 4.13.2 exactly for TestTokenTypeAssignment.testLexerTokensSection",
+        "scaffold_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+        "primary_test_commit": "504894bf13189036d1eee7ada36c929c23a17b36"
       },
-      "closure_sha256": "08469d7d770f75ea2baac802c2024a99a50a14d38238350666a873317d83a753",
-      "evidence_path": null
+      "closure_sha256": "ce905751b15121dc78418aa1a03a46284b7967a4b55664a022c30453e8e86b9c",
+      "evidence_path": "tests/codegen-direct/port-evidence/testtokentypeassignment-testlexertokenssection-67f7fb02d9"
     },
     {
       "logical_id": "testtokentypeassignment-testliteralinparserandlexer-177a82c119",
@@ -28078,8 +28161,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testtokentypeassignment-testliteralinparserandlexer-177a82c119-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testtokentypeassignment-testliteralinparserandlexer-177a82c119",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_token_type_assignment::literal_in_parser_and_lexer::matches_java_interps_and_tokens",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -28100,8 +28184,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestTokenTypeAssignment.testLiteralInParserAndLexer behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust recognizer metadata and token vocabulary text match Java 4.13.2 exactly for TestTokenTypeAssignment.testLiteralInParserAndLexer",
+      "scaffold_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+      "primary_test_commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_token_type_assignment::literal_in_parser_and_lexer::matches_java_interps_and_tokens -- --exact",
+        "commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_token_type_assignment::literal_in_parser_and_lexer::matches_java_interps_and_tokens -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testtokentypeassignment-testliteralinparserandlexer-177a82c119",
         "source_case_ids": [
@@ -28109,14 +28206,29 @@
           "java-antlr:testtokentypeassignment-testliteralinparserandlexer@c727bfd93f28"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testliteralinparserandlexer-177a82c119/fixture.json",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testliteralinparserandlexer-177a82c119/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testliteralinparserandlexer-177a82c119/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testliteralinparserandlexer-177a82c119/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testliteralinparserandlexer-177a82c119/oracle/java-unicode-data.stdout",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testliteralinparserandlexer-177a82c119/t.g4",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testliteralinparserandlexer-177a82c119/t.interp",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testliteralinparserandlexer-177a82c119/t.tokens",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testliteralinparserandlexer-177a82c119/tLexer.interp",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testliteralinparserandlexer-177a82c119/tLexer.tokens"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testtokentypeassignment-testliteralinparserandlexer-177a82c119",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_token_type_assignment::literal_in_parser_and_lexer::matches_java_interps_and_tokens",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestTokenTypeAssignment.testLiteralInParserAndLexer behavior"
+        "observable": "direct Rust recognizer metadata and token vocabulary text match Java 4.13.2 exactly for TestTokenTypeAssignment.testLiteralInParserAndLexer",
+        "scaffold_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+        "primary_test_commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "545f2eece7f1ecfe7a0bc31395eeec4b643edf5281961a52338b9d123ad9aa7a",
-      "evidence_path": null
+      "closure_sha256": "c7859489c518593c38b6946dfd682943379dc4589a3c4315e4a439e27bd1e697",
+      "evidence_path": "tests/codegen-direct/port-evidence/testtokentypeassignment-testliteralinparserandlexer-177a82c119"
     },
     {
       "logical_id": "testtokentypeassignment-testparsercharliteralwithbasicunicodeescape-8afd5248f1",
@@ -28128,8 +28240,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testtokentypeassignment-testparsercharliteralwithbasicunicodeescape-8afd5248f1-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithbasicunicodeescape-8afd5248f1",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_token_type_assignment::parser_char_literal_with_basic_unicode_escape::matches_java_interps_and_tokens",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -28150,8 +28263,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestTokenTypeAssignment.testParserCharLiteralWithBasicUnicodeEscape behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust recognizer metadata and token vocabulary text match Java 4.13.2 exactly for TestTokenTypeAssignment.testParserCharLiteralWithBasicUnicodeEscape",
+      "scaffold_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+      "primary_test_commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_token_type_assignment::parser_char_literal_with_basic_unicode_escape::matches_java_interps_and_tokens -- --exact",
+        "commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_token_type_assignment::parser_char_literal_with_basic_unicode_escape::matches_java_interps_and_tokens -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testtokentypeassignment-testparsercharliteralwithbasicunicodeescape-8afd5248f1",
         "source_case_ids": [
@@ -28159,14 +28285,29 @@
           "java-antlr:testtokentypeassignment-testparsercharliteralwithbasicunicodeescape@c28129bc45dd"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithbasicunicodeescape-8afd5248f1/fixture.json",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithbasicunicodeescape-8afd5248f1/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithbasicunicodeescape-8afd5248f1/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithbasicunicodeescape-8afd5248f1/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithbasicunicodeescape-8afd5248f1/oracle/java-unicode-data.stdout",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithbasicunicodeescape-8afd5248f1/t.g4",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithbasicunicodeescape-8afd5248f1/t.interp",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithbasicunicodeescape-8afd5248f1/t.tokens",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithbasicunicodeescape-8afd5248f1/tLexer.interp",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithbasicunicodeescape-8afd5248f1/tLexer.tokens"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithbasicunicodeescape-8afd5248f1",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_token_type_assignment::parser_char_literal_with_basic_unicode_escape::matches_java_interps_and_tokens",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestTokenTypeAssignment.testParserCharLiteralWithBasicUnicodeEscape behavior"
+        "observable": "direct Rust recognizer metadata and token vocabulary text match Java 4.13.2 exactly for TestTokenTypeAssignment.testParserCharLiteralWithBasicUnicodeEscape",
+        "scaffold_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+        "primary_test_commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "5c1aa1e85a0d837226b5fcf4623e3a8800c11b507f1f2c6f8067919f2d7979d1",
-      "evidence_path": null
+      "closure_sha256": "c652b82dd98429bfa21cbce438d54d4c35edeed24fb54cd029f6100e26db9196",
+      "evidence_path": "tests/codegen-direct/port-evidence/testtokentypeassignment-testparsercharliteralwithbasicunicodeescape-8afd5248f1"
     },
     {
       "logical_id": "testtokentypeassignment-testparsercharliteralwithescape-15c4d62b48",
@@ -28178,8 +28319,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testtokentypeassignment-testparsercharliteralwithescape-15c4d62b48-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithescape-15c4d62b48",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_token_type_assignment::parser_char_literal_with_escape::matches_java_interps_and_tokens",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -28200,8 +28342,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestTokenTypeAssignment.testParserCharLiteralWithEscape behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust recognizer metadata and token vocabulary text match Java 4.13.2 exactly for TestTokenTypeAssignment.testParserCharLiteralWithEscape",
+      "scaffold_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+      "primary_test_commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_token_type_assignment::parser_char_literal_with_escape::matches_java_interps_and_tokens -- --exact",
+        "commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_token_type_assignment::parser_char_literal_with_escape::matches_java_interps_and_tokens -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testtokentypeassignment-testparsercharliteralwithescape-15c4d62b48",
         "source_case_ids": [
@@ -28209,14 +28364,29 @@
           "java-antlr:testtokentypeassignment-testparsercharliteralwithescape@1b9828003684"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithescape-15c4d62b48/fixture.json",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithescape-15c4d62b48/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithescape-15c4d62b48/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithescape-15c4d62b48/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithescape-15c4d62b48/oracle/java-unicode-data.stdout",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithescape-15c4d62b48/t.g4",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithescape-15c4d62b48/t.interp",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithescape-15c4d62b48/t.tokens",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithescape-15c4d62b48/tLexer.interp",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithescape-15c4d62b48/tLexer.tokens"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithescape-15c4d62b48",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_token_type_assignment::parser_char_literal_with_escape::matches_java_interps_and_tokens",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestTokenTypeAssignment.testParserCharLiteralWithEscape behavior"
+        "observable": "direct Rust recognizer metadata and token vocabulary text match Java 4.13.2 exactly for TestTokenTypeAssignment.testParserCharLiteralWithEscape",
+        "scaffold_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+        "primary_test_commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "14b6383e0ad782d9bdd890f2d3e3b7d13bfe91d4def7154e3afd4b1af2d8bd4c",
-      "evidence_path": null
+      "closure_sha256": "20683ac84d46db9b35254c4c1eaee45042dea3bea15dbacfd3e5644528b62ebf",
+      "evidence_path": "tests/codegen-direct/port-evidence/testtokentypeassignment-testparsercharliteralwithescape-15c4d62b48"
     },
     {
       "logical_id": "testtokentypeassignment-testparsercharliteralwithextendedunicodeescape-e6f767b0b7",
@@ -28228,8 +28398,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testtokentypeassignment-testparsercharliteralwithextendedunicodeescape-e6f767b0b7-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithextendedunicodeescape-e6f767b0b7",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_token_type_assignment::parser_char_literal_with_extended_unicode_escape::matches_java_interps_and_tokens",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -28250,8 +28421,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestTokenTypeAssignment.testParserCharLiteralWithExtendedUnicodeEscape behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust recognizer metadata and token vocabulary text match Java 4.13.2 exactly for TestTokenTypeAssignment.testParserCharLiteralWithExtendedUnicodeEscape",
+      "scaffold_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+      "primary_test_commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_token_type_assignment::parser_char_literal_with_extended_unicode_escape::matches_java_interps_and_tokens -- --exact",
+        "commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_token_type_assignment::parser_char_literal_with_extended_unicode_escape::matches_java_interps_and_tokens -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testtokentypeassignment-testparsercharliteralwithextendedunicodeescape-e6f767b0b7",
         "source_case_ids": [
@@ -28259,14 +28443,29 @@
           "java-antlr:testtokentypeassignment-testparsercharliteralwithextendedunicodeescape@71d950a88ae8"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithextendedunicodeescape-e6f767b0b7/fixture.json",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithextendedunicodeescape-e6f767b0b7/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithextendedunicodeescape-e6f767b0b7/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithextendedunicodeescape-e6f767b0b7/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithextendedunicodeescape-e6f767b0b7/oracle/java-unicode-data.stdout",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithextendedunicodeescape-e6f767b0b7/t.g4",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithextendedunicodeescape-e6f767b0b7/t.interp",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithextendedunicodeescape-e6f767b0b7/t.tokens",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithextendedunicodeescape-e6f767b0b7/tLexer.interp",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithextendedunicodeescape-e6f767b0b7/tLexer.tokens"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testtokentypeassignment-testparsercharliteralwithextendedunicodeescape-e6f767b0b7",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_token_type_assignment::parser_char_literal_with_extended_unicode_escape::matches_java_interps_and_tokens",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestTokenTypeAssignment.testParserCharLiteralWithExtendedUnicodeEscape behavior"
+        "observable": "direct Rust recognizer metadata and token vocabulary text match Java 4.13.2 exactly for TestTokenTypeAssignment.testParserCharLiteralWithExtendedUnicodeEscape",
+        "scaffold_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+        "primary_test_commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "08ac982572270f6490078b89cd27c4c8c7f8ae8a23e802377b9d860ac2896a90",
-      "evidence_path": null
+      "closure_sha256": "4223ac9f57e0d97a993f889ff2204d0e3fc0ca559f4dbc8df52ee5e4eec43980",
+      "evidence_path": "tests/codegen-direct/port-evidence/testtokentypeassignment-testparsercharliteralwithextendedunicodeescape-e6f767b0b7"
     },
     {
       "logical_id": "testtokentypeassignment-testparsersimpletokens-809afdc7eb",
@@ -28278,8 +28477,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testtokentypeassignment-testparsersimpletokens-809afdc7eb-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testtokentypeassignment-testparsersimpletokens-809afdc7eb",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_token_type_assignment::parser_simple_tokens::matches_java_interps_and_tokens",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -28300,8 +28500,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestTokenTypeAssignment.testParserSimpleTokens behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust recognizer metadata and token vocabulary text match Java 4.13.2 exactly for TestTokenTypeAssignment.testParserSimpleTokens",
+      "scaffold_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+      "primary_test_commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_token_type_assignment::parser_simple_tokens::matches_java_interps_and_tokens -- --exact",
+        "commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_token_type_assignment::parser_simple_tokens::matches_java_interps_and_tokens -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testtokentypeassignment-testparsersimpletokens-809afdc7eb",
         "source_case_ids": [
@@ -28309,14 +28522,28 @@
           "java-antlr:testtokentypeassignment-testparsersimpletokens@f8632658b987"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsersimpletokens-809afdc7eb/diagnostics.json",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsersimpletokens-809afdc7eb/fixture.json",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsersimpletokens-809afdc7eb/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsersimpletokens-809afdc7eb/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsersimpletokens-809afdc7eb/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsersimpletokens-809afdc7eb/oracle/java-unicode-data.stdout",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsersimpletokens-809afdc7eb/t.g4",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsersimpletokens-809afdc7eb/t.interp",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsersimpletokens-809afdc7eb/t.tokens"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testtokentypeassignment-testparsersimpletokens-809afdc7eb",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_token_type_assignment::parser_simple_tokens::matches_java_interps_and_tokens",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestTokenTypeAssignment.testParserSimpleTokens behavior"
+        "observable": "direct Rust recognizer metadata and token vocabulary text match Java 4.13.2 exactly for TestTokenTypeAssignment.testParserSimpleTokens",
+        "scaffold_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+        "primary_test_commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "d4be6b2f706fcc63dda01944d85b0f50522d8127ede7102e7b4475f809f4696e",
-      "evidence_path": null
+      "closure_sha256": "f5c6d4e36cbc8a453aac3c02919f484a56eda08c3f2c5938c4c442523d588d4c",
+      "evidence_path": "tests/codegen-direct/port-evidence/testtokentypeassignment-testparsersimpletokens-809afdc7eb"
     },
     {
       "logical_id": "testtokentypeassignment-testparsertokenssection-f0930e6dae",
@@ -28328,8 +28555,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testtokentypeassignment-testparsertokenssection-f0930e6dae-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testtokentypeassignment-testparsertokenssection-f0930e6dae",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_token_type_assignment::parser_tokens_section::matches_java_interps_and_tokens",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -28350,8 +28578,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestTokenTypeAssignment.testParserTokensSection behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust recognizer metadata and token vocabulary text match Java 4.13.2 exactly for TestTokenTypeAssignment.testParserTokensSection",
+      "scaffold_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+      "primary_test_commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_token_type_assignment::parser_tokens_section::matches_java_interps_and_tokens -- --exact",
+        "commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_token_type_assignment::parser_tokens_section::matches_java_interps_and_tokens -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testtokentypeassignment-testparsertokenssection-f0930e6dae",
         "source_case_ids": [
@@ -28359,14 +28600,28 @@
           "java-antlr:testtokentypeassignment-testparsertokenssection@48468a679a5d"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsertokenssection-f0930e6dae/diagnostics.json",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsertokenssection-f0930e6dae/fixture.json",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsertokenssection-f0930e6dae/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsertokenssection-f0930e6dae/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsertokenssection-f0930e6dae/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsertokenssection-f0930e6dae/oracle/java-unicode-data.stdout",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsertokenssection-f0930e6dae/t.g4",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsertokenssection-f0930e6dae/t.interp",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testparsertokenssection-f0930e6dae/t.tokens"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testtokentypeassignment-testparsertokenssection-f0930e6dae",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_token_type_assignment::parser_tokens_section::matches_java_interps_and_tokens",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestTokenTypeAssignment.testParserTokensSection behavior"
+        "observable": "direct Rust recognizer metadata and token vocabulary text match Java 4.13.2 exactly for TestTokenTypeAssignment.testParserTokensSection",
+        "scaffold_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+        "primary_test_commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "e8bc80a21d2ad67154098e6544e07ef12ca34b4793ac910119bdefc5807194b6",
-      "evidence_path": null
+      "closure_sha256": "922bcf6c406ed050ac09aca97d6fa4a001591869cec1066818f68a8cdd8f0765",
+      "evidence_path": "tests/codegen-direct/port-evidence/testtokentypeassignment-testparsertokenssection-f0930e6dae"
     },
     {
       "logical_id": "testtokentypeassignment-testpreddoesnothidenametoliteralmapinlexer-a1fc06a563",
@@ -28378,8 +28633,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testtokentypeassignment-testpreddoesnothidenametoliteralmapinlexer-a1fc06a563-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testtokentypeassignment-testpreddoesnothidenametoliteralmapinlexer-a1fc06a563",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_token_type_assignment::pred_does_not_hide_name_to_literal_map_in_lexer::matches_java_interps_and_tokens",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -28400,8 +28656,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestTokenTypeAssignment.testPredDoesNotHideNameToLiteralMapInLexer behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust recognizer metadata and token vocabulary text match Java 4.13.2 exactly for TestTokenTypeAssignment.testPredDoesNotHideNameToLiteralMapInLexer",
+      "scaffold_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+      "primary_test_commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_token_type_assignment::pred_does_not_hide_name_to_literal_map_in_lexer::matches_java_interps_and_tokens -- --exact",
+        "commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_token_type_assignment::pred_does_not_hide_name_to_literal_map_in_lexer::matches_java_interps_and_tokens -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testtokentypeassignment-testpreddoesnothidenametoliteralmapinlexer-a1fc06a563",
         "source_case_ids": [
@@ -28409,14 +28678,29 @@
           "java-antlr:testtokentypeassignment-testpreddoesnothidenametoliteralmapinlexer@b9b12a7bb993"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testpreddoesnothidenametoliteralmapinlexer-a1fc06a563/fixture.json",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testpreddoesnothidenametoliteralmapinlexer-a1fc06a563/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testpreddoesnothidenametoliteralmapinlexer-a1fc06a563/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testpreddoesnothidenametoliteralmapinlexer-a1fc06a563/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testpreddoesnothidenametoliteralmapinlexer-a1fc06a563/oracle/java-unicode-data.stdout",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testpreddoesnothidenametoliteralmapinlexer-a1fc06a563/t.g4",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testpreddoesnothidenametoliteralmapinlexer-a1fc06a563/t.interp",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testpreddoesnothidenametoliteralmapinlexer-a1fc06a563/t.tokens",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testpreddoesnothidenametoliteralmapinlexer-a1fc06a563/tLexer.interp",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testpreddoesnothidenametoliteralmapinlexer-a1fc06a563/tLexer.tokens"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testtokentypeassignment-testpreddoesnothidenametoliteralmapinlexer-a1fc06a563",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_token_type_assignment::pred_does_not_hide_name_to_literal_map_in_lexer::matches_java_interps_and_tokens",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestTokenTypeAssignment.testPredDoesNotHideNameToLiteralMapInLexer behavior"
+        "observable": "direct Rust recognizer metadata and token vocabulary text match Java 4.13.2 exactly for TestTokenTypeAssignment.testPredDoesNotHideNameToLiteralMapInLexer",
+        "scaffold_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+        "primary_test_commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "05d511986ff02aaf9d75a745051206b5fb49cd79909a3fa47a41b1ff85c3cdba",
-      "evidence_path": null
+      "closure_sha256": "7dbd64493748c603ba8ae54a1b7a28e23da6e6ab931f029cfbbc90c5089a0485",
+      "evidence_path": "tests/codegen-direct/port-evidence/testtokentypeassignment-testpreddoesnothidenametoliteralmapinlexer-a1fc06a563"
     },
     {
       "logical_id": "testtokentypeassignment-testsetdoesnotmisstokenaliases-92cf195953",
@@ -28428,8 +28712,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testtokentypeassignment-testsetdoesnotmisstokenaliases-92cf195953-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testtokentypeassignment-testsetdoesnotmisstokenaliases-92cf195953",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_token_type_assignment::set_does_not_miss_token_aliases::matches_java_interps_and_tokens",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -28450,8 +28735,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestTokenTypeAssignment.testSetDoesNotMissTokenAliases behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust recognizer metadata and token vocabulary text match Java 4.13.2 exactly for TestTokenTypeAssignment.testSetDoesNotMissTokenAliases",
+      "scaffold_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+      "primary_test_commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_token_type_assignment::set_does_not_miss_token_aliases::matches_java_interps_and_tokens -- --exact",
+        "commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_token_type_assignment::set_does_not_miss_token_aliases::matches_java_interps_and_tokens -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testtokentypeassignment-testsetdoesnotmisstokenaliases-92cf195953",
         "source_case_ids": [
@@ -28459,14 +28757,29 @@
           "java-antlr:testtokentypeassignment-testsetdoesnotmisstokenaliases@bd867654a381"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testsetdoesnotmisstokenaliases-92cf195953/fixture.json",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testsetdoesnotmisstokenaliases-92cf195953/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testsetdoesnotmisstokenaliases-92cf195953/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testsetdoesnotmisstokenaliases-92cf195953/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testsetdoesnotmisstokenaliases-92cf195953/oracle/java-unicode-data.stdout",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testsetdoesnotmisstokenaliases-92cf195953/t.g4",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testsetdoesnotmisstokenaliases-92cf195953/t.interp",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testsetdoesnotmisstokenaliases-92cf195953/t.tokens",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testsetdoesnotmisstokenaliases-92cf195953/tLexer.interp",
+          "tests/codegen-direct/fixtures/testtokentypeassignment-testsetdoesnotmisstokenaliases-92cf195953/tLexer.tokens"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testtokentypeassignment-testsetdoesnotmisstokenaliases-92cf195953",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_token_type_assignment::set_does_not_miss_token_aliases::matches_java_interps_and_tokens",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestTokenTypeAssignment.testSetDoesNotMissTokenAliases behavior"
+        "observable": "direct Rust recognizer metadata and token vocabulary text match Java 4.13.2 exactly for TestTokenTypeAssignment.testSetDoesNotMissTokenAliases",
+        "scaffold_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+        "primary_test_commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "148d3e99a7e6289a5f362132d3ec40c1d0c90769bc2424456f8061f60afa5f44",
-      "evidence_path": null
+      "closure_sha256": "4145087959507ad972854f89cea203e227496ee5b5815bc3f35fbb8633349adc",
+      "evidence_path": "tests/codegen-direct/port-evidence/testtokentypeassignment-testsetdoesnotmisstokenaliases-92cf195953"
     },
     {
       "logical_id": "testtoolsyntaxerrors-allerrorcodesdistinct-406ce4161c",

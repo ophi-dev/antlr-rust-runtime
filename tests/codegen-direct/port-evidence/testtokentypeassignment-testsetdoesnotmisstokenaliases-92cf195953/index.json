@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtokentypeassignment-testsetdoesnotmisstokenaliases-92cf195953",
+  "active_revision_id": "testtokentypeassignment-testsetdoesnotmisstokenaliases-92cf195953-r1",
+  "revisions": [
+    {
+      "revision_id": "testtokentypeassignment-testsetdoesnotmisstokenaliases-92cf195953-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testtokentypeassignment-testsetdoesnotmisstokenaliases-92cf195953/revisions/testtokentypeassignment-testsetdoesnotmisstokenaliases-92cf195953-r1/manifest.json",
+      "closure_sha256": "4145087959507ad972854f89cea203e227496ee5b5815bc3f35fbb8633349adc"
+    }
+  ]
+}

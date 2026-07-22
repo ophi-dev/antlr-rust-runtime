@@ -41,6 +41,11 @@ import {
     SCOPE_PARSING_IMPLEMENTATION_COMMIT,
     SCOPE_PARSING_TEST_COMMIT,
     TEST_COMMIT,
+    TOKEN_ASSIGNMENT_BASE_COMMIT,
+    TOKEN_ASSIGNMENT_BASE_PARENT_COMMIT,
+    TOKEN_ASSIGNMENT_FIXTURE_COMMIT,
+    TOKEN_ASSIGNMENT_IMPLEMENTATION_COMMIT,
+    TOKEN_ASSIGNMENT_TEST_COMMIT,
     TOKEN_POSITION_BASE_COMMIT,
     TOKEN_POSITION_IMPLEMENTATION_COMMIT,
     TOKEN_POSITION_TEST_COMMIT,
@@ -311,6 +316,9 @@ for (const [logicalId, record] of records) {
         const unicodeGrammar = logicalId.startsWith(
             "testunicodegrammar-",
         );
+        const tokenAssignment = logicalId.startsWith(
+            "testtokentypeassignment-",
+        );
         if (resolution === "verified-covered-existing") {
             if (atnSerialization) {
                 expect(
@@ -429,6 +437,23 @@ for (const [logicalId, record] of records) {
                         manifest.ancestry.primary_implementation_parent ===
                             UNICODE_GRAMMAR_BASE_PARENT_COMMIT,
                     `${logicalId} Unicode grammar covered-existing ancestry differs`,
+                );
+            } else if (tokenAssignment) {
+                expect(
+                    manifest.commits.scaffold ===
+                            TOKEN_ASSIGNMENT_BASE_COMMIT &&
+                        manifest.commits.primary_test ===
+                            TOKEN_ASSIGNMENT_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            TOKEN_ASSIGNMENT_BASE_COMMIT,
+                    `${logicalId} token assignment covered-existing commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            TOKEN_ASSIGNMENT_FIXTURE_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            TOKEN_ASSIGNMENT_BASE_PARENT_COMMIT,
+                    `${logicalId} token assignment covered-existing ancestry differs`,
                 );
             } else {
                 expect(
@@ -652,6 +677,23 @@ for (const [logicalId, record] of records) {
                         manifest.ancestry.primary_implementation_parent ===
                             UNICODE_GRAMMAR_TEST_COMMIT,
                     `${logicalId} Unicode grammar recorded ancestry differs`,
+                );
+            } else if (tokenAssignment) {
+                expect(
+                    manifest.commits.scaffold ===
+                            TOKEN_ASSIGNMENT_BASE_COMMIT &&
+                        manifest.commits.primary_test ===
+                            TOKEN_ASSIGNMENT_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            TOKEN_ASSIGNMENT_IMPLEMENTATION_COMMIT,
+                    `${logicalId} token assignment evidence commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            TOKEN_ASSIGNMENT_FIXTURE_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            TOKEN_ASSIGNMENT_TEST_COMMIT,
+                    `${logicalId} token assignment recorded ancestry differs`,
                 );
             } else {
                 expect(
@@ -1021,6 +1063,50 @@ if (unicodeGrammarImplementationParent !== null) {
         unicodeGrammarImplementationParent.trim() ===
             UNICODE_GRAMMAR_TEST_COMMIT,
         "Unicode grammar implementation commit is not based on its locked tests",
+    );
+}
+const tokenAssignmentBaseParent = gitOptional([
+    "rev-parse",
+    `${TOKEN_ASSIGNMENT_BASE_COMMIT}^`,
+]);
+if (tokenAssignmentBaseParent !== null) {
+    expect(
+        tokenAssignmentBaseParent.trim() ===
+            TOKEN_ASSIGNMENT_BASE_PARENT_COMMIT,
+        "token assignment base commit has an unexpected parent",
+    );
+}
+const tokenAssignmentFixtureParent = gitOptional([
+    "rev-parse",
+    `${TOKEN_ASSIGNMENT_FIXTURE_COMMIT}^`,
+]);
+if (tokenAssignmentFixtureParent !== null) {
+    expect(
+        tokenAssignmentFixtureParent.trim() ===
+            TOKEN_ASSIGNMENT_BASE_COMMIT,
+        "token assignment fixture commit is not based on its recorded base",
+    );
+}
+const tokenAssignmentTestParent = gitOptional([
+    "rev-parse",
+    `${TOKEN_ASSIGNMENT_TEST_COMMIT}^`,
+]);
+if (tokenAssignmentTestParent !== null) {
+    expect(
+        tokenAssignmentTestParent.trim() ===
+            TOKEN_ASSIGNMENT_FIXTURE_COMMIT,
+        "token assignment test commit is not based on its fixture port",
+    );
+}
+const tokenAssignmentImplementationParent = gitOptional([
+    "rev-parse",
+    `${TOKEN_ASSIGNMENT_IMPLEMENTATION_COMMIT}^`,
+]);
+if (tokenAssignmentImplementationParent !== null) {
+    expect(
+        tokenAssignmentImplementationParent.trim() ===
+            TOKEN_ASSIGNMENT_TEST_COMMIT,
+        "token assignment implementation commit is not based on its locked tests",
     );
 }
 

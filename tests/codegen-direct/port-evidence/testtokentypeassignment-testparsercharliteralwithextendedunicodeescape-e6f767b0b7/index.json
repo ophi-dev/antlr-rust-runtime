@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtokentypeassignment-testparsercharliteralwithextendedunicodeescape-e6f767b0b7",
+  "active_revision_id": "testtokentypeassignment-testparsercharliteralwithextendedunicodeescape-e6f767b0b7-r1",
+  "revisions": [
+    {
+      "revision_id": "testtokentypeassignment-testparsercharliteralwithextendedunicodeescape-e6f767b0b7-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testtokentypeassignment-testparsercharliteralwithextendedunicodeescape-e6f767b0b7/revisions/testtokentypeassignment-testparsercharliteralwithextendedunicodeescape-e6f767b0b7-r1/manifest.json",
+      "closure_sha256": "4223ac9f57e0d97a993f889ff2204d0e3fc0ca559f4dbc8df52ee5e4eec43980"
+    }
+  ]
+}

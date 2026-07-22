@@ -38,6 +38,9 @@ import {
     SCOPE_PARSING_IMPLEMENTATION_COMMIT,
     SCOPE_PARSING_TEST_COMMIT,
     TEST_COMMIT,
+    TOKEN_ASSIGNMENT_BASE_COMMIT,
+    TOKEN_ASSIGNMENT_IMPLEMENTATION_COMMIT,
+    TOKEN_ASSIGNMENT_TEST_COMMIT,
     TOKEN_POSITION_BASE_COMMIT,
     TOKEN_POSITION_IMPLEMENTATION_COMMIT,
     TOKEN_POSITION_TEST_COMMIT,
@@ -373,6 +376,93 @@ const UNICODE_GRAMMAR_PORTS = new Map([
             resolution: "ported",
             redFingerprint:
                 "G4L002: Unicode escape is not a scalar value: 0xd83c",
+        },
+    ],
+]);
+const TOKEN_ASSIGNMENT_TEST_PREFIX =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_token_type_assignment::";
+const TOKEN_ASSIGNMENT_PORTS = new Map([
+    [
+        "testtokentypeassignment-testcombinedgrammarliterals-74842182c1",
+        {
+            testName: "combined_grammar_literals",
+            resolution: "verified-covered-existing",
+        },
+    ],
+    [
+        "testtokentypeassignment-testcombinedgrammarwithreftoliteralbutnotokenidref-fd2391c14b",
+        {
+            testName:
+                "combined_grammar_with_ref_to_literal_but_no_token_id_ref",
+            resolution: "verified-covered-existing",
+        },
+    ],
+    [
+        "testtokentypeassignment-testlexertokenssection-67f7fb02d9",
+        {
+            testName: "lexer_tokens_section",
+            resolution: "ported",
+            redFingerprint:
+                "left: \"C=1\\nD=2\\nA=3\\n'c'=1\\n'a'=3\\n\"; right: \"C=1\\nD=2\\nA=3\\n'a'=3\\n'c'=1\\n\"",
+        },
+    ],
+    [
+        "testtokentypeassignment-testliteralinparserandlexer-177a82c119",
+        {
+            testName: "literal_in_parser_and_lexer",
+            resolution: "verified-covered-existing",
+        },
+    ],
+    [
+        "testtokentypeassignment-testparsercharliteralwithbasicunicodeescape-8afd5248f1",
+        {
+            testName:
+                "parser_char_literal_with_basic_unicode_escape",
+            resolution: "verified-covered-existing",
+        },
+    ],
+    [
+        "testtokentypeassignment-testparsercharliteralwithescape-15c4d62b48",
+        {
+            testName: "parser_char_literal_with_escape",
+            resolution: "verified-covered-existing",
+        },
+    ],
+    [
+        "testtokentypeassignment-testparsercharliteralwithextendedunicodeescape-e6f767b0b7",
+        {
+            testName:
+                "parser_char_literal_with_extended_unicode_escape",
+            resolution: "verified-covered-existing",
+        },
+    ],
+    [
+        "testtokentypeassignment-testparsersimpletokens-809afdc7eb",
+        {
+            testName: "parser_simple_tokens",
+            resolution: "verified-covered-existing",
+        },
+    ],
+    [
+        "testtokentypeassignment-testparsertokenssection-f0930e6dae",
+        {
+            testName: "parser_tokens_section",
+            resolution: "verified-covered-existing",
+        },
+    ],
+    [
+        "testtokentypeassignment-testpreddoesnothidenametoliteralmapinlexer-a1fc06a563",
+        {
+            testName:
+                "pred_does_not_hide_name_to_literal_map_in_lexer",
+            resolution: "verified-covered-existing",
+        },
+    ],
+    [
+        "testtokentypeassignment-testsetdoesnotmisstokenaliases-92cf195953",
+        {
+            testName: "set_does_not_miss_token_aliases",
+            resolution: "verified-covered-existing",
         },
     ],
 ]);
@@ -946,6 +1036,9 @@ function completedPhaseBRow(
                                   : completed.kind === "unicode-grammar"
                                     ? `direct Rust lexer and parser serialization matches both complete ` +
                                       `Java 4.13.2 .interp files for ${cases[0].suite}.${cases[0].name}`
+                                    : completed.kind === "token-type-assignment"
+                                      ? `direct Rust recognizer metadata and token vocabulary text match ` +
+                                        `Java 4.13.2 exactly for ${cases[0].suite}.${cases[0].name}`
                         : `direct Rust semantic diagnostics match Java 4.13.2 exactly ` +
                           `for ${cases[0].suite}.${cases[0].name}`;
     const coveredExisting =
@@ -1353,6 +1446,32 @@ async function loadCompletedPhaseBPorts() {
             `expected 6 completed TestUnicodeGrammar ports, found ${UNICODE_GRAMMAR_PORTS.size}`,
         );
     }
+    for (const [logicalId, definition] of TOKEN_ASSIGNMENT_PORTS) {
+        ports.set(logicalId, {
+            fixturePaths: await fixturePaths(logicalId),
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_token_type_assignment::" +
+                `${definition.testName}::matches_java_interps_and_tokens`,
+            kind: "token-type-assignment",
+            resolution: definition.resolution,
+            scaffoldCommit: TOKEN_ASSIGNMENT_BASE_COMMIT,
+            testCommit: TOKEN_ASSIGNMENT_TEST_COMMIT,
+            implementationCommit:
+                definition.resolution === "ported"
+                    ? TOKEN_ASSIGNMENT_IMPLEMENTATION_COMMIT
+                    : TOKEN_ASSIGNMENT_BASE_COMMIT,
+            testCommand:
+                `${TOKEN_ASSIGNMENT_TEST_PREFIX}${definition.testName}` +
+                "::matches_java_interps_and_tokens -- --exact",
+            greenResult: "1 passed; 0 failed",
+            redFingerprint: definition.redFingerprint,
+        });
+    }
+    if (TOKEN_ASSIGNMENT_PORTS.size !== 11) {
+        throw new Error(
+            `expected 11 completed TestTokenTypeAssignment ports, found ${TOKEN_ASSIGNMENT_PORTS.size}`,
+        );
+    }
     const scopeGroups = new Map();
     for (const testCase of inventory.cases) {
         if (testCase.suite !== "TestScopeParsing") {
@@ -1391,8 +1510,8 @@ async function loadCompletedPhaseBPorts() {
             `expected 47 completed TestScopeParsing ports, found ${scopeGroups.size}`,
         );
     }
-    if (ports.size !== 197) {
-        throw new Error(`expected 197 completed Phase B ports, found ${ports.size}`);
+    if (ports.size !== 208) {
+        throw new Error(`expected 208 completed Phase B ports, found ${ports.size}`);
     }
     return ports;
 }

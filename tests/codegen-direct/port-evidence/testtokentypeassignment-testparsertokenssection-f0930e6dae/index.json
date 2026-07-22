@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtokentypeassignment-testparsertokenssection-f0930e6dae",
+  "active_revision_id": "testtokentypeassignment-testparsertokenssection-f0930e6dae-r1",
+  "revisions": [
+    {
+      "revision_id": "testtokentypeassignment-testparsertokenssection-f0930e6dae-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testtokentypeassignment-testparsertokenssection-f0930e6dae/revisions/testtokentypeassignment-testparsertokenssection-f0930e6dae-r1/manifest.json",
+      "closure_sha256": "922bcf6c406ed050ac09aca97d6fa4a001591869cec1066818f68a8cdd8f0765"
+    }
+  ]
+}

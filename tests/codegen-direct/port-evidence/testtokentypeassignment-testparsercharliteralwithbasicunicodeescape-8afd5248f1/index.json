@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtokentypeassignment-testparsercharliteralwithbasicunicodeescape-8afd5248f1",
+  "active_revision_id": "testtokentypeassignment-testparsercharliteralwithbasicunicodeescape-8afd5248f1-r1",
+  "revisions": [
+    {
+      "revision_id": "testtokentypeassignment-testparsercharliteralwithbasicunicodeescape-8afd5248f1-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testtokentypeassignment-testparsercharliteralwithbasicunicodeescape-8afd5248f1/revisions/testtokentypeassignment-testparsercharliteralwithbasicunicodeescape-8afd5248f1-r1/manifest.json",
+      "closure_sha256": "c652b82dd98429bfa21cbce438d54d4c35edeed24fb54cd029f6100e26db9196"
+    }
+  ]
+}

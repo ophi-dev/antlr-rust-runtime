@@ -1,0 +1,130 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtokentypeassignment-testparsersimpletokens-809afdc7eb",
+  "revision_id": "testtokentypeassignment-testparsersimpletokens-809afdc7eb-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "resolution": "verified-covered-existing",
+  "closure": {
+    "logical_id": "testtokentypeassignment-testparsersimpletokens-809afdc7eb",
+    "source_case_ids": [
+      "antlr-ng:testtokentypeassignment-testparsersimpletokens@f8632658b987",
+      "java-antlr:testtokentypeassignment-testparsersimpletokens@f8632658b987"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testtokentypeassignment-testparsersimpletokens-809afdc7eb/diagnostics.json",
+      "tests/codegen-direct/fixtures/testtokentypeassignment-testparsersimpletokens-809afdc7eb/fixture.json",
+      "tests/codegen-direct/fixtures/testtokentypeassignment-testparsersimpletokens-809afdc7eb/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testtokentypeassignment-testparsersimpletokens-809afdc7eb/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testtokentypeassignment-testparsersimpletokens-809afdc7eb/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testtokentypeassignment-testparsersimpletokens-809afdc7eb/oracle/java-unicode-data.stdout",
+      "tests/codegen-direct/fixtures/testtokentypeassignment-testparsersimpletokens-809afdc7eb/t.g4",
+      "tests/codegen-direct/fixtures/testtokentypeassignment-testparsersimpletokens-809afdc7eb/t.interp",
+      "tests/codegen-direct/fixtures/testtokentypeassignment-testparsersimpletokens-809afdc7eb/t.tokens"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_token_type_assignment::parser_simple_tokens::matches_java_interps_and_tokens",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust recognizer metadata and token vocabulary text match Java 4.13.2 exactly for TestTokenTypeAssignment.testParserSimpleTokens",
+    "scaffold_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+    "primary_test_commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+    "resolution": "verified-covered-existing"
+  },
+  "closure_sha256": "f5c6d4e36cbc8a453aac3c02919f484a56eda08c3f2c5938c4c442523d588d4c",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testtokentypeassignment-testparsersimpletokens@f8632658b987",
+      "path": "tests/TestTokenTypeAssignment.spec.ts",
+      "sha256": "aaae7ef40848329631d8b2545027fa8004c68bbb179baa99081ae311419bd072"
+    },
+    {
+      "source_case_id": "java-antlr:testtokentypeassignment-testparsersimpletokens@f8632658b987",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestTokenTypeAssignment.java",
+      "sha256": "f20ac97f65316180f35fc895b3aad572b38f9221eb157e5556e19f8204b792e4"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtokentypeassignment-testparsersimpletokens-809afdc7eb/diagnostics.json",
+      "sha256": "ae87448e26f43f365c6deeabcee2bfb9f8495cb0e0486b6298d3602fa8f44dbd"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtokentypeassignment-testparsersimpletokens-809afdc7eb/fixture.json",
+      "sha256": "45803e0597a77a3992137bac9eead2f4e9444a4e5c81b665a454bf6e82165bcb"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtokentypeassignment-testparsersimpletokens-809afdc7eb/oracle/java-antlr.stderr",
+      "sha256": "91dec2cbd551e893c8f77fd968bf69c0c96426f2a21bda0d5bb98f2989a7fe18"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtokentypeassignment-testparsersimpletokens-809afdc7eb/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtokentypeassignment-testparsersimpletokens-809afdc7eb/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtokentypeassignment-testparsersimpletokens-809afdc7eb/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtokentypeassignment-testparsersimpletokens-809afdc7eb/t.g4",
+      "sha256": "8cb9528888ed661d5c5ffbdfc6d45a6aadf942ed47f1a75f1abaab3b337d8321"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtokentypeassignment-testparsersimpletokens-809afdc7eb/t.interp",
+      "sha256": "fe89c73f14b8cfe3d4ce1d0eaca977c1a95931c87e947695aa39457c7df41110"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtokentypeassignment-testparsersimpletokens-809afdc7eb/t.tokens",
+      "sha256": "f52b5d61960c17821646b850c260c0f4c29b0629885a55c52c7652185b854b8f"
+    }
+  ],
+  "commits": {
+    "scaffold": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+    "primary_test": "504894bf13189036d1eee7ada36c929c23a17b36",
+    "primary_implementation": "3375d42740a0178ba064d28e20b13e5400d5b6af"
+  },
+  "ancestry": {
+    "primary_test_parent": "72c573ea998a2c7c0db72f105c2784b7143822eb",
+    "primary_implementation_parent": "8eaedb9fa7e301554126a5185fd089c068bcade2",
+    "reachability": "the case-specific .interp and .tokens test passed against the direct compiler implementation already present at the batch base"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_token_type_assignment {",
+      "end_marker": "\n    fn assert_lexer_interp",
+      "sha256": "6169096aa25e4c1340217ba17fa712a10ff4786d2ba69de74fe073be67a31685"
+    }
+  ],
+  "verified_covered_existing": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_token_type_assignment::parser_simple_tokens::matches_java_interps_and_tokens -- --exact",
+    "commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed",
+    "covering_implementation_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af"
+  },
+  "green_result": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_token_type_assignment::parser_simple_tokens::matches_java_interps_and_tokens -- --exact",
+    "commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testtokentypeassignment-testparsersimpletokens-809afdc7eb/revisions/testtokentypeassignment-testparsersimpletokens-809afdc7eb-r1/oracle-results/declared-sources.json",
+      "sha256": "8061d40dab67366670a9c9d053e16ab8cadd3f569ea09217b80d735f08d7fff7"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testtokentypeassignment-testparsersimpletokens-809afdc7eb/revisions/testtokentypeassignment-testparsersimpletokens-809afdc7eb-r1/matrix-results/results.json",
+      "sha256": "ee742e0b1ed19729b3269705613a585331d97abf4fceaadef5b741da67e8b0be"
+    }
+  ]
+}

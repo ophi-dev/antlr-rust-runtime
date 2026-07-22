@@ -44,6 +44,11 @@ import {
     SCOPE_PARSING_IMPLEMENTATION_COMMIT,
     SCOPE_PARSING_TEST_COMMIT,
     TEST_COMMIT,
+    TOKEN_ASSIGNMENT_BASE_COMMIT,
+    TOKEN_ASSIGNMENT_BASE_PARENT_COMMIT,
+    TOKEN_ASSIGNMENT_FIXTURE_COMMIT,
+    TOKEN_ASSIGNMENT_IMPLEMENTATION_COMMIT,
+    TOKEN_ASSIGNMENT_TEST_COMMIT,
     TOKEN_POSITION_BASE_COMMIT,
     TOKEN_POSITION_IMPLEMENTATION_COMMIT,
     TOKEN_POSITION_TEST_COMMIT,
@@ -141,6 +146,12 @@ const UNICODE_GRAMMAR_TEST_START =
     "    mod upstream_unicode_grammar {";
 const UNICODE_GRAMMAR_TEST_END =
     "\n    fn assert_combined_fixture";
+const TOKEN_ASSIGNMENT_TEST_PATH =
+    "src/bin_support/grammar/atn/interp_test.rs";
+const TOKEN_ASSIGNMENT_TEST_START =
+    "    mod upstream_token_type_assignment {";
+const TOKEN_ASSIGNMENT_TEST_END =
+    "\n    fn assert_lexer_interp";
 const EMPTY_VOCABULARY_LOGICAL_ID =
     "testvocabulary-testemptyvocabulary-66d31ad014";
 const SYMBOL_INFO_SHA256 =
@@ -1024,6 +1035,53 @@ const unicodeGrammarLockedSections = [
         sha256: digest(checkedInUnicodeGrammarTests),
     },
 ];
+const checkedInTokenAssignmentTests = sectionBetweenMarkers(
+    await readFile(resolve(repoRoot, TOKEN_ASSIGNMENT_TEST_PATH), "utf8"),
+    TOKEN_ASSIGNMENT_TEST_START,
+    TOKEN_ASSIGNMENT_TEST_END,
+);
+const recordedTokenAssignmentTests = gitShowOptional(
+    repoRoot,
+    TOKEN_ASSIGNMENT_TEST_COMMIT,
+    TOKEN_ASSIGNMENT_TEST_PATH,
+);
+const implementedTokenAssignmentTests = gitShowOptional(
+    repoRoot,
+    TOKEN_ASSIGNMENT_IMPLEMENTATION_COMMIT,
+    TOKEN_ASSIGNMENT_TEST_PATH,
+);
+if (
+    recordedTokenAssignmentTests === null ||
+    sectionBetweenMarkers(
+        recordedTokenAssignmentTests,
+        TOKEN_ASSIGNMENT_TEST_START,
+        TOKEN_ASSIGNMENT_TEST_END,
+    ) !== checkedInTokenAssignmentTests
+) {
+    throw new Error(
+        "checked-in token assignment ports differ from their test commit",
+    );
+}
+if (
+    implementedTokenAssignmentTests === null ||
+    sectionBetweenMarkers(
+        implementedTokenAssignmentTests,
+        TOKEN_ASSIGNMENT_TEST_START,
+        TOKEN_ASSIGNMENT_TEST_END,
+    ) !== checkedInTokenAssignmentTests
+) {
+    throw new Error(
+        "token assignment implementation changed the locked test ports",
+    );
+}
+const tokenAssignmentLockedSections = [
+    {
+        path: TOKEN_ASSIGNMENT_TEST_PATH,
+        marker: TOKEN_ASSIGNMENT_TEST_START,
+        end_marker: TOKEN_ASSIGNMENT_TEST_END,
+        sha256: digest(checkedInTokenAssignmentTests),
+    },
+];
 
 const upstreamByLogicalId = new Map(
     testMap.rows.map((row) => [row.logical_id, row]),
@@ -1156,6 +1214,9 @@ for (const row of completedRows) {
     const phaseBUnicodeGrammar = row.logical_id.startsWith(
         "testunicodegrammar-",
     );
+    const phaseBTokenAssignment = row.logical_id.startsWith(
+        "testtokentypeassignment-",
+    );
     if (
         row.owner_phase === "B" &&
         !phaseBAtnSerialization &&
@@ -1171,7 +1232,8 @@ for (const row of completedRows) {
         !phaseBEscapeSequence &&
         !phaseBUnicodeEscape &&
         !phaseBUnicodeData &&
-        !phaseBUnicodeGrammar
+        !phaseBUnicodeGrammar &&
+        !phaseBTokenAssignment
     ) {
         throw new Error(`missing Phase B evidence profile for ${row.logical_id}`);
     }
@@ -1350,6 +1412,22 @@ for (const row of completedRows) {
                                             ? "the case-specific .interp test passed against the direct compiler implementation in its parent"
                                             : "the surrogate escape implementation commit is directly based on the locked red .interp tests",
                                     }
+                                  : phaseBTokenAssignment
+                                    ? {
+                                          lockedSections:
+                                              tokenAssignmentLockedSections,
+                                          scaffoldCommit:
+                                              TOKEN_ASSIGNMENT_BASE_COMMIT,
+                                          testParent:
+                                              TOKEN_ASSIGNMENT_FIXTURE_COMMIT,
+                                          implementationParent:
+                                              coveredExisting
+                                                  ? TOKEN_ASSIGNMENT_BASE_PARENT_COMMIT
+                                                  : TOKEN_ASSIGNMENT_TEST_COMMIT,
+                                          reachability: coveredExisting
+                                              ? "the case-specific .interp and .tokens test passed against the direct compiler implementation already present at the batch base"
+                                              : "the insertion-order implementation commit is directly based on the locked red token-assignment representation test",
+                                      }
           : null;
     await addEvidence({
         logicalId: row.logical_id,
@@ -1486,6 +1564,15 @@ for (const row of completedRows) {
                                             java_compatibility_verdict:
                                                 "exact Java 4.13.2 recognizer metadata and serialized lexer and parser ATN equality",
                                         }
+                                      : phaseBTokenAssignment
+                                        ? {
+                                              primary:
+                                                  "the complete direct Rust .interp and .tokens text match the immutable Java 4.13.2 fixtures",
+                                              alternate:
+                                                  "the pinned antlr-ng TestTokenTypeAssignment case uses the same grammar and token/rule expectations",
+                                              java_compatibility_verdict:
+                                                  "exact Java 4.13.2 token numbering, aliases, insertion order, recognizer metadata, and serialized ATN equality",
+                                          }
             : {
                   primary: coveredExisting
                       ? "the case-specific Rust port matches the pinned accepted and rejected syntax outcomes"
@@ -1535,6 +1622,7 @@ for (const row of completedRows) {
             (phaseBEscapeSequence && !coveredExisting) ||
             phaseBUnicodeEscape ||
             (phaseBUnicodeGrammar && !coveredExisting) ||
+            (phaseBTokenAssignment && !coveredExisting) ||
             (phaseBTokenPosition && !coveredExisting)
             ? row.demonstrated_red
             : undefined,

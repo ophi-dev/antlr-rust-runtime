@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtokentypeassignment-testcombinedgrammarliterals-74842182c1",
+  "revision_id": "testtokentypeassignment-testcombinedgrammarliterals-74842182c1-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "resolution": "verified-covered-existing",
+  "closure": {
+    "logical_id": "testtokentypeassignment-testcombinedgrammarliterals-74842182c1",
+    "source_case_ids": [
+      "antlr-ng:testtokentypeassignment-testcombinedgrammarliterals@62afa78a168a",
+      "java-antlr:testtokentypeassignment-testcombinedgrammarliterals@62afa78a168a"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/diagnostics.json",
+      "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/fixture.json",
+      "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/oracle/java-unicode-data.stdout",
+      "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/t.g4",
+      "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/t.interp",
+      "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/t.tokens",
+      "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/tLexer.interp",
+      "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/tLexer.tokens"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_token_type_assignment::combined_grammar_literals::matches_java_interps_and_tokens",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust recognizer metadata and token vocabulary text match Java 4.13.2 exactly for TestTokenTypeAssignment.testCombinedGrammarLiterals",
+    "scaffold_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+    "primary_test_commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+    "resolution": "verified-covered-existing"
+  },
+  "closure_sha256": "c7f5e4304e979216bb94fbbee345a465669e09d91be54c117148e76850ac2e11",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testtokentypeassignment-testcombinedgrammarliterals@62afa78a168a",
+      "path": "tests/TestTokenTypeAssignment.spec.ts",
+      "sha256": "aaae7ef40848329631d8b2545027fa8004c68bbb179baa99081ae311419bd072"
+    },
+    {
+      "source_case_id": "java-antlr:testtokentypeassignment-testcombinedgrammarliterals@62afa78a168a",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestTokenTypeAssignment.java",
+      "sha256": "f20ac97f65316180f35fc895b3aad572b38f9221eb157e5556e19f8204b792e4"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/diagnostics.json",
+      "sha256": "004603df7ff830a96cb27d4fa524801ead728a1ac6f6336d0be1ea2d3f56ebd5"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/fixture.json",
+      "sha256": "922c1fb6dbfc2fb36c746fa0a674cffc46e5ae7a38f860a8a5fd9b9d048419f6"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/oracle/java-antlr.stderr",
+      "sha256": "ee5936b63b51e0163e90428d57058be47cc5ef9c703f86273904d81681fbbe2d"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/t.g4",
+      "sha256": "2319abfba9f7a1073553b18f13c8ae58264bd7ef91d262fffc78bf4794bb8e14"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/t.interp",
+      "sha256": "083bdf4a88079f4f1203b9945a028700bc2b939f98bafb0e22368bdc6e4193bd"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/t.tokens",
+      "sha256": "976c9b536a196b16fc95abb4390b801ccf1f33539eb25e412b044e57454214ac"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/tLexer.interp",
+      "sha256": "2e08691afb615b606e29370d422784d61f0afc19db7b32cac01b8b00035a0a5e"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/tLexer.tokens",
+      "sha256": "7f465e3a17d94555c9fcb8ed39d3a296d914f28c4390a408024b570dec2f2991"
+    }
+  ],
+  "commits": {
+    "scaffold": "3375d42740a0178ba064d28e20b13e5400d5b6af",
+    "primary_test": "504894bf13189036d1eee7ada36c929c23a17b36",
+    "primary_implementation": "3375d42740a0178ba064d28e20b13e5400d5b6af"
+  },
+  "ancestry": {
+    "primary_test_parent": "72c573ea998a2c7c0db72f105c2784b7143822eb",
+    "primary_implementation_parent": "8eaedb9fa7e301554126a5185fd089c068bcade2",
+    "reachability": "the case-specific .interp and .tokens test passed against the direct compiler implementation already present at the batch base"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_token_type_assignment {",
+      "end_marker": "\n    fn assert_lexer_interp",
+      "sha256": "6169096aa25e4c1340217ba17fa712a10ff4786d2ba69de74fe073be67a31685"
+    }
+  ],
+  "verified_covered_existing": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_token_type_assignment::combined_grammar_literals::matches_java_interps_and_tokens -- --exact",
+    "commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed",
+    "covering_implementation_commit": "3375d42740a0178ba064d28e20b13e5400d5b6af"
+  },
+  "green_result": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_token_type_assignment::combined_grammar_literals::matches_java_interps_and_tokens -- --exact",
+    "commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/revisions/testtokentypeassignment-testcombinedgrammarliterals-74842182c1-r1/oracle-results/declared-sources.json",
+      "sha256": "be0731ad0c939efb9109e38c346ae7d17872fc207a769b515ba4e425a20abbfe"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testtokentypeassignment-testcombinedgrammarliterals-74842182c1/revisions/testtokentypeassignment-testcombinedgrammarliterals-74842182c1-r1/matrix-results/results.json",
+      "sha256": "5bce293d148cc1a82bb1718d3fce2c2efe0a6df72c1a99fa7811f871999d46f4"
+    }
+  ]
+}

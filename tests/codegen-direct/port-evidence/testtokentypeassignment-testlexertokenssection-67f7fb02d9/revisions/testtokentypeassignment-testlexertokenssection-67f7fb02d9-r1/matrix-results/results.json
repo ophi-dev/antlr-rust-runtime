@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtokentypeassignment-testlexertokenssection-67f7fb02d9",
+  "revision_id": "testtokentypeassignment-testlexertokenssection-67f7fb02d9-r1",
+  "cells": [
+    {
+      "test_port": "primary",
+      "test_commit": "504894bf13189036d1eee7ada36c929c23a17b36",
+      "implementation_port": "primary-antlr-ng",
+      "implementation_commit": "dc507ce0e934eac246301577db1aad16a34909b9",
+      "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_token_type_assignment::lexer_tokens_section::matches_java_interps_and_tokens -- --exact",
+      "result": "green: 1 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the primary implementation passed the locked primary tests"
+}
