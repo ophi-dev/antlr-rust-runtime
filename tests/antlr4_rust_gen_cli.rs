@@ -1,9 +1,10 @@
+use std::ffi::OsStr;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-fn run_antlr4_rust_gen(args: &[&str]) -> Output {
+fn run_antlr4_rust_gen(args: &[impl AsRef<OsStr>]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_antlr4-rust-gen"))
         .args(args)
         .output()
@@ -14,19 +15,35 @@ fn utf8(bytes: &[u8]) -> &str {
     std::str::from_utf8(bytes).expect("process output should be UTF-8")
 }
 
-fn temporary_grammar_path() -> PathBuf {
+fn temporary_directory(label: &str) -> TempDirectory {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("system clock should follow the Unix epoch")
         .as_nanos();
-    std::env::temp_dir().join(format!(
-        "antlr4-rust-gen-options-{}-{nonce}.g4",
+    let path = std::env::temp_dir().join(format!(
+        "antlr4-rust-gen-{label}-{}-{nonce}",
         std::process::id()
-    ))
+    ));
+    fs::create_dir_all(&path).expect("temporary directory should be writable");
+    TempDirectory(path)
+}
+
+struct TempDirectory(PathBuf);
+
+impl TempDirectory {
+    fn path(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for TempDirectory {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
 }
 
 #[test]
-fn long_help_exits_successfully_on_stdout() {
+fn long_help_describes_source_only_cli() {
     let output = run_antlr4_rust_gen(&["--help"]);
 
     assert!(
@@ -39,11 +56,14 @@ fn long_help_exits_successfully_on_stdout() {
 
     let stdout = utf8(&output.stdout);
     assert!(
-        stdout.starts_with("Usage: antlr4-rust-gen [OPTIONS]\n"),
+        stdout.starts_with("Usage: antlr4-rust-gen [OPTIONS] ROOT.g4...\n"),
         "{stdout}"
     );
-    assert!(stdout.contains("  --lexer Lexer.interp"), "{stdout}");
+    assert!(stdout.contains("  -I, --lib DIR"), "{stdout}");
     assert!(stdout.contains("  --option-hook KEY=VALUE"), "{stdout}");
+    assert!(!stdout.contains("--lexer "), "{stdout}");
+    assert!(!stdout.contains("--parser "), "{stdout}");
+    assert!(!stdout.contains("--grammar "), "{stdout}");
     assert!(stdout.contains("  -h, --help"), "{stdout}");
 }
 
@@ -58,30 +78,31 @@ fn short_help_exits_successfully_on_stdout() {
 
 #[test]
 fn help_flag_as_option_value_is_not_intercepted() {
-    let output = run_antlr4_rust_gen(&["--lexer-name", "--help"]);
+    let output = run_antlr4_rust_gen(&["--option-hook", "--help"]);
 
     assert!(!output.status.success(), "stdout: {}", utf8(&output.stdout));
     assert_eq!(utf8(&output.stdout), "");
 
     let stderr = utf8(&output.stderr);
-    assert!(stderr.contains("at least one of --lexer or --parser is required"));
+    assert!(stderr.contains("--option-hook requires KEY=VALUE"));
     assert!(stderr.contains("Usage: antlr4-rust-gen"));
 }
 
 #[test]
-fn missing_inputs_still_report_usage_on_stderr() {
-    let output = run_antlr4_rust_gen(&[]);
+fn missing_roots_report_usage_on_stderr() {
+    let args: [&str; 0] = [];
+    let output = run_antlr4_rust_gen(&args);
 
     assert!(!output.status.success(), "stdout: {}", utf8(&output.stdout));
     assert_eq!(utf8(&output.stdout), "");
 
     let stderr = utf8(&output.stderr);
-    assert!(stderr.contains("at least one of --lexer or --parser is required"));
+    assert!(stderr.contains("at least one grammar root is required"));
     assert!(stderr.contains("Usage: antlr4-rust-gen"));
 }
 
 #[test]
-fn unknown_arguments_still_report_usage_on_stderr() {
+fn unknown_arguments_report_usage_on_stderr() {
     let output = run_antlr4_rust_gen(&["--bogus"]);
 
     assert!(!output.status.success(), "stdout: {}", utf8(&output.stdout));
@@ -90,6 +111,25 @@ fn unknown_arguments_still_report_usage_on_stderr() {
     let stderr = utf8(&output.stderr);
     assert!(stderr.contains("unknown argument --bogus"));
     assert!(stderr.contains("Usage: antlr4-rust-gen"));
+}
+
+#[test]
+fn legacy_interp_flags_are_rejected() {
+    for flag in [
+        "--lexer",
+        "--parser",
+        "--grammar",
+        "--lexer-name",
+        "--parser-name",
+    ] {
+        let output = run_antlr4_rust_gen(&[flag, "Legacy.interp"]);
+        assert!(!output.status.success(), "{flag} unexpectedly succeeded");
+        let stderr = utf8(&output.stderr);
+        assert!(
+            stderr.contains(&format!("unknown argument {flag}")),
+            "{stderr}"
+        );
+    }
 }
 
 #[test]
@@ -104,27 +144,115 @@ fn option_hook_requires_a_key_value_assignment() {
 }
 
 #[test]
+fn positional_lexer_root_emits_rust_and_manifest() {
+    let temp = temporary_directory("lexer");
+    let grammar = temp.path().join("Letters.g4");
+    let out = temp.path().join("generated");
+    fs::write(&grammar, "lexer grammar Letters;\nA: 'a';\n").expect("grammar should be writable");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    assert!(out.join("letters.rs").is_file());
+    let manifest =
+        fs::read_to_string(out.join("semantics.json")).expect("manifest should be emitted");
+    assert!(manifest.contains("\"name\": \"Letters\""), "{manifest}");
+    assert!(manifest.contains("\"kind\": \"lexer\""), "{manifest}");
+}
+
+#[test]
+fn multiple_roots_and_repeatable_library_paths_are_resolved() {
+    let temp = temporary_directory("roots");
+    let first_lib = temp.path().join("first-lib");
+    let second_lib = temp.path().join("second-lib");
+    let out = temp.path().join("generated");
+    fs::create_dir_all(&first_lib).expect("first library directory should be writable");
+    fs::create_dir_all(&second_lib).expect("second library directory should be writable");
+    fs::write(
+        first_lib.join("Shared.g4"),
+        "lexer grammar Shared;\nA: 'a';\n",
+    )
+    .expect("import should be writable");
+    let root = temp.path().join("Root.g4");
+    let other = temp.path().join("Other.g4");
+    fs::write(&root, "lexer grammar Root;\nimport Shared;\nB: 'b';\n")
+        .expect("root should be writable");
+    fs::write(&other, "lexer grammar Other;\nC: 'c';\n").expect("second root should be writable");
+
+    let output = run_antlr4_rust_gen(&[
+        root.as_os_str(),
+        other.as_os_str(),
+        OsStr::new("-I"),
+        first_lib.as_os_str(),
+        OsStr::new("--lib"),
+        second_lib.as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    assert!(out.join("root.rs").is_file());
+    assert!(out.join("other.rs").is_file());
+    assert!(!out.join("shared.rs").exists());
+}
+
+#[test]
+fn invalid_source_emits_diagnostics_without_partial_outputs() {
+    let temp = temporary_directory("invalid");
+    let grammar = temp.path().join("Broken.g4");
+    let out = temp.path().join("generated");
+    fs::write(&grammar, "lexer grammar Broken;\nA: 'unterminated;\n")
+        .expect("grammar should be writable");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(!output.status.success(), "stdout: {}", utf8(&output.stdout));
+    assert_eq!(utf8(&output.stdout), "");
+    let stderr = utf8(&output.stderr);
+    assert!(stderr.contains("Broken.g4"), "{stderr}");
+    assert!(stderr.contains("G4F002"), "{stderr}");
+    assert!(!stderr.contains("unknown argument"), "{stderr}");
+    assert!(
+        !out.exists()
+            || fs::read_dir(&out)
+                .expect("output should be readable")
+                .next()
+                .is_none(),
+        "failed compilation emitted partial output"
+    );
+}
+
+#[test]
 fn unsupported_grammar_options_warn_and_exact_hooks_acknowledge_them() {
-    let grammar = temporary_grammar_path();
+    let temp = temporary_directory("options");
+    let grammar = temp.path().join("OptionsLexer.g4");
     fs::write(
         &grammar,
-        "lexer grammar L;\noptions { superClass = MyLexerBase; }\nA: 'a';\n",
+        "lexer grammar OptionsLexer;\noptions { superClass = MyLexerBase; }\nA: 'a';\n",
     )
-    .expect("temporary grammar should be writable");
-    let missing_interp = grammar.with_extension("missing.interp");
-    let grammar = grammar
-        .to_str()
-        .expect("temporary grammar path should be UTF-8");
-    let missing_interp = missing_interp
-        .to_str()
-        .expect("temporary interp path should be UTF-8");
+    .expect("grammar should be writable");
 
+    let unsupported_out = temp.path().join("unsupported");
     let unsupported = run_antlr4_rust_gen(&[
-        "--lexer",
-        missing_interp,
-        "--grammar",
-        grammar,
-        "--require-full-semantics",
+        grammar.as_os_str(),
+        OsStr::new("--out-dir"),
+        unsupported_out.as_os_str(),
+        OsStr::new("--require-full-semantics"),
     ]);
     assert!(!unsupported.status.success());
     let stderr = utf8(&unsupported.stderr);
@@ -133,23 +261,27 @@ fn unsupported_grammar_options_warn_and_exact_hooks_acknowledge_them() {
         "{stderr}"
     );
     assert!(stderr.contains("--option-hook KEY=VALUE"), "{stderr}");
+    assert!(!unsupported_out.exists());
 
+    let acknowledged_out = temp.path().join("acknowledged");
     let acknowledged = run_antlr4_rust_gen(&[
-        "--lexer",
-        missing_interp,
-        "--grammar",
-        grammar,
-        "--option-hook",
-        "superClass=MyLexerBase",
-        "--require-full-semantics",
+        grammar.as_os_str(),
+        OsStr::new("--out-dir"),
+        acknowledged_out.as_os_str(),
+        OsStr::new("--option-hook"),
+        OsStr::new("superClass=MyLexerBase"),
+        OsStr::new("--require-full-semantics"),
     ]);
-    assert!(!acknowledged.status.success());
+    assert!(
+        acknowledged.status.success(),
+        "stderr: {}",
+        utf8(&acknowledged.stderr)
+    );
     let stderr = utf8(&acknowledged.stderr);
     assert!(!stderr.contains("unsupported grammar option"), "{stderr}");
     assert!(
         !stderr.contains("require caller-owned target behavior"),
         "{stderr}"
     );
-
-    fs::remove_file(grammar).expect("temporary grammar should be removable");
+    assert!(acknowledged_out.join("options_lexer.rs").is_file());
 }
