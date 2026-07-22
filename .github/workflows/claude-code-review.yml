@@ -113,7 +113,7 @@ jobs:
       # path, which exits before the log file is written.
       - name: Upload Claude execution log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: claude-review-log-${{ github.event.pull_request.number }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/claude-execution-output.json
