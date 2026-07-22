@@ -86,7 +86,10 @@ jobs:
             --model "claude-opus-4-8[1m]"
             --no-chrome
             --dangerously-skip-permissions
-          plugins: "code-review@claude-code-plugins"
+          plugins: |
+            "code-review@claude-code-plugins"
+            rust-analyzer-lsp
+
           # The trailing directive fixes a CI-only stall: the review skill fans out to
           # parallel sub-agents, and on its final turn the model would emit "I'll wait
           # for the agents to report…" and end the turn (stop_reason: end_turn) — but in
