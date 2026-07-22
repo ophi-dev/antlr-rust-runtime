@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "abbLexer.g4"
+  ],
+  "logical_ids": [
+    "general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison@ac9d9ddd56f1",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/bugs/General.spec.ts",
+      "case": "Bug #33 Escaping issues with backslash in .dot file comparison",
+      "source_sha256": "d10ecdc3a8bf65568eb74e94dedd8186c5be2f6cb8ff568c47bbf54093296eec"
+    }
+  ],
+  "java_antlr_test": {
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool/src/org/antlr/v4/tool/DOTGenerator.java",
+    "case": "independent generated ATN and DOT compatibility oracle",
+    "source_sha256": "4601c680d836513e1743d261c33648339c69cfd6b73effdd48f2e06fd53cc4cf",
+    "role": "Java 4.13.2 supplies .interp and .tokens; its DOT generator outcome is retained explicitly"
+  },
+  "antlr_ng_test": {
+    "source_case_id": "antlr-ng:general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison@ac9d9ddd56f1",
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/bugs/General.spec.ts",
+    "case": "Bug #33 Escaping issues with backslash in .dot file comparison",
+    "source_sha256": "d10ecdc3a8bf65568eb74e94dedd8186c5be2f6cb8ff568c47bbf54093296eec"
+  },
+  "grammar_source": {
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/bugs/data/abbLexer.g4",
+    "sha256": "d68b644ea95a62264050b9e2770d9047ae0e87b4831b52c1687f87f2dba47411"
+  },
+  "expected": "success",
+  "general_atn_dot_oracle": {
+    "rule": "EscapeSequence",
+    "expected_edge": "oracle/expected-dot-edge.txt",
+    "antlr_ng_dot": "oracle/antlr-ng-abbLexer.EscapeSequence.dot",
+    "java_dot": "oracle/java-abbLexer.EscapeSequence.dot",
+    "java_atn_outcome": "success",
+    "java_failure_fingerprint": null,
+    "agreement": "Java 4.13.2 and antlr-ng contain the same selected DOT edge",
+    "compatibility_verdict": "Java ANTLR 4.13.2 .interp and .tokens, with the pinned antlr-ng DOT regression assertion"
+  },
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "unicode_data": {
+      "generator": "org.antlr.v4.unicode.UnicodeDataTemplateController",
+      "helper": "tools/grammar-frontend/oracle/GenerateUnicodeData.java",
+      "helper_sha256": "9adec4f06cb31c7c7e408336e8fe935741f6d4ec5e8113e76450551ec1e3967f",
+      "icu4j_version": "78.1.0.0",
+      "icu4j_jar_sha256": "bbb70d3be23110d7295823eee0c2e896ac3b619b3c0f26168f65eb972df51d2a",
+      "unicode_version": "17.0.0.0"
+    },
+    "exit_status": 0
+  },
+  "regeneration_command": "node tools/grammar-frontend/generate-general-bug-fixtures.mjs --update --antlr-ng-root /tmp/antlr-cleanroom/antlr-ng-1f68422 --java-root /tmp/antlr-cleanroom/antlr4-4.13.2-tool --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar --icu-jar /tmp/antlr-cleanroom/tools/icu4j-78.1.jar",
+  "files": {
+    "abbLexer.g4": "d68b644ea95a62264050b9e2770d9047ae0e87b4831b52c1687f87f2dba47411",
+    "abbLexer.interp": "543f4fe2e4b71def8c25c2b3cd536f5bc2c56ed3a9eaec3e5ec55446ec88eb57",
+    "abbLexer.tokens": "da51e1692c33b45e746e832a87267db30ea672257d90ffcc11120a60897ffe1a",
+    "oracle/antlr-ng-abbLexer.EscapeSequence.dot": "984cb6f5a4a1be3fc156e9aeab9ead1fd135897bc3e73aef0f7519b3216973ed",
+    "oracle/antlr-ng-atn.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/antlr-ng-atn.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/expected-dot-edge.txt": "9d53fe4ed446bf55b6a5407b6ac470da56d53c03987a118cd1541099e5e88b03",
+    "oracle/java-abbLexer.EscapeSequence.dot": "1742ccd8f506c6160fb54021fb5634f88240eb32631c10f739608a7ac21571b1",
+    "oracle/java-antlr.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-atn.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-atn.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stdout": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+  }
+}

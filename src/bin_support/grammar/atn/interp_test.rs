@@ -70,7 +70,7 @@ pub(super) fn serialize_parser(graph: &FinalizedAtnGraph) -> Vec<i32> {
     data
 }
 
-fn serialize_interp(recognizer: &RecognizerModel, atn: &[i32]) -> String {
+pub(super) fn serialize_interp(recognizer: &RecognizerModel, atn: &[i32]) -> String {
     let mut output = String::new();
     write_optional_names(
         &mut output,
