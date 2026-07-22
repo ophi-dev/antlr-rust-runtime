@@ -7362,22 +7362,39 @@ fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
     );
 
     // (struct name, rule index, alt label) — one per rule plus one per
-    // labeled alternative.
-    let mut views: Vec<(String, usize)> = Vec::new();
+    // labeled alternative. The label scopes generated accessors to that
+    // alternative; the rule-level view exposes the union across its alts.
+    let mut views: Vec<(String, usize, Option<String>)> = Vec::new();
     for (rule_index, rule) in model.rules.iter().enumerate() {
-        views.push((format!("{}Context", rust_type_name(&rule.name)), rule_index));
+        views.push((
+            format!("{}Context", rust_type_name(&rule.name)),
+            rule_index,
+            None,
+        ));
         for alt in &rule.alts {
             if let Some(label) = &alt.label {
                 let view = format!("{}Context", rust_type_name(label));
-                if !views.iter().any(|(existing, _)| *existing == view) {
-                    views.push((view, rule_index));
+                if !views.iter().any(|(existing, _, _)| *existing == view) {
+                    views.push((view, rule_index, Some(label.clone())));
                 }
             }
         }
     }
 
-    for (view_name, rule_index) in &views {
+    for (view_name, rule_index, alt_label) in &views {
         let rule = &model.rules[*rule_index];
+        let referenced_targets: BTreeSet<&str> = rule
+            .alts
+            .iter()
+            .filter(|alt| {
+                alt_label
+                    .as_ref()
+                    .is_none_or(|label| alt.label.as_ref() == Some(label))
+            })
+            .flat_map(|alt| alt.refs.iter())
+            .map(|element| element.target.as_str())
+            .filter(|target| !target.is_empty())
+            .collect();
         let attrs_struct = embedded::attrs_struct_name(*rule_index);
         let mut fields = String::new();
         let mut field_inits = String::new();
@@ -7419,7 +7436,12 @@ fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
                 "    pub fn start(&self) -> __GeneratedTokenView {{\n        let token = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.start(),\n            __GeneratedRuleContext::Active {{ context, tokens, .. }} => context.start(tokens),\n        }};\n        __GeneratedTokenView {{ text: token.map(|token| token.text().to_owned()).unwrap_or_default() }}\n    }}"
             );
         }
-        for (child_index, child) in model.rules.iter().enumerate() {
+        for (child_index, child) in model
+            .rules
+            .iter()
+            .enumerate()
+            .filter(|(_, child)| referenced_targets.contains(child.name.as_str()))
+        {
             let method = rust_function_name(&child.name);
             let child_view = format!("{}Context", rust_type_name(&child.name));
             let _ = writeln!(
@@ -7427,7 +7449,10 @@ fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
                 "    pub fn {method}(&self, index: usize) -> {child_view}<'a> {{\n        let node = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.child_rules({child_index}).nth(index),\n            __GeneratedRuleContext::Active {{ context, storage, tokens, .. }} => context.child_rules(storage, tokens, {child_index}).nth(index),\n        }}.expect(\"missing rule child\");\n        {child_view}::__from_child_node(node, &self.__invocation_states)\n    }}\n    pub fn {method}_all(&self) -> Vec<{child_view}<'a>> {{\n        let nodes: Vec<_> = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.child_rules({child_index}).collect(),\n            __GeneratedRuleContext::Active {{ context, storage, tokens, .. }} => context.child_rules(storage, tokens, {child_index}).collect(),\n        }};\n        nodes.into_iter().map(|node| {child_view}::__from_child_node(node, &self.__invocation_states)).collect()\n    }}"
             );
         }
-        for (token_name, token_type) in &token_accessors {
+        for (token_name, token_type) in token_accessors
+            .iter()
+            .filter(|(token_name, _)| referenced_targets.contains(token_name.as_str()))
+        {
             let _ = writeln!(
                 accessors,
                 "    #[allow(non_snake_case)]\n    pub fn {token_name}(&self, index: usize) -> TerminalNode<'a> {{\n        let node = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.child_tokens({token_type}).nth(index),\n            __GeneratedRuleContext::Active {{ context, storage, tokens, .. }} => context.child_tokens(storage, tokens, {token_type}).nth(index),\n        }}.expect(\"missing token child\");\n        TerminalNode::new(node)\n    }}\n    #[allow(non_snake_case)]\n    pub fn {token_name}_all(&self) -> Vec<TerminalNode<'a>> {{\n        let nodes: Vec<_> = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.child_tokens({token_type}).collect(),\n            __GeneratedRuleContext::Active {{ context, storage, tokens, .. }} => context.child_tokens(storage, tokens, {token_type}).collect(),\n        }};\n        nodes.into_iter().map(TerminalNode::new).collect()\n    }}"
@@ -11712,7 +11737,7 @@ mod tests {
     fn embedded_active_context_preserves_invocation_states() {
         let rendered = render_parser_with_options(
             "TParser",
-            &minimal_parser_data(),
+            &parser_fixture_data("left-recursive-labels/T.g4"),
             ParserRenderOptions {
                 embedded: true,
                 ..ParserRenderOptions::default()
@@ -11729,6 +11754,38 @@ mod tests {
             !rendered.contains("__GeneratedRuleContext::Active { .. } => Vec::new()"),
             "active contexts must preserve their invoking-state chain"
         );
+    }
+
+    #[test]
+    fn typed_context_accessors_are_scoped_to_structural_children() {
+        let rendered = render_parser(
+            "TParser",
+            &parser_fixture_data("left-recursive-labels/T.g4"),
+        )
+        .expect("parser should render");
+        let s_context = rendered
+            .split_once("impl<'a> SContext<'a> {")
+            .expect("s context impl")
+            .1
+            .split_once("impl std::fmt::Display for SContext")
+            .expect("s context display impl")
+            .0;
+        assert!(s_context.contains("pub fn e(&self"));
+        assert!(!s_context.contains("pub fn s(&self"));
+        assert!(!s_context.contains("pub fn INT(&self"));
+
+        let e_context = rendered
+            .split_once("impl<'a> EContext<'a> {")
+            .expect("e context impl")
+            .1
+            .split_once("impl std::fmt::Display for EContext")
+            .expect("e context display impl")
+            .0;
+        assert!(e_context.contains("pub fn e(&self"));
+        assert!(e_context.contains("pub fn INT(&self"));
+        assert!(e_context.contains("pub fn STAR(&self"));
+        assert!(e_context.contains("pub fn PLUS(&self"));
+        assert!(!e_context.contains("pub fn s(&self"));
     }
 
     #[test]
