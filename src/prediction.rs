@@ -1287,4 +1287,806 @@ mod tests {
         assert!(workspace.merge_cache.capacity() <= MAX_RETAINED_MERGE_CACHE_ENTRIES);
         assert!(workspace.entries.capacity() <= MAX_RETAINED_CONTEXT_ENTRIES);
     }
+
+    mod upstream_graph_nodes {
+        use super::*;
+        use std::collections::{BTreeSet, HashMap, VecDeque};
+        use std::fmt::Write;
+
+        const EMPTY_WILDCARD_DOT: &str = concat!(
+            "digraph G {\n",
+            "rankdir=LR;\n",
+            "  s0[label=\"*\"];\n",
+            "}\n",
+        );
+        const EMPTY_FULL_CONTEXT_DOT: &str = concat!(
+            "digraph G {\n",
+            "rankdir=LR;\n",
+            "  s0[label=\"$\"];\n",
+            "}\n",
+        );
+        const X_EMPTY_FULL_CONTEXT_DOT: &str = concat!(
+            "digraph G {\n",
+            "rankdir=LR;\n",
+            "  s0[shape=record, label=\"<p0>|<p1>$\"];\n",
+            "  s1[label=\"$\"];\n",
+            "  s0:p0->s1[label=\"9\"];\n",
+            "}\n",
+        );
+        const A_DOT: &str = concat!(
+            "digraph G {\n",
+            "rankdir=LR;\n",
+            "  s0[label=\"0\"];\n",
+            "  s1[label=\"*\"];\n",
+            "  s0->s1[label=\"1\"];\n",
+            "}\n",
+        );
+        const A_EMPTY_AX_FULL_CONTEXT_DOT: &str = concat!(
+            "digraph G {\n",
+            "rankdir=LR;\n",
+            "  s0[label=\"0\"];\n",
+            "  s1[shape=record, label=\"<p0>|<p1>$\"];\n",
+            "  s2[label=\"$\"];\n",
+            "  s0->s1[label=\"1\"];\n",
+            "  s1:p0->s2[label=\"9\"];\n",
+            "}\n",
+        );
+        const NESTED_FULL_CONTEXT_DOT: &str = concat!(
+            "digraph G {\n",
+            "rankdir=LR;\n",
+            "  s0[shape=record, label=\"<p0>|<p1>$\"];\n",
+            "  s1[shape=record, label=\"<p0>|<p1>$\"];\n",
+            "  s2[label=\"$\"];\n",
+            "  s0:p0->s1[label=\"8\"];\n",
+            "  s1:p0->s2[label=\"8\"];\n",
+            "}\n",
+        );
+        const A_B_DOT: &str = concat!(
+            "digraph G {\n",
+            "rankdir=LR;\n",
+            "  s0[shape=record, label=\"<p0>|<p1>\"];\n",
+            "  s1[label=\"*\"];\n",
+            "  s0:p0->s1[label=\"1\"];\n",
+            "  s0:p1->s1[label=\"2\"];\n",
+            "}\n",
+        );
+        const AX_AX_DOT: &str = concat!(
+            "digraph G {\n",
+            "rankdir=LR;\n",
+            "  s0[label=\"0\"];\n",
+            "  s1[label=\"1\"];\n",
+            "  s2[label=\"*\"];\n",
+            "  s0->s1[label=\"1\"];\n",
+            "  s1->s2[label=\"9\"];\n",
+            "}\n",
+        );
+        const ABX_ABX_DOT: &str = concat!(
+            "digraph G {\n",
+            "rankdir=LR;\n",
+            "  s0[label=\"0\"];\n",
+            "  s1[label=\"1\"];\n",
+            "  s2[label=\"2\"];\n",
+            "  s3[label=\"*\"];\n",
+            "  s0->s1[label=\"1\"];\n",
+            "  s1->s2[label=\"2\"];\n",
+            "  s2->s3[label=\"9\"];\n",
+            "}\n",
+        );
+        const ABX_ACX_DOT: &str = concat!(
+            "digraph G {\n",
+            "rankdir=LR;\n",
+            "  s0[label=\"0\"];\n",
+            "  s1[shape=record, label=\"<p0>|<p1>\"];\n",
+            "  s2[label=\"2\"];\n",
+            "  s3[label=\"*\"];\n",
+            "  s0->s1[label=\"1\"];\n",
+            "  s1:p0->s2[label=\"2\"];\n",
+            "  s1:p1->s2[label=\"3\"];\n",
+            "  s2->s3[label=\"9\"];\n",
+            "}\n",
+        );
+        const AX_BX_DOT: &str = concat!(
+            "digraph G {\n",
+            "rankdir=LR;\n",
+            "  s0[shape=record, label=\"<p0>|<p1>\"];\n",
+            "  s1[label=\"1\"];\n",
+            "  s2[label=\"*\"];\n",
+            "  s0:p0->s1[label=\"1\"];\n",
+            "  s0:p1->s1[label=\"2\"];\n",
+            "  s1->s2[label=\"9\"];\n",
+            "}\n",
+        );
+        const AX_BY_DOT: &str = concat!(
+            "digraph G {\n",
+            "rankdir=LR;\n",
+            "  s0[shape=record, label=\"<p0>|<p1>\"];\n",
+            "  s2[label=\"2\"];\n",
+            "  s3[label=\"*\"];\n",
+            "  s1[label=\"1\"];\n",
+            "  s0:p0->s1[label=\"1\"];\n",
+            "  s0:p1->s2[label=\"2\"];\n",
+            "  s2->s3[label=\"10\"];\n",
+            "  s1->s3[label=\"9\"];\n",
+            "}\n",
+        );
+        const A_EMPTY_BX_DOT: &str = concat!(
+            "digraph G {\n",
+            "rankdir=LR;\n",
+            "  s0[shape=record, label=\"<p0>|<p1>\"];\n",
+            "  s2[label=\"2\"];\n",
+            "  s1[label=\"*\"];\n",
+            "  s0:p0->s1[label=\"1\"];\n",
+            "  s0:p1->s2[label=\"2\"];\n",
+            "  s2->s1[label=\"9\"];\n",
+            "}\n",
+        );
+        const A_EMPTY_BX_FULL_CONTEXT_DOT: &str = concat!(
+            "digraph G {\n",
+            "rankdir=LR;\n",
+            "  s0[shape=record, label=\"<p0>|<p1>\"];\n",
+            "  s2[label=\"2\"];\n",
+            "  s1[label=\"$\"];\n",
+            "  s0:p0->s1[label=\"1\"];\n",
+            "  s0:p1->s2[label=\"2\"];\n",
+            "  s2->s1[label=\"9\"];\n",
+            "}\n",
+        );
+        const AEX_BFX_DOT: &str = concat!(
+            "digraph G {\n",
+            "rankdir=LR;\n",
+            "  s0[shape=record, label=\"<p0>|<p1>\"];\n",
+            "  s2[label=\"2\"];\n",
+            "  s3[label=\"3\"];\n",
+            "  s4[label=\"*\"];\n",
+            "  s1[label=\"1\"];\n",
+            "  s0:p0->s1[label=\"1\"];\n",
+            "  s0:p1->s2[label=\"2\"];\n",
+            "  s2->s3[label=\"6\"];\n",
+            "  s3->s4[label=\"9\"];\n",
+            "  s1->s3[label=\"5\"];\n",
+            "}\n",
+        );
+        const A_B_C_DOT: &str = concat!(
+            "digraph G {\n",
+            "rankdir=LR;\n",
+            "  s0[shape=record, label=\"<p0>|<p1>|<p2>\"];\n",
+            "  s1[label=\"*\"];\n",
+            "  s0:p0->s1[label=\"1\"];\n",
+            "  s0:p1->s1[label=\"2\"];\n",
+            "  s0:p2->s1[label=\"3\"];\n",
+            "}\n",
+        );
+        const AAX_AAY_DOT: &str = concat!(
+            "digraph G {\n",
+            "rankdir=LR;\n",
+            "  s0[label=\"0\"];\n",
+            "  s1[shape=record, label=\"<p0>|<p1>\"];\n",
+            "  s2[label=\"*\"];\n",
+            "  s0->s1[label=\"1\"];\n",
+            "  s1:p0->s2[label=\"9\"];\n",
+            "  s1:p1->s2[label=\"10\"];\n",
+            "}\n",
+        );
+        const AAXC_AAYD_DOT: &str = concat!(
+            "digraph G {\n",
+            "rankdir=LR;\n",
+            "  s0[shape=record, label=\"<p0>|<p1>|<p2>\"];\n",
+            "  s2[label=\"*\"];\n",
+            "  s1[shape=record, label=\"<p0>|<p1>\"];\n",
+            "  s0:p0->s1[label=\"1\"];\n",
+            "  s0:p1->s2[label=\"3\"];\n",
+            "  s0:p2->s2[label=\"4\"];\n",
+            "  s1:p0->s2[label=\"9\"];\n",
+            "  s1:p1->s2[label=\"10\"];\n",
+            "}\n",
+        );
+        const AAUBV_ACWDX_DOT: &str = concat!(
+            "digraph G {\n",
+            "rankdir=LR;\n",
+            "  s0[shape=record, label=\"<p0>|<p1>|<p2>|<p3>\"];\n",
+            "  s4[label=\"4\"];\n",
+            "  s5[label=\"*\"];\n",
+            "  s3[label=\"3\"];\n",
+            "  s2[label=\"2\"];\n",
+            "  s1[label=\"1\"];\n",
+            "  s0:p0->s1[label=\"1\"];\n",
+            "  s0:p1->s2[label=\"2\"];\n",
+            "  s0:p2->s3[label=\"3\"];\n",
+            "  s0:p3->s4[label=\"4\"];\n",
+            "  s4->s5[label=\"9\"];\n",
+            "  s3->s5[label=\"8\"];\n",
+            "  s2->s5[label=\"7\"];\n",
+            "  s1->s5[label=\"6\"];\n",
+            "}\n",
+        );
+        const AAUBV_ABVDX_DOT: &str = concat!(
+            "digraph G {\n",
+            "rankdir=LR;\n",
+            "  s0[shape=record, label=\"<p0>|<p1>|<p2>\"];\n",
+            "  s3[label=\"3\"];\n",
+            "  s4[label=\"*\"];\n",
+            "  s2[label=\"2\"];\n",
+            "  s1[label=\"1\"];\n",
+            "  s0:p0->s1[label=\"1\"];\n",
+            "  s0:p1->s2[label=\"2\"];\n",
+            "  s0:p2->s3[label=\"4\"];\n",
+            "  s3->s4[label=\"9\"];\n",
+            "  s2->s4[label=\"7\"];\n",
+            "  s1->s4[label=\"6\"];\n",
+            "}\n",
+        );
+        const AAUBV_ABWDX_DOT: &str = concat!(
+            "digraph G {\n",
+            "rankdir=LR;\n",
+            "  s0[shape=record, label=\"<p0>|<p1>|<p2>\"];\n",
+            "  s3[label=\"3\"];\n",
+            "  s4[label=\"*\"];\n",
+            "  s2[shape=record, label=\"<p0>|<p1>\"];\n",
+            "  s1[label=\"1\"];\n",
+            "  s0:p0->s1[label=\"1\"];\n",
+            "  s0:p1->s2[label=\"2\"];\n",
+            "  s0:p2->s3[label=\"4\"];\n",
+            "  s3->s4[label=\"9\"];\n",
+            "  s2:p0->s4[label=\"7\"];\n",
+            "  s2:p1->s4[label=\"8\"];\n",
+            "  s1->s4[label=\"6\"];\n",
+            "}\n",
+        );
+        const AAUBV_ABVDU_DOT: &str = concat!(
+            "digraph G {\n",
+            "rankdir=LR;\n",
+            "  s0[shape=record, label=\"<p0>|<p1>|<p2>\"];\n",
+            "  s2[label=\"2\"];\n",
+            "  s3[label=\"*\"];\n",
+            "  s1[label=\"1\"];\n",
+            "  s0:p0->s1[label=\"1\"];\n",
+            "  s0:p1->s2[label=\"2\"];\n",
+            "  s0:p2->s1[label=\"4\"];\n",
+            "  s2->s3[label=\"7\"];\n",
+            "  s1->s3[label=\"6\"];\n",
+            "}\n",
+        );
+        const AAUBU_ACUDU_DOT: &str = concat!(
+            "digraph G {\n",
+            "rankdir=LR;\n",
+            "  s0[shape=record, label=\"<p0>|<p1>|<p2>|<p3>\"];\n",
+            "  s1[label=\"1\"];\n",
+            "  s2[label=\"*\"];\n",
+            "  s0:p0->s1[label=\"1\"];\n",
+            "  s0:p1->s1[label=\"2\"];\n",
+            "  s0:p2->s1[label=\"3\"];\n",
+            "  s0:p3->s1[label=\"4\"];\n",
+            "  s1->s2[label=\"6\"];\n",
+            "}\n",
+        );
+
+        #[derive(Clone, Copy)]
+        enum ContextSpec {
+            Empty,
+            Chain(&'static [usize]),
+            Array(&'static [&'static [usize]]),
+        }
+
+        #[derive(Clone, Copy)]
+        enum Scenario {
+            Merge {
+                left: ContextSpec,
+                right: ContextSpec,
+            },
+            NestedFullContext,
+        }
+
+        struct GraphCase {
+            source_test: &'static str,
+            logical_id: &'static str,
+            scenario: Scenario,
+            root_is_wildcard: bool,
+            expected: &'static str,
+        }
+
+        impl GraphCase {
+            const fn merge(
+                source_test: &'static str,
+                logical_id: &'static str,
+                left: ContextSpec,
+                right: ContextSpec,
+                root_is_wildcard: bool,
+                expected: &'static str,
+            ) -> Self {
+                Self {
+                    source_test,
+                    logical_id,
+                    scenario: Scenario::Merge { left, right },
+                    root_is_wildcard,
+                    expected,
+                }
+            }
+
+            const fn nested_full_context(
+                source_test: &'static str,
+                logical_id: &'static str,
+                expected: &'static str,
+            ) -> Self {
+                Self {
+                    source_test,
+                    logical_id,
+                    scenario: Scenario::NestedFullContext,
+                    root_is_wildcard: false,
+                    expected,
+                }
+            }
+        }
+
+        const CASES: &[GraphCase] = &[
+            GraphCase::merge(
+                "test_$_$",
+                "testgraphnodes-test-9ea85e6b69",
+                ContextSpec::Empty,
+                ContextSpec::Empty,
+                true,
+                EMPTY_WILDCARD_DOT,
+            ),
+            GraphCase::merge(
+                "test_$_$_fullctx",
+                "testgraphnodes-test-fullctx-3a6b2d8201",
+                ContextSpec::Empty,
+                ContextSpec::Empty,
+                false,
+                EMPTY_FULL_CONTEXT_DOT,
+            ),
+            GraphCase::merge(
+                "test_x_$",
+                "testgraphnodes-test-x-546922b23c",
+                ContextSpec::Chain(&[9]),
+                ContextSpec::Empty,
+                true,
+                EMPTY_WILDCARD_DOT,
+            ),
+            GraphCase::merge(
+                "test_x_$_fullctx",
+                "testgraphnodes-test-x-fullctx-7fdaaf473e",
+                ContextSpec::Chain(&[9]),
+                ContextSpec::Empty,
+                false,
+                X_EMPTY_FULL_CONTEXT_DOT,
+            ),
+            GraphCase::merge(
+                "test_$_x",
+                "testgraphnodes-test-x-546922b23c",
+                ContextSpec::Empty,
+                ContextSpec::Chain(&[9]),
+                true,
+                EMPTY_WILDCARD_DOT,
+            ),
+            GraphCase::merge(
+                "test_$_x_fullctx",
+                "testgraphnodes-test-x-fullctx-7fdaaf473e",
+                ContextSpec::Empty,
+                ContextSpec::Chain(&[9]),
+                false,
+                X_EMPTY_FULL_CONTEXT_DOT,
+            ),
+            GraphCase::merge(
+                "test_a_a",
+                "testgraphnodes-test-a-a-429589e373",
+                ContextSpec::Chain(&[1]),
+                ContextSpec::Chain(&[1]),
+                true,
+                A_DOT,
+            ),
+            GraphCase::merge(
+                "test_a$_ax",
+                "testgraphnodes-test-a-ax-fd976a340d",
+                ContextSpec::Chain(&[1]),
+                ContextSpec::Chain(&[9, 1]),
+                true,
+                A_DOT,
+            ),
+            GraphCase::merge(
+                "test_a$_ax_fullctx",
+                "testgraphnodes-test-a-ax-fullctx-502155fcf9",
+                ContextSpec::Chain(&[1]),
+                ContextSpec::Chain(&[9, 1]),
+                false,
+                A_EMPTY_AX_FULL_CONTEXT_DOT,
+            ),
+            GraphCase::merge(
+                "test_ax$_a$",
+                "testgraphnodes-test-ax-a-62a48f251b",
+                ContextSpec::Chain(&[9, 1]),
+                ContextSpec::Chain(&[1]),
+                true,
+                A_DOT,
+            ),
+            GraphCase::nested_full_context(
+                "test_aa$_a$_$_fullCtx",
+                "testgraphnodes-test-aa-a-fullctx-8e728ea773",
+                NESTED_FULL_CONTEXT_DOT,
+            ),
+            GraphCase::merge(
+                "test_ax$_a$_fullctx",
+                "testgraphnodes-test-ax-a-fullctx-7ef9c1d6b2",
+                ContextSpec::Chain(&[9, 1]),
+                ContextSpec::Chain(&[1]),
+                false,
+                A_EMPTY_AX_FULL_CONTEXT_DOT,
+            ),
+            GraphCase::merge(
+                "test_a_b",
+                "testgraphnodes-test-a-b-080058428f",
+                ContextSpec::Chain(&[1]),
+                ContextSpec::Chain(&[2]),
+                true,
+                A_B_DOT,
+            ),
+            GraphCase::merge(
+                "test_ax_ax_same",
+                "testgraphnodes-test-ax-ax-same-1504dc3dd3",
+                ContextSpec::Chain(&[9, 1]),
+                ContextSpec::Chain(&[9, 1]),
+                true,
+                AX_AX_DOT,
+            ),
+            GraphCase::merge(
+                "test_ax_ax",
+                "testgraphnodes-test-ax-ax-48f57578fa",
+                ContextSpec::Chain(&[9, 1]),
+                ContextSpec::Chain(&[9, 1]),
+                true,
+                AX_AX_DOT,
+            ),
+            GraphCase::merge(
+                "test_abx_abx",
+                "testgraphnodes-test-abx-abx-77366e32e9",
+                ContextSpec::Chain(&[9, 2, 1]),
+                ContextSpec::Chain(&[9, 2, 1]),
+                true,
+                ABX_ABX_DOT,
+            ),
+            GraphCase::merge(
+                "test_abx_acx",
+                "testgraphnodes-test-abx-acx-a3af7f90fa",
+                ContextSpec::Chain(&[9, 2, 1]),
+                ContextSpec::Chain(&[9, 3, 1]),
+                true,
+                ABX_ACX_DOT,
+            ),
+            GraphCase::merge(
+                "test_ax_bx_same",
+                "testgraphnodes-test-ax-bx-same-d0506bf7a9",
+                ContextSpec::Chain(&[9, 1]),
+                ContextSpec::Chain(&[9, 2]),
+                true,
+                AX_BX_DOT,
+            ),
+            GraphCase::merge(
+                "test_ax_bx",
+                "testgraphnodes-test-ax-bx-1ea2df9a04",
+                ContextSpec::Chain(&[9, 1]),
+                ContextSpec::Chain(&[9, 2]),
+                true,
+                AX_BX_DOT,
+            ),
+            GraphCase::merge(
+                "test_ax_by",
+                "testgraphnodes-test-ax-by-47815d59d2",
+                ContextSpec::Chain(&[9, 1]),
+                ContextSpec::Chain(&[10, 2]),
+                true,
+                AX_BY_DOT,
+            ),
+            GraphCase::merge(
+                "test_a$_bx",
+                "testgraphnodes-test-a-bx-b15f7b876f",
+                ContextSpec::Chain(&[1]),
+                ContextSpec::Chain(&[9, 2]),
+                true,
+                A_EMPTY_BX_DOT,
+            ),
+            GraphCase::merge(
+                "test_a$_bx_fullctx",
+                "testgraphnodes-test-a-bx-fullctx-a35242b6cf",
+                ContextSpec::Chain(&[1]),
+                ContextSpec::Chain(&[9, 2]),
+                false,
+                A_EMPTY_BX_FULL_CONTEXT_DOT,
+            ),
+            GraphCase::merge(
+                "test_aex_bfx",
+                "testgraphnodes-test-aex-bfx-07ad9de126",
+                ContextSpec::Chain(&[9, 5, 1]),
+                ContextSpec::Chain(&[9, 6, 2]),
+                true,
+                AEX_BFX_DOT,
+            ),
+            GraphCase::merge(
+                "test_A$_A$_fullctx",
+                "testgraphnodes-test-a-a-fullctx-b023f64b6c",
+                ContextSpec::Array(&[&[]]),
+                ContextSpec::Array(&[&[]]),
+                false,
+                EMPTY_FULL_CONTEXT_DOT,
+            ),
+            GraphCase::merge(
+                "test_Aab_Ac",
+                "testgraphnodes-test-aab-ac-139c5b709d",
+                ContextSpec::Array(&[&[1], &[2]]),
+                ContextSpec::Array(&[&[3]]),
+                true,
+                A_B_C_DOT,
+            ),
+            GraphCase::merge(
+                "test_Aa_Aa",
+                "testgraphnodes-test-aa-aa-0a175c83db",
+                ContextSpec::Array(&[&[1]]),
+                ContextSpec::Array(&[&[1]]),
+                true,
+                A_DOT,
+            ),
+            GraphCase::merge(
+                "test_Aa_Abc",
+                "testgraphnodes-test-aa-abc-db12d99894",
+                ContextSpec::Array(&[&[1]]),
+                ContextSpec::Array(&[&[2], &[3]]),
+                true,
+                A_B_C_DOT,
+            ),
+            GraphCase::merge(
+                "test_Aac_Ab",
+                "testgraphnodes-test-aac-ab-ef785e17e7",
+                ContextSpec::Array(&[&[1], &[3]]),
+                ContextSpec::Array(&[&[2]]),
+                true,
+                A_B_C_DOT,
+            ),
+            GraphCase::merge(
+                "test_Aab_Aa",
+                "testgraphnodes-test-aab-aa-d90d8d54f0",
+                ContextSpec::Array(&[&[1], &[2]]),
+                ContextSpec::Array(&[&[1]]),
+                true,
+                A_B_DOT,
+            ),
+            GraphCase::merge(
+                "test_Aab_Ab",
+                "testgraphnodes-test-aab-ab-e2d46352b4",
+                ContextSpec::Array(&[&[1], &[2]]),
+                ContextSpec::Array(&[&[2]]),
+                true,
+                A_B_DOT,
+            ),
+            GraphCase::merge(
+                "test_Aax_Aby",
+                "testgraphnodes-test-aax-aby-cccf935759",
+                ContextSpec::Array(&[&[9, 1]]),
+                ContextSpec::Array(&[&[10, 2]]),
+                true,
+                AX_BY_DOT,
+            ),
+            GraphCase::merge(
+                "test_Aax_Aay",
+                "testgraphnodes-test-aax-aay-c0f9b80842",
+                ContextSpec::Array(&[&[9, 1]]),
+                ContextSpec::Array(&[&[10, 1]]),
+                true,
+                AAX_AAY_DOT,
+            ),
+            GraphCase::merge(
+                "test_Aaxc_Aayd",
+                "testgraphnodes-test-aaxc-aayd-a73533f64d",
+                ContextSpec::Array(&[&[9, 1], &[3]]),
+                ContextSpec::Array(&[&[10, 1], &[4]]),
+                true,
+                AAXC_AAYD_DOT,
+            ),
+            GraphCase::merge(
+                "test_Aaubv_Acwdx",
+                "testgraphnodes-test-aaubv-acwdx-f479c849df",
+                ContextSpec::Array(&[&[6, 1], &[7, 2]]),
+                ContextSpec::Array(&[&[8, 3], &[9, 4]]),
+                true,
+                AAUBV_ACWDX_DOT,
+            ),
+            GraphCase::merge(
+                "test_Aaubv_Abvdx",
+                "testgraphnodes-test-aaubv-abvdx-01eb5714fe",
+                ContextSpec::Array(&[&[6, 1], &[7, 2]]),
+                ContextSpec::Array(&[&[7, 2], &[9, 4]]),
+                true,
+                AAUBV_ABVDX_DOT,
+            ),
+            GraphCase::merge(
+                "test_Aaubv_Abwdx",
+                "testgraphnodes-test-aaubv-abwdx-7953c9b489",
+                ContextSpec::Array(&[&[6, 1], &[7, 2]]),
+                ContextSpec::Array(&[&[8, 2], &[9, 4]]),
+                true,
+                AAUBV_ABWDX_DOT,
+            ),
+            GraphCase::merge(
+                "test_Aaubv_Abvdu",
+                "testgraphnodes-test-aaubv-abvdu-ecc8850384",
+                ContextSpec::Array(&[&[6, 1], &[7, 2]]),
+                ContextSpec::Array(&[&[7, 2], &[6, 4]]),
+                true,
+                AAUBV_ABVDU_DOT,
+            ),
+            GraphCase::merge(
+                "test_Aaubu_Acudu",
+                "testgraphnodes-test-aaubu-acudu-7cb798b616",
+                ContextSpec::Array(&[&[6, 1], &[6, 2]]),
+                ContextSpec::Array(&[&[6, 3], &[6, 4]]),
+                true,
+                AAUBU_ACUDU_DOT,
+            ),
+        ];
+
+        fn build_chain(arena: &mut ContextArena, return_states: &[usize]) -> ContextId {
+            let mut context = EMPTY_CONTEXT;
+            for &return_state in return_states {
+                context = arena.singleton(context, return_state);
+            }
+            context
+        }
+
+        fn build_context(arena: &mut ContextArena, spec: ContextSpec) -> ContextId {
+            match spec {
+                ContextSpec::Empty => EMPTY_CONTEXT,
+                ContextSpec::Chain(return_states) => build_chain(arena, return_states),
+                ContextSpec::Array(chains) => {
+                    let mut entries = Vec::with_capacity(chains.len());
+                    for return_states in chains {
+                        let context = build_chain(arena, return_states);
+                        entries.push(arena.first_entry(context));
+                    }
+                    arena.intern_entries(&entries)
+                }
+            }
+        }
+
+        fn run_case(case: &GraphCase) -> String {
+            let mut arena = ContextArena::new();
+            let mut workspace = PredictionWorkspace::default();
+            let merged = match case.scenario {
+                Scenario::Merge { left, right } => {
+                    let left = build_context(&mut arena, left);
+                    let right = build_context(&mut arena, right);
+                    arena.merge(left, right, case.root_is_wildcard, &mut workspace)
+                }
+                Scenario::NestedFullContext => {
+                    let child = arena.singleton(EMPTY_CONTEXT, 8);
+                    let right = arena.merge(EMPTY_CONTEXT, child, false, &mut workspace);
+                    let left = arena.singleton(right, 8);
+                    arena.merge(left, right, false, &mut workspace)
+                }
+            };
+            render_dot(&arena, merged, case.root_is_wildcard)
+        }
+
+        fn render_dot(arena: &ContextArena, context: ContextId, root_is_wildcard: bool) -> String {
+            let mut nodes = String::new();
+            let mut edges = String::new();
+            let mut context_ids = HashMap::new();
+            let mut work_list = VecDeque::new();
+            context_ids.insert(context, 0);
+            work_list.push_back(context);
+
+            while let Some(current) = work_list.pop_front() {
+                let current_id = context_ids[&current];
+                let len = arena.len(current);
+                write!(&mut nodes, "  s{current_id}[").expect("write to string");
+                if len > 1 {
+                    nodes.push_str("shape=record, ");
+                }
+                nodes.push_str("label=\"");
+                if arena.is_empty(current) {
+                    nodes.push(if root_is_wildcard { '*' } else { '$' });
+                } else if len > 1 {
+                    for index in 0..len {
+                        if index > 0 {
+                            nodes.push('|');
+                        }
+                        write!(&mut nodes, "<p{index}>").expect("write to string");
+                        if arena.return_state(current, index) == Some(EMPTY_RETURN_STATE) {
+                            nodes.push(if root_is_wildcard { '*' } else { '$' });
+                        }
+                    }
+                } else {
+                    write!(&mut nodes, "{current_id}").expect("write to string");
+                }
+                nodes.push_str("\"];\n");
+
+                if arena.is_empty(current) {
+                    continue;
+                }
+                for index in 0..len {
+                    let return_state = arena
+                        .return_state(current, index)
+                        .expect("context entry in range");
+                    if return_state == EMPTY_RETURN_STATE {
+                        continue;
+                    }
+                    let parent = arena.parent(current, index).expect("non-empty parent");
+                    let parent_id = if let Some(&parent_id) = context_ids.get(&parent) {
+                        parent_id
+                    } else {
+                        let parent_id = context_ids.len();
+                        context_ids.insert(parent, parent_id);
+                        work_list.push_front(parent);
+                        parent_id
+                    };
+
+                    write!(&mut edges, "  s{current_id}").expect("write to string");
+                    if len > 1 {
+                        write!(&mut edges, ":p{index}").expect("write to string");
+                    }
+                    writeln!(&mut edges, "->s{parent_id}[label=\"{return_state}\"];")
+                        .expect("write to string");
+                }
+            }
+
+            let mut dot = String::from("digraph G {\nrankdir=LR;\n");
+            dot.push_str(&nodes);
+            dot.push_str(&edges);
+            dot.push_str("}\n");
+            dot
+        }
+
+        #[test]
+        fn pinned_upstream_test_graph_nodes_matches_dot() {
+            assert_eq!(CASES.len(), 38, "pinned Java source case inventory drifted");
+            let source_tests = CASES
+                .iter()
+                .map(|case| case.source_test)
+                .collect::<BTreeSet<_>>();
+            assert_eq!(
+                source_tests.len(),
+                38,
+                "pinned Java source test names must be unique"
+            );
+            let logical_ids = CASES
+                .iter()
+                .map(|case| case.logical_id)
+                .collect::<BTreeSet<_>>();
+            assert_eq!(
+                logical_ids.len(),
+                36,
+                "pinned upstream logical row inventory drifted"
+            );
+
+            let selector = std::env::var("ANTLR_GRAPH_NODE_CASE").ok();
+            let selected = CASES
+                .iter()
+                .filter(|case| {
+                    selector
+                        .as_deref()
+                        .is_none_or(|logical_id| case.logical_id == logical_id)
+                })
+                .collect::<Vec<_>>();
+            assert!(
+                !selected.is_empty(),
+                "ANTLR_GRAPH_NODE_CASE={:?} matched no logical row",
+                selector.as_deref().unwrap_or_default()
+            );
+
+            let mut mismatches = Vec::new();
+            for case in &selected {
+                let actual = run_case(case);
+                if actual != case.expected {
+                    mismatches.push(format!(
+                        "logical_id={}\nsource_test={}\n--- expected\n{}--- actual\n{}",
+                        case.logical_id, case.source_test, case.expected, actual
+                    ));
+                }
+            }
+
+            assert!(
+                mismatches.is_empty(),
+                "TestGraphNodes DOT mismatches ({}/{} source cases):\n\n{}",
+                mismatches.len(),
+                selected.len(),
+                mismatches.join("\n")
+            );
+        }
+    }
 }
