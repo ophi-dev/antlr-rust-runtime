@@ -47,6 +47,19 @@ const GRAMMAR_OPTIONS: &[&str] = &[
 const RULE_REF_OPTIONS: &[&str] = &["p", "tokenIndex"];
 const TOKEN_OPTIONS: &[&str] = &["assoc", "tokenIndex"];
 const TOKEN_ATTRIBUTES: &[&str] = &["text", "type", "line", "index", "pos", "channel", "int"];
+const SUPPORTED_TARGET_LANGUAGES: &[&str] = &[
+    "Cpp",
+    "CSharp",
+    "Dart",
+    "Go",
+    "JavaScript",
+    "Java",
+    "PHP",
+    "Python3",
+    "Rust",
+    "Swift",
+    "TypeScript",
+];
 
 #[derive(Clone, Debug)]
 pub(crate) struct SemanticGrammarSet {
@@ -62,6 +75,7 @@ pub(crate) fn analyze(
     mut integrated: IntegratedGrammarSet,
 ) -> Result<SemanticGrammarSet, CompilationError> {
     let mut diagnostics = std::mem::take(&mut integrated.diagnostics);
+    let deferred_diagnostics = channel_placement_diagnostics(&integrated.grammar.units);
     diagnostics.extend(basic_checks(&integrated.grammar.units));
     if has_blocking_basic_errors(&diagnostics) {
         return Err(CompilationError::new(diagnostics));
@@ -113,6 +127,7 @@ pub(crate) fn analyze(
         grammars.push(semantic);
     }
 
+    diagnostics.extend(deferred_diagnostics);
     if has_errors(&diagnostics) {
         return Err(CompilationError::new(diagnostics));
     }
@@ -206,7 +221,7 @@ fn check_unit_basics(unit: &GrammarUnit, diagnostics: &mut Vec<Diagnostic>) {
     let rule_names = rules.keys().copied().collect::<BTreeSet<_>>();
     for rule in &unit.rules {
         check_rule_options(unit, rule, diagnostics);
-        check_block_options(&rule.block, diagnostics);
+        check_block_options(&rule.block, &rule.name, diagnostics);
         visit_elements(&rule.block, &mut |_, _, element| {
             if let ElementKind::RuleCall(call) = &element.kind {
                 if !rule_names.contains(call.name.as_str()) {
@@ -254,17 +269,17 @@ fn check_unit_basics(unit: &GrammarUnit, diagnostics: &mut Vec<Diagnostic>) {
                     ));
                 }
             });
-            if rule
+            for command in rule
                 .block
                 .alternatives
                 .iter()
-                .any(|alternative| !alternative.commands.is_empty())
+                .flat_map(|alternative| &alternative.commands)
             {
                 diagnostics.push(Diagnostic::warning(
                     "G4S010",
-                    rule.span.clone(),
+                    command.span.clone(),
                     format!(
-                        "fragment rule {} contains a command which cannot execute",
+                        "fragment rule {} contains an action or command which cannot execute",
                         rule.name
                     ),
                 ));
@@ -333,6 +348,7 @@ fn check_source_prequels(unit: &GrammarUnit, diagnostics: &mut Vec<Diagnostic>) 
                 check_options(options, GRAMMAR_OPTIONS, diagnostics);
                 for option in options {
                     check_case_insensitive_value(option, diagnostics);
+                    check_target_language(option, diagnostics);
                 }
             }
             GrammarPrequel::Tokens { declarations, .. } => {
@@ -341,7 +357,7 @@ fn check_source_prequels(unit: &GrammarUnit, diagnostics: &mut Vec<Diagnostic>) 
                     check_token_declaration(token, &mut token_names, diagnostics);
                 }
             }
-            GrammarPrequel::Imports { .. } => {}
+            GrammarPrequel::Imports { .. } | GrammarPrequel::Channels { .. } => {}
         }
     }
     check_repeated_prequels(&unit.prequels, diagnostics);
@@ -373,7 +389,8 @@ fn check_repeated_prequels(prequels: &[GrammarPrequel], diagnostics: &mut Vec<Di
         let span = match second {
             GrammarPrequel::Options { span, .. }
             | GrammarPrequel::Imports { span }
-            | GrammarPrequel::Tokens { span, .. } => span,
+            | GrammarPrequel::Tokens { span, .. }
+            | GrammarPrequel::Channels { span, .. } => span,
         };
         diagnostics.push(Diagnostic::error(
             "G4S054",
@@ -432,6 +449,21 @@ fn check_case_insensitive_value(
     }
 }
 
+fn check_target_language(option: &super::model::OptionDecl, diagnostics: &mut Vec<Diagnostic>) {
+    if option.name.value == "language"
+        && !SUPPORTED_TARGET_LANGUAGES.contains(&option.value.value.as_str())
+    {
+        diagnostics.push(Diagnostic::error(
+            "G4S014",
+            option.value.span.clone(),
+            format!(
+                "ANTLR cannot generate {} code because the target is not supported",
+                option.value.value
+            ),
+        ));
+    }
+}
+
 fn parse_boolean_option(value: &str) -> Option<bool> {
     match value {
         "true" => Some(true),
@@ -440,10 +472,11 @@ fn parse_boolean_option(value: &str) -> Option<bool> {
     }
 }
 
-fn check_block_options(block: &Block, diagnostics: &mut Vec<Diagnostic>) {
+fn check_block_options(block: &Block, rule_name: &str, diagnostics: &mut Vec<Diagnostic>) {
     check_options(&block.options, &[], diagnostics);
     for alternative in &block.alternatives {
         for element in &alternative.elements {
+            check_misplaced_assoc_option(&element.options, rule_name, diagnostics);
             if let Some(label) = &element.label {
                 if matches!(element.kind, ElementKind::Block(_)) {
                     diagnostics.push(Diagnostic::error(
@@ -469,15 +502,36 @@ fn check_block_options(block: &Block, diagnostics: &mut Vec<Diagnostic>) {
                             SetElement::Terminal { options, .. }
                             | SetElement::Range { options, .. } => options,
                         };
+                        check_misplaced_assoc_option(options, rule_name, diagnostics);
                         check_assigned_element_options(options, TOKEN_OPTIONS, diagnostics);
                     }
                 }
-                ElementKind::Block(nested) => check_block_options(nested, diagnostics),
+                ElementKind::Block(nested) => {
+                    check_block_options(nested, rule_name, diagnostics);
+                }
                 ElementKind::Range(..)
                 | ElementKind::Action { .. }
                 | ElementKind::Predicate { .. }
                 | ElementKind::Epsilon => {}
             }
+        }
+    }
+}
+
+fn check_misplaced_assoc_option(
+    options: &[super::model::OptionDecl],
+    rule_name: &str,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    for option in options {
+        if option.name.value == "assoc" {
+            diagnostics.push(Diagnostic::warning(
+                "G4S014",
+                option.name.span.clone(),
+                format!(
+                    "rule {rule_name} contains an assoc terminal option in an unrecognized location"
+                ),
+            ));
         }
     }
 }
@@ -584,15 +638,6 @@ fn check_token_declaration<'a>(
 }
 
 fn check_channel_declarations(unit: &GrammarUnit, diagnostics: &mut Vec<Diagnostic>) {
-    if unit.kind != GrammarKind::Lexer && !unit.channels.is_empty() {
-        for channel in &unit.channels {
-            diagnostics.push(Diagnostic::error(
-                "G4S020",
-                channel.name.span.clone(),
-                "channels blocks are only allowed in lexer grammars",
-            ));
-        }
-    }
     let mut channels = BTreeMap::new();
     for channel in &unit.channels {
         if COMMON_CONSTANTS.contains(&channel.name.value.as_str()) {
@@ -613,6 +658,25 @@ fn check_channel_declarations(unit: &GrammarUnit, diagnostics: &mut Vec<Diagnost
             );
         }
     }
+}
+
+fn channel_placement_diagnostics(units: &[GrammarUnit]) -> Vec<Diagnostic> {
+    let mut diagnostics = Vec::new();
+    for unit in units {
+        if unit.kind == GrammarKind::Lexer {
+            continue;
+        }
+        for prequel in &unit.prequels {
+            if let GrammarPrequel::Channels { span, .. } = prequel {
+                diagnostics.push(Diagnostic::error(
+                    "G4S020",
+                    span.clone(),
+                    "channels blocks are only allowed in lexer grammars",
+                ));
+            }
+        }
+    }
+    diagnostics
 }
 
 fn check_modes(unit: &GrammarUnit, diagnostics: &mut Vec<Diagnostic>) {

@@ -303,6 +303,7 @@ impl ModelBuilder<'_> {
                 });
             }
             if let Some(spec) = prequel.child_rule(p::RULE_CHANNELS_SPEC) {
+                let start = channels.len();
                 let names = spec
                     .child_rule(p::RULE_ID_LIST)
                     .into_iter()
@@ -316,6 +317,10 @@ impl ModelBuilder<'_> {
                     self.authored(ModelNodeId::Channel(declaration.id), node);
                     channels.push(declaration);
                 }
+                grammar_prequels.push(GrammarPrequel::Channels {
+                    declarations: start..channels.len(),
+                    span: spec.span(),
+                });
             }
             if let Some(action) = prequel.child_rule(p::RULE_ACTION) {
                 if let Some(action) = self.named_action(action, None) {
@@ -967,10 +972,13 @@ fn rule_call_kind(node: SyntaxNodeRef<'_>) -> ElementKind {
 fn parse_range(node: SyntaxNodeRef<'_>) -> ElementKind {
     let literals = node
         .child_terminals(p::STRING_LITERAL)
-        .map(|literal| literal.text().to_owned())
+        .map(authored_text)
         .collect::<Vec<_>>();
+    let operator_span = node
+        .child_terminal(p::RANGE)
+        .map_or_else(|| node.span(), SyntaxNodeRef::span);
     match literals.as_slice() {
-        [start, stop] => ElementKind::Range(start.clone(), stop.clone()),
+        [start, stop] => ElementKind::Range(start.clone(), stop.clone(), operator_span),
         _ => ElementKind::Epsilon,
     }
 }

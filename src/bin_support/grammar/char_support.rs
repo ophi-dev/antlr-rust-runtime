@@ -124,11 +124,61 @@ pub(super) fn get_range_escaped_string(start: i32, stop: i32) -> String {
 }
 
 pub(super) fn decode_string_literal(literal: &str) -> Result<Vec<i32>, String> {
+    let decoded = decode_string_literal_with_errors(literal)?;
+    if let Some(error) = decoded.invalid_escapes.first() {
+        return Err(format!("invalid escape sequence {}", error.sequence));
+    }
+    Ok(decoded.values)
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct InvalidEscapeSequence {
+    pub(super) offset: usize,
+    pub(super) sequence: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct DecodedStringLiteral {
+    pub(super) values: Vec<i32>,
+    pub(super) invalid_escapes: Vec<InvalidEscapeSequence>,
+}
+
+pub(super) fn decode_string_literal_with_errors(
+    literal: &str,
+) -> Result<DecodedStringLiteral, String> {
     let body = literal
         .strip_prefix('\'')
         .and_then(|value| value.strip_suffix('\''))
         .ok_or_else(|| format!("invalid lexer string literal {literal}"))?;
-    decode_literal_body(body)
+    let mut values = Vec::new();
+    let mut invalid_escapes = Vec::new();
+    let mut cursor = 0;
+    while cursor < body.len() {
+        let character = body[cursor..]
+            .chars()
+            .next()
+            .expect("cursor is on a character boundary");
+        if character != '\\' {
+            push_code_point(&mut values, character as i32);
+            cursor += character.len_utf8();
+            continue;
+        }
+
+        let (value, consumed) = scan_string_escape(body, cursor);
+        if let Some(value) = value {
+            push_code_point(&mut values, value);
+        } else {
+            invalid_escapes.push(InvalidEscapeSequence {
+                offset: cursor + 1,
+                sequence: body[cursor..cursor + consumed].to_owned(),
+            });
+        }
+        cursor += consumed;
+    }
+    Ok(DecodedStringLiteral {
+        values,
+        invalid_escapes,
+    })
 }
 
 pub(super) fn decode_character_literal(literal: &str) -> Result<i32, String> {
@@ -159,6 +209,34 @@ fn decode_literal_body(body: &str) -> Result<Vec<i32>, String> {
         }
     }
     Ok(values)
+}
+
+fn scan_string_escape(body: &str, start: usize) -> (Option<i32>, usize) {
+    let tail = &body[start..];
+    let mut characters = tail.char_indices();
+    let Some((_, '\\')) = characters.next() else {
+        unreachable!("string escape scan starts at a backslash");
+    };
+    let Some((escaped_offset, escaped)) = characters.next() else {
+        return (None, 1);
+    };
+    let escaped_end = escaped_offset + escaped.len_utf8();
+    let consumed = if escaped == 'u' {
+        let unicode = &tail[escaped_end..];
+        unicode.strip_prefix('{').map_or_else(
+            || 6.min(tail.len()),
+            |braced| {
+                braced
+                    .find('}')
+                    .map_or(tail.len(), |close| escaped_end + 1 + close + 1)
+            },
+        )
+    } else {
+        escaped_end
+    };
+    let sequence = &tail[..consumed];
+    let value = get_char_value_from_char_in_grammar_literal(sequence);
+    ((value >= 0).then_some(value), consumed)
 }
 
 fn push_code_point(values: &mut Vec<i32>, value: i32) {
@@ -199,7 +277,7 @@ pub(super) fn parse_code_point_escape(
         'b' => Some('\u{0008}'),
         'f' => Some('\u{000c}'),
         '\\' => Some('\\'),
-        '\'' => Some('\''),
+        '\'' if !in_set => Some('\''),
         ']' | '-' if in_set => Some(escaped),
         _ => None,
     };

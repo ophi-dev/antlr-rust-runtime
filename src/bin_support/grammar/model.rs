@@ -194,6 +194,10 @@ pub(crate) enum GrammarPrequel {
         declarations: std::ops::Range<usize>,
         span: SourceSpan,
     },
+    Channels {
+        declarations: std::ops::Range<usize>,
+        span: SourceSpan,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -321,7 +325,7 @@ pub(crate) enum SetElement {
 pub(crate) enum ElementKind {
     Terminal(Terminal),
     RuleCall(RuleCall),
-    Range(String, String),
+    Range(Authored<String>, Authored<String>, SourceSpan),
     Set {
         inverted: bool,
         elements: Vec<SetElement>,

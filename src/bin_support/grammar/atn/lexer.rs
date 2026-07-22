@@ -9,17 +9,18 @@ use petgraph::algo::tarjan_scc;
 use petgraph::graph::DiGraph;
 
 use super::super::char_support::{
-    decode_character_literal, decode_string_literal, parse_code_point_escape,
+    decode_character_literal, decode_string_literal_with_errors, parse_code_point_escape,
 };
 use super::super::diagnostic::{CompilationError, Diagnostic, Severity};
 use super::super::escape_sequence::{EscapeSequenceResult, parse_escape};
 use super::super::frontend::SourceSpan;
 use super::super::model::{
-    Alternative, Block, BuildStateId, Element, ElementKind, ModelNodeId, Quantifier,
+    Alternative, Authored, Block, BuildStateId, Element, ElementKind, ModelNodeId, Quantifier,
     ResolvedLexerCommand, Rule, RuleId, SemanticGrammar, SetElement, Terminal,
 };
 use super::super::provenance::{Origin, ProvenanceIndex, SyntheticReason};
 use super::super::unicode::{property_ranges, simple_lowercase, simple_uppercase};
+use super::analysis::LookAnalyzer;
 use super::build::{
     BuildGraph, BuildTransitionKind, BuildTransitionSpec, FinalizedAtnGraph, FinalizedTransition,
     FinalizedTransitionKind,
@@ -96,6 +97,25 @@ fn has_errors(diagnostics: &[Diagnostic]) -> bool {
     diagnostics
         .iter()
         .any(|diagnostic| diagnostic.severity == Severity::Error)
+}
+
+fn offset_span(span: &SourceSpan, offset: usize, length: usize) -> SourceSpan {
+    let offset = u32::try_from(offset).expect("literal offset exceeds u32");
+    let length = u32::try_from(length).expect("literal error length exceeds u32");
+    let start = span
+        .bytes
+        .start
+        .checked_add(offset)
+        .expect("literal error span exceeds u32")
+        .min(span.bytes.end);
+    let end = start
+        .checked_add(length)
+        .expect("literal error span exceeds u32")
+        .min(span.bytes.end);
+    SourceSpan {
+        source: span.source,
+        bytes: start..end,
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -330,7 +350,9 @@ impl<'a> LexerFactory<'a> {
         let base = match &element.kind {
             ElementKind::Terminal(terminal) => self.terminal(element, terminal),
             ElementKind::RuleCall(_) => self.rule_call(element),
-            ElementKind::Range(start, stop) => self.range_pair(owner, start, stop, &element.span),
+            ElementKind::Range(start, stop, operator_span) => {
+                self.range_pair(owner, start, stop, operator_span)
+            }
             ElementKind::Set { inverted, elements } => {
                 self.set_pair(owner, *inverted, elements, &element.span)
             }
@@ -383,16 +405,8 @@ impl<'a> LexerFactory<'a> {
             }
             Terminal::Eof => self.atom_pair(owner, EOF_CODE_POINT),
             Terminal::Literal(literal) => {
-                let values = match decode_string_literal(literal) {
-                    Ok(values) if !values.is_empty() => values,
-                    Ok(_) => {
-                        self.diagnostics.push(Diagnostic::error(
-                            "G4L001",
-                            element.span.clone(),
-                            "lexer string literal cannot be empty",
-                        ));
-                        return self.epsilon_pair(owner);
-                    }
+                let decoded = match decode_string_literal_with_errors(literal) {
+                    Ok(decoded) => decoded,
                     Err(message) => {
                         self.diagnostics.push(Diagnostic::error(
                             "G4L002",
@@ -401,6 +415,26 @@ impl<'a> LexerFactory<'a> {
                         ));
                         return self.epsilon_pair(owner);
                     }
+                };
+                if !decoded.invalid_escapes.is_empty() {
+                    for error in decoded.invalid_escapes {
+                        self.diagnostics.push(Diagnostic::error(
+                            "G4L002",
+                            offset_span(&element.span, error.offset, error.sequence.len()),
+                            format!("invalid escape sequence {}", error.sequence),
+                        ));
+                    }
+                    return self.epsilon_pair(owner);
+                }
+                let values = if decoded.values.is_empty() {
+                    self.diagnostics.push(Diagnostic::error(
+                        "G4L001",
+                        element.span.clone(),
+                        "lexer string literal cannot be empty",
+                    ));
+                    return self.epsilon_pair(owner);
+                } else {
+                    decoded.values
                 };
                 let pairs = values
                     .into_iter()
@@ -506,30 +540,39 @@ impl<'a> LexerFactory<'a> {
     fn range_pair(
         &mut self,
         owner: ModelNodeId,
-        start: &str,
-        stop: &str,
-        span: &SourceSpan,
+        start: &Authored<String>,
+        stop: &Authored<String>,
+        operator_span: &SourceSpan,
     ) -> StatePair {
-        let start = decode_character_literal(start);
-        let stop = decode_character_literal(stop);
-        match (start, stop) {
-            (Ok(start), Ok(stop)) if start <= stop => {
-                self.report_not_implied_characters(start, stop, span);
-                self.character_pair(owner, start, stop)
-            }
-            (Ok(start), Ok(stop)) => {
-                self.diagnostics.push(Diagnostic::error(
-                    "G4L001",
-                    span.clone(),
-                    format!("empty character range {start:#x}..{stop:#x}"),
-                ));
-                self.epsilon_pair(owner)
-            }
-            (Err(message), _) | (_, Err(message)) => {
+        let start_value = match decode_character_literal(&start.value) {
+            Ok(value) => Some(value),
+            Err(message) => {
                 self.diagnostics
-                    .push(Diagnostic::error("G4L002", span.clone(), message));
-                self.epsilon_pair(owner)
+                    .push(Diagnostic::error("G4L002", start.span.clone(), message));
+                None
             }
+        };
+        let stop_value = match decode_character_literal(&stop.value) {
+            Ok(value) => Some(value),
+            Err(message) => {
+                self.diagnostics
+                    .push(Diagnostic::error("G4L002", stop.span.clone(), message));
+                None
+            }
+        };
+        let (Some(start_value), Some(stop_value)) = (start_value, stop_value) else {
+            return self.epsilon_pair(owner);
+        };
+        if start_value <= stop_value {
+            self.report_not_implied_characters(start_value, stop_value, &start.span);
+            self.character_pair(owner, start_value, stop_value)
+        } else {
+            self.diagnostics.push(Diagnostic::error(
+                "G4L001",
+                operator_span.clone(),
+                format!("empty character range {start_value:#x}..{stop_value:#x}"),
+            ));
+            self.epsilon_pair(owner)
         }
     }
 
@@ -1242,24 +1285,35 @@ fn analyze_lexer(
 ) -> Result<LexerAnalysis, CompilationError> {
     let nullable_indices = nullable_rule_indices(graph);
     let recursive_components = recursive_rule_components(grammar);
-    let transitions = transitions_by_id(graph);
+    let analyzer = LookAnalyzer::new(graph);
     for (rule, start, stop) in closure_sites {
         let (Some(&start), Some(&stop)) = (graph.state_map.get(&start), graph.state_map.get(&stop))
         else {
             continue;
         };
-        if epsilon_reaches(graph, &transitions, start, stop, &nullable_indices) {
-            let rule = grammar
-                .unit
-                .rules
-                .iter()
-                .find(|candidate| candidate.id == rule)
-                .expect("closure rule belongs to grammar");
+        let lookahead = analyzer.look(start, Some(stop), true, true);
+        let rule = grammar
+            .unit
+            .rules
+            .iter()
+            .find(|candidate| candidate.id == rule)
+            .expect("closure rule belongs to grammar");
+        if lookahead.epsilon {
             diagnostics.push(Diagnostic::error(
                 "G4A001",
-                rule.span.clone(),
+                rule.name_span.clone(),
                 format!(
                     "rule {} contains a closure whose body can match an empty string",
+                    rule.name
+                ),
+            ));
+        }
+        if lookahead.contains(EOF_CODE_POINT) {
+            diagnostics.push(Diagnostic::error(
+                "G4A003",
+                rule.name_span.clone(),
+                format!(
+                    "rule {} contains a closure whose body can match EOF",
                     rule.name
                 ),
             ));

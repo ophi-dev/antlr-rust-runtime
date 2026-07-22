@@ -430,13 +430,13 @@ fn range_overlaps_any(range: (i32, i32), ranges: &[(i32, i32)]) -> bool {
         .any(|other| range.0 <= other.1 && other.0 <= range.1)
 }
 
-struct LookAnalyzer<'a> {
+pub(super) struct LookAnalyzer<'a> {
     graph: &'a FinalizedAtnGraph,
     transitions: BTreeMap<super::super::model::BuildTransitionId, &'a FinalizedTransition>,
 }
 
 impl<'a> LookAnalyzer<'a> {
-    fn new(graph: &'a FinalizedAtnGraph) -> Self {
+    pub(super) fn new(graph: &'a FinalizedAtnGraph) -> Self {
         Self {
             graph,
             transitions: transitions_by_id(graph),
@@ -453,7 +453,7 @@ impl<'a> LookAnalyzer<'a> {
             .filter_map(|transition| self.transitions.get(transition).copied())
     }
 
-    fn look(
+    pub(super) fn look(
         &self,
         start: usize,
         stop: Option<usize>,
@@ -596,14 +596,14 @@ struct ReturnFrame {
 }
 
 #[derive(Default)]
-struct LookResult {
+pub(super) struct LookResult {
     ranges: Vec<(i32, i32)>,
-    epsilon: bool,
+    pub(super) epsilon: bool,
     hit_predicate: bool,
 }
 
 impl LookResult {
-    fn contains(&self, symbol: i32) -> bool {
+    pub(super) fn contains(&self, symbol: i32) -> bool {
         self.ranges
             .iter()
             .any(|(start, stop)| *start <= symbol && symbol <= *stop)

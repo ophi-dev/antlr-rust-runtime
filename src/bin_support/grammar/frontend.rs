@@ -9,8 +9,8 @@ use antlr4_runtime::{
 };
 
 use super::generated::antlr_v4_lexer::{
-    AntlRv4Lexer, BLOCK_COMMENT, DOC_COMMENT, UNTERMINATED_ARGUMENT, UNTERMINATED_CHAR_SET,
-    UNTERMINATED_STRING_LITERAL,
+    AntlRv4Lexer, BLOCK_COMMENT, COLON, DOC_COMMENT, MODE, RANGE, RULE_REF, SEMI, STRING_LITERAL,
+    UNTERMINATED_ARGUMENT, UNTERMINATED_CHAR_SET, UNTERMINATED_STRING_LITERAL,
 };
 use super::generated::antlr_v4_parser::AntlRv4Parser;
 use super::lexer_adaptor::LexerAdaptor;
@@ -302,6 +302,7 @@ pub(crate) fn parse_source(
         ),
         message: diagnostic.message,
     }));
+    normalize_parser_diagnostics(&tokens, &mut diagnostics);
 
     let root = match root {
         Ok(root) if syntax_error_count == 0 && diagnostics.is_empty() => root,
@@ -351,6 +352,82 @@ pub(crate) fn parse_source(
         trivia,
         cst,
     })
+}
+
+fn normalize_parser_diagnostics(tokens: &[SyntaxToken], diagnostics: &mut Vec<SyntaxDiagnostic>) {
+    let significant = tokens
+        .iter()
+        .filter(|token| token.channel == antlr4_runtime::token::DEFAULT_CHANNEL)
+        .collect::<Vec<_>>();
+
+    for diagnostic in diagnostics.iter_mut() {
+        let Some(index) = diagnostic_token_index(&significant, &diagnostic.span) else {
+            continue;
+        };
+        if significant[index].token_type == RANGE
+            && index > 0
+            && significant[index - 1].token_type == STRING_LITERAL
+            && significant
+                .get(index + 1)
+                .is_some_and(|token| token.token_type == STRING_LITERAL)
+        {
+            diagnostic.code = "G4S009";
+            diagnostic.span = significant[index - 1].span.clone();
+            "character ranges are not allowed in parser rules".clone_into(&mut diagnostic.message);
+        }
+    }
+
+    let mut recovered = Vec::new();
+    for diagnostic in diagnostics.iter() {
+        let Some(index) = diagnostic_token_index(&significant, &diagnostic.span) else {
+            continue;
+        };
+        if significant[index].token_type != RULE_REF
+            || significant
+                .get(index + 1)
+                .is_none_or(|token| token.token_type != COLON)
+        {
+            continue;
+        }
+        let Some(mode_index) = significant[..index]
+            .iter()
+            .rposition(|token| token.token_type == MODE)
+        else {
+            continue;
+        };
+        if !significant[mode_index + 1..index]
+            .iter()
+            .any(|token| token.token_type == SEMI)
+        {
+            continue;
+        }
+        let Some(semicolon) = significant[index + 1..]
+            .iter()
+            .find(|token| token.token_type == SEMI)
+        else {
+            continue;
+        };
+        if diagnostics
+            .iter()
+            .chain(&recovered)
+            .any(|existing| existing.span == semicolon.span)
+        {
+            continue;
+        }
+        recovered.push(SyntaxDiagnostic {
+            code: "G4F003",
+            stage: DiagnosticStage::Parser,
+            span: semicolon.span.clone(),
+            message: "mismatched input ';' expecting COLON while matching a lexer rule".to_owned(),
+        });
+    }
+    diagnostics.extend(recovered);
+}
+
+fn diagnostic_token_index(tokens: &[&SyntaxToken], span: &SourceSpan) -> Option<usize> {
+    tokens
+        .iter()
+        .position(|token| token.span.bytes.start == span.bytes.start)
 }
 
 fn line_starts(source: SourceId, text: &str) -> Result<Box<[u32]>, FrontendError> {

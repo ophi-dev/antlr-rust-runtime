@@ -196,13 +196,13 @@ impl<'a> ParserFactory<'a> {
         let base = match &element.kind {
             ElementKind::Terminal(terminal) => self.terminal(element, terminal),
             ElementKind::RuleCall(_) => self.rule_call(element),
-            ElementKind::Range(start, _) => {
+            ElementKind::Range(start, _, _) => {
                 let token_type = self
                     .grammar
                     .recognizer
                     .vocabulary
                     .by_literal
-                    .get(start)
+                    .get(&start.value)
                     .copied()
                     .unwrap_or(EOF_TOKEN_TYPE);
                 self.atom_pair(owner, token_type)
