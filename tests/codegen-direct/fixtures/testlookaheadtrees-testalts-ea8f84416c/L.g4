@@ -1,0 +1,11 @@
+lexer grammar L;
+DOT  : '.' ;
+SEMI : ';' ;
+BANG : '!' ;
+PLUS : '+' ;
+LPAREN : '(' ;
+RPAREN : ')' ;
+MULT : '*' ;
+ID : [a-z]+ ;
+INT : [0-9]+ ;
+WS : [ \r\t\n]+ ;

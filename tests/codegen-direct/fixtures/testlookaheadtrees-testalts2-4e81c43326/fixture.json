@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "L.g4",
+    "T.g4"
+  ],
+  "logical_ids": [
+    "testlookaheadtrees-testalts2-4e81c43326"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:testlookaheadtrees-testalts2@12257528ce73",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestLookaheadTrees.spec.ts",
+      "case": "testAlts2",
+      "source_sha256": "8fc3e962d00320d6734578c51307e0adfcce404ce46b862b66fae4c6b9a384dd"
+    },
+    {
+      "source_case_id": "java-antlr:testlookaheadtrees-testalts2@12257528ce73",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestLookaheadTrees.java",
+      "case": "testAlts2",
+      "source_sha256": "a7be06bbd9a3d78760a2c04713a8ec23a008c866dc742ed43e0c3b2297c38abf"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testlookaheadtrees-testalts2@12257528ce73",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestLookaheadTrees.java",
+    "case": "testAlts2",
+    "source_sha256": "a7be06bbd9a3d78760a2c04713a8ec23a008c866dc742ed43e0c3b2297c38abf"
+  },
+  "antlr_ng_test": {
+    "source_case_id": "antlr-ng:testlookaheadtrees-testalts2@12257528ce73",
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/TestLookaheadTrees.spec.ts",
+    "case": "testAlts2",
+    "source_sha256": "8fc3e962d00320d6734578c51307e0adfcce404ce46b862b66fae4c6b9a384dd"
+  },
+  "expected": "success",
+  "lookahead_tree_oracle": {
+    "invocations": [
+      {
+        "input": "a;",
+        "start_rule": "s",
+        "decision": 1,
+        "expected_trees": [
+          "(e:2 (e:1 a) <error ;>)",
+          "(s:1 (e:1 a) ; <EOF>)"
+        ]
+      }
+    ],
+    "source_adaptation": "normalized trailing horizontal whitespace and added options { tokenVocab=L; } to express the upstream in-memory LexerGrammar dependency as a source-set edge",
+    "agreement": "Java and antlr-ng use the same lexer, parser grammar, inputs, decisions, and expected lookahead trees",
+    "compatibility_verdict": "Java ANTLR 4.13.2"
+  },
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "unicode_data": {
+      "generator": "org.antlr.v4.unicode.UnicodeDataTemplateController",
+      "helper": "tools/grammar-frontend/oracle/GenerateUnicodeData.java",
+      "helper_sha256": "9adec4f06cb31c7c7e408336e8fe935741f6d4ec5e8113e76450551ec1e3967f",
+      "icu4j_version": "78.1.0.0",
+      "icu4j_jar_sha256": "bbb70d3be23110d7295823eee0c2e896ac3b619b3c0f26168f65eb972df51d2a",
+      "unicode_version": "17.0.0.0"
+    },
+    "exit_status": 0
+  },
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh testlookaheadtrees-testalts2-4e81c43326 --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar --icu-jar /tmp/antlr-cleanroom/tools/icu4j-78.1.jar",
+  "files": {
+    "L.g4": "da4ceca7286c1269efc708e8e194f716314566db221e363cfa05a348e2525338",
+    "L.interp": "cc60d0d15c06bf41a96360190e1bcbaeadb9ab383910e94b772afcd471eabbf4",
+    "L.tokens": "a22e2bb88c972fedb1bd564eee323d6318902f16a0c57de895f1e2e66cf1c94a",
+    "T.g4": "6129dd427534ca476f1ea485dffbf44d6c6176f8f3f851d1eb5a3a1d60cba8b1",
+    "T.interp": "c199981176e02a6e8365662484363d156e93b1fb3e687e415827160b9182bd7c",
+    "T.tokens": "a22e2bb88c972fedb1bd564eee323d6318902f16a0c57de895f1e2e66cf1c94a",
+    "oracle/java-antlr.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stdout": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+  }
+}
