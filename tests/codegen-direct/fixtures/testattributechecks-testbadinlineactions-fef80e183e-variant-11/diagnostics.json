@@ -1,0 +1,11 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 63,
+      "line": 7,
+      "column": 4,
+      "message": "unknown attribute reference d in $d.text"
+    }
+  ]
+}

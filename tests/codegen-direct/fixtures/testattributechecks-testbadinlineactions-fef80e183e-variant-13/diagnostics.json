@@ -1,0 +1,11 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 135,
+      "line": 7,
+      "column": 4,
+      "message": "cannot assign a value to list label ids"
+    }
+  ]
+}

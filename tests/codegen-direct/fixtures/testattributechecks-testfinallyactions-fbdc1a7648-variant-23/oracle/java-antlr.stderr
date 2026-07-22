@@ -1,0 +1,1 @@
+error(64): A.g4:11:18: parameter d of rule b is not accessible in this scope: $lab.d

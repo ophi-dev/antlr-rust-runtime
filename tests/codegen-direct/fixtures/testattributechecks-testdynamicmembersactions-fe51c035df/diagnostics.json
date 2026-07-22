@@ -1,0 +1,11 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 63,
+      "line": 2,
+      "column": 11,
+      "message": "unknown attribute reference S in $S"
+    }
+  ]
+}

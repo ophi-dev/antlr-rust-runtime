@@ -1,0 +1,1 @@
+error(57): A.g4:7:4: reference to undefined rule S in non-local ref $S::j = 3;

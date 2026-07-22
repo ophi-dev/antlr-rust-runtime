@@ -1,0 +1,18 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 63,
+      "line": 7,
+      "column": 4,
+      "message": "unknown attribute reference q in $q = $blort;"
+    },
+    {
+      "severity": "error",
+      "code": 63,
+      "line": 7,
+      "column": 9,
+      "message": "unknown attribute reference blort in $blort"
+    }
+  ]
+}

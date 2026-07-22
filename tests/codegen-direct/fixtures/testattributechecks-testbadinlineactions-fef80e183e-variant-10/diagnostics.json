@@ -1,0 +1,11 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 64,
+      "line": 7,
+      "column": 6,
+      "message": "parameter d of rule b is not accessible in this scope: $b.d"
+    }
+  ]
+}

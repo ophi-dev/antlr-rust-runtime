@@ -2510,6 +2510,133 @@ mod tests {
         }
     }
 
+    mod upstream_attribute_checks {
+        use super::*;
+
+        macro_rules! case {
+            (
+                $name:ident,
+                $fixture:literal,
+                $root:literal,
+                $expects_error:literal,
+                [$($expected:expr),* $(,)?]
+            ) => {
+                mod $name {
+                    use super::*;
+
+                    #[test]
+                    fn matches_java() {
+                        assert_attribute_fixture(
+                            $fixture,
+                            $root,
+                            $expects_error,
+                            &[$($expected),*],
+                        );
+                    }
+                }
+            };
+        }
+
+        include!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/codegen-direct/generated/attribute-checks-cases.inc.rs"
+        ));
+
+        fn assert_attribute_fixture(
+            fixture_name: &str,
+            root: &str,
+            expects_error: bool,
+            expected: &[ExpectedDiagnostic],
+        ) {
+            let directory = fixture(fixture_name);
+
+            match compile_fixture(fixture_name, &[root]) {
+                Ok(compilation) => {
+                    assert!(!expects_error, "{fixture_name}: expected semantic failure");
+                    assert_diagnostics(fixture_name, root, &compilation.diagnostics, expected);
+                    let grammar_name = root
+                        .strip_suffix(".g4")
+                        .expect("attribute fixture root ends in .g4");
+                    let parser = parser_named(&compilation, grammar_name);
+                    assert_parser_interp(parser, &directory.join(format!("{grammar_name}.interp")));
+                    assert_tokens(
+                        &parser.semantic.recognizer,
+                        &directory.join(format!("{grammar_name}.tokens")),
+                    );
+                }
+                Err(error) => {
+                    assert!(expects_error, "{fixture_name}: {error:#?}");
+                    assert_diagnostics(fixture_name, root, error.diagnostics(), expected);
+                }
+            }
+        }
+
+        struct ExpectedDiagnostic {
+            code: &'static str,
+            line: usize,
+            column: usize,
+            message: &'static str,
+        }
+
+        const fn expected(
+            code: &'static str,
+            line: usize,
+            column: usize,
+            message: &'static str,
+        ) -> ExpectedDiagnostic {
+            ExpectedDiagnostic {
+                code,
+                line,
+                column,
+                message,
+            }
+        }
+
+        fn assert_diagnostics(
+            fixture_name: &str,
+            root: &str,
+            actual: &[crate::grammar::diagnostic::Diagnostic],
+            expected: &[ExpectedDiagnostic],
+        ) {
+            assert_eq!(actual.len(), expected.len(), "{fixture_name}: {actual:#?}");
+            let source = std::fs::read_to_string(fixture(fixture_name).join(root))
+                .expect("attribute fixture source");
+            for (actual, expected) in actual.iter().zip(expected) {
+                assert_eq!(actual.code, expected.code, "{fixture_name}: {actual:#?}");
+                assert_eq!(
+                    actual.severity,
+                    crate::grammar::diagnostic::Severity::Error,
+                    "{fixture_name}: {actual:#?}",
+                );
+                assert_eq!(
+                    actual.primary.bytes.start,
+                    fixture_byte_offset(&source, expected.line, expected.column),
+                    "{fixture_name}: expected {}:{} for {actual:#?}",
+                    expected.line,
+                    expected.column,
+                );
+                assert_eq!(
+                    actual.message, expected.message,
+                    "{fixture_name}: {actual:#?}",
+                );
+            }
+        }
+
+        fn assert_tokens(recognizer: &RecognizerModel, expected_path: &Path) {
+            let expected = std::fs::read_to_string(expected_path).expect("fixture tokens");
+            let mut actual = String::new();
+            for name in &recognizer.vocabulary.name_order {
+                let number = recognizer.vocabulary.by_name[name];
+                writeln!(actual, "{name}={number}").expect("writing to String cannot fail");
+            }
+            for literal in &recognizer.vocabulary.literal_order {
+                let number = recognizer.vocabulary.by_literal[literal];
+                writeln!(actual, "{literal}={number}").expect("writing to String cannot fail");
+            }
+            assert_eq!(actual, expected, "{}", expected_path.display());
+        }
+    }
+
     mod upstream_symbol_issues {
         use super::*;
         use crate::grammar::diagnostic::Severity::{Error, Warning};

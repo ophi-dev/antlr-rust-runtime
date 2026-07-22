@@ -1,0 +1,18 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 63,
+      "line": 7,
+      "column": 4,
+      "message": "unknown attribute reference S in $S"
+    },
+    {
+      "severity": "error",
+      "code": 57,
+      "line": 7,
+      "column": 7,
+      "message": "reference to undefined rule S in non-local ref $S::y"
+    }
+  ]
+}

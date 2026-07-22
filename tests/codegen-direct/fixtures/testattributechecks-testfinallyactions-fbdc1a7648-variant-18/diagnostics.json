@@ -1,0 +1,11 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 65,
+      "line": 11,
+      "column": 16,
+      "message": "unknown attribute ick for rule a in $a.ick"
+    }
+  ]
+}

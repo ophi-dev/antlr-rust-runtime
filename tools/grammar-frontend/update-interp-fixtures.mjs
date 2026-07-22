@@ -379,6 +379,11 @@ async function updateDiagnostics(directory, stdout, stderr) {
         if (position !== null) {
             diagnostic.line = Number.parseInt(position.groups.line, 10);
             diagnostic.column = Number.parseInt(position.groups.column, 10);
+            diagnostic.message = match.groups.detail.slice(
+                position.index + position[0].length,
+            ).trimStart();
+        } else {
+            diagnostic.message = match.groups.detail;
         }
         diagnostics.push(diagnostic);
     }
