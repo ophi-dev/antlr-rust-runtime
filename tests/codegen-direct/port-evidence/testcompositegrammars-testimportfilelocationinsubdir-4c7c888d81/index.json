@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcompositegrammars-testimportfilelocationinsubdir-4c7c888d81",
+  "active_revision_id": "testcompositegrammars-testimportfilelocationinsubdir-4c7c888d81-r1",
+  "revisions": [
+    {
+      "revision_id": "testcompositegrammars-testimportfilelocationinsubdir-4c7c888d81-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testimportfilelocationinsubdir-4c7c888d81/revisions/testcompositegrammars-testimportfilelocationinsubdir-4c7c888d81-r1/manifest.json",
+      "closure_sha256": "ac263476fb134bf21465bc6a15a7d9ad4e575d282003c5bde9f92f9a9b589f16"
+    }
+  ]
+}

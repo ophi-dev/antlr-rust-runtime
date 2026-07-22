@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "logical_id": "testscopeparsing-testargs-c109edb044",
+  "revision_id": "testscopeparsing-testargs-c109edb044-r1",
+  "primary_test_source": {
+    "implementation": "java-antlr",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "source_case_ids": [
+      "java-antlr:testscopeparsing-testargs-parameter-10@9bfe188b7daa"
+    ]
+  },
+  "alternate_test_source": {
+    "implementation": "independent-generated-oracle",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "source_case_ids": [],
+    "reason": "no antlr-ng source case exposes this exact observable"
+  },
+  "outcomes": {
+    "primary": "the direct Rust declaration parser matches Java 4.13.2 names, authored types, and initializers",
+    "alternate": "the paired pinned source cases expose the same prefix and postfix declaration behavior",
+    "java_compatibility_verdict": "exact Java 4.13.2 scope declaration parsing"
+  }
+}

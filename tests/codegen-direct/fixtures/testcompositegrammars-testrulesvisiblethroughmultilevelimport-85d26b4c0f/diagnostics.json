@@ -1,0 +1,18 @@
+{
+  "java_antlr": [
+    {
+      "severity": "warning",
+      "code": 125,
+      "line": 3,
+      "column": 4,
+      "message": "implicit definition of token M in parser"
+    },
+    {
+      "severity": "warning",
+      "code": 125,
+      "line": 2,
+      "column": 4,
+      "message": "implicit definition of token T in parser"
+    }
+  ]
+}

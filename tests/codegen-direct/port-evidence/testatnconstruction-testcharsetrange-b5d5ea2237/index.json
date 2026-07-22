@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnconstruction-testcharsetrange-b5d5ea2237",
+  "active_revision_id": "testatnconstruction-testcharsetrange-b5d5ea2237-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnconstruction-testcharsetrange-b5d5ea2237-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnconstruction-testcharsetrange-b5d5ea2237/revisions/testatnconstruction-testcharsetrange-b5d5ea2237-r1/manifest.json",
+      "closure_sha256": "4c352631c62c23cedd5cf44f0f2e354dd5ed65a9450fc34fffad38a1d713b926"
+    }
+  ]
+}

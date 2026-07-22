@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodegrammar-binarygrammar-611ebe1d6f",
+  "active_revision_id": "testunicodegrammar-binarygrammar-611ebe1d6f-r1",
+  "revisions": [
+    {
+      "revision_id": "testunicodegrammar-binarygrammar-611ebe1d6f-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testunicodegrammar-binarygrammar-611ebe1d6f/revisions/testunicodegrammar-binarygrammar-611ebe1d6f-r1/manifest.json",
+      "closure_sha256": "ffd45554009a303fe92bb83d97938e8650db6b951083b88a160d9bb2d1f66dd9"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodedata-testunicodegeneralcategoriessmp-fc134b5870",
+  "active_revision_id": "testunicodedata-testunicodegeneralcategoriessmp-fc134b5870-r1",
+  "revisions": [
+    {
+      "revision_id": "testunicodedata-testunicodegeneralcategoriessmp-fc134b5870-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testunicodedata-testunicodegeneralcategoriessmp-fc134b5870/revisions/testunicodedata-testunicodegeneralcategoriessmp-fc134b5870-r1/manifest.json",
+      "closure_sha256": "e68c94b1ca85e9b51ef816db042e0897a2ea34d20300ea2feb318e659a2e2d74"
+    }
+  ]
+}

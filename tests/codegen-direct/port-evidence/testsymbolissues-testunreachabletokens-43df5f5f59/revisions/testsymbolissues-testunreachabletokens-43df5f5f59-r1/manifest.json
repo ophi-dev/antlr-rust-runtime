@@ -1,0 +1,128 @@
+{
+  "schema_version": 1,
+  "logical_id": "testsymbolissues-testunreachabletokens-43df5f5f59",
+  "revision_id": "testsymbolissues-testunreachabletokens-43df5f5f59-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "closure": {
+    "logical_id": "testsymbolissues-testunreachabletokens-43df5f5f59",
+    "source_case_ids": [
+      "antlr-ng:testsymbolissues-testunreachabletokens@810ac1c78fa8",
+      "java-antlr:testsymbolissues-testunreachabletokens@810ac1c78fa8"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59/Test.g4",
+      "tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59/Test.interp",
+      "tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59/Test.tokens",
+      "tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59/diagnostics.json",
+      "tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59/fixture.json",
+      "tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59/oracle/java-unicode-data.stdout"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::unreachable_tokens::matches_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testUnreachableTokens",
+    "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+    "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b"
+  },
+  "closure_sha256": "6767a49e45707a4cb3ef57213b9863000f77cb3d2e09464b8f22e5079ff37889",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testsymbolissues-testunreachabletokens@810ac1c78fa8",
+      "path": "tests/TestSymbolIssues.spec.ts",
+      "sha256": "8f7a08f5a51689c74a7de052bc8dd7253a7ccb58f4658fdbc1d99f674e5d5b15"
+    },
+    {
+      "source_case_id": "java-antlr:testsymbolissues-testunreachabletokens@810ac1c78fa8",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestSymbolIssues.java",
+      "sha256": "777564e24248da6e2789fe6c223c0b91d2df65b1b6b5000505cb011113d27c0d"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59/Test.g4",
+      "sha256": "def840cf55ae51e546e1f0d86822af95178d355736abf6db86a7c9f58a85410c"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59/Test.interp",
+      "sha256": "dd03c987ed5f69f938791d69535eff197a950acb93235d05a9ad198b5824364b"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59/Test.tokens",
+      "sha256": "44f132271a97826fe4851c75934151cb7ae563909d8f28c8f5e94d7f58ca1df3"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59/diagnostics.json",
+      "sha256": "486f6adb4bffeb0789c4618c2deafbd588897d1014268464b4ef01ba57e9519e"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59/fixture.json",
+      "sha256": "f65a7adf934f5c20823f43666109ec86b50739603c00a35183071f159585f279"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59/oracle/java-antlr.stderr",
+      "sha256": "dc0c67f52b2666a93b20a271fad1fe11018b6ab401da22eb3f05b4432a23d75e"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testunreachabletokens-43df5f5f59/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    }
+  ],
+  "commits": {
+    "scaffold": "58ef65074571091ad69b72a2f36a7718a9caa951",
+    "primary_test": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+    "primary_implementation": "8ddba8f5bd603b78e8eea0497cea9c4fe1328208"
+  },
+  "ancestry": {
+    "primary_test_parent": "58ef65074571091ad69b72a2f36a7718a9caa951",
+    "primary_implementation_parent": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+    "reachability": "the symbol semantics implementation commit is directly based on the locked red parity tests"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_symbol_issues {",
+      "end_marker": "\n    #[allow(clippy::too_many_arguments)]\n    mod upstream_composite_grammars {",
+      "historical_end_marker": "\n    mod upstream_token_position_options {",
+      "sha256": "4ed0bea95d793d013419d427bc1c75e9373e70fbea4af44e234008b93eb05fc0"
+    }
+  ],
+  "demonstrated_red": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::unreachable_tokens::matches_java -- --exact",
+    "commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+    "exit_code": 101,
+    "fingerprint": "expected 9 G4S069 unreachable-token warnings, but emitted none"
+  },
+  "green_result": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::unreachable_tokens::matches_java -- --exact",
+    "commit": "8ddba8f5bd603b78e8eea0497cea9c4fe1328208",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testsymbolissues-testunreachabletokens-43df5f5f59/revisions/testsymbolissues-testunreachabletokens-43df5f5f59-r1/oracle-results/declared-sources.json",
+      "sha256": "730921c646531bc9157f0b6a233baaac615c88596cec9174bd7d786930921578"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testsymbolissues-testunreachabletokens-43df5f5f59/revisions/testsymbolissues-testunreachabletokens-43df5f5f59-r1/matrix-results/results.json",
+      "sha256": "910e850ee849ff4fa5a52e4eab2103d601d3bfa4ccb1b41ac1dbd3d87511768c"
+    }
+  ]
+}

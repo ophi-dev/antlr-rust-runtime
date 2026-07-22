@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcharsupport-testparsehexvalue-de6de267d9",
+  "active_revision_id": "testcharsupport-testparsehexvalue-de6de267d9-r1",
+  "revisions": [
+    {
+      "revision_id": "testcharsupport-testparsehexvalue-de6de267d9-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testcharsupport-testparsehexvalue-de6de267d9/revisions/testcharsupport-testparsehexvalue-de6de267d9-r1/manifest.json",
+      "closure_sha256": "94bb7902d90e541fb4c5bfa51b1586c660fae677a5a4bc035858845556970ed6"
+    }
+  ]
+}

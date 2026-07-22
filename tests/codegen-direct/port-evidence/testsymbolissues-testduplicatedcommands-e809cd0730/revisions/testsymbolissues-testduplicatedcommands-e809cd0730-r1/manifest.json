@@ -1,0 +1,128 @@
+{
+  "schema_version": 1,
+  "logical_id": "testsymbolissues-testduplicatedcommands-e809cd0730",
+  "revision_id": "testsymbolissues-testduplicatedcommands-e809cd0730-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "closure": {
+    "logical_id": "testsymbolissues-testduplicatedcommands-e809cd0730",
+    "source_case_ids": [
+      "antlr-ng:testsymbolissues-testduplicatedcommands@046d302e1d7f",
+      "java-antlr:testsymbolissues-testduplicatedcommands@046d302e1d7f"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730/Lexer.g4",
+      "tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730/Lexer.interp",
+      "tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730/Lexer.tokens",
+      "tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730/diagnostics.json",
+      "tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730/fixture.json",
+      "tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730/oracle/java-unicode-data.stdout"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::duplicated_commands::matches_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testDuplicatedCommands",
+    "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+    "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b"
+  },
+  "closure_sha256": "09049c2f81a18b88108291ab46b58d79db5e8e5a6228a60fb707fa928f25fdd7",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testsymbolissues-testduplicatedcommands@046d302e1d7f",
+      "path": "tests/TestSymbolIssues.spec.ts",
+      "sha256": "8f7a08f5a51689c74a7de052bc8dd7253a7ccb58f4658fdbc1d99f674e5d5b15"
+    },
+    {
+      "source_case_id": "java-antlr:testsymbolissues-testduplicatedcommands@046d302e1d7f",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestSymbolIssues.java",
+      "sha256": "777564e24248da6e2789fe6c223c0b91d2df65b1b6b5000505cb011113d27c0d"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730/Lexer.g4",
+      "sha256": "35f631381d4e86af74e58ae2c419fdd2c520617a50ceedf35b62d5cf4c5efb83"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730/Lexer.interp",
+      "sha256": "ff10655abdb8dbfe8ca0385f54430f2b25ce4c07d9f911248ce05ae6911385ae"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730/Lexer.tokens",
+      "sha256": "368e68463ee89cae95655f3f27d13b8d18fcb38f2ec1f787318ccc767b1fd9f1"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730/diagnostics.json",
+      "sha256": "d046521684ecc271bcd2bf0e1a6cfd1a4c999fdf172264f79699a4b230e83c98"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730/fixture.json",
+      "sha256": "8f30ee50a0ae652391b15b05b2474b2bbc53643284718573e200a9617ddb6fd6"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730/oracle/java-antlr.stderr",
+      "sha256": "092cdf2b0f342999b7c92547fa57ae03851d967f12752a0ecf36c87f859e6367"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testduplicatedcommands-e809cd0730/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    }
+  ],
+  "commits": {
+    "scaffold": "58ef65074571091ad69b72a2f36a7718a9caa951",
+    "primary_test": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+    "primary_implementation": "8ddba8f5bd603b78e8eea0497cea9c4fe1328208"
+  },
+  "ancestry": {
+    "primary_test_parent": "58ef65074571091ad69b72a2f36a7718a9caa951",
+    "primary_implementation_parent": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+    "reachability": "the symbol semantics implementation commit is directly based on the locked red parity tests"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_symbol_issues {",
+      "end_marker": "\n    #[allow(clippy::too_many_arguments)]\n    mod upstream_composite_grammars {",
+      "historical_end_marker": "\n    mod upstream_token_position_options {",
+      "sha256": "4ed0bea95d793d013419d427bc1c75e9373e70fbea4af44e234008b93eb05fc0"
+    }
+  ],
+  "demonstrated_red": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::duplicated_commands::matches_java -- --exact",
+    "commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+    "exit_code": 101,
+    "fingerprint": "the complete lexer .interp differed in literal alias metadata at serialized words 2 and 128"
+  },
+  "green_result": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::duplicated_commands::matches_java -- --exact",
+    "commit": "8ddba8f5bd603b78e8eea0497cea9c4fe1328208",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testsymbolissues-testduplicatedcommands-e809cd0730/revisions/testsymbolissues-testduplicatedcommands-e809cd0730-r1/oracle-results/declared-sources.json",
+      "sha256": "dd12088b40e0ef6c0965eadb97d0959e3468399c5efc0a727704f686177ed62a"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testsymbolissues-testduplicatedcommands-e809cd0730/revisions/testsymbolissues-testduplicatedcommands-e809cd0730-r1/matrix-results/results.json",
+      "sha256": "a33d6f23369b636f803c9bf99fc901355dff04d308f7b9a8cde6332ef6299b11"
+    }
+  ]
+}

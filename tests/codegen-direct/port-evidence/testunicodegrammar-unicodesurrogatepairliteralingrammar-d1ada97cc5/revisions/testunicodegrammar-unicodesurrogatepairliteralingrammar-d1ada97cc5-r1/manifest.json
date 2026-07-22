@@ -1,0 +1,126 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5",
+  "revision_id": "testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "closure": {
+    "logical_id": "testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5",
+    "source_case_ids": [
+      "antlr-ng:testunicodegrammar-unicodesurrogatepairliteralingrammar@fdc2cddea6ad"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/Unicode.g4",
+      "tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/Unicode.interp",
+      "tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/Unicode.tokens",
+      "tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/UnicodeLexer.interp",
+      "tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/UnicodeLexer.tokens",
+      "tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/fixture.json",
+      "tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/oracle/java-unicode-data.stdout"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_unicode_grammar::disabled_surrogate_pair_literal::matches_java_interps",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust lexer and parser serialization matches both complete Java 4.13.2 .interp files for TestUnicodeGrammar.unicodeSurrogatePairLiteralInGrammar",
+    "scaffold_commit": "6af469975f18f22cb0e0edd55834585edbe1a0bd",
+    "primary_test_commit": "56c71bf5f9cfd1d0ed5feaa2b55d3c35506f9ea0"
+  },
+  "closure_sha256": "3071f9cd717b96726292adaba59d2c62aa32c2b1c7286dd2e7b2cf620a59b07e",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testunicodegrammar-unicodesurrogatepairliteralingrammar@fdc2cddea6ad",
+      "path": "tests/TestUnicodeGrammar.spec.ts",
+      "sha256": "75bdc0dd144c21131a1b1af9bf8aab01b6ad50f35d0e15ae3dde515b1b39dd81"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/Unicode.g4",
+      "sha256": "cd3d5a71c9eb1df92d5742548c689eca96a6790862fce38e3e685eb34e1db667"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/Unicode.interp",
+      "sha256": "600708bcd1b5a7e52493592280453a26a465a93354a7c4da05063398a9b11ed8"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/Unicode.tokens",
+      "sha256": "2acb7b2214a485f0e3c1ba47f204055042858231db21f87d10ad4ada94c99789"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/UnicodeLexer.interp",
+      "sha256": "1208cca86612e4ef64219b5dc72eb763164716083b28f7688e19041df2745fe1"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/UnicodeLexer.tokens",
+      "sha256": "2acb7b2214a485f0e3c1ba47f204055042858231db21f87d10ad4ada94c99789"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/fixture.json",
+      "sha256": "560e1835fd047f888b0e57eb70a2dae9218814920dc41ec8cdaa2de51008cf80"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    }
+  ],
+  "commits": {
+    "scaffold": "6af469975f18f22cb0e0edd55834585edbe1a0bd",
+    "primary_test": "56c71bf5f9cfd1d0ed5feaa2b55d3c35506f9ea0",
+    "primary_implementation": "8eaedb9fa7e301554126a5185fd089c068bcade2"
+  },
+  "ancestry": {
+    "primary_test_parent": "6af469975f18f22cb0e0edd55834585edbe1a0bd",
+    "primary_implementation_parent": "56c71bf5f9cfd1d0ed5feaa2b55d3c35506f9ea0",
+    "reachability": "the surrogate escape implementation commit is directly based on the locked red .interp tests"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_unicode_grammar {",
+      "end_marker": "\n    fn assert_combined_fixture",
+      "sha256": "b8fba5737f3986600093df0384a99de1f557b9fe2bbebbe20f6c9b892c9450a8"
+    }
+  ],
+  "demonstrated_red": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_unicode_grammar::disabled_surrogate_pair_literal::matches_java_interps -- --exact",
+    "commit": "56c71bf5f9cfd1d0ed5feaa2b55d3c35506f9ea0",
+    "exit_code": 101,
+    "fingerprint": "G4L002: Unicode escape is not a scalar value: 0xd83c"
+  },
+  "green_result": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_unicode_grammar::disabled_surrogate_pair_literal::matches_java_interps -- --exact",
+    "commit": "8eaedb9fa7e301554126a5185fd089c068bcade2",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/revisions/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5-r1/oracle-results/declared-sources.json",
+      "sha256": "164060c34fde0d8fc99e8c61d4a4f0651e634bb440ee8392b46b9647c4a1fbb9"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/revisions/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5-r1/matrix-results/results.json",
+      "sha256": "d8c43c57687be37a03c317cbf0b460e62b8123644efc5454aceccab603a39fcb"
+    }
+  ]
+}

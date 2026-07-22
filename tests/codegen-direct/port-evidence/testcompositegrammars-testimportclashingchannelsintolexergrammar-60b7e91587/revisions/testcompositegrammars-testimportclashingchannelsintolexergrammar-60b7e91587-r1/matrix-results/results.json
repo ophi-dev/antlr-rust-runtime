@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcompositegrammars-testimportclashingchannelsintolexergrammar-60b7e91587",
+  "revision_id": "testcompositegrammars-testimportclashingchannelsintolexergrammar-60b7e91587-r1",
+  "cells": [
+    {
+      "test_port": "coverage-extension",
+      "test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+      "implementation_port": "existing-primary-antlr-ng",
+      "implementation_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportclashingchannelsintolexergrammar_60b7e91587::matches_java -- --exact",
+      "result": "green: 1 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the case-specific test passed against the existing Phase B implementation"
+}

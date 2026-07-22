@@ -338,6 +338,7 @@ ebnfSuffix
 lexerAtom
     : characterRange
     | terminalDef
+    | RULE_REF
     | notSet
     | LEXER_CHAR_SET
     | wildcard

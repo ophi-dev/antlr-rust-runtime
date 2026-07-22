@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testescapesequenceparsing-testparsejustbackslash-5777522916",
+  "active_revision_id": "testescapesequenceparsing-testparsejustbackslash-5777522916-r1",
+  "revisions": [
+    {
+      "revision_id": "testescapesequenceparsing-testparsejustbackslash-5777522916-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparsejustbackslash-5777522916/revisions/testescapesequenceparsing-testparsejustbackslash-5777522916-r1/manifest.json",
+      "closure_sha256": "e8082df6598823d4be25e9ac34b95ef91399a6f91779232e0523ef346bfd6a65"
+    }
+  ]
+}

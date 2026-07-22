@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e",
+  "active_revision_id": "testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e/revisions/testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e-r1/manifest.json",
+      "closure_sha256": "70e91a8dc6ccbbd30372cde0090a37a7af89c09fbdfcb627cfcb04b695acf8f8"
+    }
+  ]
+}

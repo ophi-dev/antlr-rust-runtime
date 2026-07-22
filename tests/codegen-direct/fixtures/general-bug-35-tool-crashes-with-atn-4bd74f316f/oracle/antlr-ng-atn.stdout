@@ -1,0 +1,1 @@
+warning(79): GoLexer.g4:224:0: non-fragment lexer rule OTHER can match the empty string

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnserialization-testlexerunicodeunescapedbmpnotset-8cc0c75996",
+  "revision_id": "testatnserialization-testlexerunicodeunescapedbmpnotset-8cc0c75996-r1",
+  "cells": [
+    {
+      "test_port": "coverage-extension",
+      "test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+      "implementation_port": "existing-primary-antlr-ng",
+      "implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+      "result": "green: 36 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the case-specific test passed against the existing Phase B implementation"
+}

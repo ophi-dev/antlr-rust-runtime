@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testscopeparsing-testargs-input-map-a-b-i-int-j-output-i-map-a-b-j-int-1c362c9e0d",
+  "active_revision_id": "testscopeparsing-testargs-input-map-a-b-i-int-j-output-i-map-a-b-j-int-1c362c9e0d-r1",
+  "revisions": [
+    {
+      "revision_id": "testscopeparsing-testargs-input-map-a-b-i-int-j-output-i-map-a-b-j-int-1c362c9e0d-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-map-a-b-i-int-j-output-i-map-a-b-j-int-1c362c9e0d/revisions/testscopeparsing-testargs-input-map-a-b-i-int-j-output-i-map-a-b-j-int-1c362c9e0d-r1/manifest.json",
+      "closure_sha256": "c9bb283cffcb625540a0278645799b2fd16d9d23101b6282f263739116d5f2a9"
+    }
+  ]
+}

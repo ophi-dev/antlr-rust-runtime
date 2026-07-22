@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testescapesequenceparsing-testparsenewline-8d0dddafad",
+  "active_revision_id": "testescapesequenceparsing-testparsenewline-8d0dddafad-r1",
+  "revisions": [
+    {
+      "revision_id": "testescapesequenceparsing-testparsenewline-8d0dddafad-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparsenewline-8d0dddafad/revisions/testescapesequenceparsing-testparsenewline-8d0dddafad-r1/manifest.json",
+      "closure_sha256": "000694e60123f536614f2f0d3c18ee70d66d35f04f381b4457f6f9b5f3a06759"
+    }
+  ]
+}

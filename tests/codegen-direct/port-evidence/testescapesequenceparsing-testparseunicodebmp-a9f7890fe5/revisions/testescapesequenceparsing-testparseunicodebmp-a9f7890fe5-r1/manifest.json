@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "logical_id": "testescapesequenceparsing-testparseunicodebmp-a9f7890fe5",
+  "revision_id": "testescapesequenceparsing-testparseunicodebmp-a9f7890fe5-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "closure": {
+    "logical_id": "testescapesequenceparsing-testparseunicodebmp-a9f7890fe5",
+    "source_case_ids": [
+      "antlr-ng:testescapesequenceparsing-testparseunicodebmp@d526a3fa7967",
+      "java-antlr:testescapesequenceparsing-testparseunicodebmp@d526a3fa7967"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::escape_sequence::tests::parse_unicode_bmp_matches_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust escape parsing matches Java 4.13.2 result kind, value or property set, and consumed span for TestEscapeSequenceParsing.testParseUnicodeBMP",
+    "scaffold_commit": "ce366e7033cff879abe0d23cd5f896c577e42358",
+    "primary_test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e"
+  },
+  "closure_sha256": "00ab08ce74ac1e6bdcf843e12b267166adcbd7499961af3e7f0edd95b9799042",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testescapesequenceparsing-testparseunicodebmp@d526a3fa7967",
+      "path": "tests/TestEscapeSequenceParsing.spec.ts",
+      "sha256": "292d2a01f1a77cceffe714fafee14dda9a007011813a1ed1872c02929356ee92"
+    },
+    {
+      "source_case_id": "java-antlr:testescapesequenceparsing-testparseunicodebmp@d526a3fa7967",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestEscapeSequenceParsing.java",
+      "sha256": "5c7c6c40f64392995b320d9290bce214e8496667792f52e0b064231bf1647c19"
+    }
+  ],
+  "commits": {
+    "scaffold": "ce366e7033cff879abe0d23cd5f896c577e42358",
+    "primary_test": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+    "primary_implementation": "56d2ac6a31671f9d786f2c3fa6323fffa6474375"
+  },
+  "ancestry": {
+    "primary_test_parent": "ce366e7033cff879abe0d23cd5f896c577e42358",
+    "primary_implementation_parent": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+    "reachability": "the escape sequence implementation commit is directly based on its locked red tests"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/escape_sequence.rs",
+      "marker": "#[cfg(test)]\nmod tests {",
+      "sha256": "ece072cc2218f60f9b47b7de54166339f58420fe30aa3aae129394f8438dd9a6"
+    }
+  ],
+  "demonstrated_red": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_bmp_matches_java -- --exact",
+    "commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+    "exit_code": 101,
+    "fingerprint": "left Invalid, right CodePoint { value: 43981, start: 0, stop: 6 }"
+  },
+  "green_result": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_bmp_matches_java -- --exact",
+    "commit": "56d2ac6a31671f9d786f2c3fa6323fffa6474375",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparseunicodebmp-a9f7890fe5/revisions/testescapesequenceparsing-testparseunicodebmp-a9f7890fe5-r1/oracle-results/declared-sources.json",
+      "sha256": "fa2938c336ec8d282974e3d9f2cf881c08708e2fadf9aca4e28ffecdf0400fe9"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparseunicodebmp-a9f7890fe5/revisions/testescapesequenceparsing-testparseunicodebmp-a9f7890fe5-r1/matrix-results/results.json",
+      "sha256": "1fe168caf6a8b512b026efd1b4a636190a468e228d71e671568a23b1d1c91f93"
+    }
+  ]
+}

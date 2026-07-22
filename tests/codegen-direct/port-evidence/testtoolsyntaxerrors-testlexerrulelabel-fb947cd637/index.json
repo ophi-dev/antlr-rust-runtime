@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtoolsyntaxerrors-testlexerrulelabel-fb947cd637",
+  "active_revision_id": "testtoolsyntaxerrors-testlexerrulelabel-fb947cd637-r1",
+  "revisions": [
+    {
+      "revision_id": "testtoolsyntaxerrors-testlexerrulelabel-fb947cd637-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testtoolsyntaxerrors-testlexerrulelabel-fb947cd637/revisions/testtoolsyntaxerrors-testlexerrulelabel-fb947cd637-r1/manifest.json",
+      "closure_sha256": "b882fdf6f5999c8da0a1547ebf64c5df2b9a9da1e728e202fafbc9e9c90d6813"
+    }
+  ]
+}

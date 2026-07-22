@@ -1,0 +1,58 @@
+{
+  "java_antlr": [
+    {
+      "severity": "warning",
+      "code": 184,
+      "line": 4,
+      "column": 0
+    },
+    {
+      "severity": "warning",
+      "code": 184,
+      "line": 5,
+      "column": 0
+    },
+    {
+      "severity": "warning",
+      "code": 184,
+      "line": 7,
+      "column": 0
+    },
+    {
+      "severity": "warning",
+      "code": 184,
+      "line": 7,
+      "column": 0
+    },
+    {
+      "severity": "warning",
+      "code": 184,
+      "line": 9,
+      "column": 0
+    },
+    {
+      "severity": "warning",
+      "code": 184,
+      "line": 11,
+      "column": 0
+    },
+    {
+      "severity": "warning",
+      "code": 184,
+      "line": 12,
+      "column": 0
+    },
+    {
+      "severity": "warning",
+      "code": 184,
+      "line": 13,
+      "column": 0
+    },
+    {
+      "severity": "warning",
+      "code": 184,
+      "line": 13,
+      "column": 0
+    }
+  ]
+}

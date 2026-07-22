@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnconstruction-testcharsetunicodepropertyoverlap-e358f7dd65",
+  "active_revision_id": "testatnconstruction-testcharsetunicodepropertyoverlap-e358f7dd65-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnconstruction-testcharsetunicodepropertyoverlap-e358f7dd65-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnconstruction-testcharsetunicodepropertyoverlap-e358f7dd65/revisions/testatnconstruction-testcharsetunicodepropertyoverlap-e358f7dd65-r1/manifest.json",
+      "closure_sha256": "6bbb7f03431027e7cff275eceb91b4d9ab000910e9422a0749183be059c2ede6"
+    }
+  ]
+}

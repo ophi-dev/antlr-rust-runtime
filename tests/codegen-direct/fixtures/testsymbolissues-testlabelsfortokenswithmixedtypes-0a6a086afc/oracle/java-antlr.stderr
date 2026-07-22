@@ -1,0 +1,5 @@
+error(75): L.g4:8:13: label t2=b type mismatch with previous definition: t2=a
+error(75): L.g4:11:15: label t3+=c type mismatch with previous definition: t3+=a
+error(75): L.g4:24:0: label t7 type mismatch with previous definition: TOKEN_LABEL!=RULE_LABEL
+error(75): L.g4:24:0: label t71 type mismatch with previous definition: RULE_LABEL!=TOKEN_LABEL
+error(75): L.g4:24:0: label t72 type mismatch with previous definition: RULE_LABEL!=TOKEN_LABEL

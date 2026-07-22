@@ -1,0 +1,2 @@
+grammar NewJava;
+import Java;

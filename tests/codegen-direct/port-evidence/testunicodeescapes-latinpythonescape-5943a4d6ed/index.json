@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodeescapes-latinpythonescape-5943a4d6ed",
+  "active_revision_id": "testunicodeescapes-latinpythonescape-5943a4d6ed-r1",
+  "revisions": [
+    {
+      "revision_id": "testunicodeescapes-latinpythonescape-5943a4d6ed-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testunicodeescapes-latinpythonescape-5943a4d6ed/revisions/testunicodeescapes-latinpythonescape-5943a4d6ed-r1/manifest.json",
+      "closure_sha256": "cf0ec49d06cd858ad4f4f5fc2e1d90a19887a07849890c25450d858a85323a3e"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 51,
+      "line": 4,
+      "column": 0,
+      "message": "rule ret_ty redefinition; previous at line 3"
+    }
+  ]
+}

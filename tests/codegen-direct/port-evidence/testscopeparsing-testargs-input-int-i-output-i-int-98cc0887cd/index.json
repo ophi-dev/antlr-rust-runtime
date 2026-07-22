@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testscopeparsing-testargs-input-int-i-output-i-int-98cc0887cd",
+  "active_revision_id": "testscopeparsing-testargs-input-int-i-output-i-int-98cc0887cd-r1",
+  "revisions": [
+    {
+      "revision_id": "testscopeparsing-testargs-input-int-i-output-i-int-98cc0887cd-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-int-i-output-i-int-98cc0887cd/revisions/testscopeparsing-testargs-input-int-i-output-i-int-98cc0887cd-r1/manifest.json",
+      "closure_sha256": "bb2ad58c07b7b2966f0a2ded71236eb4131c540340f2e49181d0c69ba83ac07b"
+    }
+  ]
+}

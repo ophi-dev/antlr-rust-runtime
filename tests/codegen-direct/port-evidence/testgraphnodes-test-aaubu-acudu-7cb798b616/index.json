@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testgraphnodes-test-aaubu-acudu-7cb798b616",
+  "active_revision_id": "testgraphnodes-test-aaubu-acudu-7cb798b616-r1",
+  "revisions": [
+    {
+      "revision_id": "testgraphnodes-test-aaubu-acudu-7cb798b616-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testgraphnodes-test-aaubu-acudu-7cb798b616/revisions/testgraphnodes-test-aaubu-acudu-7cb798b616-r1/manifest.json",
+      "closure_sha256": "df60baf29d6a7a3209b78a32ff309947be42f36b76158f9ba613776cb4cc9f30"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648",
+  "active_revision_id": "testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648-r1",
+  "revisions": [
+    {
+      "revision_id": "testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/revisions/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648-r1/manifest.json",
+      "closure_sha256": "79f12d80897c50a2efceb1d51cf479980c3123f0e6c65cd0cc6d132c22c6b26f"
+    }
+  ]
+}

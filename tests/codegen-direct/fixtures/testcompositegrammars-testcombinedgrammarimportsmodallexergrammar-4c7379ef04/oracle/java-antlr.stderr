@@ -1,0 +1,1 @@
+error(120): M.g4:3:5: lexical modes are only allowed in lexer grammars

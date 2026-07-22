@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5",
+  "active_revision_id": "testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5-r1",
+  "revisions": [
+    {
+      "revision_id": "testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/revisions/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5-r1/manifest.json",
+      "closure_sha256": "3071f9cd717b96726292adaba59d2c62aa32c2b1c7286dd2e7b2cf620a59b07e"
+    }
+  ]
+}

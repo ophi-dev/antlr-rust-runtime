@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testescapesequenceparsing-testparseunicodesmpmissingclosebrace-0940378cd3",
+  "active_revision_id": "testescapesequenceparsing-testparseunicodesmpmissingclosebrace-0940378cd3-r1",
+  "revisions": [
+    {
+      "revision_id": "testescapesequenceparsing-testparseunicodesmpmissingclosebrace-0940378cd3-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparseunicodesmpmissingclosebrace-0940378cd3/revisions/testescapesequenceparsing-testparseunicodesmpmissingclosebrace-0940378cd3-r1/manifest.json",
+      "closure_sha256": "bf4c7ea39b467862854a895c7ceebed8db4e40c5995e2f3d28174074f56b71ac"
+    }
+  ]
+}

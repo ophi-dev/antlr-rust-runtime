@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnserialization-testlexerunicodeescapedbmpnotset-d1fbc5a933",
+  "revision_id": "testatnserialization-testlexerunicodeescapedbmpnotset-d1fbc5a933-r1",
+  "primary_test_source": {
+    "implementation": "java-antlr",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "source_case_ids": [
+      "java-antlr:testatnserialization-testlexerunicodeescapedbmpnotset@c958c6b6e2f8"
+    ]
+  },
+  "alternate_test_source": {
+    "implementation": "antlr-ng",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "source_case_ids": [
+      "antlr-ng:testatnserialization-testlexerunicodeescapedbmpnotset@c958c6b6e2f8"
+    ]
+  },
+  "outcomes": {
+    "primary": "the complete direct Rust .interp matches the immutable Java 4.13.2 fixture",
+    "alternate": "the pinned antlr-ng TestATNSerialization case exposes the same ATN observable",
+    "java_compatibility_verdict": "exact Java 4.13.2 recognizer metadata and serialized ATN equality"
+  }
+}

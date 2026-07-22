@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcompositegrammars-testemptymodesinlexergrammar-8e58f11b11",
+  "active_revision_id": "testcompositegrammars-testemptymodesinlexergrammar-8e58f11b11-r1",
+  "revisions": [
+    {
+      "revision_id": "testcompositegrammars-testemptymodesinlexergrammar-8e58f11b11-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testemptymodesinlexergrammar-8e58f11b11/revisions/testcompositegrammars-testemptymodesinlexergrammar-8e58f11b11-r1/manifest.json",
+      "closure_sha256": "11b21a27c9ae3249f0421e481ad15fbbf7051be296f53ca6f5ae4d3d86d3b0a0"
+    }
+  ]
+}

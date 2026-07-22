@@ -1,0 +1,141 @@
+{
+  "schema_version": 1,
+  "logical_id": "testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149",
+  "revision_id": "testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "resolution": "verified-covered-existing",
+  "closure": {
+    "logical_id": "testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149",
+    "source_case_ids": [
+      "antlr-ng:testsymbolissues-testcaseinsensitiveoptioninparserule@c8857ab0ede8",
+      "java-antlr:testsymbolissues-testcaseinsensitiveoptioninparserule@c8857ab0ede8"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/G.g4",
+      "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/G.interp",
+      "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/G.tokens",
+      "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/GLexer.interp",
+      "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/GLexer.tokens",
+      "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/diagnostics.json",
+      "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/fixture.json",
+      "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/oracle/java-unicode-data.stdout"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::case_insensitive_option_in_parser_rule::matches_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testCaseInsensitiveOptionInParseRule",
+    "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+    "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+    "resolution": "verified-covered-existing"
+  },
+  "closure_sha256": "ac6039f7cf07a1ddf40f988976d7e0a0d05a00967bbbd6664406a051feaf3b0f",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testsymbolissues-testcaseinsensitiveoptioninparserule@c8857ab0ede8",
+      "path": "tests/TestSymbolIssues.spec.ts",
+      "sha256": "8f7a08f5a51689c74a7de052bc8dd7253a7ccb58f4658fdbc1d99f674e5d5b15"
+    },
+    {
+      "source_case_id": "java-antlr:testsymbolissues-testcaseinsensitiveoptioninparserule@c8857ab0ede8",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestSymbolIssues.java",
+      "sha256": "777564e24248da6e2789fe6c223c0b91d2df65b1b6b5000505cb011113d27c0d"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/G.g4",
+      "sha256": "686c3484c692e9a4941d019ad50f550b6084bd49458bb3e5019b4e207796ad31"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/G.interp",
+      "sha256": "cd021fc64f645bb266db884963fc73e71d1b61c8130425367a89bc51b41e3bea"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/G.tokens",
+      "sha256": "c8445b195da8619f15ea4ecf14914fd5116fab8622e9ac157fa74e7470fc69d0"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/GLexer.interp",
+      "sha256": "5db9645dfb104d36dddace1811dea66d9e8d6252fa8a32d6ac59ea1488307544"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/GLexer.tokens",
+      "sha256": "c8445b195da8619f15ea4ecf14914fd5116fab8622e9ac157fa74e7470fc69d0"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/diagnostics.json",
+      "sha256": "074edb244a6fdb4d19724ded8d42840ce35c61c51d31b9913fda9169526c9194"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/fixture.json",
+      "sha256": "507e5b421582de5f69f91a08a517fb900bc43d9e28ecbf3a1bb7178d2db814e8"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/oracle/java-antlr.stderr",
+      "sha256": "f50112b28614ccea02a35db8457f61ee2efae7b52960e97b73c281198683477e"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    }
+  ],
+  "commits": {
+    "scaffold": "58ef65074571091ad69b72a2f36a7718a9caa951",
+    "primary_test": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+    "primary_implementation": "58ef65074571091ad69b72a2f36a7718a9caa951"
+  },
+  "ancestry": {
+    "primary_test_parent": "58ef65074571091ad69b72a2f36a7718a9caa951",
+    "primary_implementation_parent": "0d2729880d113dc8b61222e9bb38f6a41ba44d6a",
+    "reachability": "the case-specific symbol assertion passed against the direct compiler implementation already present at the batch base"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_symbol_issues {",
+      "end_marker": "\n    #[allow(clippy::too_many_arguments)]\n    mod upstream_composite_grammars {",
+      "historical_end_marker": "\n    mod upstream_token_position_options {",
+      "sha256": "4ed0bea95d793d013419d427bc1c75e9373e70fbea4af44e234008b93eb05fc0"
+    }
+  ],
+  "verified_covered_existing": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::case_insensitive_option_in_parser_rule::matches_java -- --exact",
+    "commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed",
+    "covering_implementation_commit": "58ef65074571091ad69b72a2f36a7718a9caa951"
+  },
+  "green_result": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::case_insensitive_option_in_parser_rule::matches_java -- --exact",
+    "commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/revisions/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149-r1/oracle-results/declared-sources.json",
+      "sha256": "50bb8449c98b326c7c90c01edd4102bbe2f5bbff47f0c0ba11a204bf0fa578f8"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149/revisions/testsymbolissues-testcaseinsensitiveoptioninparserule-1827b66149-r1/matrix-results/results.json",
+      "sha256": "1f70d8c0cb8a2394a03946de3bf03d549105b6a4b6fc7a8a5481f5916c5dfacf"
+    }
+  ]
+}

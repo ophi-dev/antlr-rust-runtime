@@ -1,0 +1,18 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 110,
+      "line": 2,
+      "column": 7,
+      "message": "can't find or load grammar S"
+    },
+    {
+      "severity": "error",
+      "code": 56,
+      "line": 3,
+      "column": 4,
+      "message": "reference to undefined rule: a"
+    }
+  ]
+}

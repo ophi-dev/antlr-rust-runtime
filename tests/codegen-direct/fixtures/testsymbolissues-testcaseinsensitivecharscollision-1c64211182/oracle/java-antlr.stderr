@@ -1,0 +1,4 @@
+warning(180): L.g4:3:18: chars a-f used multiple times in set [a-fA-F0-9]
+warning(180): L.g4:4:32: chars g-l used multiple times in set 'g'..'l' | 'G'..'L'
+warning(180): L.g4::: chars 'M' used multiple times in set 'M'..'Q' | 'm'..'q'
+warning(180): L.g4::: chars 'm' used multiple times in set 'M'..'Q' | 'm'..'q'

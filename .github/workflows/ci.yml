@@ -31,11 +31,14 @@ jobs:
           rustup toolchain install stable --profile minimal --component clippy --no-self-update
           rustup default stable
 
+      - name: Validate direct-codegen fixtures
+        run: node tools/grammar-frontend/validate-interp-fixtures.mjs
+
       - name: Run Clippy
         run: cargo clippy --locked --all-targets --all-features -- -D warnings
 
       - name: Run unit tests
-        run: cargo test --locked
+        run: cargo test --locked --all-features
 
       - uses: ophi-dev/mehen@v1
         with:

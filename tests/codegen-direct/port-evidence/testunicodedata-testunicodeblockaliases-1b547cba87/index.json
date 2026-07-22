@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodedata-testunicodeblockaliases-1b547cba87",
+  "active_revision_id": "testunicodedata-testunicodeblockaliases-1b547cba87-r1",
+  "revisions": [
+    {
+      "revision_id": "testunicodedata-testunicodeblockaliases-1b547cba87-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testunicodedata-testunicodeblockaliases-1b547cba87/revisions/testunicodedata-testunicodeblockaliases-1b547cba87-r1/manifest.json",
+      "closure_sha256": "519f155aa8741b031052a4d72edb56cf9e4c79dd78e0c81beb33868e63aca235"
+    }
+  ]
+}

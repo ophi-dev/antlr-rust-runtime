@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "t.g4"
+  ],
+  "logical_ids": [
+    "testtokentypeassignment-testliteralinparserandlexer-177a82c119"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:testtokentypeassignment-testliteralinparserandlexer@c727bfd93f28",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestTokenTypeAssignment.spec.ts",
+      "case": "testLiteralInParserAndLexer",
+      "source_sha256": "aaae7ef40848329631d8b2545027fa8004c68bbb179baa99081ae311419bd072"
+    },
+    {
+      "source_case_id": "java-antlr:testtokentypeassignment-testliteralinparserandlexer@c727bfd93f28",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestTokenTypeAssignment.java",
+      "case": "testLiteralInParserAndLexer",
+      "source_sha256": "f20ac97f65316180f35fc895b3aad572b38f9221eb157e5556e19f8204b792e4"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testtokentypeassignment-testliteralinparserandlexer@c727bfd93f28",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestTokenTypeAssignment.java",
+    "case": "testLiteralInParserAndLexer",
+    "source_sha256": "f20ac97f65316180f35fc895b3aad572b38f9221eb157e5556e19f8204b792e4"
+  },
+  "antlr_ng_test": {
+    "source_case_id": "antlr-ng:testtokentypeassignment-testliteralinparserandlexer@c727bfd93f28",
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/TestTokenTypeAssignment.spec.ts",
+    "case": "testLiteralInParserAndLexer",
+    "source_sha256": "aaae7ef40848329631d8b2545027fa8004c68bbb179baa99081ae311419bd072"
+  },
+  "expected": "success",
+  "token_assignment_oracle": {
+    "artifacts": [
+      ".interp",
+      ".tokens"
+    ],
+    "agreement": "Java and antlr-ng source tests use the same grammar input and expected token/rule set",
+    "compatibility_verdict": "Java ANTLR 4.13.2"
+  },
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "unicode_data": {
+      "generator": "org.antlr.v4.unicode.UnicodeDataTemplateController",
+      "helper": "tools/grammar-frontend/oracle/GenerateUnicodeData.java",
+      "helper_sha256": "9adec4f06cb31c7c7e408336e8fe935741f6d4ec5e8113e76450551ec1e3967f",
+      "icu4j_version": "78.1.0.0",
+      "icu4j_jar_sha256": "bbb70d3be23110d7295823eee0c2e896ac3b619b3c0f26168f65eb972df51d2a",
+      "unicode_version": "17.0.0.0"
+    },
+    "exit_status": 0
+  },
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh testtokentypeassignment-testliteralinparserandlexer-177a82c119 --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar --icu-jar /tmp/antlr-cleanroom/tools/icu4j-78.1.jar",
+  "files": {
+    "oracle/java-antlr.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stdout": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3",
+    "t.g4": "6550a31c3515dfbd55fd71af226e6aea1afd58fedb1d1822f599b5da9aa9624b",
+    "t.interp": "e8a3fb845b469a4f5d0fca5d4cdebbaac10b184699231201e6d1f082f593d1b5",
+    "t.tokens": "e565289a6a29e2e660c0391403bb7fa111eda44060bfcf35fca67db2fb12f0c1",
+    "tLexer.interp": "b197722aa2ce7176c66001763abf89809865815b65e478e4150effe263dfe94f",
+    "tLexer.tokens": "e565289a6a29e2e660c0391403bb7fa111eda44060bfcf35fca67db2fb12f0c1"
+  }
+}

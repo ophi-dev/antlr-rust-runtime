@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "GoLexer.g4"
+  ],
+  "logical_ids": [
+    "general-bug-35-tool-crashes-with-atn-4bd74f316f"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:general-bug-35-tool-crashes-with-atn@4876a7c623f9",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/bugs/General.spec.ts",
+      "case": "Bug #35 Tool crashes with --atn",
+      "source_sha256": "d10ecdc3a8bf65568eb74e94dedd8186c5be2f6cb8ff568c47bbf54093296eec"
+    }
+  ],
+  "java_antlr_test": {
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool/src/org/antlr/v4/tool/DOTGenerator.java",
+    "case": "independent generated ATN and DOT compatibility oracle",
+    "source_sha256": "4601c680d836513e1743d261c33648339c69cfd6b73effdd48f2e06fd53cc4cf",
+    "role": "Java 4.13.2 supplies .interp and .tokens; its DOT generator outcome is retained explicitly"
+  },
+  "antlr_ng_test": {
+    "source_case_id": "antlr-ng:general-bug-35-tool-crashes-with-atn@4876a7c623f9",
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/bugs/General.spec.ts",
+    "case": "Bug #35 Tool crashes with --atn",
+    "source_sha256": "d10ecdc3a8bf65568eb74e94dedd8186c5be2f6cb8ff568c47bbf54093296eec"
+  },
+  "grammar_source": {
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/bugs/data/GoLexer.g4",
+    "sha256": "cb62a7a77e1d9a512ea143f570071f88580511f494ea94999feb51658c70e5cf"
+  },
+  "expected": "success",
+  "general_atn_dot_oracle": {
+    "rule": "EOS",
+    "expected_edge": "oracle/expected-dot-edge.txt",
+    "antlr_ng_dot": "oracle/antlr-ng-GoLexer.EOS.dot",
+    "java_dot": null,
+    "java_atn_outcome": "error",
+    "java_failure_fingerprint": "Not a valid Unicode code point: 0xFFFFFFFF",
+    "agreement": "Java 4.13.2 --atn crashes on EOF after ATN construction; antlr-ng supplies the no-crash DOT edge",
+    "compatibility_verdict": "Java ANTLR 4.13.2 .interp and .tokens, with the pinned antlr-ng DOT regression assertion"
+  },
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "unicode_data": {
+      "generator": "org.antlr.v4.unicode.UnicodeDataTemplateController",
+      "helper": "tools/grammar-frontend/oracle/GenerateUnicodeData.java",
+      "helper_sha256": "9adec4f06cb31c7c7e408336e8fe935741f6d4ec5e8113e76450551ec1e3967f",
+      "icu4j_version": "78.1.0.0",
+      "icu4j_jar_sha256": "bbb70d3be23110d7295823eee0c2e896ac3b619b3c0f26168f65eb972df51d2a",
+      "unicode_version": "17.0.0.0"
+    },
+    "exit_status": 0
+  },
+  "regeneration_command": "node tools/grammar-frontend/generate-general-bug-fixtures.mjs --update --antlr-ng-root /tmp/antlr-cleanroom/antlr-ng-1f68422 --java-root /tmp/antlr-cleanroom/antlr4-4.13.2-tool --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar --icu-jar /tmp/antlr-cleanroom/tools/icu4j-78.1.jar",
+  "files": {
+    "GoLexer.g4": "cb62a7a77e1d9a512ea143f570071f88580511f494ea94999feb51658c70e5cf",
+    "GoLexer.interp": "1e3a418737be812a4de30d3b68f2f5c056b5054e91adef85d118b018b2c45038",
+    "GoLexer.tokens": "7e032c158ea6501cafc9156e03880407307f33508c3f3c65888b1d2760b8104d",
+    "diagnostics.json": "4f4763daf0e568f9245eb83ecc19258f218bc51268740d0c8d19834692b32d83",
+    "oracle/antlr-ng-GoLexer.EOS.dot": "c3230d79343b5189a039bd1a0017e85343717588bae0478a0aa2a52848ba5aa0",
+    "oracle/antlr-ng-atn.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/antlr-ng-atn.stdout": "afddc90169bfca7cf78297ba0587931b24ecaf4ffd3de1126e242de8a7dc7a94",
+    "oracle/expected-dot-edge.txt": "8a96f59e9c3341f51c6ff64a71f69910d5f3658cb0efa3743b932b3d40913e55",
+    "oracle/java-antlr.stderr": "4696a5787c8a0b723a8c06e8b1113b27bcd132e1c32c4638c79500ff46cad532",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-atn.stderr": "8e104dae7261743cbc17f2f93f51b795427d6f8b1944420e11929c20d5efcc98",
+    "oracle/java-atn.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stdout": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnserialization-testsimplenoblock-a3dba6abcf",
+  "active_revision_id": "testatnserialization-testsimplenoblock-a3dba6abcf-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnserialization-testsimplenoblock-a3dba6abcf-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnserialization-testsimplenoblock-a3dba6abcf/revisions/testatnserialization-testsimplenoblock-a3dba6abcf-r1/manifest.json",
+      "closure_sha256": "c02c30ad7e8e06ac232f402e7d57b0490fdaadb1e356ce102886d123cbcaa41c"
+    }
+  ]
+}

@@ -1,0 +1,142 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcompositegrammars-testcirculargrammarinclusion-fa7d054f70",
+  "revision_id": "testcompositegrammars-testcirculargrammarinclusion-fa7d054f70-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "closure": {
+    "logical_id": "testcompositegrammars-testcirculargrammarinclusion-fa7d054f70",
+    "source_case_ids": [
+      "antlr-ng:testcompositegrammars-testcirculargrammarinclusion@cfa131d539a3",
+      "java-antlr:testcompositegrammars-testcirculargrammarinclusion-path@e9b50c2b636b"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/G1.g4",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/G2.g4",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/G2.interp",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/G2.tokens",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/G2Lexer.interp",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/G2Lexer.tokens",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/fixture.json",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/oracle/java-unicode-data.stdout"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testcirculargrammarinclusion_fa7d054f70::matches_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testCircularGrammarInclusion",
+    "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+    "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a"
+  },
+  "closure_sha256": "48559d5036618cc51af20dec68e98c95d1e58ebee36fc604899902b7ba64dc63",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testcompositegrammars-testcirculargrammarinclusion@cfa131d539a3",
+      "path": "tests/TestCompositeGrammars.spec.ts",
+      "sha256": "cb96ff644d0160da0f98f3bdb463c7f1b92c89f5b999a5c2a2dca7de5f05e2d7"
+    },
+    {
+      "source_case_id": "java-antlr:testcompositegrammars-testcirculargrammarinclusion-path@e9b50c2b636b",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestCompositeGrammars.java",
+      "sha256": "de04441f7ad86b0bf7fd100038606ba71098d4092fe3822ec2b0dee5842dbd05"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/G1.g4",
+      "sha256": "bb9eafb939f5c802745c1a5aef81b98415d177b95e1a9ddd48eb0b3be6fb0472"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/G2.g4",
+      "sha256": "a3e34445e29990f98634f0e260bf36f33279f5490181d41ae473dc794d1a6ec5"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/G2.interp",
+      "sha256": "56c8d28f390f32a301d4b8f2d7278c39168449bd02ccbc1dfbf273cc981630f6"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/G2.tokens",
+      "sha256": "e6360428f690b2a7de6ee8a633578d3f8e61c591d65c7d2f536449e84737bc81"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/G2Lexer.interp",
+      "sha256": "6d9c6ea2b998ded7affced2a1c89ad9725fd21de6f74a587ef6322f4021a746b"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/G2Lexer.tokens",
+      "sha256": "e6360428f690b2a7de6ee8a633578d3f8e61c591d65c7d2f536449e84737bc81"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/fixture.json",
+      "sha256": "b81d00b4c4cf5f951a50a2cb1048f6c01934cf02ae06f567a2b6c25444ba8b32"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    }
+  ],
+  "commits": {
+    "scaffold": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+    "primary_test": "365cdabd8f03a701770102d52760acd08fe65b6a",
+    "primary_implementation": "d1789bf340290d37dd8d444cabadd7bb111906d9"
+  },
+  "ancestry": {
+    "primary_test_parent": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+    "primary_implementation_parent": "00f692c6563d33875a5e052fe0e34171a6a055a1",
+    "reachability": "the final implementation commit descends from the locked red composite-grammar tests without changing them"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_composite_grammars {",
+      "end_marker": "\n    mod upstream_tool_syntax_errors {",
+      "sha256": "8154dc509aff5f0722a668393941ac494659fb2e04f78022e90f806d222ab3e7"
+    },
+    {
+      "path": "tests/codegen-direct/generated/composite-grammars-cases.inc.rs",
+      "marker": "// Generated by tools/grammar-frontend/generate-composite-grammars-fixtures.mjs.",
+      "sha256": "80328e0092a85fe497d9ea643cac7952162d0cad45f820e75692b0ecaf8cabeb"
+    }
+  ],
+  "demonstrated_red": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testcirculargrammarinclusion_fa7d054f70::matches_java -- --exact",
+    "commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+    "exit_code": 101,
+    "fingerprint": "the recursive import was rejected with G4L009 instead of compiling like Java"
+  },
+  "green_result": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testcirculargrammarinclusion_fa7d054f70::matches_java -- --exact",
+    "commit": "d1789bf340290d37dd8d444cabadd7bb111906d9",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/revisions/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70-r1/oracle-results/declared-sources.json",
+      "sha256": "e329d50426d788d8b71ddd321899e7c44ac22052a17bbea61663b0b2f7e24c57"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/revisions/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70-r1/matrix-results/results.json",
+      "sha256": "9252aa4eccb960226d654f0892f795eb5f3c1dadce09252869baf4c63a622dcc"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "java_antlr": [
+    {
+      "severity": "warning",
+      "code": 157,
+      "line": 3,
+      "column": 10,
+      "message": "rule x contains an assoc terminal option in an unrecognized location"
+    }
+  ]
+}

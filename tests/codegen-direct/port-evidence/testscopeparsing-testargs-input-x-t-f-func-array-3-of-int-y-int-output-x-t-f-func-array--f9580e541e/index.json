@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testscopeparsing-testargs-input-x-t-f-func-array-3-of-int-y-int-output-x-t-f-func-array--f9580e541e",
+  "active_revision_id": "testscopeparsing-testargs-input-x-t-f-func-array-3-of-int-y-int-output-x-t-f-func-array--f9580e541e-r1",
+  "revisions": [
+    {
+      "revision_id": "testscopeparsing-testargs-input-x-t-f-func-array-3-of-int-y-int-output-x-t-f-func-array--f9580e541e-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-x-t-f-func-array-3-of-int-y-int-output-x-t-f-func-array--f9580e541e/revisions/testscopeparsing-testargs-input-x-t-f-func-array-3-of-int-y-int-output-x-t-f-func-array--f9580e541e-r1/manifest.json",
+      "closure_sha256": "0299a64aa59f770566a142b2578d0d9b4974cd674a4576204ed0a691390e87ff"
+    }
+  ]
+}

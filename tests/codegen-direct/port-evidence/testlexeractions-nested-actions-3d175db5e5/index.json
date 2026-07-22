@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testlexeractions-nested-actions-3d175db5e5",
+  "active_revision_id": "testlexeractions-nested-actions-3d175db5e5-r1",
+  "revisions": [
+    {
+      "revision_id": "testlexeractions-nested-actions-3d175db5e5-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testlexeractions-nested-actions-3d175db5e5/revisions/testlexeractions-nested-actions-3d175db5e5-r1/manifest.json",
+      "closure_sha256": "8f14b2807084b2f8f5a454be14aacdef09d61674511923f6d6ecfc00d3a1dee3"
+    }
+  ]
+}

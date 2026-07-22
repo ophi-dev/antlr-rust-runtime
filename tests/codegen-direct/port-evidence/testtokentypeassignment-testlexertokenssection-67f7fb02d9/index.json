@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtokentypeassignment-testlexertokenssection-67f7fb02d9",
+  "active_revision_id": "testtokentypeassignment-testlexertokenssection-67f7fb02d9-r1",
+  "revisions": [
+    {
+      "revision_id": "testtokentypeassignment-testlexertokenssection-67f7fb02d9-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testtokentypeassignment-testlexertokenssection-67f7fb02d9/revisions/testtokentypeassignment-testlexertokenssection-67f7fb02d9-r1/manifest.json",
+      "closure_sha256": "ce905751b15121dc78418aa1a03a46284b7967a4b55664a022c30453e8e86b9c"
+    }
+  ]
+}

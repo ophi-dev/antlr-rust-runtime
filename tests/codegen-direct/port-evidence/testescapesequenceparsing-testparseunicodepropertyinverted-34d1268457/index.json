@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testescapesequenceparsing-testparseunicodepropertyinverted-34d1268457",
+  "active_revision_id": "testescapesequenceparsing-testparseunicodepropertyinverted-34d1268457-r1",
+  "revisions": [
+    {
+      "revision_id": "testescapesequenceparsing-testparseunicodepropertyinverted-34d1268457-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparseunicodepropertyinverted-34d1268457/revisions/testescapesequenceparsing-testparseunicodepropertyinverted-34d1268457-r1/manifest.json",
+      "closure_sha256": "891293b15c6bf45709a09242a679f9e55bf10b61ac72ca0c92015295c2e3d3e6"
+    }
+  ]
+}

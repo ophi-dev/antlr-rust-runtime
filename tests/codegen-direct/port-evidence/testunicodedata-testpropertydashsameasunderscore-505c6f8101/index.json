@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodedata-testpropertydashsameasunderscore-505c6f8101",
+  "active_revision_id": "testunicodedata-testpropertydashsameasunderscore-505c6f8101-r1",
+  "revisions": [
+    {
+      "revision_id": "testunicodedata-testpropertydashsameasunderscore-505c6f8101-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testunicodedata-testpropertydashsameasunderscore-505c6f8101/revisions/testunicodedata-testpropertydashsameasunderscore-505c6f8101-r1/manifest.json",
+      "closure_sha256": "c2957c93620626b5b93794cbd794cdad80c01e53212479fc076186a8e4c2723b"
+    }
+  ]
+}

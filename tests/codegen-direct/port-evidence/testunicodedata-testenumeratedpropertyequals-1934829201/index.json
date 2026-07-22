@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodedata-testenumeratedpropertyequals-1934829201",
+  "active_revision_id": "testunicodedata-testenumeratedpropertyequals-1934829201-r1",
+  "revisions": [
+    {
+      "revision_id": "testunicodedata-testenumeratedpropertyequals-1934829201-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testunicodedata-testenumeratedpropertyequals-1934829201/revisions/testunicodedata-testenumeratedpropertyequals-1934829201-r1/manifest.json",
+      "closure_sha256": "ce7ea343800d702a7acbf063fad25555e37f42e689784e5af0773e79e36fde95"
+    }
+  ]
+}

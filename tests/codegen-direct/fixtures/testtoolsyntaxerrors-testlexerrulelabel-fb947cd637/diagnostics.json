@@ -1,0 +1,11 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 50,
+      "line": 3,
+      "column": 5,
+      "message": "syntax error: '=' came as a complete surprise to me while looking for lexer rule element"
+    }
+  ]
+}

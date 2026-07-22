@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testbasicsemanticerrors-testu-c17a76a27e",
+  "active_revision_id": "testbasicsemanticerrors-testu-c17a76a27e-r1",
+  "revisions": [
+    {
+      "revision_id": "testbasicsemanticerrors-testu-c17a76a27e-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testbasicsemanticerrors-testu-c17a76a27e/revisions/testbasicsemanticerrors-testu-c17a76a27e-r1/manifest.json",
+      "closure_sha256": "3fc34a40625314f116b6c23a50130d219ff788a96f872da64f1fb45f86c4b4c9"
+    }
+  ]
+}

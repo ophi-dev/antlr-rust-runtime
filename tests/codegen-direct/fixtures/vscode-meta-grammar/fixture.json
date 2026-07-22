@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "LexBasic.g4",
+    "ANTLRv4Lexer.g4",
+    "ANTLRv4Parser.g4"
+  ],
+  "logical_ids": [
+    "vscode-antlr4-lex-basic",
+    "vscode-antlr4-antlr-v4-lexer",
+    "vscode-antlr4-antlr-v4-parser"
+  ],
+  "external_sources": [
+    {
+      "repository": "https://github.com/mike-lischke/vscode-antlr4.git",
+      "commit": "3e9469d1d490c71b3e3b909edf1235582a3f8db8",
+      "path": "grammars/LexBasic.g4",
+      "license": "BSD-3-Clause"
+    },
+    {
+      "repository": "https://github.com/mike-lischke/vscode-antlr4.git",
+      "commit": "3e9469d1d490c71b3e3b909edf1235582a3f8db8",
+      "path": "grammars/ANTLRv4Lexer.g4",
+      "license": "BSD-3-Clause"
+    },
+    {
+      "repository": "https://github.com/mike-lischke/vscode-antlr4.git",
+      "commit": "3e9469d1d490c71b3e3b909edf1235582a3f8db8",
+      "path": "grammars/ANTLRv4Parser.g4",
+      "license": "BSD-3-Clause"
+    }
+  ],
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "exit_status": 0
+  },
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh vscode-meta-grammar --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar",
+  "files": {
+    "ANTLRv4Lexer.g4": "5c6f7ff2ed7d8ec09f2b430bebc73cb0fbb540cd918b37b0ce014ba95421ef85",
+    "ANTLRv4Lexer.interp": "890804a598b296cf11c9b8eea2ecbdb2033618d83ef7ab0c88fb92de1c855a5a",
+    "ANTLRv4Lexer.tokens": "3199535ef832a1dc75254fdad42ceedd2ce61b96241d3328f5ca41f7d32ee80c",
+    "ANTLRv4Parser.g4": "d2e8c407c8037481128ca5186636e0efa99710990aec400a5b26704b18e59ba0",
+    "ANTLRv4Parser.interp": "7c6195c2dedf765afb843af54fcec6a36896fb02f6123f04d4d665641ff6202b",
+    "ANTLRv4Parser.tokens": "3199535ef832a1dc75254fdad42ceedd2ce61b96241d3328f5ca41f7d32ee80c",
+    "LexBasic.g4": "bb6a1ab8c32cfc2b8c6d5778140025174b4c74e786825ce05e5de089b6d69961",
+    "LexBasic.interp": "76f2e37776cb0e3301210eb8800beebf4435edcbd1407a40e2c3729032112835",
+    "LexBasic.tokens": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-antlr.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

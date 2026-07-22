@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "TLexer2.g4",
+    "TParser2.g4"
+  ],
+  "expected": "error",
+  "logical_ids": [
+    "vscode-antlr4-t-lexer-2",
+    "vscode-antlr4-t-parser-2"
+  ],
+  "external_sources": [
+    {
+      "repository": "https://github.com/mike-lischke/vscode-antlr4.git",
+      "commit": "3e9469d1d490c71b3e3b909edf1235582a3f8db8",
+      "path": "tests/backend/test-data/TLexer2.g4",
+      "license": "MIT"
+    },
+    {
+      "repository": "https://github.com/mike-lischke/vscode-antlr4.git",
+      "commit": "3e9469d1d490c71b3e3b909edf1235582a3f8db8",
+      "path": "tests/backend/test-data/TParser2.g4",
+      "license": "MIT"
+    }
+  ],
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "exit_status": 1
+  },
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh vscode-split-errors --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar",
+  "files": {
+    "TLexer2.g4": "3e6ac6743e840a85d172728890323850fb954b29aa746e797a499f58a3388d7a",
+    "TParser2.g4": "5b7a5257cd28ae29e2d6971179f620d6e34343fd1b5b553a30205918ec9e843b",
+    "diagnostics.json": "2d90ba789b7980dc6f68941e4f6b61d46617eca30432c39dc6e5042b705c8f24",
+    "oracle/java-antlr.stderr": "fbf0cc66e97d10a2d292b9a8945ac40e43c702e9b643eaf3fb375764bf90a60e",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

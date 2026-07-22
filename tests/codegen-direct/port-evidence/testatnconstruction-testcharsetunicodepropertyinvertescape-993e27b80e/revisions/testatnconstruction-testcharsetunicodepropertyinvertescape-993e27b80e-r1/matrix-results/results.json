@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e",
+  "revision_id": "testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e-r1",
+  "cells": [
+    {
+      "test_port": "coverage-extension",
+      "test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "implementation_port": "existing-primary-antlr-ng",
+      "implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+      "command": "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+      "result": "green: 38 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the case-specific test passed against the existing Phase B implementation"
+}

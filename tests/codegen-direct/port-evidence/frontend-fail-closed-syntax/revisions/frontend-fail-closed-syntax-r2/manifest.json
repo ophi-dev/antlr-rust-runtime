@@ -228,14 +228,14 @@
     }
   ],
   "verified_covered_existing": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::ported_tests::frontend_tool_syntax_cases_match_upstream_outcomes",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::ported_tests::frontend_tool_syntax_cases_match_upstream_outcomes",
     "commit": "9ce58d9d60d5ce1226c16460c22819fb0bd3b06a",
     "exit_code": 0,
     "result": "1 passed; 0 failed",
     "covering_implementation_commit": "8a00a3d6496779b969a42511d7e29c0d102d62d7"
   },
   "green_result": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::ported_tests::frontend_tool_syntax_cases_match_upstream_outcomes",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::ported_tests::frontend_tool_syntax_cases_match_upstream_outcomes",
     "commit": "9ce58d9d60d5ce1226c16460c22819fb0bd3b06a",
     "exit_code": 0,
     "result": "1 passed; 0 failed"
@@ -251,7 +251,7 @@
     },
     {
       "path": "tests/codegen-direct/port-evidence/frontend-fail-closed-syntax/revisions/frontend-fail-closed-syntax-r2/matrix-results/results.json",
-      "sha256": "a06ab9818f695c83f6fd63deeb6f54a36bf621d6a80e19baf1c71f5d9eab2d1d"
+      "sha256": "8be562dcb0b5de43a5de0074a7a6785f8089d5e3e6639d01112444372684dbfc"
     }
   ]
 }

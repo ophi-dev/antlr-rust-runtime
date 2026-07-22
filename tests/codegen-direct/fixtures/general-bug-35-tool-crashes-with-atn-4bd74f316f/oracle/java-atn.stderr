@@ -1,0 +1,11 @@
+Exception in thread "main" java.lang.IllegalArgumentException: Not a valid Unicode code point: 0xFFFFFFFF
+	at java.base/java.lang.Character.toChars(Character.java:10051)
+	at java.base/java.lang.AbstractStringBuilder.appendCodePoint(AbstractStringBuilder.java:1059)
+	at java.base/java.lang.StringBuilder.appendCodePoint(StringBuilder.java:280)
+	at org.antlr.v4.tool.DOTGenerator.getDOT(DOTGenerator.java:262)
+	at org.antlr.v4.tool.DOTGenerator.getDOT(DOTGenerator.java:174)
+	at org.antlr.v4.Tool.generateATNs(Tool.java:684)
+	at org.antlr.v4.Tool.processNonCombinedGrammar(Tool.java:386)
+	at org.antlr.v4.Tool.process(Tool.java:359)
+	at org.antlr.v4.Tool.processGrammarsOnCommandLine(Tool.java:318)
+	at org.antlr.v4.Tool.main(Tool.java:162)

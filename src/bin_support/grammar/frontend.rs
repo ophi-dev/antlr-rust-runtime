@@ -9,8 +9,8 @@ use antlr4_runtime::{
 };
 
 use super::generated::antlr_v4_lexer::{
-    AntlRv4Lexer, BLOCK_COMMENT, DOC_COMMENT, UNTERMINATED_ARGUMENT, UNTERMINATED_CHAR_SET,
-    UNTERMINATED_STRING_LITERAL,
+    AntlRv4Lexer, BLOCK_COMMENT, COLON, DOC_COMMENT, MODE, RANGE, RULE_REF, SEMI, STRING_LITERAL,
+    UNTERMINATED_ARGUMENT, UNTERMINATED_CHAR_SET, UNTERMINATED_STRING_LITERAL,
 };
 use super::generated::antlr_v4_parser::AntlRv4Parser;
 use super::lexer_adaptor::LexerAdaptor;
@@ -31,11 +31,23 @@ impl SourceId {
 
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub(crate) struct SyntaxId(u32);
+pub(crate) struct SyntaxId(u64);
 
 impl SyntaxId {
+    pub(crate) const fn new(index: u32) -> Self {
+        Self(index as u64)
+    }
+
+    pub(crate) const fn for_source(source: SourceId, index: u32) -> Self {
+        Self(((source.0 as u64) << 32) | index as u64)
+    }
+
     pub(crate) const fn index(self) -> usize {
-        self.0 as usize
+        (self.0 as u32) as usize
+    }
+
+    pub(crate) const fn source(self) -> SourceId {
+        SourceId::new((self.0 >> 32) as u32)
     }
 }
 
@@ -83,6 +95,10 @@ pub(crate) struct Cst {
 }
 
 impl Cst {
+    pub(crate) const fn root_id(&self) -> SyntaxId {
+        self.root
+    }
+
     pub(crate) fn root(&self) -> &SyntaxNode {
         &self.nodes[self.root.index()]
     }
@@ -91,13 +107,35 @@ impl Cst {
         self.nodes.get(id.index())
     }
 
-    pub(crate) fn children(&self, id: SyntaxId) -> impl Iterator<Item = SyntaxId> + '_ {
+    pub(crate) fn children(&self, id: SyntaxId) -> impl DoubleEndedIterator<Item = SyntaxId> + '_ {
         self.node(id)
             .into_iter()
             .flat_map(|node| {
                 self.children[node.child_ids.start as usize..node.child_ids.end as usize].iter()
             })
             .copied()
+    }
+
+    pub(crate) fn descendants(&self, id: SyntaxId) -> CstDescendants<'_> {
+        CstDescendants {
+            cst: self,
+            pending: vec![id],
+        }
+    }
+}
+
+pub(crate) struct CstDescendants<'a> {
+    cst: &'a Cst,
+    pending: Vec<SyntaxId>,
+}
+
+impl Iterator for CstDescendants<'_> {
+    type Item = SyntaxId;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let id = self.pending.pop()?;
+        self.pending.extend(self.cst.children(id).rev());
+        Some(id)
     }
 }
 
@@ -160,6 +198,23 @@ impl SourceFile {
         let column = self.text[line_start..byte].chars().count();
         Some((line_index + 1, column))
     }
+
+    pub(crate) fn byte_offset(&self, line: usize, column: usize) -> Option<u32> {
+        let line_start = *self.line_starts.get(line.checked_sub(1)?)? as usize;
+        let line_end = self.text[line_start..]
+            .find('\n')
+            .map_or(self.text.len(), |offset| line_start + offset);
+        let offset = if column == self.text[line_start..line_end].chars().count() {
+            line_end
+        } else {
+            self.text[line_start..line_end]
+                .char_indices()
+                .nth(column)?
+                .0
+                + line_start
+        };
+        u32::try_from(offset).ok()
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -200,11 +255,31 @@ impl fmt::Display for FrontendError {
 
 impl std::error::Error for FrontendError {}
 
+pub(crate) struct RecoveredSource {
+    pub(crate) file: SourceFile,
+    pub(crate) diagnostics: Vec<SyntaxDiagnostic>,
+}
+
 pub(crate) fn parse_source(
     source: SourceId,
     logical_path: impl Into<PathBuf>,
     text: impl Into<Box<str>>,
 ) -> Result<SourceFile, FrontendError> {
+    let recovered = parse_source_recovering(source, logical_path, text)?;
+    if recovered.diagnostics.is_empty() {
+        Ok(recovered.file)
+    } else {
+        Err(FrontendError {
+            diagnostics: recovered.diagnostics,
+        })
+    }
+}
+
+pub(crate) fn parse_source_recovering(
+    source: SourceId,
+    logical_path: impl Into<PathBuf>,
+    text: impl Into<Box<str>>,
+) -> Result<RecoveredSource, FrontendError> {
     let logical_path = logical_path.into();
     let text = text.into();
     let line_starts = line_starts(source, &text)?;
@@ -264,21 +339,23 @@ pub(crate) fn parse_source(
         ),
         message: diagnostic.message,
     }));
+    normalize_parser_diagnostics(&tokens, &mut diagnostics);
 
     let root = match root {
-        Ok(root) if syntax_error_count == 0 && diagnostics.is_empty() => root,
-        Ok(_) => {
+        Ok(root) => {
             if diagnostics.is_empty() {
-                diagnostics.push(SyntaxDiagnostic {
-                    code: "G4F003",
-                    stage: DiagnosticStage::Parser,
-                    span: SourceSpan::empty(source),
-                    message: format!(
-                        "grammar parser recovered from {syntax_error_count} syntax error(s)"
-                    ),
-                });
+                if syntax_error_count != 0 {
+                    diagnostics.push(SyntaxDiagnostic {
+                        code: "G4F003",
+                        stage: DiagnosticStage::Parser,
+                        span: SourceSpan::empty(source),
+                        message: format!(
+                            "grammar parser recovered from {syntax_error_count} syntax error(s)"
+                        ),
+                    });
+                }
             }
-            return Err(FrontendError { diagnostics });
+            root
         }
         Err(error) => {
             if diagnostics.is_empty() {
@@ -294,7 +371,11 @@ pub(crate) fn parse_source(
     };
 
     let parsed = parser.into_parsed_file(root);
-    let cst = copy_cst(source, &tokens, parsed.tree())?;
+    let cst = match copy_cst(source, &tokens, parsed.tree()) {
+        Ok(cst) => cst,
+        Err(_) if !diagnostics.is_empty() => return Err(FrontendError { diagnostics }),
+        Err(error) => return Err(error),
+    };
     let trivia = tokens
         .iter()
         .enumerate()
@@ -304,15 +385,104 @@ pub(crate) fn parse_source(
         })
         .map(|(index, _)| index as u32)
         .collect();
-    Ok(SourceFile {
-        id: source,
-        logical_path,
-        text,
-        line_starts,
-        tokens: tokens.into_boxed_slice(),
-        trivia,
-        cst,
+    Ok(RecoveredSource {
+        file: SourceFile {
+            id: source,
+            logical_path,
+            text,
+            line_starts,
+            tokens: tokens.into_boxed_slice(),
+            trivia,
+            cst,
+        },
+        diagnostics,
     })
+}
+
+fn normalize_parser_diagnostics(tokens: &[SyntaxToken], diagnostics: &mut Vec<SyntaxDiagnostic>) {
+    let significant = tokens
+        .iter()
+        .filter(|token| token.channel == antlr4_runtime::token::DEFAULT_CHANNEL)
+        .collect::<Vec<_>>();
+
+    for diagnostic in diagnostics.iter_mut() {
+        let Some(index) = diagnostic_token_index(&significant, &diagnostic.span) else {
+            continue;
+        };
+        if significant[index].token_type == RANGE
+            && index > 0
+            && significant[index - 1].token_type == STRING_LITERAL
+            && significant
+                .get(index + 1)
+                .is_some_and(|token| token.token_type == STRING_LITERAL)
+        {
+            diagnostic.code = "G4S009";
+            diagnostic.span = significant[index - 1].span.clone();
+            "character ranges are not allowed in parser rules".clone_into(&mut diagnostic.message);
+        }
+    }
+
+    let mut recovered = Vec::new();
+    for diagnostic in diagnostics.iter() {
+        let Some(index) = diagnostic_token_index(&significant, &diagnostic.span) else {
+            continue;
+        };
+        if significant[index].token_type != RULE_REF
+            || significant
+                .get(index + 1)
+                .is_none_or(|token| token.token_type != COLON)
+        {
+            continue;
+        }
+        let Some(mode_index) = significant[..index]
+            .iter()
+            .rposition(|token| token.token_type == MODE)
+        else {
+            continue;
+        };
+        if !significant[mode_index + 1..index]
+            .iter()
+            .any(|token| token.token_type == SEMI)
+        {
+            continue;
+        }
+        let Some(semicolon) = significant[index + 1..]
+            .iter()
+            .find(|token| token.token_type == SEMI)
+        else {
+            continue;
+        };
+        if diagnostics
+            .iter()
+            .chain(&recovered)
+            .any(|existing| existing.span == semicolon.span)
+        {
+            continue;
+        }
+        recovered.push(SyntaxDiagnostic {
+            code: "G4F003",
+            stage: DiagnosticStage::Parser,
+            span: semicolon.span.clone(),
+            message: "mismatched input ';' expecting COLON while matching a lexer rule".to_owned(),
+        });
+    }
+    diagnostics.extend(recovered);
+
+    let mut seen = Vec::new();
+    diagnostics.retain(|diagnostic| {
+        if seen.contains(&diagnostic.span) {
+            false
+        } else {
+            seen.push(diagnostic.span.clone());
+            true
+        }
+    });
+}
+
+fn diagnostic_token_index(tokens: &[&SyntaxToken], span: &SourceSpan) -> Option<usize> {
+    tokens
+        .iter()
+        .position(|token| token.span.bytes.start == span.bytes.start)
 }
 
 fn line_starts(source: SourceId, text: &str) -> Result<Box<[u32]>, FrontendError> {
@@ -517,7 +687,7 @@ fn copy_node(
     let child_end = u32::try_from(children.len())
         .map_err(|_| invalid_span(source, "CST exceeds 2^32 edges"))?;
     nodes[node_index as usize].child_ids = child_start..child_end;
-    Ok(SyntaxId(node_index))
+    Ok(SyntaxId::for_source(source, node_index))
 }
 
 fn node_span(

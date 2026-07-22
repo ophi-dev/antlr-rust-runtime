@@ -1,0 +1,159 @@
+{
+  "schema_version": 1,
+  "logical_id": "general-bug-35-tool-crashes-with-atn-4bd74f316f",
+  "revision_id": "general-bug-35-tool-crashes-with-atn-4bd74f316f-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "resolution": "verified-covered-existing",
+  "closure": {
+    "logical_id": "general-bug-35-tool-crashes-with-atn-4bd74f316f",
+    "source_case_ids": [
+      "antlr-ng:general-bug-35-tool-crashes-with-atn@4876a7c623f9"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/GoLexer.g4",
+      "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/GoLexer.interp",
+      "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/GoLexer.tokens",
+      "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/diagnostics.json",
+      "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/fixture.json",
+      "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/antlr-ng-GoLexer.EOS.dot",
+      "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/antlr-ng-atn.stderr",
+      "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/antlr-ng-atn.stdout",
+      "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/expected-dot-edge.txt",
+      "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/java-atn.stderr",
+      "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/java-atn.stdout",
+      "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/java-unicode-data.stdout"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::general_bug_test::bug_35_eof_dot_edge_does_not_crash",
+    "unit_under_test": "semantic checks or post-parse compiler diagnostics",
+    "observable": "direct Rust recognizer metadata matches Java 4.13.2 and the selected ATN DOT edge matches the pinned upstream oracle for General.Bug #35 Tool crashes with --atn",
+    "scaffold_commit": "4b8cf8598ed1ce18df901b34fc5beba5a8a458dc",
+    "primary_test_commit": "827ea806215b2547d2c049d1ae25775a4c6eeea2",
+    "resolution": "verified-covered-existing"
+  },
+  "closure_sha256": "6808854b9cafc727e58c2f867288a5d7eff38d9158a54003cb62360addad3fb9",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:general-bug-35-tool-crashes-with-atn@4876a7c623f9",
+      "path": "tests/bugs/General.spec.ts",
+      "sha256": "d10ecdc3a8bf65568eb74e94dedd8186c5be2f6cb8ff568c47bbf54093296eec"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/GoLexer.g4",
+      "sha256": "cb62a7a77e1d9a512ea143f570071f88580511f494ea94999feb51658c70e5cf"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/GoLexer.interp",
+      "sha256": "1e3a418737be812a4de30d3b68f2f5c056b5054e91adef85d118b018b2c45038"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/GoLexer.tokens",
+      "sha256": "7e032c158ea6501cafc9156e03880407307f33508c3f3c65888b1d2760b8104d"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/diagnostics.json",
+      "sha256": "4f4763daf0e568f9245eb83ecc19258f218bc51268740d0c8d19834692b32d83"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/fixture.json",
+      "sha256": "df49d8393487400563771a0af207acba5d17d338b6d1e16570a956d8a7624ba9"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/antlr-ng-GoLexer.EOS.dot",
+      "sha256": "c3230d79343b5189a039bd1a0017e85343717588bae0478a0aa2a52848ba5aa0"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/antlr-ng-atn.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/antlr-ng-atn.stdout",
+      "sha256": "afddc90169bfca7cf78297ba0587931b24ecaf4ffd3de1126e242de8a7dc7a94"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/expected-dot-edge.txt",
+      "sha256": "8a96f59e9c3341f51c6ff64a71f69910d5f3658cb0efa3743b932b3d40913e55"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/java-antlr.stderr",
+      "sha256": "4696a5787c8a0b723a8c06e8b1113b27bcd132e1c32c4638c79500ff46cad532"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/java-atn.stderr",
+      "sha256": "8e104dae7261743cbc17f2f93f51b795427d6f8b1944420e11929c20d5efcc98"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/java-atn.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    }
+  ],
+  "commits": {
+    "scaffold": "4b8cf8598ed1ce18df901b34fc5beba5a8a458dc",
+    "primary_test": "827ea806215b2547d2c049d1ae25775a4c6eeea2",
+    "primary_implementation": "4b8cf8598ed1ce18df901b34fc5beba5a8a458dc"
+  },
+  "ancestry": {
+    "primary_test_parent": "4b8cf8598ed1ce18df901b34fc5beba5a8a458dc",
+    "primary_implementation_parent": "d1789bf340290d37dd8d444cabadd7bb111906d9",
+    "reachability": "the case-specific .interp, .tokens, and DOT assertions passed against the direct compiler implementation already present at the batch base"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/general_bug_test.rs",
+      "marker": "use std::collections::{BTreeMap, BTreeSet, VecDeque};",
+      "sha256": "18cf037412317e46a06b121e82d60251b00c059e9ff27a9871f01b033530e1ac"
+    },
+    {
+      "path": "src/bin_support/grammar/atn/mod.rs",
+      "marker": "#[cfg(test)]\nmod general_bug_test;",
+      "end_marker": "\n#[cfg(test)]\nmod interp_test;",
+      "sha256": "08614a35e50fa7f68efd847dcee8a95efaedb2913d831117a11081b1215ef23a"
+    }
+  ],
+  "verified_covered_existing": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::general_bug_test",
+    "commit": "827ea806215b2547d2c049d1ae25775a4c6eeea2",
+    "exit_code": 0,
+    "result": "2 passed; 0 failed",
+    "covering_implementation_commit": "4b8cf8598ed1ce18df901b34fc5beba5a8a458dc"
+  },
+  "green_result": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::general_bug_test",
+    "commit": "827ea806215b2547d2c049d1ae25775a4c6eeea2",
+    "exit_code": 0,
+    "result": "2 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/general-bug-35-tool-crashes-with-atn-4bd74f316f/revisions/general-bug-35-tool-crashes-with-atn-4bd74f316f-r1/oracle-results/declared-sources.json",
+      "sha256": "a52f804c63a3f2058591843215d31e8e6f3f52ccb5982bebb3b08f1cc148ca1b"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/general-bug-35-tool-crashes-with-atn-4bd74f316f/revisions/general-bug-35-tool-crashes-with-atn-4bd74f316f-r1/matrix-results/results.json",
+      "sha256": "f047440d0730a1d08b1994f08f7c05ea2776db51cb1d3c1c70045742f28c9261"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testlookaheadtrees-testincludeeof-41ef07554a",
+  "revision_id": "testlookaheadtrees-testincludeeof-41ef07554a-r1",
+  "cells": [
+    {
+      "test_port": "primary",
+      "test_commit": "b1b0728572764a335519762e5e7125a25fe3f118",
+      "implementation_port": "primary-antlr-ng",
+      "implementation_commit": "e2046ea128583ecf578a82b901ee495e0c503c47",
+      "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_lookahead_trees::include_eof_matches_java -- --exact",
+      "result": "green: 1 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the primary implementation passed the locked primary tests"
+}

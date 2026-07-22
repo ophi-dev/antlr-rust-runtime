@@ -1,0 +1,11 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 65,
+      "line": 5,
+      "column": 11,
+      "message": "unknown attribute z for rule a in $a::z"
+    }
+  ]
+}

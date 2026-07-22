@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testvocabulary-testvocabularyfromtokennames-d047506a84",
+  "active_revision_id": "testvocabulary-testvocabularyfromtokennames-d047506a84-r1",
+  "revisions": [
+    {
+      "revision_id": "testvocabulary-testvocabularyfromtokennames-d047506a84-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testvocabulary-testvocabularyfromtokennames-d047506a84/revisions/testvocabulary-testvocabularyfromtokennames-d047506a84-r1/manifest.json",
+      "closure_sha256": "b01255f68bb158fc87e8216c5f4bee37c0dd73681aebb3986a2f74d112ca15ce"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92",
+  "revision_id": "testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92-r1",
+  "cells": [
+    {
+      "test_port": "primary",
+      "test_commit": "4338380064180acf5da3e2414bd5837c21266d65",
+      "implementation_port": "primary-antlr-ng",
+      "implementation_commit": "a5f1269a026f5a40f59071cadf8a6c60f8fe1b09",
+      "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::recursive_rule_reference_with_argument_without_parameter::matches_java_diagnostic -- --exact",
+      "result": "green: 1 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the primary implementation passed the locked primary tests"
+}

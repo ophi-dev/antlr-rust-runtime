@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "LexerBasic.g4"
+  ],
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1+9"
+  },
+  "files": {
+    "LexerBasic.g4": "e2ce807471027536b481faf6ce5a8d86a062dc968def70f55cc221be2c947ea6",
+    "LexerBasic.interp": "73fee09d34f8f73cee32b01c20c72f307a6879e68923063e88567baad5b4ca11",
+    "LexerBasic.tokens": "ba74728c9737ee0f8792a3da8c8a24dea911252b4978d636c243626b7bef33bb"
+  }
+}

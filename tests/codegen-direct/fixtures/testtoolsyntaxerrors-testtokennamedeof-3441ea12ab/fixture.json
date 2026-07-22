@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "logical_ids": [
+    "testtoolsyntaxerrors-testtokennamedeof-3441ea12ab"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "java-antlr:testtoolsyntaxerrors-testtokennamedeof@2c45f9429c7a",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestToolSyntaxErrors.java",
+      "case": "testTokenNamedEOF",
+      "source_sha256": "d20fdd17605ec4419dea95b8734f6768d54b6a3a13c3f592e75653690b5808e0"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testtoolsyntaxerrors-testtokennamedeof@2c45f9429c7a",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestToolSyntaxErrors.java",
+    "case": "testTokenNamedEOF",
+    "source_sha256": "d20fdd17605ec4419dea95b8734f6768d54b6a3a13c3f592e75653690b5808e0"
+  },
+  "fixture_binding": {
+    "method": "testTokenNamedEOF",
+    "source": "pinned Java TestToolSyntaxErrors.java"
+  },
+  "roots": [
+    "A.g4"
+  ],
+  "expected": "error",
+  "tool_syntax_errors_oracle": {
+    "artifacts": [
+      "diagnostics"
+    ],
+    "diagnostic_types": [
+      "RESERVED_RULE_NAME"
+    ],
+    "compatibility_verdict": "Java ANTLR 4.13.2"
+  },
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "unicode_data": {
+      "generator": "org.antlr.v4.unicode.UnicodeDataTemplateController",
+      "helper": "tools/grammar-frontend/oracle/GenerateUnicodeData.java",
+      "helper_sha256": "9adec4f06cb31c7c7e408336e8fe935741f6d4ec5e8113e76450551ec1e3967f",
+      "icu4j_version": "78.1.0.0",
+      "icu4j_jar_sha256": "bbb70d3be23110d7295823eee0c2e896ac3b619b3c0f26168f65eb972df51d2a",
+      "unicode_version": "17.0.0.0"
+    },
+    "exit_status": 1
+  },
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh testtoolsyntaxerrors-testtokennamedeof-3441ea12ab --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar --icu-jar /tmp/antlr-cleanroom/tools/icu4j-78.1.jar",
+  "files": {
+    "A.g4": "39bb69ee8477d8d4e8cbd4191a2a47206302a5dd3e48e1d8b0c23154c2eb5463",
+    "diagnostics.json": "41c91613b6ed5a50e3a38edd1f68f1ccd293ad3393f8987bdfe6101adf8ebdf1",
+    "oracle/java-antlr.stderr": "cf674e46baa42261b6c86ff836a17c4eae5b4c31ed881b089b67297c8c28d17b",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stdout": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testlookaheadtrees-testincludeeof-41ef07554a",
+  "active_revision_id": "testlookaheadtrees-testincludeeof-41ef07554a-r1",
+  "revisions": [
+    {
+      "revision_id": "testlookaheadtrees-testincludeeof-41ef07554a-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testlookaheadtrees-testincludeeof-41ef07554a/revisions/testlookaheadtrees-testincludeeof-41ef07554a-r1/manifest.json",
+      "closure_sha256": "8b1635f17d7f67baf9a61c563e078f5d1dc898893e8cab4ea29867c6490922b6"
+    }
+  ]
+}

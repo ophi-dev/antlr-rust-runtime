@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testescapesequenceparsing-testparsenewline-8d0dddafad",
+  "revision_id": "testescapesequenceparsing-testparsenewline-8d0dddafad-r1",
+  "cells": [
+    {
+      "test_port": "primary",
+      "test_commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
+      "implementation_port": "primary-antlr-ng",
+      "implementation_commit": "56d2ac6a31671f9d786f2c3fa6323fffa6474375",
+      "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_newline_matches_java -- --exact",
+      "result": "green: 1 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the primary implementation passed the locked primary tests"
+}

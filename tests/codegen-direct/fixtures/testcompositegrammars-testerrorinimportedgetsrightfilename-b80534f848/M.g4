@@ -1,0 +1,2 @@
+grammar M;
+import S;

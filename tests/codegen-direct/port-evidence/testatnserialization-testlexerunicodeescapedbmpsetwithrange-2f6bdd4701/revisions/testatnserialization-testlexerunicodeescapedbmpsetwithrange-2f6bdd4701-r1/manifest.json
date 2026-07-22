@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701",
+  "revision_id": "testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "resolution": "verified-covered-existing",
+  "closure": {
+    "logical_id": "testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701",
+    "source_case_ids": [
+      "antlr-ng:testatnserialization-testlexerunicodeescapedbmpsetwithrange@3f0d721a4c24",
+      "java-antlr:testatnserialization-testlexerunicodeescapedbmpsetwithrange@3f0d721a4c24"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701/L.g4",
+      "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701/L.interp",
+      "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701/L.tokens",
+      "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701/fixture.json",
+      "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701/oracle/java-antlr.stdout"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_atn_serialization::lexer_unicode_escaped_bmp_set_with_range::matches_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust serialization matches the complete Java 4.13.2 .interp for TestATNSerialization.testLexerUnicodeEscapedBMPSetWithRange",
+    "scaffold_commit": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+    "primary_test_commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+    "resolution": "verified-covered-existing"
+  },
+  "closure_sha256": "eeb5006b944738cf9ab48cfa43c51e40c05929704ebbecfb8afe2ef09bfc7aee",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testatnserialization-testlexerunicodeescapedbmpsetwithrange@3f0d721a4c24",
+      "path": "tests/TestATNSerialization.spec.ts",
+      "sha256": "e66e987e1dd70fbecda510c3929c19c7a3d7b4cdf5ab1859564a7067cb9bcc9f"
+    },
+    {
+      "source_case_id": "java-antlr:testatnserialization-testlexerunicodeescapedbmpsetwithrange@3f0d721a4c24",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestATNSerialization.java",
+      "sha256": "10677d64d96a762304980adcb95b0cae5dee21dd16ab433ac5b46b5c0bb6d017"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701/L.g4",
+      "sha256": "8ea7e0882cfe6c411a299f7c9762c3f52b265741b4f0837c0876e73429fd04b8"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701/L.interp",
+      "sha256": "b64ff8afbebc89623c359b6e33a5e32e55aba3c634a26dc63daeab8f7a2018a4"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701/L.tokens",
+      "sha256": "05e2fff4ffabf4e3b89a4096f749fc10a24a6739f8c96770a96860c3612eb3e6"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701/fixture.json",
+      "sha256": "29d887970a167b447119fac3b10283846845cd12f5017aec34410b10457881db"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "commits": {
+    "scaffold": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+    "primary_test": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+    "primary_implementation": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad"
+  },
+  "ancestry": {
+    "primary_test_parent": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
+    "primary_implementation_parent": "63e800d1236d34721b0f870d8a2c723c74edfc5e",
+    "reachability": "the case-specific test commit is directly based on the existing Phase B implementation"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_atn_serialization {",
+      "end_marker": "\n    fn assert_lexer_fixture",
+      "sha256": "be571c0ccbfa94b5662543387e3b8eeb73709d9c984b5992d74827f5d426d5c6"
+    }
+  ],
+  "verified_covered_existing": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+    "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+    "exit_code": 0,
+    "result": "36 passed; 0 failed",
+    "covering_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad"
+  },
+  "green_result": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+    "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
+    "exit_code": 0,
+    "result": "36 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701/revisions/testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701-r1/oracle-results/declared-sources.json",
+      "sha256": "52e9d34320ae312c8c49f598dbc3c476772a1bcc48104ff2745618371fad0c42"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701/revisions/testatnserialization-testlexerunicodeescapedbmpsetwithrange-2f6bdd4701-r1/matrix-results/results.json",
+      "sha256": "16dc8037dbc3e8413b8b98f47dcb081100c44b8dc8958b4f5acdb3794b5b4383"
+    }
+  ]
+}

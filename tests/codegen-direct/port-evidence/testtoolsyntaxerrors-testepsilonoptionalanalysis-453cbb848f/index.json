@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtoolsyntaxerrors-testepsilonoptionalanalysis-453cbb848f",
+  "active_revision_id": "testtoolsyntaxerrors-testepsilonoptionalanalysis-453cbb848f-r1",
+  "revisions": [
+    {
+      "revision_id": "testtoolsyntaxerrors-testepsilonoptionalanalysis-453cbb848f-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testtoolsyntaxerrors-testepsilonoptionalanalysis-453cbb848f/revisions/testtoolsyntaxerrors-testepsilonoptionalanalysis-453cbb848f-r1/manifest.json",
+      "closure_sha256": "c1bd53bbbf869163d79a924b7b8f914a9991a5d05ced84d53f2d0fba1b417acb"
+    }
+  ]
+}

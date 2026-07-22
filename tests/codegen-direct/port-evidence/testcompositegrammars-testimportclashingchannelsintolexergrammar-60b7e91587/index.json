@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcompositegrammars-testimportclashingchannelsintolexergrammar-60b7e91587",
+  "active_revision_id": "testcompositegrammars-testimportclashingchannelsintolexergrammar-60b7e91587-r1",
+  "revisions": [
+    {
+      "revision_id": "testcompositegrammars-testimportclashingchannelsintolexergrammar-60b7e91587-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testimportclashingchannelsintolexergrammar-60b7e91587/revisions/testcompositegrammars-testimportclashingchannelsintolexergrammar-60b7e91587-r1/manifest.json",
+      "closure_sha256": "0857f5b157cf401486bf876d839eb2efd0f70ea2f76c421c7084ff8d60e1a198"
+    }
+  ]
+}

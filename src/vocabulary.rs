@@ -27,6 +27,40 @@ impl Vocabulary {
         }
     }
 
+    pub const fn empty() -> Self {
+        Self {
+            literal: Vec::new(),
+            symbolic: Vec::new(),
+            display: Vec::new(),
+        }
+    }
+
+    pub fn from_token_names(
+        token_names: impl IntoIterator<Item = Option<impl Into<String>>>,
+    ) -> Self {
+        let display = token_names
+            .into_iter()
+            .map(|value| value.map(Into::into))
+            .collect::<Vec<Option<String>>>();
+        let literal = display
+            .iter()
+            .map(|name| name.as_ref().filter(|name| name.starts_with('\'')).cloned())
+            .collect();
+        let symbolic = display
+            .iter()
+            .map(|name| {
+                name.as_ref()
+                    .filter(|name| name.starts_with(char::is_uppercase))
+                    .cloned()
+            })
+            .collect();
+        Self {
+            literal,
+            symbolic,
+            display,
+        }
+    }
+
     pub fn literal_name(&self, token_type: i32) -> Option<&str> {
         Self::get(&self.literal, token_type)
     }
@@ -68,5 +102,57 @@ mod tests {
         assert_eq!(vocabulary.display_name(2), "identifier");
         assert_eq!(vocabulary.display_name(99), "99");
         assert_eq!(vocabulary.symbolic_name(-1), Some("EOF"));
+    }
+
+    mod upstream_vocabulary {
+        use super::*;
+
+        #[test]
+        fn empty_vocabulary_matches_java() {
+            let vocabulary = Vocabulary::empty();
+
+            assert_eq!(
+                vocabulary.symbolic_name(crate::token::TOKEN_EOF),
+                Some("EOF")
+            );
+            assert_eq!(vocabulary.display_name(0), "0");
+        }
+
+        #[test]
+        fn vocabulary_from_token_names_matches_java() {
+            let token_names = [
+                "<INVALID>",
+                "TOKEN_REF",
+                "RULE_REF",
+                "'//'",
+                "'/'",
+                "'*'",
+                "'!'",
+                "ID",
+                "STRING",
+            ];
+            let vocabulary =
+                Vocabulary::from_token_names(token_names.map(|name| Some(name.to_owned())));
+
+            assert_eq!(
+                vocabulary.symbolic_name(crate::token::TOKEN_EOF),
+                Some("EOF")
+            );
+            for (token_type, token_name) in token_names.into_iter().enumerate() {
+                let token_type = i32::try_from(token_type).expect("test token type fits i32");
+                assert_eq!(vocabulary.display_name(token_type), token_name);
+
+                if token_name.starts_with('\'') {
+                    assert_eq!(vocabulary.literal_name(token_type), Some(token_name));
+                    assert_eq!(vocabulary.symbolic_name(token_type), None);
+                } else if token_name.starts_with(char::is_uppercase) {
+                    assert_eq!(vocabulary.literal_name(token_type), None);
+                    assert_eq!(vocabulary.symbolic_name(token_type), Some(token_name));
+                } else {
+                    assert_eq!(vocabulary.literal_name(token_type), None);
+                    assert_eq!(vocabulary.symbolic_name(token_type), None);
+                }
+            }
+        }
     }
 }

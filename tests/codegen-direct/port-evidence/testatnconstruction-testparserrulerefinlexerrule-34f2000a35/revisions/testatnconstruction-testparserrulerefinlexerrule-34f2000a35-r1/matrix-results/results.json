@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnconstruction-testparserrulerefinlexerrule-34f2000a35",
+  "revision_id": "testatnconstruction-testparserrulerefinlexerrule-34f2000a35-r1",
+  "cells": [
+    {
+      "test_port": "primary",
+      "test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
+      "implementation_port": "primary-antlr-ng",
+      "implementation_commit": "5d0729a84eac4b89012e31819eb00f5acb654c3a",
+      "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_construction::parser_rule_ref_in_lexer_rule",
+      "result": "green: 1 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the primary implementation passed the locked primary tests"
+}

@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "Unicode.g4"
+  ],
+  "logical_ids": [
+    "testunicodegrammar-unicodesmpliteralingrammar-b41d70815f"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "java-antlr:testunicodegrammar-unicodesmpliteralingrammar@c71acd901f77",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestUnicodeGrammar.java",
+      "case": "unicodeSMPLiteralInGrammar",
+      "source_sha256": "42cddf707e13976a08ac763b4a46d6c04c4b94d28b90877ba466ab3cc41ba029"
+    },
+    {
+      "source_case_id": "antlr-ng:testunicodegrammar-unicodesmpliteralingrammar@c71acd901f77",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestUnicodeGrammar.spec.ts",
+      "case": "unicodeSMPLiteralInGrammar",
+      "source_sha256": "75bdc0dd144c21131a1b1af9bf8aab01b6ad50f35d0e15ae3dde515b1b39dd81"
+    }
+  ],
+  "expected": "success",
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "unicode_data": {
+      "generator": "org.antlr.v4.unicode.UnicodeDataTemplateController",
+      "helper": "tools/grammar-frontend/oracle/GenerateUnicodeData.java",
+      "helper_sha256": "9adec4f06cb31c7c7e408336e8fe935741f6d4ec5e8113e76450551ec1e3967f",
+      "icu4j_version": "78.1.0.0",
+      "icu4j_jar_sha256": "bbb70d3be23110d7295823eee0c2e896ac3b619b3c0f26168f65eb972df51d2a",
+      "unicode_version": "17.0.0.0"
+    },
+    "exit_status": 0
+  },
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh testunicodegrammar-unicodesmpliteralingrammar-b41d70815f --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar --icu-jar /tmp/antlr-cleanroom/tools/icu4j-78.1.jar",
+  "files": {
+    "Unicode.g4": "d987b61635638d7d1d2f82d53f5f38ddab79b6501d9a7eb1431538b2db02c7b9",
+    "Unicode.interp": "600708bcd1b5a7e52493592280453a26a465a93354a7c4da05063398a9b11ed8",
+    "Unicode.tokens": "2acb7b2214a485f0e3c1ba47f204055042858231db21f87d10ad4ada94c99789",
+    "UnicodeLexer.interp": "4ab83fe088e6afcf68b8a0581341c93c110c45c692c44421dbb3a2fce5b6abcb",
+    "UnicodeLexer.tokens": "2acb7b2214a485f0e3c1ba47f204055042858231db21f87d10ad4ada94c99789",
+    "oracle/java-antlr.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stdout": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+  }
+}

@@ -1,0 +1,4 @@
+RuleStart_a_0->s2
+s2-{'b', A}->s3
+s3->RuleStop_a_1
+RuleStop_a_1-EOF->s4

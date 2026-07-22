@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtopologicalsort-testrepeatededges-e97d12fac9",
+  "active_revision_id": "testtopologicalsort-testrepeatededges-e97d12fac9-r1",
+  "revisions": [
+    {
+      "revision_id": "testtopologicalsort-testrepeatededges-e97d12fac9-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testtopologicalsort-testrepeatededges-e97d12fac9/revisions/testtopologicalsort-testrepeatededges-e97d12fac9-r1/manifest.json",
+      "closure_sha256": "1db85b858d3470dfbf4cff3b220e5d96e4d3f7f3f0737743f1bc2c76adbb488e"
+    }
+  ]
+}

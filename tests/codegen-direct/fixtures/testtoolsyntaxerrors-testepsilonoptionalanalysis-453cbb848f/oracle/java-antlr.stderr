@@ -1,0 +1,2 @@
+warning(154): A.g4:3:0: rule y contains an optional block with at least one alternative that can match an empty string
+warning(154): A.g4:4:0: rule z1 contains an optional block with at least one alternative that can match an empty string

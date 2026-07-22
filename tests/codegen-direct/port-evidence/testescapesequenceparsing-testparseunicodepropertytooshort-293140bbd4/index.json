@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testescapesequenceparsing-testparseunicodepropertytooshort-293140bbd4",
+  "active_revision_id": "testescapesequenceparsing-testparseunicodepropertytooshort-293140bbd4-r1",
+  "revisions": [
+    {
+      "revision_id": "testescapesequenceparsing-testparseunicodepropertytooshort-293140bbd4-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparseunicodepropertytooshort-293140bbd4/revisions/testescapesequenceparsing-testparseunicodepropertytooshort-293140bbd4-r1/manifest.json",
+      "closure_sha256": "65e18742c63c32c0834d9954b7d1a12c7b5e7e9be8396f7a4881ae1d5dc7ddfb"
+    }
+  ]
+}

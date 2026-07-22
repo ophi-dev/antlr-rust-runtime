@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnserialization-testlexerunicodesmpliteralserializedtoset-e23baf8432",
+  "active_revision_id": "testatnserialization-testlexerunicodesmpliteralserializedtoset-e23baf8432-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnserialization-testlexerunicodesmpliteralserializedtoset-e23baf8432-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnserialization-testlexerunicodesmpliteralserializedtoset-e23baf8432/revisions/testatnserialization-testlexerunicodesmpliteralserializedtoset-e23baf8432-r1/manifest.json",
+      "closure_sha256": "46c5ddf2f19306325d17e47bad32166c22fb7e7459aab1e95a1b051fc7363f72"
+    }
+  ]
+}

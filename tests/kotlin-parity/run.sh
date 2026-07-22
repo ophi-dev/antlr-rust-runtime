@@ -77,11 +77,13 @@ DUMPER_DIR="$SCRIPT_DIR/dumper"
 DUMPER_GEN="$DUMPER_DIR/src/generated"
 mkdir -p "$DUMPER_GEN"
 cargo run --quiet --release --manifest-path "$REPO_ROOT/Cargo.toml" \
+    --features codegen \
     --bin antlr4-rust-gen -- \
     --lexer  "$WORK_DIR/interp/KotlinLexer.interp" \
     --grammar "$WORK_DIR/grammar/KotlinLexer.g4" \
     --out-dir "$WORK_DIR/rust-gen"
 cargo run --quiet --release --manifest-path "$REPO_ROOT/Cargo.toml" \
+    --features codegen \
     --bin antlr4-rust-gen -- \
     --parser "$WORK_DIR/interp/KotlinParser.interp" \
     --grammar "$WORK_DIR/grammar/KotlinParser.g4" \

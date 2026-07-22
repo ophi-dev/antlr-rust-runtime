@@ -1,0 +1,18 @@
+{
+  "java_antlr": [
+    {
+      "severity": "warning",
+      "code": 154,
+      "line": 3,
+      "column": 0,
+      "message": "rule y contains an optional block with at least one alternative that can match an empty string"
+    },
+    {
+      "severity": "warning",
+      "code": 154,
+      "line": 4,
+      "column": 0,
+      "message": "rule z1 contains an optional block with at least one alternative that can match an empty string"
+    }
+  ]
+}

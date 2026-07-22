@@ -1,0 +1,16 @@
+{
+  "java_antlr": [
+    {
+      "severity": "warning",
+      "code": 154,
+      "line": 5,
+      "column": 0
+    }
+  ],
+  "rust": [
+    {
+      "severity": "warning",
+      "category": "G4A004"
+    }
+  ]
+}

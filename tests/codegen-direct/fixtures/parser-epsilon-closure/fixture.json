@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "ParserEpsilonClosure.g4"
+  ],
+  "expected": "error",
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "exit_status": 1
+  },
+  "files": {
+    "ParserEpsilonClosure.g4": "f59e09955dd4d42d7f58672f3e7ef40eb1193b2376947901ababeccef0e21a3a",
+    "diagnostics.json": "d49b15ce1fb8c3cb5e4afbda6a21055380abb4b0ef1d5f9871cb231fcdc8b62c",
+    "oracle/java-antlr.stderr": "86fd4b58b8590abe40117793009b6308f131b8deb2e6512f8998641309282530",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh parser-epsilon-closure --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar"
+}

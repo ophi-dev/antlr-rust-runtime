@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "logical_id": "testattributechecks-testbadinlineactions-6f6958e1f6",
+  "revision_id": "testattributechecks-testbadinlineactions-6f6958e1f6-r1",
+  "primary_test_source": {
+    "implementation": "independent-generated-oracle",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "source_case_ids": [],
+    "reason": "no java-antlr source case exposes this exact observable"
+  },
+  "alternate_test_source": {
+    "implementation": "antlr-ng",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "source_case_ids": [
+      "antlr-ng:testattributechecks-testbadinlineactions@10080180ddcf",
+      "antlr-ng:testattributechecks-testbadinlineactions@1a0ced7c879b",
+      "antlr-ng:testattributechecks-testbadinlineactions@2aab11045c69",
+      "antlr-ng:testattributechecks-testbadinlineactions@2bfc8e16baba",
+      "antlr-ng:testattributechecks-testbadinlineactions@31018af425ec",
+      "antlr-ng:testattributechecks-testbadinlineactions@3d125651b93b",
+      "antlr-ng:testattributechecks-testbadinlineactions@66c499eb26b7",
+      "antlr-ng:testattributechecks-testbadinlineactions@724267397134",
+      "antlr-ng:testattributechecks-testbadinlineactions@a3f14f4ca74f",
+      "antlr-ng:testattributechecks-testbadinlineactions@d3ab096bd6af",
+      "antlr-ng:testattributechecks-testbadinlineactions@d63051828877",
+      "antlr-ng:testattributechecks-testbadinlineactions@e73c477ce746",
+      "antlr-ng:testattributechecks-testbadinlineactions@f07adcad2947",
+      "antlr-ng:testattributechecks-testbadinlineactions@fea4a5bc6b43"
+    ]
+  },
+  "outcomes": {
+    "primary": "the direct Rust compiler matches the immutable Java 4.13.2 action-attribute diagnostics and accepted .interp and .tokens fixtures",
+    "alternate": "the pinned antlr-ng TestAttributeChecks case uses the same rendered grammar and diagnostic expectation",
+    "java_compatibility_verdict": "exact Java 4.13.2 diagnostic code, message, ordering, and position or complete accepted recognizer metadata equality"
+  }
+}

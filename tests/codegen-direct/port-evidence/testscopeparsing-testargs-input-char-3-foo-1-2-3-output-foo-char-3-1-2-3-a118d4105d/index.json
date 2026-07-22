@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testscopeparsing-testargs-input-char-3-foo-1-2-3-output-foo-char-3-1-2-3-a118d4105d",
+  "active_revision_id": "testscopeparsing-testargs-input-char-3-foo-1-2-3-output-foo-char-3-1-2-3-a118d4105d-r1",
+  "revisions": [
+    {
+      "revision_id": "testscopeparsing-testargs-input-char-3-foo-1-2-3-output-foo-char-3-1-2-3-a118d4105d-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-char-3-foo-1-2-3-output-foo-char-3-1-2-3-a118d4105d/revisions/testscopeparsing-testargs-input-char-3-foo-1-2-3-output-foo-char-3-1-2-3-a118d4105d-r1/manifest.json",
+      "closure_sha256": "8c2b7a2a69d1f02de19735466b27a0d29a50f0299b5d9433f3787b2fa9739241"
+    }
+  ]
+}

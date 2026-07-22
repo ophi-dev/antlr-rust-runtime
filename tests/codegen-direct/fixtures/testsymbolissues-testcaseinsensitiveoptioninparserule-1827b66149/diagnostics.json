@@ -1,0 +1,10 @@
+{
+  "java_antlr": [
+    {
+      "severity": "warning",
+      "code": 83,
+      "line": 2,
+      "column": 15
+    }
+  ]
+}

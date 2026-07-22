@@ -1,0 +1,5 @@
+warning(180): L.g4:2:18: chars a-f used multiple times in set [aa-f]
+warning(180): L.g4:3:18: chars D-J used multiple times in set [A-FD-J]
+warning(180): L.g4:4:38: chars O-V used multiple times in set 'Z' | 'K'..'R' | 'O'..'V'
+warning(180): L.g4::: chars 'g' used multiple times in set 'g'..'l'
+warning(180): L.g4::: chars '\n' used multiple times in set '\n'..'\r'

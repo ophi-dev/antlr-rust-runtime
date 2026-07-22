@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate-3c6626e10f",
+  "active_revision_id": "testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate-3c6626e10f-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate-3c6626e10f-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate-3c6626e10f/revisions/testatnconstruction-testaplussinglealthasplusastpointingatloopbackstate-3c6626e10f-r1/manifest.json",
+      "closure_sha256": "c4e452f7434ad7a5840d9267f68c11807ff85d5cc5d076f217361df2d32acd92"
+    }
+  ]
+}

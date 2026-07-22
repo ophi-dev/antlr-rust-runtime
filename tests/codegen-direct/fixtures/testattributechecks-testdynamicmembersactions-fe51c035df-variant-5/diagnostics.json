@@ -1,0 +1,11 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 57,
+      "line": 2,
+      "column": 11,
+      "message": "reference to undefined rule S in non-local ref $S::j"
+    }
+  ]
+}

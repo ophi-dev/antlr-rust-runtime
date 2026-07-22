@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "logical_id": "testattributechecks-testdynamicinitactions-s-5fe7b01648",
+  "revision_id": "testattributechecks-testdynamicinitactions-s-5fe7b01648-r1",
+  "primary_test_source": {
+    "implementation": "independent-generated-oracle",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "source_case_ids": [],
+    "reason": "no java-antlr source case exposes this exact observable"
+  },
+  "alternate_test_source": {
+    "implementation": "antlr-ng",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "source_case_ids": [
+      "antlr-ng:testattributechecks-testdynamicinitactions-s@509c0db51e0c"
+    ]
+  },
+  "outcomes": {
+    "primary": "the direct Rust compiler matches the immutable Java 4.13.2 action-attribute diagnostics and accepted .interp and .tokens fixtures",
+    "alternate": "the pinned antlr-ng TestAttributeChecks case uses the same rendered grammar and diagnostic expectation",
+    "java_compatibility_verdict": "exact Java 4.13.2 diagnostic code, message, ordering, and position or complete accepted recognizer metadata equality"
+  }
+}

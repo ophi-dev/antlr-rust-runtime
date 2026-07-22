@@ -1,0 +1,11 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 181,
+      "line": 2,
+      "column": 4,
+      "message": "token ranges not allowed in parser: 'A'..'Z'"
+    }
+  ]
+}

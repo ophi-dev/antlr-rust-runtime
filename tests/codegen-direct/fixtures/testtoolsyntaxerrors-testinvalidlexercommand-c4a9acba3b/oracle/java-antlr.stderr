@@ -1,0 +1,2 @@
+error(149): A.g4:4:14: lexer command popmode does not exist or is not supported by the current target
+error(149): A.g4:5:14: lexer command token does not exist or is not supported by the current target

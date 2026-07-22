@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testleftrecursiontoolissues-testcheckforleftrecursiveemptyfollow-558283d55a",
+  "active_revision_id": "testleftrecursiontoolissues-testcheckforleftrecursiveemptyfollow-558283d55a-r1",
+  "revisions": [
+    {
+      "revision_id": "testleftrecursiontoolissues-testcheckforleftrecursiveemptyfollow-558283d55a-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testleftrecursiontoolissues-testcheckforleftrecursiveemptyfollow-558283d55a/revisions/testleftrecursiontoolissues-testcheckforleftrecursiveemptyfollow-558283d55a-r1/manifest.json",
+      "closure_sha256": "e51712121e06766e90aa8eb6407c7a27fa712767c6c8c7e2d07a7d28e7f1d5a2"
+    }
+  ]
+}

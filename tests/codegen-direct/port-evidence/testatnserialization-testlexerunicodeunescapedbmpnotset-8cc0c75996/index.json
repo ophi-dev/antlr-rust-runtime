@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnserialization-testlexerunicodeunescapedbmpnotset-8cc0c75996",
+  "active_revision_id": "testatnserialization-testlexerunicodeunescapedbmpnotset-8cc0c75996-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnserialization-testlexerunicodeunescapedbmpnotset-8cc0c75996-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnserialization-testlexerunicodeunescapedbmpnotset-8cc0c75996/revisions/testatnserialization-testlexerunicodeunescapedbmpnotset-8cc0c75996-r1/manifest.json",
+      "closure_sha256": "5498c705231c9f74b77742d7fe3debb51f68033a47f0f836de18affcc5df3772"
+    }
+  ]
+}

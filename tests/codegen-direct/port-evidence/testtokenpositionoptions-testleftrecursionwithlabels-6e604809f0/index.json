@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtokenpositionoptions-testleftrecursionwithlabels-6e604809f0",
+  "active_revision_id": "testtokenpositionoptions-testleftrecursionwithlabels-6e604809f0-r1",
+  "revisions": [
+    {
+      "revision_id": "testtokenpositionoptions-testleftrecursionwithlabels-6e604809f0-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testtokenpositionoptions-testleftrecursionwithlabels-6e604809f0/revisions/testtokenpositionoptions-testleftrecursionwithlabels-6e604809f0-r1/manifest.json",
+      "closure_sha256": "2a12291a98e5b856dcbe577f6283d0b5f7318f4215fc198ed2048620acec686e"
+    }
+  ]
+}

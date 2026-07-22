@@ -1,0 +1,137 @@
+{
+  "schema_version": 1,
+  "logical_id": "testlookaheadtrees-testcallleftrecursiverule-410ec32fb8",
+  "revision_id": "testlookaheadtrees-testcallleftrecursiverule-410ec32fb8-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "closure": {
+    "logical_id": "testlookaheadtrees-testcallleftrecursiverule-410ec32fb8",
+    "source_case_ids": [
+      "antlr-ng:testlookaheadtrees-testcallleftrecursiverule@c8038b861c1d",
+      "java-antlr:testlookaheadtrees-testcallleftrecursiverule@c8038b861c1d"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/L.g4",
+      "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/L.interp",
+      "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/L.tokens",
+      "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/T.g4",
+      "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/T.interp",
+      "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/T.tokens",
+      "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/fixture.json",
+      "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/oracle/java-unicode-data.stdout"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_lookahead_trees::calls_left_recursive_rule_match_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust forced-alternative parse trees and complete serialization match Java 4.13.2 for TestLookaheadTrees.testCallLeftRecursiveRule",
+    "scaffold_commit": "c429fbd96902b2320ea82df94afea3fa3df6d177",
+    "primary_test_commit": "b1b0728572764a335519762e5e7125a25fe3f118"
+  },
+  "closure_sha256": "bee9ab0d6cfd6f37b2a8fd7f9f0ad7c14d52a8ad07071c2a688a144271244461",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testlookaheadtrees-testcallleftrecursiverule@c8038b861c1d",
+      "path": "tests/TestLookaheadTrees.spec.ts",
+      "sha256": "8fc3e962d00320d6734578c51307e0adfcce404ce46b862b66fae4c6b9a384dd"
+    },
+    {
+      "source_case_id": "java-antlr:testlookaheadtrees-testcallleftrecursiverule@c8038b861c1d",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestLookaheadTrees.java",
+      "sha256": "a7be06bbd9a3d78760a2c04713a8ec23a008c866dc742ed43e0c3b2297c38abf"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/L.g4",
+      "sha256": "da4ceca7286c1269efc708e8e194f716314566db221e363cfa05a348e2525338"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/L.interp",
+      "sha256": "cc60d0d15c06bf41a96360190e1bcbaeadb9ab383910e94b772afcd471eabbf4"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/L.tokens",
+      "sha256": "a22e2bb88c972fedb1bd564eee323d6318902f16a0c57de895f1e2e66cf1c94a"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/T.g4",
+      "sha256": "358237d09542d2b4eee7e0b1a3076a94702d520bfc2c821c310b773992ea6932"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/T.interp",
+      "sha256": "6fdd578fc8527985ad1a3395d41aaa1da92b79dd7d44d644a4f50a81d77d0d34"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/T.tokens",
+      "sha256": "a22e2bb88c972fedb1bd564eee323d6318902f16a0c57de895f1e2e66cf1c94a"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/fixture.json",
+      "sha256": "22607cd40e07de3ec2ffb3a85c34d9ade9c73f438ed61d5abee23f334bae692b"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    }
+  ],
+  "commits": {
+    "scaffold": "c429fbd96902b2320ea82df94afea3fa3df6d177",
+    "primary_test": "b1b0728572764a335519762e5e7125a25fe3f118",
+    "primary_implementation": "e2046ea128583ecf578a82b901ee495e0c503c47"
+  },
+  "ancestry": {
+    "primary_test_parent": "c429fbd96902b2320ea82df94afea3fa3df6d177",
+    "primary_implementation_parent": "b1b0728572764a335519762e5e7125a25fe3f118",
+    "reachability": "the lookahead tree implementation commit is directly based on the locked red forced-alternative tests"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_lookahead_trees {",
+      "end_marker": "\n    mod upstream_left_recursion_tool_issues {",
+      "sha256": "987451e27fe7663bc015f4cef6409cde24c654dd62e0066e07bc9f7044bc0709"
+    }
+  ],
+  "demonstrated_red": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_lookahead_trees::calls_left_recursive_rule_match_java -- --exact",
+    "commit": "b1b0728572764a335519762e5e7125a25fe3f118",
+    "exit_code": 101,
+    "fingerprint": "decision 0, alternative 2 produced \"(a:1 (e:4 x) ;)\" instead of \"(a:2 x ;)\""
+  },
+  "green_result": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_lookahead_trees::calls_left_recursive_rule_match_java -- --exact",
+    "commit": "e2046ea128583ecf578a82b901ee495e0c503c47",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/revisions/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8-r1/oracle-results/declared-sources.json",
+      "sha256": "419f70cc1e1e6de6e27e863f5a44bd666ca98cba104d4b222b681ee334075137"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/revisions/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8-r1/matrix-results/results.json",
+      "sha256": "77464ef83ffdcee9a35d54f89a135e685fa5df75ebdf3dff27d2cc72f2c061d5"
+    }
+  ]
+}

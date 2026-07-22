@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcompositegrammars-testdelegatesseesametokentype-c679d17236",
+  "active_revision_id": "testcompositegrammars-testdelegatesseesametokentype-c679d17236-r1",
+  "revisions": [
+    {
+      "revision_id": "testcompositegrammars-testdelegatesseesametokentype-c679d17236-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testdelegatesseesametokentype-c679d17236/revisions/testcompositegrammars-testdelegatesseesametokentype-c679d17236-r1/manifest.json",
+      "closure_sha256": "199a5a15b8e380de5afd5dbc3f40aa87744da343dc1c4cb196b7c11e28100acb"
+    }
+  ]
+}

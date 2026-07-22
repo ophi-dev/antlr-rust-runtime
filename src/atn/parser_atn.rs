@@ -1288,6 +1288,14 @@ impl ParserAtnBuilder {
         transition: ParserTransitionSpec,
     ) -> Result<TransitionId, ParserAtnError> {
         let source = self.checked_state(source, "transition source")?;
+        if let Some((index, _)) = self
+            .transitions
+            .iter()
+            .enumerate()
+            .find(|(_, existing)| existing.source == source && existing.spec() == transition)
+        {
+            return TransitionId::try_from(index);
+        }
         let record = self.transition_record(source, transition)?;
         let id = TransitionId::try_from(self.transitions.len())?;
         self.transitions.push(record);
@@ -2705,6 +2713,29 @@ mod tests {
             .add_interval_set(ranges.iter().copied())
             .expect("token set");
         builder.finish().expect("packed parser ATN")
+    }
+
+    #[test]
+    fn duplicate_transitions_reuse_the_existing_edge() {
+        let mut builder = ParserAtnBuilder::new(1);
+        builder
+            .add_state(AtnStateKind::RuleStop, None)
+            .expect("source");
+        builder
+            .add_state(AtnStateKind::Basic, None)
+            .expect("target");
+        let transition = ParserTransitionSpec::Epsilon { target: 1 };
+
+        let first = builder
+            .add_transition(0, transition)
+            .expect("first transition");
+        let duplicate = builder
+            .add_transition(0, transition)
+            .expect("duplicate transition");
+        assert_eq!(duplicate, first);
+
+        let atn = builder.finish().expect("packed parser ATN");
+        assert_eq!(atn.transition_count(), 1);
     }
 
     fn legacy_words(atn: &ParserAtn) -> Vec<u32> {

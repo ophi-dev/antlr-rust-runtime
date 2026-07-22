@@ -31,6 +31,20 @@ pub(crate) struct AttrDecl {
     pub(crate) ty: String,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct LocatedAttrDecl {
+    pub(crate) declaration: AttrDecl,
+    pub(crate) name_offset: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ScopeDecl {
+    pub(crate) name: String,
+    pub(crate) ty: Option<String>,
+    pub(crate) initializer: Option<String>,
+    pub(crate) name_offset: usize,
+}
+
 /// One element reference inside an alternative: a rule ref, token ref, or a
 /// labeled sub-block, in source order.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -159,26 +173,123 @@ fn map_attr_type(raw: &str) -> String {
 
 /// Parses `[a: i32, int b, String s]`-style attribute declarations, accepting
 /// both the rendered Rust `name: type` form and raw `type name` descriptors.
-fn parse_attr_decls(clause: &str) -> Vec<AttrDecl> {
-    let mut decls = Vec::new();
-    for part in split_top_level(clause, ',') {
-        let part = strip_default_initializer(part.trim());
-        if part.is_empty() {
-            continue;
-        }
-        if let Some((name, ty)) = split_name_colon_type(part) {
-            decls.push(AttrDecl {
-                name: name.to_owned(),
-                ty: map_attr_type(ty),
-            });
-        } else if let Some((ty, name)) = part.rsplit_once(char::is_whitespace) {
-            decls.push(AttrDecl {
-                name: name.trim().to_owned(),
-                ty: map_attr_type(ty),
-            });
+pub(crate) fn parse_attr_decls(clause: &str) -> Vec<AttrDecl> {
+    parse_attr_decls_with_offsets(clause)
+        .into_iter()
+        .map(|located| located.declaration)
+        .collect()
+}
+
+pub(crate) fn parse_attr_decls_with_offsets(clause: &str) -> Vec<LocatedAttrDecl> {
+    parse_scope_decls(clause)
+        .into_iter()
+        .map(|declaration| LocatedAttrDecl {
+            name_offset: declaration.name_offset,
+            declaration: AttrDecl {
+                name: declaration.name,
+                ty: declaration
+                    .ty
+                    .as_deref()
+                    .map_or_else(String::new, map_attr_type),
+            },
+        })
+        .collect()
+}
+
+pub(crate) fn parse_scope_decls(clause: &str) -> Vec<ScopeDecl> {
+    split_top_level(clause, ',')
+        .into_iter()
+        .filter_map(|(raw_offset, raw_part)| {
+            let leading = raw_part.len() - raw_part.trim_start().len();
+            let part_offset = raw_offset + leading;
+            let part = raw_part.trim();
+            if part.is_empty() {
+                return None;
+            }
+
+            let (declarator, initializer) =
+                part.find('=')
+                    .filter(|index| *index > 0)
+                    .map_or((part, None), |equals| {
+                        (
+                            part[..equals].trim_end(),
+                            Some(part[equals + 1..].trim().to_owned()),
+                        )
+                    });
+            let (name, ty, name_offset) = if let Some(colon) = postfix_type_colon(declarator) {
+                parse_postfix_scope_decl(declarator, colon)?
+            } else {
+                parse_prefix_scope_decl(declarator)?
+            };
+            Some(ScopeDecl {
+                name,
+                ty,
+                initializer,
+                name_offset: part_offset + name_offset,
+            })
+        })
+        .collect()
+}
+
+fn postfix_type_colon(declarator: &str) -> Option<usize> {
+    declarator
+        .char_indices()
+        .find(|(index, character)| {
+            if *character != ':' {
+                return false;
+            }
+            !declarator[..*index].ends_with(':') && !declarator[*index + 1..].starts_with(':')
+        })
+        .map(|(index, _)| index)
+}
+
+fn parse_prefix_scope_decl(declarator: &str) -> Option<(String, Option<String>, usize)> {
+    let mut in_identifier = false;
+    let mut start = None;
+    for (index, character) in declarator.char_indices().rev() {
+        if !in_identifier && character.is_alphanumeric() {
+            in_identifier = true;
+        } else if in_identifier && !is_identifier_character(character) {
+            start = Some(index + character.len_utf8());
+            break;
         }
     }
-    decls
+    let start = start.or_else(|| in_identifier.then_some(0))?;
+    let stop = declarator[start..]
+        .char_indices()
+        .find(|(_, character)| !is_identifier_character(*character))
+        .map_or(declarator.len(), |(offset, _)| start + offset);
+    let name = declarator[start..stop].to_owned();
+    let ty = format!("{}{}", &declarator[..start], &declarator[stop..]);
+    let ty = nonempty_trimmed(&ty);
+    Some((name, ty, start))
+}
+
+fn parse_postfix_scope_decl(
+    declarator: &str,
+    colon: usize,
+) -> Option<(String, Option<String>, usize)> {
+    let name_part = &declarator[..colon];
+    let start = name_part
+        .char_indices()
+        .find(|(_, character)| is_identifier_character(*character))
+        .map(|(index, _)| index)?;
+    let stop = name_part[start..]
+        .char_indices()
+        .find(|(_, character)| !is_identifier_character(*character))
+        .map_or(name_part.len(), |(offset, _)| start + offset);
+    let name = name_part[start..stop].to_owned();
+    let ty = nonempty_trimmed(&declarator[colon + 1..]);
+    Some((name, ty, start))
+}
+
+fn nonempty_trimmed(value: &str) -> Option<String> {
+    let value = value.trim();
+    (!value.is_empty()).then(|| value.to_owned())
+}
+
+fn is_identifier_character(character: char) -> bool {
+    character == '_' || character.is_alphanumeric()
 }
 
 /// Removes a raw grammar initializer when it is the type's Rust `Default`.
@@ -186,6 +297,7 @@ fn parse_attr_decls(clause: &str) -> Vec<AttrDecl> {
 /// Embedded attrs are initialized through `Default::default()`, so retaining
 /// explicit `false` / zero initializers would only prevent the declaration
 /// parser from recognizing otherwise portable ANTLR rule locals.
+#[cfg(test)]
 fn strip_default_initializer(part: &str) -> &str {
     let Some(index) = part
         .as_bytes()
@@ -227,7 +339,7 @@ fn split_name_colon_type(part: &str) -> Option<(&str, &str)> {
 
 /// Splits on `separator` at zero bracket/paren/angle/brace depth outside
 /// string literals.
-fn split_top_level(text: &str, separator: char) -> Vec<&str> {
+fn split_top_level(text: &str, separator: char) -> Vec<(usize, &str)> {
     let mut parts = Vec::new();
     let mut depth = 0_i32;
     let mut start = 0;
@@ -244,13 +356,13 @@ fn split_top_level(text: &str, separator: char) -> Vec<&str> {
             '(' | '[' | '{' | '<' if !quoted => depth += 1,
             ')' | ']' | '}' | '>' if !quoted => depth -= 1,
             _ if ch == separator && !quoted && depth == 0 => {
-                parts.push(&text[start..index]);
+                parts.push((start, &text[start..index]));
                 start = index + ch.len_utf8();
             }
             _ => {}
         }
     }
-    parts.push(&text[start..]);
+    parts.push((start, &text[start..]));
     parts
 }
 
@@ -1309,6 +1421,89 @@ mod tests {
                 ty: "String".into()
             }
         );
+    }
+
+    #[test]
+    fn locates_rust_and_java_style_attr_names() {
+        let clause = "  value: i32, int expr, String name";
+        let declarations = parse_attr_decls_with_offsets(clause);
+        assert_eq!(
+            declarations
+                .iter()
+                .map(|declaration| (
+                    declaration.declaration.name.as_str(),
+                    declaration.name_offset
+                ))
+                .collect::<Vec<_>>(),
+            [
+                ("value", clause.find("value").expect("value offset")),
+                ("expr", clause.find("expr").expect("expr offset")),
+                ("name", clause.find("name").expect("name offset")),
+            ],
+        );
+    }
+
+    mod upstream_scope_parsing {
+        use super::*;
+
+        const CASES: &[(&str, &str)] = &[
+            ("", ""),
+            (" ", ""),
+            ("int i", "i:int"),
+            ("int[] i, int j[]", "i:int[], j:int []"),
+            ("Map<A,B>[] i, int j[]", "i:Map<A,B>[], j:int []"),
+            ("Map<A,List<B>>[] i", "i:Map<A,List<B>>[]"),
+            (
+                "int i = 34+a[3], int j[] = new int[34]",
+                "i:int=34+a[3], j:int []=new int[34]",
+            ),
+            ("char *[3] foo = {1,2,3}", "foo:char *[3]={1,2,3}"),
+            ("String[] headers", "headers:String[]"),
+            ("std::vector<std::string> x", "x:std::vector<std::string>"),
+            ("i", "i"),
+            ("i,j", "i, j"),
+            ("i\t,j, k", "i, j, k"),
+            ("x: int", "x:int"),
+            ("x :int", "x:int"),
+            ("x:int", "x:int"),
+            ("x:int=3", "x:int=3"),
+            (
+                "r:Rectangle=Rectangle(fromLength: 6, fromBreadth: 12)",
+                "r:Rectangle=Rectangle(fromLength: 6, fromBreadth: 12)",
+            ),
+            ("p:pointer to int", "p:pointer to int"),
+            ("a: array[3] of int", "a:array[3] of int"),
+            ("a \t:\tfunc(array[3] of int)", "a:func(array[3] of int)"),
+            ("x:int, y:float", "x:int, y:float"),
+            (
+                "x:T?, f:func(array[3] of int), y:int",
+                "x:T?, f:func(array[3] of int), y:int",
+            ),
+            ("float64 x = 3", "x:float64=3"),
+            ("map[string]int x", "x:map[string]int"),
+        ];
+
+        #[test]
+        fn argument_declarations_match_java() {
+            for &(input, expected) in CASES {
+                let actual = parse_scope_decls(input)
+                    .into_iter()
+                    .map(render)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                assert_eq!(actual, expected, "input {input:?}");
+            }
+        }
+
+        fn render(declaration: ScopeDecl) -> String {
+            let ty = declaration
+                .ty
+                .map_or_else(String::new, |ty| format!(":{ty}"));
+            let initializer = declaration
+                .initializer
+                .map_or_else(String::new, |initializer| format!("={initializer}"));
+            format!("{}{ty}{initializer}", declaration.name)
+        }
     }
 
     #[test]

@@ -1,0 +1,2 @@
+error(50): A.g4:4:0: syntax error: 'b' came as a complete surprise to me
+error(50): A.g4:4:6: syntax error: mismatched input ';' expecting COLON while matching a lexer rule

@@ -1,0 +1,17 @@
+DOT=1
+SEMI=2
+BANG=3
+PLUS=4
+LPAREN=5
+RPAREN=6
+MULT=7
+ID=8
+INT=9
+WS=10
+'.'=1
+';'=2
+'!'=3
+'+'=4
+'('=5
+')'=6
+'*'=7

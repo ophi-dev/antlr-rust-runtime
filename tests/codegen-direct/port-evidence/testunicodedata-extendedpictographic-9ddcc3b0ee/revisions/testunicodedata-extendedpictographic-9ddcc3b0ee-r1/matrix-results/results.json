@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodedata-extendedpictographic-9ddcc3b0ee",
+  "revision_id": "testunicodedata-extendedpictographic-9ddcc3b0ee-r1",
+  "cells": [
+    {
+      "test_port": "coverage-extension",
+      "test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+      "implementation_port": "existing-primary-antlr-ng",
+      "implementation_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::unicode::tests::extended_pictographic_matches_java -- --exact",
+      "result": "green: 1 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the case-specific test passed against the existing Phase B implementation"
+}

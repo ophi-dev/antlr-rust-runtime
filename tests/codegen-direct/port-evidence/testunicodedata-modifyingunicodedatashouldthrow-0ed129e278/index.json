@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodedata-modifyingunicodedatashouldthrow-0ed129e278",
+  "active_revision_id": "testunicodedata-modifyingunicodedatashouldthrow-0ed129e278-r1",
+  "revisions": [
+    {
+      "revision_id": "testunicodedata-modifyingunicodedatashouldthrow-0ed129e278-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testunicodedata-modifyingunicodedatashouldthrow-0ed129e278/revisions/testunicodedata-modifyingunicodedatashouldthrow-0ed129e278-r1/manifest.json",
+      "closure_sha256": "a65a99acaab806f0e4f185b035ad0da56146c47a18b882c0a4d0f5c50be9ee63"
+    }
+  ]
+}

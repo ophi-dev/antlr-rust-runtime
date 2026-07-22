@@ -1,0 +1,2 @@
+warning(158): A.g4:7:12: fragment rule X2 contains an action or command which can never be executed
+warning(158): A.g4:10:9: fragment rule Y2 contains an action or command which can never be executed

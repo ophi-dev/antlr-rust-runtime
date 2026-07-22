@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "T.g4"
+  ],
+  "logical_ids": [
+    "testatnserialization-testsimpleloop-1e309afd1c"
+  ],
+  "upstream_test": {
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestATNSerialization.java",
+    "case": "testSimpleLoop",
+    "source_case_id": "java-antlr:testatnserialization-testsimpleloop@92764ff0d508",
+    "source_sha256": "10677d64d96a762304980adcb95b0cae5dee21dd16ab433ac5b46b5c0bb6d017"
+  },
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "exit_status": 0
+  },
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh testatnserialization-testsimpleloop-1e309afd1c --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar",
+  "files": {
+    "T.g4": "97c6367b421a0c683a21d37c116acc604f4d09834b43ccb105a8eb400edc0fbe",
+    "T.interp": "ef7d2512bfef15479cab53fc4cfe1ff9fa449b550eb0ee984ae8d5864ffc2b49",
+    "T.tokens": "beb5f2519a8d4a22ff19d6b4ba05806c75710dc1ad7e2ef37ee1d1a950d4b074",
+    "diagnostics.json": "f06037a3f158fa19829b80d30726abe5798310f726d5fa0bcf0681bcb2aa905f",
+    "oracle/java-antlr.stderr": "b60456f1de4c6bbe8c27e825ef281546890b882c8e21cfa2d1ec1540442fd300",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

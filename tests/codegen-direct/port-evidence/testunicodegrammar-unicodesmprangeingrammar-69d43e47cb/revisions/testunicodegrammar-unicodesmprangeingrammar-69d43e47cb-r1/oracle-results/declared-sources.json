@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodegrammar-unicodesmprangeingrammar-69d43e47cb",
+  "revision_id": "testunicodegrammar-unicodesmprangeingrammar-69d43e47cb-r1",
+  "primary_test_source": {
+    "implementation": "java-antlr",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "source_case_ids": [
+      "java-antlr:testunicodegrammar-unicodesmprangeingrammar@1657d579dcc9"
+    ]
+  },
+  "alternate_test_source": {
+    "implementation": "antlr-ng",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "source_case_ids": [
+      "antlr-ng:testunicodegrammar-unicodesmprangeingrammar@1657d579dcc9"
+    ]
+  },
+  "outcomes": {
+    "primary": "both complete direct Rust .interp files match the immutable Java 4.13.2 lexer and parser fixtures",
+    "alternate": "the pinned antlr-ng TestUnicodeGrammar case exposes the same compiler-level Unicode literal behavior where available",
+    "java_compatibility_verdict": "exact Java 4.13.2 recognizer metadata and serialized lexer and parser ATN equality"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testscopeparsing-testargs-input-a-t-tfunc-array-3-of-int-output-a-func-array-3-of-int-c93f399e1a",
+  "active_revision_id": "testscopeparsing-testargs-input-a-t-tfunc-array-3-of-int-output-a-func-array-3-of-int-c93f399e1a-r1",
+  "revisions": [
+    {
+      "revision_id": "testscopeparsing-testargs-input-a-t-tfunc-array-3-of-int-output-a-func-array-3-of-int-c93f399e1a-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-a-t-tfunc-array-3-of-int-output-a-func-array-3-of-int-c93f399e1a/revisions/testscopeparsing-testargs-input-a-t-tfunc-array-3-of-int-output-a-func-array-3-of-int-c93f399e1a-r1/manifest.json",
+      "closure_sha256": "b304d8b8f4ba4f650b770b804b04746d1d3d706d9e388c24acaf330023cca13d"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodedata-testunicodegeneralcategorieslatin-42fdf6bf79",
+  "active_revision_id": "testunicodedata-testunicodegeneralcategorieslatin-42fdf6bf79-r1",
+  "revisions": [
+    {
+      "revision_id": "testunicodedata-testunicodegeneralcategorieslatin-42fdf6bf79-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testunicodedata-testunicodegeneralcategorieslatin-42fdf6bf79/revisions/testunicodedata-testunicodegeneralcategorieslatin-42fdf6bf79-r1/manifest.json",
+      "closure_sha256": "10a4f767231e01f5a491397508448760a8f1e4a5a1a9bf7b39c37fd46fc29470"
+    }
+  ]
+}

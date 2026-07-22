@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testsymbolissues-testemptylexermodedetection-1e410b0d53",
+  "active_revision_id": "testsymbolissues-testemptylexermodedetection-1e410b0d53-r1",
+  "revisions": [
+    {
+      "revision_id": "testsymbolissues-testemptylexermodedetection-1e410b0d53-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testsymbolissues-testemptylexermodedetection-1e410b0d53/revisions/testsymbolissues-testemptylexermodedetection-1e410b0d53-r1/manifest.json",
+      "closure_sha256": "87b59da362e60131f2975931c255c6d09b0ab1b2acb2a0367c637766eaa7bb9c"
+    }
+  ]
+}

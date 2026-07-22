@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "logical_ids": [
+    "testtoolsyntaxerrors-testepsilonoptionalandclosureanalysis-b73d1d68ad"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "java-antlr:testtoolsyntaxerrors-testepsilonoptionalandclosureanalysis@bc48db1f157d",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestToolSyntaxErrors.java",
+      "case": "testEpsilonOptionalAndClosureAnalysis",
+      "source_sha256": "d20fdd17605ec4419dea95b8734f6768d54b6a3a13c3f592e75653690b5808e0"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testtoolsyntaxerrors-testepsilonoptionalandclosureanalysis@bc48db1f157d",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestToolSyntaxErrors.java",
+    "case": "testEpsilonOptionalAndClosureAnalysis",
+    "source_sha256": "d20fdd17605ec4419dea95b8734f6768d54b6a3a13c3f592e75653690b5808e0"
+  },
+  "fixture_binding": {
+    "method": "testEpsilonOptionalAndClosureAnalysis",
+    "source": "pinned Java TestToolSyntaxErrors.java"
+  },
+  "roots": [
+    "T.g4"
+  ],
+  "expected": "success",
+  "tool_syntax_errors_oracle": {
+    "artifacts": [
+      ".interp",
+      ".tokens",
+      "diagnostics"
+    ],
+    "diagnostic_types": [
+      "EPSILON_OPTIONAL"
+    ],
+    "compatibility_verdict": "Java ANTLR 4.13.2"
+  },
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "unicode_data": {
+      "generator": "org.antlr.v4.unicode.UnicodeDataTemplateController",
+      "helper": "tools/grammar-frontend/oracle/GenerateUnicodeData.java",
+      "helper_sha256": "9adec4f06cb31c7c7e408336e8fe935741f6d4ec5e8113e76450551ec1e3967f",
+      "icu4j_version": "78.1.0.0",
+      "icu4j_jar_sha256": "bbb70d3be23110d7295823eee0c2e896ac3b619b3c0f26168f65eb972df51d2a",
+      "unicode_version": "17.0.0.0"
+    },
+    "exit_status": 0
+  },
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh testtoolsyntaxerrors-testepsilonoptionalandclosureanalysis-b73d1d68ad --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar --icu-jar /tmp/antlr-cleanroom/tools/icu4j-78.1.jar",
+  "files": {
+    "T.g4": "90c4470834c0137432a620bf45c91fb1e01fe6af1b6575bf2eefca6eb41f2b6a",
+    "T.interp": "a5aaf1ee270c4ae3957629ae73d099e2031ce102f584b3ce32b85b27d12a7c11",
+    "T.tokens": "1da3cfd3aeaec5995fdd79361166c531a283887325706e6dcca1b36657757f1b",
+    "TLexer.interp": "802559281c859e7757c48ab8730c3c7f3a108cc9f4d097e0aa0cd6c4ee1d05c6",
+    "TLexer.tokens": "1da3cfd3aeaec5995fdd79361166c531a283887325706e6dcca1b36657757f1b",
+    "diagnostics.json": "89e8ed8ae9c21c2d25f9087e3e1b546fe3e216e273a3b6b5c551de2dcd8725ae",
+    "oracle/java-antlr.stderr": "1cc723aeddaebe1470d5f83e744568c61b54edc3eccc8fff5e6eb108ca63c471",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stdout": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+  }
+}

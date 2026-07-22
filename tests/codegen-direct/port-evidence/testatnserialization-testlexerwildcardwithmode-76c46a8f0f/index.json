@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnserialization-testlexerwildcardwithmode-76c46a8f0f",
+  "active_revision_id": "testatnserialization-testlexerwildcardwithmode-76c46a8f0f-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnserialization-testlexerwildcardwithmode-76c46a8f0f-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnserialization-testlexerwildcardwithmode-76c46a8f0f/revisions/testatnserialization-testlexerwildcardwithmode-76c46a8f0f-r1/manifest.json",
+      "closure_sha256": "9b1e511c210405357ae7139aae2fa8e2a8c0f2f4fc17de14f8853c885853d582"
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 144,
+      "line": 2,
+      "column": 30,
+      "message": "multi-character literals are not allowed in lexer sets: 'GH'"
+    },
+    {
+      "severity": "error",
+      "code": 144,
+      "line": 2,
+      "column": 36,
+      "message": "multi-character literals are not allowed in lexer sets: 'LM'"
+    },
+    {
+      "severity": "error",
+      "code": 156,
+      "line": 3,
+      "column": 30,
+      "message": "invalid escape sequence \\u24\\u"
+    },
+    {
+      "severity": "error",
+      "code": 156,
+      "line": 3,
+      "column": 40,
+      "message": "invalid escape sequence \\{"
+    },
+    {
+      "severity": "error",
+      "code": 174,
+      "line": 4,
+      "column": 33,
+      "message": "string literals and sets cannot be empty: 'F'..'A'"
+    },
+    {
+      "severity": "error",
+      "code": 174,
+      "line": 5,
+      "column": 30,
+      "message": "string literals and sets cannot be empty: 'f'..'a'"
+    },
+    {
+      "severity": "error",
+      "code": 174,
+      "line": 5,
+      "column": 36,
+      "message": "string literals and sets cannot be empty: []"
+    },
+    {
+      "severity": "error",
+      "code": 156,
+      "line": 10,
+      "column": 84,
+      "message": "invalid escape sequence \\'"
+    }
+  ]
+}

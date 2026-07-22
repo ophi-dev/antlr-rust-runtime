@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtoolsyntaxerrors-testinvalidlanguageingrammar-4e78a7faa1",
+  "active_revision_id": "testtoolsyntaxerrors-testinvalidlanguageingrammar-4e78a7faa1-r1",
+  "revisions": [
+    {
+      "revision_id": "testtoolsyntaxerrors-testinvalidlanguageingrammar-4e78a7faa1-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testtoolsyntaxerrors-testinvalidlanguageingrammar-4e78a7faa1/revisions/testtoolsyntaxerrors-testinvalidlanguageingrammar-4e78a7faa1-r1/manifest.json",
+      "closure_sha256": "61ac9292324be06155af2d5467c40c5e27bb102f3184489c5de39ff1be7cbfab"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+lexer grammar Test;
+INVALID_STRING_LITERAL_RANGE: 'GH'..'LM';
+INVALID_CHAR_SET:             [\u24\uA2][\{];
+EMPTY_STRING_LITERAL_RANGE:   'F'..'A' | 'Z';
+EMPTY_CHAR_SET:               [f-az][];
+START_HYPHEN_IN_CHAR_SET:     [-z];
+END_HYPHEN_IN_CHAR_SET:       [a-];
+SINGLE_HYPHEN_IN_CHAR_SET:    [-];
+VALID_STRING_LITERALS:        '\u1234' | '\t' | '\'';
+VALID_CHAR_SET:               [`\-=\]];EMPTY_CHAR_SET_WITH_INVALID_ESCAPE_SEQUENCE: [\'];

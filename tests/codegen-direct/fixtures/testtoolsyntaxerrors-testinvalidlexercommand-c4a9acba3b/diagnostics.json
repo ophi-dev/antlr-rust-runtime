@@ -1,0 +1,18 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 149,
+      "line": 4,
+      "column": 14,
+      "message": "lexer command popmode does not exist or is not supported by the current target"
+    },
+    {
+      "severity": "error",
+      "code": 149,
+      "line": 5,
+      "column": 14,
+      "message": "lexer command token does not exist or is not supported by the current target"
+    }
+  ]
+}

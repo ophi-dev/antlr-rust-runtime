@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testsymbolissues-testa-2e644f226d",
+  "revision_id": "testsymbolissues-testa-2e644f226d-r1",
+  "cells": [
+    {
+      "test_port": "primary",
+      "test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+      "implementation_port": "primary-antlr-ng",
+      "implementation_commit": "8ddba8f5bd603b78e8eea0497cea9c4fe1328208",
+      "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::a::matches_java -- --exact",
+      "result": "green: 1 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the primary implementation passed the locked primary tests"
+}

@@ -1,0 +1,2 @@
+warning(125): P.g4:2:5: implicit definition of token COMMA in parser
+warning(125): P.g4:2:11: implicit definition of token ID in parser

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcharsupport-testgetcharvaluefromcharingrammarliteral-94ddda545b",
+  "active_revision_id": "testcharsupport-testgetcharvaluefromcharingrammarliteral-94ddda545b-r1",
+  "revisions": [
+    {
+      "revision_id": "testcharsupport-testgetcharvaluefromcharingrammarliteral-94ddda545b-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testcharsupport-testgetcharvaluefromcharingrammarliteral-94ddda545b/revisions/testcharsupport-testgetcharvaluefromcharingrammarliteral-94ddda545b-r1/manifest.json",
+      "closure_sha256": "540586e0109141d54002621b3e3afb7b2c13bcecfb1cd2eac53b829611dbc366"
+    }
+  ]
+}

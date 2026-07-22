@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodeescapes-latinjavaescape-da2311f9d3",
+  "active_revision_id": "testunicodeescapes-latinjavaescape-da2311f9d3-r1",
+  "revisions": [
+    {
+      "revision_id": "testunicodeescapes-latinjavaescape-da2311f9d3-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testunicodeescapes-latinjavaescape-da2311f9d3/revisions/testunicodeescapes-latinjavaescape-da2311f9d3-r1/manifest.json",
+      "closure_sha256": "5e7f26b03db2cbd7cea00357dc68e5dc348052ded6832bfdc6639359dda37f69"
+    }
+  ]
+}

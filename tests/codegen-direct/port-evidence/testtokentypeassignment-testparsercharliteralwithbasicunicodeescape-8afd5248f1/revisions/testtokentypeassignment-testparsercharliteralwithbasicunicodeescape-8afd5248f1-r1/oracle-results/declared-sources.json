@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtokentypeassignment-testparsercharliteralwithbasicunicodeescape-8afd5248f1",
+  "revision_id": "testtokentypeassignment-testparsercharliteralwithbasicunicodeescape-8afd5248f1-r1",
+  "primary_test_source": {
+    "implementation": "java-antlr",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "source_case_ids": [
+      "java-antlr:testtokentypeassignment-testparsercharliteralwithbasicunicodeescape@c28129bc45dd"
+    ]
+  },
+  "alternate_test_source": {
+    "implementation": "antlr-ng",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "source_case_ids": [
+      "antlr-ng:testtokentypeassignment-testparsercharliteralwithbasicunicodeescape@c28129bc45dd"
+    ]
+  },
+  "outcomes": {
+    "primary": "the complete direct Rust .interp and .tokens text match the immutable Java 4.13.2 fixtures",
+    "alternate": "the pinned antlr-ng TestTokenTypeAssignment case uses the same grammar and token/rule expectations",
+    "java_compatibility_verdict": "exact Java 4.13.2 token numbering, aliases, insertion order, recognizer metadata, and serialized ATN equality"
+  }
+}

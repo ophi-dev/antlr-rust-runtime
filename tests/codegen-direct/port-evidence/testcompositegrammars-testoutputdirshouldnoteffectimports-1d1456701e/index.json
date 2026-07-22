@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcompositegrammars-testoutputdirshouldnoteffectimports-1d1456701e",
+  "active_revision_id": "testcompositegrammars-testoutputdirshouldnoteffectimports-1d1456701e-r1",
+  "revisions": [
+    {
+      "revision_id": "testcompositegrammars-testoutputdirshouldnoteffectimports-1d1456701e-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testoutputdirshouldnoteffectimports-1d1456701e/revisions/testcompositegrammars-testoutputdirshouldnoteffectimports-1d1456701e-r1/manifest.json",
+      "closure_sha256": "2e6afd30c4abb35315535923f079ee88a283bd38d55b2bddcd061e7ad6aaee52"
+    }
+  ]
+}

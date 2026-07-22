@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c",
+  "active_revision_id": "testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c-r1",
+  "revisions": [
+    {
+      "revision_id": "testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c/revisions/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c-r1/manifest.json",
+      "closure_sha256": "f6b9267d65f26f6a5078eaf9319be67983d602531ceee5c5e112c54577460713"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnconstruction-testcharsetunicodemultiplepropertyescape-b3c6b5bbe8",
+  "active_revision_id": "testatnconstruction-testcharsetunicodemultiplepropertyescape-b3c6b5bbe8-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnconstruction-testcharsetunicodemultiplepropertyescape-b3c6b5bbe8-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnconstruction-testcharsetunicodemultiplepropertyescape-b3c6b5bbe8/revisions/testatnconstruction-testcharsetunicodemultiplepropertyescape-b3c6b5bbe8-r1/manifest.json",
+      "closure_sha256": "5c5c1c80f85213133621c49ab208cb96c03b6c3c9b4edbb04f1a7d2c9dea8068"
+    }
+  ]
+}

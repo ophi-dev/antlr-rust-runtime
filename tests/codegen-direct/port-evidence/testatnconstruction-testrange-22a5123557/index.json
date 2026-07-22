@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnconstruction-testrange-22a5123557",
+  "active_revision_id": "testatnconstruction-testrange-22a5123557-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnconstruction-testrange-22a5123557-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnconstruction-testrange-22a5123557/revisions/testatnconstruction-testrange-22a5123557-r1/manifest.json",
+      "closure_sha256": "16c8d28cc168c70c366d5fdf225f3547e3682f4adf01f0da43eb3a7f2a2968bf"
+    }
+  ]
+}

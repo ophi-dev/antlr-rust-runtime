@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "t.g4"
+  ],
+  "expected": "error",
+  "logical_ids": [
+    "vscode-antlr4-t"
+  ],
+  "external_source": {
+    "repository": "https://github.com/mike-lischke/vscode-antlr4.git",
+    "commit": "3e9469d1d490c71b3e3b909edf1235582a3f8db8",
+    "path": "tests/backend/test-data/t.g4",
+    "license": "MIT"
+  },
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "exit_status": 1
+  },
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh vscode-diagnostics --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar",
+  "files": {
+    "diagnostics.json": "6dc39ed3b78b426b8afa11eb1cab918299fb1124e3b8ddba6b54c06c6c34cc89",
+    "oracle/java-antlr.stderr": "0fc82beb9a41ba1fbe24b9a85a27ebb44d610d45e851a77023b1581c693287b2",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "t.g4": "0c1da889ca65acbcd9af3d3b0b07649d00c8af25c0da9804daaf57b82b991d4b",
+    "t.tokens": "b49ebdcaa686ac94326cba816e28d668de7a7719a653eefb2253ba0778550ab4"
+  }
+}

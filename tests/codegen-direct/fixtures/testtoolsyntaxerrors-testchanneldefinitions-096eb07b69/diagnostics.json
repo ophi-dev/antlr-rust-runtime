@@ -1,0 +1,11 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 177,
+      "line": 10,
+      "column": 34,
+      "message": "NEWLINE_CHANNEL is not a recognized channel name"
+    }
+  ]
+}

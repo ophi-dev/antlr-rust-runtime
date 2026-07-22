@@ -1,0 +1,11 @@
+{
+  "java_antlr": [
+    {
+      "severity": "warning",
+      "code": 146,
+      "line": 224,
+      "column": 0,
+      "message": "non-fragment lexer rule OTHER can match the empty string"
+    }
+  ]
+}

@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "logical_id": "testgraphnodes-test-a-bx-b15f7b876f",
+  "revision_id": "testgraphnodes-test-a-bx-b15f7b876f-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "resolution": "verified-covered-existing",
+  "closure": {
+    "logical_id": "testgraphnodes-test-a-bx-b15f7b876f",
+    "source_case_ids": [
+      "antlr-ng:testgraphnodes-test-a-bx@9001eec86122",
+      "java-antlr:testgraphnodes-test-a-bx@9001eec86122"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot",
+    "unit_under_test": "prediction-context graph merging",
+    "observable": "Rust prediction-context merging matches the Java 4.13.2 DOT graph for TestGraphNodes.test_a$_bx",
+    "scaffold_commit": "b2b1830785748af7bf758f576f6051a748148eda",
+    "primary_test_commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+    "resolution": "verified-covered-existing"
+  },
+  "closure_sha256": "5228fb739848e5d6b3cffffb7d82eb05a0fa8edeed129c6c9a2f170850a2137f",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testgraphnodes-test-a-bx@9001eec86122",
+      "path": "tests/TestGraphNodes.spec.ts",
+      "sha256": "c0312768aa10c8b0da1a5cf1ffae74370067ed7a9a42fcf0ceb6a7414266638c"
+    },
+    {
+      "source_case_id": "java-antlr:testgraphnodes-test-a-bx@9001eec86122",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestGraphNodes.java",
+      "sha256": "c33fb05046296906d9ab708650d338035199791db37a111c2864b0ffb4fd0022"
+    }
+  ],
+  "commits": {
+    "scaffold": "b2b1830785748af7bf758f576f6051a748148eda",
+    "primary_test": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+    "primary_implementation": "b2b1830785748af7bf758f576f6051a748148eda"
+  },
+  "ancestry": {
+    "primary_test_parent": "b2b1830785748af7bf758f576f6051a748148eda",
+    "primary_implementation_parent": "e2046ea128583ecf578a82b901ee495e0c503c47",
+    "reachability": "the case-specific DOT assertion passed against prediction-context merging already present at the batch base"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/prediction.rs",
+      "marker": "    mod upstream_graph_nodes {",
+      "sha256": "3690e29ecfdc3a109eb772a04584e65cf4c97759b9a6b0e6b035ff92e9cbda09"
+    }
+  ],
+  "verified_covered_existing": {
+    "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-a-bx-b15f7b876f cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+    "commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed",
+    "covering_implementation_commit": "b2b1830785748af7bf758f576f6051a748148eda"
+  },
+  "green_result": {
+    "command": "ANTLR_GRAPH_NODE_CASE=testgraphnodes-test-a-bx-b15f7b876f cargo test --locked --lib prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot -- --exact",
+    "commit": "4f0e4c7d36a126a7e1d852c61628fa4be33d622c",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testgraphnodes-test-a-bx-b15f7b876f/revisions/testgraphnodes-test-a-bx-b15f7b876f-r1/oracle-results/declared-sources.json",
+      "sha256": "86412c570bbcb8068afc9235ef1e3b3b1f5aee586852c657cdfe5f11287b7abc"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testgraphnodes-test-a-bx-b15f7b876f/revisions/testgraphnodes-test-a-bx-b15f7b876f-r1/matrix-results/results.json",
+      "sha256": "6d499ae7996f855070a4deb6f33ba1d8268a949cea57bd39842ddd46409151b2"
+    }
+  ]
+}

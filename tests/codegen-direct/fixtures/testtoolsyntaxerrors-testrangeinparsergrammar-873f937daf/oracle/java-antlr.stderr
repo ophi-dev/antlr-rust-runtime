@@ -1,0 +1,1 @@
+error(181): T.g4:2:4: token ranges not allowed in parser: 'A'..'Z'

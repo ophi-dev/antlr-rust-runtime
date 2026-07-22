@@ -1,0 +1,135 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtoolsyntaxerrors-testepsilonclosureanalysis-fbecc8c0c7",
+  "revision_id": "testtoolsyntaxerrors-testepsilonclosureanalysis-fbecc8c0c7-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "resolution": "verified-covered-existing",
+  "closure": {
+    "logical_id": "testtoolsyntaxerrors-testepsilonclosureanalysis-fbecc8c0c7",
+    "source_case_ids": [
+      "antlr-ng:testtoolsyntaxerrors-testepsilonclosureanalysis@1d97ec316ba1",
+      "java-antlr:testtoolsyntaxerrors-testepsilonclosureanalysis@1d97ec316ba1"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testepsilonclosureanalysis-fbecc8c0c7/A.g4",
+      "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testepsilonclosureanalysis-fbecc8c0c7/ALexer.interp",
+      "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testepsilonclosureanalysis-fbecc8c0c7/ALexer.tokens",
+      "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testepsilonclosureanalysis-fbecc8c0c7/diagnostics.json",
+      "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testepsilonclosureanalysis-fbecc8c0c7/fixture.json",
+      "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testepsilonclosureanalysis-fbecc8c0c7/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testepsilonclosureanalysis-fbecc8c0c7/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testepsilonclosureanalysis-fbecc8c0c7/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testepsilonclosureanalysis-fbecc8c0c7/oracle/java-unicode-data.stdout"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_tool_syntax_errors::testtoolsyntaxerrors_testepsilonclosureanalysis_fbecc8c0c7::matches_java",
+    "unit_under_test": "semantic checks or post-parse compiler diagnostics",
+    "observable": "direct Rust tool diagnostics and accepted artifacts match Java 4.13.2 for TestToolSyntaxErrors.testEpsilonClosureAnalysis",
+    "scaffold_commit": "68f088b7b61d64b9c92fb102c69a53f0a8e54e0b",
+    "primary_test_commit": "e50d7e1e7aad6b6322e839af86c3933fa5a2792a",
+    "resolution": "verified-covered-existing"
+  },
+  "closure_sha256": "ee36ade88ec8a6008c7fe6f9f74f89513078fea8e2e1ad02eb22ea4bda69c33f",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testtoolsyntaxerrors-testepsilonclosureanalysis@1d97ec316ba1",
+      "path": "tests/TestToolSyntaxErrors.spec.ts",
+      "sha256": "5c9ad90476e381cb1658e11568bb5282258ab04da3a0d56e04db46f995d54e85"
+    },
+    {
+      "source_case_id": "java-antlr:testtoolsyntaxerrors-testepsilonclosureanalysis@1d97ec316ba1",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestToolSyntaxErrors.java",
+      "sha256": "d20fdd17605ec4419dea95b8734f6768d54b6a3a13c3f592e75653690b5808e0"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testepsilonclosureanalysis-fbecc8c0c7/A.g4",
+      "sha256": "d73e64bc91a256e6fcf0f9d994f53d1a63564e1126d1cb4d49bfbe3b2665cb76"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testepsilonclosureanalysis-fbecc8c0c7/ALexer.interp",
+      "sha256": "836616b6f49e9b36f665d1af9821ea456303af121a85043b698e815e285be784"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testepsilonclosureanalysis-fbecc8c0c7/ALexer.tokens",
+      "sha256": "6e5445e89ba62ae0d84ab646772601676ee16c491a911ec9c160f7db8aa5f9a6"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testepsilonclosureanalysis-fbecc8c0c7/diagnostics.json",
+      "sha256": "d6b7bf00ef446a013a503567c752d6b7986829d542761fa3a0f616bdc71b017d"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testepsilonclosureanalysis-fbecc8c0c7/fixture.json",
+      "sha256": "765e523d3fe1f8f703ba6833aa9b65eb1c4c9f52d826d68e0a0f7146f7e35721"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testepsilonclosureanalysis-fbecc8c0c7/oracle/java-antlr.stderr",
+      "sha256": "d36c8b93e2b09c8745e4549145efbb867b63b2c69becfbe25989a2799f2f51e0"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testepsilonclosureanalysis-fbecc8c0c7/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testepsilonclosureanalysis-fbecc8c0c7/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testepsilonclosureanalysis-fbecc8c0c7/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    }
+  ],
+  "commits": {
+    "scaffold": "68f088b7b61d64b9c92fb102c69a53f0a8e54e0b",
+    "primary_test": "e50d7e1e7aad6b6322e839af86c3933fa5a2792a",
+    "primary_implementation": "68f088b7b61d64b9c92fb102c69a53f0a8e54e0b"
+  },
+  "ancestry": {
+    "primary_test_parent": "68f088b7b61d64b9c92fb102c69a53f0a8e54e0b",
+    "primary_implementation_parent": "ede783206bb4dfc3d8f5d031fdfea9feab507763",
+    "reachability": "the case-specific tool diagnostic or artifact assertion passed against the direct compiler implementation already present at the batch base"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_tool_syntax_errors {",
+      "end_marker": "\n    mod upstream_token_position_options {",
+      "sha256": "7b8cc97f2e78edfd22563d77ce3d75abcf7e7b5c4563e1993548a4ab3424d6aa"
+    },
+    {
+      "path": "tests/codegen-direct/generated/tool-syntax-errors-cases.inc.rs",
+      "marker": "// Generated by tools/grammar-frontend/generate-tool-syntax-errors-fixtures.mjs.",
+      "sha256": "d615d9f51927ce54db20c4565fca5b540eedb0a3487c43c100eb78c480458400"
+    }
+  ],
+  "verified_covered_existing": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_tool_syntax_errors::testtoolsyntaxerrors_testepsilonclosureanalysis_fbecc8c0c7::matches_java -- --exact",
+    "commit": "e50d7e1e7aad6b6322e839af86c3933fa5a2792a",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed",
+    "covering_implementation_commit": "68f088b7b61d64b9c92fb102c69a53f0a8e54e0b"
+  },
+  "green_result": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_tool_syntax_errors::testtoolsyntaxerrors_testepsilonclosureanalysis_fbecc8c0c7::matches_java -- --exact",
+    "commit": "e50d7e1e7aad6b6322e839af86c3933fa5a2792a",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testtoolsyntaxerrors-testepsilonclosureanalysis-fbecc8c0c7/revisions/testtoolsyntaxerrors-testepsilonclosureanalysis-fbecc8c0c7-r1/oracle-results/declared-sources.json",
+      "sha256": "cad0f6ada063f0dca8bdd481ece8ace5ee2efa2fb8ff9f12e9b2561767142654"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testtoolsyntaxerrors-testepsilonclosureanalysis-fbecc8c0c7/revisions/testtoolsyntaxerrors-testepsilonclosureanalysis-fbecc8c0c7-r1/matrix-results/results.json",
+      "sha256": "617ed96325412951cf18e0613099487d1917744f3e1d724b2b30eea2b9366276"
+    }
+  ]
+}

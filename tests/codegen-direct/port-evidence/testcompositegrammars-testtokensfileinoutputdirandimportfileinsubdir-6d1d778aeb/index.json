@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb",
+  "active_revision_id": "testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb-r1",
+  "revisions": [
+    {
+      "revision_id": "testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb/revisions/testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb-r1/manifest.json",
+      "closure_sha256": "4b011c700914c453e0ef85006483eafd5ae9676386967064da033390d35b0685"
+    }
+  ]
+}

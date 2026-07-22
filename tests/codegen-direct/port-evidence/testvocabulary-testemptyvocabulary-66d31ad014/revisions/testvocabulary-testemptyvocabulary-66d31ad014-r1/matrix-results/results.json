@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testvocabulary-testemptyvocabulary-66d31ad014",
+  "revision_id": "testvocabulary-testemptyvocabulary-66d31ad014-r1",
+  "cells": [
+    {
+      "test_port": "primary",
+      "test_commit": "d2211267b0573bf147d1baa57af8f7c13ce2d245",
+      "implementation_port": "primary-antlr-ng",
+      "implementation_commit": "2de0397b1db0d20cad0d59f2ea31c55b989edae2",
+      "command": "cargo test --locked --lib empty_vocabulary_matches_java -- --test-threads=1",
+      "result": "green: 1 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the primary implementation passed the locked primary tests"
+}

@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "A.g4"
+  ],
+  "logical_ids": [
+    "testattributechecks-testfinallyactions-1430d03d17",
+    "testattributechecks-testfinallyactions-fbdc1a7648"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "java-antlr:testattributechecks-testfinallyactions@6bb5793cc471",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestAttributeChecks.java",
+      "case": "testFinallyActions",
+      "source_sha256": "7e267fd9a376f7d8d63161d3caac6c4289c80136c3957146c419323cd87b6d4a"
+    },
+    {
+      "source_case_id": "antlr-ng:testattributechecks-testfinallyactions@387288aa9eb1",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestAttributeChecks.spec.ts",
+      "case": "testFinallyActions",
+      "source_sha256": "fa9ddfee1540fdee030868888a0f368dfa3bb6eef53bdcdeae2eb33b84f3d26b"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testattributechecks-testfinallyactions@6bb5793cc471",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestAttributeChecks.java",
+    "case": "testFinallyActions",
+    "source_sha256": "7e267fd9a376f7d8d63161d3caac6c4289c80136c3957146c419323cd87b6d4a"
+  },
+  "antlr_ng_test": {
+    "source_case_id": "antlr-ng:testattributechecks-testfinallyactions@387288aa9eb1",
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/TestAttributeChecks.spec.ts",
+    "case": "testFinallyActions",
+    "source_sha256": "fa9ddfee1540fdee030868888a0f368dfa3bb6eef53bdcdeae2eb33b84f3d26b"
+  },
+  "expected": "success",
+  "fixture_variant": {
+    "method": "testFinallyActions",
+    "location": "finally",
+    "action": "$y = $x",
+    "index": 4,
+    "count": 23
+  },
+  "attribute_checks_oracle": {
+    "artifacts": [
+      ".interp",
+      ".tokens",
+      "diagnostics"
+    ],
+    "agreement": "Java and antlr-ng use the same rendered grammar and expected diagnostic category",
+    "compatibility_verdict": "Java ANTLR 4.13.2"
+  },
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "unicode_data": {
+      "generator": "org.antlr.v4.unicode.UnicodeDataTemplateController",
+      "helper": "tools/grammar-frontend/oracle/GenerateUnicodeData.java",
+      "helper_sha256": "9adec4f06cb31c7c7e408336e8fe935741f6d4ec5e8113e76450551ec1e3967f",
+      "icu4j_version": "78.1.0.0",
+      "icu4j_jar_sha256": "bbb70d3be23110d7295823eee0c2e896ac3b619b3c0f26168f65eb972df51d2a",
+      "unicode_version": "17.0.0.0"
+    },
+    "exit_status": 0
+  },
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh testattributechecks-testfinallyactions-fbdc1a7648-variant-4 --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar --icu-jar /tmp/antlr-cleanroom/tools/icu4j-78.1.jar",
+  "files": {
+    "A.g4": "b27646a6c805109150d2ddb52132dec3aab903272e99c7f8d6d50469056d5b92",
+    "A.interp": "d71b2caefc8e97d771a530a9858e3ddf7f0a7ab5c75ddfff0104ba6a07581b63",
+    "A.tokens": "05e2fff4ffabf4e3b89a4096f749fc10a24a6739f8c96770a96860c3612eb3e6",
+    "oracle/java-antlr.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stdout": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+  }
+}

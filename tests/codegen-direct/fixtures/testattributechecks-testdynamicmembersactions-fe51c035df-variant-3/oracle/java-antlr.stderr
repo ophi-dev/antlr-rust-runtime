@@ -1,0 +1,2 @@
+error(57): A.g4:2:11: reference to undefined rule S in non-local ref $S::i
+error(57): A.g4:2:17: reference to undefined rule S in non-local ref $S::i

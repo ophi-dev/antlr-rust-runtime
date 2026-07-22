@@ -1,0 +1,6 @@
+warning(108): M.g4:2:9: token name A is already defined
+warning(108): M.g4:2:12: token name B is already defined
+warning(108): M.g4:2:15: token name C is already defined
+warning(108): M.g4:2:9: token name C is already defined
+warning(108): M.g4:2:12: token name B is already defined
+warning(108): M.g4:2:15: token name A is already defined

@@ -1,0 +1,18 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 50,
+      "line": 4,
+      "column": 0,
+      "message": "syntax error: 'b' came as a complete surprise to me"
+    },
+    {
+      "severity": "error",
+      "code": 50,
+      "line": 4,
+      "column": 6,
+      "message": "syntax error: mismatched input ';' expecting COLON while matching a lexer rule"
+    }
+  ]
+}

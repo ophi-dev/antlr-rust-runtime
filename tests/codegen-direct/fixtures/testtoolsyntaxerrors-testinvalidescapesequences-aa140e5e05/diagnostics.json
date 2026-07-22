@@ -1,0 +1,25 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 156,
+      "line": 2,
+      "column": 12,
+      "message": "invalid escape sequence \\uAABG"
+    },
+    {
+      "severity": "error",
+      "code": 156,
+      "line": 2,
+      "column": 19,
+      "message": "invalid escape sequence \\x"
+    },
+    {
+      "severity": "error",
+      "code": 156,
+      "line": 2,
+      "column": 22,
+      "message": "invalid escape sequence \\u"
+    }
+  ]
+}

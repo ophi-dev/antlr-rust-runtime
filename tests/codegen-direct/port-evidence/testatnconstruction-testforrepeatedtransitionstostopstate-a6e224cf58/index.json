@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58",
+  "active_revision_id": "testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58/revisions/testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58-r1/manifest.json",
+      "closure_sha256": "abaef4f65f235c730c8784e26809610b1f40221f29ab61b621ca475cd801de34"
+    }
+  ]
+}

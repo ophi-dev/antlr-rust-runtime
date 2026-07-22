@@ -1,0 +1,1 @@
+error(186): EofClosure.g4:2:0: rule EofClosure contains a closure with at least one alternative that can match EOF

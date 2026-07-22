@@ -1,0 +1,4 @@
+RuleStart_b_2->s7
+s7-B->s8
+s8->RuleStop_b_3
+RuleStop_b_3->s5

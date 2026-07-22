@@ -18,16 +18,37 @@ path = "src/lib.rs"
 
 [features]
 default = []
+codegen = [
+    "dep:icu_casemap",
+    "dep:icu_properties",
+    "dep:intl",
+    "dep:petgraph",
+]
 std = []
 perf-counters = []
 
 [dependencies]
+icu_casemap = { version = "2.2.0", optional = true }
+icu_properties = { version = "2.2.0", features = ["alloc"], optional = true }
+intl = { version = "0.5.1", default-features = false, features = ["full", "normalization"], optional = true }
 memchr = "2"
+petgraph = { version = "0.8.3", default-features = false, features = ["std"], optional = true }
 stacker = "0.1.24"
 thiserror = "2"
 
 [dev-dependencies]
 pretty_assertions = "1"
+sha2 = "0.10"
+
+[[bin]]
+name = "antlr4-rust-gen"
+path = "src/bin/antlr4-rust-gen.rs"
+required-features = ["codegen"]
+
+[[test]]
+name = "antlr4_rust_gen_cli"
+path = "tests/antlr4_rust_gen_cli.rs"
+required-features = ["codegen"]
 
 [package.metadata.docs.rs]
 all-features = true

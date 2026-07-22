@@ -24,7 +24,7 @@ Run this from the Kotlin grammar directory. The files consumed by this repo are:
 ## Generate Rust Modules
 
 ```bash
-cargo run --bin antlr4-rust-gen -- \
+cargo run --features codegen --bin antlr4-rust-gen -- \
   --lexer /tmp/antlr-cleanroom/kotlin-java/KotlinLexer.interp \
   --parser /tmp/antlr-cleanroom/kotlin-java/KotlinParser.interp \
   --out-dir /tmp/antlr-cleanroom/kotlin-rust

@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "OddExpr.g4"
+  ],
+  "logical_ids": [
+    "vscode-antlr4-odd-expr"
+  ],
+  "external_source": {
+    "repository": "https://github.com/mike-lischke/vscode-antlr4.git",
+    "commit": "3e9469d1d490c71b3e3b909edf1235582a3f8db8",
+    "path": "tests/backend/test-data/OddExpr.g4",
+    "license": "MIT"
+  },
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "exit_status": 0
+  },
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh vscode-odd-expr --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar",
+  "files": {
+    "OddExpr.g4": "5b976405f9bfff5db92683665ea3d8b90816333504b588d3642a77c3a39ade92",
+    "OddExpr.interp": "bcb1c88bbb1cbe140a7503c7a9e3a5a69c816bba688091cc2c9302112fa8f635",
+    "OddExpr.tokens": "c3a9e09678802e5d37e2c41c654308d40938282cbbd4a87065c41b8a59eee9f3",
+    "OddExprLexer.interp": "c8df7d6bb664b0121f6144b77ce32ad29a315fb9518438850cdc7b1593c1faa7",
+    "OddExprLexer.tokens": "e09cce1ec28f8ddecdd9a7bdf04aa3b629c9c3665e3e2e743510dc4e8ba5ad16",
+    "diagnostics.json": "45df8a5979bf18bf1cfce9ed037db52c71ccac853bc3c8937623d8285c339b46",
+    "oracle/java-antlr.stderr": "015d22c6c020feec21682d75aa05fdca3fb0eb573ac4eeec89c0f3a2086f75a7",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

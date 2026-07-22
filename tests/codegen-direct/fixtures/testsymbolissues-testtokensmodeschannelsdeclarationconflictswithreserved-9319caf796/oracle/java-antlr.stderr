@@ -1,0 +1,4 @@
+error(159): L.g4:5:0: cannot declare a rule with reserved name MIN_CHAR_VALUE
+error(173): L.g4:4:0: cannot use or declare mode with reserved name MAX_CHAR_VALUE
+error(172): L.g4:2:11: cannot use or declare channel with reserved name SKIP
+error(172): L.g4:2:17: cannot use or declare channel with reserved name HIDDEN

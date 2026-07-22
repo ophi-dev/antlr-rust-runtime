@@ -1,0 +1,8 @@
+error(144): Test.g4:2:30: multi-character literals are not allowed in lexer sets: 'GH'
+error(144): Test.g4:2:36: multi-character literals are not allowed in lexer sets: 'LM'
+error(156): Test.g4:3:30: invalid escape sequence \u24\u
+error(156): Test.g4:3:40: invalid escape sequence \{
+error(174): Test.g4:4:33: string literals and sets cannot be empty: 'F'..'A'
+error(174): Test.g4:5:30: string literals and sets cannot be empty: 'f'..'a'
+error(174): Test.g4:5:36: string literals and sets cannot be empty: []
+error(156): Test.g4:10:84: invalid escape sequence \'

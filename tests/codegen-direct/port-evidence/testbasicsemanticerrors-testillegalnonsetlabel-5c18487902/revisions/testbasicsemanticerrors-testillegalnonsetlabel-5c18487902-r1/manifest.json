@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "logical_id": "testbasicsemanticerrors-testillegalnonsetlabel-5c18487902",
+  "revision_id": "testbasicsemanticerrors-testillegalnonsetlabel-5c18487902-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "closure": {
+    "logical_id": "testbasicsemanticerrors-testillegalnonsetlabel-5c18487902",
+    "source_case_ids": [
+      "antlr-ng:testbasicsemanticerrors-testillegalnonsetlabel@783e32f2af06",
+      "java-antlr:testbasicsemanticerrors-testillegalnonsetlabel@783e32f2af06"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902/T.g4",
+      "tests/codegen-direct/fixtures/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902/TLexer.interp",
+      "tests/codegen-direct/fixtures/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902/TLexer.tokens",
+      "tests/codegen-direct/fixtures/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902/diagnostics.json",
+      "tests/codegen-direct/fixtures/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902/fixture.json",
+      "tests/codegen-direct/fixtures/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902/oracle/java-antlr.stdout"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_basic_semantic_errors::illegal_non_set_label_matches_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust semantic diagnostics match Java 4.13.2 exactly for TestBasicSemanticErrors.testIllegalNonSetLabel",
+    "scaffold_commit": "685575f01d17b4d6791de8ac4207afe6f38d4b40",
+    "primary_test_commit": "d133e49cebf5b149b9cdf0dff70171128cd8ded5"
+  },
+  "closure_sha256": "3bed687eaace9a97ef414dd794401da34520408a73c58cc1004e880dffa7faad",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testbasicsemanticerrors-testillegalnonsetlabel@783e32f2af06",
+      "path": "tests/TestBasicSemanticErrors.spec.ts",
+      "sha256": "074aff6e9a006420110fbd883d45039887bee9663a3e089d3767269b7fab5dd4"
+    },
+    {
+      "source_case_id": "java-antlr:testbasicsemanticerrors-testillegalnonsetlabel@783e32f2af06",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestBasicSemanticErrors.java",
+      "sha256": "5f739f16bdcbd8a3c519a49b91c1c02f22e12c0cc718c881c7239f8abc8385ac"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902/T.g4",
+      "sha256": "39e2b5049a35746aba8aadd56c9a4e4167563ba0f51bb79495f2446f9deeb5c5"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902/TLexer.interp",
+      "sha256": "77c61117be5dfa71f381ac443728d9320a2f36d965f21e230d141afe8c3d3484"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902/TLexer.tokens",
+      "sha256": "c925e7e5c36baccef7a321e0dbbef02ebf0c4fe21a2e97c3fd2270e17c1ed382"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902/diagnostics.json",
+      "sha256": "7ed5a16dfc7689e237de53585943dda6a514c4069bd6e31f29df7dc0f0314a03"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902/fixture.json",
+      "sha256": "578bf6b3352c70b342555c88d93e6f834a69c10d968a773db1ddeac8b1a9c2b6"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902/oracle/java-antlr.stderr",
+      "sha256": "8649e0969aa14a3b2ff2c1d1ee8a0b71ff1f133fc6eb8cf51028777f49a99880"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "commits": {
+    "scaffold": "685575f01d17b4d6791de8ac4207afe6f38d4b40",
+    "primary_test": "d133e49cebf5b149b9cdf0dff70171128cd8ded5",
+    "primary_implementation": "1733fa4e06a1b97951592da68689a9bff27ba86c"
+  },
+  "ancestry": {
+    "primary_test_parent": "685575f01d17b4d6791de8ac4207afe6f38d4b40",
+    "primary_implementation_parent": "d133e49cebf5b149b9cdf0dff70171128cd8ded5",
+    "reachability": "the implementation commit is directly based on the locked red semantic tests"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_basic_semantic_errors {",
+      "end_marker": "\n        const fn expected(",
+      "sha256": "601b3d2e7a8126b38b502258a1ecf7693c3ef8580b30639baeb40eccf5fb1cd5"
+    }
+  ],
+  "demonstrated_red": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_basic_semantic_errors -- --test-threads=1",
+    "commit": "d133e49cebf5b149b9cdf0dff70171128cd8ded5",
+    "exit_code": 101,
+    "fingerprint": "the invalid label on a non-set block compiled successfully"
+  },
+  "green_result": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_basic_semantic_errors -- --test-threads=1",
+    "commit": "1733fa4e06a1b97951592da68689a9bff27ba86c",
+    "exit_code": 0,
+    "result": "3 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902/revisions/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902-r1/oracle-results/declared-sources.json",
+      "sha256": "ee389a77c69b6e4718d8a2ed1b0cff26de456532deaee5aa59033f9210536220"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902/revisions/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902-r1/matrix-results/results.json",
+      "sha256": "edf2015e1cfbeb2f406e3f8d2455e15df758565cdb13c8b5077053c1ded899f1"
+    }
+  ]
+}

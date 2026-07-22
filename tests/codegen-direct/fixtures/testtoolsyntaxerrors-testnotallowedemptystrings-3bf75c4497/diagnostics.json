@@ -1,0 +1,39 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 174,
+      "line": 2,
+      "column": 8,
+      "message": "string literals and sets cannot be empty: ''"
+    },
+    {
+      "severity": "error",
+      "code": 174,
+      "line": 2,
+      "column": 16,
+      "message": "string literals and sets cannot be empty: ''"
+    },
+    {
+      "severity": "error",
+      "code": 174,
+      "line": 3,
+      "column": 8,
+      "message": "string literals and sets cannot be empty: ''"
+    },
+    {
+      "severity": "error",
+      "code": 174,
+      "line": 4,
+      "column": 15,
+      "message": "string literals and sets cannot be empty: ''"
+    },
+    {
+      "severity": "error",
+      "code": 174,
+      "line": 5,
+      "column": 8,
+      "message": "string literals and sets cannot be empty: ''"
+    }
+  ]
+}

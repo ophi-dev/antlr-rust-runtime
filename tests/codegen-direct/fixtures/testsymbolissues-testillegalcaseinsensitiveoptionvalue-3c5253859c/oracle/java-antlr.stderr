@@ -1,0 +1,2 @@
+warning(84): L.g4:2:28: unsupported option value caseInsensitive=badValue
+warning(84): L.g4:3:36: unsupported option value caseInsensitive=badValue

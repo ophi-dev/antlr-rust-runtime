@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcharsupport-testgetcharvaluefromgrammarcharliteral-7e17776ef5",
+  "revision_id": "testcharsupport-testgetcharvaluefromgrammarcharliteral-7e17776ef5-r1",
+  "cells": [
+    {
+      "test_port": "primary",
+      "test_commit": "8970016dbac6705533db4d9ad55d996b61bed026",
+      "implementation_port": "primary-antlr-ng",
+      "implementation_commit": "28b8fe8bf72608dc19752d8cb39feab7ecb21fc3",
+      "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::char_support::tests::",
+      "result": "green: 8 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the primary implementation passed the locked primary tests"
+}

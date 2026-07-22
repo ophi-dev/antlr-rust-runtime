@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodedata-emojipresentation-537f7d4f94",
+  "active_revision_id": "testunicodedata-emojipresentation-537f7d4f94-r1",
+  "revisions": [
+    {
+      "revision_id": "testunicodedata-emojipresentation-537f7d4f94-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testunicodedata-emojipresentation-537f7d4f94/revisions/testunicodedata-emojipresentation-537f7d4f94-r1/manifest.json",
+      "closure_sha256": "ef7b78bb4249da3a9c19470d6894b3b2b7afed0269154a2702161c75e602ff3d"
+    }
+  ]
+}

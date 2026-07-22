@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "logical_id": "testsymbolissues-testunreachabletokens-43df5f5f59",
+  "revision_id": "testsymbolissues-testunreachabletokens-43df5f5f59-r1",
+  "primary_test_source": {
+    "implementation": "java-antlr",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "source_case_ids": [
+      "java-antlr:testsymbolissues-testunreachabletokens@810ac1c78fa8"
+    ]
+  },
+  "alternate_test_source": {
+    "implementation": "antlr-ng",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "source_case_ids": [
+      "antlr-ng:testsymbolissues-testunreachabletokens@810ac1c78fa8"
+    ]
+  },
+  "outcomes": {
+    "primary": "the direct Rust compiler matches the immutable Java 4.13.2 diagnostics and complete .interp and .tokens fixtures",
+    "alternate": "the pinned antlr-ng TestSymbolIssues case exercises the same symbol, command, and lexer-range behavior",
+    "java_compatibility_verdict": "exact Java 4.13.2 diagnostic ordering and positions, token metadata, and serialized ATN equality"
+  }
+}

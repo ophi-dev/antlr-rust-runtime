@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "general-bug-35-tool-crashes-with-atn-4bd74f316f",
+  "active_revision_id": "general-bug-35-tool-crashes-with-atn-4bd74f316f-r1",
+  "revisions": [
+    {
+      "revision_id": "general-bug-35-tool-crashes-with-atn-4bd74f316f-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/general-bug-35-tool-crashes-with-atn-4bd74f316f/revisions/general-bug-35-tool-crashes-with-atn-4bd74f316f-r1/manifest.json",
+      "closure_sha256": "6808854b9cafc727e58c2f867288a5d7eff38d9158a54003cb62360addad3fb9"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 120,
+      "line": 3,
+      "column": 5,
+      "message": "lexical modes are only allowed in lexer grammars"
+    }
+  ]
+}

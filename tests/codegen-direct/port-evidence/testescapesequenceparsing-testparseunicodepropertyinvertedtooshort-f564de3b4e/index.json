@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testescapesequenceparsing-testparseunicodepropertyinvertedtooshort-f564de3b4e",
+  "active_revision_id": "testescapesequenceparsing-testparseunicodepropertyinvertedtooshort-f564de3b4e-r1",
+  "revisions": [
+    {
+      "revision_id": "testescapesequenceparsing-testparseunicodepropertyinvertedtooshort-f564de3b4e-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparseunicodepropertyinvertedtooshort-f564de3b4e/revisions/testescapesequenceparsing-testparseunicodepropertyinvertedtooshort-f564de3b4e-r1/manifest.json",
+      "closure_sha256": "6d6e8a6e223c0e48f8b1258692572e6bade357e758d6cd5335d9efafd7a550ad"
+    }
+  ]
+}

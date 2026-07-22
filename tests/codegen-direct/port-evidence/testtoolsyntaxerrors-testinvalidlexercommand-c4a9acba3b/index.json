@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtoolsyntaxerrors-testinvalidlexercommand-c4a9acba3b",
+  "active_revision_id": "testtoolsyntaxerrors-testinvalidlexercommand-c4a9acba3b-r1",
+  "revisions": [
+    {
+      "revision_id": "testtoolsyntaxerrors-testinvalidlexercommand-c4a9acba3b-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testtoolsyntaxerrors-testinvalidlexercommand-c4a9acba3b/revisions/testtoolsyntaxerrors-testinvalidlexercommand-c4a9acba3b-r1/manifest.json",
+      "closure_sha256": "fc5edf8d9b55a8aedaf1295dd3a9bb2b9f6c219ab158781fa7fe266328f55d22"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtopologicalsort-testsimpletokendependence-02d55e6f25",
+  "active_revision_id": "testtopologicalsort-testsimpletokendependence-02d55e6f25-r1",
+  "revisions": [
+    {
+      "revision_id": "testtopologicalsort-testsimpletokendependence-02d55e6f25-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testtopologicalsort-testsimpletokendependence-02d55e6f25/revisions/testtopologicalsort-testsimpletokendependence-02d55e6f25-r1/manifest.json",
+      "closure_sha256": "1a9e76c5bad4d0a752da2c5b81646d0831b8d280b8a936185d1f107be3e8f5a5"
+    }
+  ]
+}

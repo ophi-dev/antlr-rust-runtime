@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnconstruction-testparserrulerefinlexerrule-34f2000a35",
+  "active_revision_id": "testatnconstruction-testparserrulerefinlexerrule-34f2000a35-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnconstruction-testparserrulerefinlexerrule-34f2000a35-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnconstruction-testparserrulerefinlexerrule-34f2000a35/revisions/testatnconstruction-testparserrulerefinlexerrule-34f2000a35-r1/manifest.json",
+      "closure_sha256": "9f7e6c494d3200bce6c1f2fb3780c87ec13e259e8ef96ffd1c8d6cf99048e5cf"
+    }
+  ]
+}

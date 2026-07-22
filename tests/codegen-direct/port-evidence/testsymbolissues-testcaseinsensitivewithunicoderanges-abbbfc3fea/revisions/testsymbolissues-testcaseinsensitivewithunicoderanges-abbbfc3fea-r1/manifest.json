@@ -1,0 +1,126 @@
+{
+  "schema_version": 1,
+  "logical_id": "testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea",
+  "revision_id": "testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "resolution": "verified-covered-existing",
+  "closure": {
+    "logical_id": "testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea",
+    "source_case_ids": [
+      "antlr-ng:testsymbolissues-testcaseinsensitivewithunicoderanges@b1b40abb5488",
+      "java-antlr:testsymbolissues-testcaseinsensitivewithunicoderanges@b1b40abb5488"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea/L.g4",
+      "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea/L.interp",
+      "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea/L.tokens",
+      "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea/fixture.json",
+      "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea/oracle/java-unicode-data.stdout"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_symbol_issues::case_insensitive_with_unicode_ranges::matches_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust symbol diagnostics, token metadata, and serialization match Java 4.13.2 for TestSymbolIssues.testCaseInsensitiveWithUnicodeRanges",
+    "scaffold_commit": "58ef65074571091ad69b72a2f36a7718a9caa951",
+    "primary_test_commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+    "resolution": "verified-covered-existing"
+  },
+  "closure_sha256": "c100e74bc7e1cdd3c47d0e4957544aced46926417588712dec560d97af4526c8",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testsymbolissues-testcaseinsensitivewithunicoderanges@b1b40abb5488",
+      "path": "tests/TestSymbolIssues.spec.ts",
+      "sha256": "8f7a08f5a51689c74a7de052bc8dd7253a7ccb58f4658fdbc1d99f674e5d5b15"
+    },
+    {
+      "source_case_id": "java-antlr:testsymbolissues-testcaseinsensitivewithunicoderanges@b1b40abb5488",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestSymbolIssues.java",
+      "sha256": "777564e24248da6e2789fe6c223c0b91d2df65b1b6b5000505cb011113d27c0d"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea/L.g4",
+      "sha256": "6785fd2c0bf709b409c34249f376205288d986f03b1c2b651cb09465edbe3b51"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea/L.interp",
+      "sha256": "4bb7dcb56af55ef94f8d4dd8b46e6349b80ef1d8d2e061fdc48ea87f2a183e3c"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea/L.tokens",
+      "sha256": "11e326131b169460daea14573609db8de44de6f2cd752a10877b735ee2b93af0"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea/fixture.json",
+      "sha256": "b8a83518026f8574e433b6a7160815c03bcaaadcbc981b0a7663c476d1c4be8f"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    }
+  ],
+  "commits": {
+    "scaffold": "58ef65074571091ad69b72a2f36a7718a9caa951",
+    "primary_test": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+    "primary_implementation": "58ef65074571091ad69b72a2f36a7718a9caa951"
+  },
+  "ancestry": {
+    "primary_test_parent": "58ef65074571091ad69b72a2f36a7718a9caa951",
+    "primary_implementation_parent": "0d2729880d113dc8b61222e9bb38f6a41ba44d6a",
+    "reachability": "the case-specific symbol assertion passed against the direct compiler implementation already present at the batch base"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_symbol_issues {",
+      "end_marker": "\n    #[allow(clippy::too_many_arguments)]\n    mod upstream_composite_grammars {",
+      "historical_end_marker": "\n    mod upstream_token_position_options {",
+      "sha256": "4ed0bea95d793d013419d427bc1c75e9373e70fbea4af44e234008b93eb05fc0"
+    }
+  ],
+  "verified_covered_existing": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::case_insensitive_with_unicode_ranges::matches_java -- --exact",
+    "commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed",
+    "covering_implementation_commit": "58ef65074571091ad69b72a2f36a7718a9caa951"
+  },
+  "green_result": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::case_insensitive_with_unicode_ranges::matches_java -- --exact",
+    "commit": "7d2b102d3b69b7fe0049bbb243aff27bf2a1ee3b",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea/revisions/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea-r1/oracle-results/declared-sources.json",
+      "sha256": "d308773b25c34e0aa8030c185105ba63b326e16c06147d0bc4d9d34e0a861d85"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea/revisions/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea-r1/matrix-results/results.json",
+      "sha256": "f8745acd5fe7dea5eadfad25b9099b219a068f024d6f1e3837ba04ac9f3c2792"
+    }
+  ]
+}

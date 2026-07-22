@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testscopeparsing-testargs-input-r-rectangle-rectangle-fromlength-6-frombreadth-12-output-df688ce09b",
+  "active_revision_id": "testscopeparsing-testargs-input-r-rectangle-rectangle-fromlength-6-frombreadth-12-output-df688ce09b-r1",
+  "revisions": [
+    {
+      "revision_id": "testscopeparsing-testargs-input-r-rectangle-rectangle-fromlength-6-frombreadth-12-output-df688ce09b-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-r-rectangle-rectangle-fromlength-6-frombreadth-12-output-df688ce09b/revisions/testscopeparsing-testargs-input-r-rectangle-rectangle-fromlength-6-frombreadth-12-output-df688ce09b-r1/manifest.json",
+      "closure_sha256": "748e94cafa025b693e1e0ae7600bfc47709e6567705ba868bec88edf4c25dc4e"
+    }
+  ]
+}

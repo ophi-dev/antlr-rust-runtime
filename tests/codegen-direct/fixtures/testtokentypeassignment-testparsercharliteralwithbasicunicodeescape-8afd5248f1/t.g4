@@ -1,0 +1,2 @@
+grammar t;
+a : '\uABCD';

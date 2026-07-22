@@ -6,11 +6,80 @@ import { fileURLToPath } from "node:url";
 
 import {
     ANTLR_NG_COMMIT,
+    ATTRIBUTE_CHECKS_BASE_COMMIT,
+    ATTRIBUTE_CHECKS_IMPLEMENTATION_COMMIT,
+    ATTRIBUTE_CHECKS_TEST_COMMIT,
+    ATN_CONSTRUCTION_BASE_COMMIT,
+    ATN_CONSTRUCTION_IMPLEMENTATION_COMMIT,
+    ATN_CONSTRUCTION_TEST_COMMIT,
+    ATN_SERIALIZATION_TEST_COMMIT,
+    BASIC_SEMANTIC_BASE_COMMIT,
+    BASIC_SEMANTIC_IMPLEMENTATION_COMMIT,
+    BASIC_SEMANTIC_TEST_COMMIT,
+    CHAR_SUPPORT_BASE_COMMIT,
+    CHAR_SUPPORT_IMPLEMENTATION_COMMIT,
+    CHAR_SUPPORT_TEST_COMMIT,
+    COMPOSITE_GRAMMARS_BASE_COMMIT,
+    COMPOSITE_GRAMMARS_IMPLEMENTATION_COMMIT,
+    COMPOSITE_GRAMMARS_TEST_COMMIT,
+    EMPTY_VOCABULARY_BASE_COMMIT,
+    EMPTY_VOCABULARY_IMPLEMENTATION_COMMIT,
+    EMPTY_VOCABULARY_TEST_COMMIT,
+    ERROR_SETS_BASE_COMMIT,
+    ERROR_SETS_IMPLEMENTATION_COMMIT,
+    ERROR_SETS_TEST_COMMIT,
+    ESCAPE_SEQUENCE_IMPLEMENTATION_COMMIT,
+    ESCAPE_SEQUENCE_SCAFFOLD_COMMIT,
+    ESCAPE_SEQUENCE_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_COMMIT,
+    GENERAL_ATN_DOT_BASE_COMMIT,
+    GENERAL_ATN_DOT_TEST_COMMIT,
+    GRAPH_NODES_BASE_COMMIT,
+    GRAPH_NODES_IMPLEMENTATION_COMMIT,
+    GRAPH_NODES_TEST_COMMIT,
     IMPLEMENTATION_COMMIT,
     JAVA_COMMIT,
+    LEFT_RECURSION_BASE_COMMIT,
+    LEFT_RECURSION_IMPLEMENTATION_COMMIT,
+    LEFT_RECURSION_TEST_COMMIT,
+    LOOKAHEAD_TREE_FIXTURE_COMMIT,
+    LOOKAHEAD_TREE_IMPLEMENTATION_COMMIT,
+    LOOKAHEAD_TREE_TEST_COMMIT,
+    NESTED_ACTION_BASE_COMMIT,
+    NESTED_ACTION_IMPLEMENTATION_COMMIT,
+    NESTED_ACTION_TEST_COMMIT,
+    PHASE_B_BASE_COMMIT,
+    PHASE_B_IMPLEMENTATION_COMMIT,
     SCAFFOLD_COMMIT,
+    SCOPE_PARSING_BASE_COMMIT,
+    SCOPE_PARSING_IMPLEMENTATION_COMMIT,
+    SCOPE_PARSING_TEST_COMMIT,
+    SYMBOL_ISSUES_BASE_COMMIT,
+    SYMBOL_ISSUES_IMPLEMENTATION_COMMIT,
+    SYMBOL_ISSUES_TEST_COMMIT,
     TEST_COMMIT,
+    TOKEN_ASSIGNMENT_BASE_COMMIT,
+    TOKEN_ASSIGNMENT_IMPLEMENTATION_COMMIT,
+    TOKEN_ASSIGNMENT_TEST_COMMIT,
+    TOKEN_POSITION_BASE_COMMIT,
+    TOKEN_POSITION_IMPLEMENTATION_COMMIT,
+    TOKEN_POSITION_TEST_COMMIT,
+    TOOL_SYNTAX_ERRORS_BASE_COMMIT,
+    TOOL_SYNTAX_ERRORS_IMPLEMENTATION_COMMIT,
+    TOOL_SYNTAX_ERRORS_TEST_COMMIT,
+    TOPOLOGICAL_SORT_BASE_COMMIT,
+    TOPOLOGICAL_SORT_TEST_COMMIT,
+    UNICODE_DATA_BASE_COMMIT,
+    UNICODE_DATA_TEST_COMMIT,
+    UNICODE_ESCAPE_IMPLEMENTATION_COMMIT,
+    UNICODE_ESCAPE_SCAFFOLD_COMMIT,
+    UNICODE_ESCAPE_TEST_COMMIT,
+    UNICODE_GRAMMAR_BASE_COMMIT,
+    UNICODE_GRAMMAR_IMPLEMENTATION_COMMIT,
+    UNICODE_GRAMMAR_TEST_COMMIT,
+    VOCABULARY_BASE_COMMIT,
+    VOCABULARY_IMPLEMENTATION_COMMIT,
+    VOCABULARY_TEST_COMMIT,
     digest,
     parseMode,
     stableStringify,
@@ -18,9 +87,793 @@ import {
 
 const APPROVING_REVIEW = "merged implementation plan PR #149, section 11.5";
 const FRONTEND_TEST_COMMAND =
-    "cargo test --locked --bin antlr4-rust-gen grammar::frontend::tests::";
+    "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::frontend::tests::";
 const FRONTEND_SYNTAX_TEST_COMMAND =
-    "cargo test --locked --bin antlr4-rust-gen grammar::ported_tests::frontend_tool_syntax_cases_match_upstream_outcomes";
+    "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::ported_tests::frontend_tool_syntax_cases_match_upstream_outcomes";
+const ATN_SERIALIZATION_TEST_COMMAND =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::";
+const ATN_SERIALIZATION_TEST_MODULE =
+    "src/bin_support/grammar/atn/interp_test.rs";
+const ATTRIBUTE_CHECKS_CASES =
+    "tests/codegen-direct/generated/attribute-checks-cases.inc.rs";
+const ATTRIBUTE_CHECKS_TEST_COMMAND =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen " +
+    "grammar::atn::interp_test::tests::upstream_attribute_checks";
+const TOOL_SYNTAX_ERRORS_CASES =
+    "tests/codegen-direct/generated/tool-syntax-errors-cases.inc.rs";
+const TOOL_SYNTAX_ERRORS_TEST_PREFIX =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen " +
+    "grammar::atn::interp_test::tests::upstream_tool_syntax_errors::";
+const TOOL_SYNTAX_ERRORS_RED_CASES = new Map([
+    [
+        "testtoolsyntaxerrors-testchanneldefinitionincombined-c0331a41a6",
+        "expected 3 Java diagnostics, but the direct compiler emitted 2 channel-placement diagnostics",
+    ],
+    [
+        "testtoolsyntaxerrors-testchanneldefinitioninparser-4e1163cf33",
+        "expected 1 Java diagnostic, but the direct compiler emitted 2 channel-placement diagnostics",
+    ],
+    [
+        "testtoolsyntaxerrors-testdoublequoteintwostringliterals-ffb6aa0def",
+        "invalid escape diagnostic started at byte 26 instead of Java byte 27",
+    ],
+    [
+        "testtoolsyntaxerrors-testeofclosure-b763b175f6",
+        "the EOF closure compiled successfully instead of reporting Java error 186",
+    ],
+    [
+        "testtoolsyntaxerrors-testepsilonclosureinlexer-e76e483430",
+        "epsilon-closure diagnostic started at byte 44 instead of Java byte 53",
+    ],
+    [
+        "testtoolsyntaxerrors-testfragmentactionignored-2154f94584",
+        "fragment-action warning started at byte 79 instead of Java byte 100",
+    ],
+    [
+        "testtoolsyntaxerrors-testinvalidcharsetsandstringliterals-e5f43238b4",
+        "expected 8 Java diagnostics, but the direct compiler emitted 6 imprecise lexer diagnostics",
+    ],
+    [
+        "testtoolsyntaxerrors-testinvalidescapesequences-aa140e5e05",
+        "expected 3 Java invalid-escape diagnostics, but the direct compiler emitted 1",
+    ],
+    [
+        "testtoolsyntaxerrors-testinvalidlanguageingrammar-4e78a7faa1",
+        "the unsupported target language compiled successfully instead of reporting Java error 31",
+    ],
+    [
+        "testtoolsyntaxerrors-testinvalidlanguageingrammarwithlexercommand-606074f05f",
+        "expected Java error 31 first, but the direct compiler reported only unknown channel G4S053",
+    ],
+    [
+        "testtoolsyntaxerrors-testmodeinparser-287a67d82e",
+        "expected 2 Java parser diagnostics, but recovery emitted 1",
+    ],
+    [
+        "testtoolsyntaxerrors-testrangeinparsergrammar-873f937daf",
+        "expected Java token-range error 181, but the frontend emitted generic parser diagnostic G4F003",
+    ],
+    [
+        "testtoolsyntaxerrors-testunrecognizedassocoption-5eb7b9d825",
+        "expected Java warning 157, but the direct compiler emitted no diagnostic",
+    ],
+]);
+const COMPOSITE_GRAMMARS_CASES =
+    "tests/codegen-direct/generated/composite-grammars-cases.inc.rs";
+const COMPOSITE_GRAMMARS_TEST_PREFIX =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen " +
+    "grammar::atn::interp_test::tests::upstream_composite_grammars::";
+const GENERAL_ATN_DOT_TEST_COMMAND =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen " +
+    "grammar::atn::general_bug_test";
+const GENERAL_ATN_DOT_PORTS = new Map([
+    [
+        "general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812",
+        "bug_33_backslash_dot_edge_matches_upstream",
+    ],
+    [
+        "general-bug-35-tool-crashes-with-atn-4bd74f316f",
+        "bug_35_eof_dot_edge_does_not_crash",
+    ],
+]);
+const COMPOSITE_GRAMMARS_RED_CASES = new Map([
+    [
+        "testcompositegrammars-testcirculargrammarinclusion-fa7d054f70",
+        "the recursive import was rejected with G4L009 instead of compiling like Java",
+    ],
+    [
+        "testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-4c7379ef04",
+        "the incompatible modal lexer import compiled instead of reporting Java error 120",
+    ],
+    [
+        "testcompositegrammars-testdelegatesseesametokentype-c679d17236",
+        "the direct compiler emitted 9 duplicate-token warnings instead of Java's 6",
+    ],
+    [
+        "testcompositegrammars-testemptymodesinlexergrammar-8e58f11b11",
+        "the imported empty mode was rejected with G4S026 instead of compiling like Java",
+    ],
+    [
+        "testcompositegrammars-testimportedtokenvocabignoredwithwarning-58b6a447ff",
+        "the imported tokenVocab was resolved and rejected instead of producing Java warning 109",
+    ],
+    [
+        "testcompositegrammars-testimportfilenotsearchedforinoutputdir-8979f25b55",
+        "the direct compiler emitted 1 missing-import diagnostic instead of Java's 2 diagnostics",
+    ],
+    [
+        "testcompositegrammars-testimportlargegrammar-110006096d",
+        "the direct compiler emitted 4 fragment-action warnings instead of Java's clean result",
+    ],
+    [
+        "testcompositegrammars-testimportselfloop-1a101afc75",
+        "the self import was rejected with G4L009 instead of compiling like Java",
+    ],
+    [
+        "testcompositegrammars-testnestedcomposite-6c1f19c65a",
+        "the imported implicit-token warning was attributed to G2.g4 instead of Java's G3.g4",
+    ],
+    [
+        "testcompositegrammars-testrulesvisiblethroughmultilevelimport-85d26b4c0f",
+        "the imported implicit-token warning was attributed to T.g4 instead of Java's M.g4",
+    ],
+    [
+        "testcompositegrammars-testsyntaxerrorsinimportsnotthrownout-6bf25ff5eb",
+        "the direct compiler emitted G4F003 instead of Java's follow-on undefined-rule diagnostic",
+    ],
+]);
+const ATN_CONSTRUCTION_TEST_COMMAND =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_construction::";
+const ATN_CONSTRUCTION_COVERED_COMMAND =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state";
+const ATN_CONSTRUCTION_RED_CASES = new Map([
+    [
+        "testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58",
+        "ATN graph contained RuleStop_e_3->BlockEnd_26 three times instead of once",
+    ],
+    [
+        "testatnconstruction-testparserrulerefinlexerrule-34f2000a35",
+        "missing G4S008 diagnostic; Stage 0 reported G4F003 no viable alternative at input 'a'",
+    ],
+]);
+const BASIC_SEMANTIC_TEST_COMMAND =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_basic_semantic_errors -- --test-threads=1";
+const BASIC_SEMANTIC_PORTS = new Map([
+    [
+        "testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44",
+        {
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_basic_semantic_errors::argument_retval_local_conflicts_match_java",
+            redFingerprint:
+                "expected 10 ordered diagnostics, but the direct compiler emitted 7 generic rule-wide diagnostics",
+        },
+    ],
+    [
+        "testbasicsemanticerrors-testillegalnonsetlabel-5c18487902",
+        {
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_basic_semantic_errors::illegal_non_set_label_matches_java",
+            redFingerprint:
+                "the invalid label on a non-set block compiled successfully",
+        },
+    ],
+    [
+        "testbasicsemanticerrors-testu-c17a76a27e",
+        {
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_basic_semantic_errors::u_matches_java",
+            redFingerprint:
+                "expected 11 ordered diagnostics, but the direct compiler emitted 3",
+        },
+    ],
+]);
+const ERROR_SETS_TEST_COMMAND =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_error_sets -- --test-threads=1";
+const ERROR_SETS_PORTS = new Map([
+    [
+        "testerrorsets-testnotcharsetwithruleref-9d8ec8db7a",
+        {
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_error_sets::not_char_set_with_rule_ref_matches_java",
+            redFingerprint:
+                "expected G4S065 at the lexer-set member, but the compiler emitted G4L003 for the enclosing set",
+        },
+    ],
+    [
+        "testerrorsets-testnotcharsetwithstring-04bc32a04f",
+        {
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_error_sets::not_char_set_with_string_matches_java",
+            redFingerprint:
+                "expected G4S066 at the lexer-set member, but the compiler emitted G4L002 for the enclosing set",
+        },
+    ],
+]);
+const TOKEN_POSITION_TEST_COMMAND =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_token_position_options -- --test-threads=1";
+const TOKEN_POSITION_PORTS = new Map([
+    [
+        "testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91",
+        {
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_token_position_options::left_recursion_rewrite_matches_java",
+            resolution: "verified-covered-existing",
+            implementationCommit: TOKEN_POSITION_BASE_COMMIT,
+            testCommand:
+                "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_token_position_options::left_recursion_rewrite_matches_java -- --test-threads=1",
+            greenResult: "1 passed; 0 failed",
+        },
+    ],
+    [
+        "testtokenpositionoptions-testleftrecursionwithlabels-6e604809f0",
+        {
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_token_position_options::left_recursion_with_labels_matches_java",
+            resolution: "ported",
+            implementationCommit: TOKEN_POSITION_IMPLEMENTATION_COMMIT,
+            testCommand: TOKEN_POSITION_TEST_COMMAND,
+            greenResult: "3 passed; 0 failed",
+            redFingerprint:
+                "labeled rule and token references retained the label starts 33 and 59 instead of the Java target starts 35 and 61",
+        },
+    ],
+    [
+        "testtokenpositionoptions-testleftrecursionwithset-57f72a753d",
+        {
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_token_position_options::left_recursion_with_set_matches_java",
+            resolution: "verified-covered-existing",
+            implementationCommit: TOKEN_POSITION_BASE_COMMIT,
+            testCommand:
+                "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_token_position_options::left_recursion_with_set_matches_java -- --test-threads=1",
+            greenResult: "1 passed; 0 failed",
+        },
+    ],
+]);
+const TOPOLOGICAL_SORT_TEST_COMMAND =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_topological_sort -- --test-threads=1";
+const TOPOLOGICAL_SORT_PORTS = new Map([
+    [
+        "testtopologicalsort-testcyclicgraph-94f1aecafb",
+        "cyclic_graph_matches_java",
+    ],
+    [
+        "testtopologicalsort-testfairlylargegraph-a5f1fbf809",
+        "fairly_large_graph_matches_java",
+    ],
+    [
+        "testtopologicalsort-testparserlexercombo-8897396a63",
+        "parser_lexer_combo_matches_java",
+    ],
+    [
+        "testtopologicalsort-testrepeatededges-e97d12fac9",
+        "repeated_edges_match_java",
+    ],
+    [
+        "testtopologicalsort-testsimpletokendependence-02d55e6f25",
+        "simple_token_dependence_matches_java",
+    ],
+]);
+const VOCABULARY_TEST_COMMAND =
+    "cargo test --locked --lib upstream_vocabulary -- --test-threads=1";
+const EMPTY_VOCABULARY_TEST_COMMAND =
+    "cargo test --locked --lib empty_vocabulary_matches_java -- --test-threads=1";
+const VOCABULARY_PORTS = new Map([
+    [
+        "testvocabulary-testemptyvocabulary-66d31ad014",
+        {
+            rustTest:
+                "vocabulary::tests::upstream_vocabulary::empty_vocabulary_matches_java",
+            scaffoldCommit: EMPTY_VOCABULARY_BASE_COMMIT,
+            testCommit: EMPTY_VOCABULARY_TEST_COMMIT,
+            implementationCommit: EMPTY_VOCABULARY_IMPLEMENTATION_COMMIT,
+            testCommand: EMPTY_VOCABULARY_TEST_COMMAND,
+            greenResult: "1 passed; 0 failed",
+            redFingerprint:
+                "E0599: no associated function or constant named empty found for Vocabulary",
+        },
+    ],
+    [
+        "testvocabulary-testvocabularyfromtokennames-d047506a84",
+        {
+            rustTest:
+                "vocabulary::tests::upstream_vocabulary::vocabulary_from_token_names_matches_java",
+            scaffoldCommit: VOCABULARY_BASE_COMMIT,
+            testCommit: VOCABULARY_TEST_COMMIT,
+            implementationCommit: VOCABULARY_IMPLEMENTATION_COMMIT,
+            testCommand: VOCABULARY_TEST_COMMAND,
+            greenResult: "2 passed; 0 failed",
+            redFingerprint:
+                "E0599: no associated function or constant named from_token_names found for Vocabulary",
+        },
+    ],
+]);
+const SCOPE_PARSING_TEST_COMMAND =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java";
+const CHAR_SUPPORT_TEST_COMMAND =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::char_support::tests::";
+const NESTED_ACTION_LOGICAL_ID =
+    "testlexeractions-nested-actions-3d175db5e5";
+const NESTED_ACTION_TEST_COMMAND =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::syntax::tests::nested_actions_match_upstream -- --exact";
+const ESCAPE_SEQUENCE_TEST_PREFIX =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::escape_sequence::tests::";
+const ESCAPE_SEQUENCE_RED_CASES = new Map([
+    [
+        "testParseNewline",
+        "left Invalid, right CodePoint { value: 10, start: 0, stop: 2 }",
+    ],
+    [
+        "testParseTab",
+        "left Invalid, right CodePoint { value: 9, start: 0, stop: 2 }",
+    ],
+    [
+        "testParseUnicodeBMP",
+        "left Invalid, right CodePoint { value: 43981, start: 0, stop: 6 }",
+    ],
+    [
+        "testParseUnicodeSMP",
+        "left Invalid, right CodePoint { value: 1092557, start: 0, stop: 10 }",
+    ],
+    [
+        "testParseUnicodeProperty",
+        "left Invalid, right Property with ranges [(66560, 66639)]",
+    ],
+    [
+        "testParseUnicodePropertyInverted",
+        "left Invalid, right Property with ranges [(0, 66559), (66640, 1114111)]",
+    ],
+]);
+const UNICODE_ESCAPE_EXPECTED = new Map([
+    ["latinJavaEscape", "\\u0061"],
+    ["latinPythonEscape", "\\u0061"],
+    ["latinSwiftEscape", "\\u{0061}"],
+    ["bmpJavaEscape", "\\uABCD"],
+    ["bmpPythonEscape", "\\uABCD"],
+    ["bmpSwiftEscape", "\\u{ABCD}"],
+    ["smpJavaEscape", "\\uD83D\\uDCA9"],
+    ["smpPythonEscape", "\\U0001F4A9"],
+    ["smpSwiftEscape", "\\u{1F4A9}"],
+]);
+const UNICODE_ESCAPE_TEST_PREFIX =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::unicode_escape::tests::";
+const UNICODE_DATA_TEST_PREFIX =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::unicode::tests::";
+const UNICODE_DATA_TEST_NAMES = new Map([
+    [
+        "testUnicodeGeneralCategoriesLatin",
+        "unicode_general_categories_latin_matches_java",
+    ],
+    [
+        "testUnicodeGeneralCategoriesBMP",
+        "unicode_general_categories_bmp_matches_java",
+    ],
+    [
+        "testUnicodeGeneralCategoriesSMP",
+        "unicode_general_categories_smp_matches_java",
+    ],
+    ["testUnicodeCategoryAliases", "unicode_category_aliases_match_java"],
+    ["testUnicodeBinaryProperties", "unicode_binary_properties_match_java"],
+    [
+        "testUnicodeBinaryPropertyAliases",
+        "unicode_binary_property_aliases_match_java",
+    ],
+    ["testUnicodeScripts", "unicode_scripts_match_java"],
+    ["testUnicodeScriptEquals", "unicode_script_equals_matches_java"],
+    ["testUnicodeScriptAliases", "unicode_script_aliases_match_java"],
+    ["testUnicodeBlocks", "unicode_blocks_match_java"],
+    ["testUnicodeBlockEquals", "unicode_block_equals_matches_java"],
+    ["testUnicodeBlockAliases", "unicode_block_aliases_match_java"],
+    ["testEnumeratedPropertyEquals", "enumerated_property_equals_matches_java"],
+    ["extendedPictographic", "extended_pictographic_matches_java"],
+    ["emojiPresentation", "emoji_presentation_matches_java"],
+    [
+        "testPropertyCaseInsensitivity",
+        "property_case_insensitivity_matches_java",
+    ],
+    [
+        "testPropertyDashSameAsUnderscore",
+        "property_dash_same_as_underscore_matches_java",
+    ],
+    [
+        "modifyingUnicodeDataShouldThrow",
+        "modifying_unicode_data_should_throw_matches_java",
+    ],
+]);
+const UNICODE_GRAMMAR_TEST_PREFIX =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_unicode_grammar::";
+const UNICODE_GRAMMAR_PORTS = new Map([
+    [
+        "testunicodegrammar-binarygrammar-611ebe1d6f",
+        {
+            testName: "binary",
+            resolution: "verified-covered-existing",
+        },
+    ],
+    [
+        "testunicodegrammar-matchingdanglingsurrogateininput-8b7976ab4f",
+        {
+            testName: "dangling_surrogate",
+            resolution: "ported",
+            redFingerprint:
+                "G4L002: Unicode escape is not a scalar value: 0xd83c",
+        },
+    ],
+    [
+        "testunicodegrammar-unicodebmpliteralingrammar-4e3b8e43e6",
+        {
+            testName: "bmp_literal",
+            resolution: "verified-covered-existing",
+        },
+    ],
+    [
+        "testunicodegrammar-unicodesmpliteralingrammar-b41d70815f",
+        {
+            testName: "smp_literal",
+            resolution: "verified-covered-existing",
+        },
+    ],
+    [
+        "testunicodegrammar-unicodesmprangeingrammar-69d43e47cb",
+        {
+            testName: "smp_range",
+            resolution: "verified-covered-existing",
+        },
+    ],
+    [
+        "testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5",
+        {
+            testName: "disabled_surrogate_pair_literal",
+            resolution: "ported",
+            redFingerprint:
+                "G4L002: Unicode escape is not a scalar value: 0xd83c",
+        },
+    ],
+]);
+const TOKEN_ASSIGNMENT_TEST_PREFIX =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_token_type_assignment::";
+const TOKEN_ASSIGNMENT_PORTS = new Map([
+    [
+        "testtokentypeassignment-testcombinedgrammarliterals-74842182c1",
+        {
+            testName: "combined_grammar_literals",
+            resolution: "verified-covered-existing",
+        },
+    ],
+    [
+        "testtokentypeassignment-testcombinedgrammarwithreftoliteralbutnotokenidref-fd2391c14b",
+        {
+            testName:
+                "combined_grammar_with_ref_to_literal_but_no_token_id_ref",
+            resolution: "verified-covered-existing",
+        },
+    ],
+    [
+        "testtokentypeassignment-testlexertokenssection-67f7fb02d9",
+        {
+            testName: "lexer_tokens_section",
+            resolution: "ported",
+            redFingerprint:
+                "left: \"C=1\\nD=2\\nA=3\\n'c'=1\\n'a'=3\\n\"; right: \"C=1\\nD=2\\nA=3\\n'a'=3\\n'c'=1\\n\"",
+        },
+    ],
+    [
+        "testtokentypeassignment-testliteralinparserandlexer-177a82c119",
+        {
+            testName: "literal_in_parser_and_lexer",
+            resolution: "verified-covered-existing",
+        },
+    ],
+    [
+        "testtokentypeassignment-testparsercharliteralwithbasicunicodeescape-8afd5248f1",
+        {
+            testName:
+                "parser_char_literal_with_basic_unicode_escape",
+            resolution: "verified-covered-existing",
+        },
+    ],
+    [
+        "testtokentypeassignment-testparsercharliteralwithescape-15c4d62b48",
+        {
+            testName: "parser_char_literal_with_escape",
+            resolution: "verified-covered-existing",
+        },
+    ],
+    [
+        "testtokentypeassignment-testparsercharliteralwithextendedunicodeescape-e6f767b0b7",
+        {
+            testName:
+                "parser_char_literal_with_extended_unicode_escape",
+            resolution: "verified-covered-existing",
+        },
+    ],
+    [
+        "testtokentypeassignment-testparsersimpletokens-809afdc7eb",
+        {
+            testName: "parser_simple_tokens",
+            resolution: "verified-covered-existing",
+        },
+    ],
+    [
+        "testtokentypeassignment-testparsertokenssection-f0930e6dae",
+        {
+            testName: "parser_tokens_section",
+            resolution: "verified-covered-existing",
+        },
+    ],
+    [
+        "testtokentypeassignment-testpreddoesnothidenametoliteralmapinlexer-a1fc06a563",
+        {
+            testName:
+                "pred_does_not_hide_name_to_literal_map_in_lexer",
+            resolution: "verified-covered-existing",
+        },
+    ],
+    [
+        "testtokentypeassignment-testsetdoesnotmisstokenaliases-92cf195953",
+        {
+            testName: "set_does_not_miss_token_aliases",
+            resolution: "verified-covered-existing",
+        },
+    ],
+]);
+const LEFT_RECURSION_TEST_PREFIX =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::";
+const LEFT_RECURSION_PORTS = new Map([
+    [
+        "testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22",
+        {
+            testName: "argument_on_primary_rule",
+            testFunction: "matches_java_interps",
+            resolution: "verified-covered-existing",
+        },
+    ],
+    [
+        "testleftrecursiontoolissues-testcheckforleftrecursiveemptyfollow-558283d55a",
+        {
+            testName: "empty_left_recursive_follow",
+            testFunction: "matches_java_diagnostic",
+            resolution: "ported",
+            redFingerprint:
+                "G4A002 used closure terminology instead of Java's left-recursive alternative diagnostic",
+        },
+    ],
+    [
+        "testleftrecursiontoolissues-testcheckfornonleftrecursiverule-477f42142e",
+        {
+            testName: "no_non_left_recursive_alternative",
+            testFunction: "matches_java_diagnostic",
+            resolution: "ported",
+            redFingerprint:
+                "G4R002 used non-left-recursive terminology instead of Java's exact diagnostic",
+        },
+    ],
+    [
+        "testleftrecursiontoolissues-testisolatedleftrecursiveruleref-43f8252e7d",
+        {
+            testName: "isolated_left_recursive_rule_reference",
+            testFunction: "matches_java_diagnostic",
+            resolution: "ported",
+            redFingerprint:
+                "G4R001 used the Rust implementation-pattern message instead of Java's exact diagnostic",
+        },
+    ],
+    [
+        "testleftrecursiontoolissues-testleftrecursiverulerefwitharg-40cd52608d",
+        {
+            testName: "recursive_rule_reference_with_argument",
+            testFunction: "matches_java_diagnostic",
+            resolution: "ported",
+            redFingerprint:
+                "the direct compiler accepted a left-recursive rule reference carrying arguments",
+        },
+    ],
+    [
+        "testleftrecursiontoolissues-testleftrecursiverulerefwitharg2-7332bdbd4f",
+        {
+            testName:
+                "recursive_rule_reference_with_argument_and_parameter",
+            testFunction: "matches_java_diagnostic",
+            resolution: "ported",
+            redFingerprint:
+                "the direct compiler accepted a parameterized left-recursive rule reference carrying arguments",
+        },
+    ],
+    [
+        "testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92",
+        {
+            testName:
+                "recursive_rule_reference_with_argument_without_parameter",
+            testFunction: "matches_java_diagnostic",
+            resolution: "ported",
+            redFingerprint:
+                "the direct compiler accepted an argument on a left-recursive rule without parameters",
+        },
+    ],
+]);
+const LOOKAHEAD_TREE_TEST_PREFIX =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_lookahead_trees::";
+const LOOKAHEAD_TREE_PORTS = new Map([
+    [
+        "testlookaheadtrees-testalts-ea8f84416c",
+        {
+            testName: "alternatives_match_java",
+            redFingerprint:
+                'decision 0, alternative 2 produced "(e:1 a . b)" instead of "(e:2 a <error .>)"',
+        },
+    ],
+    [
+        "testlookaheadtrees-testalts2-4e81c43326",
+        {
+            testName: "left_recursive_loop_match_java",
+            redFingerprint:
+                'decision 1, alternative 1 produced "(e:1 a)" instead of "(e:2 (e:1 a) <error ;>)"',
+        },
+    ],
+    [
+        "testlookaheadtrees-testcallleftrecursiverule-410ec32fb8",
+        {
+            testName: "calls_left_recursive_rule_match_java",
+            redFingerprint:
+                'decision 0, alternative 2 produced "(a:1 (e:4 x) ;)" instead of "(a:2 x ;)"',
+        },
+    ],
+    [
+        "testlookaheadtrees-testincludeeof-41ef07554a",
+        {
+            testName: "include_eof_matches_java",
+            redFingerprint:
+                'decision 0, alternative 2 produced "(e:1 a . b <EOF>)" instead of "(e:2 a . b <EOF>)"',
+        },
+    ],
+]);
+const GRAPH_NODES_TEST =
+    "prediction::tests::upstream_graph_nodes::pinned_upstream_test_graph_nodes_matches_dot";
+const GRAPH_NODES_RED_LOGICAL_IDS = new Set([
+    "testgraphnodes-test-a-ax-fd976a340d",
+    "testgraphnodes-test-a-ax-fullctx-502155fcf9",
+    "testgraphnodes-test-ax-a-62a48f251b",
+    "testgraphnodes-test-aa-a-fullctx-8e728ea773",
+    "testgraphnodes-test-ax-a-fullctx-7ef9c1d6b2",
+    "testgraphnodes-test-abx-acx-a3af7f90fa",
+    "testgraphnodes-test-aax-aay-c0f9b80842",
+    "testgraphnodes-test-aaxc-aayd-a73533f64d",
+    "testgraphnodes-test-aaubv-abwdx-7953c9b489",
+]);
+const SYMBOL_ISSUES_TEST_PREFIX =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_symbol_issues::";
+const SYMBOL_ISSUES_RED_CASES = new Map([
+    [
+        "testsymbolissues-testa-2e644f226d",
+        "expected 10 ordered diagnostics, but semantic analysis stopped after 5 duplicate-action and option diagnostics",
+    ],
+    [
+        "testsymbolissues-testb-9ccf14c21c",
+        "the first diagnostic was G4S031 instead of the expected label/rule conflict G4S038",
+    ],
+    [
+        "testsymbolissues-testcaseinsensitivecharscollision-1c64211182",
+        "expected 4 G4S068 case-folded character-collision warnings, but emitted none",
+    ],
+    [
+        "testsymbolissues-testcharscollision-2c32d921bf",
+        "expected 5 G4S068 character-collision warnings, but emitted none",
+    ],
+    [
+        "testsymbolissues-testduplicatedcommands-e809cd0730",
+        "the complete lexer .interp differed in literal alias metadata at serialized words 2 and 128",
+    ],
+    [
+        "testsymbolissues-teste-cd9e1fc41d",
+        "emitted 2 duplicate-token warnings instead of Java's single G4S019 warning",
+    ],
+    [
+        "testsymbolissues-testemptylexermodedetection-1e410b0d53",
+        "G4S026 pointed at byte 26 instead of the mode name at byte 31",
+    ],
+    [
+        "testsymbolissues-testillegalcaseinsensitiveoptionvalue-3c5253859c",
+        "emitted 1 invalid caseInsensitive value warning instead of 2",
+    ],
+    [
+        "testsymbolissues-testincompatiblecommands-43fa4a3fd8",
+        "the complete lexer .interp differed in literal alias metadata at serialized words 2, 246, and 248",
+    ],
+    [
+        "testsymbolissues-testlabelsfortokenswithmixedtypes-0a6a086afc",
+        "emitted 10 label-type conflicts instead of Java's 5 context-scoped conflicts",
+    ],
+    [
+        "testsymbolissues-testlabelsfortokenswithmixedtypeslrwithlabels-5841a22629",
+        "the accepted labeled left-recursive grammar failed with G4S041",
+    ],
+    [
+        "testsymbolissues-testlabelsfortokenswithmixedtypeslrwithoutlabels-15b35eab8e",
+        "emitted 1 left-recursive label conflict instead of Java's 2 rule-scoped conflicts",
+    ],
+    [
+        "testsymbolissues-testnotimpliedcharacters-4c3481ae89",
+        "expected 2 G4S070 mixed-case range warnings, but emitted none",
+    ],
+    [
+        "testsymbolissues-testnotimpliedcharacterswithcaseinsensitiveoption-f08fa6ab47",
+        "expected 1 G4S070 mixed-case range warning under caseInsensitive, but emitted none",
+    ],
+    [
+        "testsymbolissues-testredundantcaseinsensitivelexerruleoption-a9ec701b5c",
+        "both true and false variants expected G4S067 redundant caseInsensitive rule-option warnings, but emitted none",
+    ],
+    [
+        "testsymbolissues-testtokensmodeschannelsdeclarationconflictswithreserved-9319caf796",
+        "emitted 5 reserved-name diagnostics instead of 4 and incorrectly rejected DEFAULT_MODE",
+    ],
+    [
+        "testsymbolissues-testtokensmodeschannelsusingconflictswithreserved-c8a93f7227",
+        "the first command-argument diagnostic was G4S053 instead of reserved-channel G4S021",
+    ],
+    [
+        "testsymbolissues-testunreachabletokens-43df5f5f59",
+        "expected 9 G4S069 unreachable-token warnings, but emitted none",
+    ],
+]);
+const CHAR_SUPPORT_PORTS = new Map([
+    [
+        "testcharsupport-testcapitalize-25cbf55e21",
+        {
+            testName: "capitalize_matches_java",
+            missingFunction: "capitalize",
+        },
+    ],
+    [
+        "testcharsupport-testgetantlrcharliteralforchar-5f81e9b4e6",
+        {
+            testName: "antlr_char_literal_for_char_matches_java",
+            missingFunction: "get_antlr_char_literal_for_char",
+        },
+    ],
+    [
+        "testcharsupport-testgetcharvaluefromcharingrammarliteral-94ddda545b",
+        {
+            testName: "char_value_from_char_in_grammar_literal_matches_java",
+            missingFunction: "get_char_value_from_char_in_grammar_literal",
+        },
+    ],
+    [
+        "testcharsupport-testgetcharvaluefromgrammarcharliteral-7e17776ef5",
+        {
+            testName: "char_value_from_grammar_char_literal_matches_java",
+            missingFunction: "get_char_value_from_grammar_char_literal",
+        },
+    ],
+    [
+        "testcharsupport-testgetintervalsetescapedstring-6bc4eb94c4",
+        {
+            testName: "interval_set_escaped_string_matches_java",
+            missingFunction: "get_interval_set_escaped_string",
+        },
+    ],
+    [
+        "testcharsupport-testgetrangeescapedstring-ecd6bf8c9f",
+        {
+            testName: "range_escaped_string_matches_java",
+            missingFunction: "get_range_escaped_string",
+        },
+    ],
+    [
+        "testcharsupport-testgetstringfromgrammarstringliteral-601aa92456",
+        {
+            testName: "string_from_grammar_string_literal_matches_java",
+            missingFunction: "get_string_from_grammar_string_literal",
+        },
+    ],
+    [
+        "testcharsupport-testparsehexvalue-de6de267d9",
+        {
+            testName: "parse_hex_value_matches_java",
+            missingFunction: "parse_hex_value",
+        },
+    ],
+]);
 
 const PHASE_B_SUITES = new Set([
     "TestATNConstruction",
@@ -151,6 +1004,7 @@ const externalAssertions = new Map(
         ]),
     ),
 );
+const completedPhaseBPorts = await loadCompletedPhaseBPorts();
 
 const unassigned = new Map(inventory.cases.map((testCase) => [testCase.id, testCase]));
 const rows = [];
@@ -410,11 +1264,18 @@ function externalAssertionInput(assertionId) {
 
 function mappedRow(logicalId, cases, policy) {
     const sourceCaseIds = cases.map((testCase) => testCase.id).sort();
+    const externalAssertionIds = [...externalAssertions]
+        .filter(
+            ([, { assertion }]) =>
+                assertion.tdd_owner === `upstream:${logicalId}`,
+        )
+        .map(([assertionId]) => assertionId)
+        .sort();
     if (policy.disposition !== "port") {
         return {
             logical_id: logicalId,
             source_case_ids: sourceCaseIds,
-            external_assertion_ids: [],
+            external_assertion_ids: externalAssertionIds,
             owner_phase: policy.owner,
             disposition: policy.disposition,
             active_revision_id: null,
@@ -423,11 +1284,28 @@ function mappedRow(logicalId, cases, policy) {
             approving_reviewer: APPROVING_REVIEW,
         };
     }
+    const completed = completedPhaseBPorts.get(logicalId);
+    if (completed) {
+        return completedPhaseBRow(
+            logicalId,
+            cases,
+            policy,
+            externalAssertionIds,
+            completed,
+        );
+    }
 
     const closure = {
         logical_id: logicalId,
         source_case_ids: sourceCaseIds,
-        external_assertion_ids: [],
+        external_assertion_ids: externalAssertionIds,
+        ...(externalAssertionIds.length === 0
+            ? {}
+            : {
+                  external_assertion_inputs: externalAssertionIds.map(
+                      externalAssertionInput,
+                  ),
+              }),
         owner_phase: policy.owner,
         disposition: "port",
         rust_test: `planned:tests/codegen-direct/fixtures/${logicalId}`,
@@ -437,7 +1315,7 @@ function mappedRow(logicalId, cases, policy) {
     return {
         logical_id: logicalId,
         source_case_ids: sourceCaseIds,
-        external_assertion_ids: [],
+        external_assertion_ids: externalAssertionIds,
         owner_phase: policy.owner,
         disposition: "port",
         active_revision_id: `${logicalId}-r1`,
@@ -455,6 +1333,927 @@ function mappedRow(logicalId, cases, policy) {
         closure_sha256: digest(stableStringify(closure)),
         evidence_path: null,
     };
+}
+
+function completedPhaseBRow(
+    logicalId,
+    cases,
+    policy,
+    externalAssertionIds,
+    completed,
+) {
+    if (policy.owner !== "B") {
+        throw new Error(`${logicalId} completed Phase B port has owner ${policy.owner}`);
+    }
+    const sourceCaseIds = cases.map((testCase) => testCase.id).sort();
+    const observable =
+        completed.kind === "atn-serialization"
+            ? `direct Rust serialization matches the complete Java 4.13.2 .interp ` +
+              `for ${cases[0].suite}.${cases[0].name}`
+            : completed.kind === "atn-construction"
+              ? `direct Rust ATN construction matches the Java 4.13.2 graph, ` +
+                `.interp, or diagnostic for ${cases[0].suite}.${cases[0].name}`
+              : completed.kind === "error-sets"
+                ? `direct Rust lexer-set diagnostics match Java 4.13.2 exactly ` +
+                  `for ${cases[0].suite}.${cases[0].name}`
+                : completed.kind === "token-position-options"
+                  ? `direct Rust left-recursion source bindings and .interp match ` +
+                    `Java 4.13.2 for ${cases[0].suite}.${cases[0].name}`
+                  : completed.kind === "topological-sort"
+                    ? `direct Rust grammar dependencies preserve Java's dependency-first ` +
+                      `order for ${cases[0].suite}.${cases[0].name}`
+                    : completed.kind === "vocabulary"
+                      ? `the Rust vocabulary API matches Java 4.13.2 name classification ` +
+                        `for ${cases[0].suite}.${cases[0].name}`
+                      : completed.kind === "scope-parsing"
+                        ? `direct Rust declaration parsing matches Java 4.13.2 names, ` +
+                          `types, and initializers for ${cases[0].suite}.${cases[0].name}`
+                        : completed.kind === "char-support"
+                          ? `direct Rust character literal support matches Java 4.13.2 ` +
+                            `for ${cases[0].suite}.${cases[0].name}`
+                          : completed.kind === "nested-action"
+                            ? `direct Rust grammar modeling preserves nested member actions and ` +
+                              `normalizes predicate fail messages for ${cases[0].suite}.${cases[0].name}`
+                            : completed.kind === "escape-sequence"
+                              ? `direct Rust escape parsing matches Java 4.13.2 result kind, ` +
+                                `value or property set, and consumed span for ${cases[0].suite}.${cases[0].name}`
+                              : completed.kind === "unicode-escape"
+                                ? `direct Rust Unicode escape rendering matches Java 4.13.2 ` +
+                                  `for ${cases[0].suite}.${cases[0].name}`
+                                : completed.kind === "unicode-data"
+                                  ? `direct Rust Unicode property data matches Java 4.13.2 ` +
+                                    `for ${cases[0].suite}.${cases[0].name}`
+                                  : completed.kind === "unicode-grammar"
+                                    ? `direct Rust lexer and parser serialization matches both complete ` +
+                                      `Java 4.13.2 .interp files for ${cases[0].suite}.${cases[0].name}`
+                                    : completed.kind === "token-type-assignment"
+                                      ? `direct Rust recognizer metadata and token vocabulary text match ` +
+                                        `Java 4.13.2 exactly for ${cases[0].suite}.${cases[0].name}`
+                                      : completed.kind ===
+                                          "left-recursion-tool-issues"
+                                        ? `direct Rust left-recursion diagnostics and accepted serialization match ` +
+                                          `Java 4.13.2 for ${cases[0].suite}.${cases[0].name}`
+                                        : completed.kind === "symbol-issues"
+                                          ? `direct Rust symbol diagnostics, token metadata, and serialization match ` +
+                                            `Java 4.13.2 for ${cases[0].suite}.${cases[0].name}`
+                                        : completed.kind === "attribute-checks"
+                                          ? `direct Rust action attribute diagnostics and accepted serialization match ` +
+                                            `Java 4.13.2 for ${cases[0].suite}.${cases[0].name}`
+                                        : completed.kind ===
+                                            "tool-syntax-errors"
+                                          ? `direct Rust tool diagnostics and accepted artifacts match ` +
+                                            `Java 4.13.2 for ${cases[0].suite}.${cases[0].name}`
+                                          : completed.kind ===
+                                              "composite-grammars"
+                                            ? `direct Rust import integration, diagnostics, and artifacts match ` +
+                                              `Java 4.13.2 for ${cases[0].suite}.${cases[0].name}`
+                                        : completed.kind === "general-atn-dot"
+                                          ? `direct Rust recognizer metadata matches Java 4.13.2 and the selected ` +
+                                            `ATN DOT edge matches the pinned upstream oracle for ${cases[0].suite}.${cases[0].name}`
+                                        : completed.kind === "graph-nodes"
+                                          ? `Rust prediction-context merging matches the Java 4.13.2 DOT graph ` +
+                                            `for ${cases[0].suite}.${cases[0].name}`
+                                          : completed.kind === "lookahead-trees"
+                                            ? `direct Rust forced-alternative parse trees and complete serialization match ` +
+                                              `Java 4.13.2 for ${cases[0].suite}.${cases[0].name}`
+                        : `direct Rust semantic diagnostics match Java 4.13.2 exactly ` +
+                          `for ${cases[0].suite}.${cases[0].name}`;
+    const coveredExisting =
+        completed.resolution === "verified-covered-existing";
+    const closure = {
+        logical_id: logicalId,
+        source_case_ids: sourceCaseIds,
+        external_assertion_ids: externalAssertionIds,
+        ...(externalAssertionIds.length === 0
+            ? {}
+            : {
+                  external_assertion_inputs: externalAssertionIds.map(
+                      externalAssertionInput,
+                  ),
+              }),
+        fixture_paths: completed.fixturePaths,
+        owner_phase: "B",
+        disposition: "port",
+        rust_test: completed.rustTest,
+        unit_under_test: policy.unit,
+        observable,
+        scaffold_commit: completed.scaffoldCommit,
+        primary_test_commit: completed.testCommit,
+        ...(coveredExisting
+            ? { resolution: "verified-covered-existing" }
+            : {}),
+    };
+    return {
+        logical_id: logicalId,
+        source_case_ids: sourceCaseIds,
+        external_assertion_ids: externalAssertionIds,
+        owner_phase: "B",
+        disposition: "port",
+        active_revision_id: `${logicalId}-r1`,
+        tdd_state: "done",
+        ...(coveredExisting
+            ? { resolution: "verified-covered-existing" }
+            : {}),
+        rust_test: completed.rustTest,
+        primary_test_source: sourceIdentity(cases, "java-antlr"),
+        alternate_test_source: sourceIdentity(cases, "antlr-ng"),
+        primary_implementation_source: `antlr-ng@${ANTLR_NG_COMMIT}`,
+        alternate_implementation_source: `java-antlr@${JAVA_COMMIT}`,
+        prerequisites: ["Phase B compiler boundary"],
+        unit_under_test: policy.unit,
+        expected_red_failure_fingerprint: coveredExisting
+            ? "not applicable: the case-specific port passed against the existing Phase B compiler"
+            : completed.redFingerprint,
+        observable_equivalence: observable,
+        scaffold_commit: completed.scaffoldCommit,
+        primary_test_commit: completed.testCommit,
+        ...(coveredExisting
+            ? {
+                  verified_covered_existing: {
+                      command: completed.testCommand,
+                      commit: completed.testCommit,
+                      exit_code: 0,
+                      result: completed.greenResult,
+                  },
+              }
+            : {
+                  demonstrated_red: {
+                      command: completed.testCommand,
+                      exit_code: 101,
+                      fingerprint: completed.redFingerprint,
+                  },
+              }),
+        primary_implementation_commit: completed.implementationCommit,
+        green_result: {
+            command: completed.testCommand,
+            result: completed.greenResult,
+        },
+        closure,
+        closure_sha256: digest(stableStringify(closure)),
+        evidence_path: `tests/codegen-direct/port-evidence/${logicalId}`,
+    };
+}
+
+async function loadCompletedPhaseBPorts() {
+    const source = await readFile(
+        resolve(repoRoot, ATN_SERIALIZATION_TEST_MODULE),
+        "utf8",
+    );
+    const ports = new Map();
+    const serializationPattern =
+        /case!\(\s*(\w+),\s*(parser|lexer),\s*"(testatnserialization-[^"]+)",\s*"[^"]+"\s*\);/gu;
+    for (const match of source.matchAll(serializationPattern)) {
+        const [, moduleName, , logicalId] = match;
+        ports.set(logicalId, {
+            fixturePaths: await fixturePaths(logicalId),
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_atn_serialization::" +
+                `${moduleName}::matches_java`,
+            kind: "atn-serialization",
+            resolution: "verified-covered-existing",
+            scaffoldCommit: PHASE_B_BASE_COMMIT,
+            testCommit: ATN_SERIALIZATION_TEST_COMMIT,
+            implementationCommit: PHASE_B_IMPLEMENTATION_COMMIT,
+            testCommand: ATN_SERIALIZATION_TEST_COMMAND,
+            greenResult: "36 passed; 0 failed",
+        });
+    }
+    const serializationCount = ports.size;
+    if (serializationCount !== 36) {
+        throw new Error(
+            `expected 36 completed TestATNSerialization ports, found ${serializationCount}`,
+        );
+    }
+
+    const constructionPattern =
+        /(?:case|partial_case|error_case)!\(\s*(\w+),\s*"(testatnconstruction-[^"]+)"(?:,\s*"[^"]+")?\s*\);/gu;
+    let constructionCount = 0;
+    for (const match of source.matchAll(constructionPattern)) {
+        const [, moduleName, logicalId] = match;
+        const redFingerprint = ATN_CONSTRUCTION_RED_CASES.get(logicalId);
+        ports.set(logicalId, {
+            fixturePaths: await fixturePaths(logicalId),
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_atn_construction::" +
+                `${moduleName}::matches_java`,
+            kind: "atn-construction",
+            resolution: redFingerprint
+                ? "ported"
+                : "verified-covered-existing",
+            scaffoldCommit: ATN_CONSTRUCTION_BASE_COMMIT,
+            testCommit: ATN_CONSTRUCTION_TEST_COMMIT,
+            implementationCommit: redFingerprint
+                ? ATN_CONSTRUCTION_IMPLEMENTATION_COMMIT
+                : PHASE_B_IMPLEMENTATION_COMMIT,
+            testCommand: redFingerprint
+                ? `${ATN_CONSTRUCTION_TEST_COMMAND}${moduleName}`
+                : ATN_CONSTRUCTION_COVERED_COMMAND,
+            greenResult: redFingerprint
+                ? "1 passed; 0 failed"
+                : "38 passed; 0 failed",
+            redFingerprint,
+        });
+        constructionCount += 1;
+    }
+    if (constructionCount !== 40) {
+        throw new Error(
+            `expected 40 completed TestATNConstruction ports, found ${constructionCount}`,
+        );
+    }
+
+    for (const [logicalId, definition] of BASIC_SEMANTIC_PORTS) {
+        ports.set(logicalId, {
+            fixturePaths: await fixturePaths(logicalId),
+            rustTest: definition.rustTest,
+            kind: "basic-semantic-errors",
+            resolution: "ported",
+            scaffoldCommit: BASIC_SEMANTIC_BASE_COMMIT,
+            testCommit: BASIC_SEMANTIC_TEST_COMMIT,
+            implementationCommit: BASIC_SEMANTIC_IMPLEMENTATION_COMMIT,
+            testCommand: BASIC_SEMANTIC_TEST_COMMAND,
+            greenResult: "3 passed; 0 failed",
+            redFingerprint: definition.redFingerprint,
+        });
+    }
+    for (const [logicalId, definition] of ERROR_SETS_PORTS) {
+        ports.set(logicalId, {
+            fixturePaths: await fixturePaths(logicalId),
+            rustTest: definition.rustTest,
+            kind: "error-sets",
+            resolution: "ported",
+            scaffoldCommit: ERROR_SETS_BASE_COMMIT,
+            testCommit: ERROR_SETS_TEST_COMMIT,
+            implementationCommit: ERROR_SETS_IMPLEMENTATION_COMMIT,
+            testCommand: ERROR_SETS_TEST_COMMAND,
+            greenResult: "2 passed; 0 failed",
+            redFingerprint: definition.redFingerprint,
+        });
+    }
+    for (const [logicalId, definition] of TOKEN_POSITION_PORTS) {
+        ports.set(logicalId, {
+            fixturePaths: await fixturePaths(logicalId),
+            rustTest: definition.rustTest,
+            kind: "token-position-options",
+            resolution: definition.resolution,
+            scaffoldCommit: TOKEN_POSITION_BASE_COMMIT,
+            testCommit: TOKEN_POSITION_TEST_COMMIT,
+            implementationCommit: definition.implementationCommit,
+            testCommand: definition.testCommand,
+            greenResult: definition.greenResult,
+            redFingerprint: definition.redFingerprint,
+        });
+    }
+    for (const [logicalId, testName] of TOPOLOGICAL_SORT_PORTS) {
+        ports.set(logicalId, {
+            fixturePaths: [],
+            rustTest:
+                "grammar::loader::tests::upstream_topological_sort::" +
+                testName,
+            kind: "topological-sort",
+            resolution: "verified-covered-existing",
+            scaffoldCommit: TOPOLOGICAL_SORT_BASE_COMMIT,
+            testCommit: TOPOLOGICAL_SORT_TEST_COMMIT,
+            implementationCommit: TOPOLOGICAL_SORT_BASE_COMMIT,
+            testCommand: TOPOLOGICAL_SORT_TEST_COMMAND,
+            greenResult: "5 passed; 0 failed",
+        });
+    }
+    for (const [logicalId, definition] of VOCABULARY_PORTS) {
+        ports.set(logicalId, {
+            fixturePaths: [],
+            rustTest: definition.rustTest,
+            kind: "vocabulary",
+            resolution: "ported",
+            scaffoldCommit: definition.scaffoldCommit,
+            testCommit: definition.testCommit,
+            implementationCommit: definition.implementationCommit,
+            testCommand: definition.testCommand,
+            greenResult: definition.greenResult,
+            redFingerprint: definition.redFingerprint,
+        });
+    }
+    for (const [logicalId, definition] of CHAR_SUPPORT_PORTS) {
+        ports.set(logicalId, {
+            fixturePaths: [],
+            rustTest: "grammar::char_support::tests::" + definition.testName,
+            kind: "char-support",
+            resolution: "ported",
+            scaffoldCommit: CHAR_SUPPORT_BASE_COMMIT,
+            testCommit: CHAR_SUPPORT_TEST_COMMIT,
+            implementationCommit: CHAR_SUPPORT_IMPLEMENTATION_COMMIT,
+            testCommand: CHAR_SUPPORT_TEST_COMMAND,
+            greenResult: "8 passed; 0 failed",
+            redFingerprint:
+                `E0425: cannot find function \`${definition.missingFunction}\` ` +
+                "in this scope",
+        });
+    }
+    ports.set(NESTED_ACTION_LOGICAL_ID, {
+        fixturePaths: [],
+        rustTest: "grammar::syntax::tests::nested_actions_match_upstream",
+        kind: "nested-action",
+        resolution: "ported",
+        scaffoldCommit: NESTED_ACTION_BASE_COMMIT,
+        testCommit: NESTED_ACTION_TEST_COMMIT,
+        implementationCommit: NESTED_ACTION_IMPLEMENTATION_COMMIT,
+        testCommand: NESTED_ACTION_TEST_COMMAND,
+        greenResult: "1 passed; 0 failed",
+        redFingerprint:
+            "predicate fail message retained grammar quotes: " +
+            "left Some(\"'custom message'\"), right Some(\"custom message\")",
+    });
+    const escapeSequenceGroups = new Map();
+    for (const testCase of inventory.cases) {
+        if (testCase.suite !== "TestEscapeSequenceParsing") {
+            continue;
+        }
+        const key =
+            `${testCase.suite}\0${canonicalName(testCase.name)}` +
+            `\0${parameterKey(testCase)}`;
+        const group = escapeSequenceGroups.get(key) ?? [];
+        group.push(testCase);
+        escapeSequenceGroups.set(key, group);
+    }
+    for (const [key, cases] of escapeSequenceGroups) {
+        const logicalId = logicalCaseId(
+            cases[0].suite,
+            cases[0].name,
+            key,
+        );
+        const testName = escapeSequenceRustTestName(cases[0].name);
+        const redFingerprint = ESCAPE_SEQUENCE_RED_CASES.get(
+            cases[0].name,
+        );
+        ports.set(logicalId, {
+            fixturePaths: [],
+            rustTest:
+                `grammar::escape_sequence::tests::${testName}`,
+            kind: "escape-sequence",
+            resolution: redFingerprint
+                ? "ported"
+                : "verified-covered-existing",
+            scaffoldCommit: ESCAPE_SEQUENCE_SCAFFOLD_COMMIT,
+            testCommit: ESCAPE_SEQUENCE_TEST_COMMIT,
+            implementationCommit: redFingerprint
+                ? ESCAPE_SEQUENCE_IMPLEMENTATION_COMMIT
+                : ESCAPE_SEQUENCE_SCAFFOLD_COMMIT,
+            testCommand:
+                `${ESCAPE_SEQUENCE_TEST_PREFIX}${testName} -- --exact`,
+            greenResult: "1 passed; 0 failed",
+            redFingerprint,
+        });
+    }
+    if (escapeSequenceGroups.size !== 17) {
+        throw new Error(
+            `expected 17 completed TestEscapeSequenceParsing ports, found ${escapeSequenceGroups.size}`,
+        );
+    }
+    const unicodeEscapeGroups = new Map();
+    for (const testCase of inventory.cases) {
+        if (testCase.suite !== "TestUnicodeEscapes") {
+            continue;
+        }
+        const key =
+            `${testCase.suite}\0${canonicalName(testCase.name)}` +
+            `\0${parameterKey(testCase)}`;
+        const group = unicodeEscapeGroups.get(key) ?? [];
+        group.push(testCase);
+        unicodeEscapeGroups.set(key, group);
+    }
+    for (const [key, cases] of unicodeEscapeGroups) {
+        const logicalId = logicalCaseId(
+            cases[0].suite,
+            cases[0].name,
+            key,
+        );
+        const testName = escapeSequenceRustTestName(cases[0].name);
+        const expected = UNICODE_ESCAPE_EXPECTED.get(cases[0].name);
+        if (expected === undefined) {
+            throw new Error(
+                `missing Unicode escape expectation for ${cases[0].name}`,
+            );
+        }
+        ports.set(logicalId, {
+            fixturePaths: [],
+            rustTest:
+                `grammar::unicode_escape::tests::${testName}`,
+            kind: "unicode-escape",
+            resolution: "ported",
+            scaffoldCommit: UNICODE_ESCAPE_SCAFFOLD_COMMIT,
+            testCommit: UNICODE_ESCAPE_TEST_COMMIT,
+            implementationCommit:
+                UNICODE_ESCAPE_IMPLEMENTATION_COMMIT,
+            testCommand:
+                `${UNICODE_ESCAPE_TEST_PREFIX}${testName} -- --exact`,
+            greenResult: "1 passed; 0 failed",
+            redFingerprint:
+                `left empty string, right ${JSON.stringify(expected)}`,
+        });
+    }
+    if (unicodeEscapeGroups.size !== 9) {
+        throw new Error(
+            `expected 9 completed TestUnicodeEscapes ports, found ${unicodeEscapeGroups.size}`,
+        );
+    }
+    const unicodeDataGroups = new Map();
+    for (const testCase of inventory.cases) {
+        if (testCase.suite !== "TestUnicodeData") {
+            continue;
+        }
+        const key =
+            `${testCase.suite}\0${canonicalName(testCase.name)}` +
+            `\0${parameterKey(testCase)}`;
+        const group = unicodeDataGroups.get(key) ?? [];
+        group.push(testCase);
+        unicodeDataGroups.set(key, group);
+    }
+    for (const [key, cases] of unicodeDataGroups) {
+        const logicalId = logicalCaseId(
+            cases[0].suite,
+            cases[0].name,
+            key,
+        );
+        const testName = UNICODE_DATA_TEST_NAMES.get(cases[0].name);
+        if (testName === undefined) {
+            throw new Error(
+                `missing Unicode data test mapping for ${cases[0].name}`,
+            );
+        }
+        ports.set(logicalId, {
+            fixturePaths: [],
+            rustTest: `grammar::unicode::tests::${testName}`,
+            kind: "unicode-data",
+            resolution: "verified-covered-existing",
+            scaffoldCommit: UNICODE_DATA_BASE_COMMIT,
+            testCommit: UNICODE_DATA_TEST_COMMIT,
+            implementationCommit: UNICODE_DATA_BASE_COMMIT,
+            testCommand:
+                `${UNICODE_DATA_TEST_PREFIX}${testName} -- --exact`,
+            greenResult: "1 passed; 0 failed",
+        });
+    }
+    if (unicodeDataGroups.size !== 18) {
+        throw new Error(
+            `expected 18 completed TestUnicodeData ports, found ${unicodeDataGroups.size}`,
+        );
+    }
+    for (const [logicalId, definition] of UNICODE_GRAMMAR_PORTS) {
+        ports.set(logicalId, {
+            fixturePaths: await fixturePaths(logicalId),
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_unicode_grammar::" +
+                `${definition.testName}::matches_java_interps`,
+            kind: "unicode-grammar",
+            resolution: definition.resolution,
+            scaffoldCommit: UNICODE_GRAMMAR_BASE_COMMIT,
+            testCommit: UNICODE_GRAMMAR_TEST_COMMIT,
+            implementationCommit:
+                definition.resolution === "ported"
+                    ? UNICODE_GRAMMAR_IMPLEMENTATION_COMMIT
+                    : UNICODE_GRAMMAR_BASE_COMMIT,
+            testCommand:
+                `${UNICODE_GRAMMAR_TEST_PREFIX}${definition.testName}` +
+                "::matches_java_interps -- --exact",
+            greenResult: "1 passed; 0 failed",
+            redFingerprint: definition.redFingerprint,
+        });
+    }
+    if (UNICODE_GRAMMAR_PORTS.size !== 6) {
+        throw new Error(
+            `expected 6 completed TestUnicodeGrammar ports, found ${UNICODE_GRAMMAR_PORTS.size}`,
+        );
+    }
+    for (const [logicalId, definition] of TOKEN_ASSIGNMENT_PORTS) {
+        ports.set(logicalId, {
+            fixturePaths: await fixturePaths(logicalId),
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_token_type_assignment::" +
+                `${definition.testName}::matches_java_interps_and_tokens`,
+            kind: "token-type-assignment",
+            resolution: definition.resolution,
+            scaffoldCommit: TOKEN_ASSIGNMENT_BASE_COMMIT,
+            testCommit: TOKEN_ASSIGNMENT_TEST_COMMIT,
+            implementationCommit:
+                definition.resolution === "ported"
+                    ? TOKEN_ASSIGNMENT_IMPLEMENTATION_COMMIT
+                    : TOKEN_ASSIGNMENT_BASE_COMMIT,
+            testCommand:
+                `${TOKEN_ASSIGNMENT_TEST_PREFIX}${definition.testName}` +
+                "::matches_java_interps_and_tokens -- --exact",
+            greenResult: "1 passed; 0 failed",
+            redFingerprint: definition.redFingerprint,
+        });
+    }
+    if (TOKEN_ASSIGNMENT_PORTS.size !== 11) {
+        throw new Error(
+            `expected 11 completed TestTokenTypeAssignment ports, found ${TOKEN_ASSIGNMENT_PORTS.size}`,
+        );
+    }
+    for (const [logicalId, definition] of LEFT_RECURSION_PORTS) {
+        ports.set(logicalId, {
+            fixturePaths: await fixturePaths(logicalId),
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::" +
+                `${definition.testName}::${definition.testFunction}`,
+            kind: "left-recursion-tool-issues",
+            resolution: definition.resolution,
+            scaffoldCommit: LEFT_RECURSION_BASE_COMMIT,
+            testCommit: LEFT_RECURSION_TEST_COMMIT,
+            implementationCommit:
+                definition.resolution === "ported"
+                    ? LEFT_RECURSION_IMPLEMENTATION_COMMIT
+                    : LEFT_RECURSION_BASE_COMMIT,
+            testCommand:
+                `${LEFT_RECURSION_TEST_PREFIX}${definition.testName}::` +
+                `${definition.testFunction} -- --exact`,
+            greenResult: "1 passed; 0 failed",
+            redFingerprint: definition.redFingerprint,
+        });
+    }
+    if (LEFT_RECURSION_PORTS.size !== 7) {
+        throw new Error(
+            `expected 7 completed TestLeftRecursionToolIssues ports, found ${LEFT_RECURSION_PORTS.size}`,
+        );
+    }
+    const graphNodeGroups = new Map();
+    for (const testCase of inventory.cases) {
+        if (testCase.suite !== "TestGraphNodes") {
+            continue;
+        }
+        const key =
+            `${testCase.suite}\0${canonicalName(testCase.name)}` +
+            `\0${parameterKey(testCase)}`;
+        const group = graphNodeGroups.get(key) ?? [];
+        group.push(testCase);
+        graphNodeGroups.set(key, group);
+    }
+    const remainingGraphNodeRedIds = new Set(
+        GRAPH_NODES_RED_LOGICAL_IDS,
+    );
+    for (const [key, cases] of graphNodeGroups) {
+        const logicalId = logicalCaseId(
+            cases[0].suite,
+            cases[0].name,
+            key,
+        );
+        const ported = GRAPH_NODES_RED_LOGICAL_IDS.has(logicalId);
+        remainingGraphNodeRedIds.delete(logicalId);
+        ports.set(logicalId, {
+            fixturePaths: [],
+            rustTest: GRAPH_NODES_TEST,
+            kind: "graph-nodes",
+            resolution: ported
+                ? "ported"
+                : "verified-covered-existing",
+            scaffoldCommit: GRAPH_NODES_BASE_COMMIT,
+            testCommit: GRAPH_NODES_TEST_COMMIT,
+            implementationCommit: ported
+                ? GRAPH_NODES_IMPLEMENTATION_COMMIT
+                : GRAPH_NODES_BASE_COMMIT,
+            testCommand:
+                `ANTLR_GRAPH_NODE_CASE=${logicalId} cargo test --locked --lib ` +
+                `${GRAPH_NODES_TEST} -- --exact`,
+            greenResult: "1 passed; 0 failed",
+            redFingerprint: ported
+                ? `logical_id=${logicalId}`
+                : undefined,
+        });
+    }
+    if (
+        graphNodeGroups.size !== 36 ||
+        remainingGraphNodeRedIds.size !== 0
+    ) {
+        throw new Error(
+            "expected 36 completed TestGraphNodes ports with all recorded red cases",
+        );
+    }
+    const symbolIssuesPattern =
+        /case!\(\s*(\w+),\s*"(testsymbolissues-[^"]+)"/gu;
+    const remainingSymbolIssuesRedIds = new Set(
+        SYMBOL_ISSUES_RED_CASES.keys(),
+    );
+    let symbolIssuesCount = 0;
+    for (const match of source.matchAll(symbolIssuesPattern)) {
+        const [, testName, logicalId] = match;
+        if (logicalId.endsWith("-variant-2")) {
+            const baseLogicalId = logicalId.slice(
+                0,
+                -"-variant-2".length,
+            );
+            const base = ports.get(baseLogicalId);
+            if (base === undefined) {
+                throw new Error(
+                    `${logicalId} appeared before its base symbol issue port`,
+                );
+            }
+            base.fixturePaths = [
+                ...base.fixturePaths,
+                ...await fixturePaths(logicalId),
+            ].sort();
+            base.rustTest =
+                "grammar::atn::interp_test::tests::upstream_symbol_issues::" +
+                "redundant_case_insensitive_lexer_rule_option";
+            base.testCommand =
+                `${SYMBOL_ISSUES_TEST_PREFIX}` +
+                "redundant_case_insensitive_lexer_rule_option";
+            base.greenResult = "2 passed; 0 failed";
+            symbolIssuesCount += 1;
+            continue;
+        }
+        const redFingerprint = SYMBOL_ISSUES_RED_CASES.get(logicalId);
+        const ported = redFingerprint !== undefined;
+        remainingSymbolIssuesRedIds.delete(logicalId);
+        ports.set(logicalId, {
+            fixturePaths: await fixturePaths(logicalId),
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_symbol_issues::" +
+                `${testName}::matches_java`,
+            kind: "symbol-issues",
+            resolution: ported
+                ? "ported"
+                : "verified-covered-existing",
+            scaffoldCommit: SYMBOL_ISSUES_BASE_COMMIT,
+            testCommit: SYMBOL_ISSUES_TEST_COMMIT,
+            implementationCommit: ported
+                ? SYMBOL_ISSUES_IMPLEMENTATION_COMMIT
+                : SYMBOL_ISSUES_BASE_COMMIT,
+            testCommand:
+                `${SYMBOL_ISSUES_TEST_PREFIX}${testName}::matches_java -- --exact`,
+            greenResult: "1 passed; 0 failed",
+            redFingerprint,
+        });
+        symbolIssuesCount += 1;
+    }
+    if (
+        symbolIssuesCount !== 27 ||
+        remainingSymbolIssuesRedIds.size !== 0
+    ) {
+        throw new Error(
+            "expected 27 completed TestSymbolIssues ports with all recorded red cases",
+        );
+    }
+    const attributeCasesSource = await readFile(
+        resolve(repoRoot, ATTRIBUTE_CHECKS_CASES),
+        "utf8",
+    );
+    const attributePattern =
+        /case!\(\s*(\w+),\s*"([^"]+)"/gu;
+    const attributeRows = new Map();
+    let attributeCaseCount = 0;
+    let attributeErrorCount = 0;
+    for (const match of attributeCasesSource.matchAll(attributePattern)) {
+        const [, testName, fixtureName] = match;
+        const fixtureBase =
+            `tests/codegen-direct/fixtures/${fixtureName}`;
+        const manifest = JSON.parse(
+            await readFile(
+                resolve(repoRoot, fixtureBase, "fixture.json"),
+                "utf8",
+            ),
+        );
+        const expectedError = manifest.expected === "error";
+        attributeCaseCount += 1;
+        attributeErrorCount += Number(expectedError);
+        for (const logicalId of manifest.logical_ids ?? []) {
+            const row = attributeRows.get(logicalId) ?? {
+                fixturePaths: new Set(),
+                fixtureNames: [],
+                firstTestName: testName,
+                firstErrorFixture: null,
+            };
+            for (const fixturePath of await fixturePaths(fixtureName)) {
+                row.fixturePaths.add(fixturePath);
+            }
+            row.fixtureNames.push(fixtureName);
+            if (expectedError && row.firstErrorFixture === null) {
+                row.firstErrorFixture = fixtureName;
+            }
+            attributeRows.set(logicalId, row);
+        }
+    }
+    for (const [logicalId, row] of attributeRows) {
+        const ported = row.firstErrorFixture !== null;
+        ports.set(logicalId, {
+            fixturePaths: [...row.fixturePaths].sort(),
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_attribute_checks",
+            kind: "attribute-checks",
+            resolution: ported
+                ? "ported"
+                : "verified-covered-existing",
+            scaffoldCommit: ATTRIBUTE_CHECKS_BASE_COMMIT,
+            testCommit: ATTRIBUTE_CHECKS_TEST_COMMIT,
+            implementationCommit: ported
+                ? ATTRIBUTE_CHECKS_IMPLEMENTATION_COMMIT
+                : ATTRIBUTE_CHECKS_BASE_COMMIT,
+            testCommand:
+                row.fixtureNames.length === 1
+                    ? `${ATTRIBUTE_CHECKS_TEST_COMMAND}::${row.firstTestName}` +
+                      "::matches_java -- --exact"
+                    : `${ATTRIBUTE_CHECKS_TEST_COMMAND}::${row.firstTestName}`,
+            greenResult:
+                `${row.fixtureNames.length} passed; 0 failed`,
+            redFingerprint: ported
+                ? `${row.firstErrorFixture}: expected semantic failure`
+                : undefined,
+        });
+    }
+    if (
+        attributeCaseCount !== 121 ||
+        attributeErrorCount !== 87 ||
+        attributeRows.size !== 44
+    ) {
+        throw new Error(
+            "expected 121 TestAttributeChecks fixtures with 87 errors covering 44 completed ports",
+        );
+    }
+    const toolSyntaxCasesSource = await readFile(
+        resolve(repoRoot, TOOL_SYNTAX_ERRORS_CASES),
+        "utf8",
+    );
+    const toolSyntaxPattern =
+        /(?:meta_case|case)!\(\s*(\w+),\s*"([^"]+)"/gu;
+    const remainingToolSyntaxRedIds = new Set(
+        TOOL_SYNTAX_ERRORS_RED_CASES.keys(),
+    );
+    let toolSyntaxCount = 0;
+    for (const match of toolSyntaxCasesSource.matchAll(toolSyntaxPattern)) {
+        const [, testName, logicalId] = match;
+        const redFingerprint =
+            TOOL_SYNTAX_ERRORS_RED_CASES.get(logicalId);
+        const ported = redFingerprint !== undefined;
+        remainingToolSyntaxRedIds.delete(logicalId);
+        ports.set(logicalId, {
+            fixturePaths: await fixturePaths(logicalId),
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_tool_syntax_errors::" +
+                `${testName}::matches_java`,
+            kind: "tool-syntax-errors",
+            resolution: ported
+                ? "ported"
+                : "verified-covered-existing",
+            scaffoldCommit: TOOL_SYNTAX_ERRORS_BASE_COMMIT,
+            testCommit: TOOL_SYNTAX_ERRORS_TEST_COMMIT,
+            implementationCommit: ported
+                ? TOOL_SYNTAX_ERRORS_IMPLEMENTATION_COMMIT
+                : TOOL_SYNTAX_ERRORS_BASE_COMMIT,
+            testCommand:
+                `${TOOL_SYNTAX_ERRORS_TEST_PREFIX}${testName}` +
+                "::matches_java -- --exact",
+            greenResult: "1 passed; 0 failed",
+            redFingerprint,
+        });
+        toolSyntaxCount += 1;
+    }
+    if (
+        toolSyntaxCount !== 31 ||
+        remainingToolSyntaxRedIds.size !== 0
+    ) {
+        throw new Error(
+            "expected 31 completed TestToolSyntaxErrors ports with all recorded red cases",
+        );
+    }
+    const compositeCasesSource = await readFile(
+        resolve(repoRoot, COMPOSITE_GRAMMARS_CASES),
+        "utf8",
+    );
+    const compositePattern =
+        /case!\(\s*(\w+),\s*"(testcompositegrammars-[^"]+)"/gu;
+    const remainingCompositeRedIds = new Set(
+        COMPOSITE_GRAMMARS_RED_CASES.keys(),
+    );
+    let compositeCount = 0;
+    for (const match of compositeCasesSource.matchAll(compositePattern)) {
+        const [, testName, logicalId] = match;
+        const redFingerprint =
+            COMPOSITE_GRAMMARS_RED_CASES.get(logicalId);
+        const ported = redFingerprint !== undefined;
+        remainingCompositeRedIds.delete(logicalId);
+        ports.set(logicalId, {
+            fixturePaths: await fixturePaths(logicalId),
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_composite_grammars::" +
+                `${testName}::matches_java`,
+            kind: "composite-grammars",
+            resolution: ported
+                ? "ported"
+                : "verified-covered-existing",
+            scaffoldCommit: COMPOSITE_GRAMMARS_BASE_COMMIT,
+            testCommit: COMPOSITE_GRAMMARS_TEST_COMMIT,
+            implementationCommit: ported
+                ? COMPOSITE_GRAMMARS_IMPLEMENTATION_COMMIT
+                : COMPOSITE_GRAMMARS_BASE_COMMIT,
+            testCommand:
+                `${COMPOSITE_GRAMMARS_TEST_PREFIX}${testName}` +
+                "::matches_java -- --exact",
+            greenResult: "1 passed; 0 failed",
+            redFingerprint,
+        });
+        compositeCount += 1;
+    }
+    if (
+        compositeCount !== 26 ||
+        remainingCompositeRedIds.size !== 0
+    ) {
+        throw new Error(
+            "expected 26 completed TestCompositeGrammars ports with all recorded red cases",
+        );
+    }
+    for (const [logicalId, testName] of GENERAL_ATN_DOT_PORTS) {
+        ports.set(logicalId, {
+            fixturePaths: await fixturePaths(logicalId),
+            rustTest: `grammar::atn::general_bug_test::${testName}`,
+            kind: "general-atn-dot",
+            resolution: "verified-covered-existing",
+            scaffoldCommit: GENERAL_ATN_DOT_BASE_COMMIT,
+            testCommit: GENERAL_ATN_DOT_TEST_COMMIT,
+            implementationCommit: GENERAL_ATN_DOT_BASE_COMMIT,
+            testCommand: GENERAL_ATN_DOT_TEST_COMMAND,
+            greenResult: "2 passed; 0 failed",
+        });
+    }
+    if (GENERAL_ATN_DOT_PORTS.size !== 2) {
+        throw new Error(
+            `expected 2 completed General ATN DOT ports, found ${GENERAL_ATN_DOT_PORTS.size}`,
+        );
+    }
+    for (const [logicalId, definition] of LOOKAHEAD_TREE_PORTS) {
+        ports.set(logicalId, {
+            fixturePaths: await fixturePaths(logicalId),
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_lookahead_trees::" +
+                definition.testName,
+            kind: "lookahead-trees",
+            resolution: "ported",
+            scaffoldCommit: LOOKAHEAD_TREE_FIXTURE_COMMIT,
+            testCommit: LOOKAHEAD_TREE_TEST_COMMIT,
+            implementationCommit: LOOKAHEAD_TREE_IMPLEMENTATION_COMMIT,
+            testCommand:
+                `${LOOKAHEAD_TREE_TEST_PREFIX}${definition.testName} -- --exact`,
+            greenResult: "1 passed; 0 failed",
+            redFingerprint: definition.redFingerprint,
+        });
+    }
+    if (LOOKAHEAD_TREE_PORTS.size !== 4) {
+        throw new Error(
+            `expected 4 completed TestLookaheadTrees ports, found ${LOOKAHEAD_TREE_PORTS.size}`,
+        );
+    }
+    const scopeGroups = new Map();
+    for (const testCase of inventory.cases) {
+        if (testCase.suite !== "TestScopeParsing") {
+            continue;
+        }
+        const key =
+            `${testCase.suite}\0${canonicalName(testCase.name)}` +
+            `\0${parameterKey(testCase)}`;
+        const group = scopeGroups.get(key) ?? [];
+        group.push(testCase);
+        scopeGroups.set(key, group);
+    }
+    for (const [key, cases] of scopeGroups) {
+        const logicalId = logicalCaseId(
+            cases[0].suite,
+            cases[0].name,
+            key,
+        );
+        ports.set(logicalId, {
+            fixturePaths: [],
+            rustTest:
+                "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+            kind: "scope-parsing",
+            resolution: "ported",
+            scaffoldCommit: SCOPE_PARSING_BASE_COMMIT,
+            testCommit: SCOPE_PARSING_TEST_COMMIT,
+            implementationCommit: SCOPE_PARSING_IMPLEMENTATION_COMMIT,
+            testCommand: SCOPE_PARSING_TEST_COMMAND,
+            greenResult: "1 passed; 0 failed",
+            redFingerprint:
+                "E0425: cannot find function `parse_scope_decls` in this scope",
+        });
+    }
+    if (scopeGroups.size !== 47) {
+        throw new Error(
+            `expected 47 completed TestScopeParsing ports, found ${scopeGroups.size}`,
+        );
+    }
+    if (ports.size !== 384) {
+        throw new Error(`expected 384 completed Phase B ports, found ${ports.size}`);
+    }
+    return ports;
+}
+
+async function fixturePaths(logicalId) {
+    const fixtureBase = `tests/codegen-direct/fixtures/${logicalId}`;
+    const manifest = JSON.parse(
+        await readFile(resolve(repoRoot, fixtureBase, "fixture.json"), "utf8"),
+    );
+    return [
+        `${fixtureBase}/fixture.json`,
+        ...Object.keys(manifest.files ?? {}).map(
+            (path) => `${fixtureBase}/${path}`,
+        ),
+    ].sort();
 }
 
 function policyFor(suite, name) {
@@ -490,6 +2289,13 @@ function policyFor(suite, name) {
             unit: structural
                 ? "structural lexer action collection"
                 : "compiled lexer action behavior",
+        };
+    }
+    if (suite === "TestGraphNodes") {
+        return {
+            owner: "B",
+            disposition: "port",
+            unit: "prediction-context graph merging",
         };
     }
     if (PHASE_B_SUITES.has(suite)) {
@@ -548,6 +2354,14 @@ function parameterKey(testCase) {
 
 function canonicalName(name) {
     return name.normalize("NFKD").toLowerCase().replaceAll(/[^a-z0-9]+/gu, "");
+}
+
+function escapeSequenceRustTestName(name) {
+    return name
+        .replace(/^test/u, "")
+        .replace(/([A-Z]+)([A-Z][a-z])/gu, "$1_$2")
+        .replace(/([a-z0-9])([A-Z])/gu, "$1_$2")
+        .toLowerCase() + "_matches_java";
 }
 
 function slug(value) {

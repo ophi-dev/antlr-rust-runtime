@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22",
+  "active_revision_id": "testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22-r1",
+  "revisions": [
+    {
+      "revision_id": "testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22/revisions/testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22-r1/manifest.json",
+      "closure_sha256": "2074358e6d77a7434a5c4aab3536344e751337f5075c2ea2f11580ef6a1d99bf"
+    }
+  ]
+}

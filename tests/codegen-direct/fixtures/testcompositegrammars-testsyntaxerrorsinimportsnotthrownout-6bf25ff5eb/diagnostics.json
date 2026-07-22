@@ -1,0 +1,18 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 50,
+      "line": 3,
+      "column": 0,
+      "message": "syntax error: mismatched input '<EOF>' expecting ASSIGN"
+    },
+    {
+      "severity": "error",
+      "code": 56,
+      "line": 3,
+      "column": 4,
+      "message": "reference to undefined rule: x"
+    }
+  ]
+}

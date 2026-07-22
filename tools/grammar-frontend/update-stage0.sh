@@ -84,6 +84,7 @@ cargo build \
     --locked \
     --manifest-path "$repo_root/Cargo.toml" \
     --target-dir "$work_dir/target" \
+    --features codegen \
     --bin antlr4-rust-gen
 
 generator="$work_dir/target/debug/antlr4-rust-gen"

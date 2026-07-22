@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodedata-testunicodescriptaliases-9bd1cbfc9f",
+  "revision_id": "testunicodedata-testunicodescriptaliases-9bd1cbfc9f-r1",
+  "cells": [
+    {
+      "test_port": "coverage-extension",
+      "test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
+      "implementation_port": "existing-primary-antlr-ng",
+      "implementation_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
+      "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::unicode::tests::unicode_script_aliases_match_java -- --exact",
+      "result": "green: 1 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the case-specific test passed against the existing Phase B implementation"
+}

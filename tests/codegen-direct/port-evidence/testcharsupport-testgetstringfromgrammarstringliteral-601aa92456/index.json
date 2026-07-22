@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcharsupport-testgetstringfromgrammarstringliteral-601aa92456",
+  "active_revision_id": "testcharsupport-testgetstringfromgrammarstringliteral-601aa92456-r1",
+  "revisions": [
+    {
+      "revision_id": "testcharsupport-testgetstringfromgrammarstringliteral-601aa92456-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testcharsupport-testgetstringfromgrammarstringliteral-601aa92456/revisions/testcharsupport-testgetstringfromgrammarstringliteral-601aa92456-r1/manifest.json",
+      "closure_sha256": "71d7b64f60dbb686ff625e586a8595251225dc0f078d41ad3d4578dd9969a9ae"
+    }
+  ]
+}

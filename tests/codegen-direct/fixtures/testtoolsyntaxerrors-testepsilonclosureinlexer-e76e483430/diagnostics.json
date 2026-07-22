@@ -1,0 +1,11 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 153,
+      "line": 3,
+      "column": 9,
+      "message": "rule FRAGMENT contains a closure with at least one alternative that can match an empty string"
+    }
+  ]
+}

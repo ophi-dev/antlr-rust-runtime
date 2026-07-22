@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "logical_id": "testvocabulary-testemptyvocabulary-66d31ad014",
+  "revision_id": "testvocabulary-testemptyvocabulary-66d31ad014-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "closure": {
+    "logical_id": "testvocabulary-testemptyvocabulary-66d31ad014",
+    "source_case_ids": [
+      "antlr-ng:testvocabulary-testemptyvocabulary@8e69cf9e9958",
+      "java-antlr:testvocabulary-testemptyvocabulary@8e69cf9e9958"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "vocabulary::tests::upstream_vocabulary::empty_vocabulary_matches_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "the Rust vocabulary API matches Java 4.13.2 name classification for TestVocabulary.testEmptyVocabulary",
+    "scaffold_commit": "134b4e7304defa10da58e2b2ef90c6517f20213f",
+    "primary_test_commit": "d2211267b0573bf147d1baa57af8f7c13ce2d245"
+  },
+  "closure_sha256": "3acfd293697c647ea7562f1c20db8402627faf0e417fa8fe77bcb2849ce9c5b5",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testvocabulary-testemptyvocabulary@8e69cf9e9958",
+      "path": "tests/TestVocabulary.spec.ts",
+      "sha256": "3d04680de2c7470a6c93528b11473409d14812a13f39da2c094577a9bfe49923"
+    },
+    {
+      "source_case_id": "java-antlr:testvocabulary-testemptyvocabulary@8e69cf9e9958",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestVocabulary.java",
+      "sha256": "cb6dc731a710fe1d1dc1daae395aab0d54be610d5b322e0223693697a446e7df"
+    }
+  ],
+  "commits": {
+    "scaffold": "134b4e7304defa10da58e2b2ef90c6517f20213f",
+    "primary_test": "d2211267b0573bf147d1baa57af8f7c13ce2d245",
+    "primary_implementation": "2de0397b1db0d20cad0d59f2ea31c55b989edae2"
+  },
+  "ancestry": {
+    "primary_test_parent": "134b4e7304defa10da58e2b2ef90c6517f20213f",
+    "primary_implementation_parent": "d2211267b0573bf147d1baa57af8f7c13ce2d245",
+    "reachability": "the empty vocabulary implementation commit is directly based on its locked red test"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/vocabulary.rs",
+      "marker": "        #[test]\n        fn empty_vocabulary_matches_java() {",
+      "end_marker": "\n        #[test]\n        fn vocabulary_from_token_names_matches_java() {",
+      "sha256": "bbbf710a545d7bed3a3c7e6cb9cda5d8f5684059d7c4a13f3672671ed6cf48ef"
+    }
+  ],
+  "demonstrated_red": {
+    "command": "cargo test --locked --lib empty_vocabulary_matches_java -- --test-threads=1",
+    "commit": "d2211267b0573bf147d1baa57af8f7c13ce2d245",
+    "exit_code": 101,
+    "fingerprint": "E0599: no associated function or constant named empty found for Vocabulary"
+  },
+  "green_result": {
+    "command": "cargo test --locked --lib empty_vocabulary_matches_java -- --test-threads=1",
+    "commit": "2de0397b1db0d20cad0d59f2ea31c55b989edae2",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testvocabulary-testemptyvocabulary-66d31ad014/revisions/testvocabulary-testemptyvocabulary-66d31ad014-r1/oracle-results/declared-sources.json",
+      "sha256": "ea5a88d96cc1e57bd66624e61e9afb9f437e9b4d0da02699a483a324ef8b7981"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testvocabulary-testemptyvocabulary-66d31ad014/revisions/testvocabulary-testemptyvocabulary-66d31ad014-r1/matrix-results/results.json",
+      "sha256": "4516818cf620a95659946372fb9a59997e9e4b2e6665b36dee4330fb039f0784"
+    }
+  ]
+}

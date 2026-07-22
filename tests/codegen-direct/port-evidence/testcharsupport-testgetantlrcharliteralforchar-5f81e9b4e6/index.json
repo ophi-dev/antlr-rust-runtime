@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcharsupport-testgetantlrcharliteralforchar-5f81e9b4e6",
+  "active_revision_id": "testcharsupport-testgetantlrcharliteralforchar-5f81e9b4e6-r1",
+  "revisions": [
+    {
+      "revision_id": "testcharsupport-testgetantlrcharliteralforchar-5f81e9b4e6-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testcharsupport-testgetantlrcharliteralforchar-5f81e9b4e6/revisions/testcharsupport-testgetantlrcharliteralforchar-5f81e9b4e6-r1/manifest.json",
+      "closure_sha256": "234cc52b21e0c041d4483e4a432e17e1543ca87320c47cec9d2d3e1b8894a98e"
+    }
+  ]
+}

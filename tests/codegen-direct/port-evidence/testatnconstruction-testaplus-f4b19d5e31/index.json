@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnconstruction-testaplus-f4b19d5e31",
+  "active_revision_id": "testatnconstruction-testaplus-f4b19d5e31-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnconstruction-testaplus-f4b19d5e31-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnconstruction-testaplus-f4b19d5e31/revisions/testatnconstruction-testaplus-f4b19d5e31-r1/manifest.json",
+      "closure_sha256": "5f7fd129662e840ff88c934985ee84de145f9a757fc38debb8cfc1e35c4dcd66"
+    }
+  ]
+}

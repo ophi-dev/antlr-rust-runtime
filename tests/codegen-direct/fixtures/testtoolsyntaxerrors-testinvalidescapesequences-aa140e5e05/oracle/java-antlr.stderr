@@ -1,0 +1,3 @@
+error(156): A.g4:2:12: invalid escape sequence \uAABG
+error(156): A.g4:2:19: invalid escape sequence \x
+error(156): A.g4:2:22: invalid escape sequence \u

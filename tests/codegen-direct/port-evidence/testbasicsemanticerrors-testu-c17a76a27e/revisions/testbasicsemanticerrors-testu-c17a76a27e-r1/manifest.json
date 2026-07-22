@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "logical_id": "testbasicsemanticerrors-testu-c17a76a27e",
+  "revision_id": "testbasicsemanticerrors-testu-c17a76a27e-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "closure": {
+    "logical_id": "testbasicsemanticerrors-testu-c17a76a27e",
+    "source_case_ids": [
+      "antlr-ng:testbasicsemanticerrors-testu@bfbbf710db94",
+      "java-antlr:testbasicsemanticerrors-testu@bfbbf710db94"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testbasicsemanticerrors-testu-c17a76a27e/U.g4",
+      "tests/codegen-direct/fixtures/testbasicsemanticerrors-testu-c17a76a27e/diagnostics.json",
+      "tests/codegen-direct/fixtures/testbasicsemanticerrors-testu-c17a76a27e/fixture.json",
+      "tests/codegen-direct/fixtures/testbasicsemanticerrors-testu-c17a76a27e/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testbasicsemanticerrors-testu-c17a76a27e/oracle/java-antlr.stdout"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_basic_semantic_errors::u_matches_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust semantic diagnostics match Java 4.13.2 exactly for TestBasicSemanticErrors.testU",
+    "scaffold_commit": "685575f01d17b4d6791de8ac4207afe6f38d4b40",
+    "primary_test_commit": "d133e49cebf5b149b9cdf0dff70171128cd8ded5"
+  },
+  "closure_sha256": "3fc34a40625314f116b6c23a50130d219ff788a96f872da64f1fb45f86c4b4c9",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testbasicsemanticerrors-testu@bfbbf710db94",
+      "path": "tests/TestBasicSemanticErrors.spec.ts",
+      "sha256": "074aff6e9a006420110fbd883d45039887bee9663a3e089d3767269b7fab5dd4"
+    },
+    {
+      "source_case_id": "java-antlr:testbasicsemanticerrors-testu@bfbbf710db94",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestBasicSemanticErrors.java",
+      "sha256": "5f739f16bdcbd8a3c519a49b91c1c02f22e12c0cc718c881c7239f8abc8385ac"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testbasicsemanticerrors-testu-c17a76a27e/U.g4",
+      "sha256": "0277c07c33cb76cb6d445a31139fa362df56390ba834cfe0b1f0a556c03e3492"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testbasicsemanticerrors-testu-c17a76a27e/diagnostics.json",
+      "sha256": "cd0ff54917c8b68fc5b88ed1fe049c78cf017160a51bc20ff03cdc1f56ba02bb"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testbasicsemanticerrors-testu-c17a76a27e/fixture.json",
+      "sha256": "cba9702d6e5fb9f45eea7e820ce7b00bc05facc57c8b85f32cd255923d7b8c8a"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testbasicsemanticerrors-testu-c17a76a27e/oracle/java-antlr.stderr",
+      "sha256": "b4e232c04debce8bd4157eb3b6ca1a1b38b34a6c8ed3fc15c4817437a7bc744d"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testbasicsemanticerrors-testu-c17a76a27e/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "commits": {
+    "scaffold": "685575f01d17b4d6791de8ac4207afe6f38d4b40",
+    "primary_test": "d133e49cebf5b149b9cdf0dff70171128cd8ded5",
+    "primary_implementation": "1733fa4e06a1b97951592da68689a9bff27ba86c"
+  },
+  "ancestry": {
+    "primary_test_parent": "685575f01d17b4d6791de8ac4207afe6f38d4b40",
+    "primary_implementation_parent": "d133e49cebf5b149b9cdf0dff70171128cd8ded5",
+    "reachability": "the implementation commit is directly based on the locked red semantic tests"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_basic_semantic_errors {",
+      "end_marker": "\n        const fn expected(",
+      "sha256": "601b3d2e7a8126b38b502258a1ecf7693c3ef8580b30639baeb40eccf5fb1cd5"
+    }
+  ],
+  "demonstrated_red": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_basic_semantic_errors -- --test-threads=1",
+    "commit": "d133e49cebf5b149b9cdf0dff70171128cd8ded5",
+    "exit_code": 101,
+    "fingerprint": "expected 11 ordered diagnostics, but the direct compiler emitted 3"
+  },
+  "green_result": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_basic_semantic_errors -- --test-threads=1",
+    "commit": "1733fa4e06a1b97951592da68689a9bff27ba86c",
+    "exit_code": 0,
+    "result": "3 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testbasicsemanticerrors-testu-c17a76a27e/revisions/testbasicsemanticerrors-testu-c17a76a27e-r1/oracle-results/declared-sources.json",
+      "sha256": "e728891c91509a5123f0d1c6ba6a4b14c0f9493adc7c87d4f5443671b54ccd93"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testbasicsemanticerrors-testu-c17a76a27e/revisions/testbasicsemanticerrors-testu-c17a76a27e-r1/matrix-results/results.json",
+      "sha256": "15d09c531ea4b4139fdea33472f144f82228e6c859ff90bee16827f53b44d84d"
+    }
+  ]
+}

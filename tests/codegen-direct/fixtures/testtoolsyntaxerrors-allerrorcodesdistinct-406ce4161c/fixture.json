@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "logical_ids": [
+    "testtoolsyntaxerrors-allerrorcodesdistinct-406ce4161c"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "java-antlr:testtoolsyntaxerrors-allerrorcodesdistinct@a15431e741b7",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestToolSyntaxErrors.java",
+      "case": "AllErrorCodesDistinct",
+      "source_sha256": "d20fdd17605ec4419dea95b8734f6768d54b6a3a13c3f592e75653690b5808e0"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testtoolsyntaxerrors-allerrorcodesdistinct@a15431e741b7",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestToolSyntaxErrors.java",
+    "case": "AllErrorCodesDistinct",
+    "source_sha256": "d20fdd17605ec4419dea95b8734f6768d54b6a3a13c3f592e75653690b5808e0"
+  },
+  "fixture_binding": {
+    "method": "AllErrorCodesDistinct",
+    "source": "pinned Java TestToolSyntaxErrors.java"
+  },
+  "roots": [],
+  "expected": "meta",
+  "java_error_type_source": {
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool/src/org/antlr/v4/tool/ErrorType.java",
+    "source_sha256": "981aec5a1f5d42b065cd02d407bef8516623b5956aafe880a458723c09226185"
+  },
+  "tool_syntax_errors_oracle": {
+    "artifacts": [
+      "oracle/java-error-types.tsv",
+      "diagnostic-code-distinctness"
+    ],
+    "error_type_count": 124,
+    "compatibility_verdict": "Java ANTLR 4.13.2"
+  },
+  "files": {
+    "oracle/java-error-types.tsv": "d62d8c63d2974fa01693e8a6c784095a77a4349c00f869a66b7192a040feaa99"
+  }
+}

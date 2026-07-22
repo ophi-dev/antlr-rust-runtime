@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testatnserialization-testlexerrange-02c072a36f",
+  "active_revision_id": "testatnserialization-testlexerrange-02c072a36f-r1",
+  "revisions": [
+    {
+      "revision_id": "testatnserialization-testlexerrange-02c072a36f-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testatnserialization-testlexerrange-02c072a36f/revisions/testatnserialization-testlexerrange-02c072a36f-r1/manifest.json",
+      "closure_sha256": "e8f8bbddee9b9c3a4baa435ee22abbe60d02820dc51018b17435f7aa80a1b7d4"
+    }
+  ]
+}

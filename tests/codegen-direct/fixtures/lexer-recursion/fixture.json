@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "LexerRecursion.g4"
+  ],
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "exit_status": 0
+  },
+  "files": {
+    "LexerRecursion.g4": "ffea7e98c2ad56c48b43670812db1a98241d5b56bb37815abec6e8061da6585d",
+    "LexerRecursion.interp": "b9a4e67141da5801bd019e1aa6768775c4c514c74886e03382d8f2fce10210e4",
+    "LexerRecursion.tokens": "7820df1ddc3cef548a313121613f338e07b3927cdb4322e8af1577cd49e55bb1",
+    "oracle/java-antlr.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh lexer-recursion --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar"
+}

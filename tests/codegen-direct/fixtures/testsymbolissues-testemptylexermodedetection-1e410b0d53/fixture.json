@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "L.g4"
+  ],
+  "logical_ids": [
+    "testsymbolissues-testemptylexermodedetection-1e410b0d53"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:testsymbolissues-testemptylexermodedetection@cf7f31a10af6",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestSymbolIssues.spec.ts",
+      "case": "testEmptyLexerModeDetection",
+      "source_sha256": "8f7a08f5a51689c74a7de052bc8dd7253a7ccb58f4658fdbc1d99f674e5d5b15"
+    },
+    {
+      "source_case_id": "java-antlr:testsymbolissues-testemptylexermodedetection@cf7f31a10af6",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestSymbolIssues.java",
+      "case": "testEmptyLexerModeDetection",
+      "source_sha256": "777564e24248da6e2789fe6c223c0b91d2df65b1b6b5000505cb011113d27c0d"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testsymbolissues-testemptylexermodedetection@cf7f31a10af6",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestSymbolIssues.java",
+    "case": "testEmptyLexerModeDetection",
+    "source_sha256": "777564e24248da6e2789fe6c223c0b91d2df65b1b6b5000505cb011113d27c0d"
+  },
+  "antlr_ng_test": {
+    "source_case_id": "antlr-ng:testsymbolissues-testemptylexermodedetection@cf7f31a10af6",
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/TestSymbolIssues.spec.ts",
+    "case": "testEmptyLexerModeDetection",
+    "source_sha256": "8f7a08f5a51689c74a7de052bc8dd7253a7ccb58f4658fdbc1d99f674e5d5b15"
+  },
+  "expected": "error",
+  "symbol_issues_oracle": {
+    "artifacts": [
+      ".interp",
+      ".tokens",
+      "diagnostics"
+    ],
+    "agreement": "Java and antlr-ng use the same grammar input and expected diagnostic categories",
+    "compatibility_verdict": "Java ANTLR 4.13.2"
+  },
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "unicode_data": {
+      "generator": "org.antlr.v4.unicode.UnicodeDataTemplateController",
+      "helper": "tools/grammar-frontend/oracle/GenerateUnicodeData.java",
+      "helper_sha256": "9adec4f06cb31c7c7e408336e8fe935741f6d4ec5e8113e76450551ec1e3967f",
+      "icu4j_version": "78.1.0.0",
+      "icu4j_jar_sha256": "bbb70d3be23110d7295823eee0c2e896ac3b619b3c0f26168f65eb972df51d2a",
+      "unicode_version": "17.0.0.0"
+    },
+    "exit_status": 1
+  },
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh testsymbolissues-testemptylexermodedetection-1e410b0d53 --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar --icu-jar /tmp/antlr-cleanroom/tools/icu4j-78.1.jar",
+  "files": {
+    "L.g4": "b8deca6a725cc7a1f5639213b6e1cbd56b9a32a1b9ef9c63cb7613b3e23f9d18",
+    "diagnostics.json": "fda7eca005903feaba3a63f6939eb2ca30fd36fd0a457d27f17438a11cb9d3be",
+    "oracle/java-antlr.stderr": "4315c01030e412b4165b7e2fad82f0414d6ad26cee007031679849682c5388c7",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stdout": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+  }
+}

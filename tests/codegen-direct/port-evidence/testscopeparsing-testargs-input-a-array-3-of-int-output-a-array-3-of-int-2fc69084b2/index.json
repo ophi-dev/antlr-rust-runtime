@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testscopeparsing-testargs-input-a-array-3-of-int-output-a-array-3-of-int-2fc69084b2",
+  "active_revision_id": "testscopeparsing-testargs-input-a-array-3-of-int-output-a-array-3-of-int-2fc69084b2-r1",
+  "revisions": [
+    {
+      "revision_id": "testscopeparsing-testargs-input-a-array-3-of-int-output-a-array-3-of-int-2fc69084b2-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-a-array-3-of-int-output-a-array-3-of-int-2fc69084b2/revisions/testscopeparsing-testargs-input-a-array-3-of-int-output-a-array-3-of-int-2fc69084b2-r1/manifest.json",
+      "closure_sha256": "3f33b2b397ffd6eed59eb2a548a55c7ea296ca229b4b9e9043d8c35d9fc2b98c"
+    }
+  ]
+}

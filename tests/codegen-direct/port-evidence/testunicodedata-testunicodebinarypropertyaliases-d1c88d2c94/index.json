@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodedata-testunicodebinarypropertyaliases-d1c88d2c94",
+  "active_revision_id": "testunicodedata-testunicodebinarypropertyaliases-d1c88d2c94-r1",
+  "revisions": [
+    {
+      "revision_id": "testunicodedata-testunicodebinarypropertyaliases-d1c88d2c94-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testunicodedata-testunicodebinarypropertyaliases-d1c88d2c94/revisions/testunicodedata-testunicodebinarypropertyaliases-d1c88d2c94-r1/manifest.json",
+      "closure_sha256": "56f9a2de95d8fe296fbd31f62a2a6df5c50766a388dee80e9ee1c8e614198672"
+    }
+  ]
+}

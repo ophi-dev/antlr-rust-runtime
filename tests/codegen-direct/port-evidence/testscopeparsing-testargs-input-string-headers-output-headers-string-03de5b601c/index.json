@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testscopeparsing-testargs-input-string-headers-output-headers-string-03de5b601c",
+  "active_revision_id": "testscopeparsing-testargs-input-string-headers-output-headers-string-03de5b601c-r1",
+  "revisions": [
+    {
+      "revision_id": "testscopeparsing-testargs-input-string-headers-output-headers-string-03de5b601c-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-string-headers-output-headers-string-03de5b601c/revisions/testscopeparsing-testargs-input-string-headers-output-headers-string-03de5b601c-r1/manifest.json",
+      "closure_sha256": "35ee9c5b944a6671833a6329a3cb6ecd5ae53df8c9c9e834a97c8fac00f5b38a"
+    }
+  ]
+}

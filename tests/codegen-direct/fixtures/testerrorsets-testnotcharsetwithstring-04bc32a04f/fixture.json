@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "T.g4"
+  ],
+  "logical_ids": [
+    "testerrorsets-testnotcharsetwithstring-04bc32a04f"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:testerrorsets-testnotcharsetwithstring@608d687e971d",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestErrorSets.spec.ts",
+      "case": "testNotCharSetWithString",
+      "source_sha256": "612cfab5207f6c84d10ac273d968584147e763be9e5e9733ab75904f9480ef2c"
+    },
+    {
+      "source_case_id": "java-antlr:testerrorsets-testnotcharsetwithstring@608d687e971d",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestErrorSets.java",
+      "case": "testNotCharSetWithString",
+      "source_sha256": "4113c3ccec07e7931070b9072f82381d6b9e0c6b5836def318edb1c17c62217e"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testerrorsets-testnotcharsetwithstring@608d687e971d",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestErrorSets.java",
+    "case": "testNotCharSetWithString",
+    "source_sha256": "4113c3ccec07e7931070b9072f82381d6b9e0c6b5836def318edb1c17c62217e"
+  },
+  "antlr_ng_test": {
+    "source_case_id": "antlr-ng:testerrorsets-testnotcharsetwithstring@608d687e971d",
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/TestErrorSets.spec.ts",
+    "case": "testNotCharSetWithString",
+    "source_sha256": "612cfab5207f6c84d10ac273d968584147e763be9e5e9733ab75904f9480ef2c"
+  },
+  "expected": "error",
+  "diagnostic_oracle": {
+    "agreement": "Java ANTLR and antlr-ng expect the same diagnostic category and source position",
+    "compatibility_verdict": "Java ANTLR 4.13.2"
+  },
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "exit_status": 1
+  },
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh testerrorsets-testnotcharsetwithstring-04bc32a04f --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar",
+  "files": {
+    "T.g4": "4481fd5b43f5a69793e2533c474eae69cfcb01ba5baf7ba3a8174dee5a00737c",
+    "T.tokens": "4caac4c4839017a18d0363b4c0cc731f1567c80f7f3aa1df80215e595f8dfdc0",
+    "diagnostics.json": "77921df05a15db9379f93b0593a782e1853babce8fc320852e9e55371ffd2ce6",
+    "oracle/java-antlr.stderr": "7e3d9a65bc0978cd7bb6df19689c463c24b1c8d4ee1ef61df14d665abea882f3",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

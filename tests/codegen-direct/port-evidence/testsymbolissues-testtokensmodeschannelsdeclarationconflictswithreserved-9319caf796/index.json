@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testsymbolissues-testtokensmodeschannelsdeclarationconflictswithreserved-9319caf796",
+  "active_revision_id": "testsymbolissues-testtokensmodeschannelsdeclarationconflictswithreserved-9319caf796-r1",
+  "revisions": [
+    {
+      "revision_id": "testsymbolissues-testtokensmodeschannelsdeclarationconflictswithreserved-9319caf796-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testsymbolissues-testtokensmodeschannelsdeclarationconflictswithreserved-9319caf796/revisions/testsymbolissues-testtokensmodeschannelsdeclarationconflictswithreserved-9319caf796-r1/manifest.json",
+      "closure_sha256": "72140cb16cb99e0d5173f28c104634d4dbfcff8774b708c6710851a3db9a8e39"
+    }
+  ]
+}

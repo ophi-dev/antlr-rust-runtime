@@ -1,0 +1,28 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 159,
+      "line": 5,
+      "column": 0
+    },
+    {
+      "severity": "error",
+      "code": 173,
+      "line": 4,
+      "column": 0
+    },
+    {
+      "severity": "error",
+      "code": 172,
+      "line": 2,
+      "column": 11
+    },
+    {
+      "severity": "error",
+      "code": 172,
+      "line": 2,
+      "column": 17
+    }
+  ]
+}

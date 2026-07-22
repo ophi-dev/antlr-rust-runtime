@@ -1,0 +1,11 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 67,
+      "line": 5,
+      "column": 8,
+      "message": "missing attribute access on rule reference lab in $lab"
+    }
+  ]
+}

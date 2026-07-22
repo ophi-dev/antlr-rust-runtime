@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea",
+  "active_revision_id": "testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea-r1",
+  "revisions": [
+    {
+      "revision_id": "testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea/revisions/testsymbolissues-testcaseinsensitivewithunicoderanges-abbbfc3fea-r1/manifest.json",
+      "closure_sha256": "c100e74bc7e1cdd3c47d0e4957544aced46926417588712dec560d97af4526c8"
+    }
+  ]
+}

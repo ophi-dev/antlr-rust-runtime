@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testescapesequenceparsing-testparseunicodepropertyinvertedmissingclosebrace-dd21bab8f1",
+  "active_revision_id": "testescapesequenceparsing-testparseunicodepropertyinvertedmissingclosebrace-dd21bab8f1-r1",
+  "revisions": [
+    {
+      "revision_id": "testescapesequenceparsing-testparseunicodepropertyinvertedmissingclosebrace-dd21bab8f1-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparseunicodepropertyinvertedmissingclosebrace-dd21bab8f1/revisions/testescapesequenceparsing-testparseunicodepropertyinvertedmissingclosebrace-dd21bab8f1-r1/manifest.json",
+      "closure_sha256": "37512d0599ecd0910e194adcd1b2c85426da6202d4a6f817058e1f98dcbd4ac2"
+    }
+  ]
+}

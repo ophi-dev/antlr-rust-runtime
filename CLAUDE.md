@@ -35,7 +35,7 @@ than letting fmt explode the block to one element per line.
 ## Generated parser codegen
 
 ```bash
-cargo run --release --bin antlr4-rust-gen -- \
+cargo run --release --features codegen --bin antlr4-rust-gen -- \
     --lexer  path/to/Foo.interp \
     --parser path/to/FooParser.interp \
     --out-dir crates/foo/src/generated

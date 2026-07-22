@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "logical_id": "testlexeractions-nested-actions-3d175db5e5",
+  "revision_id": "testlexeractions-nested-actions-3d175db5e5-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "closure": {
+    "logical_id": "testlexeractions-nested-actions-3d175db5e5",
+    "source_case_ids": [
+      "antlr-ng:testlexeractions-nested-actions@9de183fdb922"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::syntax::tests::nested_actions_match_upstream",
+    "unit_under_test": "structural lexer action collection",
+    "observable": "direct Rust grammar modeling preserves nested member actions and normalizes predicate fail messages for TestLexerActions.Nested actions",
+    "scaffold_commit": "98219b854f02c72685ea13546c5b491a59b6d384",
+    "primary_test_commit": "8ab5c20ff8a99514d51672268b632f6b2bac7678"
+  },
+  "closure_sha256": "8f14b2807084b2f8f5a454be14aacdef09d61674511923f6d6ecfc00d3a1dee3",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testlexeractions-nested-actions@9de183fdb922",
+      "path": "tests/TestLexerActions.spec.ts",
+      "sha256": "17dab66bfccb18670ca3057109d1ae1df4e9120afb07f165c5e9ecf47771e93c"
+    }
+  ],
+  "commits": {
+    "scaffold": "98219b854f02c72685ea13546c5b491a59b6d384",
+    "primary_test": "8ab5c20ff8a99514d51672268b632f6b2bac7678",
+    "primary_implementation": "78c6d271b6379fa230bb9de133307785a6877587"
+  },
+  "ancestry": {
+    "primary_test_parent": "98219b854f02c72685ea13546c5b491a59b6d384",
+    "primary_implementation_parent": "8ab5c20ff8a99514d51672268b632f6b2bac7678",
+    "reachability": "the nested action implementation commit is directly based on its locked red test"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/syntax.rs",
+      "marker": "#[cfg(test)]\nmod tests {",
+      "sha256": "7d42954ce50ccf2a6afa9d7e7dd2e6c5a880992f132b429555ff1c7ff2b51e65"
+    }
+  ],
+  "demonstrated_red": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::syntax::tests::nested_actions_match_upstream -- --exact",
+    "commit": "8ab5c20ff8a99514d51672268b632f6b2bac7678",
+    "exit_code": 101,
+    "fingerprint": "predicate fail message retained grammar quotes: left Some(\"'custom message'\"), right Some(\"custom message\")"
+  },
+  "green_result": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::syntax::tests::nested_actions_match_upstream -- --exact",
+    "commit": "78c6d271b6379fa230bb9de133307785a6877587",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testlexeractions-nested-actions-3d175db5e5/revisions/testlexeractions-nested-actions-3d175db5e5-r1/oracle-results/declared-sources.json",
+      "sha256": "d0ee89de0193c2b9acbba285b643bdba7d8bdf6dbe5d3601e58a9dee7e2d2a82"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testlexeractions-nested-actions-3d175db5e5/revisions/testlexeractions-nested-actions-3d175db5e5-r1/matrix-results/results.json",
+      "sha256": "20a6cf7cc3c003487fb6cca21ab1860c1027799a5965c9b6c375ad68fc85fdc9"
+    }
+  ]
+}

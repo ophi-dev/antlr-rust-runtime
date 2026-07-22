@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "logical_id": "testscopeparsing-testargs-input-i-j-output-i-j-3c35b10605",
+  "revision_id": "testscopeparsing-testargs-input-i-j-output-i-j-3c35b10605-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "closure": {
+    "logical_id": "testscopeparsing-testargs-input-i-j-output-i-j-3c35b10605",
+    "source_case_ids": [
+      "antlr-ng:testscopeparsing-testargs-input-i-j-output-i-j@a14899236f99"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust declaration parsing matches Java 4.13.2 names, types, and initializers for TestScopeParsing.testArgs: { input: 'i,j', output: 'i, j' }",
+    "scaffold_commit": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+    "primary_test_commit": "dfb3d07d4536f91094931dcc4884567530f78b11"
+  },
+  "closure_sha256": "7e803cdf56ca2a349a09e43503432aed97cacd5468dbc06c299a7e1e4677c8c5",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testscopeparsing-testargs-input-i-j-output-i-j@a14899236f99",
+      "path": "tests/TestScopeParsing.spec.ts",
+      "sha256": "bfff35a210b05e9ddf083816d5e7aff1a9efa4fe634061bcd5f85010ae23eb8b"
+    }
+  ],
+  "commits": {
+    "scaffold": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+    "primary_test": "dfb3d07d4536f91094931dcc4884567530f78b11",
+    "primary_implementation": "9bef3f59a6e29b5319e25807a2af6702e2d387a5"
+  },
+  "ancestry": {
+    "primary_test_parent": "2246948ef1f6a73d98bccfe0e75e272ce6d3c2f2",
+    "primary_implementation_parent": "dfb3d07d4536f91094931dcc4884567530f78b11",
+    "reachability": "the scope parsing implementation commit is directly based on its locked red test"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/embedded.rs",
+      "marker": "    mod upstream_scope_parsing {",
+      "end_marker": "\n    #[test]\n    fn translates_attr_and_rule_reads()",
+      "sha256": "2ecd35f8c02e2d521e877274a3156b2a373a07ac4c77ad4357197b12a445d6f2"
+    }
+  ],
+  "demonstrated_red": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+    "commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
+    "exit_code": 101,
+    "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
+  },
+  "green_result": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+    "commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-i-j-output-i-j-3c35b10605/revisions/testscopeparsing-testargs-input-i-j-output-i-j-3c35b10605-r1/oracle-results/declared-sources.json",
+      "sha256": "2fbbe51637d67e6923e528c45bb1600555db39257485d1bbb541609c60a0984b"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-i-j-output-i-j-3c35b10605/revisions/testscopeparsing-testargs-input-i-j-output-i-j-3c35b10605-r1/matrix-results/results.json",
+      "sha256": "69d97ca2ffe63beac0d802f0de5d01695c09a4217e1ec6e81c3945225d17a45b"
+    }
+  ]
+}

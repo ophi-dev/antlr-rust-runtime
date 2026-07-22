@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtokentypeassignment-testliteralinparserandlexer-177a82c119",
+  "active_revision_id": "testtokentypeassignment-testliteralinparserandlexer-177a82c119-r1",
+  "revisions": [
+    {
+      "revision_id": "testtokentypeassignment-testliteralinparserandlexer-177a82c119-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testtokentypeassignment-testliteralinparserandlexer-177a82c119/revisions/testtokentypeassignment-testliteralinparserandlexer-177a82c119-r1/manifest.json",
+      "closure_sha256": "c7859489c518593c38b6946dfd682943379dc4589a3c4315e4a439e27bd1e697"
+    }
+  ]
+}

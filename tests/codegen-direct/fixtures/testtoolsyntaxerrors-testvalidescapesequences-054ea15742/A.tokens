@@ -1,0 +1,4 @@
+NORMAL_ESCAPE=1
+UNICODE_ESCAPE=2
+'\b \t \n \f \r \' \\'=1
+'\u0001 \u00A1 \u00a1 \uaaaa \uAAAA'=2

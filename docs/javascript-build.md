@@ -56,7 +56,7 @@ generator.
 From this repository's root:
 
 ```bash
-cargo run --locked --release --bin antlr4-rust-gen -- \
+cargo run --locked --release --features codegen --bin antlr4-rust-gen -- \
   --lexer "$BUILD/interp/JavaScriptLexer.interp" \
   --grammar "$GRAMMAR/JavaScriptLexer.g4" \
   --sem-patterns patterns/javascript.toml \
@@ -65,7 +65,7 @@ cargo run --locked --release --bin antlr4-rust-gen -- \
   --require-full-semantics \
   --out-dir "$BUILD/lexer"
 
-cargo run --locked --release --bin antlr4-rust-gen -- \
+cargo run --locked --release --features codegen --bin antlr4-rust-gen -- \
   --parser "$BUILD/interp/JavaScriptParser.interp" \
   --grammar "$GRAMMAR/JavaScriptParser.g4" \
   --sem-patterns patterns/javascript.toml \
