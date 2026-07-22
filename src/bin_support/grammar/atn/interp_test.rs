@@ -817,6 +817,17 @@ mod tests {
         );
     }
 
+    fn assert_lexer_fixture(fixture_name: &str, grammar_name: &str) -> Compilation {
+        let compilation =
+            compile_lexer_fixture(fixture_name, grammar_name).expect("lexer ATN should compile");
+        let fixture = fixture(fixture_name);
+        assert_lexer_interp(
+            lexer_named(&compilation, grammar_name),
+            &fixture.join(format!("{grammar_name}.interp")),
+        );
+        compilation
+    }
+
     mod upstream_unicode_grammar {
         use super::*;
 
@@ -876,17 +887,6 @@ mod tests {
         assert_parser_interp(
             parser_named(&compilation, &format!("{grammar_name}Parser")),
             &directory.join(format!("{grammar_name}.interp")),
-        );
-        compilation
-    }
-
-    fn assert_lexer_fixture(fixture_name: &str, grammar_name: &str) -> Compilation {
-        let compilation =
-            compile_lexer_fixture(fixture_name, grammar_name).expect("lexer ATN should compile");
-        let fixture = fixture(fixture_name);
-        assert_lexer_interp(
-            lexer_named(&compilation, grammar_name),
-            &fixture.join(format!("{grammar_name}.interp")),
         );
         compilation
     }

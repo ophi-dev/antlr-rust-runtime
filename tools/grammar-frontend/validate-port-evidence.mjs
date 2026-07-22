@@ -53,6 +53,10 @@ import {
     UNICODE_ESCAPE_SCAFFOLD_COMMIT,
     UNICODE_ESCAPE_SCAFFOLD_PARENT_COMMIT,
     UNICODE_ESCAPE_TEST_COMMIT,
+    UNICODE_GRAMMAR_BASE_COMMIT,
+    UNICODE_GRAMMAR_BASE_PARENT_COMMIT,
+    UNICODE_GRAMMAR_IMPLEMENTATION_COMMIT,
+    UNICODE_GRAMMAR_TEST_COMMIT,
     VOCABULARY_BASE_COMMIT,
     VOCABULARY_IMPLEMENTATION_COMMIT,
     VOCABULARY_TEST_COMMIT,
@@ -304,6 +308,9 @@ for (const [logicalId, record] of records) {
         const unicodeData = logicalId.startsWith(
             "testunicodedata-",
         );
+        const unicodeGrammar = logicalId.startsWith(
+            "testunicodegrammar-",
+        );
         if (resolution === "verified-covered-existing") {
             if (atnSerialization) {
                 expect(
@@ -405,6 +412,23 @@ for (const [logicalId, record] of records) {
                         manifest.ancestry.primary_implementation_parent ===
                             UNICODE_DATA_BASE_PARENT_COMMIT,
                     `${logicalId} Unicode data covered-existing ancestry differs`,
+                );
+            } else if (unicodeGrammar) {
+                expect(
+                    manifest.commits.scaffold ===
+                            UNICODE_GRAMMAR_BASE_COMMIT &&
+                        manifest.commits.primary_test ===
+                            UNICODE_GRAMMAR_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            UNICODE_GRAMMAR_BASE_COMMIT,
+                    `${logicalId} Unicode grammar covered-existing commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            UNICODE_GRAMMAR_BASE_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            UNICODE_GRAMMAR_BASE_PARENT_COMMIT,
+                    `${logicalId} Unicode grammar covered-existing ancestry differs`,
                 );
             } else {
                 expect(
@@ -611,6 +635,23 @@ for (const [logicalId, record] of records) {
                         manifest.ancestry.primary_implementation_parent ===
                             UNICODE_ESCAPE_TEST_COMMIT,
                     `${logicalId} Unicode escape recorded ancestry differs`,
+                );
+            } else if (unicodeGrammar) {
+                expect(
+                    manifest.commits.scaffold ===
+                            UNICODE_GRAMMAR_BASE_COMMIT &&
+                        manifest.commits.primary_test ===
+                            UNICODE_GRAMMAR_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            UNICODE_GRAMMAR_IMPLEMENTATION_COMMIT,
+                    `${logicalId} Unicode grammar evidence commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            UNICODE_GRAMMAR_BASE_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            UNICODE_GRAMMAR_TEST_COMMIT,
+                    `${logicalId} Unicode grammar recorded ancestry differs`,
                 );
             } else {
                 expect(
@@ -947,6 +988,39 @@ if (unicodeDataTestParent !== null) {
     expect(
         unicodeDataTestParent.trim() === UNICODE_DATA_BASE_COMMIT,
         "Unicode data test commit is not based on its recorded base",
+    );
+}
+const unicodeGrammarBaseParent = gitOptional([
+    "rev-parse",
+    `${UNICODE_GRAMMAR_BASE_COMMIT}^`,
+]);
+if (unicodeGrammarBaseParent !== null) {
+    expect(
+        unicodeGrammarBaseParent.trim() ===
+            UNICODE_GRAMMAR_BASE_PARENT_COMMIT,
+        "Unicode grammar base commit has an unexpected parent",
+    );
+}
+const unicodeGrammarTestParent = gitOptional([
+    "rev-parse",
+    `${UNICODE_GRAMMAR_TEST_COMMIT}^`,
+]);
+if (unicodeGrammarTestParent !== null) {
+    expect(
+        unicodeGrammarTestParent.trim() ===
+            UNICODE_GRAMMAR_BASE_COMMIT,
+        "Unicode grammar test commit is not based on its recorded base",
+    );
+}
+const unicodeGrammarImplementationParent = gitOptional([
+    "rev-parse",
+    `${UNICODE_GRAMMAR_IMPLEMENTATION_COMMIT}^`,
+]);
+if (unicodeGrammarImplementationParent !== null) {
+    expect(
+        unicodeGrammarImplementationParent.trim() ===
+            UNICODE_GRAMMAR_TEST_COMMIT,
+        "Unicode grammar implementation commit is not based on its locked tests",
     );
 }
 

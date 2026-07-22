@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5",
+  "revision_id": "testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5-r1",
+  "cells": [
+    {
+      "test_port": "primary",
+      "test_commit": "56c71bf5f9cfd1d0ed5feaa2b55d3c35506f9ea0",
+      "implementation_port": "primary-antlr-ng",
+      "implementation_commit": "8eaedb9fa7e301554126a5185fd089c068bcade2",
+      "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_unicode_grammar::disabled_surrogate_pair_literal::matches_java_interps -- --exact",
+      "result": "green: 1 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the primary implementation passed the locked primary tests"
+}

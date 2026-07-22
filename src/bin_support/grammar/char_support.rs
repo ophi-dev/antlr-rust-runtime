@@ -272,15 +272,6 @@ mod tests {
             get_string_from_grammar_string_literal("foo\\u{bb}bb"),
             Some("oo\u{bb}b".to_owned())
         );
-        assert_eq!(
-            get_string_from_grammar_string_literal("'\\uD83C\\uDF0D'"),
-            Some("\u{1f30d}".to_owned())
-        );
-        assert_eq!(
-            decode_string_literal("'\\uD83C\\uDF0D'"),
-            Ok(vec![0x1_f30d])
-        );
-        assert_eq!(decode_string_literal("'\\uD83C'"), Ok(vec![0xd83c]));
     }
 
     #[test]

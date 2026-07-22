@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodegrammar-unicodebmpliteralingrammar-4e3b8e43e6",
+  "revision_id": "testunicodegrammar-unicodebmpliteralingrammar-4e3b8e43e6-r1",
+  "cells": [
+    {
+      "test_port": "coverage-extension",
+      "test_commit": "56c71bf5f9cfd1d0ed5feaa2b55d3c35506f9ea0",
+      "implementation_port": "existing-primary-antlr-ng",
+      "implementation_commit": "6af469975f18f22cb0e0edd55834585edbe1a0bd",
+      "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_unicode_grammar::bmp_literal::matches_java_interps -- --exact",
+      "result": "green: 1 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the case-specific test passed against the existing Phase B implementation"
+}

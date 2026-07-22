@@ -1,0 +1,135 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodegrammar-unicodesmprangeingrammar-69d43e47cb",
+  "revision_id": "testunicodegrammar-unicodesmprangeingrammar-69d43e47cb-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "resolution": "verified-covered-existing",
+  "closure": {
+    "logical_id": "testunicodegrammar-unicodesmprangeingrammar-69d43e47cb",
+    "source_case_ids": [
+      "antlr-ng:testunicodegrammar-unicodesmprangeingrammar@1657d579dcc9",
+      "java-antlr:testunicodegrammar-unicodesmprangeingrammar@1657d579dcc9"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/Unicode.g4",
+      "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/Unicode.interp",
+      "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/Unicode.tokens",
+      "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/UnicodeLexer.interp",
+      "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/UnicodeLexer.tokens",
+      "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/fixture.json",
+      "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/oracle/java-unicode-data.stdout"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_unicode_grammar::smp_range::matches_java_interps",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust lexer and parser serialization matches both complete Java 4.13.2 .interp files for TestUnicodeGrammar.unicodeSMPRangeInGrammar",
+    "scaffold_commit": "6af469975f18f22cb0e0edd55834585edbe1a0bd",
+    "primary_test_commit": "56c71bf5f9cfd1d0ed5feaa2b55d3c35506f9ea0",
+    "resolution": "verified-covered-existing"
+  },
+  "closure_sha256": "c7350cdfdf6e3aaf07b9fd7012bce800b2fb862c34683b11d0b114e35f887a64",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testunicodegrammar-unicodesmprangeingrammar@1657d579dcc9",
+      "path": "tests/TestUnicodeGrammar.spec.ts",
+      "sha256": "75bdc0dd144c21131a1b1af9bf8aab01b6ad50f35d0e15ae3dde515b1b39dd81"
+    },
+    {
+      "source_case_id": "java-antlr:testunicodegrammar-unicodesmprangeingrammar@1657d579dcc9",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestUnicodeGrammar.java",
+      "sha256": "42cddf707e13976a08ac763b4a46d6c04c4b94d28b90877ba466ab3cc41ba029"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/Unicode.g4",
+      "sha256": "9243774d47625275cb40484e99679ac2f9322ae8e171f7f1051fd214c5f03b1e"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/Unicode.interp",
+      "sha256": "600708bcd1b5a7e52493592280453a26a465a93354a7c4da05063398a9b11ed8"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/Unicode.tokens",
+      "sha256": "2acb7b2214a485f0e3c1ba47f204055042858231db21f87d10ad4ada94c99789"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/UnicodeLexer.interp",
+      "sha256": "4ab83fe088e6afcf68b8a0581341c93c110c45c692c44421dbb3a2fce5b6abcb"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/UnicodeLexer.tokens",
+      "sha256": "2acb7b2214a485f0e3c1ba47f204055042858231db21f87d10ad4ada94c99789"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/fixture.json",
+      "sha256": "71b9a357ab407ceb54e89b9b36b3ddde367c49b938647dc93223c91ca2d73409"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    }
+  ],
+  "commits": {
+    "scaffold": "6af469975f18f22cb0e0edd55834585edbe1a0bd",
+    "primary_test": "56c71bf5f9cfd1d0ed5feaa2b55d3c35506f9ea0",
+    "primary_implementation": "6af469975f18f22cb0e0edd55834585edbe1a0bd"
+  },
+  "ancestry": {
+    "primary_test_parent": "6af469975f18f22cb0e0edd55834585edbe1a0bd",
+    "primary_implementation_parent": "f63d755c5c91c311879703a8af91777017e075c1",
+    "reachability": "the case-specific .interp test passed against the direct compiler implementation in its parent"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_unicode_grammar {",
+      "end_marker": "\n    fn assert_combined_fixture",
+      "sha256": "b8fba5737f3986600093df0384a99de1f557b9fe2bbebbe20f6c9b892c9450a8"
+    }
+  ],
+  "verified_covered_existing": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_unicode_grammar::smp_range::matches_java_interps -- --exact",
+    "commit": "56c71bf5f9cfd1d0ed5feaa2b55d3c35506f9ea0",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed",
+    "covering_implementation_commit": "6af469975f18f22cb0e0edd55834585edbe1a0bd"
+  },
+  "green_result": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_unicode_grammar::smp_range::matches_java_interps -- --exact",
+    "commit": "56c71bf5f9cfd1d0ed5feaa2b55d3c35506f9ea0",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/revisions/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb-r1/oracle-results/declared-sources.json",
+      "sha256": "f599eb6a0ef621c456acb540e153d3ffa0208020914e4d356236a6ae1e5f0b1c"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/revisions/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb-r1/matrix-results/results.json",
+      "sha256": "e9d39822b1d4861e574d0d7667863d1144e012d5ab66b6ad5d5a18db66ae839a"
+    }
+  ]
+}

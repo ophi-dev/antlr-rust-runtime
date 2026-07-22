@@ -48,6 +48,9 @@ import {
     UNICODE_ESCAPE_IMPLEMENTATION_COMMIT,
     UNICODE_ESCAPE_SCAFFOLD_COMMIT,
     UNICODE_ESCAPE_TEST_COMMIT,
+    UNICODE_GRAMMAR_BASE_COMMIT,
+    UNICODE_GRAMMAR_IMPLEMENTATION_COMMIT,
+    UNICODE_GRAMMAR_TEST_COMMIT,
     VOCABULARY_BASE_COMMIT,
     VOCABULARY_IMPLEMENTATION_COMMIT,
     VOCABULARY_TEST_COMMIT,
@@ -321,6 +324,56 @@ const UNICODE_DATA_TEST_NAMES = new Map([
     [
         "modifyingUnicodeDataShouldThrow",
         "modifying_unicode_data_should_throw_matches_java",
+    ],
+]);
+const UNICODE_GRAMMAR_TEST_PREFIX =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_unicode_grammar::";
+const UNICODE_GRAMMAR_PORTS = new Map([
+    [
+        "testunicodegrammar-binarygrammar-611ebe1d6f",
+        {
+            testName: "binary",
+            resolution: "verified-covered-existing",
+        },
+    ],
+    [
+        "testunicodegrammar-matchingdanglingsurrogateininput-8b7976ab4f",
+        {
+            testName: "dangling_surrogate",
+            resolution: "ported",
+            redFingerprint:
+                "G4L002: Unicode escape is not a scalar value: 0xd83c",
+        },
+    ],
+    [
+        "testunicodegrammar-unicodebmpliteralingrammar-4e3b8e43e6",
+        {
+            testName: "bmp_literal",
+            resolution: "verified-covered-existing",
+        },
+    ],
+    [
+        "testunicodegrammar-unicodesmpliteralingrammar-b41d70815f",
+        {
+            testName: "smp_literal",
+            resolution: "verified-covered-existing",
+        },
+    ],
+    [
+        "testunicodegrammar-unicodesmprangeingrammar-69d43e47cb",
+        {
+            testName: "smp_range",
+            resolution: "verified-covered-existing",
+        },
+    ],
+    [
+        "testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5",
+        {
+            testName: "disabled_surrogate_pair_literal",
+            resolution: "ported",
+            redFingerprint:
+                "G4L002: Unicode escape is not a scalar value: 0xd83c",
+        },
     ],
 ]);
 const CHAR_SUPPORT_PORTS = new Map([
@@ -890,6 +943,9 @@ function completedPhaseBRow(
                                 : completed.kind === "unicode-data"
                                   ? `direct Rust Unicode property data matches Java 4.13.2 ` +
                                     `for ${cases[0].suite}.${cases[0].name}`
+                                  : completed.kind === "unicode-grammar"
+                                    ? `direct Rust lexer and parser serialization matches both complete ` +
+                                      `Java 4.13.2 .interp files for ${cases[0].suite}.${cases[0].name}`
                         : `direct Rust semantic diagnostics match Java 4.13.2 exactly ` +
                           `for ${cases[0].suite}.${cases[0].name}`;
     const coveredExisting =
@@ -1271,6 +1327,32 @@ async function loadCompletedPhaseBPorts() {
             `expected 18 completed TestUnicodeData ports, found ${unicodeDataGroups.size}`,
         );
     }
+    for (const [logicalId, definition] of UNICODE_GRAMMAR_PORTS) {
+        ports.set(logicalId, {
+            fixturePaths: await fixturePaths(logicalId),
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_unicode_grammar::" +
+                `${definition.testName}::matches_java_interps`,
+            kind: "unicode-grammar",
+            resolution: definition.resolution,
+            scaffoldCommit: UNICODE_GRAMMAR_BASE_COMMIT,
+            testCommit: UNICODE_GRAMMAR_TEST_COMMIT,
+            implementationCommit:
+                definition.resolution === "ported"
+                    ? UNICODE_GRAMMAR_IMPLEMENTATION_COMMIT
+                    : UNICODE_GRAMMAR_BASE_COMMIT,
+            testCommand:
+                `${UNICODE_GRAMMAR_TEST_PREFIX}${definition.testName}` +
+                "::matches_java_interps -- --exact",
+            greenResult: "1 passed; 0 failed",
+            redFingerprint: definition.redFingerprint,
+        });
+    }
+    if (UNICODE_GRAMMAR_PORTS.size !== 6) {
+        throw new Error(
+            `expected 6 completed TestUnicodeGrammar ports, found ${UNICODE_GRAMMAR_PORTS.size}`,
+        );
+    }
     const scopeGroups = new Map();
     for (const testCase of inventory.cases) {
         if (testCase.suite !== "TestScopeParsing") {
@@ -1309,8 +1391,8 @@ async function loadCompletedPhaseBPorts() {
             `expected 47 completed TestScopeParsing ports, found ${scopeGroups.size}`,
         );
     }
-    if (ports.size !== 191) {
-        throw new Error(`expected 191 completed Phase B ports, found ${ports.size}`);
+    if (ports.size !== 197) {
+        throw new Error(`expected 197 completed Phase B ports, found ${ports.size}`);
     }
     return ports;
 }

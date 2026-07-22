@@ -32573,8 +32573,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodegrammar-binarygrammar-611ebe1d6f-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodegrammar-binarygrammar-611ebe1d6f",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_unicode_grammar::binary::matches_java_interps",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -32594,22 +32595,50 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeGrammar.binaryGrammar behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust lexer and parser serialization matches both complete Java 4.13.2 .interp files for TestUnicodeGrammar.binaryGrammar",
+      "scaffold_commit": "6af469975f18f22cb0e0edd55834585edbe1a0bd",
+      "primary_test_commit": "56c71bf5f9cfd1d0ed5feaa2b55d3c35506f9ea0",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_unicode_grammar::binary::matches_java_interps -- --exact",
+        "commit": "56c71bf5f9cfd1d0ed5feaa2b55d3c35506f9ea0",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "6af469975f18f22cb0e0edd55834585edbe1a0bd",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_unicode_grammar::binary::matches_java_interps -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodegrammar-binarygrammar-611ebe1d6f",
         "source_case_ids": [
           "java-antlr:testunicodegrammar-binarygrammar@6530a5b1deb0"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testunicodegrammar-binarygrammar-611ebe1d6f/Binary.g4",
+          "tests/codegen-direct/fixtures/testunicodegrammar-binarygrammar-611ebe1d6f/Binary.interp",
+          "tests/codegen-direct/fixtures/testunicodegrammar-binarygrammar-611ebe1d6f/Binary.tokens",
+          "tests/codegen-direct/fixtures/testunicodegrammar-binarygrammar-611ebe1d6f/BinaryLexer.interp",
+          "tests/codegen-direct/fixtures/testunicodegrammar-binarygrammar-611ebe1d6f/BinaryLexer.tokens",
+          "tests/codegen-direct/fixtures/testunicodegrammar-binarygrammar-611ebe1d6f/fixture.json",
+          "tests/codegen-direct/fixtures/testunicodegrammar-binarygrammar-611ebe1d6f/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testunicodegrammar-binarygrammar-611ebe1d6f/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testunicodegrammar-binarygrammar-611ebe1d6f/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testunicodegrammar-binarygrammar-611ebe1d6f/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodegrammar-binarygrammar-611ebe1d6f",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_unicode_grammar::binary::matches_java_interps",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeGrammar.binaryGrammar behavior"
+        "observable": "direct Rust lexer and parser serialization matches both complete Java 4.13.2 .interp files for TestUnicodeGrammar.binaryGrammar",
+        "scaffold_commit": "6af469975f18f22cb0e0edd55834585edbe1a0bd",
+        "primary_test_commit": "56c71bf5f9cfd1d0ed5feaa2b55d3c35506f9ea0",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "fc3bbae4f3998824f83ffc1ac7b274252056c4b156d0380b11e724a7a5d12db0",
-      "evidence_path": null
+      "closure_sha256": "ffd45554009a303fe92bb83d97938e8650db6b951083b88a160d9bb2d1f66dd9",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodegrammar-binarygrammar-611ebe1d6f"
     },
     {
       "logical_id": "testunicodegrammar-matchingdanglingsurrogateininput-8b7976ab4f",
@@ -32621,8 +32650,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodegrammar-matchingdanglingsurrogateininput-8b7976ab4f-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodegrammar-matchingdanglingsurrogateininput-8b7976ab4f",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_unicode_grammar::dangling_surrogate::matches_java_interps",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -32643,8 +32672,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeGrammar.matchingDanglingSurrogateInInput behavior",
+      "expected_red_failure_fingerprint": "G4L002: Unicode escape is not a scalar value: 0xd83c",
+      "observable_equivalence": "direct Rust lexer and parser serialization matches both complete Java 4.13.2 .interp files for TestUnicodeGrammar.matchingDanglingSurrogateInInput",
+      "scaffold_commit": "6af469975f18f22cb0e0edd55834585edbe1a0bd",
+      "primary_test_commit": "56c71bf5f9cfd1d0ed5feaa2b55d3c35506f9ea0",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_unicode_grammar::dangling_surrogate::matches_java_interps -- --exact",
+        "exit_code": 101,
+        "fingerprint": "G4L002: Unicode escape is not a scalar value: 0xd83c"
+      },
+      "primary_implementation_commit": "8eaedb9fa7e301554126a5185fd089c068bcade2",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_unicode_grammar::dangling_surrogate::matches_java_interps -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodegrammar-matchingdanglingsurrogateininput-8b7976ab4f",
         "source_case_ids": [
@@ -32652,14 +32693,28 @@
           "java-antlr:testunicodegrammar-matchingdanglingsurrogateininput@b98d4503cea1"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testunicodegrammar-matchingdanglingsurrogateininput-8b7976ab4f/Unicode.g4",
+          "tests/codegen-direct/fixtures/testunicodegrammar-matchingdanglingsurrogateininput-8b7976ab4f/Unicode.interp",
+          "tests/codegen-direct/fixtures/testunicodegrammar-matchingdanglingsurrogateininput-8b7976ab4f/Unicode.tokens",
+          "tests/codegen-direct/fixtures/testunicodegrammar-matchingdanglingsurrogateininput-8b7976ab4f/UnicodeLexer.interp",
+          "tests/codegen-direct/fixtures/testunicodegrammar-matchingdanglingsurrogateininput-8b7976ab4f/UnicodeLexer.tokens",
+          "tests/codegen-direct/fixtures/testunicodegrammar-matchingdanglingsurrogateininput-8b7976ab4f/fixture.json",
+          "tests/codegen-direct/fixtures/testunicodegrammar-matchingdanglingsurrogateininput-8b7976ab4f/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testunicodegrammar-matchingdanglingsurrogateininput-8b7976ab4f/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testunicodegrammar-matchingdanglingsurrogateininput-8b7976ab4f/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testunicodegrammar-matchingdanglingsurrogateininput-8b7976ab4f/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodegrammar-matchingdanglingsurrogateininput-8b7976ab4f",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_unicode_grammar::dangling_surrogate::matches_java_interps",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeGrammar.matchingDanglingSurrogateInInput behavior"
+        "observable": "direct Rust lexer and parser serialization matches both complete Java 4.13.2 .interp files for TestUnicodeGrammar.matchingDanglingSurrogateInInput",
+        "scaffold_commit": "6af469975f18f22cb0e0edd55834585edbe1a0bd",
+        "primary_test_commit": "56c71bf5f9cfd1d0ed5feaa2b55d3c35506f9ea0"
       },
-      "closure_sha256": "5bdaff9be815bf414ee778c22906cc29b24457c42a4c28bf25c7399bf981be59",
-      "evidence_path": null
+      "closure_sha256": "a090e93f4f3a4d5798fd378d8409a64e4fe72228f67808e4f00345710d560497",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodegrammar-matchingdanglingsurrogateininput-8b7976ab4f"
     },
     {
       "logical_id": "testunicodegrammar-unicodebmpliteralingrammar-4e3b8e43e6",
@@ -32671,8 +32726,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodegrammar-unicodebmpliteralingrammar-4e3b8e43e6-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodegrammar-unicodebmpliteralingrammar-4e3b8e43e6",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_unicode_grammar::bmp_literal::matches_java_interps",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -32693,8 +32749,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeGrammar.unicodeBMPLiteralInGrammar behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust lexer and parser serialization matches both complete Java 4.13.2 .interp files for TestUnicodeGrammar.unicodeBMPLiteralInGrammar",
+      "scaffold_commit": "6af469975f18f22cb0e0edd55834585edbe1a0bd",
+      "primary_test_commit": "56c71bf5f9cfd1d0ed5feaa2b55d3c35506f9ea0",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_unicode_grammar::bmp_literal::matches_java_interps -- --exact",
+        "commit": "56c71bf5f9cfd1d0ed5feaa2b55d3c35506f9ea0",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "6af469975f18f22cb0e0edd55834585edbe1a0bd",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_unicode_grammar::bmp_literal::matches_java_interps -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodegrammar-unicodebmpliteralingrammar-4e3b8e43e6",
         "source_case_ids": [
@@ -32702,14 +32771,29 @@
           "java-antlr:testunicodegrammar-unicodebmpliteralingrammar@3b7b4af387e2"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodebmpliteralingrammar-4e3b8e43e6/Unicode.g4",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodebmpliteralingrammar-4e3b8e43e6/Unicode.interp",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodebmpliteralingrammar-4e3b8e43e6/Unicode.tokens",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodebmpliteralingrammar-4e3b8e43e6/UnicodeLexer.interp",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodebmpliteralingrammar-4e3b8e43e6/UnicodeLexer.tokens",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodebmpliteralingrammar-4e3b8e43e6/fixture.json",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodebmpliteralingrammar-4e3b8e43e6/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodebmpliteralingrammar-4e3b8e43e6/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodebmpliteralingrammar-4e3b8e43e6/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodebmpliteralingrammar-4e3b8e43e6/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodegrammar-unicodebmpliteralingrammar-4e3b8e43e6",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_unicode_grammar::bmp_literal::matches_java_interps",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeGrammar.unicodeBMPLiteralInGrammar behavior"
+        "observable": "direct Rust lexer and parser serialization matches both complete Java 4.13.2 .interp files for TestUnicodeGrammar.unicodeBMPLiteralInGrammar",
+        "scaffold_commit": "6af469975f18f22cb0e0edd55834585edbe1a0bd",
+        "primary_test_commit": "56c71bf5f9cfd1d0ed5feaa2b55d3c35506f9ea0",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "75140f54026b25f23e1a1721047edb424bae37d911825f4e9ef9ae7e0631b195",
-      "evidence_path": null
+      "closure_sha256": "899c218aebbedfe4f2690a22f0370cacc3cdec85fec7c91c6a1c2a0f91bf9d69",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodegrammar-unicodebmpliteralingrammar-4e3b8e43e6"
     },
     {
       "logical_id": "testunicodegrammar-unicodesmpliteralingrammar-b41d70815f",
@@ -32721,8 +32805,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodegrammar-unicodesmpliteralingrammar-b41d70815f-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodegrammar-unicodesmpliteralingrammar-b41d70815f",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_unicode_grammar::smp_literal::matches_java_interps",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -32743,8 +32828,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeGrammar.unicodeSMPLiteralInGrammar behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust lexer and parser serialization matches both complete Java 4.13.2 .interp files for TestUnicodeGrammar.unicodeSMPLiteralInGrammar",
+      "scaffold_commit": "6af469975f18f22cb0e0edd55834585edbe1a0bd",
+      "primary_test_commit": "56c71bf5f9cfd1d0ed5feaa2b55d3c35506f9ea0",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_unicode_grammar::smp_literal::matches_java_interps -- --exact",
+        "commit": "56c71bf5f9cfd1d0ed5feaa2b55d3c35506f9ea0",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "6af469975f18f22cb0e0edd55834585edbe1a0bd",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_unicode_grammar::smp_literal::matches_java_interps -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodegrammar-unicodesmpliteralingrammar-b41d70815f",
         "source_case_ids": [
@@ -32752,14 +32850,29 @@
           "java-antlr:testunicodegrammar-unicodesmpliteralingrammar@c71acd901f77"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmpliteralingrammar-b41d70815f/Unicode.g4",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmpliteralingrammar-b41d70815f/Unicode.interp",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmpliteralingrammar-b41d70815f/Unicode.tokens",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmpliteralingrammar-b41d70815f/UnicodeLexer.interp",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmpliteralingrammar-b41d70815f/UnicodeLexer.tokens",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmpliteralingrammar-b41d70815f/fixture.json",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmpliteralingrammar-b41d70815f/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmpliteralingrammar-b41d70815f/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmpliteralingrammar-b41d70815f/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmpliteralingrammar-b41d70815f/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodegrammar-unicodesmpliteralingrammar-b41d70815f",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_unicode_grammar::smp_literal::matches_java_interps",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeGrammar.unicodeSMPLiteralInGrammar behavior"
+        "observable": "direct Rust lexer and parser serialization matches both complete Java 4.13.2 .interp files for TestUnicodeGrammar.unicodeSMPLiteralInGrammar",
+        "scaffold_commit": "6af469975f18f22cb0e0edd55834585edbe1a0bd",
+        "primary_test_commit": "56c71bf5f9cfd1d0ed5feaa2b55d3c35506f9ea0",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "87a6162f2fc16db988d0ba4d13b9b9a1915ec58564bf6fca2a965dd36950a8db",
-      "evidence_path": null
+      "closure_sha256": "37cb98ca34d711693780bc4d5fd23ac437ac00f93d90a6e502920704dc652da6",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodegrammar-unicodesmpliteralingrammar-b41d70815f"
     },
     {
       "logical_id": "testunicodegrammar-unicodesmprangeingrammar-69d43e47cb",
@@ -32771,8 +32884,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodegrammar-unicodesmprangeingrammar-69d43e47cb-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_unicode_grammar::smp_range::matches_java_interps",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -32793,8 +32907,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeGrammar.unicodeSMPRangeInGrammar behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust lexer and parser serialization matches both complete Java 4.13.2 .interp files for TestUnicodeGrammar.unicodeSMPRangeInGrammar",
+      "scaffold_commit": "6af469975f18f22cb0e0edd55834585edbe1a0bd",
+      "primary_test_commit": "56c71bf5f9cfd1d0ed5feaa2b55d3c35506f9ea0",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_unicode_grammar::smp_range::matches_java_interps -- --exact",
+        "commit": "56c71bf5f9cfd1d0ed5feaa2b55d3c35506f9ea0",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "6af469975f18f22cb0e0edd55834585edbe1a0bd",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_unicode_grammar::smp_range::matches_java_interps -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodegrammar-unicodesmprangeingrammar-69d43e47cb",
         "source_case_ids": [
@@ -32802,14 +32929,29 @@
           "java-antlr:testunicodegrammar-unicodesmprangeingrammar@1657d579dcc9"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/Unicode.g4",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/Unicode.interp",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/Unicode.tokens",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/UnicodeLexer.interp",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/UnicodeLexer.tokens",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/fixture.json",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_unicode_grammar::smp_range::matches_java_interps",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeGrammar.unicodeSMPRangeInGrammar behavior"
+        "observable": "direct Rust lexer and parser serialization matches both complete Java 4.13.2 .interp files for TestUnicodeGrammar.unicodeSMPRangeInGrammar",
+        "scaffold_commit": "6af469975f18f22cb0e0edd55834585edbe1a0bd",
+        "primary_test_commit": "56c71bf5f9cfd1d0ed5feaa2b55d3c35506f9ea0",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "b4023cb2fa2c627ac06a4568219b43c99393ec382322fd66a8e4038b5451db38",
-      "evidence_path": null
+      "closure_sha256": "c7350cdfdf6e3aaf07b9fd7012bce800b2fb862c34683b11d0b114e35f887a64",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb"
     },
     {
       "logical_id": "testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5",
@@ -32820,8 +32962,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_unicode_grammar::disabled_surrogate_pair_literal::matches_java_interps",
       "primary_test_source": {
         "implementation": "independent-generated-oracle",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -32841,22 +32983,48 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestUnicodeGrammar.unicodeSurrogatePairLiteralInGrammar behavior",
+      "expected_red_failure_fingerprint": "G4L002: Unicode escape is not a scalar value: 0xd83c",
+      "observable_equivalence": "direct Rust lexer and parser serialization matches both complete Java 4.13.2 .interp files for TestUnicodeGrammar.unicodeSurrogatePairLiteralInGrammar",
+      "scaffold_commit": "6af469975f18f22cb0e0edd55834585edbe1a0bd",
+      "primary_test_commit": "56c71bf5f9cfd1d0ed5feaa2b55d3c35506f9ea0",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_unicode_grammar::disabled_surrogate_pair_literal::matches_java_interps -- --exact",
+        "exit_code": 101,
+        "fingerprint": "G4L002: Unicode escape is not a scalar value: 0xd83c"
+      },
+      "primary_implementation_commit": "8eaedb9fa7e301554126a5185fd089c068bcade2",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_unicode_grammar::disabled_surrogate_pair_literal::matches_java_interps -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5",
         "source_case_ids": [
           "antlr-ng:testunicodegrammar-unicodesurrogatepairliteralingrammar@fdc2cddea6ad"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/Unicode.g4",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/Unicode.interp",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/Unicode.tokens",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/UnicodeLexer.interp",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/UnicodeLexer.tokens",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/fixture.json",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_unicode_grammar::disabled_surrogate_pair_literal::matches_java_interps",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestUnicodeGrammar.unicodeSurrogatePairLiteralInGrammar behavior"
+        "observable": "direct Rust lexer and parser serialization matches both complete Java 4.13.2 .interp files for TestUnicodeGrammar.unicodeSurrogatePairLiteralInGrammar",
+        "scaffold_commit": "6af469975f18f22cb0e0edd55834585edbe1a0bd",
+        "primary_test_commit": "56c71bf5f9cfd1d0ed5feaa2b55d3c35506f9ea0"
       },
-      "closure_sha256": "77a85efe8e658c02e5ccaf1e92c29ab4c6bfce32cb51bae9d4f0a7129b990728",
-      "evidence_path": null
+      "closure_sha256": "3071f9cd717b96726292adaba59d2c62aa32c2b1c7286dd2e7b2cf620a59b07e",
+      "evidence_path": "tests/codegen-direct/port-evidence/testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5"
     },
     {
       "logical_id": "testutils-testcapitalize-9a243dde5b",

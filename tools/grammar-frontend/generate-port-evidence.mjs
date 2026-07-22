@@ -55,6 +55,10 @@ import {
     UNICODE_ESCAPE_IMPLEMENTATION_COMMIT,
     UNICODE_ESCAPE_SCAFFOLD_COMMIT,
     UNICODE_ESCAPE_TEST_COMMIT,
+    UNICODE_GRAMMAR_BASE_COMMIT,
+    UNICODE_GRAMMAR_BASE_PARENT_COMMIT,
+    UNICODE_GRAMMAR_IMPLEMENTATION_COMMIT,
+    UNICODE_GRAMMAR_TEST_COMMIT,
     VOCABULARY_BASE_COMMIT,
     VOCABULARY_IMPLEMENTATION_COMMIT,
     VOCABULARY_TEST_COMMIT,
@@ -131,6 +135,12 @@ const UNICODE_ESCAPE_TEST_MARKER = "#[cfg(test)]\nmod tests {";
 const UNICODE_DATA_TEST_PATH =
     "src/bin_support/grammar/unicode.rs";
 const UNICODE_DATA_TEST_MARKER = "#[cfg(test)]\nmod tests {";
+const UNICODE_GRAMMAR_TEST_PATH =
+    "src/bin_support/grammar/atn/interp_test.rs";
+const UNICODE_GRAMMAR_TEST_START =
+    "    mod upstream_unicode_grammar {";
+const UNICODE_GRAMMAR_TEST_END =
+    "\n    fn assert_combined_fixture";
 const EMPTY_VOCABULARY_LOGICAL_ID =
     "testvocabulary-testemptyvocabulary-66d31ad014";
 const SYMBOL_INFO_SHA256 =
@@ -967,6 +977,53 @@ const unicodeDataLockedSections = [
         sha256: digest(checkedInUnicodeDataTests),
     },
 ];
+const checkedInUnicodeGrammarTests = sectionBetweenMarkers(
+    await readFile(resolve(repoRoot, UNICODE_GRAMMAR_TEST_PATH), "utf8"),
+    UNICODE_GRAMMAR_TEST_START,
+    UNICODE_GRAMMAR_TEST_END,
+);
+const recordedUnicodeGrammarTests = gitShowOptional(
+    repoRoot,
+    UNICODE_GRAMMAR_TEST_COMMIT,
+    UNICODE_GRAMMAR_TEST_PATH,
+);
+const implementedUnicodeGrammarTests = gitShowOptional(
+    repoRoot,
+    UNICODE_GRAMMAR_IMPLEMENTATION_COMMIT,
+    UNICODE_GRAMMAR_TEST_PATH,
+);
+if (
+    recordedUnicodeGrammarTests === null ||
+    sectionBetweenMarkers(
+        recordedUnicodeGrammarTests,
+        UNICODE_GRAMMAR_TEST_START,
+        UNICODE_GRAMMAR_TEST_END,
+    ) !== checkedInUnicodeGrammarTests
+) {
+    throw new Error(
+        "checked-in Unicode grammar ports differ from their test commit",
+    );
+}
+if (
+    implementedUnicodeGrammarTests === null ||
+    sectionBetweenMarkers(
+        implementedUnicodeGrammarTests,
+        UNICODE_GRAMMAR_TEST_START,
+        UNICODE_GRAMMAR_TEST_END,
+    ) !== checkedInUnicodeGrammarTests
+) {
+    throw new Error(
+        "Unicode grammar implementation changed the locked test ports",
+    );
+}
+const unicodeGrammarLockedSections = [
+    {
+        path: UNICODE_GRAMMAR_TEST_PATH,
+        marker: UNICODE_GRAMMAR_TEST_START,
+        end_marker: UNICODE_GRAMMAR_TEST_END,
+        sha256: digest(checkedInUnicodeGrammarTests),
+    },
+];
 
 const upstreamByLogicalId = new Map(
     testMap.rows.map((row) => [row.logical_id, row]),
@@ -1096,6 +1153,9 @@ for (const row of completedRows) {
     const phaseBUnicodeData = row.logical_id.startsWith(
         "testunicodedata-",
     );
+    const phaseBUnicodeGrammar = row.logical_id.startsWith(
+        "testunicodegrammar-",
+    );
     if (
         row.owner_phase === "B" &&
         !phaseBAtnSerialization &&
@@ -1110,7 +1170,8 @@ for (const row of completedRows) {
         !phaseBNestedAction &&
         !phaseBEscapeSequence &&
         !phaseBUnicodeEscape &&
-        !phaseBUnicodeData
+        !phaseBUnicodeData &&
+        !phaseBUnicodeGrammar
     ) {
         throw new Error(`missing Phase B evidence profile for ${row.logical_id}`);
     }
@@ -1273,6 +1334,22 @@ for (const row of completedRows) {
                                       reachability:
                                           "the case-specific tests passed against the existing generated Unicode data implementation",
                                   }
+                                : phaseBUnicodeGrammar
+                                  ? {
+                                        lockedSections:
+                                            unicodeGrammarLockedSections,
+                                        scaffoldCommit:
+                                            UNICODE_GRAMMAR_BASE_COMMIT,
+                                        testParent:
+                                            UNICODE_GRAMMAR_BASE_COMMIT,
+                                        implementationParent:
+                                            coveredExisting
+                                                ? UNICODE_GRAMMAR_BASE_PARENT_COMMIT
+                                                : UNICODE_GRAMMAR_TEST_COMMIT,
+                                        reachability: coveredExisting
+                                            ? "the case-specific .interp test passed against the direct compiler implementation in its parent"
+                                            : "the surrogate escape implementation commit is directly based on the locked red .interp tests",
+                                    }
           : null;
     await addEvidence({
         logicalId: row.logical_id,
@@ -1400,6 +1477,15 @@ for (const row of completedRows) {
                                           java_compatibility_verdict:
                                               "exact Java 4.13.2 property membership; Rust's read-only slice statically enforces Java's mutation rejection contract",
                                       }
+                                    : phaseBUnicodeGrammar
+                                      ? {
+                                            primary:
+                                                "both complete direct Rust .interp files match the immutable Java 4.13.2 lexer and parser fixtures",
+                                            alternate:
+                                                "the pinned antlr-ng TestUnicodeGrammar case exposes the same compiler-level Unicode literal behavior where available",
+                                            java_compatibility_verdict:
+                                                "exact Java 4.13.2 recognizer metadata and serialized lexer and parser ATN equality",
+                                        }
             : {
                   primary: coveredExisting
                       ? "the case-specific Rust port matches the pinned accepted and rejected syntax outcomes"
@@ -1448,6 +1534,7 @@ for (const row of completedRows) {
             phaseBNestedAction ||
             (phaseBEscapeSequence && !coveredExisting) ||
             phaseBUnicodeEscape ||
+            (phaseBUnicodeGrammar && !coveredExisting) ||
             (phaseBTokenPosition && !coveredExisting)
             ? row.demonstrated_red
             : undefined,

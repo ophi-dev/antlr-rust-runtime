@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testunicodegrammar-unicodesmprangeingrammar-69d43e47cb",
+  "active_revision_id": "testunicodegrammar-unicodesmprangeingrammar-69d43e47cb-r1",
+  "revisions": [
+    {
+      "revision_id": "testunicodegrammar-unicodesmprangeingrammar-69d43e47cb-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb/revisions/testunicodegrammar-unicodesmprangeingrammar-69d43e47cb-r1/manifest.json",
+      "closure_sha256": "c7350cdfdf6e3aaf07b9fd7012bce800b2fb862c34683b11d0b114e35f887a64"
+    }
+  ]
+}

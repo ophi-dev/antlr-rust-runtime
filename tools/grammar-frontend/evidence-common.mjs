@@ -97,6 +97,14 @@ export const UNICODE_DATA_BASE_COMMIT =
     "adb9780e25a8145cff258d641231c3fcea04f710";
 export const UNICODE_DATA_TEST_COMMIT =
     "cd65be4f29e8d710f4d20ee9538e57f863e767d1";
+export const UNICODE_GRAMMAR_BASE_PARENT_COMMIT =
+    "f63d755c5c91c311879703a8af91777017e075c1";
+export const UNICODE_GRAMMAR_BASE_COMMIT =
+    "6af469975f18f22cb0e0edd55834585edbe1a0bd";
+export const UNICODE_GRAMMAR_TEST_COMMIT =
+    "56c71bf5f9cfd1d0ed5feaa2b55d3c35506f9ea0";
+export const UNICODE_GRAMMAR_IMPLEMENTATION_COMMIT =
+    "8eaedb9fa7e301554126a5185fd089c068bcade2";
 
 export function stableStringify(value) {
     if (Array.isArray(value)) {
