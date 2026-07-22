@@ -3,17 +3,20 @@
 [![Crates.io Version](https://img.shields.io/crates/v/antlr-rust-runtime)](https://crates.io/crates/antlr-rust-runtime)
 [![ANTLR Runtime Testsuite](https://github.com/ophi-dev/antlr-rust-runtime/actions/workflows/antlr-runtime-testsuite.yml/badge.svg)](https://github.com/ophi-dev/antlr-rust-runtime/actions/workflows/antlr-runtime-testsuite.yml)
 
-`antlr-rust-runtime` is a pure Rust runtime and metadata generator for ANTLR v4
+`antlr-rust-runtime` is a pure Rust runtime and source generator for ANTLR v4
 lexers and parsers. It is a clean-room implementation written from scratch from
 the public ANTLR runtime contract; it does not vendor or fork an older Rust
 ANTLR runtime.
 
 ## First Steps
 
-### 1. Install ANTLR4
+### 1. Get an ANTLR4 grammar
 
-Follow the ANTLR getting-started guide and install the ANTLR tool jar. The
-runtime tests currently validate against ANTLR `4.13.2`.
+Use your own `.g4` files or a grammar from
+[`antlr/grammars-v4`](https://github.com/antlr/grammars-v4). Rust generation
+does not require Java, Node.js, the ANTLR tool jar, or an intermediate
+`.interp` file. The repository's differential tests use ANTLR `4.13.2` only as
+an explicit compatibility oracle.
 
 ### 2. Install the Rust ANTLR runtime tools
 
@@ -41,78 +44,39 @@ Install the companion generator binary:
 cargo install antlr-rust-runtime --features codegen --bin antlr4-rust-gen
 ```
 
-This installs `antlr4-rust-gen`, which turns ANTLR `.interp` metadata into Rust
+This installs `antlr4-rust-gen`, which compiles ANTLR `.g4` source into Rust
 lexer and parser modules. During generation it also compiles the lexer's DFA
 ahead of time and embeds the tables in the generated lexer, so tokenization
 runs at full speed from the first character with no per-process warmup.
 
 ### 3. Generate your parser
 
-The current release uses a metadata-first generation path:
-
-1. run the official ANTLR tool to produce `.interp` files,
-2. run `antlr4-rust-gen` to emit Rust modules,
-3. compile those modules against `antlr4_runtime`.
+Pass one or more root grammars directly. Imports and `tokenVocab` dependencies
+are resolved from each root's directory and any additional `--lib`/`-I`
+directories.
 
 For a split lexer/parser grammar:
 
 ```bash
-antlr4 MyGrammarLexer.g4 MyGrammarParser.g4
-
 antlr4-rust-gen \
-  --lexer MyGrammarLexer.interp \
-  --parser MyGrammarParser.interp \
+  MyGrammarLexer.g4 \
+  MyGrammarParser.g4 \
+  --lib . \
   --out-dir src/generated
 ```
 
-The checked-in ANTLR `RustTarget`/StringTemplate shell is kept in `tool/` and
-will be expanded around the same runtime contracts.
-
-### Alternative: Generate metadata with antlr-ng
-
-[`antlr-ng`](https://www.antlr-ng.org/introduction.html) is a TypeScript/npm
-parser generator based on ANTLR 4.13.2. It does not currently ship a Rust
-target, but it can produce the same `.interp` metadata that `antlr4-rust-gen`
-uses.
-
-Install it with npm or run it through `npx`:
-
-```bash
-npx -y antlr-ng -Dlanguage=Java -o build/antlr --exact-output-dir true JSON.g4
-```
-
-The `-Dlanguage=Java` option selects one of antlr-ng's bundled code-generation
-targets only so the tool emits grammar artifacts, including `JSONLexer.interp`
-and `JSON.interp`. The Java files can be ignored; Rust code still comes from
-`antlr4-rust-gen`:
-
-```bash
-antlr4-rust-gen \
-  --lexer build/antlr/JSONLexer.interp \
-  --parser build/antlr/JSON.interp \
-  --out-dir src/generated
-```
-
-For local tooling, antlr-ng requires Node.js 20 or newer. See the
-[antlr-ng getting-started guide](https://www.antlr-ng.org/getting-started.html)
-for CLI installation and option details.
+Use multiple roots when a build should emit several independent recognizers in
+one deterministic source-set compilation.
 
 ## Complete Example
 
-Suppose you are using the JSON grammar from `antlr/grammars-v4/json`.
-
-Fetch or copy `JSON.g4`, then generate ANTLR metadata:
-
-```bash
-antlr4 JSON.g4
-```
-
-Generate Rust modules:
+Suppose you are using `JSON.g4` from `antlr/grammars-v4/json`. Generate both
+recognizers directly from the combined grammar:
 
 ```bash
 antlr4-rust-gen \
-  --lexer JSONLexer.interp \
-  --parser JSON.interp \
+  JSON.g4 \
+  --lib . \
   --out-dir src/generated
 ```
 
@@ -122,19 +86,20 @@ Declare the generated modules in your crate:
 mod generated {
     #![allow(dead_code)]
 
-    pub mod json;
     pub mod json_lexer;
+    pub mod json_parser;
 }
 ```
 
 Call the generated parser helper for the compact path:
 
 ```rust
-use generated::json::{self, Json};
 use generated::json_lexer::JsonLexer;
+use generated::json_parser::{self, JsonParser};
 
 fn main() -> Result<(), antlr4_runtime::AntlrError> {
-    let parsed = json::parse(r#"{"a":1}"#, JsonLexer::new, Json::json)?;
+    let parsed =
+        json_parser::parse(r#"{"a":1}"#, JsonLexer::new, JsonParser::json)?;
 
     println!("{}", parsed.tree().text());
     Ok(())
@@ -146,13 +111,17 @@ parser afterward for diagnostics:
 
 ```rust
 use antlr4_runtime::Parser;
-use generated::json::{self, Json};
 use generated::json_lexer::JsonLexer;
+use generated::json_parser::{self, JsonParser};
 
 fn main() -> Result<(), antlr4_runtime::AntlrError> {
-    let output = json::parse_with_parser(r#"{"a":1}"#, JsonLexer::new, Json::json)?;
+    let output = json_parser::parse_with_parser(
+        r#"{"a":1}"#,
+        JsonLexer::new,
+        JsonParser::json,
+    )?;
     let syntax_errors = output.parser.number_of_syntax_errors();
-    let json::JsonParseOutput {
+    let json_parser::JsonParserParseOutput {
         result: tree,
         parser,
     } = output;
@@ -173,14 +142,14 @@ options, or custom error handling before invoking the entry rule:
 
 ```rust
 use antlr4_runtime::{CommonTokenStream, InputStream};
-use generated::json::Json;
 use generated::json_lexer::JsonLexer;
+use generated::json_parser::JsonParser;
 
 fn main() -> Result<(), antlr4_runtime::AntlrError> {
     let mut lexer = JsonLexer::new(InputStream::new(r#"{"a":1}"#));
     lexer.remove_error_listeners();
     let tokens = CommonTokenStream::new(lexer);
-    let mut parser = Json::new(tokens);
+    let mut parser = JsonParser::new(tokens);
     parser.remove_error_listeners();
     let tree = parser.json()?;
 
@@ -202,7 +171,7 @@ nested source and rebuild the token buffer:
 ```rust
 let lexer = JsonLexer::new(InputStream::new(""));
 let tokens = CommonTokenStream::new(lexer);
-let mut parser = Json::new(tokens);
+let mut parser = JsonParser::new(tokens);
 
 for input in [r#"{"a":1}"#, r#"{"b":2}"#] {
     let tokens = parser.token_stream_mut();
@@ -241,8 +210,8 @@ form.
 
 - Pure Rust runtime implementation.
 - Written from scratch as a clean-room implementation.
-- Supports ANTLR serialized lexer ATN deserialization and generator-side
-  compilation of serialized parser ATNs into packed runtime tables.
+- Compiles ANTLR grammar source into lexer ATNs and packed parser runtime
+  tables without an external generator.
 - Supports lexer and parser execution through generated Rust wrappers.
 - Supports real split lexer/parser grammars, including Kotlin smoke builds.
 - Passes every upstream ANTLR runtime-testsuite descriptor discovered by the
@@ -270,10 +239,10 @@ The runtime contains:
 - versioned, packed parser ATN tables embedded directly in generated parsers,
   with rule recognition over borrowing state/transition views
 - canonical `ContextId` prediction graphs pooled with learned parser DFA state
-- `antlr4-rust-gen`, a Rust generator that consumes ANTLR `.interp` metadata and
-  emits Rust modules
+- `antlr4-rust-gen`, a source-only Rust generator that compiles `.g4` roots and
+  their import graph into Rust modules
 - `antlr4-runtime-testsuite`, a harness for running upstream ANTLR
-  runtime-test descriptors through the Rust metadata path
+  runtime-test descriptors through the direct Rust source compiler
 
 See [docs/kotlin-build.md](docs/kotlin-build.md) for the Kotlin smoke workflow.
 See [docs/runtime-testsuite.md](docs/runtime-testsuite.md) for the upstream
@@ -282,9 +251,10 @@ runtime-testsuite harness.
 ### Semantic Predicates and Actions: the Compatibility Boundary
 
 ANTLR grammars may embed **target-language** semantic predicates and actions
-(`{isTypeName()}?`, `{this.count++;}`). The serialized ATN records *where*
-they occur, but not executable code, so a metadata-first runtime cannot run
-arbitrary grammar-embedded snippets. The boundary is:
+(`{isTypeName()}?`, `{this.count++;}`). The direct compiler preserves their
+structural owner, source span, and finalized ATN coordinate, but cannot make
+arbitrary code written for another target language executable as Rust. The
+boundary is:
 
 - **Target-agnostic grammars** — no embedded code, or only built-in lexer
   commands (`skip`, `channel(...)`, `mode(...)`, `type(...)`) — are fully
@@ -292,8 +262,7 @@ arbitrary grammar-embedded snippets. The boundary is:
 - **Recognized predicate/action shapes** — a library of common idioms
   (constant predicates, lookahead text/type checks, integer member counters,
   column predicates, and the upstream testsuite's action templates) — are
-  translated into SemIR by `antlr4-rust-gen` when the grammar source is
-  passed via `--grammar`.
+  translated into SemIR by `antlr4-rust-gen`.
 - **User pattern files** — `--sem-patterns file.toml` can add exact predicate
   rewrites, helper-call rewrites, and per-coordinate `hook` /
   `assume-true` / `assume-false` / `error` dispositions without changing the
@@ -307,15 +276,15 @@ arbitrary grammar-embedded snippets. The boundary is:
   grammar-author source, is a runtime no-op, and is exempt from the `error`
   gate — only actions the author actually wrote in the grammar can fail it.
 
-When `--grammar` is present, the same manifest inventories top-level grammar
-options. Options already represented by ANTLR metadata (`tokenVocab` and
-`caseInsensitive`) are recorded without a warning. Target extension options
-such as `superClass` and `contextSuperClass` warn because the Rust backend
-cannot inherit their target-language implementation automatically. If
-caller-owned Rust hooks provide that behavior, acknowledge the exact option:
+The same manifest inventories top-level grammar options. Options implemented
+by the source compiler (`tokenVocab` and `caseInsensitive`) are recorded
+without a warning. Target extension options such as `superClass` and
+`contextSuperClass` warn because the Rust backend cannot inherit their
+target-language implementation automatically. If caller-owned Rust hooks
+provide that behavior, acknowledge the exact option:
 
 ```bash
-antlr4-rust-gen --lexer L.interp --grammar L.g4 \
+antlr4-rust-gen L.g4 \
     --option-hook superClass=MyLexerBase --out-dir src/generated
 ```
 
@@ -326,7 +295,7 @@ options have the `unsupported` disposition and make
 Unknown coordinates are governed by `--sem-unknown`:
 
 ```bash
-antlr4-rust-gen --lexer L.interp --parser P.interp --grammar G.g4 \
+antlr4-rust-gen L.g4 P.g4 --lib . \
     --out-dir src/generated --sem-unknown error
 ```
 
@@ -440,7 +409,7 @@ Portable lexer commands and the recognized idioms are the target-agnostic
 subset; prefer them when authoring grammars intended for multiple runtimes.
 
 Grammars whose `{ ... }` blocks are already **Rust** can skip translation
-entirely: `antlr4-rust-gen --actions embedded --grammar Foo.g4` splices the
+entirely: `antlr4-rust-gen Foo.g4 --actions embedded` splices the
 bodies verbatim (after `$`-attribute translation) into the generated parser,
 inline at their ATN action/predicate coordinates. This is the mode the
 conformance harness uses after rendering descriptor grammars through
@@ -458,7 +427,8 @@ cargo run --release --quiet --bin antlr4-runtime-testsuite
 The harness runs descriptors the way every official ANTLR target does: each
 descriptor grammar is rendered through `.conformance-review/Rust.test.stg`
 with the real StringTemplate engine, so its actions and predicates become real
-Rust code that is compiled and executed inline.
+Rust code. The rendered `.g4` source graph is then compiled directly by
+`antlr4-rust-gen`, and the resulting code is executed inline.
 
 Run a specific descriptor:
 

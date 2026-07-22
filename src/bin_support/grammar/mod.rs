@@ -23,4 +23,9 @@ mod unicode;
 mod unicode_escape;
 
 #[cfg(test)]
+pub(crate) use semantics::{
+    ParsedAttributeDeclaration as ScopeDecl, parse_attribute_declarations as parse_scope_decls,
+};
+
+#[cfg(test)]
 mod ported_tests;

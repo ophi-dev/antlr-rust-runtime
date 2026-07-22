@@ -38,7 +38,10 @@ tests/kotlin-parity/run.sh \
     --grammars-v4 /tmp/antlr-cleanroom/grammars-v4
 ```
 
-That regenerates the Rust parser from the Kotlin grammar `.interp`, builds `tests/kotlin-parity/dumper`, and asserts the parse trees match `antlr4-python3-runtime` byte-for-byte.
+That generates the Rust recognizers directly from the Kotlin `.g4` source,
+builds `tests/kotlin-parity/dumper`, and asserts the parse trees match
+`antlr4-python3-runtime` byte-for-byte. The ANTLR jar is used only for the
+Python oracle.
 
 ### Measure parse-only timings
 
@@ -81,8 +84,8 @@ each descriptor grammar is rendered through
 `.conformance-review/Rust.test.stg` with the real StringTemplate engine
 (`tools/stg-render/RenderGrammar.java`, executed via the ANTLR jar and the
 Java single-file source launcher), so its actions/predicates become real
-Rust code. The rendered grammar feeds both the ANTLR tool and
-`antlr4-rust-gen --actions embedded`, which splices the bodies verbatim
+Rust code. The rendered grammar feeds `antlr4-rust-gen --actions embedded`
+directly, which splices the bodies verbatim
 after `$`-attribute translation (`src/bin_support/embedded.rs`) and
 generates typed context views, per-rule attrs structs, members
 fields/methods, listener traits, and recognizer facades. `--stg PATH`

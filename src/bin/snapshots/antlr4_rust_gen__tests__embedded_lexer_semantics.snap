@@ -1,0 +1,58 @@
+---
+source: src/bin/antlr4-rust-gen.rs
+expression: entries
+---
+[
+    SemanticsEntry {
+        kind: LexerAction,
+        rule_index: Some(
+            0,
+        ),
+        rule_name: Some(
+            "I",
+        ),
+        index: Some(
+            0,
+        ),
+        atn_state: None,
+        line: Some(
+            4,
+        ),
+        column: Some(
+            10,
+        ),
+        body: Some(
+            "writeln!(self.output(), \"{}\", \"I\");",
+        ),
+        disposition: Translated,
+        template: Some(
+            "Embedded",
+        ),
+    },
+    SemanticsEntry {
+        kind: LexerPredicate,
+        rule_index: Some(
+            1,
+        ),
+        rule_name: Some(
+            "J",
+        ),
+        index: Some(
+            0,
+        ),
+        atn_state: None,
+        line: Some(
+            8,
+        ),
+        column: Some(
+            6,
+        ),
+        body: Some(
+            "self.text() == \"j\"",
+        ),
+        disposition: Translated,
+        template: Some(
+            "Embedded",
+        ),
+    },
+]

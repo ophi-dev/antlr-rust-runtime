@@ -424,11 +424,18 @@ pub(crate) enum LeftRecursiveAlternativeKind {
     Suffix,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct RemovedLeftRecursiveLabel {
+    pub(crate) original_alternative: AlternativeId,
+    pub(crate) label: Label,
+    pub(crate) target: String,
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(crate) struct LeftRecursionInfo {
     pub(crate) original_to_rewritten: BTreeMap<AlternativeId, AlternativeId>,
     pub(crate) alternative_kinds: BTreeMap<AlternativeId, LeftRecursiveAlternativeKind>,
-    pub(crate) deleted_labels: BTreeMap<LabelId, AlternativeId>,
+    pub(crate) deleted_labels: BTreeMap<LabelId, RemovedLeftRecursiveLabel>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

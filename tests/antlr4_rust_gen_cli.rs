@@ -11,8 +11,8 @@ fn run_antlr4_rust_gen(args: &[impl AsRef<OsStr>]) -> Output {
         .expect("antlr4-rust-gen should run")
 }
 
-fn assert_generated_modules_compile(temp: &Path, modules: &[&str]) {
-    let project = temp.join("compile-generated");
+fn assert_generated_modules_compile(temp_dir: &Path, modules: &[&str]) {
+    let project = temp_dir.join("compile-generated");
     let source = project.join("src");
     fs::create_dir_all(&source).expect("generated-module check should be writable");
     fs::write(
@@ -31,13 +31,16 @@ fn assert_generated_modules_compile(temp: &Path, modules: &[&str]) {
     .expect("generated-module manifest should be writable");
     let declarations = modules
         .iter()
-        .map(|module| format!("#[path = {module:?}]\nmod {};", module.replace(".rs", "")))
+        .map(|module| {
+            let module_name = module.strip_suffix(".rs").unwrap_or(module);
+            format!("#[path = {module:?}]\nmod {module_name};")
+        })
         .collect::<Vec<_>>()
         .join("\n");
     fs::write(source.join("lib.rs"), declarations)
         .expect("generated-module crate root should be writable");
     for module in modules {
-        fs::copy(temp.join("generated").join(module), source.join(module))
+        fs::copy(temp_dir.join("generated").join(module), source.join(module))
             .expect("generated module should be copied into the check crate");
     }
 

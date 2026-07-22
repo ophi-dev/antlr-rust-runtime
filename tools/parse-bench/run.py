@@ -326,12 +326,11 @@ def prepare_go_support(
 def generate_rust_modules(
     spec: LanguageSpec,
     grammar_dir: Path,
-    interp_dir: Path,
     rust_generated_dir: Path,
     require_generated_parser: bool,
     runtime_root: Path,
 ) -> None:
-    common = [
+    cmd = [
         "cargo",
         "run",
         "--quiet",
@@ -343,29 +342,17 @@ def generate_rust_modules(
         "--bin",
         "antlr4-rust-gen",
         "--",
+        str(grammar_dir / spec.grammar_files[0]),
+        str(grammar_dir / spec.grammar_files[1]),
+        "--lib",
+        str(grammar_dir),
         "--out-dir",
         str(rust_generated_dir),
-    ]
-    run(
-        [
-            *common,
-            "--lexer",
-            str(interp_dir / f"{spec.lexer_name}.interp"),
-            "--grammar",
-            str(grammar_dir / spec.grammar_files[0]),
-            "--allow-unsupported-lexer-actions",
-        ]
-    )
-    parser_cmd = [
-        *common,
-        "--parser",
-        str(interp_dir / f"{spec.parser_name}.interp"),
-        "--grammar",
-        str(grammar_dir / spec.grammar_files[1]),
+        "--allow-unsupported-lexer-actions",
     ]
     if require_generated_parser:
-        parser_cmd.append("--require-generated-parser")
-    run(parser_cmd)
+        cmd.append("--require-generated-parser")
+    run(cmd)
 
 
 def write_rust_runner(
@@ -1233,12 +1220,9 @@ def prepare_work(
             copy_grammar(spec, args.grammars_v4, base_grammar)
             if spec.name == "java":
                 transform_java(base_grammar)
-            interp_dir = work_dir / "generated" / spec.name / "interp"
-            generate_antlr(args.antlr_jar, spec, base_grammar, interp_dir, None)
             generate_rust_modules(
                 spec,
                 base_grammar,
-                interp_dir,
                 rust_generated,
                 args.rust_generated_only,
                 args.runtime_root,

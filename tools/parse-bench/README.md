@@ -63,7 +63,7 @@ python3 tools/parse-bench/run.py \
 
 The script regenerates parsers into `target/parse-bench`, builds:
 
-- a Rust runner using this runtime and generated `.interp` metadata,
+- a Rust runner generated directly from the grammar source with this runtime,
 - a Python ANTLR runner using `antlr4-python3-runtime`,
 - a Go ANTLR runner using `github.com/antlr4-go/antlr/v4`,
 - a tree-sitter runner using `tree-sitter-language-pack`.
@@ -88,7 +88,7 @@ Dumps land under `<work-dir>/ast-dumps/<language>/`.
 
 Kotlin, Java, and Trino fixtures currently pass this gate. Some C# Mono
 fixtures diverge (preprocessor/`#if` handling differences between the Go support
-base and the Rust `.interp` path) — the check fails those intentionally so
+base and the Rust source-compiled path) — the check fails those intentionally so
 timings are not compared on unequal trees.
 
 ```bash

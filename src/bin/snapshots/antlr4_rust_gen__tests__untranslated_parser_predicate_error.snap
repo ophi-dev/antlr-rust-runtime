@@ -1,0 +1,6 @@
+---
+source: src/bin/antlr4-rust-gen.rs
+expression: message
+---
+unsupported semantic predicate: rule=s(0) pred_index=0 at 4:6: {isTypeName()}
+--sem-unknown=error: 1 semantic coordinate(s) have no Rust implementation and are configured to fail; add a semantic pattern, adjust a coordinate's `dispose`, or accept a documented fallback with --sem-unknown=assume-true / assume-false

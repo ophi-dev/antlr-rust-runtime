@@ -14,7 +14,7 @@ pub const SERIALIZED_VERSION: i32 = 4;
 /// Raw integer form of an ANTLR v4 serialized ATN.
 ///
 /// ANTLR targets commonly embed this data as strings or integer arrays. The
-/// Rust generator emits integer arrays from `.interp` files, while
+/// Rust generator emits integer arrays from its compiled lexer artifact, while
 /// `from_chars` supports targets that encode ATN values in string literals.
 #[derive(Clone, Debug)]
 pub struct SerializedAtn<'a> {

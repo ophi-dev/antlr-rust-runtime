@@ -23,11 +23,12 @@ than letting fmt explode the block to one element per line.
 - `src/lib.rs` — public exports
 - `src/lexer.rs`, `src/atn/lexer.rs` — `BaseLexer` + lexer ATN simulator
 - `src/parser.rs` — `BaseParser` and the recursive `recognize_state_fast` walker
-- `src/atn/`, `src/atn/serialized.rs` — ATN graph + ANTLR `.interp` deserializer
+- `src/atn/`, `src/atn/serialized.rs` — runtime ATN graph and generated lexer
+  artifact deserializer
 - `src/prediction.rs` — compact `ContextId` storage, `AtnConfig`, `PredictionFxHasher`
 - `src/token.rs`, `src/token_stream.rs`, `src/char_stream.rs` — input + token plumbing
 - `src/tree.rs` — public `ParseTree` / `ParserRuleContext`
-- `src/bin/antlr4-rust-gen.rs` — `.interp` → Rust parser code generator
+- `src/bin/antlr4-rust-gen.rs` — `.g4` source to Rust recognizer generator
 - `src/bin/antlr4-runtime-testsuite.rs` — conformance harness (see below)
 - `tests/kotlin-parity/` — Kotlin parity dumper + snippets
 - `tools/parse-bench/` — Python harness comparing rust/go/python/tree-sitter parse times
@@ -36,8 +37,9 @@ than letting fmt explode the block to one element per line.
 
 ```bash
 cargo run --release --features codegen --bin antlr4-rust-gen -- \
-    --lexer  path/to/Foo.interp \
-    --parser path/to/FooParser.interp \
+    path/to/FooLexer.g4 \
+    path/to/FooParser.g4 \
+    --lib path/to \
     --out-dir crates/foo/src/generated
 ```
 
@@ -84,7 +86,10 @@ tests/kotlin-parity/run.sh \
     --grammars-v4 /tmp/antlr-cleanroom/grammars-v4
 ```
 
-That regenerates the Rust parser from the Kotlin grammar `.interp`, builds `tests/kotlin-parity/dumper`, and asserts the parse trees match `antlr4-python3-runtime` byte-for-byte.
+That generates the Rust recognizers directly from the Kotlin `.g4` source,
+builds `tests/kotlin-parity/dumper`, and asserts the parse trees match
+`antlr4-python3-runtime` byte-for-byte. The ANTLR jar is used only for the
+Python oracle.
 
 ### Measure parse-only timings
 
@@ -127,8 +132,8 @@ each descriptor grammar is rendered through
 `.conformance-review/Rust.test.stg` with the real StringTemplate engine
 (`tools/stg-render/RenderGrammar.java`, executed via the ANTLR jar and the
 Java single-file source launcher), so its actions/predicates become real
-Rust code. The rendered grammar feeds both the ANTLR tool and
-`antlr4-rust-gen --actions embedded`, which splices the bodies verbatim
+Rust code. The rendered grammar feeds `antlr4-rust-gen --actions embedded`
+directly, which splices the bodies verbatim
 after `$`-attribute translation (`src/bin_support/embedded.rs`) and
 generates typed context views, per-rule attrs structs, members
 fields/methods, listener traits, and recognizer facades. `--stg PATH`

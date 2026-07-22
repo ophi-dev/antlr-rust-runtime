@@ -8,11 +8,11 @@ typed Rust hooks and keeps the target-specific state in copyable base modules.
 ## Prerequisites
 
 - Rust 1.95 or newer
-- Java 17 or newer
-- ANTLR 4.13.2
 - `antlr/grammars-v4` at the pinned parity commit
+- Java 17 and ANTLR 4.13.2 only when running the Java parity proof
 
 ```bash
+# The jar is an oracle dependency for the parity harness, not Rust generation.
 ANTLR4_JAR=/tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar
 ANTLR_JAR_SHA256=eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76
 mkdir -p /tmp/antlr-cleanroom/tools
@@ -29,47 +29,25 @@ git -C /tmp/antlr-cleanroom/grammars-v4 checkout \
   284602b3f23ca54dc30778204ab7ae9e969145e9
 ```
 
-## Generate ANTLR metadata
-
-Run the ANTLR tool on the unmodified split grammar. The generated Java files
-can be ignored; the Rust generator consumes the `.interp` metadata and the
-original `.g4` sources.
-
-```bash
-GRAMMAR=/tmp/antlr-cleanroom/grammars-v4/javascript/typescript
-BUILD=/tmp/antlr-cleanroom/typescript-rust
-JAR=/tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar
-
-mkdir -p "$BUILD/interp" "$BUILD/lexer" "$BUILD/parser"
-(
-  cd "$GRAMMAR"
-  java -jar "$JAR" -o "$BUILD/interp" -Xexact-output-dir \
-    TypeScriptLexer.g4 TypeScriptParser.g4
-)
-```
-
 ## Generate strict Rust modules
 
 From this repository's root:
 
 ```bash
-cargo run --locked --release --features codegen --bin antlr4-rust-gen -- \
-  --lexer "$BUILD/interp/TypeScriptLexer.interp" \
-  --grammar "$GRAMMAR/TypeScriptLexer.g4" \
-  --sem-patterns patterns/javascript.toml \
-  --option-hook superClass=TypeScriptLexerBase \
-  --sem-unknown error \
-  --require-full-semantics \
-  --out-dir "$BUILD/lexer"
+GRAMMAR=/tmp/antlr-cleanroom/grammars-v4/javascript/typescript
+BUILD=/tmp/antlr-cleanroom/typescript-rust
+mkdir -p "$BUILD/generated"
 
 cargo run --locked --release --features codegen --bin antlr4-rust-gen -- \
-  --parser "$BUILD/interp/TypeScriptParser.interp" \
-  --grammar "$GRAMMAR/TypeScriptParser.g4" \
+  "$GRAMMAR/TypeScriptLexer.g4" \
+  "$GRAMMAR/TypeScriptParser.g4" \
+  --lib "$GRAMMAR" \
   --sem-patterns patterns/javascript.toml \
+  --option-hook superClass=TypeScriptLexerBase \
   --option-hook superClass=TypeScriptParserBase \
   --sem-unknown error \
   --require-full-semantics \
-  --out-dir "$BUILD/parser"
+  --out-dir "$BUILD/generated"
 ```
 
 Every authored action and predicate is either translated or routed to a typed
@@ -81,8 +59,8 @@ otherwise target-specific superclass behavior.
 
 Copy these files into an application crate:
 
-- `$BUILD/lexer/type_script_lexer.rs`
-- `$BUILD/parser/type_script_parser.rs`
+- `$BUILD/generated/type_script_lexer.rs`
+- `$BUILD/generated/type_script_parser.rs`
 - `tests/typescript-parity/dumper/src/typescript_lexer_base.rs`
 - `tests/typescript-parity/dumper/src/typescript_parser_base.rs`
 
@@ -121,14 +99,14 @@ For lower-level diagnostics, fill a `CommonTokenStream` and call
 `Parser::number_of_syntax_errors()` after the entry rule.
 
 The generator intentionally omits `--require-generated-parser`. Rules outside
-the direct recursive-descent compiler use the faithful runtime ATN interpreter,
-which receives the same typed hooks.
+the generated recursive-descent subset use the faithful runtime ATN
+interpreter, which receives the same typed hooks.
 
 ## Run the repository proof
 
 ```bash
 tests/typescript-parity/run.sh \
-  --antlr-jar "$JAR" \
+  --antlr-jar "$ANTLR4_JAR" \
   --grammars-v4 /tmp/antlr-cleanroom/grammars-v4
 ```
 

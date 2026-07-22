@@ -1,34 +1,27 @@
 # Kotlin Grammar Smoke Build
 
-This is the current clean-room path for proving that the runtime can build Rust modules from the ANTLR Kotlin grammar.
+This is the source-only path for building Rust modules from the ANTLR Kotlin
+grammar.
 
 ## Inputs
 
-- Official ANTLR tool jar, tested with `antlr-4.13.2-complete.jar`.
 - Kotlin grammar from `antlr/grammars-v4`, directory `kotlin/kotlin`.
-
-## Generate ANTLR Metadata
-
-```bash
-java -jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar \
-  -o /tmp/antlr-cleanroom/kotlin-java \
-  -Xexact-output-dir \
-  KotlinLexer.g4 KotlinParser.g4
-```
-
-Run this from the Kotlin grammar directory. The files consumed by this repo are:
-
-- `KotlinLexer.interp`
-- `KotlinParser.interp`
 
 ## Generate Rust Modules
 
 ```bash
+GRAMMAR=/tmp/antlr-cleanroom/grammars-v4/kotlin/kotlin
+
 cargo run --features codegen --bin antlr4-rust-gen -- \
-  --lexer /tmp/antlr-cleanroom/kotlin-java/KotlinLexer.interp \
-  --parser /tmp/antlr-cleanroom/kotlin-java/KotlinParser.interp \
+  "$GRAMMAR/KotlinLexer.g4" \
+  "$GRAMMAR/KotlinParser.g4" \
+  --lib "$GRAMMAR" \
+  --require-generated-parser \
   --out-dir /tmp/antlr-cleanroom/kotlin-rust
 ```
+
+`UnicodeClasses.g4` is resolved through `--lib`; it does not need to be listed
+as another root.
 
 This emits:
 

@@ -8,14 +8,16 @@ upstream descriptor files without vendoring them.
 
 The upstream Java/JUnit harness assumes each target can be generated directly with
 `-Dlanguage=<target>` and that target-specific grammar action templates are available.
-This runtime currently uses a clean-room metadata path:
+The Rust harness keeps the upstream descriptor/template contract but uses the
+direct source compiler:
 
-1. the official ANTLR tool emits `.interp` metadata,
-2. `antlr4-rust-gen` emits Rust modules from that metadata,
+1. the ANTLR jar's StringTemplate engine renders each descriptor through
+   `Rust.test.stg`,
+2. `antlr4-rust-gen` compiles the rendered `.g4` root and import graph directly,
 3. the generated modules run against `antlr4_runtime`.
 
-The harness follows that path while still using the upstream descriptor grammar,
-input, stdout, and stderr expectations.
+The jar is used only as the upstream StringTemplate implementation. It does
+not generate Rust metadata or recognizers.
 
 ## Run Full Sweep
 
@@ -60,7 +62,7 @@ Supported now:
 
 - lexer descriptors,
 - parser descriptors with empty stdout/stderr expectations,
-- single-grammar descriptors,
+- single and imported/composite grammar source graphs,
 - descriptor stdout/stderr comparison,
 - grouped lexer recovery diagnostics,
 - farthest-token parser mismatch diagnostics for supported non-recovery
@@ -71,7 +73,7 @@ Supported now:
   supported descriptors,
 - parser extraneous-input diagnostics and error-node parse trees for supported
   single-token deletion descriptors,
-- parser precedence predicates in metadata-driven recognition,
+- parser precedence predicates in ATN recognition,
 - lexer and parser target-template actions for the currently supported stdout
   helpers,
 - parser token-label text actions such as `$TOKEN.text` and `$label.text`,
@@ -112,8 +114,8 @@ Supported now:
 - parser integer-member target templates for semantic-predicate fixtures,
   including `AddMember`, `GetMember`, `ModMemberEquals`, and
   `ModMemberNotEquals`,
-- multi-template parser action blocks and empty regular actions that must stay
-  aligned with serialized ATN action states,
+- multi-template parser action blocks and empty regular actions bound to their
+  finalized ATN action states,
 - parser supported-predicate decision ordering for action-bearing alternatives,
 - listener-suite target templates for `BasicListener`, token/rule getter
   listeners, and the left-recursive listener fixtures,
@@ -136,13 +138,13 @@ Supported now:
 - ANTLR recursive-context tree rewrites for left-recursive parse-tree output,
 - ANTLR whitespace escaping for terminal text in `ToStringTree(...)` output,
 - `StringTemplate` backslash rendering for descriptor grammars,
-- official ANTLR `.interp` generation,
-- Rust module generation and execution through Cargo.
+- direct Rust module generation from rendered grammar source and execution
+  through Cargo.
 
 Not wired yet:
 
 - composite grammar override/member/mixed-action shapes beyond the currently
-  supported import metadata cases,
+  covered descriptor cases,
 - target-template semantic actions beyond the currently supported stdout helpers
   and no-op compile checks,
 - parser error recovery diagnostics beyond the currently supported mismatch,
@@ -151,8 +153,8 @@ Not wired yet:
 - runtime diagnostic/profile/DFA flags beyond the currently modeled ambiguity
   diagnostics and non-default prediction modes.
 
-The harness reports unsupported descriptors as skipped and treats output mismatches
-as failures.
+The harness reports unsupported descriptors as skipped, and the sweep fails if
+any descriptor fails or is skipped.
 
 Current validated groups:
 
