@@ -880,6 +880,7 @@ impl ModelBuilder<'_> {
             scope,
             name,
             body: delimited_contents(action.text(), '{', '}'),
+            body_span: action.span(),
             syntax: owner.id(),
             span: owner.span(),
         }
@@ -902,6 +903,7 @@ fn parse_exception_handler(node: SyntaxNodeRef<'_>) -> Option<ExceptionHandler> 
     Some(ExceptionHandler {
         argument: delimited_contents(argument.text(), '[', ']'),
         body: delimited_contents(action.text(), '{', '}'),
+        body_span: action.span(),
         syntax: node.id(),
         span: node.span(),
     })

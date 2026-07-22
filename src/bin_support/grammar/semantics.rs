@@ -3,8 +3,10 @@ use std::fs;
 
 use crate::embedded::parse_scope_decls;
 
+use super::action::{ActionReference, ActionReferenceKind, action_references};
 use super::char_support::decode_string_literal;
 use super::diagnostic::{CompilationError, Diagnostic, Severity};
+use super::frontend::SourceSpan;
 use super::left_recursion::rewrite_immediate_left_recursion;
 use super::model::{
     ActionBinding, ActionId, Alternative, AttributeClause, AttributeSymbol, Block, Element,
@@ -44,6 +46,7 @@ const GRAMMAR_OPTIONS: &[&str] = &[
 ];
 const RULE_REF_OPTIONS: &[&str] = &["p", "tokenIndex"];
 const TOKEN_OPTIONS: &[&str] = &["assoc", "tokenIndex"];
+const TOKEN_ATTRIBUTES: &[&str] = &["text", "type", "line", "index", "pos", "channel", "int"];
 
 #[derive(Clone, Debug)]
 pub(crate) struct SemanticGrammarSet {
@@ -538,9 +541,9 @@ fn check_named_actions(unit: &GrammarUnit, diagnostics: &mut Vec<Diagnostic>) {
     }
 }
 
-fn named_action_diagnostic_span(action: &super::model::NamedAction) -> super::frontend::SourceSpan {
+fn named_action_diagnostic_span(action: &super::model::NamedAction) -> SourceSpan {
     let start = action.span.bytes.start.saturating_add(1);
-    super::frontend::SourceSpan {
+    SourceSpan {
         source: action.span.source,
         bytes: start..action.span.bytes.end.max(start),
     }
@@ -674,7 +677,7 @@ fn import_dependency(
                 destination.import(vocabulary);
             } else {
                 let span = dependency.declaration.as_ref().map_or_else(
-                    || super::frontend::SourceSpan::empty(super::frontend::SourceId::new(0)),
+                    || SourceSpan::empty(super::frontend::SourceId::new(0)),
                     |declaration| declaration.span.clone(),
                 );
                 diagnostics.push(Diagnostic::error(
@@ -688,7 +691,7 @@ fn import_dependency(
         }
         IntegratedVocabularySource::TokensFile(path) => {
             let span = dependency.declaration.as_ref().map_or_else(
-                || super::frontend::SourceSpan::empty(super::frontend::SourceId::new(0)),
+                || SourceSpan::empty(super::frontend::SourceId::new(0)),
                 |declaration| declaration.span.clone(),
             );
             let text = match fs::read_to_string(path) {
@@ -1188,7 +1191,7 @@ struct LabelSignature {
     assignment: LabelKind,
     value_kind: LabelValueKind,
     target: Option<String>,
-    span: super::frontend::SourceSpan,
+    span: SourceSpan,
 }
 
 fn check_rule_labels(
@@ -1486,7 +1489,7 @@ fn attribute_symbols(clause: &AttributeClause) -> Vec<AttributeSymbol> {
             AttributeSymbol {
                 name: declaration.name,
                 ty: declaration.ty.unwrap_or_default(),
-                span: super::frontend::SourceSpan {
+                span: SourceSpan {
                     source: clause.span.source,
                     bytes: start..end,
                 },
@@ -1500,6 +1503,38 @@ struct BindingCollection {
     call_graph: BTreeMap<RuleId, Vec<RuleId>>,
     action_numbers: BTreeMap<ActionId, usize>,
     predicate_numbers: BTreeMap<super::model::PredicateId, usize>,
+}
+
+#[derive(Clone, Copy)]
+enum ActionScope<'a> {
+    Grammar,
+    Rule(&'a Rule),
+    Alternative {
+        rule: &'a Rule,
+        alternative: &'a Alternative,
+    },
+}
+
+impl<'a> ActionScope<'a> {
+    const fn rule(self) -> Option<&'a Rule> {
+        match self {
+            Self::Grammar => None,
+            Self::Rule(rule) | Self::Alternative { rule, .. } => Some(rule),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ActionTarget {
+    Rule(RuleId),
+    Token,
+    Other,
+}
+
+#[derive(Clone, Copy)]
+struct ResolvedLabel {
+    kind: LabelKind,
+    target: ActionTarget,
 }
 
 struct BindingCollector<'a> {
@@ -1540,6 +1575,15 @@ impl<'a> BindingCollector<'a> {
 
     fn collect(mut self) -> BindingCollection {
         for rule in &self.unit.rules {
+            self.bindings
+                .attributes
+                .insert(rule.id, rule_attributes(rule));
+            self.call_graph.entry(rule.id).or_default();
+        }
+        for action in &self.unit.actions {
+            self.validate_action(ActionScope::Grammar, &action.body, &action.body_span);
+        }
+        for rule in &self.unit.rules {
             self.collect_rule(rule);
         }
         for targets in self.call_graph.values_mut() {
@@ -1555,11 +1599,16 @@ impl<'a> BindingCollector<'a> {
     }
 
     fn collect_rule(&mut self, rule: &Rule) {
-        let attributes = rule_attributes(rule);
-        self.bindings.attributes.insert(rule.id, attributes);
-        self.call_graph.entry(rule.id).or_default();
-
+        for action in &rule.actions {
+            self.validate_action(ActionScope::Rule(rule), &action.body, &action.body_span);
+        }
         self.collect_block(rule, &rule.block);
+        for handler in &rule.catches {
+            self.validate_action(ActionScope::Rule(rule), &handler.body, &handler.body_span);
+        }
+        if let Some(action) = &rule.finally_action {
+            self.validate_action(ActionScope::Rule(rule), &action.body, &action.body_span);
+        }
         if rule.kind == RuleKind::Lexer {
             self.collect_commands(rule);
         }
@@ -1567,14 +1616,24 @@ impl<'a> BindingCollector<'a> {
 
     fn collect_block(&mut self, rule: &Rule, block: &Block) {
         for alternative in &block.alternatives {
-            self.bindings.alternatives.insert(alternative.id, rule.id);
-            for element in &alternative.elements {
-                self.collect_element(rule, alternative, element);
-            }
+            self.collect_alternative(rule, alternative, alternative);
         }
     }
 
-    fn collect_element(&mut self, rule: &Rule, alternative: &Alternative, element: &Element) {
+    fn collect_alternative(&mut self, rule: &Rule, alternative: &Alternative, scope: &Alternative) {
+        self.bindings.alternatives.insert(alternative.id, rule.id);
+        for element in &alternative.elements {
+            self.collect_element(rule, alternative, scope, element);
+        }
+    }
+
+    fn collect_element(
+        &mut self,
+        rule: &Rule,
+        alternative: &Alternative,
+        scope: &Alternative,
+        element: &Element,
+    ) {
         if let Some(label) = &element.label {
             self.bindings.labels.insert(
                 label.id,
@@ -1630,7 +1689,9 @@ impl<'a> BindingCollector<'a> {
                 self.validate_set(elements, element);
             }
             ElementKind::Block(nested) => {
-                self.collect_block(rule, nested);
+                for nested_alternative in &nested.alternatives {
+                    self.collect_alternative(rule, nested_alternative, scope);
+                }
             }
             ElementKind::Action { id, body } => {
                 let index = self.action_numbers.len();
@@ -1645,7 +1706,14 @@ impl<'a> BindingCollector<'a> {
                         context_dependent: action_is_context_dependent(body),
                     },
                 );
-                self.validate_action(rule, alternative, body, element);
+                self.validate_action(
+                    ActionScope::Alternative {
+                        rule,
+                        alternative: scope,
+                    },
+                    body,
+                    &element.span,
+                );
             }
             ElementKind::Predicate {
                 id,
@@ -1666,7 +1734,14 @@ impl<'a> BindingCollector<'a> {
                         context_dependent: action_is_context_dependent(body),
                     },
                 );
-                self.validate_action(rule, alternative, body, element);
+                self.validate_action(
+                    ActionScope::Alternative {
+                        rule,
+                        alternative: scope,
+                    },
+                    body,
+                    &element.span,
+                );
             }
             ElementKind::Range(..) | ElementKind::Epsilon => {}
         }
@@ -1700,44 +1775,306 @@ impl<'a> BindingCollector<'a> {
         }
     }
 
-    fn validate_action(
-        &mut self,
+    fn validate_action(&mut self, scope: ActionScope<'_>, body: &str, body_span: &SourceSpan) {
+        for reference in action_references(body) {
+            let diagnostic =
+                match reference.kind {
+                    ActionReferenceKind::Attribute { name, assignment } => self
+                        .validate_simple_reference(scope, reference, name, assignment, body_span),
+                    ActionReferenceKind::Qualified { name, attribute } => self
+                        .validate_qualified_reference(scope, reference, name, attribute, body_span),
+                    ActionReferenceKind::NonLocal { rule, attribute } => {
+                        self.validate_non_local_reference(reference, rule, attribute, body_span)
+                    }
+                };
+            if let Some(diagnostic) = diagnostic {
+                self.diagnostics.push(diagnostic);
+            }
+        }
+    }
+
+    fn validate_simple_reference(
+        &self,
+        scope: ActionScope<'_>,
+        reference: ActionReference<'_>,
+        name: &str,
+        assignment: bool,
+        body_span: &SourceSpan,
+    ) -> Option<Diagnostic> {
+        if self.resolves_to_simple_attribute(scope, name) {
+            return None;
+        }
+        let name_span = action_identifier_span(body_span, reference.name_offset, name.len());
+        if assignment {
+            return Some(if self.resolves_to_list_label(scope, name) {
+                Diagnostic::error(
+                    "G4S076",
+                    name_span,
+                    format!("cannot assign a value to list label {name}"),
+                )
+            } else {
+                unknown_simple_attribute(name_span, name, reference.expression)
+            });
+        }
+        if self.resolves_to_token(scope, name) || self.resolves_to_list_label(scope, name) {
+            return None;
+        }
+        if self.isolated_rule(scope, name).is_some() {
+            return Some(Diagnostic::error(
+                "G4S075",
+                name_span,
+                format!(
+                    "missing attribute access on rule reference {name} in {}",
+                    reference.expression
+                ),
+            ));
+        }
+        Some(unknown_simple_attribute(
+            name_span,
+            name,
+            reference.expression,
+        ))
+    }
+
+    fn validate_qualified_reference(
+        &self,
+        scope: ActionScope<'_>,
+        reference: ActionReference<'_>,
+        name: &str,
+        attribute: &str,
+        body_span: &SourceSpan,
+    ) -> Option<Diagnostic> {
+        if self.resolves_to_simple_attribute(scope, name) {
+            return None;
+        }
+        let name_span = action_identifier_span(body_span, reference.name_offset, name.len());
+        let attribute_span = action_identifier_span(
+            body_span,
+            reference
+                .attribute_offset
+                .expect("qualified reference has an attribute offset"),
+            attribute.len(),
+        );
+        match self.attribute_dictionary(scope, name) {
+            Some(ActionTarget::Rule(rule)) => {
+                return self.validate_rule_attribute(
+                    self.rule(rule).expect("action target rule belongs to unit"),
+                    attribute,
+                    attribute_span,
+                    reference.expression,
+                    false,
+                );
+            }
+            Some(ActionTarget::Token) => {
+                return (!TOKEN_ATTRIBUTES.contains(&attribute)).then(|| {
+                    Diagnostic::error(
+                        "G4S077",
+                        attribute_span,
+                        format!(
+                            "attribute {attribute} isn't a valid property in {}",
+                            reference.expression
+                        ),
+                    )
+                });
+            }
+            Some(ActionTarget::Other) | None => {}
+        }
+        if let Some(rule) = self.isolated_rule(scope, name) {
+            return self.validate_rule_attribute(
+                self.rule(rule).expect("isolated rule belongs to unit"),
+                attribute,
+                attribute_span,
+                reference.expression,
+                false,
+            );
+        }
+        Some(unknown_simple_attribute(
+            name_span,
+            name,
+            reference.expression,
+        ))
+    }
+
+    fn validate_non_local_reference(
+        &self,
+        reference: ActionReference<'_>,
+        rule_name: &str,
+        attribute: &str,
+        body_span: &SourceSpan,
+    ) -> Option<Diagnostic> {
+        let Some(rule) = self.rule_named(rule_name) else {
+            return Some(Diagnostic::error(
+                "G4S071",
+                action_identifier_span(body_span, reference.name_offset, rule_name.len()),
+                format!(
+                    "reference to undefined rule {rule_name} in non-local ref {}",
+                    reference.expression
+                ),
+            ));
+        };
+        let attribute_span = action_identifier_span(
+            body_span,
+            reference
+                .attribute_offset
+                .expect("non-local reference has an attribute offset"),
+            attribute.len(),
+        );
+        self.validate_rule_attribute(rule, attribute, attribute_span, reference.expression, true)
+    }
+
+    fn validate_rule_attribute(
+        &self,
         rule: &Rule,
-        alternative: &Alternative,
-        body: &str,
-        owner: &Element,
-    ) {
+        attribute: &str,
+        attribute_span: SourceSpan,
+        expression: &str,
+        include_parameters_and_locals: bool,
+    ) -> Option<Diagnostic> {
         let attributes = &self.bindings.attributes[&rule.id];
-        let attribute_names = attributes
+        let is_return = attributes
+            .returns
+            .iter()
+            .any(|candidate| candidate.name == attribute);
+        let is_parameter = attributes
             .arguments
             .iter()
-            .chain(&attributes.returns)
-            .chain(&attributes.locals)
-            .map(|attribute| attribute.name.as_str())
-            .collect::<BTreeSet<_>>();
-        let labels = alternative
-            .elements
+            .any(|candidate| candidate.name == attribute);
+        let is_local = attributes
+            .locals
             .iter()
-            .filter_map(|element| element.label.as_ref().map(|label| label.name.as_str()))
-            .collect::<BTreeSet<_>>();
-        for reference in dollar_references(body) {
-            if predefined_attribute(reference)
-                || attribute_names.contains(reference)
-                || labels.contains(reference)
-                || self.rules_by_name.contains_key(reference)
-                || self.vocabulary.by_name.contains_key(reference)
-            {
-                continue;
-            }
-            self.diagnostics.push(Diagnostic::error(
-                "G4S045",
-                owner.span.clone(),
+            .any(|candidate| candidate.name == attribute);
+        if is_return
+            || predefined_attribute(attribute)
+            || (include_parameters_and_locals && (is_parameter || is_local))
+        {
+            return None;
+        }
+        if is_parameter {
+            return Some(Diagnostic::error(
+                "G4S073",
+                attribute_span,
                 format!(
-                    "unknown attribute reference ${reference} in rule {}",
+                    "parameter {attribute} of rule {} is not accessible in this scope: {expression}",
                     rule.name
                 ),
             ));
         }
+        Some(Diagnostic::error(
+            "G4S074",
+            attribute_span,
+            format!(
+                "unknown attribute {attribute} for rule {} in {expression}",
+                rule.name
+            ),
+        ))
+    }
+
+    fn resolves_to_simple_attribute(&self, scope: ActionScope<'_>, name: &str) -> bool {
+        let Some(rule) = scope.rule() else {
+            return false;
+        };
+        let attributes = &self.bindings.attributes[&rule.id];
+        predefined_attribute(name)
+            || attributes
+                .arguments
+                .iter()
+                .chain(&attributes.returns)
+                .chain(&attributes.locals)
+                .any(|attribute| attribute.name == name)
+    }
+
+    fn resolves_to_list_label(&self, scope: ActionScope<'_>, name: &str) -> bool {
+        self.label_target(scope, name)
+            .is_some_and(|label| label.kind == LabelKind::List)
+    }
+
+    fn resolves_to_token(&self, scope: ActionScope<'_>, name: &str) -> bool {
+        let labeled_token = self.label_target(scope, name).is_some_and(|label| {
+            label.kind == LabelKind::Single && label.target == ActionTarget::Token
+        });
+        labeled_token
+            || matches!(
+                scope,
+                ActionScope::Alternative { alternative, .. }
+                    if alternative_has_token_reference(alternative, name)
+            )
+    }
+
+    fn isolated_rule(&self, scope: ActionScope<'_>, name: &str) -> Option<RuleId> {
+        let rule = scope.rule()?;
+        if rule.name == name {
+            return Some(rule.id);
+        }
+        if let Some(label) = self.label_target(scope, name)
+            && label.kind == LabelKind::Single
+            && let ActionTarget::Rule(target) = label.target
+        {
+            return Some(target);
+        }
+        match scope {
+            ActionScope::Alternative { alternative, .. } => {
+                alternative_rule_reference(alternative, name)
+                    .and_then(|name| self.rule_named(name))
+                    .map(|rule| rule.id)
+            }
+            ActionScope::Grammar | ActionScope::Rule(_) => None,
+        }
+    }
+
+    fn attribute_dictionary(&self, scope: ActionScope<'_>, name: &str) -> Option<ActionTarget> {
+        if let Some(label) = self.label_target(scope, name)
+            && label.kind == LabelKind::Single
+        {
+            return Some(label.target);
+        }
+        let ActionScope::Alternative { alternative, .. } = scope else {
+            return None;
+        };
+        if let Some(rule_name) = alternative_rule_reference(alternative, name) {
+            return self
+                .rule_named(rule_name)
+                .map(|rule| ActionTarget::Rule(rule.id));
+        }
+        alternative_has_token_reference(alternative, name).then_some(ActionTarget::Token)
+    }
+
+    fn label_target(&self, scope: ActionScope<'_>, name: &str) -> Option<ResolvedLabel> {
+        let (label, element) = match scope {
+            ActionScope::Grammar => return None,
+            ActionScope::Rule(rule) => find_label_in_block(&rule.block, name)?,
+            ActionScope::Alternative { alternative, .. } => {
+                find_label_in_alternative(alternative, name)?
+            }
+        };
+        let target = match &element.kind {
+            ElementKind::RuleCall(call) => self
+                .rules_by_name
+                .get(call.name.as_str())
+                .copied()
+                .map_or(ActionTarget::Other, ActionTarget::Rule),
+            ElementKind::Terminal(_) | ElementKind::Range(..) | ElementKind::Set { .. } => {
+                ActionTarget::Token
+            }
+            ElementKind::Block(_)
+            | ElementKind::Action { .. }
+            | ElementKind::Predicate { .. }
+            | ElementKind::Epsilon => ActionTarget::Other,
+        };
+        Some(ResolvedLabel {
+            kind: label.kind,
+            target,
+        })
+    }
+
+    fn rule_named(&self, name: &str) -> Option<&Rule> {
+        self.rules_by_name
+            .get(name)
+            .copied()
+            .and_then(|id| self.rule(id))
+    }
+
+    fn rule(&self, id: RuleId) -> Option<&Rule> {
+        self.unit.rules.iter().find(|rule| rule.id == id)
     }
 
     fn collect_commands(&mut self, rule: &Rule) {
@@ -1919,6 +2256,113 @@ impl<'a> BindingCollector<'a> {
             _ => unreachable!("required command set checked above"),
         }
     }
+}
+
+fn unknown_simple_attribute(span: SourceSpan, name: &str, expression: &str) -> Diagnostic {
+    Diagnostic::error(
+        "G4S072",
+        span,
+        format!("unknown attribute reference {name} in {expression}"),
+    )
+}
+
+fn action_identifier_span(body_span: &SourceSpan, offset: usize, length: usize) -> SourceSpan {
+    let offset = u32::try_from(offset).expect("action reference offset exceeds u32");
+    let length = u32::try_from(length).expect("action reference length exceeds u32");
+    let start = body_span
+        .bytes
+        .start
+        .checked_add(1)
+        .and_then(|start| start.checked_add(offset))
+        .expect("action reference span exceeds u32");
+    let end = start
+        .checked_add(length)
+        .expect("action reference span exceeds u32");
+    SourceSpan {
+        source: body_span.source,
+        bytes: start..end,
+    }
+}
+
+fn find_label_in_block<'a>(block: &'a Block, name: &str) -> Option<(&'a Label, &'a Element)> {
+    block
+        .alternatives
+        .iter()
+        .find_map(|alternative| find_label_in_alternative(alternative, name))
+}
+
+fn find_label_in_alternative<'a>(
+    alternative: &'a Alternative,
+    name: &str,
+) -> Option<(&'a Label, &'a Element)> {
+    for element in &alternative.elements {
+        if let Some(label) = &element.label
+            && label.name == name
+        {
+            return Some((label, element));
+        }
+        if let ElementKind::Block(block) = &element.kind
+            && let Some(found) = find_label_in_block(block, name)
+        {
+            return Some(found);
+        }
+    }
+    None
+}
+
+fn alternative_rule_reference<'a>(alternative: &'a Alternative, name: &str) -> Option<&'a str> {
+    for element in &alternative.elements {
+        match &element.kind {
+            ElementKind::RuleCall(call) if call.name == name => {
+                return Some(call.name.as_str());
+            }
+            ElementKind::Block(block) => {
+                if let Some(found) = block
+                    .alternatives
+                    .iter()
+                    .find_map(|nested| alternative_rule_reference(nested, name))
+                {
+                    return Some(found);
+                }
+            }
+            ElementKind::Terminal(_)
+            | ElementKind::RuleCall(_)
+            | ElementKind::Range(..)
+            | ElementKind::Set { .. }
+            | ElementKind::Action { .. }
+            | ElementKind::Predicate { .. }
+            | ElementKind::Epsilon => {}
+        }
+    }
+    None
+}
+
+fn alternative_has_token_reference(alternative: &Alternative, name: &str) -> bool {
+    alternative
+        .elements
+        .iter()
+        .any(|element| match &element.kind {
+            ElementKind::Terminal(Terminal::Token(token)) => token == name,
+            ElementKind::Set { elements, .. } => elements.iter().any(|member| {
+                matches!(
+                    member,
+                    SetElement::Terminal {
+                        value: Terminal::Token(token),
+                        ..
+                    } if token == name
+                )
+            }),
+            ElementKind::Block(block) => block
+                .alternatives
+                .iter()
+                .any(|nested| alternative_has_token_reference(nested, name)),
+            ElementKind::Terminal(_)
+            | ElementKind::RuleCall(_)
+            | ElementKind::Range(..)
+            | ElementKind::Action { .. }
+            | ElementKind::Predicate { .. }
+            | ElementKind::Epsilon => false,
+        })
 }
 
 #[derive(Clone, Debug)]
@@ -2214,29 +2658,7 @@ fn incompatible_command<'a>(seen: &'a [String], command: &str) -> Option<&'a str
 }
 
 fn action_is_context_dependent(body: &str) -> bool {
-    !dollar_references(body).is_empty()
-}
-
-fn dollar_references(body: &str) -> Vec<&str> {
-    let bytes = body.as_bytes();
-    let mut references = Vec::new();
-    let mut index = 0;
-    while index < bytes.len() {
-        if bytes[index] != b'$' {
-            index += 1;
-            continue;
-        }
-        let start = index + 1;
-        let mut end = start;
-        while end < bytes.len() && (bytes[end] == b'_' || bytes[end].is_ascii_alphanumeric()) {
-            end += 1;
-        }
-        if end > start && (bytes[start] == b'_' || bytes[start].is_ascii_alphabetic()) {
-            references.push(&body[start..end]);
-        }
-        index = end.max(index + 1);
-    }
-    references
+    !action_references(body).is_empty()
 }
 
 fn predefined_attribute(name: &str) -> bool {

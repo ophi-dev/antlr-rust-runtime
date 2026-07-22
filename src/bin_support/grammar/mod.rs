@@ -1,3 +1,4 @@
+mod action;
 mod atn;
 mod char_support;
 mod compiler;

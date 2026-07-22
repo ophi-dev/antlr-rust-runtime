@@ -392,6 +392,7 @@ pub(crate) struct NamedAction {
     pub(crate) scope: Option<String>,
     pub(crate) name: String,
     pub(crate) body: String,
+    pub(crate) body_span: SourceSpan,
     pub(crate) syntax: SyntaxId,
     pub(crate) span: SourceSpan,
 }
@@ -400,6 +401,7 @@ pub(crate) struct NamedAction {
 pub(crate) struct ExceptionHandler {
     pub(crate) argument: String,
     pub(crate) body: String,
+    pub(crate) body_span: SourceSpan,
     pub(crate) syntax: SyntaxId,
     pub(crate) span: SourceSpan,
 }
