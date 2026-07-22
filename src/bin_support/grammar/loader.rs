@@ -50,13 +50,14 @@ struct Loader {
 }
 
 pub(crate) fn load(options: LoadOptions) -> Result<LoadedSources, CompilationError> {
-    let loaded = load_recovering(options);
+    let mut loaded = load_recovering(options);
     if loaded
         .diagnostics
         .iter()
         .any(|diagnostic| diagnostic.severity == Severity::Error)
     {
-        return Err(CompilationError::new(loaded.diagnostics));
+        let diagnostics = std::mem::take(&mut loaded.diagnostics);
+        return Err(CompilationError::new(diagnostics).with_sources(&loaded.sources));
     }
     Ok(loaded)
 }
@@ -163,7 +164,7 @@ impl Loader {
         let source = self.sources.next_id();
         let logical_path = user_spelling.unwrap_or(path).to_path_buf();
         let file = if recover_syntax {
-            match parse_source_recovering(source, logical_path, text) {
+            match parse_source_recovering(source, logical_path.clone(), text) {
                 Ok(recovered) => {
                     let has_diagnostics = !recovered.diagnostics.is_empty();
                     self.diagnostics.extend(
@@ -172,20 +173,25 @@ impl Loader {
                         }),
                     );
                     if has_diagnostics {
+                        self.sources
+                            .insert(canonical, recovered.file)
+                            .expect("canonical path checked before parsing");
                         return None;
                     }
                     recovered.file
                 }
                 Err(error) => {
                     self.record_frontend_error(&error);
+                    self.retain_failed_source(canonical, source, logical_path);
                     return None;
                 }
             }
         } else {
-            match parse_source(source, logical_path, text) {
+            match parse_source(source, logical_path.clone(), text) {
                 Ok(file) => file,
                 Err(error) => {
                     self.record_frontend_error(&error);
+                    self.retain_failed_source(canonical, source, logical_path);
                     return None;
                 }
             }
@@ -202,6 +208,18 @@ impl Loader {
         self.grammar_for_source.insert(source, grammar);
         self.grammars.push(parsed);
         Some(grammar)
+    }
+
+    fn retain_failed_source(
+        &mut self,
+        canonical_path: PathBuf,
+        source: SourceId,
+        logical_path: PathBuf,
+    ) {
+        let text = fs::read_to_string(&canonical_path).unwrap_or_default();
+        self.sources
+            .insert_failed(canonical_path, source, logical_path, text)
+            .expect("canonical path checked before parsing");
     }
 
     fn record_frontend_error(&mut self, error: &super::frontend::FrontendError) {

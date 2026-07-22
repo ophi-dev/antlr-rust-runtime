@@ -21,8 +21,8 @@ use grammar::model::{
 };
 use grammar::provenance::{Origin, ProvenanceIndex};
 use grammar::source::SourceSet;
-use petgraph::algo::has_path_connecting;
 use petgraph::graph::DiGraph;
+use petgraph::visit::{Dfs, Reversed};
 
 #[path = "../bin_support/embedded.rs"]
 mod embedded;
@@ -131,7 +131,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &data,
                 &args.option_hooks,
             )?);
-            let entries = collect_parser_semantics(&data, args.sem_unknown, &args.sem_patterns)?;
+            let entries = collect_parser_semantics_for_mode(
+                &data,
+                args.embedded_actions,
+                args.sem_unknown,
+                &args.sem_patterns,
+            )?;
             enforce_sem_unknown(args.sem_unknown, &entries)?;
             enforce_require_full_semantics(args.require_full_semantics, &entries)?;
             let grammar_name = compiled.semantic.recognizer.name.clone();
@@ -210,17 +215,23 @@ fn render_compilation_error(
         .first()
         .map_or_else(|| Path::new("<grammar>"), PathBuf::as_path);
     let mut message = String::new();
-    for diagnostic in error.diagnostics() {
+    for (index, diagnostic) in error.diagnostics().iter().enumerate() {
         let severity = match diagnostic.severity {
             grammar::diagnostic::Severity::Warning => "warning",
             grammar::diagnostic::Severity::Error => "error",
         };
+        let location = error.location(index);
+        let path = location.map_or_else(
+            || fallback.display().to_string(),
+            |location| location.path.display().to_string(),
+        );
+        let position = location
+            .and_then(|location| location.position)
+            .map_or_else(String::new, |(line, column)| format!(":{line}:{column}"));
         let _ = writeln!(
             message,
-            "{severity}[{}]: {}:{}",
-            diagnostic.code,
-            fallback.display(),
-            diagnostic.message
+            "{severity}[{}]: {path}{position}: {}",
+            diagnostic.code, diagnostic.message
         );
     }
     io::Error::new(io::ErrorKind::InvalidInput, message)
@@ -1154,14 +1165,30 @@ fn collect_lexer_semantics(
     Ok(entries)
 }
 
+#[cfg(test)]
 fn collect_parser_semantics(
     data: &CodegenData<'_>,
     policy: SemUnknownPolicy,
     patterns: &SemPatternFile,
 ) -> io::Result<Vec<SemanticsEntry>> {
-    let portable_locals = build_structural_portable_local_data(data, patterns)?;
-    let predicates =
-        structural_predicate_templates(data, SemanticsKind::ParserPredicate, patterns)?;
+    collect_parser_semantics_for_mode(data, false, policy, patterns)
+}
+
+fn collect_parser_semantics_for_mode(
+    data: &CodegenData<'_>,
+    embedded: bool,
+    policy: SemUnknownPolicy,
+    patterns: &SemPatternFile,
+) -> io::Result<Vec<SemanticsEntry>> {
+    let portable_locals = (!embedded)
+        .then(|| build_structural_portable_local_data(data, patterns))
+        .transpose()?
+        .unwrap_or_default();
+    let predicates = if embedded {
+        Vec::new()
+    } else {
+        structural_predicate_templates(data, SemanticsKind::ParserPredicate, patterns)?
+    };
     let mut entries = Vec::new();
     for predicate in structural_predicates(data)? {
         let coordinate = (predicate.rule_index, predicate.predicate_index);
@@ -1179,27 +1206,35 @@ fn collect_parser_semantics(
             line: Some(line),
             column: Some(column),
             body: Some(one_line_action_body(&predicate.body)),
-            disposition: patterns
-                .coordinate_disposition(
-                    SemanticsKind::ParserPredicate,
-                    data.rule_names
-                        .get(predicate.rule_index)
-                        .map(String::as_str),
-                    Some(predicate.predicate_index),
-                    None,
-                )
-                .unwrap_or_else(|| {
-                    if portable_locals.predicates.contains_key(&coordinate) {
-                        SemanticsDisposition::Translated
-                    } else {
-                        predicate_template_disposition(template, policy)
-                    }
-                }),
-            template: portable_locals
-                .predicates
-                .contains_key(&coordinate)
-                .then(|| "PortableBooleanLocal".to_owned())
-                .or_else(|| template.map(|template| format!("{template:?}"))),
+            disposition: if embedded {
+                SemanticsDisposition::Translated
+            } else {
+                patterns
+                    .coordinate_disposition(
+                        SemanticsKind::ParserPredicate,
+                        data.rule_names
+                            .get(predicate.rule_index)
+                            .map(String::as_str),
+                        Some(predicate.predicate_index),
+                        None,
+                    )
+                    .unwrap_or_else(|| {
+                        if portable_locals.predicates.contains_key(&coordinate) {
+                            SemanticsDisposition::Translated
+                        } else {
+                            predicate_template_disposition(template, policy)
+                        }
+                    })
+            },
+            template: if embedded {
+                Some("Embedded".to_owned())
+            } else {
+                portable_locals
+                    .predicates
+                    .contains_key(&coordinate)
+                    .then(|| "PortableBooleanLocal".to_owned())
+                    .or_else(|| template.map(|template| format!("{template:?}")))
+            },
         });
     }
     for action in structural_actions(data)? {
@@ -1213,26 +1248,38 @@ fn collect_parser_semantics(
             line: action.authored.then_some(line),
             column: action.authored.then_some(column),
             body: action.authored.then(|| one_line_action_body(&action.body)),
-            disposition: patterns
-                .coordinate_disposition(
-                    SemanticsKind::ParserAction,
-                    data.rule_names.get(action.rule_index).map(String::as_str),
-                    None,
-                    Some(action.state),
-                )
-                .unwrap_or_else(|| {
-                    if portable_locals.inline_actions.contains_key(&action.state) {
-                        SemanticsDisposition::Translated
-                    } else if !action.authored || action.body.trim().is_empty() {
-                        SemanticsDisposition::Synthetic
-                    } else {
-                        policy.unknown_action_disposition()
-                    }
-                }),
-            template: portable_locals
-                .inline_actions
-                .contains_key(&action.state)
-                .then(|| "PortableBooleanLocal".to_owned()),
+            disposition: if embedded && action.authored {
+                SemanticsDisposition::Translated
+            } else if embedded {
+                SemanticsDisposition::Synthetic
+            } else {
+                patterns
+                    .coordinate_disposition(
+                        SemanticsKind::ParserAction,
+                        data.rule_names.get(action.rule_index).map(String::as_str),
+                        None,
+                        Some(action.state),
+                    )
+                    .unwrap_or_else(|| {
+                        if portable_locals.inline_actions.contains_key(&action.state) {
+                            SemanticsDisposition::Translated
+                        } else if !action.authored || action.body.trim().is_empty() {
+                            SemanticsDisposition::Synthetic
+                        } else {
+                            policy.unknown_action_disposition()
+                        }
+                    })
+            },
+            template: if embedded && action.authored {
+                Some("Embedded".to_owned())
+            } else if embedded {
+                None
+            } else {
+                portable_locals
+                    .inline_actions
+                    .contains_key(&action.state)
+                    .then(|| "PortableBooleanLocal".to_owned())
+            },
         });
     }
     entries.sort_by_key(|entry| {
@@ -3426,20 +3473,19 @@ fn collect_generated_step_callees(steps: &[GeneratedParserStep], callees: &mut B
 }
 
 fn graph_nodes_reaching(graph: &DiGraph<usize, ()>, targets: &BTreeSet<usize>) -> BTreeSet<usize> {
-    let target_nodes = graph
+    let reversed = Reversed(graph);
+    let mut traversal = Dfs::empty(reversed);
+    let mut reaching = targets.clone();
+    for target in graph
         .node_indices()
         .filter(|node| targets.contains(&graph[*node]))
-        .collect::<Vec<_>>();
-    graph
-        .node_indices()
-        .filter(|source| {
-            target_nodes
-                .iter()
-                .any(|target| has_path_connecting(graph, *source, *target, None))
-        })
-        .map(|node| graph[node])
-        .chain(targets.iter().copied())
-        .collect()
+    {
+        traversal.move_to(target);
+        while let Some(node) = traversal.next(reversed) {
+            reaching.insert(graph[node]);
+        }
+    }
+    reaching
 }
 
 fn generated_atn_preferred_chain_is_expensive(
@@ -8831,21 +8877,11 @@ fn uses_structural_alt_number_contexts(data: &CodegenData<'_>) -> bool {
     let Some(semantic) = data.semantic else {
         return false;
     };
-    semantic.unit.options.iter().any(|option| {
-        option.name.value == "contextSuperClass"
-            || option.value.value.contains("TreeNodeWithAltNumField")
-    }) || semantic
+    semantic
         .unit
-        .actions
+        .options
         .iter()
-        .chain(
-            semantic
-                .unit
-                .rules
-                .iter()
-                .flat_map(|rule| rule.actions.iter()),
-        )
-        .any(|action| action.body.contains("TreeNodeWithAltNumField"))
+        .any(|option| option.name.value == "contextSuperClass")
 }
 
 fn parse_predicate_template(body: &str) -> Option<PredicateTemplate> {
@@ -11066,6 +11102,22 @@ mod tests {
         assert_eq!(
             generated_atn_preferred_rule_calls(&rules, &[]),
             vec![false; ATN_PREFERRED_LEADING_CALL_CHAIN_MIN - 1]
+        );
+    }
+
+    #[test]
+    fn graph_reachability_traverses_backwards_from_every_target() {
+        let mut graph = DiGraph::new();
+        let nodes = (0..6)
+            .map(|value| graph.add_node(value))
+            .collect::<Vec<_>>();
+        graph.add_edge(nodes[0], nodes[1], ());
+        graph.add_edge(nodes[1], nodes[2], ());
+        graph.add_edge(nodes[3], nodes[4], ());
+
+        assert_eq!(
+            graph_nodes_reaching(&graph, &BTreeSet::from([2, 4, 99])),
+            BTreeSet::from([0, 1, 2, 3, 4, 99])
         );
     }
 

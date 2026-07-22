@@ -43,12 +43,23 @@ while (($#)); do
     esac
 done
 
-for command in cargo cmp cp mktemp rsync shasum; do
+for command in cargo cmp cp mktemp rsync; do
     if ! command -v "$command" >/dev/null 2>&1; then
         echo "required command not found: $command" >&2
         exit 2
     fi
 done
+
+if command -v shasum >/dev/null 2>&1; then
+    sha256=(shasum -a 256)
+    sha256_check=(shasum -a 256 -c)
+elif command -v sha256sum >/dev/null 2>&1; then
+    sha256=(sha256sum)
+    sha256_check=(sha256sum -c)
+else
+    echo "required command not found: shasum or sha256sum" >&2
+    exit 2
+fi
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/../.." && pwd)"
@@ -168,7 +179,7 @@ if [[ "$mode" == update ]]; then
         "$checked_in_dir/antlr_v4_parser.rs"
     (
         cd "$repo_root"
-        shasum -a 256 \
+        "${sha256[@]}" \
             third_party/antlr-v4-grammar/ANTLRv4Lexer.g4 \
             third_party/antlr-v4-grammar/ANTLRv4Parser.g4 \
             third_party/antlr-v4-grammar/predefined.tokens \
@@ -185,7 +196,7 @@ else
         "$checked_in_dir/antlr_v4_parser.rs"
     (
         cd "$repo_root"
-        shasum -a 256 --check "$hash_file"
+        "${sha256_check[@]}" "$hash_file"
     )
     echo "the checked-in frontend is the tested self-hosting fixed point"
 fi

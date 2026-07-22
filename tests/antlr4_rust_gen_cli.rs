@@ -300,6 +300,39 @@ fn colliding_rule_and_alternative_label_context_names_compile() {
 }
 
 #[test]
+fn embedded_parser_semantics_satisfy_strict_manifest_checks() {
+    let temp = temporary_directory("embedded-parser-semantics");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/embedded-parser-semantics/T.g4");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--actions"),
+        OsStr::new("embedded"),
+        OsStr::new("--sem-unknown"),
+        OsStr::new("error"),
+        OsStr::new("--require-full-semantics"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    let manifest =
+        fs::read_to_string(out.join("semantics.json")).expect("manifest should be emitted");
+    assert_eq!(
+        manifest.matches("\"disposition\": \"translated\"").count(),
+        2
+    );
+    assert_eq!(manifest.matches("\"template\": \"Embedded\"").count(), 2);
+    assert_generated_modules_compile(temp.path(), &["t_lexer.rs", "t_parser.rs"]);
+}
+
+#[test]
 fn imported_predicate_manifest_uses_its_structural_source_owner() {
     let temp = temporary_directory("imported-predicate");
     let root = temp.path().join("Root.g4");
@@ -614,6 +647,30 @@ fn invalid_source_emits_diagnostics_without_partial_outputs() {
                 .is_none(),
         "failed compilation emitted partial output"
     );
+}
+
+#[test]
+fn imported_source_diagnostics_report_the_import_path() {
+    let temp = temporary_directory("imported-diagnostic");
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/imported-diagnostic");
+    let root = fixture.join("Root.g4");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        root.as_os_str(),
+        OsStr::new("--lib"),
+        fixture.as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(!output.status.success(), "stdout: {}", utf8(&output.stdout));
+    let stderr = utf8(&output.stderr);
+    let delegate_diagnostic = format!("error[G4F003]: {}", fixture.join("Delegate.g4").display());
+    let wrong_root_diagnostic = format!("error[G4F003]: {}", root.display());
+    assert!(stderr.contains(&delegate_diagnostic), "{stderr}");
+    assert!(!stderr.contains(&wrong_root_diagnostic), "{stderr}");
+    assert!(!out.exists(), "failed compilation emitted output");
 }
 
 #[test]

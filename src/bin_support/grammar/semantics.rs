@@ -1722,10 +1722,12 @@ fn parse_postfix_attribute_declaration(
 
 fn split_top_level(text: &str, separator: char) -> Vec<(usize, &str)> {
     let mut parts = Vec::new();
-    let mut depth = 0_i32;
+    let mut delimiter_depth = 0_usize;
+    let mut angle_depth = 0_usize;
     let mut start = 0;
     let mut quoted = false;
     let mut escaped = false;
+    let mut in_initializer = false;
     for (index, character) in text.char_indices() {
         if escaped {
             escaped = false;
@@ -1734,17 +1736,42 @@ fn split_top_level(text: &str, separator: char) -> Vec<(usize, &str)> {
         match character {
             '\\' if quoted => escaped = true,
             '"' => quoted = !quoted,
-            '(' | '[' | '{' | '<' if !quoted => depth += 1,
-            ')' | ']' | '}' | '>' if !quoted => depth -= 1,
-            _ if character == separator && !quoted && depth == 0 => {
+            '(' | '[' | '{' if !quoted => delimiter_depth += 1,
+            ')' | ']' | '}' if !quoted => {
+                delimiter_depth = delimiter_depth.saturating_sub(1);
+            }
+            '<' if !quoted && !in_initializer => angle_depth += 1,
+            '>' if !quoted && !in_initializer => {
+                angle_depth = angle_depth.saturating_sub(1);
+            }
+            '=' if !quoted
+                && delimiter_depth == 0
+                && angle_depth == 0
+                && is_assignment_operator(text, index) =>
+            {
+                in_initializer = true;
+            }
+            _ if character == separator
+                && !quoted
+                && delimiter_depth == 0
+                && (in_initializer || angle_depth == 0) =>
+            {
                 parts.push((start, &text[start..index]));
                 start = index + character.len_utf8();
+                angle_depth = 0;
+                in_initializer = false;
             }
             _ => {}
         }
     }
     parts.push((start, &text[start..]));
     parts
+}
+
+fn is_assignment_operator(text: &str, index: usize) -> bool {
+    let previous = text[..index].chars().next_back();
+    let next = text[index + '='.len_utf8()..].chars().next();
+    !matches!(previous, Some('=' | '!' | '<' | '>')) && next != Some('=')
 }
 
 fn nonempty_trimmed(value: &str) -> Option<String> {
@@ -3209,6 +3236,56 @@ entry[int x] returns [int y] locals [boolean seen]
                 .collect::<Vec<_>>();
             assert_eq!(actual, expected, "input {input:?}");
         }
+    }
+
+    #[test]
+    fn attribute_initializers_allow_comparison_operators() {
+        let actual = parse_attribute_declarations(
+            "Map<A,List<B>> values = defaults, boolean less = other < 0, \
+             boolean greater = other > 0, boolean atMost = other <= 0, \
+             boolean atLeast = other >= 0, int count",
+        )
+        .into_iter()
+        .map(|declaration| {
+            (
+                declaration.name,
+                declaration.ty.unwrap_or_default(),
+                declaration.initializer,
+            )
+        })
+        .collect::<Vec<_>>();
+
+        assert_eq!(
+            actual,
+            [
+                (
+                    "values".to_owned(),
+                    "Map<A,List<B>>".to_owned(),
+                    Some("defaults".to_owned()),
+                ),
+                (
+                    "less".to_owned(),
+                    "boolean".to_owned(),
+                    Some("other < 0".to_owned()),
+                ),
+                (
+                    "greater".to_owned(),
+                    "boolean".to_owned(),
+                    Some("other > 0".to_owned()),
+                ),
+                (
+                    "atMost".to_owned(),
+                    "boolean".to_owned(),
+                    Some("other <= 0".to_owned()),
+                ),
+                (
+                    "atLeast".to_owned(),
+                    "boolean".to_owned(),
+                    Some("other >= 0".to_owned()),
+                ),
+                ("count".to_owned(), "int".to_owned(), None),
+            ]
+        );
     }
 
     #[test]

@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use antlr4_runtime::atn::AtnStateKind;
 
@@ -235,22 +235,23 @@ impl BuildGraph {
             let compact = state_map.len();
             state_map.insert(state.id, compact);
         }
-        let surviving_transitions = self
+        let transition_map = self
             .transitions
             .iter()
             .filter(|transition| {
                 state_map.contains_key(&transition.source)
                     && state_map.contains_key(&transition.target)
             })
-            .map(|transition| transition.id)
-            .collect::<BTreeSet<_>>();
+            .enumerate()
+            .map(|(index, transition)| (transition.id, index))
+            .collect::<BTreeMap<_, _>>();
         let model_transitions = self
             .model_transitions
             .into_iter()
             .filter_map(|(model, transitions)| {
                 let transitions = transitions
                     .into_iter()
-                    .filter(|transition| surviving_transitions.contains(transition))
+                    .filter_map(|transition| transition_map.get(&transition).copied())
                     .collect::<Vec<_>>();
                 (!transitions.is_empty()).then_some((model, transitions))
             })
@@ -382,7 +383,7 @@ pub(crate) struct FinalizedAtnGraph {
     pub(crate) rule_starts: Vec<usize>,
     pub(crate) rule_stops: Vec<usize>,
     pub(crate) state_map: BTreeMap<BuildStateId, usize>,
-    pub(crate) model_transitions: BTreeMap<ModelNodeId, Vec<BuildTransitionId>>,
+    pub(crate) model_transitions: BTreeMap<ModelNodeId, Vec<usize>>,
 }
 
 impl FinalizedAtnGraph {
@@ -394,11 +395,7 @@ impl FinalizedAtnGraph {
             .get(&model)
             .into_iter()
             .flatten()
-            .filter_map(|id| {
-                self.transitions
-                    .iter()
-                    .find(|transition| transition.original == *id)
-            })
+            .filter_map(|index| self.transitions.get(*index))
     }
 }
 
