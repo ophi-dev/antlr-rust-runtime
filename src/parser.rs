@@ -563,6 +563,29 @@ pub trait SemanticHooks {
         true
     }
 
+    /// Whether this hook object may override interpreted parser decisions.
+    ///
+    /// This remains disabled by default so ordinary generated parsers retain
+    /// the fast recognizer path.
+    fn observes_parser_decisions(&self) -> bool {
+        false
+    }
+
+    /// Overrides one interpreted parser decision with a one-based alternative.
+    ///
+    /// Returning `None` leaves normal adaptive prediction in control. Hooks
+    /// that return an alternative own any one-shot or input-index filtering
+    /// they require.
+    fn parser_decision_override(
+        &mut self,
+        decision: usize,
+        input_index: usize,
+        alternative_count: usize,
+    ) -> Option<usize> {
+        let _ = (decision, input_index, alternative_count);
+        None
+    }
+
     fn sempred<S>(
         &mut self,
         ctx: &mut ParserSemCtx<'_, S>,

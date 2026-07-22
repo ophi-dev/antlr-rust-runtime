@@ -352,8 +352,6 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::rc::Rc;
 
-    use antlr4_runtime::InputStream;
-    use antlr4_runtime::RecognizerData;
     use antlr4_runtime::atn::lexer::{next_token_compiled_with_hooks, next_token_with_hooks};
     use antlr4_runtime::atn::lexer_dfa::CompiledLexerDfa;
     use antlr4_runtime::atn::serialized::{AtnDeserializer, SerializedAtn};
@@ -363,10 +361,15 @@ mod tests {
     };
     use antlr4_runtime::token_stream::CommonTokenStream;
     use antlr4_runtime::vocabulary::Vocabulary;
+    use antlr4_runtime::{
+        BaseParser, InputStream, ParserRuntimeOptions, RecognizerData, SemanticHooks,
+        UnknownSemanticPolicy,
+    };
 
     use super::*;
     use crate::grammar::compiler::{Compilation, compile};
     use crate::grammar::loader::{LoadOptions, load};
+    use crate::grammar::model::LeftRecursiveAlternativeKind;
     use crate::grammar::provenance::Origin;
     use crate::grammar::semantics::analyze;
     use crate::grammar::transform::integrate_loaded;
@@ -1251,6 +1254,330 @@ mod tests {
             &serialize_interp(&compiled.semantic.recognizer, &actual),
             expected_path,
         );
+    }
+
+    mod upstream_lookahead_trees {
+        use super::*;
+
+        #[test]
+        fn alternatives_match_java() {
+            let compilation = assert_lookahead_fixture("testlookaheadtrees-testalts-ea8f84416c");
+            assert_lookahead_trees(
+                &compilation,
+                "a.b;",
+                "s",
+                0,
+                0,
+                &[("e", "(e:1 a . b)"), ("e", "(e:2 a <error .>)")],
+            );
+        }
+
+        #[test]
+        fn left_recursive_loop_match_java() {
+            let compilation = assert_lookahead_fixture("testlookaheadtrees-testalts2-4e81c43326");
+            assert_lookahead_trees(
+                &compilation,
+                "a;",
+                "s",
+                1,
+                1,
+                &[
+                    ("e", "(e:2 (e:1 a) <error ;>)"),
+                    ("s", "(s:1 (e:1 a) ; <EOF>)"),
+                ],
+            );
+        }
+
+        #[test]
+        fn include_eof_matches_java() {
+            let compilation =
+                assert_lookahead_fixture("testlookaheadtrees-testincludeeof-41ef07554a");
+            assert_lookahead_trees(
+                &compilation,
+                "a.b",
+                "s",
+                0,
+                0,
+                &[("e", "(e:1 a . b <EOF>)"), ("e", "(e:2 a . b <EOF>)")],
+            );
+        }
+
+        #[test]
+        fn calls_left_recursive_rule_match_java() {
+            let compilation =
+                assert_lookahead_fixture("testlookaheadtrees-testcallleftrecursiverule-410ec32fb8");
+            assert_lookahead_trees(
+                &compilation,
+                "x;!",
+                "s",
+                0,
+                0,
+                &[("a", "(a:1 (e:4 x) ;)"), ("a", "(a:2 x ;)")],
+            );
+            assert_lookahead_trees(
+                &compilation,
+                "x+1;!",
+                "s",
+                2,
+                1,
+                &[
+                    ("e", "(e:1 (e:4 x) <error +>)"),
+                    ("e", "(e:2 (e:4 x) + (e:5 1))"),
+                    ("e", "(e:3 (e:4 x) <error +>)"),
+                ],
+            );
+        }
+
+        fn assert_lookahead_fixture(fixture_name: &str) -> Compilation {
+            let compilation = compile_fixture(fixture_name, &["L.g4", "T.g4"])
+                .expect("lookahead grammar should compile");
+            assert_lexer_interp(
+                lexer_named(&compilation, "L"),
+                &fixture(fixture_name).join("L.interp"),
+            );
+            assert_parser_interp(
+                parser_named(&compilation, "T"),
+                &fixture(fixture_name).join("T.interp"),
+            );
+            assert!(compilation.diagnostics.is_empty());
+            compilation
+        }
+
+        fn assert_lookahead_trees(
+            compilation: &Compilation,
+            input: &str,
+            start_rule: &str,
+            decision: usize,
+            decision_input: usize,
+            expected: &[(&str, &str)],
+        ) {
+            let lexer = lexer_named(compilation, "L");
+            let compiled = parser_named(compilation, "T");
+            let decision_state = compiled.graph.decisions[decision];
+            assert_eq!(
+                compiled.graph.states[decision_state].transitions.len(),
+                expected.len(),
+            );
+            let start_rule = compiled
+                .semantic
+                .recognizer
+                .rule_names
+                .iter()
+                .position(|name| name == start_rule)
+                .expect("upstream start rule should exist");
+
+            let left_recursive_alt_numbers = left_recursive_alt_numbers(compiled);
+            for (alternative, &(expected_rule, expected_tree)) in expected.iter().enumerate() {
+                let hooks = ForcedDecisionHooks {
+                    decision,
+                    input_index: decision_input,
+                    alternative: alternative + 1,
+                    reached: false,
+                };
+                let source = DirectTokenSource {
+                    base: BaseLexer::new(
+                        InputStream::with_source_name(input, "lookahead-test"),
+                        recognizer_data(&lexer.semantic.recognizer),
+                    ),
+                    atn: &lexer.atn,
+                    strategy: LexerStrategy::Interpreted,
+                };
+                let stream = CommonTokenStream::try_new(source)
+                    .expect("lookahead input token stream should fit");
+                let mut parser = BaseParser::with_semantic_hooks(
+                    stream,
+                    recognizer_data(&compiled.semantic.recognizer),
+                    hooks,
+                );
+                let expected_rule = compiled
+                    .semantic
+                    .recognizer
+                    .rule_names
+                    .iter()
+                    .position(|name| name == expected_rule)
+                    .expect("expected subtree rule should exist");
+                let (tree, _) = parser
+                    .parse_atn_rule_with_runtime_options(
+                        &compiled.packed,
+                        start_rule,
+                        ParserRuntimeOptions {
+                            track_alt_numbers: true,
+                            unknown_predicate_policy: UnknownSemanticPolicy::AssumeFalse,
+                            ..ParserRuntimeOptions::default()
+                        },
+                    )
+                    .unwrap_or_else(|error| {
+                        panic!(
+                            "decision {decision}, alternative {} should produce a tree: {error:?}",
+                            alternative + 1,
+                        )
+                    });
+                let subtree = parser
+                    .node(tree)
+                    .first_rule(expected_rule)
+                    .expect("expected subtree should exist");
+                assert_eq!(
+                    lookahead_tree_string(
+                        subtree,
+                        &compiled.semantic.recognizer.rule_names,
+                        &left_recursive_alt_numbers,
+                    ),
+                    expected_tree,
+                    "decision {decision}, alternative {}",
+                    alternative + 1,
+                );
+            }
+        }
+
+        #[derive(Debug)]
+        struct ForcedDecisionHooks {
+            decision: usize,
+            input_index: usize,
+            alternative: usize,
+            reached: bool,
+        }
+
+        impl SemanticHooks for ForcedDecisionHooks {
+            fn observes_parser_decisions(&self) -> bool {
+                true
+            }
+
+            fn parser_decision_override(
+                &mut self,
+                decision: usize,
+                input_index: usize,
+                alternative_count: usize,
+            ) -> Option<usize> {
+                if self.reached || decision != self.decision || input_index != self.input_index {
+                    return None;
+                }
+                assert!(self.alternative <= alternative_count);
+                self.reached = true;
+                Some(self.alternative)
+            }
+        }
+
+        #[derive(Debug)]
+        struct LeftRecursiveAltNumbers {
+            primary: Vec<usize>,
+            operator: Vec<usize>,
+        }
+
+        fn left_recursive_alt_numbers(
+            compiled: &super::super::super::parser::CompiledParser,
+        ) -> Vec<Option<LeftRecursiveAltNumbers>> {
+            let mut mappings = (0..compiled.semantic.recognizer.rule_names.len())
+                .map(|_| None)
+                .collect::<Vec<_>>();
+            for rule in &compiled.semantic.unit.rules {
+                let Some(info) = &rule.left_recursion else {
+                    continue;
+                };
+                let rule_index = compiled.semantic.recognizer.rule_numbers[&rule.id];
+                let mut primary = Vec::new();
+                let mut operator = Vec::new();
+                for (index, kind) in info.alternative_kinds.values().enumerate() {
+                    let original_alt_number = index + 1;
+                    match kind {
+                        LeftRecursiveAlternativeKind::Primary
+                        | LeftRecursiveAlternativeKind::Prefix => {
+                            primary.push(original_alt_number);
+                        }
+                        LeftRecursiveAlternativeKind::Binary
+                        | LeftRecursiveAlternativeKind::Suffix => {
+                            operator.push(original_alt_number);
+                        }
+                    }
+                }
+                mappings[rule_index] = Some(LeftRecursiveAltNumbers { primary, operator });
+            }
+            mappings
+        }
+
+        fn recognizer_data(recognizer: &RecognizerModel) -> RecognizerData {
+            RecognizerData::new(
+                recognizer.name.clone(),
+                Vocabulary::new(
+                    recognizer.literal_names.clone(),
+                    recognizer.symbolic_names.clone(),
+                    vec![None::<String>; recognizer.symbolic_names.len()],
+                ),
+            )
+            .with_rule_names(recognizer.rule_names.clone())
+        }
+
+        fn lookahead_tree_string(
+            node: antlr4_runtime::tree::Node<'_>,
+            rule_names: &[String],
+            left_recursive_alt_numbers: &[Option<LeftRecursiveAltNumbers>],
+        ) -> String {
+            render_lookahead_tree(node, rule_names, left_recursive_alt_numbers).0
+        }
+
+        fn render_lookahead_tree(
+            node: antlr4_runtime::tree::Node<'_>,
+            rule_names: &[String],
+            left_recursive_alt_numbers: &[Option<LeftRecursiveAltNumbers>],
+        ) -> (String, bool) {
+            if let Some(rule) = node.as_rule() {
+                let name = &rule_names[rule.rule_index()];
+                let alt_number = original_alt_number(rule, left_recursive_alt_numbers);
+                let display_name = if alt_number == 0 {
+                    name.clone()
+                } else {
+                    format!("{name}:{alt_number}")
+                };
+                if rule.child_count() == 0 {
+                    return (display_name, false);
+                }
+                let mut children = Vec::new();
+                let mut hit_error = false;
+                for child in rule.children() {
+                    let (child, child_hit_error) =
+                        render_lookahead_tree(child, rule_names, left_recursive_alt_numbers);
+                    children.push(child);
+                    if child_hit_error {
+                        hit_error = true;
+                        break;
+                    }
+                }
+                return (
+                    format!("({display_name} {})", children.join(" ")),
+                    hit_error,
+                );
+            }
+            if node.as_error().is_some() {
+                return (format!("<error {}>", node.text()), true);
+            }
+            (node.to_string_tree_with_names::<String>(&[]), false)
+        }
+
+        fn original_alt_number(
+            rule: antlr4_runtime::tree::RuleNodeView<'_>,
+            mappings: &[Option<LeftRecursiveAltNumbers>],
+        ) -> usize {
+            let rewritten_alt_number = rule.alt_number();
+            let Some(mapping) = &mappings[rule.rule_index()] else {
+                return rewritten_alt_number;
+            };
+            let starts_with_same_rule = rule
+                .children()
+                .next()
+                .and_then(antlr4_runtime::tree::Node::as_rule)
+                .is_some_and(|child| child.rule_index() == rule.rule_index());
+            let authored_alt_numbers = if starts_with_same_rule {
+                &mapping.operator
+            } else {
+                &mapping.primary
+            };
+            if rewritten_alt_number == 0 && authored_alt_numbers.len() == 1 {
+                return authored_alt_numbers[0];
+            }
+            authored_alt_numbers
+                .get(rewritten_alt_number.saturating_sub(1))
+                .copied()
+                .unwrap_or(rewritten_alt_number)
+        }
     }
 
     mod upstream_left_recursion_tool_issues {
