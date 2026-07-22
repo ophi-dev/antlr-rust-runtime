@@ -97,7 +97,21 @@ jobs:
             --no-chrome
             --dangerously-skip-permissions
           plugins: "code-review@claude-code-plugins"
-          prompt: "/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
+          # The trailing directive fixes a CI-only stall: the review skill fans out to
+          # parallel sub-agents, and on its final turn the model would emit "I'll wait
+          # for the agents to report…" and end the turn (stop_reason: end_turn) — but in
+          # a non-interactive batch there is no async resume, so the consolidated review
+          # was never posted even though every sub-agent had already returned. Forbid the
+          # yield: sub-agent results are available synchronously in-session.
+          prompt: |
+            /code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}
+
+            IMPORTANT (non-interactive CI run): You cannot pause and resume. Any
+            sub-agents you spawn return their results synchronously within this same
+            session — never end your turn saying you will "wait for" them. Once their
+            results are in hand, immediately validate the candidate findings and post
+            the consolidated review via update_claude_comment before finishing. The
+            task is not complete until the consolidated review has been posted.
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
 
