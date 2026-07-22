@@ -96,7 +96,7 @@
     {
       "path": "src/bin_support/grammar/atn/interp_test.rs",
       "marker": "    mod upstream_symbol_issues {",
-      "end_marker": "\n    mod upstream_tool_syntax_errors {",
+      "end_marker": "\n    #[allow(clippy::too_many_arguments)]\n    mod upstream_composite_grammars {",
       "historical_end_marker": "\n    mod upstream_token_position_options {",
       "sha256": "4ed0bea95d793d013419d427bc1c75e9373e70fbea4af44e234008b93eb05fc0"
     }

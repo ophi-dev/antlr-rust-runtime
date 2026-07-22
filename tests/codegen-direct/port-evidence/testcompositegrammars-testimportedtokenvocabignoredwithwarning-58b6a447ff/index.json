@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcompositegrammars-testimportedtokenvocabignoredwithwarning-58b6a447ff",
+  "active_revision_id": "testcompositegrammars-testimportedtokenvocabignoredwithwarning-58b6a447ff-r1",
+  "revisions": [
+    {
+      "revision_id": "testcompositegrammars-testimportedtokenvocabignoredwithwarning-58b6a447ff-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testimportedtokenvocabignoredwithwarning-58b6a447ff/revisions/testcompositegrammars-testimportedtokenvocabignoredwithwarning-58b6a447ff-r1/manifest.json",
+      "closure_sha256": "301f3550f77febcf7eda85731374e679407d9350dce761c64ff126ab7cba92d0"
+    }
+  ]
+}

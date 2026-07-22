@@ -19,6 +19,9 @@ import {
     CHAR_SUPPORT_BASE_COMMIT,
     CHAR_SUPPORT_IMPLEMENTATION_COMMIT,
     CHAR_SUPPORT_TEST_COMMIT,
+    COMPOSITE_GRAMMARS_BASE_COMMIT,
+    COMPOSITE_GRAMMARS_IMPLEMENTATION_COMMIT,
+    COMPOSITE_GRAMMARS_TEST_COMMIT,
     EMPTY_VOCABULARY_BASE_COMMIT,
     EMPTY_VOCABULARY_IMPLEMENTATION_COMMIT,
     EMPTY_VOCABULARY_TEST_COMMIT,
@@ -151,6 +154,57 @@ const TOOL_SYNTAX_ERRORS_RED_CASES = new Map([
     [
         "testtoolsyntaxerrors-testunrecognizedassocoption-5eb7b9d825",
         "expected Java warning 157, but the direct compiler emitted no diagnostic",
+    ],
+]);
+const COMPOSITE_GRAMMARS_CASES =
+    "tests/codegen-direct/generated/composite-grammars-cases.inc.rs";
+const COMPOSITE_GRAMMARS_TEST_PREFIX =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen " +
+    "grammar::atn::interp_test::tests::upstream_composite_grammars::";
+const COMPOSITE_GRAMMARS_RED_CASES = new Map([
+    [
+        "testcompositegrammars-testcirculargrammarinclusion-fa7d054f70",
+        "the recursive import was rejected with G4L009 instead of compiling like Java",
+    ],
+    [
+        "testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-4c7379ef04",
+        "the incompatible modal lexer import compiled instead of reporting Java error 120",
+    ],
+    [
+        "testcompositegrammars-testdelegatesseesametokentype-c679d17236",
+        "the direct compiler emitted 9 duplicate-token warnings instead of Java's 6",
+    ],
+    [
+        "testcompositegrammars-testemptymodesinlexergrammar-8e58f11b11",
+        "the imported empty mode was rejected with G4S026 instead of compiling like Java",
+    ],
+    [
+        "testcompositegrammars-testimportedtokenvocabignoredwithwarning-58b6a447ff",
+        "the imported tokenVocab was resolved and rejected instead of producing Java warning 109",
+    ],
+    [
+        "testcompositegrammars-testimportfilenotsearchedforinoutputdir-8979f25b55",
+        "the direct compiler emitted 1 missing-import diagnostic instead of Java's 2 diagnostics",
+    ],
+    [
+        "testcompositegrammars-testimportlargegrammar-110006096d",
+        "the direct compiler emitted 4 fragment-action warnings instead of Java's clean result",
+    ],
+    [
+        "testcompositegrammars-testimportselfloop-1a101afc75",
+        "the self import was rejected with G4L009 instead of compiling like Java",
+    ],
+    [
+        "testcompositegrammars-testnestedcomposite-6c1f19c65a",
+        "the imported implicit-token warning was attributed to G2.g4 instead of Java's G3.g4",
+    ],
+    [
+        "testcompositegrammars-testrulesvisiblethroughmultilevelimport-85d26b4c0f",
+        "the imported implicit-token warning was attributed to T.g4 instead of Java's M.g4",
+    ],
+    [
+        "testcompositegrammars-testsyntaxerrorsinimportsnotthrownout-6bf25ff5eb",
+        "the direct compiler emitted G4F003 instead of Java's follow-on undefined-rule diagnostic",
     ],
 ]);
 const ATN_CONSTRUCTION_TEST_COMMAND =
@@ -1334,6 +1388,10 @@ function completedPhaseBRow(
                                             "tool-syntax-errors"
                                           ? `direct Rust tool diagnostics and accepted artifacts match ` +
                                             `Java 4.13.2 for ${cases[0].suite}.${cases[0].name}`
+                                          : completed.kind ===
+                                              "composite-grammars"
+                                            ? `direct Rust import integration, diagnostics, and artifacts match ` +
+                                              `Java 4.13.2 for ${cases[0].suite}.${cases[0].name}`
                                         : completed.kind === "graph-nodes"
                                           ? `Rust prediction-context merging matches the Java 4.13.2 DOT graph ` +
                                             `for ${cases[0].suite}.${cases[0].name}`
@@ -2037,6 +2095,52 @@ async function loadCompletedPhaseBPorts() {
             "expected 31 completed TestToolSyntaxErrors ports with all recorded red cases",
         );
     }
+    const compositeCasesSource = await readFile(
+        resolve(repoRoot, COMPOSITE_GRAMMARS_CASES),
+        "utf8",
+    );
+    const compositePattern =
+        /case!\(\s*(\w+),\s*"(testcompositegrammars-[^"]+)"/gu;
+    const remainingCompositeRedIds = new Set(
+        COMPOSITE_GRAMMARS_RED_CASES.keys(),
+    );
+    let compositeCount = 0;
+    for (const match of compositeCasesSource.matchAll(compositePattern)) {
+        const [, testName, logicalId] = match;
+        const redFingerprint =
+            COMPOSITE_GRAMMARS_RED_CASES.get(logicalId);
+        const ported = redFingerprint !== undefined;
+        remainingCompositeRedIds.delete(logicalId);
+        ports.set(logicalId, {
+            fixturePaths: await fixturePaths(logicalId),
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_composite_grammars::" +
+                `${testName}::matches_java`,
+            kind: "composite-grammars",
+            resolution: ported
+                ? "ported"
+                : "verified-covered-existing",
+            scaffoldCommit: COMPOSITE_GRAMMARS_BASE_COMMIT,
+            testCommit: COMPOSITE_GRAMMARS_TEST_COMMIT,
+            implementationCommit: ported
+                ? COMPOSITE_GRAMMARS_IMPLEMENTATION_COMMIT
+                : COMPOSITE_GRAMMARS_BASE_COMMIT,
+            testCommand:
+                `${COMPOSITE_GRAMMARS_TEST_PREFIX}${testName}` +
+                "::matches_java -- --exact",
+            greenResult: "1 passed; 0 failed",
+            redFingerprint,
+        });
+        compositeCount += 1;
+    }
+    if (
+        compositeCount !== 26 ||
+        remainingCompositeRedIds.size !== 0
+    ) {
+        throw new Error(
+            "expected 26 completed TestCompositeGrammars ports with all recorded red cases",
+        );
+    }
     for (const [logicalId, definition] of LOOKAHEAD_TREE_PORTS) {
         ports.set(logicalId, {
             fixturePaths: await fixturePaths(logicalId),
@@ -2097,8 +2201,8 @@ async function loadCompletedPhaseBPorts() {
             `expected 47 completed TestScopeParsing ports, found ${scopeGroups.size}`,
         );
     }
-    if (ports.size !== 356) {
-        throw new Error(`expected 356 completed Phase B ports, found ${ports.size}`);
+    if (ports.size !== 382) {
+        throw new Error(`expected 382 completed Phase B ports, found ${ports.size}`);
     }
     return ports;
 }

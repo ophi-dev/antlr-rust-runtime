@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcompositegrammars-testheaderspropagatedcorrectlytoimportedgrammars-f8ff35ee27",
+  "active_revision_id": "testcompositegrammars-testheaderspropagatedcorrectlytoimportedgrammars-f8ff35ee27-r1",
+  "revisions": [
+    {
+      "revision_id": "testcompositegrammars-testheaderspropagatedcorrectlytoimportedgrammars-f8ff35ee27-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testheaderspropagatedcorrectlytoimportedgrammars-f8ff35ee27/revisions/testcompositegrammars-testheaderspropagatedcorrectlytoimportedgrammars-f8ff35ee27-r1/manifest.json",
+      "closure_sha256": "f62e397b413f8f73efec578bd01ec4bfe11d62c6b1904470c437a8fd3780b49e"
+    }
+  ]
+}

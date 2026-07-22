@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcompositegrammars-testimportedtokenvocabignoredwithwarning-58b6a447ff",
+  "revision_id": "testcompositegrammars-testimportedtokenvocabignoredwithwarning-58b6a447ff-r1",
+  "cells": [
+    {
+      "test_port": "primary",
+      "test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+      "implementation_port": "primary-antlr-ng",
+      "implementation_commit": "d1789bf340290d37dd8d444cabadd7bb111906d9",
+      "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportedtokenvocabignoredwithwarning_58b6a447ff::matches_java -- --exact",
+      "result": "green: 1 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the primary implementation passed the locked primary tests"
+}

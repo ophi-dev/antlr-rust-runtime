@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcompositegrammars-test3levelimport-8ebe7bd112",
+  "revision_id": "testcompositegrammars-test3levelimport-8ebe7bd112-r1",
+  "primary_test_source": {
+    "implementation": "java-antlr",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "source_case_ids": [
+      "java-antlr:testcompositegrammars-test3levelimport-path@4fafe828433c"
+    ]
+  },
+  "alternate_test_source": {
+    "implementation": "antlr-ng",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "source_case_ids": [
+      "antlr-ng:testcompositegrammars-test3levelimport@668ccefe9039"
+    ]
+  },
+  "outcomes": {
+    "primary": "the direct Rust compiler matches the immutable Java 4.13.2 composite-grammar diagnostics and complete .interp and .tokens fixtures",
+    "alternate": "the pinned antlr-ng TestCompositeGrammars case uses the same grammar import graph and observable",
+    "java_compatibility_verdict": "exact Java 4.13.2 import integration, diagnostic category, severity, ordering, source position, and accepted recognizer metadata equality"
+  }
+}

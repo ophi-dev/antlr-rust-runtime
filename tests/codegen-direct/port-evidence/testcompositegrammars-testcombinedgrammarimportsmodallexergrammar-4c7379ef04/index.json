@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-4c7379ef04",
+  "active_revision_id": "testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-4c7379ef04-r1",
+  "revisions": [
+    {
+      "revision_id": "testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-4c7379ef04-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-4c7379ef04/revisions/testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-4c7379ef04-r1/manifest.json",
+      "closure_sha256": "7635753a560354ff7c87e117be0579eef14789f64b2cf7a2acf039d7c91415b4"
+    }
+  ]
+}

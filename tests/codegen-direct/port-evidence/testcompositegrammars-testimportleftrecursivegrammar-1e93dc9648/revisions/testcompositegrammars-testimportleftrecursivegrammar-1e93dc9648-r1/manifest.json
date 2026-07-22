@@ -1,0 +1,145 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648",
+  "revision_id": "testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "resolution": "verified-covered-existing",
+  "closure": {
+    "logical_id": "testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648",
+    "source_case_ids": [
+      "antlr-ng:testcompositegrammars-testimportleftrecursivegrammar@12264aff38e0",
+      "java-antlr:testcompositegrammars-testimportleftrecursivegrammar-path@ec8458ac8b44"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/Java.g4",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/T.g4",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/T.interp",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/T.tokens",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/TLexer.interp",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/TLexer.tokens",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/fixture.json",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/oracle/java-unicode-data.stdout"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportleftrecursivegrammar_1e93dc9648::matches_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testImportLeftRecursiveGrammar",
+    "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+    "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+    "resolution": "verified-covered-existing"
+  },
+  "closure_sha256": "79f12d80897c50a2efceb1d51cf479980c3123f0e6c65cd0cc6d132c22c6b26f",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testcompositegrammars-testimportleftrecursivegrammar@12264aff38e0",
+      "path": "tests/TestCompositeGrammars.spec.ts",
+      "sha256": "cb96ff644d0160da0f98f3bdb463c7f1b92c89f5b999a5c2a2dca7de5f05e2d7"
+    },
+    {
+      "source_case_id": "java-antlr:testcompositegrammars-testimportleftrecursivegrammar-path@ec8458ac8b44",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestCompositeGrammars.java",
+      "sha256": "de04441f7ad86b0bf7fd100038606ba71098d4092fe3822ec2b0dee5842dbd05"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/Java.g4",
+      "sha256": "0e236705d5349ecb0b0b3efa02b7162f7415742dfd9af8e8ef7306d0418cee00"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/T.g4",
+      "sha256": "29d90fce9f8e8f5e20b1f0851883879c93fc2702dfd9e50280e1b7a18a88760f"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/T.interp",
+      "sha256": "9d45977774a1452112adf0a5cbc3530cf5f7782a29ba25675f855a14226038be"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/T.tokens",
+      "sha256": "159653876daee0f860d2315acfbc9053b1f71e17071b5590be5d9e7d97a81565"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/TLexer.interp",
+      "sha256": "578b65a6ae7fb4eaec1a7cf14f0797ac950089a9d5e1884c2e0874eb3249e972"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/TLexer.tokens",
+      "sha256": "159653876daee0f860d2315acfbc9053b1f71e17071b5590be5d9e7d97a81565"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/fixture.json",
+      "sha256": "b470c7fd2c2db8045b85e471e2bea6e475dfe40f02e0e84b91cd5c213f947e29"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    }
+  ],
+  "commits": {
+    "scaffold": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+    "primary_test": "365cdabd8f03a701770102d52760acd08fe65b6a",
+    "primary_implementation": "34523259e7ecb751c80bb5de20b3a213648d4dac"
+  },
+  "ancestry": {
+    "primary_test_parent": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+    "primary_implementation_parent": "10c384d8431953e0de596eb64ccaca46d230b3f4",
+    "reachability": "the case-specific composite-grammar assertion passed against the direct compiler implementation already present at the batch base"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_composite_grammars {",
+      "end_marker": "\n    mod upstream_tool_syntax_errors {",
+      "sha256": "8154dc509aff5f0722a668393941ac494659fb2e04f78022e90f806d222ab3e7"
+    },
+    {
+      "path": "tests/codegen-direct/generated/composite-grammars-cases.inc.rs",
+      "marker": "// Generated by tools/grammar-frontend/generate-composite-grammars-fixtures.mjs.",
+      "sha256": "80328e0092a85fe497d9ea643cac7952162d0cad45f820e75692b0ecaf8cabeb"
+    }
+  ],
+  "verified_covered_existing": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportleftrecursivegrammar_1e93dc9648::matches_java -- --exact",
+    "commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed",
+    "covering_implementation_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac"
+  },
+  "green_result": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportleftrecursivegrammar_1e93dc9648::matches_java -- --exact",
+    "commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/revisions/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648-r1/oracle-results/declared-sources.json",
+      "sha256": "e7189038a53ace6191837c8ba1ed820b4f7f9cbd6658c432d020f4705a8a74f5"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/revisions/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648-r1/matrix-results/results.json",
+      "sha256": "f1e804f256a733ae07f1693c20c9769bd67e7ddd661c47909af2ce0e167520f3"
+    }
+  ]
+}

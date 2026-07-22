@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcompositegrammars-test3levelimport-8ebe7bd112",
+  "active_revision_id": "testcompositegrammars-test3levelimport-8ebe7bd112-r1",
+  "revisions": [
+    {
+      "revision_id": "testcompositegrammars-test3levelimport-8ebe7bd112-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testcompositegrammars-test3levelimport-8ebe7bd112/revisions/testcompositegrammars-test3levelimport-8ebe7bd112-r1/manifest.json",
+      "closure_sha256": "eed5ff48091528ac18453bc5a09dd4637ddf60f48820b84d5c8c72425774fb53"
+    }
+  ]
+}

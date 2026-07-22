@@ -1,0 +1,135 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c",
+  "revision_id": "testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "resolution": "verified-covered-existing",
+  "closure": {
+    "logical_id": "testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c",
+    "source_case_ids": [
+      "antlr-ng:testcompositegrammars-testimportmixedchannelsintolexergrammar@4ea9d3df0200",
+      "java-antlr:testcompositegrammars-testimportmixedchannelsintolexergrammar-path@7ab669b604b6"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c/M.g4",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c/M.interp",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c/M.tokens",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c/S.g4",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c/fixture.json",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c/oracle/java-unicode-data.stdout"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportmixedchannelsintolexergrammar_fd4892253c::matches_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testImportMixedChannelsIntoLexerGrammar",
+    "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+    "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+    "resolution": "verified-covered-existing"
+  },
+  "closure_sha256": "f6b9267d65f26f6a5078eaf9319be67983d602531ceee5c5e112c54577460713",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testcompositegrammars-testimportmixedchannelsintolexergrammar@4ea9d3df0200",
+      "path": "tests/TestCompositeGrammars.spec.ts",
+      "sha256": "cb96ff644d0160da0f98f3bdb463c7f1b92c89f5b999a5c2a2dca7de5f05e2d7"
+    },
+    {
+      "source_case_id": "java-antlr:testcompositegrammars-testimportmixedchannelsintolexergrammar-path@7ab669b604b6",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestCompositeGrammars.java",
+      "sha256": "de04441f7ad86b0bf7fd100038606ba71098d4092fe3822ec2b0dee5842dbd05"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c/M.g4",
+      "sha256": "34238bbffe0876cdce68daaa4e9816d5c1f2e0de39c421573ee70c42df3a7c3b"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c/M.interp",
+      "sha256": "18a211a4cc212b5712ee3b8e898cdb9158163ad1c29e0d02da95dac6a34c29d5"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c/M.tokens",
+      "sha256": "21851b2e47f7ff45ed51bb97a3856744a11b256ff70015b3297106a0479183c8"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c/S.g4",
+      "sha256": "ab64fc730312b55d3a1985c44a9fe473c1522899239ec296444018f2172e86b8"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c/fixture.json",
+      "sha256": "553118b7e77b3a6aea85412d9fc741e9afb21ebfe96b0b46b45c88a17594e4db"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    }
+  ],
+  "commits": {
+    "scaffold": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+    "primary_test": "365cdabd8f03a701770102d52760acd08fe65b6a",
+    "primary_implementation": "34523259e7ecb751c80bb5de20b3a213648d4dac"
+  },
+  "ancestry": {
+    "primary_test_parent": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+    "primary_implementation_parent": "10c384d8431953e0de596eb64ccaca46d230b3f4",
+    "reachability": "the case-specific composite-grammar assertion passed against the direct compiler implementation already present at the batch base"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_composite_grammars {",
+      "end_marker": "\n    mod upstream_tool_syntax_errors {",
+      "sha256": "8154dc509aff5f0722a668393941ac494659fb2e04f78022e90f806d222ab3e7"
+    },
+    {
+      "path": "tests/codegen-direct/generated/composite-grammars-cases.inc.rs",
+      "marker": "// Generated by tools/grammar-frontend/generate-composite-grammars-fixtures.mjs.",
+      "sha256": "80328e0092a85fe497d9ea643cac7952162d0cad45f820e75692b0ecaf8cabeb"
+    }
+  ],
+  "verified_covered_existing": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportmixedchannelsintolexergrammar_fd4892253c::matches_java -- --exact",
+    "commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed",
+    "covering_implementation_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac"
+  },
+  "green_result": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportmixedchannelsintolexergrammar_fd4892253c::matches_java -- --exact",
+    "commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c/revisions/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c-r1/oracle-results/declared-sources.json",
+      "sha256": "3295d3a892197818c3eb0149d0315a3b7ac4da6c6b39168be59fc5d5e7dcca00"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c/revisions/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c-r1/matrix-results/results.json",
+      "sha256": "3b6b5220149c6b55312edf5e36bb8eb453f7f924bb1f3a103c1b30002f0ab6c5"
+    }
+  ]
+}

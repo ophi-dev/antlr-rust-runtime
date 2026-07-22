@@ -17575,8 +17575,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcompositegrammars-test3levelimport-8ebe7bd112-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-test3levelimport-8ebe7bd112",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_test3levelimport_8ebe7bd112::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -17597,8 +17598,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCompositeGrammars.test3LevelImport behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.test3LevelImport",
+      "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_test3levelimport_8ebe7bd112::matches_java -- --exact",
+        "commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_test3levelimport_8ebe7bd112::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcompositegrammars-test3levelimport-8ebe7bd112",
         "source_case_ids": [
@@ -17606,14 +17620,30 @@
           "java-antlr:testcompositegrammars-test3levelimport-path@4fafe828433c"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testcompositegrammars-test3levelimport-8ebe7bd112/M.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-test3levelimport-8ebe7bd112/M.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-test3levelimport-8ebe7bd112/M.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-test3levelimport-8ebe7bd112/S.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-test3levelimport-8ebe7bd112/T.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-test3levelimport-8ebe7bd112/diagnostics.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-test3levelimport-8ebe7bd112/fixture.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-test3levelimport-8ebe7bd112/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-test3levelimport-8ebe7bd112/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testcompositegrammars-test3levelimport-8ebe7bd112/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-test3levelimport-8ebe7bd112/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-test3levelimport-8ebe7bd112",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_test3levelimport_8ebe7bd112::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCompositeGrammars.test3LevelImport behavior"
+        "observable": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.test3LevelImport",
+        "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+        "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "77cc2125762e6e89bebdd6ce24a47a6232cc69d40d403149b39d59609bac62dd",
-      "evidence_path": null
+      "closure_sha256": "eed5ff48091528ac18453bc5a09dd4637ddf60f48820b84d5c8c72425774fb53",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcompositegrammars-test3levelimport-8ebe7bd112"
     },
     {
       "logical_id": "testcompositegrammars-testbigtreeofimports-697f33079e",
@@ -17625,8 +17655,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcompositegrammars-testbigtreeofimports-697f33079e-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testbigtreeofimports-697f33079e",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testbigtreeofimports_697f33079e::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -17647,8 +17678,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCompositeGrammars.testBigTreeOfImports behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testBigTreeOfImports",
+      "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testbigtreeofimports_697f33079e::matches_java -- --exact",
+        "commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testbigtreeofimports_697f33079e::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcompositegrammars-testbigtreeofimports-697f33079e",
         "source_case_ids": [
@@ -17656,14 +17700,32 @@
           "java-antlr:testcompositegrammars-testbigtreeofimports-path@771535f11fe9"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testcompositegrammars-testbigtreeofimports-697f33079e/A.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testbigtreeofimports-697f33079e/B.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testbigtreeofimports-697f33079e/C.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testbigtreeofimports-697f33079e/M.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testbigtreeofimports-697f33079e/M.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testbigtreeofimports-697f33079e/M.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testbigtreeofimports-697f33079e/S.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testbigtreeofimports-697f33079e/T.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testbigtreeofimports-697f33079e/fixture.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testbigtreeofimports-697f33079e/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testbigtreeofimports-697f33079e/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testbigtreeofimports-697f33079e/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testbigtreeofimports-697f33079e/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testbigtreeofimports-697f33079e",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testbigtreeofimports_697f33079e::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCompositeGrammars.testBigTreeOfImports behavior"
+        "observable": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testBigTreeOfImports",
+        "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+        "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "70b99551d3bc75e34deed03da4aaf744f883c3eceaabb32ca34c82b12c72ffe4",
-      "evidence_path": null
+      "closure_sha256": "e8e1dd53c0d6ab9d2f330112308d7c929ab9aea7c4755f0dbaddbe1cad61c92f",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testbigtreeofimports-697f33079e"
     },
     {
       "logical_id": "testcompositegrammars-testcirculargrammarinclusion-fa7d054f70",
@@ -17675,8 +17737,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcompositegrammars-testcirculargrammarinclusion-fa7d054f70-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testcirculargrammarinclusion_fa7d054f70::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -17697,8 +17759,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCompositeGrammars.testCircularGrammarInclusion behavior",
+      "expected_red_failure_fingerprint": "the recursive import was rejected with G4L009 instead of compiling like Java",
+      "observable_equivalence": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testCircularGrammarInclusion",
+      "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testcirculargrammarinclusion_fa7d054f70::matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "the recursive import was rejected with G4L009 instead of compiling like Java"
+      },
+      "primary_implementation_commit": "d1789bf340290d37dd8d444cabadd7bb111906d9",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testcirculargrammarinclusion_fa7d054f70::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcompositegrammars-testcirculargrammarinclusion-fa7d054f70",
         "source_case_ids": [
@@ -17706,14 +17780,29 @@
           "java-antlr:testcompositegrammars-testcirculargrammarinclusion-path@e9b50c2b636b"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/G1.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/G2.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/G2.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/G2.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/G2Lexer.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/G2Lexer.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/fixture.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testcirculargrammarinclusion_fa7d054f70::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCompositeGrammars.testCircularGrammarInclusion behavior"
+        "observable": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testCircularGrammarInclusion",
+        "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+        "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a"
       },
-      "closure_sha256": "e7f26707b3fbeb82837fa2fcfe15b8e9669c72676c35d1067499c2c60dcf806b",
-      "evidence_path": null
+      "closure_sha256": "48559d5036618cc51af20dec68e98c95d1e58ebee36fc604899902b7ba64dc63",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testcirculargrammarinclusion-fa7d054f70"
     },
     {
       "logical_id": "testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-4c7379ef04",
@@ -17725,8 +17814,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-4c7379ef04-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-4c7379ef04",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testcombinedgrammarimportsmodallexergrammar_4c7379ef04::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -17747,8 +17836,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCompositeGrammars.testCombinedGrammarImportsModalLexerGrammar behavior",
+      "expected_red_failure_fingerprint": "the incompatible modal lexer import compiled instead of reporting Java error 120",
+      "observable_equivalence": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testCombinedGrammarImportsModalLexerGrammar",
+      "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testcombinedgrammarimportsmodallexergrammar_4c7379ef04::matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "the incompatible modal lexer import compiled instead of reporting Java error 120"
+      },
+      "primary_implementation_commit": "d1789bf340290d37dd8d444cabadd7bb111906d9",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testcombinedgrammarimportsmodallexergrammar_4c7379ef04::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-4c7379ef04",
         "source_case_ids": [
@@ -17756,14 +17857,28 @@
           "java-antlr:testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-path@d6a7ca93f213"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-4c7379ef04/M.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-4c7379ef04/MLexer.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-4c7379ef04/MLexer.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-4c7379ef04/S.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-4c7379ef04/diagnostics.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-4c7379ef04/fixture.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-4c7379ef04/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-4c7379ef04/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-4c7379ef04/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-4c7379ef04/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-4c7379ef04",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testcombinedgrammarimportsmodallexergrammar_4c7379ef04::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCompositeGrammars.testCombinedGrammarImportsModalLexerGrammar behavior"
+        "observable": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testCombinedGrammarImportsModalLexerGrammar",
+        "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+        "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a"
       },
-      "closure_sha256": "d0a36e17b0ace3bf130f7485cbe82ecff1aca89b999cc580ec18973a937bd6d1",
-      "evidence_path": null
+      "closure_sha256": "7635753a560354ff7c87e117be0579eef14789f64b2cf7a2acf039d7c91415b4",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testcombinedgrammarimportsmodallexergrammar-4c7379ef04"
     },
     {
       "logical_id": "testcompositegrammars-testdelegatesseesametokentype-c679d17236",
@@ -17775,8 +17890,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcompositegrammars-testdelegatesseesametokentype-c679d17236-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testdelegatesseesametokentype-c679d17236",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testdelegatesseesametokentype_c679d17236::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -17797,8 +17912,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCompositeGrammars.testDelegatesSeeSameTokenType behavior",
+      "expected_red_failure_fingerprint": "the direct compiler emitted 9 duplicate-token warnings instead of Java's 6",
+      "observable_equivalence": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testDelegatesSeeSameTokenType",
+      "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testdelegatesseesametokentype_c679d17236::matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "the direct compiler emitted 9 duplicate-token warnings instead of Java's 6"
+      },
+      "primary_implementation_commit": "d1789bf340290d37dd8d444cabadd7bb111906d9",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testdelegatesseesametokentype_c679d17236::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcompositegrammars-testdelegatesseesametokentype-c679d17236",
         "source_case_ids": [
@@ -17806,14 +17933,31 @@
           "java-antlr:testcompositegrammars-testdelegatesseesametokentype-path@e884ad92ea0c"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testcompositegrammars-testdelegatesseesametokentype-c679d17236/M.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testdelegatesseesametokentype-c679d17236/M.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testdelegatesseesametokentype-c679d17236/M.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testdelegatesseesametokentype-c679d17236/MLexer.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testdelegatesseesametokentype-c679d17236/MLexer.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testdelegatesseesametokentype-c679d17236/S.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testdelegatesseesametokentype-c679d17236/T.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testdelegatesseesametokentype-c679d17236/diagnostics.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testdelegatesseesametokentype-c679d17236/fixture.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testdelegatesseesametokentype-c679d17236/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testdelegatesseesametokentype-c679d17236/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testdelegatesseesametokentype-c679d17236/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testdelegatesseesametokentype-c679d17236/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testdelegatesseesametokentype-c679d17236",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testdelegatesseesametokentype_c679d17236::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCompositeGrammars.testDelegatesSeeSameTokenType behavior"
+        "observable": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testDelegatesSeeSameTokenType",
+        "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+        "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a"
       },
-      "closure_sha256": "10e7494f487d39b8296655356f69d4b6838756f5bfdad41dee341495d9685442",
-      "evidence_path": null
+      "closure_sha256": "199a5a15b8e380de5afd5dbc3f40aa87744da343dc1c4cb196b7c11e28100acb",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testdelegatesseesametokentype-c679d17236"
     },
     {
       "logical_id": "testcompositegrammars-testemptymodesinlexergrammar-8e58f11b11",
@@ -17825,8 +17969,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcompositegrammars-testemptymodesinlexergrammar-8e58f11b11-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testemptymodesinlexergrammar-8e58f11b11",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testemptymodesinlexergrammar_8e58f11b11::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -17847,8 +17991,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCompositeGrammars.testEmptyModesInLexerGrammar behavior",
+      "expected_red_failure_fingerprint": "the imported empty mode was rejected with G4S026 instead of compiling like Java",
+      "observable_equivalence": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testEmptyModesInLexerGrammar",
+      "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testemptymodesinlexergrammar_8e58f11b11::matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "the imported empty mode was rejected with G4S026 instead of compiling like Java"
+      },
+      "primary_implementation_commit": "d1789bf340290d37dd8d444cabadd7bb111906d9",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testemptymodesinlexergrammar_8e58f11b11::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcompositegrammars-testemptymodesinlexergrammar-8e58f11b11",
         "source_case_ids": [
@@ -17856,14 +18012,27 @@
           "java-antlr:testcompositegrammars-testemptymodesinlexergrammar-path@82d45f29c64d"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testcompositegrammars-testemptymodesinlexergrammar-8e58f11b11/M.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testemptymodesinlexergrammar-8e58f11b11/M.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testemptymodesinlexergrammar-8e58f11b11/M.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testemptymodesinlexergrammar-8e58f11b11/S.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testemptymodesinlexergrammar-8e58f11b11/fixture.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testemptymodesinlexergrammar-8e58f11b11/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testemptymodesinlexergrammar-8e58f11b11/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testemptymodesinlexergrammar-8e58f11b11/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testemptymodesinlexergrammar-8e58f11b11/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testemptymodesinlexergrammar-8e58f11b11",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testemptymodesinlexergrammar_8e58f11b11::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCompositeGrammars.testEmptyModesInLexerGrammar behavior"
+        "observable": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testEmptyModesInLexerGrammar",
+        "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+        "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a"
       },
-      "closure_sha256": "8885859e238c7a47233b2eb22282fd818633dfffb24714f2f94d3f6b22f81e07",
-      "evidence_path": null
+      "closure_sha256": "11b21a27c9ae3249f0421e481ad15fbbf7051be296f53ca6f5ae4d3d86d3b0a0",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testemptymodesinlexergrammar-8e58f11b11"
     },
     {
       "logical_id": "testcompositegrammars-testerrorinimportedgetsrightfilename-b80534f848",
@@ -17875,8 +18044,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcompositegrammars-testerrorinimportedgetsrightfilename-b80534f848-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testerrorinimportedgetsrightfilename-b80534f848",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testerrorinimportedgetsrightfilename_b80534f848::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -17897,8 +18067,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCompositeGrammars.testErrorInImportedGetsRightFilename behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testErrorInImportedGetsRightFilename",
+      "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testerrorinimportedgetsrightfilename_b80534f848::matches_java -- --exact",
+        "commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testerrorinimportedgetsrightfilename_b80534f848::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcompositegrammars-testerrorinimportedgetsrightfilename-b80534f848",
         "source_case_ids": [
@@ -17906,14 +18089,29 @@
           "java-antlr:testcompositegrammars-testerrorinimportedgetsrightfilename-path@385195b47180"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testcompositegrammars-testerrorinimportedgetsrightfilename-b80534f848/M.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testerrorinimportedgetsrightfilename-b80534f848/MLexer.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testerrorinimportedgetsrightfilename-b80534f848/MLexer.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testerrorinimportedgetsrightfilename-b80534f848/S.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testerrorinimportedgetsrightfilename-b80534f848/diagnostics.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testerrorinimportedgetsrightfilename-b80534f848/fixture.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testerrorinimportedgetsrightfilename-b80534f848/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testerrorinimportedgetsrightfilename-b80534f848/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testerrorinimportedgetsrightfilename-b80534f848/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testerrorinimportedgetsrightfilename-b80534f848/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testerrorinimportedgetsrightfilename-b80534f848",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testerrorinimportedgetsrightfilename_b80534f848::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCompositeGrammars.testErrorInImportedGetsRightFilename behavior"
+        "observable": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testErrorInImportedGetsRightFilename",
+        "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+        "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "1bc858ff05037140829dff0a66e3add5ac89fab8832f160b3b3d583780236ec4",
-      "evidence_path": null
+      "closure_sha256": "36058ee3f0a29ef622e68cf732f650f496fe981c413b69c689293b524da6d914",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testerrorinimportedgetsrightfilename-b80534f848"
     },
     {
       "logical_id": "testcompositegrammars-testheaderspropagatedcorrectlytoimportedgrammars-f8ff35ee27",
@@ -17924,8 +18122,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcompositegrammars-testheaderspropagatedcorrectlytoimportedgrammars-f8ff35ee27-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropagatedcorrectlytoimportedgrammars-f8ff35ee27",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testheaderspropagatedcorrectlytoimportedgrammars_f8ff35ee27::matches_java",
       "primary_test_source": {
         "implementation": "independent-generated-oracle",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -17945,22 +18144,51 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCompositeGrammars.testHeadersPropagatedCorrectlyToImportedGrammars behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testHeadersPropagatedCorrectlyToImportedGrammars",
+      "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testheaderspropagatedcorrectlytoimportedgrammars_f8ff35ee27::matches_java -- --exact",
+        "commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testheaderspropagatedcorrectlytoimportedgrammars_f8ff35ee27::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcompositegrammars-testheaderspropagatedcorrectlytoimportedgrammars-f8ff35ee27",
         "source_case_ids": [
           "antlr-ng:testcompositegrammars-testheaderspropagatedcorrectlytoimportedgrammars@541bcd504ed2"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropagatedcorrectlytoimportedgrammars-f8ff35ee27/M.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropagatedcorrectlytoimportedgrammars-f8ff35ee27/M.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropagatedcorrectlytoimportedgrammars-f8ff35ee27/M.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropagatedcorrectlytoimportedgrammars-f8ff35ee27/MLexer.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropagatedcorrectlytoimportedgrammars-f8ff35ee27/MLexer.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropagatedcorrectlytoimportedgrammars-f8ff35ee27/S.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropagatedcorrectlytoimportedgrammars-f8ff35ee27/fixture.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropagatedcorrectlytoimportedgrammars-f8ff35ee27/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropagatedcorrectlytoimportedgrammars-f8ff35ee27/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropagatedcorrectlytoimportedgrammars-f8ff35ee27/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropagatedcorrectlytoimportedgrammars-f8ff35ee27/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropagatedcorrectlytoimportedgrammars-f8ff35ee27",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testheaderspropagatedcorrectlytoimportedgrammars_f8ff35ee27::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCompositeGrammars.testHeadersPropagatedCorrectlyToImportedGrammars behavior"
+        "observable": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testHeadersPropagatedCorrectlyToImportedGrammars",
+        "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+        "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "f4fc4cba4e7b577a5da201d6f73280c5879949646ac14fa3059e5a1e5eb46fa9",
-      "evidence_path": null
+      "closure_sha256": "f62e397b413f8f73efec578bd01ec4bfe11d62c6b1904470c437a8fd3780b49e",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testheaderspropagatedcorrectlytoimportedgrammars-f8ff35ee27"
     },
     {
       "logical_id": "testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04",
@@ -17971,8 +18199,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testheaderspropogatedcorrectlytoimportedgrammars_e8e7638e04::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -17992,22 +18221,51 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCompositeGrammars.testHeadersPropogatedCorrectlyToImportedGrammars behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testHeadersPropogatedCorrectlyToImportedGrammars",
+      "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testheaderspropogatedcorrectlytoimportedgrammars_e8e7638e04::matches_java -- --exact",
+        "commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testheaderspropogatedcorrectlytoimportedgrammars_e8e7638e04::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04",
         "source_case_ids": [
           "java-antlr:testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-p@d710a3ddfc36"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/M.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/M.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/M.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/MLexer.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/MLexer.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/S.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/fixture.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testheaderspropogatedcorrectlytoimportedgrammars_e8e7638e04::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCompositeGrammars.testHeadersPropogatedCorrectlyToImportedGrammars behavior"
+        "observable": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testHeadersPropogatedCorrectlyToImportedGrammars",
+        "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+        "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "d85ffb4e252632f20afa1b3c3a1921cb62e01facf41e53b462ef184d4d8743bc",
-      "evidence_path": null
+      "closure_sha256": "0aa8970f93f3b4715ffdcf3f0471adb99c2a1ddd9ae27d0f1a4b2dbb3cec223f",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04"
     },
     {
       "logical_id": "testcompositegrammars-testimportchannelsintolexergrammar-e6cf88820f",
@@ -18019,8 +18277,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcompositegrammars-testimportchannelsintolexergrammar-e6cf88820f-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testimportchannelsintolexergrammar-e6cf88820f",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportchannelsintolexergrammar_e6cf88820f::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18041,8 +18300,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCompositeGrammars.testImportChannelsIntoLexerGrammar behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testImportChannelsIntoLexerGrammar",
+      "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportchannelsintolexergrammar_e6cf88820f::matches_java -- --exact",
+        "commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportchannelsintolexergrammar_e6cf88820f::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcompositegrammars-testimportchannelsintolexergrammar-e6cf88820f",
         "source_case_ids": [
@@ -18050,14 +18322,28 @@
           "java-antlr:testcompositegrammars-testimportchannelsintolexergrammar-path@8986a20695cc"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportchannelsintolexergrammar-e6cf88820f/M.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportchannelsintolexergrammar-e6cf88820f/M.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportchannelsintolexergrammar-e6cf88820f/M.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportchannelsintolexergrammar-e6cf88820f/S.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportchannelsintolexergrammar-e6cf88820f/fixture.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportchannelsintolexergrammar-e6cf88820f/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportchannelsintolexergrammar-e6cf88820f/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportchannelsintolexergrammar-e6cf88820f/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportchannelsintolexergrammar-e6cf88820f/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testimportchannelsintolexergrammar-e6cf88820f",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportchannelsintolexergrammar_e6cf88820f::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCompositeGrammars.testImportChannelsIntoLexerGrammar behavior"
+        "observable": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testImportChannelsIntoLexerGrammar",
+        "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+        "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "be21a4444fbb4502fe1a9ea6f0ebc29edc35a800b3edad9bd5c3252ccd32dab7",
-      "evidence_path": null
+      "closure_sha256": "2085614150a9884a130dec9fe47488f2ed7c67da2e6af7a1d21386ddbfe694e8",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testimportchannelsintolexergrammar-e6cf88820f"
     },
     {
       "logical_id": "testcompositegrammars-testimportclashingchannelsintolexergrammar-60b7e91587",
@@ -18069,8 +18355,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcompositegrammars-testimportclashingchannelsintolexergrammar-60b7e91587-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testimportclashingchannelsintolexergrammar-60b7e91587",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportclashingchannelsintolexergrammar_60b7e91587::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18091,8 +18378,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCompositeGrammars.testImportClashingChannelsIntoLexerGrammar behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testImportClashingChannelsIntoLexerGrammar",
+      "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportclashingchannelsintolexergrammar_60b7e91587::matches_java -- --exact",
+        "commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportclashingchannelsintolexergrammar_60b7e91587::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcompositegrammars-testimportclashingchannelsintolexergrammar-60b7e91587",
         "source_case_ids": [
@@ -18100,14 +18400,28 @@
           "java-antlr:testcompositegrammars-testimportclashingchannelsintolexergrammar-path@257aa00a2d44"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportclashingchannelsintolexergrammar-60b7e91587/M.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportclashingchannelsintolexergrammar-60b7e91587/M.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportclashingchannelsintolexergrammar-60b7e91587/M.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportclashingchannelsintolexergrammar-60b7e91587/S.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportclashingchannelsintolexergrammar-60b7e91587/fixture.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportclashingchannelsintolexergrammar-60b7e91587/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportclashingchannelsintolexergrammar-60b7e91587/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportclashingchannelsintolexergrammar-60b7e91587/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportclashingchannelsintolexergrammar-60b7e91587/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testimportclashingchannelsintolexergrammar-60b7e91587",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportclashingchannelsintolexergrammar_60b7e91587::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCompositeGrammars.testImportClashingChannelsIntoLexerGrammar behavior"
+        "observable": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testImportClashingChannelsIntoLexerGrammar",
+        "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+        "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "d1028e92bc7b123d4e198da05beea0f67f8ec0a56892bce1c66f9cf46e46c18b",
-      "evidence_path": null
+      "closure_sha256": "0857f5b157cf401486bf876d839eb2efd0f70ea2f76c421c7084ff8d60e1a198",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testimportclashingchannelsintolexergrammar-60b7e91587"
     },
     {
       "logical_id": "testcompositegrammars-testimportedtokenvocabignoredwithwarning-58b6a447ff",
@@ -18119,8 +18433,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcompositegrammars-testimportedtokenvocabignoredwithwarning-58b6a447ff-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testimportedtokenvocabignoredwithwarning-58b6a447ff",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportedtokenvocabignoredwithwarning_58b6a447ff::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18141,8 +18455,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCompositeGrammars.testImportedTokenVocabIgnoredWithWarning behavior",
+      "expected_red_failure_fingerprint": "the imported tokenVocab was resolved and rejected instead of producing Java warning 109",
+      "observable_equivalence": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testImportedTokenVocabIgnoredWithWarning",
+      "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportedtokenvocabignoredwithwarning_58b6a447ff::matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "the imported tokenVocab was resolved and rejected instead of producing Java warning 109"
+      },
+      "primary_implementation_commit": "d1789bf340290d37dd8d444cabadd7bb111906d9",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportedtokenvocabignoredwithwarning_58b6a447ff::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcompositegrammars-testimportedtokenvocabignoredwithwarning-58b6a447ff",
         "source_case_ids": [
@@ -18150,14 +18476,30 @@
           "java-antlr:testcompositegrammars-testimportedtokenvocabignoredwithwarning-path@0b787da6615b"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportedtokenvocabignoredwithwarning-58b6a447ff/M.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportedtokenvocabignoredwithwarning-58b6a447ff/M.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportedtokenvocabignoredwithwarning-58b6a447ff/M.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportedtokenvocabignoredwithwarning-58b6a447ff/MLexer.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportedtokenvocabignoredwithwarning-58b6a447ff/MLexer.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportedtokenvocabignoredwithwarning-58b6a447ff/S.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportedtokenvocabignoredwithwarning-58b6a447ff/diagnostics.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportedtokenvocabignoredwithwarning-58b6a447ff/fixture.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportedtokenvocabignoredwithwarning-58b6a447ff/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportedtokenvocabignoredwithwarning-58b6a447ff/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportedtokenvocabignoredwithwarning-58b6a447ff/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportedtokenvocabignoredwithwarning-58b6a447ff/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testimportedtokenvocabignoredwithwarning-58b6a447ff",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportedtokenvocabignoredwithwarning_58b6a447ff::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCompositeGrammars.testImportedTokenVocabIgnoredWithWarning behavior"
+        "observable": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testImportedTokenVocabIgnoredWithWarning",
+        "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+        "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a"
       },
-      "closure_sha256": "83e376e9b1fb98a410f0d1727ed94c871bf12e55dce90b84c3861e6e04d92b50",
-      "evidence_path": null
+      "closure_sha256": "301f3550f77febcf7eda85731374e679407d9350dce761c64ff126ab7cba92d0",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testimportedtokenvocabignoredwithwarning-58b6a447ff"
     },
     {
       "logical_id": "testcompositegrammars-testimportfilelocationinsubdir-4c7c888d81",
@@ -18169,8 +18511,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcompositegrammars-testimportfilelocationinsubdir-4c7c888d81-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testimportfilelocationinsubdir-4c7c888d81",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportfilelocationinsubdir_4c7c888d81::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18191,8 +18534,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCompositeGrammars.testImportFileLocationInSubdir behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testImportFileLocationInSubdir",
+      "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportfilelocationinsubdir_4c7c888d81::matches_java -- --exact",
+        "commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportfilelocationinsubdir_4c7c888d81::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcompositegrammars-testimportfilelocationinsubdir-4c7c888d81",
         "source_case_ids": [
@@ -18200,14 +18556,30 @@
           "java-antlr:testcompositegrammars-testimportfilelocationinsubdir-path@df1b97cd156e"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportfilelocationinsubdir-4c7c888d81/M.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportfilelocationinsubdir-4c7c888d81/M.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportfilelocationinsubdir-4c7c888d81/M.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportfilelocationinsubdir-4c7c888d81/MLexer.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportfilelocationinsubdir-4c7c888d81/MLexer.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportfilelocationinsubdir-4c7c888d81/fixture.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportfilelocationinsubdir-4c7c888d81/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportfilelocationinsubdir-4c7c888d81/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportfilelocationinsubdir-4c7c888d81/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportfilelocationinsubdir-4c7c888d81/oracle/java-unicode-data.stdout",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportfilelocationinsubdir-4c7c888d81/sub/S.g4"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testimportfilelocationinsubdir-4c7c888d81",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportfilelocationinsubdir_4c7c888d81::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCompositeGrammars.testImportFileLocationInSubdir behavior"
+        "observable": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testImportFileLocationInSubdir",
+        "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+        "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "54c36b4dc307a87f9141a682a0ecaa72df03e9ed5331645d86cede0e0dd5a4f5",
-      "evidence_path": null
+      "closure_sha256": "ac263476fb134bf21465bc6a15a7d9ad4e575d282003c5bde9f92f9a9b589f16",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testimportfilelocationinsubdir-4c7c888d81"
     },
     {
       "logical_id": "testcompositegrammars-testimportfilenotsearchedforinoutputdir-8979f25b55",
@@ -18219,8 +18591,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcompositegrammars-testimportfilenotsearchedforinoutputdir-8979f25b55-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testimportfilenotsearchedforinoutputdir-8979f25b55",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportfilenotsearchedforinoutputdir_8979f25b55::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18241,8 +18613,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCompositeGrammars.testImportFileNotSearchedForInOutputDir behavior",
+      "expected_red_failure_fingerprint": "the direct compiler emitted 1 missing-import diagnostic instead of Java's 2 diagnostics",
+      "observable_equivalence": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testImportFileNotSearchedForInOutputDir",
+      "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportfilenotsearchedforinoutputdir_8979f25b55::matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "the direct compiler emitted 1 missing-import diagnostic instead of Java's 2 diagnostics"
+      },
+      "primary_implementation_commit": "d1789bf340290d37dd8d444cabadd7bb111906d9",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportfilenotsearchedforinoutputdir_8979f25b55::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcompositegrammars-testimportfilenotsearchedforinoutputdir-8979f25b55",
         "source_case_ids": [
@@ -18250,14 +18634,27 @@
           "java-antlr:testcompositegrammars-testimportfilenotsearchedforinoutputdir-path@a1bf99933864"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportfilenotsearchedforinoutputdir-8979f25b55/M.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportfilenotsearchedforinoutputdir-8979f25b55/MLexer.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportfilenotsearchedforinoutputdir-8979f25b55/diagnostics.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportfilenotsearchedforinoutputdir-8979f25b55/fixture.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportfilenotsearchedforinoutputdir-8979f25b55/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportfilenotsearchedforinoutputdir-8979f25b55/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportfilenotsearchedforinoutputdir-8979f25b55/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportfilenotsearchedforinoutputdir-8979f25b55/oracle/java-unicode-data.stdout",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportfilenotsearchedforinoutputdir-8979f25b55/out/S.g4"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testimportfilenotsearchedforinoutputdir-8979f25b55",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportfilenotsearchedforinoutputdir_8979f25b55::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCompositeGrammars.testImportFileNotSearchedForInOutputDir behavior"
+        "observable": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testImportFileNotSearchedForInOutputDir",
+        "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+        "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a"
       },
-      "closure_sha256": "60b7ba8e279f97c77c93b4ed5ca6e5bf1be1d00259709e167ad9ddebc1738c59",
-      "evidence_path": null
+      "closure_sha256": "737faa7233e2614cf52d7f338822f0a191c97a104c6315879b534e4495c37a17",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testimportfilenotsearchedforinoutputdir-8979f25b55"
     },
     {
       "logical_id": "testcompositegrammars-testimportintolexergrammar-caf8b54010",
@@ -18271,8 +18668,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcompositegrammars-testimportintolexergrammar-caf8b54010-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testimportintolexergrammar-caf8b54010",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportintolexergrammar_caf8b54010::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18293,8 +18691,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCompositeGrammars.testImportIntoLexerGrammar behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testImportIntoLexerGrammar",
+      "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportintolexergrammar_caf8b54010::matches_java -- --exact",
+        "commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportintolexergrammar_caf8b54010::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcompositegrammars-testimportintolexergrammar-caf8b54010",
         "source_case_ids": [
@@ -18313,14 +18724,28 @@
             "rust_test": "grammar::atn::interp_test::tests::vscode_alternate_meta_grammar_and_import_match_java"
           }
         ],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportintolexergrammar-caf8b54010/M.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportintolexergrammar-caf8b54010/M.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportintolexergrammar-caf8b54010/M.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportintolexergrammar-caf8b54010/S.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportintolexergrammar-caf8b54010/fixture.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportintolexergrammar-caf8b54010/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportintolexergrammar-caf8b54010/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportintolexergrammar-caf8b54010/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportintolexergrammar-caf8b54010/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testimportintolexergrammar-caf8b54010",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportintolexergrammar_caf8b54010::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCompositeGrammars.testImportIntoLexerGrammar behavior"
+        "observable": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testImportIntoLexerGrammar",
+        "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+        "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "41626af1232c08eae810b85beee172def9182535c7271a05948569dbb19300e3",
-      "evidence_path": null
+      "closure_sha256": "5cc7adacd0a7bc621f7d867889967b8b68ee8215a69d1014621fc1659913958a",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testimportintolexergrammar-caf8b54010"
     },
     {
       "logical_id": "testcompositegrammars-testimportlargegrammar-110006096d",
@@ -18332,8 +18757,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcompositegrammars-testimportlargegrammar-110006096d-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testimportlargegrammar-110006096d",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportlargegrammar_110006096d::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18354,8 +18779,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCompositeGrammars.testImportLargeGrammar behavior",
+      "expected_red_failure_fingerprint": "the direct compiler emitted 4 fragment-action warnings instead of Java's clean result",
+      "observable_equivalence": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testImportLargeGrammar",
+      "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportlargegrammar_110006096d::matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "the direct compiler emitted 4 fragment-action warnings instead of Java's clean result"
+      },
+      "primary_implementation_commit": "d1789bf340290d37dd8d444cabadd7bb111906d9",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportlargegrammar_110006096d::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcompositegrammars-testimportlargegrammar-110006096d",
         "source_case_ids": [
@@ -18363,14 +18800,29 @@
           "java-antlr:testcompositegrammars-testimportlargegrammar-path@bf8ef898a941"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportlargegrammar-110006096d/Java.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportlargegrammar-110006096d/NewJava.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportlargegrammar-110006096d/NewJava.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportlargegrammar-110006096d/NewJava.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportlargegrammar-110006096d/NewJavaLexer.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportlargegrammar-110006096d/NewJavaLexer.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportlargegrammar-110006096d/fixture.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportlargegrammar-110006096d/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportlargegrammar-110006096d/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportlargegrammar-110006096d/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportlargegrammar-110006096d/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testimportlargegrammar-110006096d",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportlargegrammar_110006096d::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCompositeGrammars.testImportLargeGrammar behavior"
+        "observable": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testImportLargeGrammar",
+        "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+        "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a"
       },
-      "closure_sha256": "98d6fc49b3833438da3be872d08427378409f6f21a60c74fdaa106b1a83a91fc",
-      "evidence_path": null
+      "closure_sha256": "bb216f5965145eceadb2634e0eaab79658ab69ce279cb5d18b68b7fe0b88a4a8",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testimportlargegrammar-110006096d"
     },
     {
       "logical_id": "testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648",
@@ -18382,8 +18834,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportleftrecursivegrammar_1e93dc9648::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18404,8 +18857,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCompositeGrammars.testImportLeftRecursiveGrammar behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testImportLeftRecursiveGrammar",
+      "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportleftrecursivegrammar_1e93dc9648::matches_java -- --exact",
+        "commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportleftrecursivegrammar_1e93dc9648::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648",
         "source_case_ids": [
@@ -18413,14 +18879,30 @@
           "java-antlr:testcompositegrammars-testimportleftrecursivegrammar-path@ec8458ac8b44"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/Java.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/T.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/T.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/T.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/TLexer.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/TLexer.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/fixture.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportleftrecursivegrammar_1e93dc9648::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCompositeGrammars.testImportLeftRecursiveGrammar behavior"
+        "observable": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testImportLeftRecursiveGrammar",
+        "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+        "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "71ef35ffa2465d85dced3fb322f1442f856740d48d05fedc61c73656b785400a",
-      "evidence_path": null
+      "closure_sha256": "79f12d80897c50a2efceb1d51cf479980c3123f0e6c65cd0cc6d132c22c6b26f",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testimportleftrecursivegrammar-1e93dc9648"
     },
     {
       "logical_id": "testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c",
@@ -18432,8 +18914,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportmixedchannelsintolexergrammar_fd4892253c::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18454,8 +18937,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCompositeGrammars.testImportMixedChannelsIntoLexerGrammar behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testImportMixedChannelsIntoLexerGrammar",
+      "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportmixedchannelsintolexergrammar_fd4892253c::matches_java -- --exact",
+        "commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportmixedchannelsintolexergrammar_fd4892253c::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c",
         "source_case_ids": [
@@ -18463,14 +18959,28 @@
           "java-antlr:testcompositegrammars-testimportmixedchannelsintolexergrammar-path@7ab669b604b6"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c/M.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c/M.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c/M.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c/S.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c/fixture.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportmixedchannelsintolexergrammar_fd4892253c::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCompositeGrammars.testImportMixedChannelsIntoLexerGrammar behavior"
+        "observable": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testImportMixedChannelsIntoLexerGrammar",
+        "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+        "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "3c6a8eab4ccdadc3217b3a70e54e1ae48d70bdee2f0a726440d295a59d9c5f0e",
-      "evidence_path": null
+      "closure_sha256": "f6b9267d65f26f6a5078eaf9319be67983d602531ceee5c5e112c54577460713",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testimportmixedchannelsintolexergrammar-fd4892253c"
     },
     {
       "logical_id": "testcompositegrammars-testimportmodesintolexergrammar-5f8855b9af",
@@ -18482,8 +18992,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcompositegrammars-testimportmodesintolexergrammar-5f8855b9af-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testimportmodesintolexergrammar-5f8855b9af",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportmodesintolexergrammar_5f8855b9af::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18504,8 +19015,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCompositeGrammars.testImportModesIntoLexerGrammar behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testImportModesIntoLexerGrammar",
+      "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportmodesintolexergrammar_5f8855b9af::matches_java -- --exact",
+        "commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportmodesintolexergrammar_5f8855b9af::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcompositegrammars-testimportmodesintolexergrammar-5f8855b9af",
         "source_case_ids": [
@@ -18513,14 +19037,28 @@
           "java-antlr:testcompositegrammars-testimportmodesintolexergrammar-path@f64cec1776fe"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportmodesintolexergrammar-5f8855b9af/M.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportmodesintolexergrammar-5f8855b9af/M.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportmodesintolexergrammar-5f8855b9af/M.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportmodesintolexergrammar-5f8855b9af/S.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportmodesintolexergrammar-5f8855b9af/fixture.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportmodesintolexergrammar-5f8855b9af/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportmodesintolexergrammar-5f8855b9af/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportmodesintolexergrammar-5f8855b9af/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportmodesintolexergrammar-5f8855b9af/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testimportmodesintolexergrammar-5f8855b9af",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportmodesintolexergrammar_5f8855b9af::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCompositeGrammars.testImportModesIntoLexerGrammar behavior"
+        "observable": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testImportModesIntoLexerGrammar",
+        "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+        "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "53d00c8b285bc99715634d9972cdac2016f2fbfa07688586feb6a3ec4c2d7ab2",
-      "evidence_path": null
+      "closure_sha256": "dd0398ed8dbd57e0cd7684beedccf4c7c548ef6d348ebf94b50d5a5a169fab27",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testimportmodesintolexergrammar-5f8855b9af"
     },
     {
       "logical_id": "testcompositegrammars-testimportselfloop-1a101afc75",
@@ -18532,8 +19070,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcompositegrammars-testimportselfloop-1a101afc75-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testimportselfloop-1a101afc75",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportselfloop_1a101afc75::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18554,8 +19092,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCompositeGrammars.testImportSelfLoop behavior",
+      "expected_red_failure_fingerprint": "the self import was rejected with G4L009 instead of compiling like Java",
+      "observable_equivalence": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testImportSelfLoop",
+      "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportselfloop_1a101afc75::matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "the self import was rejected with G4L009 instead of compiling like Java"
+      },
+      "primary_implementation_commit": "d1789bf340290d37dd8d444cabadd7bb111906d9",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportselfloop_1a101afc75::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcompositegrammars-testimportselfloop-1a101afc75",
         "source_case_ids": [
@@ -18563,14 +19113,28 @@
           "java-antlr:testcompositegrammars-testimportselfloop-path@66b81045aef9"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportselfloop-1a101afc75/M.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportselfloop-1a101afc75/M.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportselfloop-1a101afc75/M.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportselfloop-1a101afc75/MLexer.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportselfloop-1a101afc75/MLexer.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportselfloop-1a101afc75/fixture.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportselfloop-1a101afc75/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportselfloop-1a101afc75/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportselfloop-1a101afc75/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testimportselfloop-1a101afc75/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testimportselfloop-1a101afc75",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testimportselfloop_1a101afc75::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCompositeGrammars.testImportSelfLoop behavior"
+        "observable": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testImportSelfLoop",
+        "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+        "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a"
       },
-      "closure_sha256": "cc244c314e0fba5ee1a1862586cd04701070b43bbeae5ed5d6fc8fa699f31a59",
-      "evidence_path": null
+      "closure_sha256": "f83c09682670c402eb77990024cbec426b791b6b1e7c615d31b8b0f955f023e8",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testimportselfloop-1a101afc75"
     },
     {
       "logical_id": "testcompositegrammars-testmergemodesintolexergrammar-2cd796aaf7",
@@ -18582,8 +19146,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcompositegrammars-testmergemodesintolexergrammar-2cd796aaf7-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testmergemodesintolexergrammar-2cd796aaf7",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testmergemodesintolexergrammar_2cd796aaf7::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18604,8 +19169,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCompositeGrammars.testMergeModesIntoLexerGrammar behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testMergeModesIntoLexerGrammar",
+      "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testmergemodesintolexergrammar_2cd796aaf7::matches_java -- --exact",
+        "commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testmergemodesintolexergrammar_2cd796aaf7::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcompositegrammars-testmergemodesintolexergrammar-2cd796aaf7",
         "source_case_ids": [
@@ -18613,14 +19191,28 @@
           "java-antlr:testcompositegrammars-testmergemodesintolexergrammar-path@b38d0bfedc76"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testcompositegrammars-testmergemodesintolexergrammar-2cd796aaf7/M.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testmergemodesintolexergrammar-2cd796aaf7/M.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testmergemodesintolexergrammar-2cd796aaf7/M.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testmergemodesintolexergrammar-2cd796aaf7/S.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testmergemodesintolexergrammar-2cd796aaf7/fixture.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testmergemodesintolexergrammar-2cd796aaf7/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testmergemodesintolexergrammar-2cd796aaf7/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testmergemodesintolexergrammar-2cd796aaf7/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testmergemodesintolexergrammar-2cd796aaf7/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testmergemodesintolexergrammar-2cd796aaf7",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testmergemodesintolexergrammar_2cd796aaf7::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCompositeGrammars.testMergeModesIntoLexerGrammar behavior"
+        "observable": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testMergeModesIntoLexerGrammar",
+        "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+        "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "95e137a54f6b51e9be7545dab130b2bd101db41124743f6d6afb2cc36cab48e6",
-      "evidence_path": null
+      "closure_sha256": "b0245178c43f516bbdb51c6423ee7fb37cf1d7a0c5632e260cb58ef786429a61",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testmergemodesintolexergrammar-2cd796aaf7"
     },
     {
       "logical_id": "testcompositegrammars-testnestedcomposite-6c1f19c65a",
@@ -18632,8 +19224,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcompositegrammars-testnestedcomposite-6c1f19c65a-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testnestedcomposite-6c1f19c65a",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testnestedcomposite_6c1f19c65a::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18654,8 +19246,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCompositeGrammars.testNestedComposite behavior",
+      "expected_red_failure_fingerprint": "the imported implicit-token warning was attributed to G2.g4 instead of Java's G3.g4",
+      "observable_equivalence": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testNestedComposite",
+      "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testnestedcomposite_6c1f19c65a::matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "the imported implicit-token warning was attributed to G2.g4 instead of Java's G3.g4"
+      },
+      "primary_implementation_commit": "d1789bf340290d37dd8d444cabadd7bb111906d9",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testnestedcomposite_6c1f19c65a::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcompositegrammars-testnestedcomposite-6c1f19c65a",
         "source_case_ids": [
@@ -18663,14 +19267,30 @@
           "java-antlr:testcompositegrammars-testnestedcomposite-path@83a7d27c727e"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testcompositegrammars-testnestedcomposite-6c1f19c65a/G1.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testnestedcomposite-6c1f19c65a/G2.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testnestedcomposite-6c1f19c65a/G3.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testnestedcomposite-6c1f19c65a/G3.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testnestedcomposite-6c1f19c65a/G3.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testnestedcomposite-6c1f19c65a/L.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testnestedcomposite-6c1f19c65a/diagnostics.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testnestedcomposite-6c1f19c65a/fixture.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testnestedcomposite-6c1f19c65a/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testnestedcomposite-6c1f19c65a/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testnestedcomposite-6c1f19c65a/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testnestedcomposite-6c1f19c65a/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testnestedcomposite-6c1f19c65a",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testnestedcomposite_6c1f19c65a::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCompositeGrammars.testNestedComposite behavior"
+        "observable": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testNestedComposite",
+        "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+        "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a"
       },
-      "closure_sha256": "88f795bfd032a28db3afb8478be6a4a6ac3aa3e78c8bb001c5d99f283558fcd2",
-      "evidence_path": null
+      "closure_sha256": "f00a2aba719d848b706ad3a2551dd791b6ee324b3aefbd3cc02055234f526fc6",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testnestedcomposite-6c1f19c65a"
     },
     {
       "logical_id": "testcompositegrammars-testoutputdirshouldnoteffectimports-1d1456701e",
@@ -18682,8 +19302,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcompositegrammars-testoutputdirshouldnoteffectimports-1d1456701e-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testoutputdirshouldnoteffectimports-1d1456701e",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testoutputdirshouldnoteffectimports_1d1456701e::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18704,8 +19325,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCompositeGrammars.testOutputDirShouldNotEffectImports behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testOutputDirShouldNotEffectImports",
+      "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testoutputdirshouldnoteffectimports_1d1456701e::matches_java -- --exact",
+        "commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testoutputdirshouldnoteffectimports_1d1456701e::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcompositegrammars-testoutputdirshouldnoteffectimports-1d1456701e",
         "source_case_ids": [
@@ -18713,14 +19347,30 @@
           "java-antlr:testcompositegrammars-testoutputdirshouldnoteffectimports-path@4ec79f9df20e"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testcompositegrammars-testoutputdirshouldnoteffectimports-1d1456701e/M.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testoutputdirshouldnoteffectimports-1d1456701e/M.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testoutputdirshouldnoteffectimports-1d1456701e/M.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testoutputdirshouldnoteffectimports-1d1456701e/MLexer.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testoutputdirshouldnoteffectimports-1d1456701e/MLexer.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testoutputdirshouldnoteffectimports-1d1456701e/fixture.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testoutputdirshouldnoteffectimports-1d1456701e/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testoutputdirshouldnoteffectimports-1d1456701e/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testoutputdirshouldnoteffectimports-1d1456701e/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testoutputdirshouldnoteffectimports-1d1456701e/oracle/java-unicode-data.stdout",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testoutputdirshouldnoteffectimports-1d1456701e/sub/S.g4"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testoutputdirshouldnoteffectimports-1d1456701e",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testoutputdirshouldnoteffectimports_1d1456701e::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCompositeGrammars.testOutputDirShouldNotEffectImports behavior"
+        "observable": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testOutputDirShouldNotEffectImports",
+        "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+        "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "5d0a5ccc84975079e185e926c6643b74d515bfc91f46cc47517231ba0a47313e",
-      "evidence_path": null
+      "closure_sha256": "2e6afd30c4abb35315535923f079ee88a283bd38d55b2bddcd061e7ad6aaee52",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testoutputdirshouldnoteffectimports-1d1456701e"
     },
     {
       "logical_id": "testcompositegrammars-testrulesvisiblethroughmultilevelimport-85d26b4c0f",
@@ -18732,8 +19382,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcompositegrammars-testrulesvisiblethroughmultilevelimport-85d26b4c0f-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testrulesvisiblethroughmultilevelimport-85d26b4c0f",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testrulesvisiblethroughmultilevelimport_85d26b4c0f::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18754,8 +19404,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCompositeGrammars.testRulesVisibleThroughMultilevelImport behavior",
+      "expected_red_failure_fingerprint": "the imported implicit-token warning was attributed to T.g4 instead of Java's M.g4",
+      "observable_equivalence": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testRulesVisibleThroughMultilevelImport",
+      "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testrulesvisiblethroughmultilevelimport_85d26b4c0f::matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "the imported implicit-token warning was attributed to T.g4 instead of Java's M.g4"
+      },
+      "primary_implementation_commit": "d1789bf340290d37dd8d444cabadd7bb111906d9",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testrulesvisiblethroughmultilevelimport_85d26b4c0f::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcompositegrammars-testrulesvisiblethroughmultilevelimport-85d26b4c0f",
         "source_case_ids": [
@@ -18763,14 +19425,29 @@
           "java-antlr:testcompositegrammars-testrulesvisiblethroughmultilevelimport-path@bc5660b365cc"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testcompositegrammars-testrulesvisiblethroughmultilevelimport-85d26b4c0f/M.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testrulesvisiblethroughmultilevelimport-85d26b4c0f/M.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testrulesvisiblethroughmultilevelimport-85d26b4c0f/M.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testrulesvisiblethroughmultilevelimport-85d26b4c0f/S.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testrulesvisiblethroughmultilevelimport-85d26b4c0f/T.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testrulesvisiblethroughmultilevelimport-85d26b4c0f/diagnostics.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testrulesvisiblethroughmultilevelimport-85d26b4c0f/fixture.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testrulesvisiblethroughmultilevelimport-85d26b4c0f/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testrulesvisiblethroughmultilevelimport-85d26b4c0f/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testrulesvisiblethroughmultilevelimport-85d26b4c0f/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testrulesvisiblethroughmultilevelimport-85d26b4c0f/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testrulesvisiblethroughmultilevelimport-85d26b4c0f",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testrulesvisiblethroughmultilevelimport_85d26b4c0f::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCompositeGrammars.testRulesVisibleThroughMultilevelImport behavior"
+        "observable": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testRulesVisibleThroughMultilevelImport",
+        "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+        "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a"
       },
-      "closure_sha256": "9199223de106c04beb193762cecfedb1eaf394e344ce287e01e0316ec7ce006c",
-      "evidence_path": null
+      "closure_sha256": "40417feef7d9e0a7a53df56018e61d8c9cb5124c4a5c5c83d7ce0a2dac3f1e4a",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testrulesvisiblethroughmultilevelimport-85d26b4c0f"
     },
     {
       "logical_id": "testcompositegrammars-testsyntaxerrorsinimportsnotthrownout-6bf25ff5eb",
@@ -18782,8 +19459,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcompositegrammars-testsyntaxerrorsinimportsnotthrownout-6bf25ff5eb-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testsyntaxerrorsinimportsnotthrownout-6bf25ff5eb",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testsyntaxerrorsinimportsnotthrownout_6bf25ff5eb::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18804,8 +19481,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCompositeGrammars.testSyntaxErrorsInImportsNotThrownOut behavior",
+      "expected_red_failure_fingerprint": "the direct compiler emitted G4F003 instead of Java's follow-on undefined-rule diagnostic",
+      "observable_equivalence": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testSyntaxErrorsInImportsNotThrownOut",
+      "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testsyntaxerrorsinimportsnotthrownout_6bf25ff5eb::matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "the direct compiler emitted G4F003 instead of Java's follow-on undefined-rule diagnostic"
+      },
+      "primary_implementation_commit": "d1789bf340290d37dd8d444cabadd7bb111906d9",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testsyntaxerrorsinimportsnotthrownout_6bf25ff5eb::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcompositegrammars-testsyntaxerrorsinimportsnotthrownout-6bf25ff5eb",
         "source_case_ids": [
@@ -18813,14 +19502,27 @@
           "java-antlr:testcompositegrammars-testsyntaxerrorsinimportsnotthrownout-path@36e2892f7fd8"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testcompositegrammars-testsyntaxerrorsinimportsnotthrownout-6bf25ff5eb/M.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testsyntaxerrorsinimportsnotthrownout-6bf25ff5eb/MLexer.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testsyntaxerrorsinimportsnotthrownout-6bf25ff5eb/S.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testsyntaxerrorsinimportsnotthrownout-6bf25ff5eb/diagnostics.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testsyntaxerrorsinimportsnotthrownout-6bf25ff5eb/fixture.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testsyntaxerrorsinimportsnotthrownout-6bf25ff5eb/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testsyntaxerrorsinimportsnotthrownout-6bf25ff5eb/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testsyntaxerrorsinimportsnotthrownout-6bf25ff5eb/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testsyntaxerrorsinimportsnotthrownout-6bf25ff5eb/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testsyntaxerrorsinimportsnotthrownout-6bf25ff5eb",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testsyntaxerrorsinimportsnotthrownout_6bf25ff5eb::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCompositeGrammars.testSyntaxErrorsInImportsNotThrownOut behavior"
+        "observable": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testSyntaxErrorsInImportsNotThrownOut",
+        "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+        "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a"
       },
-      "closure_sha256": "f20032a920653b3c8e48ea69ac1e62a5fbf4b25dcccaa54233f8dd1a6f5c6176",
-      "evidence_path": null
+      "closure_sha256": "02393f19afef109eb6716a102f0616687a1f9c5c0c4c1f315dd7210ddfdc2762",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testsyntaxerrorsinimportsnotthrownout-6bf25ff5eb"
     },
     {
       "logical_id": "testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb",
@@ -18836,8 +19538,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testtokensfileinoutputdirandimportfileinsubdir_6d1d778aeb::matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -18858,8 +19561,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestCompositeGrammars.testTokensFileInOutputDirAndImportFileInSubdir behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testTokensFileInOutputDirAndImportFileInSubdir",
+      "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testtokensfileinoutputdirandimportfileinsubdir_6d1d778aeb::matches_java -- --exact",
+        "commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testtokensfileinoutputdirandimportfileinsubdir_6d1d778aeb::matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb",
         "source_case_ids": [
@@ -18894,14 +19610,31 @@
             "rust_test": "grammar::compiler::tests::missing_token_vocab_matches_java_diagnostic_site"
           }
         ],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb/MLexer.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb/MLexer.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb/MLexer.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb/MParser.g4",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb/MParser.interp",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb/MParser.tokens",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb/fixture.json",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb/oracle/java-unicode-data.stdout",
+          "tests/codegen-direct/fixtures/testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb/sub/S.g4"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testtokensfileinoutputdirandimportfileinsubdir_6d1d778aeb::matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestCompositeGrammars.testTokensFileInOutputDirAndImportFileInSubdir behavior"
+        "observable": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testTokensFileInOutputDirAndImportFileInSubdir",
+        "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+        "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "2dd25578efdab0aa8b8ea73a6a3ddeffb0ee225f00114fe4e0b563fdb9f75fe7",
-      "evidence_path": null
+      "closure_sha256": "4b011c700914c453e0ef85006483eafd5ae9676386967064da033390d35b0685",
+      "evidence_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testtokensfileinoutputdirandimportfileinsubdir-6d1d778aeb"
     },
     {
       "logical_id": "testdollarparser-testsimplecall-351e2be59c",

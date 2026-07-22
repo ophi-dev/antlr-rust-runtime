@@ -1,0 +1,139 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04",
+  "revision_id": "testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "resolution": "verified-covered-existing",
+  "closure": {
+    "logical_id": "testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04",
+    "source_case_ids": [
+      "java-antlr:testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-p@d710a3ddfc36"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/M.g4",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/M.interp",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/M.tokens",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/MLexer.interp",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/MLexer.tokens",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/S.g4",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/fixture.json",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/oracle/java-unicode-data.stdout"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testheaderspropogatedcorrectlytoimportedgrammars_e8e7638e04::matches_java",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust import integration, diagnostics, and artifacts match Java 4.13.2 for TestCompositeGrammars.testHeadersPropogatedCorrectlyToImportedGrammars",
+    "scaffold_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+    "primary_test_commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+    "resolution": "verified-covered-existing"
+  },
+  "closure_sha256": "0aa8970f93f3b4715ffdcf3f0471adb99c2a1ddd9ae27d0f1a4b2dbb3cec223f",
+  "allowed_inputs": [
+    {
+      "source_case_id": "java-antlr:testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-p@d710a3ddfc36",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestCompositeGrammars.java",
+      "sha256": "de04441f7ad86b0bf7fd100038606ba71098d4092fe3822ec2b0dee5842dbd05"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/M.g4",
+      "sha256": "49c95e3f6e9d5b084155174af514808a12d8abe4e233fc8851ca2b4ef8d894cb"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/M.interp",
+      "sha256": "6cb41a4fbee889ae7a906c191381e372938414771b8221813ee8d183362d9842"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/M.tokens",
+      "sha256": "c7fbbc4abcacb628b03392811307983b54de73bc088aec6fc46873a9b5158c48"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/MLexer.interp",
+      "sha256": "ae5d94dcd95037f49e2ce4485ca0a5a38662e6e39e9a4c7507cb09e4b12f39e0"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/MLexer.tokens",
+      "sha256": "c7fbbc4abcacb628b03392811307983b54de73bc088aec6fc46873a9b5158c48"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/S.g4",
+      "sha256": "b381419ccd23f6a0208da7499a57095a0842ea061db3ac977bc43025af3ddc51"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/fixture.json",
+      "sha256": "0f1e9cf104042b5a2b4b363b57866cc0863e47496b05670b47f712bf857fcc28"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    }
+  ],
+  "commits": {
+    "scaffold": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+    "primary_test": "365cdabd8f03a701770102d52760acd08fe65b6a",
+    "primary_implementation": "34523259e7ecb751c80bb5de20b3a213648d4dac"
+  },
+  "ancestry": {
+    "primary_test_parent": "34523259e7ecb751c80bb5de20b3a213648d4dac",
+    "primary_implementation_parent": "10c384d8431953e0de596eb64ccaca46d230b3f4",
+    "reachability": "the case-specific composite-grammar assertion passed against the direct compiler implementation already present at the batch base"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_composite_grammars {",
+      "end_marker": "\n    mod upstream_tool_syntax_errors {",
+      "sha256": "8154dc509aff5f0722a668393941ac494659fb2e04f78022e90f806d222ab3e7"
+    },
+    {
+      "path": "tests/codegen-direct/generated/composite-grammars-cases.inc.rs",
+      "marker": "// Generated by tools/grammar-frontend/generate-composite-grammars-fixtures.mjs.",
+      "sha256": "80328e0092a85fe497d9ea643cac7952162d0cad45f820e75692b0ecaf8cabeb"
+    }
+  ],
+  "verified_covered_existing": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testheaderspropogatedcorrectlytoimportedgrammars_e8e7638e04::matches_java -- --exact",
+    "commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed",
+    "covering_implementation_commit": "34523259e7ecb751c80bb5de20b3a213648d4dac"
+  },
+  "green_result": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_composite_grammars::testcompositegrammars_testheaderspropogatedcorrectlytoimportedgrammars_e8e7638e04::matches_java -- --exact",
+    "commit": "365cdabd8f03a701770102d52760acd08fe65b6a",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/revisions/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04-r1/oracle-results/declared-sources.json",
+      "sha256": "d2e5532779c3fa256ba80b366319df9d6905cf2a4031d3b873b93c9c626a2490"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04/revisions/testcompositegrammars-testheaderspropogatedcorrectlytoimportedgrammars-e8e7638e04-r1/matrix-results/results.json",
+      "sha256": "296bae447088247a3bb3293f8ae0919731d6533bcf1ec49bddef003966c02ee7"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcompositegrammars-testbigtreeofimports-697f33079e",
+  "active_revision_id": "testcompositegrammars-testbigtreeofimports-697f33079e-r1",
+  "revisions": [
+    {
+      "revision_id": "testcompositegrammars-testbigtreeofimports-697f33079e-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testbigtreeofimports-697f33079e/revisions/testcompositegrammars-testbigtreeofimports-697f33079e-r1/manifest.json",
+      "closure_sha256": "e8e1dd53c0d6ab9d2f330112308d7c929ab9aea7c4755f0dbaddbe1cad61c92f"
+    }
+  ]
+}

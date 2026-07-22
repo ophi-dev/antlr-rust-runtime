@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testcompositegrammars-testsyntaxerrorsinimportsnotthrownout-6bf25ff5eb",
+  "active_revision_id": "testcompositegrammars-testsyntaxerrorsinimportsnotthrownout-6bf25ff5eb-r1",
+  "revisions": [
+    {
+      "revision_id": "testcompositegrammars-testsyntaxerrorsinimportsnotthrownout-6bf25ff5eb-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testcompositegrammars-testsyntaxerrorsinimportsnotthrownout-6bf25ff5eb/revisions/testcompositegrammars-testsyntaxerrorsinimportsnotthrownout-6bf25ff5eb-r1/manifest.json",
+      "closure_sha256": "02393f19afef109eb6716a102f0616687a1f9c5c0c4c1f315dd7210ddfdc2762"
+    }
+  ]
+}

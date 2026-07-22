@@ -21,6 +21,11 @@ import {
     CHAR_SUPPORT_BASE_COMMIT,
     CHAR_SUPPORT_IMPLEMENTATION_COMMIT,
     CHAR_SUPPORT_TEST_COMMIT,
+    COMPOSITE_GRAMMARS_BASE_COMMIT,
+    COMPOSITE_GRAMMARS_BASE_PARENT_COMMIT,
+    COMPOSITE_GRAMMARS_IMPLEMENTATION_COMMIT,
+    COMPOSITE_GRAMMARS_IMPLEMENTATION_PARENT_COMMIT,
+    COMPOSITE_GRAMMARS_TEST_COMMIT,
     EMPTY_VOCABULARY_BASE_COMMIT,
     EMPTY_VOCABULARY_IMPLEMENTATION_COMMIT,
     EMPTY_VOCABULARY_TEST_COMMIT,
@@ -361,6 +366,9 @@ for (const [logicalId, record] of records) {
         const toolSyntaxErrors = logicalId.startsWith(
             "testtoolsyntaxerrors-",
         );
+        const compositeGrammars = logicalId.startsWith(
+            "testcompositegrammars-",
+        );
         if (resolution === "verified-covered-existing") {
             if (atnSerialization) {
                 expect(
@@ -581,6 +589,23 @@ for (const [logicalId, record] of records) {
                         manifest.ancestry.primary_implementation_parent ===
                             TOOL_SYNTAX_ERRORS_BASE_PARENT_COMMIT,
                     `${logicalId} tool syntax covered-existing ancestry differs`,
+                );
+            } else if (compositeGrammars) {
+                expect(
+                    manifest.commits.scaffold ===
+                            COMPOSITE_GRAMMARS_BASE_COMMIT &&
+                        manifest.commits.primary_test ===
+                            COMPOSITE_GRAMMARS_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            COMPOSITE_GRAMMARS_BASE_COMMIT,
+                    `${logicalId} composite grammar covered-existing commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            COMPOSITE_GRAMMARS_BASE_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            COMPOSITE_GRAMMARS_BASE_PARENT_COMMIT,
+                    `${logicalId} composite grammar covered-existing ancestry differs`,
                 );
             } else {
                 expect(
@@ -906,6 +931,23 @@ for (const [logicalId, record] of records) {
                         manifest.ancestry.primary_implementation_parent ===
                             TOOL_SYNTAX_ERRORS_TEST_COMMIT,
                     `${logicalId} tool syntax recorded ancestry differs`,
+                );
+            } else if (compositeGrammars) {
+                expect(
+                    manifest.commits.scaffold ===
+                            COMPOSITE_GRAMMARS_BASE_COMMIT &&
+                        manifest.commits.primary_test ===
+                            COMPOSITE_GRAMMARS_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            COMPOSITE_GRAMMARS_IMPLEMENTATION_COMMIT,
+                    `${logicalId} composite grammar evidence commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            COMPOSITE_GRAMMARS_BASE_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            COMPOSITE_GRAMMARS_IMPLEMENTATION_PARENT_COMMIT,
+                    `${logicalId} composite grammar recorded ancestry differs`,
                 );
             } else if (lookaheadTree) {
                 expect(
@@ -1507,6 +1549,50 @@ if (toolSyntaxErrorsImplementationParent !== null) {
         toolSyntaxErrorsImplementationParent.trim() ===
             TOOL_SYNTAX_ERRORS_TEST_COMMIT,
         "tool syntax implementation commit is not based on its locked tests",
+    );
+}
+const compositeGrammarsBaseParent = gitOptional([
+    "rev-parse",
+    `${COMPOSITE_GRAMMARS_BASE_COMMIT}^`,
+]);
+if (compositeGrammarsBaseParent !== null) {
+    expect(
+        compositeGrammarsBaseParent.trim() ===
+            COMPOSITE_GRAMMARS_BASE_PARENT_COMMIT,
+        "composite grammar base commit has an unexpected parent",
+    );
+}
+const compositeGrammarsTestParent = gitOptional([
+    "rev-parse",
+    `${COMPOSITE_GRAMMARS_TEST_COMMIT}^`,
+]);
+if (compositeGrammarsTestParent !== null) {
+    expect(
+        compositeGrammarsTestParent.trim() ===
+            COMPOSITE_GRAMMARS_BASE_COMMIT,
+        "composite grammar test commit is not based on its recorded base",
+    );
+}
+const initialCompositeGrammarsImplementationParent = gitOptional([
+    "rev-parse",
+    `${COMPOSITE_GRAMMARS_IMPLEMENTATION_PARENT_COMMIT}^`,
+]);
+if (initialCompositeGrammarsImplementationParent !== null) {
+    expect(
+        initialCompositeGrammarsImplementationParent.trim() ===
+            COMPOSITE_GRAMMARS_TEST_COMMIT,
+        "initial composite grammar implementation is not based on its locked tests",
+    );
+}
+const compositeGrammarsImplementationParent = gitOptional([
+    "rev-parse",
+    `${COMPOSITE_GRAMMARS_IMPLEMENTATION_COMMIT}^`,
+]);
+if (compositeGrammarsImplementationParent !== null) {
+    expect(
+        compositeGrammarsImplementationParent.trim() ===
+            COMPOSITE_GRAMMARS_IMPLEMENTATION_PARENT_COMMIT,
+        "final composite grammar implementation has an unexpected parent",
     );
 }
 
