@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use super::atn::{CompiledLexer, CompiledParser, compile_lexer, compile_parser};
 use super::diagnostic::{CompilationError, Diagnostic};
-use super::loader::{LoadOptions, LoadedSources, load};
+use super::loader::{LoadOptions, LoadedSources, load_recovering};
 use super::model::{GrammarId, GrammarKind};
 use super::semantics::{SemanticGrammarSet, analyze};
 use super::source::SourceSet;
@@ -55,14 +55,14 @@ fn compile_with_transforms(
     options: LoadOptions,
     transforms: &TransformRegistry,
 ) -> Result<Compilation, CompilationError> {
-    let loaded = load(options)?;
+    let loaded = load_recovering(options);
     let root_order = loaded.grammars.roots.clone();
     let mut integrated = integrate_loaded(&loaded)?;
     let transform_report = transforms
         .run(&mut integrated.grammar, false)
         .map_err(|diagnostic| CompilationError::new(vec![diagnostic]))?;
+    let semantics = analyze(&loaded.sources, integrated)?;
     let LoadedSources { sources, .. } = loaded;
-    let semantics = analyze(integrated)?;
     compile_semantics(sources, root_order, semantics, transform_report)
 }
 

@@ -1,12 +1,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::char_support::get_char_value_from_grammar_char_literal;
-use super::diagnostic::{CompilationError, Diagnostic, Severity};
+use super::diagnostic::{CompilationError, Diagnostic};
 use super::loader::LoadedSources;
 use super::model::{
     Alternative, Authored, Block, ChannelDeclaration, Element, ElementId, ElementKind, GrammarId,
-    GrammarKind, GrammarUnit, Label, Mode, ModelIdAllocator, ModelNodeId, NamedAction, Quantifier,
-    Rule, RuleKind, SetElement, Terminal, TokenDeclaration, TransformId, VocabularySource,
+    GrammarKind, GrammarPrequel, GrammarUnit, Label, Mode, ModelIdAllocator, ModelNodeId,
+    NamedAction, Quantifier, Rule, RuleKind, SetElement, Terminal, TokenDeclaration, TransformId,
+    VocabularySource,
 };
 use super::provenance::{MandatoryTransform, Origin, ProvenanceIndex, Tombstone};
 use super::syntax::parse_grammar_unit;
@@ -318,12 +319,6 @@ pub(crate) fn integrate_loaded(
         });
     }
 
-    if diagnostics
-        .iter()
-        .any(|diagnostic| diagnostic.severity == Severity::Error)
-    {
-        return Err(CompilationError::new(diagnostics));
-    }
     let grammar = TransformGrammar { units, provenance };
     if let Err(diagnostic) = validate_model(&grammar) {
         return Err(CompilationError::new(vec![diagnostic]));
@@ -425,6 +420,20 @@ fn integrate_imports(
         }
 
         for mode in &imported.modes {
+            let surviving_rules = mode
+                .rules
+                .iter()
+                .filter_map(|rule| {
+                    imported
+                        .rules
+                        .iter()
+                        .find(|candidate| candidate.id == *rule)
+                })
+                .filter(|rule| !rule_names.contains(&rule.name))
+                .collect::<Vec<_>>();
+            if surviving_rules.is_empty() {
+                continue;
+            }
             let destination_mode = if let Some(index) = mode_indices.get(&mode.name).copied() {
                 destination.modes[index].id
             } else {
@@ -434,13 +443,7 @@ fn integrate_imports(
                 destination.modes.push(cloned);
                 id
             };
-            let mode_rules = mode.rules.iter().filter_map(|rule| {
-                imported
-                    .rules
-                    .iter()
-                    .find(|candidate| candidate.id == *rule)
-            });
-            for rule in mode_rules {
+            for rule in surviving_rules {
                 if rule_names.insert(rule.name.clone()) {
                     let cloned = cloner.rule(rule, Some(destination_mode));
                     let index = mode_indices[&mode.name];
@@ -466,9 +469,13 @@ fn integrate_imports(
             })
         }) {
             let primary = imported
-                .options
-                .first()
-                .map_or_else(|| imported.span.clone(), |option| option.name.span.clone());
+                .prequels
+                .iter()
+                .find_map(|prequel| match prequel {
+                    GrammarPrequel::Options { span, .. } => Some(span.clone()),
+                    _ => None,
+                })
+                .unwrap_or_else(|| imported.span.clone());
             diagnostics.push(Diagnostic::warning(
                 "G4T001",
                 primary,
@@ -897,12 +904,19 @@ fn split_combined(
 ) -> (Option<GrammarUnit>, GrammarUnit) {
     let combined_id = combined.id;
     let base_name = combined.name.clone();
+    let modal_rules = combined
+        .modes
+        .iter()
+        .flat_map(|mode| mode.rules.iter())
+        .copied()
+        .collect::<BTreeSet<_>>();
     let mut lexer_rules = Vec::new();
     let mut parser_rules = Vec::new();
     for rule in std::mem::take(&mut combined.rules) {
-        match rule.kind {
-            RuleKind::Lexer => lexer_rules.push(rule),
-            RuleKind::Parser => parser_rules.push(rule),
+        match (rule.kind, modal_rules.contains(&rule.id)) {
+            (_, true) => parser_rules.push(rule),
+            (RuleKind::Lexer, false) => lexer_rules.push(rule),
+            (RuleKind::Parser, false) => parser_rules.push(rule),
         }
     }
     combined.rules = parser_rules;
@@ -930,15 +944,6 @@ fn split_combined(
     }
     implicit_rules.append(&mut lexer_rules);
 
-    let mut lexer_modes = std::mem::take(&mut combined.modes);
-    for mode in &lexer_modes {
-        add_implicit_origin(
-            provenance,
-            ModelNodeId::Mode(mode.id),
-            combined_id,
-            ModelNodeId::Mode(mode.id),
-        );
-    }
     for rule in &implicit_rules {
         add_rule_implicit_origins(provenance, rule, combined_id);
     }
@@ -986,7 +991,7 @@ fn split_combined(
             tokens: Vec::new(),
             channels: Vec::new(),
             actions: lexer_actions,
-            modes: std::mem::take(&mut lexer_modes),
+            modes: Vec::new(),
             rules: implicit_rules,
             syntax: combined.syntax,
             span: combined.span.clone(),

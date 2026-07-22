@@ -1863,7 +1863,8 @@ mod tests {
         })
         .expect("fixture should load");
         let integrated = integrate_loaded(&loaded).expect("fixture should integrate");
-        let semantics = analyze(integrated).expect("fixture should pass semantic analysis");
+        let semantics =
+            analyze(&loaded.sources, integrated).expect("fixture should pass semantic analysis");
         let grammar = semantics
             .grammars
             .iter()
@@ -3186,6 +3187,7 @@ mod tests {
             }
         }
 
+        #[allow(clippy::too_many_arguments)]
         fn assert_composite_fixture(
             fixture_name: &str,
             roots: &[&str],

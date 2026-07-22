@@ -198,6 +198,23 @@ impl SourceFile {
         let column = self.text[line_start..byte].chars().count();
         Some((line_index + 1, column))
     }
+
+    pub(crate) fn byte_offset(&self, line: usize, column: usize) -> Option<u32> {
+        let line_start = *self.line_starts.get(line.checked_sub(1)?)? as usize;
+        let line_end = self.text[line_start..]
+            .find('\n')
+            .map_or(self.text.len(), |offset| line_start + offset);
+        let offset = if column == self.text[line_start..line_end].chars().count() {
+            line_end
+        } else {
+            self.text[line_start..line_end]
+                .char_indices()
+                .nth(column)?
+                .0
+                + line_start
+        };
+        u32::try_from(offset).ok()
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -238,11 +255,31 @@ impl fmt::Display for FrontendError {
 
 impl std::error::Error for FrontendError {}
 
+pub(crate) struct RecoveredSource {
+    pub(crate) file: SourceFile,
+    pub(crate) diagnostics: Vec<SyntaxDiagnostic>,
+}
+
 pub(crate) fn parse_source(
     source: SourceId,
     logical_path: impl Into<PathBuf>,
     text: impl Into<Box<str>>,
 ) -> Result<SourceFile, FrontendError> {
+    let recovered = parse_source_recovering(source, logical_path, text)?;
+    if recovered.diagnostics.is_empty() {
+        Ok(recovered.file)
+    } else {
+        Err(FrontendError {
+            diagnostics: recovered.diagnostics,
+        })
+    }
+}
+
+pub(crate) fn parse_source_recovering(
+    source: SourceId,
+    logical_path: impl Into<PathBuf>,
+    text: impl Into<Box<str>>,
+) -> Result<RecoveredSource, FrontendError> {
     let logical_path = logical_path.into();
     let text = text.into();
     let line_starts = line_starts(source, &text)?;
@@ -305,19 +342,20 @@ pub(crate) fn parse_source(
     normalize_parser_diagnostics(&tokens, &mut diagnostics);
 
     let root = match root {
-        Ok(root) if syntax_error_count == 0 && diagnostics.is_empty() => root,
-        Ok(_) => {
+        Ok(root) => {
             if diagnostics.is_empty() {
-                diagnostics.push(SyntaxDiagnostic {
-                    code: "G4F003",
-                    stage: DiagnosticStage::Parser,
-                    span: SourceSpan::empty(source),
-                    message: format!(
-                        "grammar parser recovered from {syntax_error_count} syntax error(s)"
-                    ),
-                });
+                if syntax_error_count != 0 {
+                    diagnostics.push(SyntaxDiagnostic {
+                        code: "G4F003",
+                        stage: DiagnosticStage::Parser,
+                        span: SourceSpan::empty(source),
+                        message: format!(
+                            "grammar parser recovered from {syntax_error_count} syntax error(s)"
+                        ),
+                    });
+                }
             }
-            return Err(FrontendError { diagnostics });
+            root
         }
         Err(error) => {
             if diagnostics.is_empty() {
@@ -333,7 +371,11 @@ pub(crate) fn parse_source(
     };
 
     let parsed = parser.into_parsed_file(root);
-    let cst = copy_cst(source, &tokens, parsed.tree())?;
+    let cst = match copy_cst(source, &tokens, parsed.tree()) {
+        Ok(cst) => cst,
+        Err(_) if !diagnostics.is_empty() => return Err(FrontendError { diagnostics }),
+        Err(error) => return Err(error),
+    };
     let trivia = tokens
         .iter()
         .enumerate()
@@ -343,14 +385,17 @@ pub(crate) fn parse_source(
         })
         .map(|(index, _)| index as u32)
         .collect();
-    Ok(SourceFile {
-        id: source,
-        logical_path,
-        text,
-        line_starts,
-        tokens: tokens.into_boxed_slice(),
-        trivia,
-        cst,
+    Ok(RecoveredSource {
+        file: SourceFile {
+            id: source,
+            logical_path,
+            text,
+            line_starts,
+            tokens: tokens.into_boxed_slice(),
+            trivia,
+            cst,
+        },
+        diagnostics,
     })
 }
 
@@ -422,6 +467,16 @@ fn normalize_parser_diagnostics(tokens: &[SyntaxToken], diagnostics: &mut Vec<Sy
         });
     }
     diagnostics.extend(recovered);
+
+    let mut seen = Vec::new();
+    diagnostics.retain(|diagnostic| {
+        if seen.contains(&diagnostic.span) {
+            false
+        } else {
+            seen.push(diagnostic.span.clone());
+            true
+        }
+    });
 }
 
 fn diagnostic_token_index(tokens: &[&SyntaxToken], span: &SourceSpan) -> Option<usize> {

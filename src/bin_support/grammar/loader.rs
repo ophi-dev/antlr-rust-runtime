@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use super::diagnostic::{CompilationError, Diagnostic, Severity};
-use super::frontend::{SourceId, SourceSpan, parse_source};
+use super::frontend::{SourceId, SourceSpan, parse_source, parse_source_recovering};
 use super::model::{
     GrammarId, ImportEdge, LoadedGrammarSet, LookupKind, LookupRecord, ParsedGrammarUnit,
     VocabularyEdge, VocabularySource,
@@ -41,22 +41,29 @@ struct Loader {
     by_name: BTreeMap<String, GrammarId>,
     grammar_for_source: BTreeMap<SourceId, GrammarId>,
     visits: BTreeMap<GrammarId, VisitState>,
+    token_vocab_targets: BTreeSet<GrammarId>,
+    resolved_vocabularies: BTreeSet<GrammarId>,
     stack: Vec<GrammarId>,
     load_order: Vec<GrammarId>,
     diagnostics: Vec<Diagnostic>,
 }
 
 pub(crate) fn load(options: LoadOptions) -> Result<LoadedSources, CompilationError> {
-    let mut loader = Loader::new(options);
-    loader.run();
-    if loader
+    let loaded = load_recovering(options);
+    if loaded
         .diagnostics
         .iter()
         .any(|diagnostic| diagnostic.severity == Severity::Error)
     {
-        return Err(CompilationError::new(loader.diagnostics));
+        return Err(CompilationError::new(loaded.diagnostics));
     }
-    Ok(loader.finish())
+    Ok(loaded)
+}
+
+pub(crate) fn load_recovering(options: LoadOptions) -> LoadedSources {
+    let mut loader = Loader::new(options);
+    loader.run();
+    loader.finish()
 }
 
 impl Loader {
@@ -72,6 +79,8 @@ impl Loader {
             by_name: BTreeMap::new(),
             grammar_for_source: BTreeMap::new(),
             visits: BTreeMap::new(),
+            token_vocab_targets: BTreeSet::new(),
+            resolved_vocabularies: BTreeSet::new(),
             stack: Vec::new(),
             load_order: Vec::new(),
             diagnostics: Vec::new(),
@@ -89,7 +98,7 @@ impl Loader {
         }
         let roots = self.options.roots.clone();
         for path in roots {
-            if let Some(grammar) = self.load_path(&path, Some(&path)) {
+            if let Some(grammar) = self.load_path(&path, Some(&path), false) {
                 if !self.roots.contains(&grammar) {
                     self.roots.push(grammar);
                 }
@@ -117,7 +126,12 @@ impl Loader {
         }
     }
 
-    fn load_path(&mut self, path: &Path, user_spelling: Option<&Path>) -> Option<GrammarId> {
+    fn load_path(
+        &mut self,
+        path: &Path,
+        user_spelling: Option<&Path>,
+        recover_syntax: bool,
+    ) -> Option<GrammarId> {
         let canonical = match fs::canonicalize(path) {
             Ok(path) => path,
             Err(error) => {
@@ -145,14 +159,28 @@ impl Loader {
         };
         let source = self.sources.next_id();
         let logical_path = user_spelling.unwrap_or(path).to_path_buf();
-        let file = match parse_source(source, logical_path, text) {
-            Ok(file) => file,
-            Err(error) => {
-                self.diagnostics
-                    .extend(error.diagnostics().iter().map(|syntax| {
-                        Diagnostic::error(syntax.code, syntax.span.clone(), syntax.message.clone())
-                    }));
-                return None;
+        let file = if recover_syntax {
+            match parse_source_recovering(source, logical_path, text) {
+                Ok(recovered) => {
+                    self.diagnostics.extend(
+                        recovered.diagnostics.into_iter().map(|syntax| {
+                            Diagnostic::error(syntax.code, syntax.span, syntax.message)
+                        }),
+                    );
+                    recovered.file
+                }
+                Err(error) => {
+                    self.record_frontend_error(&error);
+                    return None;
+                }
+            }
+        } else {
+            match parse_source(source, logical_path, text) {
+                Ok(file) => file,
+                Err(error) => {
+                    self.record_frontend_error(&error);
+                    return None;
+                }
             }
         };
         let parsed = parse_loader_unit(&file);
@@ -167,6 +195,13 @@ impl Loader {
         self.grammar_for_source.insert(source, grammar);
         self.grammars.push(parsed);
         Some(grammar)
+    }
+
+    fn record_frontend_error(&mut self, error: &super::frontend::FrontendError) {
+        self.diagnostics
+            .extend(error.diagnostics().iter().map(|syntax| {
+                Diagnostic::error(syntax.code, syntax.span.clone(), syntax.message.clone())
+            }));
     }
 
     fn check_file_name(&mut self, canonical: &Path, grammar: &ParsedGrammarUnit) {
@@ -203,7 +238,14 @@ impl Loader {
 
     fn visit(&mut self, grammar: GrammarId) {
         match self.visits.get(&grammar) {
-            Some(VisitState::Loaded) => return,
+            Some(VisitState::Loaded) => {
+                if self.should_resolve_token_vocab(grammar)
+                    && self.resolved_vocabularies.insert(grammar)
+                {
+                    self.resolve_token_vocab(grammar);
+                }
+                return;
+            }
             Some(VisitState::Loading) => {
                 self.report_cycle(grammar);
                 return;
@@ -213,7 +255,9 @@ impl Loader {
         self.visits.insert(grammar, VisitState::Loading);
         self.stack.push(grammar);
         self.resolve_imports(grammar);
-        self.resolve_token_vocab(grammar);
+        if self.should_resolve_token_vocab(grammar) && self.resolved_vocabularies.insert(grammar) {
+            self.resolve_token_vocab(grammar);
+        }
         self.stack.pop();
         self.visits.insert(grammar, VisitState::Loaded);
         self.load_order.push(grammar);
@@ -222,6 +266,11 @@ impl Loader {
     fn resolve_imports(&mut self, importer: GrammarId) {
         let imports = self.grammars[importer.index()].imports.clone();
         for declaration in imports {
+            if self.stack.iter().any(|grammar| {
+                self.grammars[grammar.index()].header.name.value == declaration.grammar.value
+            }) {
+                continue;
+            }
             let lookup = self.resolve_source_lookup(
                 importer,
                 &declaration.grammar.value,
@@ -238,7 +287,7 @@ impl Loader {
                 ));
                 continue;
             };
-            let Some(imported) = self.load_path(&path, Some(&path)) else {
+            let Some(imported) = self.load_path(&path, Some(&path), true) else {
                 continue;
             };
             self.check_import(importer, imported, &declaration);
@@ -272,7 +321,7 @@ impl Loader {
         let source_path = source_lookup.selected.clone();
         self.lookups.push(source_lookup.record);
         if let Some(path) = source_path {
-            if let Some(producer) = self.load_path(&path, Some(&path)) {
+            if let Some(producer) = self.load_path(&path, Some(&path), false) {
                 self.bind_source_vocab(importer, producer, declaration, Some(source_lookup_index));
                 return;
             }
@@ -320,7 +369,12 @@ impl Loader {
             declaration,
             lookup,
         });
+        self.token_vocab_targets.insert(producer);
         self.visit(producer);
+    }
+
+    fn should_resolve_token_vocab(&self, grammar: GrammarId) -> bool {
+        self.roots.contains(&grammar) || self.token_vocab_targets.contains(&grammar)
     }
 
     fn bind_tokens_file(
@@ -522,19 +576,32 @@ mod tests {
     }
 
     #[test]
-    fn reports_cycles_with_the_dependency_chain() {
+    fn ignores_recursive_import_edges_like_java() {
         let fixture = Fixture::new("cycle");
         fixture.write("A.g4", "parser grammar A; import B; a: b;");
         fixture.write("B.g4", "parser grammar B; import C; b: c;");
         fixture.write("C.g4", "parser grammar C; import A; c: a;");
-        let error = load(LoadOptions {
+        let loaded = load(LoadOptions {
             roots: vec![fixture.path("A.g4")],
             library_directories: Vec::new(),
         })
-        .expect_err("cycle must fail");
-        assert!(error.diagnostics().iter().any(|diagnostic| {
-            diagnostic.code == "G4L009" && diagnostic.message.contains("A -> B -> C -> A")
-        }));
+        .expect("recursive import should be ignored");
+        assert_eq!(loaded.grammars.imports.len(), 2);
+        assert_eq!(
+            loaded
+                .grammars
+                .load_order
+                .iter()
+                .map(|grammar| {
+                    loaded.grammars.grammars[grammar.index()]
+                        .header
+                        .name
+                        .value
+                        .as_str()
+                })
+                .collect::<Vec<_>>(),
+            ["C", "B", "A"],
+        );
     }
 
     #[test]
@@ -612,10 +679,7 @@ mod tests {
                 load_order_names_from_parts(&loader.grammars, &loader.load_order),
                 ["D", "C", "B", "A"],
             );
-            assert!(loader.diagnostics.iter().any(|diagnostic| {
-                diagnostic.code == "G4L009"
-                    && diagnostic.message == "grammar dependency cycle: A -> B -> C -> A"
-            }));
+            assert!(loader.diagnostics.is_empty());
         }
 
         #[test]

@@ -6,7 +6,7 @@ use crate::embedded::parse_scope_decls;
 use super::action::{ActionReference, ActionReferenceKind, action_references};
 use super::char_support::decode_string_literal;
 use super::diagnostic::{CompilationError, Diagnostic, Severity};
-use super::frontend::SourceSpan;
+use super::frontend::{SourceId, SourceSpan};
 use super::left_recursion::rewrite_immediate_left_recursion;
 use super::model::{
     ActionBinding, ActionId, Alternative, AttributeClause, AttributeSymbol, Block, Element,
@@ -17,6 +17,7 @@ use super::model::{
     TokenSymbol, TokenSymbolId, Vocabulary,
 };
 use super::provenance::ProvenanceIndex;
+use super::source::SourceSet;
 use super::transform::{
     IntegratedGrammarSet, IntegratedVocabulary, IntegratedVocabularySource, RootOutputs,
 };
@@ -72,11 +73,12 @@ pub(crate) struct SemanticGrammarSet {
 }
 
 pub(crate) fn analyze(
+    sources: &SourceSet,
     mut integrated: IntegratedGrammarSet,
 ) -> Result<SemanticGrammarSet, CompilationError> {
     let mut diagnostics = std::mem::take(&mut integrated.diagnostics);
     let deferred_diagnostics = channel_placement_diagnostics(&integrated.grammar.units);
-    diagnostics.extend(basic_checks(&integrated.grammar.units));
+    diagnostics.extend(basic_checks(sources, &integrated.grammar.units));
     if has_blocking_basic_errors(&diagnostics) {
         return Err(CompilationError::new(diagnostics));
     }
@@ -117,6 +119,7 @@ pub(crate) fn analyze(
         }
 
         let semantic = analyze_unit(
+            sources,
             unit,
             &symbol_units[&unit_id],
             imported,
@@ -147,21 +150,52 @@ fn has_errors(diagnostics: &[Diagnostic]) -> bool {
         .any(|diagnostic| diagnostic.severity == Severity::Error)
 }
 
+fn diagnostic_span_in_root(
+    sources: &SourceSet,
+    root: SourceId,
+    original: &SourceSpan,
+) -> SourceSpan {
+    if original.source == root {
+        return original.clone();
+    }
+    let Some(source) = sources.get(original.source) else {
+        return original.clone();
+    };
+    let Some(target) = sources.get(root) else {
+        return original.clone();
+    };
+    let Some((start_line, start_column)) = source.line_column(original.bytes.start) else {
+        return original.clone();
+    };
+    let Some(start) = target.byte_offset(start_line, start_column) else {
+        return original.clone();
+    };
+    let end = source
+        .line_column(original.bytes.end)
+        .and_then(|(line, column)| target.byte_offset(line, column))
+        .filter(|end| *end >= start)
+        .unwrap_or(start);
+    SourceSpan {
+        source: root,
+        bytes: start..end,
+    }
+}
+
 fn has_blocking_basic_errors(diagnostics: &[Diagnostic]) -> bool {
     diagnostics
         .iter()
         .any(|diagnostic| diagnostic.severity == Severity::Error && diagnostic.code != "G4S016")
 }
 
-fn basic_checks(units: &[GrammarUnit]) -> Vec<Diagnostic> {
+fn basic_checks(sources: &SourceSet, units: &[GrammarUnit]) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
     for unit in units {
-        check_unit_basics(unit, &mut diagnostics);
+        check_unit_basics(sources, unit, &mut diagnostics);
     }
     diagnostics
 }
 
-fn check_unit_basics(unit: &GrammarUnit, diagnostics: &mut Vec<Diagnostic>) {
+fn check_unit_basics(sources: &SourceSet, unit: &GrammarUnit, diagnostics: &mut Vec<Diagnostic>) {
     if unit.rules.is_empty() {
         diagnostics.push(Diagnostic::error(
             "G4S001",
@@ -199,14 +233,17 @@ fn check_unit_basics(unit: &GrammarUnit, diagnostics: &mut Vec<Diagnostic>) {
                     rule.name
                 ),
             )),
-            (GrammarKind::Parser, RuleKind::Lexer) => diagnostics.push(Diagnostic::error(
-                "G4S005",
-                rule.span.clone(),
-                format!(
-                    "lexer rule {} is not allowed in a parser grammar",
-                    rule.name
-                ),
-            )),
+            (GrammarKind::Parser, RuleKind::Lexer) if rule.mode.is_none() => {
+                diagnostics.push(Diagnostic::error(
+                    "G4S005",
+                    rule.span.clone(),
+                    format!(
+                        "lexer rule {} is not allowed in a parser grammar",
+                        rule.name
+                    ),
+                ));
+            }
+            (GrammarKind::Parser, RuleKind::Lexer) => {}
             (GrammarKind::Combined, _) => diagnostics.push(Diagnostic::error(
                 "G4S006",
                 unit.span.clone(),
@@ -255,10 +292,7 @@ fn check_unit_basics(unit: &GrammarUnit, diagnostics: &mut Vec<Diagnostic>) {
         check_alt_labels(rule, &rules, diagnostics);
         if rule.fragment {
             visit_elements(&rule.block, &mut |_, _, element| {
-                if matches!(
-                    element.kind,
-                    ElementKind::Action { .. } | ElementKind::Predicate { .. }
-                ) {
+                if matches!(element.kind, ElementKind::Action { .. }) {
                     diagnostics.push(Diagnostic::warning(
                         "G4S010",
                         element.span.clone(),
@@ -288,7 +322,7 @@ fn check_unit_basics(unit: &GrammarUnit, diagnostics: &mut Vec<Diagnostic>) {
     }
 
     check_named_actions(unit, diagnostics);
-    check_modes(unit, diagnostics);
+    check_modes(sources, unit, diagnostics);
     check_channel_declarations(unit, diagnostics);
 }
 
@@ -363,7 +397,7 @@ fn check_source_prequels(unit: &GrammarUnit, diagnostics: &mut Vec<Diagnostic>) 
     check_repeated_prequels(&unit.prequels, diagnostics);
     for token in &unit.tokens {
         if checked_tokens.insert(token.id) {
-            check_token_declaration(token, &mut token_names, diagnostics);
+            check_token_declaration(token, &mut BTreeMap::new(), diagnostics);
         }
     }
 }
@@ -679,12 +713,12 @@ fn channel_placement_diagnostics(units: &[GrammarUnit]) -> Vec<Diagnostic> {
     diagnostics
 }
 
-fn check_modes(unit: &GrammarUnit, diagnostics: &mut Vec<Diagnostic>) {
+fn check_modes(sources: &SourceSet, unit: &GrammarUnit, diagnostics: &mut Vec<Diagnostic>) {
     if unit.kind != GrammarKind::Lexer {
         for mode in &unit.modes {
             diagnostics.push(Diagnostic::error(
                 "G4S023",
-                mode.span.clone(),
+                diagnostic_span_in_root(sources, unit.source, &mode.name_span),
                 format!("mode {} is only allowed in lexer grammars", mode.name),
             ));
         }
@@ -741,7 +775,7 @@ fn import_dependency(
                 destination.import(vocabulary);
             } else {
                 let span = dependency.declaration.as_ref().map_or_else(
-                    || SourceSpan::empty(super::frontend::SourceId::new(0)),
+                    || SourceSpan::empty(SourceId::new(0)),
                     |declaration| declaration.span.clone(),
                 );
                 diagnostics.push(Diagnostic::error(
@@ -755,7 +789,7 @@ fn import_dependency(
         }
         IntegratedVocabularySource::TokensFile(path) => {
             let span = dependency.declaration.as_ref().map_or_else(
-                || SourceSpan::empty(super::frontend::SourceId::new(0)),
+                || SourceSpan::empty(SourceId::new(0)),
                 |declaration| declaration.span.clone(),
             );
             let text = match fs::read_to_string(path) {
@@ -823,6 +857,7 @@ fn import_dependency(
 }
 
 fn analyze_unit(
+    sources: &SourceSet,
     unit: GrammarUnit,
     symbol_unit: &GrammarUnit,
     mut vocabulary: VocabularyBuilder,
@@ -836,7 +871,7 @@ fn analyze_unit(
         if imported_names.contains(&declaration.name.value) {
             token_diagnostics.push(Diagnostic::warning(
                 "G4S019",
-                declaration.name.span.clone(),
+                diagnostic_span_in_root(sources, unit.source, &declaration.name.span),
                 format!("token {} is already defined", declaration.name.value),
             ));
         }
@@ -846,7 +881,7 @@ fn analyze_unit(
     match unit.kind {
         GrammarKind::Lexer => assign_lexer_tokens(&unit, &mut vocabulary, ids),
         GrammarKind::Parser => {
-            assign_parser_tokens(&unit, &mut vocabulary, ids, &mut token_diagnostics);
+            assign_parser_tokens(sources, &unit, &mut vocabulary, ids, &mut token_diagnostics);
         }
         GrammarKind::Combined => unreachable!("combined grammar is split before semantics"),
     }
@@ -966,6 +1001,7 @@ fn assign_lexer_tokens(
 }
 
 fn assign_parser_tokens(
+    sources: &SourceSet,
     unit: &GrammarUnit,
     vocabulary: &mut VocabularyBuilder,
     ids: &mut ModelIdAllocator,
@@ -977,7 +1013,7 @@ fn assign_parser_tokens(
                 if name != "EOF" && !vocabulary.by_name.contains_key(name) {
                     diagnostics.push(Diagnostic::warning(
                         "G4S030",
-                        element.span.clone(),
+                        diagnostic_span_in_root(sources, unit.source, &element.span),
                         format!("implicit definition of token {name} in parser"),
                     ));
                     vocabulary.define_name(name, None, None, ids);
@@ -987,7 +1023,7 @@ fn assign_parser_tokens(
                 if !vocabulary.by_literal.contains_key(literal) {
                     diagnostics.push(Diagnostic::error(
                             "G4S031",
-                            element.span.clone(),
+                            diagnostic_span_in_root(sources, unit.source, &element.span),
                             format!(
                                 "cannot create implicit token for string literal {literal} in a parser grammar"
                             ),
@@ -1003,7 +1039,7 @@ fn assign_parser_tokens(
                         } if name != "EOF" && !vocabulary.by_name.contains_key(name) => {
                             diagnostics.push(Diagnostic::warning(
                                 "G4S030",
-                                element.span.clone(),
+                                diagnostic_span_in_root(sources, unit.source, &element.span),
                                 format!("implicit definition of token {name} in parser"),
                             ));
                             vocabulary.define_name(name, None, None, ids);
@@ -1014,7 +1050,7 @@ fn assign_parser_tokens(
                         } if !vocabulary.by_literal.contains_key(literal) => {
                             diagnostics.push(Diagnostic::error(
                                     "G4S031",
-                                    element.span.clone(),
+                                    diagnostic_span_in_root(sources, unit.source, &element.span),
                                     format!(
                                         "cannot create implicit token for string literal {literal} in a parser grammar"
                                     ),
@@ -2936,7 +2972,7 @@ A : 'a' -> channel(COMMENTS);
             roots: vec![fixture.path(root)],
             library_directories: Vec::new(),
         })?;
-        analyze(integrate_loaded(&loaded)?)
+        analyze(&loaded.sources, integrate_loaded(&loaded)?)
     }
 
     struct Fixture {
