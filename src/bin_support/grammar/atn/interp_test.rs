@@ -3076,6 +3076,7 @@ mod tests {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     mod upstream_composite_grammars {
         use super::*;
         use crate::grammar::diagnostic::Severity::{Error, Warning};
@@ -3187,7 +3188,6 @@ mod tests {
             }
         }
 
-        #[allow(clippy::too_many_arguments)]
         fn assert_composite_fixture(
             fixture_name: &str,
             roots: &[&str],

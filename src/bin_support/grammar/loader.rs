@@ -43,6 +43,7 @@ struct Loader {
     visits: BTreeMap<GrammarId, VisitState>,
     token_vocab_targets: BTreeSet<GrammarId>,
     resolved_vocabularies: BTreeSet<GrammarId>,
+    report_recursive_imports: bool,
     stack: Vec<GrammarId>,
     load_order: Vec<GrammarId>,
     diagnostics: Vec<Diagnostic>,
@@ -62,6 +63,7 @@ pub(crate) fn load(options: LoadOptions) -> Result<LoadedSources, CompilationErr
 
 pub(crate) fn load_recovering(options: LoadOptions) -> LoadedSources {
     let mut loader = Loader::new(options);
+    loader.report_recursive_imports = false;
     loader.run();
     loader.finish()
 }
@@ -81,6 +83,7 @@ impl Loader {
             visits: BTreeMap::new(),
             token_vocab_targets: BTreeSet::new(),
             resolved_vocabularies: BTreeSet::new(),
+            report_recursive_imports: true,
             stack: Vec::new(),
             load_order: Vec::new(),
             diagnostics: Vec::new(),
@@ -266,9 +269,12 @@ impl Loader {
     fn resolve_imports(&mut self, importer: GrammarId) {
         let imports = self.grammars[importer.index()].imports.clone();
         for declaration in imports {
-            if self.stack.iter().any(|grammar| {
+            if let Some(recursive) = self.stack.iter().copied().find(|grammar| {
                 self.grammars[grammar.index()].header.name.value == declaration.grammar.value
             }) {
+                if self.report_recursive_imports {
+                    self.report_cycle(recursive);
+                }
                 continue;
             }
             let lookup = self.resolve_source_lookup(
@@ -679,7 +685,10 @@ mod tests {
                 load_order_names_from_parts(&loader.grammars, &loader.load_order),
                 ["D", "C", "B", "A"],
             );
-            assert!(loader.diagnostics.is_empty());
+            assert!(loader.diagnostics.iter().any(|diagnostic| {
+                diagnostic.code == "G4L009"
+                    && diagnostic.message == "grammar dependency cycle: A -> B -> C -> A"
+            }));
         }
 
         #[test]
