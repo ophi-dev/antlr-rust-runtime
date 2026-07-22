@@ -263,6 +263,201 @@ fn imported_predicate_manifest_uses_its_structural_source_owner() {
 }
 
 #[test]
+fn imported_parser_predicate_generates_typed_hook_from_structural_body() {
+    let temp = temporary_directory("imported-parser-hook");
+    let root = temp.path().join("Root.g4");
+    let delegate = temp.path().join("Delegate.g4");
+    let tokens = temp.path().join("Tokens.g4");
+    let out = temp.path().join("generated");
+    fs::write(
+        &root,
+        "parser grammar Root;\n\
+         import Delegate;\n\
+         options { tokenVocab=Tokens; }\n\
+         start: delegated EOF;\n",
+    )
+    .expect("root grammar should be writable");
+    fs::write(
+        &delegate,
+        "parser grammar Delegate;\ndelegated: {isTypeName()}? ID;\n",
+    )
+    .expect("delegate grammar should be writable");
+    fs::write(&tokens, "lexer grammar Tokens;\nID: [a-z]+;\n")
+        .expect("token grammar should be writable");
+
+    let output = run_antlr4_rust_gen(&[
+        root.as_os_str(),
+        tokens.as_os_str(),
+        OsStr::new("-I"),
+        temp.path().as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    let parser = fs::read_to_string(out.join("root.rs")).expect("parser should be emitted");
+    assert!(parser.contains("pub trait RootHooks"), "{parser}");
+    assert!(parser.contains("fn is_type_name"), "{parser}");
+    assert!(
+        parser.contains("(1, 0) => Some(self.0.is_type_name(ctx))"),
+        "{parser}"
+    );
+}
+
+#[test]
+fn imported_lexer_action_generates_typed_hook_from_structural_body() {
+    let temp = temporary_directory("imported-lexer-hook");
+    let root = temp.path().join("RootLexer.g4");
+    let delegate = temp.path().join("DelegateLexer.g4");
+    let patterns = temp.path().join("patterns.toml");
+    let out = temp.path().join("generated");
+    fs::write(
+        &root,
+        "lexer grammar RootLexer;\nimport DelegateLexer;\nB: 'b';\n",
+    )
+    .expect("root grammar should be writable");
+    fs::write(
+        &delegate,
+        "lexer grammar DelegateLexer;\nA: 'a' {this.handle(\"a\");};\n",
+    )
+    .expect("delegate grammar should be writable");
+    fs::write(
+        &patterns,
+        "version = 1\n\
+         [[helper]]\n\
+         kind = \"lexer-action\"\n\
+         name = \"handle\"\n\
+         arguments = \"string\"\n\
+         returns = \"unit\"\n\
+         lower = \"hook\"\n",
+    )
+    .expect("semantic patterns should be writable");
+
+    let output = run_antlr4_rust_gen(&[
+        root.as_os_str(),
+        OsStr::new("-I"),
+        temp.path().as_os_str(),
+        OsStr::new("--sem-patterns"),
+        patterns.as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    let lexer = fs::read_to_string(out.join("root_lexer.rs")).expect("lexer should be emitted");
+    assert!(lexer.contains("pub trait RootLexerHooks"), "{lexer}");
+    assert!(lexer.contains("fn handle"), "{lexer}");
+    assert!(lexer.contains("self.0.handle(ctx, \"a\")"), "{lexer}");
+}
+
+#[test]
+fn imported_rule_arguments_and_locals_use_structural_call_owners() {
+    let temp = temporary_directory("imported-rule-arguments");
+    let root = temp.path().join("Root.g4");
+    let delegate = temp.path().join("Delegate.g4");
+    let tokens = temp.path().join("Tokens.g4");
+    let out = temp.path().join("generated");
+    fs::write(
+        &root,
+        "parser grammar Root;\n\
+         import Delegate;\n\
+         options { tokenVocab=Tokens; }\n\
+         start: outer EOF;\n",
+    )
+    .expect("root grammar should be writable");
+    fs::write(
+        &delegate,
+        "parser grammar Delegate;\n\
+         outer locals [boolean seen=false]\n\
+             : {$seen=true;} {$seen}? target[true]\n\
+             ;\n\
+         target[boolean enabled]: ID;\n",
+    )
+    .expect("delegate grammar should be writable");
+    fs::write(&tokens, "lexer grammar Tokens;\nID: [a-z]+;\n")
+        .expect("token grammar should be writable");
+
+    let output = run_antlr4_rust_gen(&[
+        root.as_os_str(),
+        tokens.as_os_str(),
+        OsStr::new("-I"),
+        temp.path().as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    let parser = fs::read_to_string(out.join("root.rs")).expect("parser should be emitted");
+    assert!(
+        parser.contains("let mut __antlr_local_seen = false;"),
+        "{parser}"
+    );
+    assert!(
+        parser.contains("parse_generated_rule_2_dispatch(1, false)"),
+        "{parser}"
+    );
+}
+
+#[test]
+fn imported_embedded_action_uses_structural_rule_and_transition_owner() {
+    let temp = temporary_directory("imported-embedded-action");
+    let root = temp.path().join("Root.g4");
+    let delegate = temp.path().join("Delegate.g4");
+    let tokens = temp.path().join("Tokens.g4");
+    let out = temp.path().join("generated");
+    fs::write(
+        &root,
+        "parser grammar Root;\n\
+         import Delegate;\n\
+         options { tokenVocab=Tokens; }\n\
+         start: delegated EOF;\n",
+    )
+    .expect("root grammar should be writable");
+    fs::write(
+        &delegate,
+        "parser grammar Delegate;\n\
+         delegated: {writeln!(self.output(), \"delegated\").unwrap();} ID;\n",
+    )
+    .expect("delegate grammar should be writable");
+    fs::write(&tokens, "lexer grammar Tokens;\nID: [a-z]+;\n")
+        .expect("token grammar should be writable");
+
+    let output = run_antlr4_rust_gen(&[
+        root.as_os_str(),
+        tokens.as_os_str(),
+        OsStr::new("-I"),
+        temp.path().as_os_str(),
+        OsStr::new("--actions"),
+        OsStr::new("embedded"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    let parser = fs::read_to_string(out.join("root.rs")).expect("parser should be emitted");
+    assert!(
+        parser.contains("writeln!(self.output(), \"delegated\").unwrap();"),
+        "{parser}"
+    );
+}
+
+#[test]
 fn multiple_roots_and_repeatable_library_paths_are_resolved() {
     let temp = temporary_directory("roots");
     let first_lib = temp.path().join("first-lib");
