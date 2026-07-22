@@ -1253,6 +1253,104 @@ mod tests {
         );
     }
 
+    mod upstream_left_recursion_tool_issues {
+        use super::*;
+        use crate::grammar::diagnostic::Severity::Error;
+
+        macro_rules! error_case {
+            ($name:ident, $fixture:literal, $code:literal, $line:literal, $message:literal) => {
+                mod $name {
+                    use super::*;
+
+                    #[test]
+                    fn matches_java_diagnostic() {
+                        assert_diagnostic($fixture, $code, $line, $message);
+                    }
+                }
+            };
+        }
+
+        error_case!(
+            no_non_left_recursive_alternative,
+            "testleftrecursiontoolissues-testcheckfornonleftrecursiverule-477f42142e",
+            "G4R002",
+            3,
+            "left recursive rule a must contain an alternative which is not left recursive"
+        );
+        error_case!(
+            empty_left_recursive_follow,
+            "testleftrecursiontoolissues-testcheckforleftrecursiveemptyfollow-558283d55a",
+            "G4A002",
+            3,
+            "left recursive rule a contains a left recursive alternative which can be followed by the empty string"
+        );
+        error_case!(
+            recursive_rule_reference_with_argument,
+            "testleftrecursiontoolissues-testleftrecursiverulerefwitharg-40cd52608d",
+            "G4R001",
+            6,
+            "rule expressionA is left recursive but doesn't conform to a pattern ANTLR can handle"
+        );
+        error_case!(
+            recursive_rule_reference_with_argument_and_parameter,
+            "testleftrecursiontoolissues-testleftrecursiverulerefwitharg2-7332bdbd4f",
+            "G4R001",
+            2,
+            "rule a is left recursive but doesn't conform to a pattern ANTLR can handle"
+        );
+        error_case!(
+            recursive_rule_reference_with_argument_without_parameter,
+            "testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92",
+            "G4R001",
+            2,
+            "rule a is left recursive but doesn't conform to a pattern ANTLR can handle"
+        );
+        error_case!(
+            isolated_left_recursive_rule_reference,
+            "testleftrecursiontoolissues-testisolatedleftrecursiveruleref-43f8252e7d",
+            "G4R001",
+            2,
+            "rule a is left recursive but doesn't conform to a pattern ANTLR can handle"
+        );
+
+        mod argument_on_primary_rule {
+            use super::*;
+
+            #[test]
+            fn matches_java_interps() {
+                let compilation = assert_combined_fixture(
+                    "testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22",
+                    "T",
+                );
+                assert!(compilation.diagnostics.is_empty());
+            }
+        }
+
+        fn assert_diagnostic(fixture_name: &str, code: &str, line: usize, message: &str) {
+            let error = compile_fixture(fixture_name, &["T.g4"])
+                .expect_err("upstream invalid grammar should fail");
+            let [diagnostic] = error.diagnostics() else {
+                panic!("{fixture_name} should report exactly one diagnostic: {error:#?}");
+            };
+            assert_eq!(diagnostic.code, code, "{fixture_name}: {diagnostic:#?}");
+            assert_eq!(
+                diagnostic.severity, Error,
+                "{fixture_name}: {diagnostic:#?}",
+            );
+            assert_eq!(
+                diagnostic.message, message,
+                "{fixture_name}: {diagnostic:#?}",
+            );
+            let source = std::fs::read_to_string(fixture(fixture_name).join("T.g4"))
+                .expect("fixture source");
+            assert_eq!(
+                diagnostic.primary.bytes.start,
+                fixture_byte_offset(&source, line, 0),
+                "{fixture_name}: {diagnostic:#?}",
+            );
+        }
+    }
+
     mod upstream_atn_construction {
         use super::*;
 
