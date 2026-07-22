@@ -1,0 +1,18 @@
+{
+  "java_antlr": [
+    {
+      "severity": "warning",
+      "code": 125,
+      "line": 3,
+      "column": 3,
+      "message": "implicit definition of token T4 in parser"
+    },
+    {
+      "severity": "warning",
+      "code": 125,
+      "line": 3,
+      "column": 3,
+      "message": "implicit definition of token T3 in parser"
+    }
+  ]
+}

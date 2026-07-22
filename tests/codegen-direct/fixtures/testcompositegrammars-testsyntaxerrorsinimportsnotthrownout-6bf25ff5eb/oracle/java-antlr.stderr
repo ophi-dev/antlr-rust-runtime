@@ -1,0 +1,2 @@
+error(50): S.g4:3:0: syntax error: mismatched input '<EOF>' expecting ASSIGN
+error(56): M.g4:3:4: reference to undefined rule: x

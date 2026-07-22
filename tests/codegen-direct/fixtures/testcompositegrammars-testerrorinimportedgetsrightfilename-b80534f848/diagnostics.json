@@ -1,0 +1,11 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 56,
+      "line": 2,
+      "column": 10,
+      "message": "reference to undefined rule: c"
+    }
+  ]
+}

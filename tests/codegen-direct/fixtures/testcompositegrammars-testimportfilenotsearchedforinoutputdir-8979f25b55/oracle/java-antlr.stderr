@@ -1,0 +1,2 @@
+error(110): M.g4:2:7: can't find or load grammar S
+error(56): M.g4:3:4: reference to undefined rule: a

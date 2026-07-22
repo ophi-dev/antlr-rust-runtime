@@ -1,0 +1,46 @@
+{
+  "java_antlr": [
+    {
+      "severity": "warning",
+      "code": 108,
+      "line": 2,
+      "column": 9,
+      "message": "token name A is already defined"
+    },
+    {
+      "severity": "warning",
+      "code": 108,
+      "line": 2,
+      "column": 12,
+      "message": "token name B is already defined"
+    },
+    {
+      "severity": "warning",
+      "code": 108,
+      "line": 2,
+      "column": 15,
+      "message": "token name C is already defined"
+    },
+    {
+      "severity": "warning",
+      "code": 108,
+      "line": 2,
+      "column": 9,
+      "message": "token name C is already defined"
+    },
+    {
+      "severity": "warning",
+      "code": 108,
+      "line": 2,
+      "column": 12,
+      "message": "token name B is already defined"
+    },
+    {
+      "severity": "warning",
+      "code": 108,
+      "line": 2,
+      "column": 15,
+      "message": "token name A is already defined"
+    }
+  ]
+}

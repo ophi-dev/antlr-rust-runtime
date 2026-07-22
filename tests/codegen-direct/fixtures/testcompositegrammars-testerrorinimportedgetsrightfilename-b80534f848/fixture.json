@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "M.g4"
+  ],
+  "library_directories": [],
+  "logical_ids": [
+    "testcompositegrammars-testerrorinimportedgetsrightfilename-b80534f848"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:testcompositegrammars-testerrorinimportedgetsrightfilename@4ab3878ee182",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestCompositeGrammars.spec.ts",
+      "case": "testErrorInImportedGetsRightFilename",
+      "source_sha256": "cb96ff644d0160da0f98f3bdb463c7f1b92c89f5b999a5c2a2dca7de5f05e2d7"
+    },
+    {
+      "source_case_id": "java-antlr:testcompositegrammars-testerrorinimportedgetsrightfilename-path@385195b47180",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestCompositeGrammars.java",
+      "case": "testErrorInImportedGetsRightFilename",
+      "source_sha256": "de04441f7ad86b0bf7fd100038606ba71098d4092fe3822ec2b0dee5842dbd05"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testcompositegrammars-testerrorinimportedgetsrightfilename-path@385195b47180",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestCompositeGrammars.java",
+    "case": "testErrorInImportedGetsRightFilename",
+    "source_sha256": "de04441f7ad86b0bf7fd100038606ba71098d4092fe3822ec2b0dee5842dbd05"
+  },
+  "fixture_binding": {
+    "method": "testErrorInImportedGetsRightFilename",
+    "source": "pinned Java TestCompositeGrammars.java"
+  },
+  "expected": "error",
+  "composite_grammars_oracle": {
+    "artifacts": [
+      "diagnostics"
+    ],
+    "diagnostic_types": [
+      "UNDEFINED_RULE_REF"
+    ],
+    "compatibility_verdict": "Java ANTLR 4.13.2"
+  },
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "unicode_data": {
+      "generator": "org.antlr.v4.unicode.UnicodeDataTemplateController",
+      "helper": "tools/grammar-frontend/oracle/GenerateUnicodeData.java",
+      "helper_sha256": "9adec4f06cb31c7c7e408336e8fe935741f6d4ec5e8113e76450551ec1e3967f",
+      "icu4j_version": "78.1.0.0",
+      "icu4j_jar_sha256": "bbb70d3be23110d7295823eee0c2e896ac3b619b3c0f26168f65eb972df51d2a",
+      "unicode_version": "17.0.0.0"
+    },
+    "exit_status": 1
+  },
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh testcompositegrammars-testerrorinimportedgetsrightfilename-b80534f848 --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar --icu-jar /tmp/antlr-cleanroom/tools/icu4j-78.1.jar",
+  "files": {
+    "M.g4": "a2294fbb30ceae51b8e3761a8937740268bbf44f034d2de261e9b4d55071dbe3",
+    "MLexer.interp": "b2f3071697d1935935ab0e620a48b7051c5c9284f952c4a7e9336204edd57d06",
+    "MLexer.tokens": "0d10a40dbe5c095bbea11ccb75d06517b53e44dc685ad36353147051b18eaa57",
+    "S.g4": "b5ef9be91081f9e627a66f3bb6a33946f06ddc02290792c3d50ba88e851f7e4d",
+    "diagnostics.json": "93cdd4ef5145d12eaefadccccff8d00d3b0d015905c6d0bb6da8a9ce83529c01",
+    "oracle/java-antlr.stderr": "a95b87b7326e630fa767f646f5d851210fb7643cf81231f2d394a62356e02228",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stdout": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+  }
+}

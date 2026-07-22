@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "G3.g4"
+  ],
+  "library_directories": [],
+  "logical_ids": [
+    "testcompositegrammars-testnestedcomposite-6c1f19c65a"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:testcompositegrammars-testnestedcomposite@22199ea298f8",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestCompositeGrammars.spec.ts",
+      "case": "testNestedComposite",
+      "source_sha256": "cb96ff644d0160da0f98f3bdb463c7f1b92c89f5b999a5c2a2dca7de5f05e2d7"
+    },
+    {
+      "source_case_id": "java-antlr:testcompositegrammars-testnestedcomposite-path@83a7d27c727e",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestCompositeGrammars.java",
+      "case": "testNestedComposite",
+      "source_sha256": "de04441f7ad86b0bf7fd100038606ba71098d4092fe3822ec2b0dee5842dbd05"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testcompositegrammars-testnestedcomposite-path@83a7d27c727e",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestCompositeGrammars.java",
+    "case": "testNestedComposite",
+    "source_sha256": "de04441f7ad86b0bf7fd100038606ba71098d4092fe3822ec2b0dee5842dbd05"
+  },
+  "fixture_binding": {
+    "method": "testNestedComposite",
+    "source": "pinned Java TestCompositeGrammars.java"
+  },
+  "expected": "success",
+  "composite_grammars_oracle": {
+    "artifacts": [
+      ".interp",
+      ".tokens",
+      "diagnostics"
+    ],
+    "diagnostic_types": [],
+    "compatibility_verdict": "Java ANTLR 4.13.2"
+  },
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "unicode_data": {
+      "generator": "org.antlr.v4.unicode.UnicodeDataTemplateController",
+      "helper": "tools/grammar-frontend/oracle/GenerateUnicodeData.java",
+      "helper_sha256": "9adec4f06cb31c7c7e408336e8fe935741f6d4ec5e8113e76450551ec1e3967f",
+      "icu4j_version": "78.1.0.0",
+      "icu4j_jar_sha256": "bbb70d3be23110d7295823eee0c2e896ac3b619b3c0f26168f65eb972df51d2a",
+      "unicode_version": "17.0.0.0"
+    },
+    "exit_status": 0
+  },
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh testcompositegrammars-testnestedcomposite-6c1f19c65a --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar --icu-jar /tmp/antlr-cleanroom/tools/icu4j-78.1.jar",
+  "files": {
+    "G1.g4": "db13b6db36f266a83a06a3d87a87fbc35bef15f1f1315cfe2ccc1b76ee677792",
+    "G2.g4": "e29fcf0ce0b26472f4217c799f728043000f09b6478956cfb9f7a666da5d52db",
+    "G3.g4": "7928ca1e43c8ade85e1dba5fd73341bb4527aa94e1e9f6eb66c009de61fcb352",
+    "G3.interp": "2677e734091581ba64035d7d465e2ab3925d6549ba2da4138234d53e5a5912f4",
+    "G3.tokens": "d48fceeecac55b13dece1965b94261a67f8a37f26a0067106970854ebc86d175",
+    "L.g4": "b50a63903c159a9a14fcce6d0597e7581310defe3a2e519bbea351ea5a417c09",
+    "diagnostics.json": "e1cd37d0ccff05b1bcf3fe58654dcca64feaadbd121fda379fda61f8e1ea0058",
+    "oracle/java-antlr.stderr": "c20dfec62008ad9011bfb2c83b640ae44bf6b9620e8b3463550e3c06e078a4c1",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stdout": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+  }
+}

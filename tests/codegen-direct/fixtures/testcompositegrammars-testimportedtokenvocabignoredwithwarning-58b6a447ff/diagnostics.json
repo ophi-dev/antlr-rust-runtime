@@ -1,0 +1,11 @@
+{
+  "java_antlr": [
+    {
+      "severity": "warning",
+      "code": 109,
+      "line": 2,
+      "column": 0,
+      "message": "options ignored in imported grammar S"
+    }
+  ]
+}
