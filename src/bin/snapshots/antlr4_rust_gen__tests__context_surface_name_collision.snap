@@ -1,0 +1,53 @@
+---
+source: src/bin/antlr4-rust-gen.rs
+expression: context_surface_names(&model)
+---
+ContextSurfaceNames {
+    rules: [
+        ContextSurfaceName {
+            context_type: "PrimaryExpressionStartContext",
+            listener_method: "primary_expression_start",
+        },
+        ContextSurfaceName {
+            context_type: "ObjectCreationExpressionContext",
+            listener_method: "object_creation_expression",
+        },
+    ],
+    alternatives: [
+        {
+            "objectCreationExpression": ContextSurfaceName {
+                context_type: "ObjectCreationExpressionLabelContext",
+                listener_method: "object_creation_expression_label",
+            },
+        },
+        {},
+    ],
+    views: [
+        ContextViewName {
+            surface: ContextSurfaceName {
+                context_type: "PrimaryExpressionStartContext",
+                listener_method: "primary_expression_start",
+            },
+            rule_index: 0,
+            alternative_label: None,
+        },
+        ContextViewName {
+            surface: ContextSurfaceName {
+                context_type: "ObjectCreationExpressionLabelContext",
+                listener_method: "object_creation_expression_label",
+            },
+            rule_index: 0,
+            alternative_label: Some(
+                "objectCreationExpression",
+            ),
+        },
+        ContextViewName {
+            surface: ContextSurfaceName {
+                context_type: "ObjectCreationExpressionContext",
+                listener_method: "object_creation_expression",
+            },
+            rule_index: 1,
+            alternative_label: None,
+        },
+    ],
+}

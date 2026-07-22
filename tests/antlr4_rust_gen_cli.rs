@@ -270,6 +270,36 @@ fn combined_root_emits_standard_typed_contexts_and_listener() {
 }
 
 #[test]
+fn colliding_rule_and_alternative_label_context_names_compile() {
+    let temp = temporary_directory("context-name-collision");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/context-name-collision/T.g4");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    let parser = fs::read_to_string(out.join("t.rs")).expect("parser should be emitted");
+    for expected in [
+        "pub struct ObjectCreationExpressionContext<'a>",
+        "pub struct ObjectCreationExpressionLabelContext<'a>",
+        "fn enter_object_creation_expression(&mut self",
+        "fn enter_object_creation_expression_label(&mut self",
+    ] {
+        assert!(parser.contains(expected), "missing {expected:?}\n{parser}");
+    }
+    assert_generated_modules_compile(temp.path(), &["t.rs"]);
+}
+
+#[test]
 fn imported_predicate_manifest_uses_its_structural_source_owner() {
     let temp = temporary_directory("imported-predicate");
     let root = temp.path().join("Root.g4");

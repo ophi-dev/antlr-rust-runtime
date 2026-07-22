@@ -7247,6 +7247,135 @@ fn embedded_rule_call_expression(value: &str) -> Option<String> {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ContextSurfaceName {
+    context_type: String,
+    listener_method: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ContextViewName {
+    surface: ContextSurfaceName,
+    rule_index: usize,
+    alternative_label: Option<String>,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct ContextSurfaceNames {
+    rules: Vec<ContextSurfaceName>,
+    alternatives: Vec<BTreeMap<String, ContextSurfaceName>>,
+    views: Vec<ContextViewName>,
+}
+
+impl ContextSurfaceNames {
+    fn alternative(&self, rule_index: usize, label: &str) -> &ContextSurfaceName {
+        self.alternatives[rule_index]
+            .get(label)
+            .expect("alternative label has an allocated context name")
+    }
+}
+
+/// Reserves canonical rule names before allocating labels. A label only gains
+/// a `Label`/`_label` suffix when Rust normalization would otherwise collide.
+fn context_surface_names(model: &embedded::EmbeddedModel) -> ContextSurfaceNames {
+    let mut used_context_types = BTreeSet::new();
+    let mut used_listener_methods = BTreeSet::new();
+    let rules = model
+        .rules
+        .iter()
+        .map(|rule| ContextSurfaceName {
+            context_type: allocate_context_type(&rule.name, "Rule", &mut used_context_types),
+            listener_method: allocate_listener_method(
+                &rule.name,
+                "rule",
+                &mut used_listener_methods,
+            ),
+        })
+        .collect::<Vec<_>>();
+
+    let mut alternatives = (0..model.rules.len())
+        .map(|_| BTreeMap::new())
+        .collect::<Vec<_>>();
+    let mut views = Vec::new();
+    for (rule_index, rule) in model.rules.iter().enumerate() {
+        views.push(ContextViewName {
+            surface: rules[rule_index].clone(),
+            rule_index,
+            alternative_label: None,
+        });
+        for alternative in &rule.alts {
+            let Some(label) = &alternative.label else {
+                continue;
+            };
+            if let Entry::Vacant(entry) = alternatives[rule_index].entry(label.clone()) {
+                let surface = ContextSurfaceName {
+                    context_type: allocate_context_type(label, "Label", &mut used_context_types),
+                    listener_method: allocate_listener_method(
+                        label,
+                        "label",
+                        &mut used_listener_methods,
+                    ),
+                };
+                entry.insert(surface.clone());
+                views.push(ContextViewName {
+                    surface,
+                    rule_index,
+                    alternative_label: Some(label.clone()),
+                });
+            }
+        }
+    }
+
+    ContextSurfaceNames {
+        rules,
+        alternatives,
+        views,
+    }
+}
+
+fn allocate_context_type(
+    source_name: &str,
+    collision_suffix: &str,
+    used: &mut BTreeSet<String>,
+) -> String {
+    let base = rust_type_name(source_name);
+    let canonical = format!("{base}Context");
+    if used.insert(canonical.clone()) {
+        return canonical;
+    }
+
+    let stem = format!("{base}{collision_suffix}");
+    let mut candidate = format!("{stem}Context");
+    let mut suffix = 2;
+    while !used.insert(candidate.clone()) {
+        candidate = format!("{stem}{suffix}Context");
+        suffix += 1;
+    }
+    candidate
+}
+
+fn allocate_listener_method(
+    source_name: &str,
+    collision_suffix: &str,
+    used: &mut BTreeSet<String>,
+) -> String {
+    let canonical = rust_function_name(source_name)
+        .trim_start_matches("r#")
+        .to_owned();
+    if used.insert(canonical.clone()) {
+        return canonical;
+    }
+
+    let stem = format!("{canonical}_{collision_suffix}");
+    let mut candidate = stem.clone();
+    let mut suffix = 2;
+    while !used.insert(candidate.clone()) {
+        candidate = format!("{stem}_{suffix}");
+        suffix += 1;
+    }
+    candidate
+}
+
 /// Generates the typed context views, listener trait, and walker for the
 /// embedded `.test.stg` surface:
 ///
@@ -7266,6 +7395,7 @@ fn render_embedded_context_types(
     model: &embedded::EmbeddedModel,
 ) -> String {
     let mut out = String::new();
+    let context_names = context_surface_names(model);
     let listener_trait = format!(
         "{}Listener",
         grammar_name.strip_suffix("Parser").unwrap_or(grammar_name)
@@ -7361,33 +7491,19 @@ fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
 "#,
     );
 
-    // (struct name, rule index, alt label) — one per rule plus one per
-    // labeled alternative. The label scopes generated accessors to that
-    // alternative; the rule-level view exposes the union across its alts.
-    let mut views: Vec<(String, usize, Option<String>)> = Vec::new();
-    for (rule_index, rule) in model.rules.iter().enumerate() {
-        views.push((
-            format!("{}Context", rust_type_name(&rule.name)),
-            rule_index,
-            None,
-        ));
-        for alt in &rule.alts {
-            if let Some(label) = &alt.label {
-                let view = format!("{}Context", rust_type_name(label));
-                if !views.iter().any(|(existing, _, _)| *existing == view) {
-                    views.push((view, rule_index, Some(label.clone())));
-                }
-            }
-        }
-    }
-
-    for (view_name, rule_index, alt_label) in &views {
+    for ContextViewName {
+        surface,
+        rule_index,
+        alternative_label,
+    } in &context_names.views
+    {
+        let view_name = &surface.context_type;
         let rule = &model.rules[*rule_index];
         let referenced_targets: BTreeSet<&str> = rule
             .alts
             .iter()
             .filter(|alt| {
-                alt_label
+                alternative_label
                     .as_ref()
                     .is_none_or(|label| alt.label.as_ref() == Some(label))
             })
@@ -7443,7 +7559,7 @@ fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
             .filter(|(_, child)| referenced_targets.contains(child.name.as_str()))
         {
             let method = rust_function_name(&child.name);
-            let child_view = format!("{}Context", rust_type_name(&child.name));
+            let child_view = &context_names.rules[child_index].context_type;
             let _ = writeln!(
                 accessors,
                 "    pub fn {method}(&self, index: usize) -> {child_view}<'a> {{\n        let node = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.child_rules({child_index}).nth(index),\n            __GeneratedRuleContext::Active {{ context, storage, tokens, .. }} => context.child_rules(storage, tokens, {child_index}).nth(index),\n        }}.expect(\"missing rule child\");\n        {child_view}::__from_child_node(node, &self.__invocation_states)\n    }}\n    pub fn {method}_all(&self) -> Vec<{child_view}<'a>> {{\n        let nodes: Vec<_> = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.child_rules({child_index}).collect(),\n            __GeneratedRuleContext::Active {{ context, storage, tokens, .. }} => context.child_rules(storage, tokens, {child_index}).collect(),\n        }};\n        nodes.into_iter().map(|node| {child_view}::__from_child_node(node, &self.__invocation_states)).collect()\n    }}"
@@ -7470,32 +7586,25 @@ fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
         );
     }
 
-    // Listener trait with defaulted callbacks. Method names are snake_case
-    // per the `.test.stg` convention (`exit_call` for `# Call`); the `r#`
-    // keyword escape is dropped because the composed `enter_x`/`exit_x`
-    // identifier is never a keyword.
-    let listener_method =
-        |name: &str| -> String { rust_function_name(name).trim_start_matches("r#").to_owned() };
+    // Listener trait with defaulted callbacks.
     let mut trait_methods = String::new();
     let mut enter_arms = String::new();
     let mut exit_arms = String::new();
     for (rule_index, rule) in model.rules.iter().enumerate() {
-        let mut names: Vec<(String, String)> = vec![(
-            listener_method(&rule.name),
-            format!("{}Context", rust_type_name(&rule.name)),
-        )];
+        let mut names = vec![context_names.rules[rule_index].clone()];
         for alt in &rule.alts {
             if let Some(label) = &alt.label {
-                let pair = (
-                    listener_method(label),
-                    format!("{}Context", rust_type_name(label)),
-                );
-                if !names.contains(&pair) {
-                    names.push(pair);
+                let surface = context_names.alternative(rule_index, label);
+                if !names.contains(surface) {
+                    names.push(surface.clone());
                 }
             }
         }
-        for (method, view) in &names {
+        for ContextSurfaceName {
+            context_type: view,
+            listener_method: method,
+        } in &names
+        {
             let _ = writeln!(
                 trait_methods,
                 "    fn enter_{method}(&mut self, _ctx: &{view}) {{}}\n    fn exit_{method}(&mut self, _ctx: &{view}) {{}}"
@@ -7521,7 +7630,10 @@ fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
         let has_labels = names.len() > 1;
         let dispatch = |phase: &str| -> String {
             if !has_labels {
-                let (method, view) = &names[0];
+                let ContextSurfaceName {
+                    context_type: view,
+                    listener_method: method,
+                } = &names[0];
                 return format!(
                     "                self.0.{phase}_{method}(&{view}::__from_listener_node(context, self.1.as_deref()));\n"
                 );
@@ -7535,10 +7647,14 @@ fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
                 .filter(|_| primary_labels.iter().collect::<BTreeSet<_>>().len() == 1);
             match (op, primary) {
                 (Some(op), Some(primary)) => {
-                    let op_method = listener_method(op);
-                    let op_view = format!("{}Context", rust_type_name(op));
-                    let primary_method = listener_method(primary);
-                    let primary_view = format!("{}Context", rust_type_name(primary));
+                    let ContextSurfaceName {
+                        context_type: op_view,
+                        listener_method: op_method,
+                    } = context_names.alternative(rule_index, op);
+                    let ContextSurfaceName {
+                        context_type: primary_view,
+                        listener_method: primary_method,
+                    } = context_names.alternative(rule_index, primary);
                     let _ = writeln!(
                         out,
                         "                if context.child_rule_trees({rule_index}).next().is_some() {{ self.0.{phase}_{op_method}(&{op_view}::__from_listener_node(context, self.1.as_deref())); }} else {{ self.0.{phase}_{primary_method}(&{primary_view}::__from_listener_node(context, self.1.as_deref())); }}"
@@ -7547,7 +7663,10 @@ fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
                 _ => {
                     // No unambiguous per-alternative identity available; fire
                     // the rule-level callback only.
-                    let (method, view) = &names[0];
+                    let ContextSurfaceName {
+                        context_type: view,
+                        listener_method: method,
+                    } = &names[0];
                     let _ = writeln!(
                         out,
                         "                self.0.{phase}_{method}(&{view}::__from_listener_node(context, self.1.as_deref()));"
@@ -11753,6 +11872,18 @@ mod tests {
         assert!(
             !rendered.contains("__GeneratedRuleContext::Active { .. } => Vec::new()"),
             "active contexts must preserve their invoking-state chain"
+        );
+    }
+
+    #[test]
+    fn context_surface_names_disambiguate_normalized_label_collisions() {
+        let data = parser_fixture_data("context-name-collision/T.g4");
+        let model =
+            structural_embedded_model(&data, false).expect("structural model should resolve");
+
+        insta::assert_debug_snapshot!(
+            "context_surface_name_collision",
+            context_surface_names(&model)
         );
     }
 
