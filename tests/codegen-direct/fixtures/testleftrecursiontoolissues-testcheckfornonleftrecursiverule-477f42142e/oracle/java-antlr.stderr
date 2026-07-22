@@ -1,0 +1,1 @@
+error(147): T.g4:3:0: left recursive rule a must contain an alternative which is not left recursive

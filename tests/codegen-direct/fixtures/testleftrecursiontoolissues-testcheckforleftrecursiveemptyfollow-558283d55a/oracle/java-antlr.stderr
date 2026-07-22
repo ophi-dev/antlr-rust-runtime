@@ -1,0 +1,1 @@
+error(148): T.g4:3:0: left recursive rule a contains a left recursive alternative which can be followed by the empty string

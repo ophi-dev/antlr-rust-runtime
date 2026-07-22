@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "roots": [
+    "T.g4"
+  ],
+  "logical_ids": [
+    "testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "antlr-ng:testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule@3a66c06aa95d",
+      "repository": "https://github.com/mike-lischke/antlr-ng.git",
+      "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+      "path": "tests/TestLeftRecursionToolIssues.spec.ts",
+      "case": "testArgOnPrimaryRuleInLeftRecursiveRule",
+      "source_sha256": "edaa6f09333eddf1527618fe2a6e1567ff80116bb4c5d9ec7660a7b809a31aca"
+    },
+    {
+      "source_case_id": "java-antlr:testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule@3a66c06aa95d",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestLeftRecursionToolIssues.java",
+      "case": "testArgOnPrimaryRuleInLeftRecursiveRule",
+      "source_sha256": "bfa8575d870cdc2a66abe8bf9bf6f17ba4e33e98d76bf5d70ada32bcc27260cd"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule@3a66c06aa95d",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestLeftRecursionToolIssues.java",
+    "case": "testArgOnPrimaryRuleInLeftRecursiveRule",
+    "source_sha256": "bfa8575d870cdc2a66abe8bf9bf6f17ba4e33e98d76bf5d70ada32bcc27260cd"
+  },
+  "antlr_ng_test": {
+    "source_case_id": "antlr-ng:testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule@3a66c06aa95d",
+    "repository": "https://github.com/mike-lischke/antlr-ng.git",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "path": "tests/TestLeftRecursionToolIssues.spec.ts",
+    "case": "testArgOnPrimaryRuleInLeftRecursiveRule",
+    "source_sha256": "edaa6f09333eddf1527618fe2a6e1567ff80116bb4c5d9ec7660a7b809a31aca"
+  },
+  "expected": "success",
+  "left_recursion_oracle": {
+    "diagnostic": null,
+    "agreement": "Java and antlr-ng source tests use the same grammar and expected diagnostic text",
+    "compatibility_verdict": "Java ANTLR 4.13.2"
+  },
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "unicode_data": {
+      "generator": "org.antlr.v4.unicode.UnicodeDataTemplateController",
+      "helper": "tools/grammar-frontend/oracle/GenerateUnicodeData.java",
+      "helper_sha256": "9adec4f06cb31c7c7e408336e8fe935741f6d4ec5e8113e76450551ec1e3967f",
+      "icu4j_version": "78.1.0.0",
+      "icu4j_jar_sha256": "bbb70d3be23110d7295823eee0c2e896ac3b619b3c0f26168f65eb972df51d2a",
+      "unicode_version": "17.0.0.0"
+    },
+    "exit_status": 0
+  },
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22 --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar --icu-jar /tmp/antlr-cleanroom/tools/icu4j-78.1.jar",
+  "files": {
+    "T.g4": "fd1cec702bd16572e17863cb008d7849c5e82e8f96b38bb995c204d91bbfe260",
+    "T.interp": "2830bfe4e85cf928ade8517df83ea16a93128bc7881f2ebaff4adedbc4514e1b",
+    "T.tokens": "2e165c6c4b0d41e3e82c86a0fd4cb7ff8b659436c12ee4f9ccb3d1842bbe37b4",
+    "TLexer.interp": "b094cc698765e2cc66a48c971d4731db7dc67e7f0a3bab8eebb63d128c048ff9",
+    "TLexer.tokens": "2e165c6c4b0d41e3e82c86a0fd4cb7ff8b659436c12ee4f9ccb3d1842bbe37b4",
+    "oracle/java-antlr.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stdout": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+  }
+}

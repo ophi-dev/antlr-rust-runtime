@@ -1,0 +1,1 @@
+error(169): T.g4:2:0: rule a is left recursive but doesn't conform to a pattern ANTLR can handle
