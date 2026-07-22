@@ -1575,6 +1575,8 @@ struct VocabularyBuilder {
     by_number: BTreeMap<i32, MutableToken>,
     by_name: BTreeMap<String, i32>,
     by_literal: BTreeMap<String, i32>,
+    name_order: Vec<String>,
+    literal_order: Vec<String>,
     next: i32,
 }
 
@@ -1584,6 +1586,8 @@ impl VocabularyBuilder {
             by_number: BTreeMap::new(),
             by_name: BTreeMap::new(),
             by_literal: BTreeMap::new(),
+            name_order: Vec::new(),
+            literal_order: Vec::new(),
             next: 1,
         }
     }
@@ -1611,11 +1615,33 @@ impl VocabularyBuilder {
             }
             self.next = self.next.max(token.number.saturating_add(1));
         }
+        for name in &vocabulary.name_order {
+            let number = vocabulary.by_name[name];
+            if !self.by_name.contains_key(name) {
+                self.by_name.insert(name.clone(), number);
+                self.name_order.push(name.clone());
+            }
+        }
         for (name, number) in &vocabulary.by_name {
-            self.by_name.entry(name.clone()).or_insert(*number);
+            if !self.by_name.contains_key(name) {
+                self.by_name.insert(name.clone(), *number);
+                if name != "EOF" {
+                    self.name_order.push(name.clone());
+                }
+            }
+        }
+        for literal in &vocabulary.literal_order {
+            let number = vocabulary.by_literal[literal];
+            if !self.by_literal.contains_key(literal) {
+                self.by_literal.insert(literal.clone(), number);
+                self.literal_order.push(literal.clone());
+            }
         }
         for (literal, number) in &vocabulary.by_literal {
-            self.by_literal.entry(literal.clone()).or_insert(*number);
+            if !self.by_literal.contains_key(literal) {
+                self.by_literal.insert(literal.clone(), *number);
+                self.literal_order.push(literal.clone());
+            }
         }
     }
 
@@ -1643,6 +1669,7 @@ impl VocabularyBuilder {
             entry.name = Some(name.to_owned());
         }
         self.by_name.insert(name.to_owned(), number);
+        self.name_order.push(name.to_owned());
         self.next = self.next.max(number.saturating_add(1));
         number
     }
@@ -1671,6 +1698,7 @@ impl VocabularyBuilder {
             entry.literal = Some(literal.to_owned());
         }
         self.by_literal.insert(literal.to_owned(), number);
+        self.literal_order.push(literal.to_owned());
         self.next = self.next.max(number.saturating_add(1));
         number
     }
@@ -1678,6 +1706,7 @@ impl VocabularyBuilder {
     fn define_alias(&mut self, name: &str, literal: &str, ids: &mut ModelIdAllocator) {
         let number = self.define_name(name, None, None, ids);
         if self.by_literal.insert(literal.to_owned(), number).is_none() {
+            self.literal_order.push(literal.to_owned());
             if let Some(token) = self.by_number.get_mut(&number) {
                 token.literal = Some(literal.to_owned());
             }
@@ -1693,6 +1722,7 @@ impl VocabularyBuilder {
                 token.literal = None;
             }
         }
+        self.literal_order.retain(|candidate| candidate != literal);
     }
 
     fn finish(self) -> Vocabulary {
@@ -1706,20 +1736,12 @@ impl VocabularyBuilder {
                 literal: token.literal,
             })
             .collect::<Vec<_>>();
-        let name_order = tokens
-            .iter()
-            .filter_map(|token| token.name.clone())
-            .collect();
-        let literal_order = tokens
-            .iter()
-            .filter_map(|token| token.literal.clone())
-            .collect();
         Vocabulary {
             tokens,
             by_name: self.by_name,
             by_literal: self.by_literal,
-            name_order,
-            literal_order,
+            name_order: self.name_order,
+            literal_order: self.literal_order,
         }
     }
 }
