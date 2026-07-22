@@ -3509,16 +3509,13 @@ mod tests {
                 "{fixture_name}: wrong Java source binding",
             );
 
-            let oracle = std::fs::read_to_string(
-                fixture(fixture_name).join("oracle/java-error-types.tsv"),
-            )
-            .expect("Java ErrorType oracle");
+            let oracle =
+                std::fs::read_to_string(fixture(fixture_name).join("oracle/java-error-types.tsv"))
+                    .expect("Java ErrorType oracle");
             let oracle_entries = oracle
                 .lines()
                 .map(|line| {
-                    let (code, name) = line
-                        .split_once('\t')
-                        .expect("Java ErrorType oracle record");
+                    let (code, name) = line.split_once('\t').expect("Java ErrorType oracle record");
                     (
                         code.parse::<u32>()
                             .expect("Java ErrorType oracle numeric code"),
