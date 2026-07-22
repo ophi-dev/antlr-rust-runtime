@@ -151,14 +151,27 @@ fn decode_literal_body(body: &str) -> Result<Vec<i32>, String> {
             .expect("cursor is on a character boundary");
         if character == '\\' {
             let (value, consumed) = parse_code_point_escape(body, cursor, false)?;
-            values.push(value);
+            push_code_point(&mut values, value);
             cursor += consumed;
         } else {
-            values.push(character as i32);
+            push_code_point(&mut values, character as i32);
             cursor += character.len_utf8();
         }
     }
     Ok(values)
+}
+
+fn push_code_point(values: &mut Vec<i32>, value: i32) {
+    let Some(&high) = values.last() else {
+        values.push(value);
+        return;
+    };
+    if (0xD800..=0xDBFF).contains(&high) && (0xDC00..=0xDFFF).contains(&value) {
+        let supplementary = 0x1_0000 + ((high - 0xD800) << 10) + value - 0xDC00;
+        *values.last_mut().expect("last value exists") = supplementary;
+    } else {
+        values.push(value);
+    }
 }
 
 pub(super) fn parse_code_point_escape(
@@ -215,11 +228,11 @@ pub(super) fn parse_code_point_escape(
     }
     let value = u32::from_str_radix(digits, 16)
         .map_err(|_| format!("invalid Unicode escape \\u{{{digits}}}"))?;
-    if value > MAX_CODE_POINT as u32 || char::from_u32(value).is_none() {
-        return Err(format!("Unicode escape is not a scalar value: {value:#x}"));
+    if value > MAX_CODE_POINT as u32 {
+        return Err(format!("Unicode escape is out of range: {value:#x}"));
     }
     Ok((
-        i32::try_from(value).expect("Unicode scalar fits i32"),
+        i32::try_from(value).expect("Unicode code point fits i32"),
         consumed,
     ))
 }
@@ -259,6 +272,15 @@ mod tests {
             get_string_from_grammar_string_literal("foo\\u{bb}bb"),
             Some("oo\u{bb}b".to_owned())
         );
+        assert_eq!(
+            get_string_from_grammar_string_literal("'\\uD83C\\uDF0D'"),
+            Some("\u{1f30d}".to_owned())
+        );
+        assert_eq!(
+            decode_string_literal("'\\uD83C\\uDF0D'"),
+            Ok(vec![0x1_f30d])
+        );
+        assert_eq!(decode_string_literal("'\\uD83C'"), Ok(vec![0xd83c]));
     }
 
     #[test]

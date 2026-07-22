@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::char_support::decode_character_literal;
+use super::char_support::get_char_value_from_grammar_char_literal;
 use super::diagnostic::{CompilationError, Diagnostic, Severity};
 use super::loader::LoadedSources;
 use super::model::{
@@ -808,7 +808,7 @@ fn block_set_members(block: &Block, lexer: bool) -> Option<(Vec<SetElement>, Vec
         }
         let member = match &element.kind {
             ElementKind::Terminal(Terminal::Literal(literal))
-                if !lexer || grammar_literal_scalar(literal).is_some() =>
+                if !lexer || grammar_literal_code_point(literal).is_some() =>
             {
                 SetElement::Terminal {
                     source: element.id,
@@ -825,8 +825,8 @@ fn block_set_members(block: &Block, lexer: bool) -> Option<(Vec<SetElement>, Vec
             },
             ElementKind::Range(start, stop)
                 if lexer
-                    && grammar_literal_scalar(start).is_some()
-                    && grammar_literal_scalar(stop).is_some() =>
+                    && grammar_literal_code_point(start).is_some()
+                    && grammar_literal_code_point(stop).is_some() =>
             {
                 SetElement::Range {
                     source: element.id,
@@ -883,11 +883,9 @@ fn tombstone_block(provenance: &mut ProvenanceIndex, block: &Block, replacements
     }
 }
 
-fn grammar_literal_scalar(literal: &str) -> Option<char> {
-    decode_character_literal(literal)
-        .ok()
-        .and_then(|value| u32::try_from(value).ok())
-        .and_then(char::from_u32)
+fn grammar_literal_code_point(literal: &str) -> Option<i32> {
+    let value = get_char_value_from_grammar_char_literal(Some(literal));
+    (value >= 0).then_some(value)
 }
 
 fn split_combined(
