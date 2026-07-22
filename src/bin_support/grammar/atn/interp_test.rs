@@ -891,6 +891,134 @@ mod tests {
         compilation
     }
 
+    mod upstream_token_type_assignment {
+        use super::*;
+
+        #[derive(Clone, Copy)]
+        enum FixtureKind {
+            Combined,
+            Lexer,
+            Parser,
+        }
+
+        macro_rules! case {
+            ($name:ident, $fixture:literal, $kind:ident) => {
+                mod $name {
+                    use super::*;
+
+                    #[test]
+                    fn matches_java_interps_and_tokens() {
+                        assert_fixture($fixture, FixtureKind::$kind);
+                    }
+                }
+            };
+        }
+
+        case!(
+            combined_grammar_literals,
+            "testtokentypeassignment-testcombinedgrammarliterals-74842182c1",
+            Combined
+        );
+        case!(
+            combined_grammar_with_ref_to_literal_but_no_token_id_ref,
+            "testtokentypeassignment-testcombinedgrammarwithreftoliteralbutnotokenidref-fd2391c14b",
+            Combined
+        );
+        case!(
+            lexer_tokens_section,
+            "testtokentypeassignment-testlexertokenssection-67f7fb02d9",
+            Lexer
+        );
+        case!(
+            literal_in_parser_and_lexer,
+            "testtokentypeassignment-testliteralinparserandlexer-177a82c119",
+            Combined
+        );
+        case!(
+            parser_char_literal_with_basic_unicode_escape,
+            "testtokentypeassignment-testparsercharliteralwithbasicunicodeescape-8afd5248f1",
+            Combined
+        );
+        case!(
+            parser_char_literal_with_escape,
+            "testtokentypeassignment-testparsercharliteralwithescape-15c4d62b48",
+            Combined
+        );
+        case!(
+            parser_char_literal_with_extended_unicode_escape,
+            "testtokentypeassignment-testparsercharliteralwithextendedunicodeescape-e6f767b0b7",
+            Combined
+        );
+        case!(
+            parser_simple_tokens,
+            "testtokentypeassignment-testparsersimpletokens-809afdc7eb",
+            Parser
+        );
+        case!(
+            parser_tokens_section,
+            "testtokentypeassignment-testparsertokenssection-f0930e6dae",
+            Parser
+        );
+        case!(
+            pred_does_not_hide_name_to_literal_map_in_lexer,
+            "testtokentypeassignment-testpreddoesnothidenametoliteralmapinlexer-a1fc06a563",
+            Combined
+        );
+        case!(
+            set_does_not_miss_token_aliases,
+            "testtokentypeassignment-testsetdoesnotmisstokenaliases-92cf195953",
+            Combined
+        );
+
+        fn assert_fixture(fixture_name: &str, kind: FixtureKind) {
+            let compilation =
+                compile_fixture(fixture_name, &["t.g4"]).expect("fixture should compile");
+            let directory = fixture(fixture_name);
+            match kind {
+                FixtureKind::Combined => {
+                    let lexer = lexer_named(&compilation, "tLexer");
+                    let parser = parser_named(&compilation, "tParser");
+                    assert_lexer_interp(lexer, &directory.join("tLexer.interp"));
+                    assert_parser_interp(parser, &directory.join("t.interp"));
+                    assert_tokens(&lexer.semantic.recognizer, &directory.join("tLexer.tokens"));
+                    assert_tokens(&parser.semantic.recognizer, &directory.join("t.tokens"));
+                }
+                FixtureKind::Lexer => {
+                    let lexer = lexer_named(&compilation, "t");
+                    assert_lexer_interp(lexer, &directory.join("t.interp"));
+                    assert_tokens(&lexer.semantic.recognizer, &directory.join("t.tokens"));
+                }
+                FixtureKind::Parser => {
+                    let parser = parser_named(&compilation, "t");
+                    assert_parser_interp(parser, &directory.join("t.interp"));
+                    assert_tokens(&parser.semantic.recognizer, &directory.join("t.tokens"));
+                }
+            }
+        }
+
+        fn assert_tokens(recognizer: &RecognizerModel, expected_path: &Path) {
+            let expected = std::fs::read_to_string(expected_path).expect("fixture tokens");
+            assert_eq!(serialize_tokens(recognizer), expected);
+        }
+
+        fn serialize_tokens(recognizer: &RecognizerModel) -> String {
+            let mut output = String::new();
+            for token in &recognizer.vocabulary.tokens {
+                if let Some(name) = &token.name {
+                    writeln!(output, "{name}={}", token.number)
+                        .expect("writing to String cannot fail");
+                }
+            }
+            for token in &recognizer.vocabulary.tokens {
+                if let Some(literal) = &token.literal {
+                    writeln!(output, "{literal}={}", token.number)
+                        .expect("writing to String cannot fail");
+                }
+            }
+            output
+        }
+    }
+
     fn assert_lexer_interp(compiled: &super::super::lexer::CompiledLexer, expected_path: &Path) {
         let expected = read_atn(expected_path);
         let serialized = SerializedAtn::from_i32(&expected);

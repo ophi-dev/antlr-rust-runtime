@@ -1,0 +1,3 @@
+warning(125): t.g4:2:4: implicit definition of token A in parser
+warning(125): t.g4:2:8: implicit definition of token B in parser
+warning(125): t.g4:3:4: implicit definition of token C in parser
