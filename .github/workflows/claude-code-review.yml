@@ -61,7 +61,7 @@ jobs:
       - name: Install uv with
         uses: astral-sh/setup-uv@v9.0.0
         with:
-          python-version: 3.12
+          python-version: "3.12"
           github-token: ${{ github.token }}
           ignore-nothing-to-cache: "true"
           activate-environment: "true"
@@ -69,18 +69,8 @@ jobs:
       - name: Run Claude Code Review
         id: claude-review
         uses: anthropics/claude-code-action@v1
-        env:
-          # Exposed to the skill's Bash steps for `gh pr comment` / `gh pr view`.
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          # Use the job's GITHUB_TOKEN (has pull-requests/issues: write) instead of
-          # the GitHub App. The App path exchanges an OIDC token for an app token and
-          # that exchange rejects any PR whose workflow file differs from the default
-          # branch — which this PR does. Supplying github_token makes the action return
-          # it before that gated exchange, so Claude can actually review this PR.
-          github_token: ${{ secrets.GITHUB_TOKEN }}
           plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
           # When track_progress is enabled:
           # - Creates a tracking comment with progress checkboxes
