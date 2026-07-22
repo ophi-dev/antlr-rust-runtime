@@ -107,6 +107,9 @@ pub(crate) fn analyze(
             .iter()
             .filter(|dependency| dependency.consumer == unit_id)
             .collect::<Vec<_>>();
+        let shares_tokens_with_implicit_lexer = dependencies
+            .iter()
+            .any(|dependency| dependency.declaration.is_none());
         let mut imported = VocabularyBuilder::new();
         for dependency in dependencies {
             import_dependency(
@@ -119,9 +122,12 @@ pub(crate) fn analyze(
         }
 
         let semantic = analyze_unit(
-            sources,
+            UnitAnalysisContext {
+                sources,
+                symbol_unit: &symbol_units[&unit_id],
+                shares_tokens_with_implicit_lexer,
+            },
             unit,
-            &symbol_units[&unit_id],
             imported,
             &mut integrated.ids,
             &mut diagnostics,
@@ -856,19 +862,32 @@ fn import_dependency(
     }
 }
 
+#[derive(Clone, Copy)]
+struct UnitAnalysisContext<'a> {
+    sources: &'a SourceSet,
+    symbol_unit: &'a GrammarUnit,
+    shares_tokens_with_implicit_lexer: bool,
+}
+
 fn analyze_unit(
-    sources: &SourceSet,
+    context: UnitAnalysisContext<'_>,
     unit: GrammarUnit,
-    symbol_unit: &GrammarUnit,
     mut vocabulary: VocabularyBuilder,
     ids: &mut ModelIdAllocator,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> SemanticGrammar {
+    let UnitAnalysisContext {
+        sources,
+        symbol_unit,
+        shares_tokens_with_implicit_lexer,
+    } = context;
     let imported_names = vocabulary.by_name.keys().cloned().collect::<BTreeSet<_>>();
     let mut token_diagnostics = Vec::new();
     vocabulary.define_builtin_eof();
     for declaration in &unit.tokens {
-        if imported_names.contains(&declaration.name.value) {
+        if imported_names.contains(&declaration.name.value)
+            && !(shares_tokens_with_implicit_lexer && declaration.name.span.source == unit.source)
+        {
             token_diagnostics.push(Diagnostic::warning(
                 "G4S019",
                 diagnostic_span_in_root(sources, unit.source, &declaration.name.span),

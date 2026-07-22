@@ -165,11 +165,15 @@ impl Loader {
         let file = if recover_syntax {
             match parse_source_recovering(source, logical_path, text) {
                 Ok(recovered) => {
+                    let has_diagnostics = !recovered.diagnostics.is_empty();
                     self.diagnostics.extend(
                         recovered.diagnostics.into_iter().map(|syntax| {
                             Diagnostic::error(syntax.code, syntax.span, syntax.message)
                         }),
                     );
+                    if has_diagnostics {
+                        return None;
+                    }
                     recovered.file
                 }
                 Err(error) => {
@@ -313,7 +317,9 @@ impl Loader {
         let Some(declaration) = self.grammars[importer.index()].token_vocab.clone() else {
             return;
         };
-        if let Some(producer) = self.by_name.get(&declaration.value).copied() {
+        if let Some(producer) = self.by_name.get(&declaration.value).copied()
+            && self.grammars[producer.index()].header.kind != super::model::GrammarKind::Parser
+        {
             self.bind_source_vocab(importer, producer, declaration, None);
             return;
         }
@@ -326,11 +332,12 @@ impl Loader {
         let source_lookup_index = self.lookups.len();
         let source_path = source_lookup.selected.clone();
         self.lookups.push(source_lookup.record);
-        if let Some(path) = source_path {
-            if let Some(producer) = self.load_path(&path, Some(&path), false) {
-                self.bind_source_vocab(importer, producer, declaration, Some(source_lookup_index));
-                return;
-            }
+        if let Some(path) = source_path
+            && let Some(producer) = self.load_path(&path, Some(&path), false)
+            && self.grammars[producer.index()].header.kind != super::model::GrammarKind::Parser
+        {
+            self.bind_source_vocab(importer, producer, declaration, Some(source_lookup_index));
+            return;
         }
         self.bind_tokens_file(importer, declaration);
     }
@@ -645,6 +652,49 @@ mod tests {
             fs::canonicalize(first.join("Shared.g4")).expect("selected import is canonicalizable");
         assert_eq!(lookup.selected.as_deref(), Some(selected.as_path()));
         assert_eq!(lookup.shadowed.len(), 1);
+    }
+
+    #[test]
+    fn malformed_recovered_import_returns_diagnostics_without_panicking() {
+        let fixture = Fixture::new("malformed-import");
+        fixture.write("Root.g4", "parser grammar Root; import Broken; root : 'x';");
+        fixture.write("Broken.g4", "parser grammar ;");
+
+        let error = load(LoadOptions {
+            roots: vec![fixture.path("Root.g4")],
+            library_directories: Vec::new(),
+        })
+        .expect_err("malformed import should be rejected");
+
+        assert!(
+            error
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| diagnostic.code == "G4F003")
+        );
+    }
+
+    #[test]
+    fn parser_token_vocab_name_falls_back_to_a_tokens_file() {
+        let fixture = Fixture::new("parser-token-vocab-fallback");
+        fixture.write(
+            "P.g4",
+            "parser grammar P; options { tokenVocab=P; } root : ID;",
+        );
+        fixture.write("P.tokens", "ID=1\n");
+
+        let loaded = load(LoadOptions {
+            roots: vec![fixture.path("P.g4")],
+            library_directories: Vec::new(),
+        })
+        .expect("tokens file should provide the parser vocabulary");
+        let source = &loaded.grammars.vocabularies[0].source;
+
+        assert!(matches!(
+            source,
+            VocabularySource::TokensFile(path)
+                if path.file_name().and_then(std::ffi::OsStr::to_str) == Some("P.tokens")
+        ));
     }
 
     mod upstream_topological_sort {

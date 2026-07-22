@@ -5,9 +5,9 @@ use super::diagnostic::{CompilationError, Diagnostic};
 use super::loader::LoadedSources;
 use super::model::{
     Alternative, Authored, Block, ChannelDeclaration, Element, ElementId, ElementKind, GrammarId,
-    GrammarKind, GrammarPrequel, GrammarUnit, Label, Mode, ModelIdAllocator, ModelNodeId,
-    NamedAction, Quantifier, Rule, RuleKind, SetElement, Terminal, TokenDeclaration, TransformId,
-    VocabularySource,
+    GrammarKind, GrammarPrequel, GrammarUnit, Label, LexerCommand, Mode, ModelIdAllocator,
+    ModelNodeId, NamedAction, Quantifier, Rule, RuleKind, SetElement, Terminal, TokenDeclaration,
+    TransformId, VocabularySource,
 };
 use super::provenance::{MandatoryTransform, Origin, ProvenanceIndex, Tombstone};
 use super::syntax::parse_grammar_unit;
@@ -704,7 +704,10 @@ fn reduce_block_children(block: &mut Block, lexer: bool, provenance: &mut Proven
                 continue;
             };
             reduce_block_children(nested, lexer, provenance);
-            if let Some((members, inputs)) = block_set_members(nested, lexer) {
+            if let Some((members, inputs, commands)) = block_set_members(nested, lexer) {
+                if !commands.is_empty() {
+                    continue;
+                }
                 let replacement = ModelNodeId::Element(element.id);
                 record_transform(
                     provenance,
@@ -728,7 +731,7 @@ fn reduce_top_level_block(
     ids: &mut ModelIdAllocator,
     provenance: &mut ProvenanceIndex,
 ) {
-    let Some((members, inputs)) = block_set_members(block, lexer) else {
+    let Some((members, inputs, commands)) = block_set_members(block, lexer) else {
         return;
     };
     let new_alternative = ids.alternative();
@@ -790,21 +793,26 @@ fn reduce_top_level_block(
         }],
         label: None,
         options: Vec::new(),
-        commands: Vec::new(),
+        commands,
         syntax: block.syntax,
         span: block.span.clone(),
     });
 }
 
-fn block_set_members(block: &Block, lexer: bool) -> Option<(Vec<SetElement>, Vec<ModelNodeId>)> {
+fn block_set_members(
+    block: &Block,
+    lexer: bool,
+) -> Option<(Vec<SetElement>, Vec<ModelNodeId>, Vec<LexerCommand>)> {
     if !block.options.is_empty() || block.alternatives.len() < 2 {
         return None;
     }
+    let commands = block.alternatives.first()?.commands.clone();
     let mut members = Vec::with_capacity(block.alternatives.len());
     let mut inputs = Vec::with_capacity(block.alternatives.len());
     for alternative in &block.alternatives {
         if alternative.label.is_some()
             || !alternative.options.is_empty()
+            || !same_lexer_commands(&alternative.commands, &commands)
             || alternative.elements.len() != 1
         {
             return None;
@@ -849,7 +857,15 @@ fn block_set_members(block: &Block, lexer: bool) -> Option<(Vec<SetElement>, Vec
         members.push(member);
         inputs.push(ModelNodeId::Element(element.id));
     }
-    Some((members, inputs))
+    Some((members, inputs, commands))
+}
+
+fn same_lexer_commands(left: &[LexerCommand], right: &[LexerCommand]) -> bool {
+    left.len() == right.len()
+        && left
+            .iter()
+            .zip(right)
+            .all(|(left, right)| left.name == right.name && left.argument == right.argument)
 }
 
 fn record_transform(
@@ -988,7 +1004,12 @@ fn split_combined(
                 })
                 .cloned()
                 .collect(),
-            tokens: Vec::new(),
+            tokens: combined
+                .tokens
+                .iter()
+                .filter(|token| token.name.span.source == combined.source)
+                .map(|token| clone_implicit_token(token, combined_id, ids, provenance))
+                .collect(),
             channels: Vec::new(),
             actions: lexer_actions,
             modes: Vec::new(),
@@ -1049,6 +1070,7 @@ fn parser_literals(rules: &[Rule]) -> Vec<String> {
 fn literal_aliases(rules: &[Rule]) -> BTreeSet<String> {
     rules
         .iter()
+        .filter(|rule| !rule.fragment)
         .filter_map(|rule| {
             let alternative = rule.block.alternatives.first()?;
             if rule.block.alternatives.len() != 1 {
@@ -1202,6 +1224,24 @@ fn clone_implicit_action(
         original: source_id,
     });
     provenance.record_model(ModelNodeId::Action(cloned.id), origins);
+    cloned
+}
+
+fn clone_implicit_token(
+    source: &TokenDeclaration,
+    combined: GrammarId,
+    ids: &mut ModelIdAllocator,
+    provenance: &mut ProvenanceIndex,
+) -> TokenDeclaration {
+    let mut cloned = source.clone();
+    cloned.id = ids.token();
+    let source_id = ModelNodeId::Token(source.id);
+    let mut origins = provenance.origins(source_id).to_vec();
+    origins.push(Origin::ImplicitLexer {
+        combined,
+        original: source_id,
+    });
+    provenance.record_model(ModelNodeId::Token(cloned.id), origins);
     cloned
 }
 
@@ -1445,6 +1485,7 @@ mod tests {
 
     use super::*;
     use crate::grammar::loader::{LoadOptions, load};
+    use crate::grammar::semantics::analyze;
 
     #[test]
     fn integrates_diamond_imports_reduces_sets_and_splits_combined_grammar() {
@@ -1545,6 +1586,101 @@ right : 'right';
             .collect::<BTreeSet<_>>();
         assert_eq!(imported_edges.len(), 2);
         validate_model(&integrated.grammar).expect("integrated model should be valid");
+    }
+
+    #[test]
+    fn identical_lexer_commands_are_preserved_when_alternatives_reduce_to_a_set() {
+        let fixture = Fixture::new("lexer-command-set");
+        fixture.write(
+            "Commands.g4",
+            "lexer grammar Commands; A : 'a' -> skip | 'b' -> skip;",
+        );
+
+        let loaded = load(LoadOptions {
+            roots: vec![fixture.path("Commands.g4")],
+            library_directories: Vec::new(),
+        })
+        .expect("fixture should load");
+        let integrated = integrate_loaded(&loaded).expect("fixture should integrate");
+        let rule = &integrated.grammar.units[0].rules[0];
+
+        let [alternative] = rule.block.alternatives.as_slice() else {
+            panic!("identical command alternatives should reduce to one set");
+        };
+        assert!(matches!(
+            alternative.elements[0].kind,
+            ElementKind::Set { .. }
+        ));
+        assert_eq!(alternative.commands[0].name, "skip");
+    }
+
+    #[test]
+    fn combined_split_copies_declared_tokens_to_the_implicit_lexer() {
+        let fixture = Fixture::new("combined-tokens");
+        fixture.write(
+            "Root.g4",
+            "grammar Root; tokens { INDENT } root : X; X : 'x' -> type(INDENT);",
+        );
+
+        let loaded = load(LoadOptions {
+            roots: vec![fixture.path("Root.g4")],
+            library_directories: Vec::new(),
+        })
+        .expect("fixture should load");
+        let integrated = integrate_loaded(&loaded).expect("fixture should integrate");
+        let lexer = integrated
+            .grammar
+            .units
+            .iter()
+            .find(|unit| unit.name == "RootLexer")
+            .expect("implicit lexer");
+        let parser = integrated
+            .grammar
+            .units
+            .iter()
+            .find(|unit| unit.name == "RootParser")
+            .expect("combined parser");
+
+        assert_eq!(lexer.tokens[0].name.value, "INDENT");
+        assert_eq!(parser.tokens[0].name.value, "INDENT");
+        assert_ne!(lexer.tokens[0].id, parser.tokens[0].id);
+        let semantic = analyze(&loaded.sources, integrated)
+            .expect("the implicit lexer type command should resolve");
+        assert!(
+            semantic
+                .diagnostics
+                .iter()
+                .all(|diagnostic| diagnostic.code != "G4S019")
+        );
+    }
+
+    #[test]
+    fn fragment_literal_does_not_suppress_an_implicit_lexer_rule() {
+        let fixture = Fixture::new("fragment-literal-alias");
+        fixture.write("Root.g4", "grammar Root; root : 'x'; fragment F : 'x';");
+
+        let loaded = load(LoadOptions {
+            roots: vec![fixture.path("Root.g4")],
+            library_directories: Vec::new(),
+        })
+        .expect("fixture should load");
+        let integrated = integrate_loaded(&loaded).expect("fixture should integrate");
+        let lexer = integrated
+            .grammar
+            .units
+            .iter()
+            .find(|unit| unit.name == "RootLexer")
+            .expect("implicit lexer");
+
+        assert_eq!(
+            lexer
+                .rules
+                .iter()
+                .map(|rule| rule.name.as_str())
+                .collect::<Vec<_>>(),
+            ["T__0", "F"]
+        );
+        analyze(&loaded.sources, integrated).expect("parser literal should resolve");
     }
 
     #[test]
