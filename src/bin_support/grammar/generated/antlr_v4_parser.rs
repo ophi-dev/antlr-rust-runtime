@@ -10,6 +10,10 @@ use antlr4_runtime::token_stream::CommonTokenStream;
 use antlr4_runtime::atn::parser_atn::ParserAtn;
 use antlr4_runtime::{BaseParser, GeneratedParser, GrammarMetadata, Parser, Recognizer};
 use std::sync::OnceLock;
+#[allow(unused_imports)]
+use std::io::Write as _;
+#[allow(unused_imports)]
+use antlr4_runtime::{java_style_list, PredictionMode, BailErrorStrategy, TerminalNodeView as RuntimeTerminalNode, ErrorNodeView as RuntimeErrorNode, RuleNodeView, FromRuleNode, Token as _};
 
 
 pub const EOF: i32 = antlr4_runtime::TOKEN_EOF;
@@ -160,9 +164,9 @@ pub const RULE_QUALIFIED_IDENTIFIER: usize = 66;
 pub static METADATA: GrammarMetadata = GrammarMetadata::new(
     "ANTLRv4Parser",
     &["grammarSpec", "grammarDecl", "grammarType", "prequelConstruct", "optionsSpec", "option", "optionValue", "delegateGrammars", "delegateGrammar", "tokensSpec", "channelsSpec", "idList", "action_", "actionScopeName", "actionBlock", "argActionBlock", "modeSpec", "rules", "ruleSpec", "parserRuleSpec", "exceptionGroup", "exceptionHandler", "finallyClause", "rulePrequel", "ruleReturns", "throwsSpec", "localsSpec", "ruleAction", "ruleModifiers", "ruleModifier", "ruleBlock", "ruleAltList", "labeledAlt", "lexerRuleSpec", "lexerRuleBlock", "lexerAltList", "lexerAlt", "lexerElements", "lexerElement", "lexerBlock", "lexerCommands", "lexerCommand", "lexerCommandName", "lexerCommandExpr", "altList", "alternative", "element", "predicateOptions", "predicateOption", "labeledElement", "ebnf", "blockSuffix", "ebnfSuffix", "lexerAtom", "atom", "wildcard", "notSet", "blockSet", "setElement", "block", "ruleref", "characterRange", "terminalDef", "elementOptions", "elementOption", "identifier", "qualifiedIdentifier"],
-    &[None, None, None, None, None, None, None, Some("\'=\'"), None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, Some("\'[\'"), None, None, None, Some("\'import\'"), Some("\'fragment\'"), Some("\'lexer\'"), Some("\'parser\'"), Some("\'grammar\'"), Some("\'protected\'"), Some("\'public\'"), Some("\'private\'"), Some("\'returns\'"), Some("\'locals\'"), Some("\'throws\'"), Some("\'catch\'"), Some("\'finally\'"), Some("\'mode\'"), Some("\':\'"), Some("\'::\'"), Some("\',\'"), Some("\';\'"), Some("\'(\'"), Some("\')\'"), Some("\'}\'"), Some("\'->\'"), Some("\'<\'"), Some("\'>\'"), Some("\'?\'"), Some("\'*\'"), Some("\'+=\'"), Some("\'+\'"), Some("\'|\'"), Some("\'$\'"), Some("\'..\'"), Some("\'.\'"), Some("\'@\'"), Some("\'#\'"), Some("\'~\'"), None, None, None, None, None, None],
-    &[None, None, None, None, Some("ACTION"), Some("ARG_ACTION"), Some("ARG_OR_CHARSET"), Some("ASSIGN"), Some("LEXER_CHAR_SET"), Some("RULE_REF"), Some("SEMPRED"), Some("STRING_LITERAL"), Some("TOKEN_REF"), Some("UNICODE_ESC"), Some("UNICODE_EXTENDED_ESC"), Some("WS"), Some("ALT"), Some("BLOCK"), Some("CLOSURE"), Some("ELEMENT_OPTIONS"), Some("EPSILON"), Some("LEXER_ACTION_CALL"), Some("LEXER_ALT_ACTION"), Some("OPTIONAL"), Some("POSITIVE_CLOSURE"), Some("RULE"), Some("RULEMODIFIERS"), Some("RULES"), Some("SET"), Some("WILDCARD"), Some("DOC_COMMENT"), Some("BLOCK_COMMENT"), Some("LINE_COMMENT"), Some("INT"), Some("UNTERMINATED_STRING_LITERAL"), Some("BEGIN_ARGUMENT"), Some("OPTIONS"), Some("TOKENS"), Some("CHANNELS"), Some("IMPORT"), Some("FRAGMENT"), Some("LEXER"), Some("PARSER"), Some("GRAMMAR"), Some("PROTECTED"), Some("PUBLIC"), Some("PRIVATE"), Some("RETURNS"), Some("LOCALS"), Some("THROWS"), Some("CATCH"), Some("FINALLY"), Some("MODE"), Some("COLON"), Some("COLONCOLON"), Some("COMMA"), Some("SEMI"), Some("LPAREN"), Some("RPAREN"), Some("RBRACE"), Some("RARROW"), Some("LT"), Some("GT"), Some("QUESTION"), Some("STAR"), Some("PLUS_ASSIGN"), Some("PLUS"), Some("OR"), Some("DOLLAR"), Some("RANGE"), Some("DOT"), Some("AT"), Some("POUND"), Some("NOT"), Some("ID"), Some("END_ARGUMENT"), Some("UNTERMINATED_ARGUMENT"), Some("ARGUMENT_CONTENT"), Some("UNTERMINATED_CHAR_SET"), None],
-    &[None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None],
+    &[None, None, None, None, None, None, None, Some("\'=\'"), None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, Some("\'[\'"), None, None, None, Some("\'import\'"), Some("\'fragment\'"), Some("\'lexer\'"), Some("\'parser\'"), Some("\'grammar\'"), Some("\'protected\'"), Some("\'public\'"), Some("\'private\'"), Some("\'returns\'"), Some("\'locals\'"), Some("\'throws\'"), Some("\'catch\'"), Some("\'finally\'"), Some("\'mode\'"), Some("\':\'"), Some("\'::\'"), Some("\',\'"), Some("\';\'"), Some("\'(\'"), Some("\')\'"), Some("\'}\'"), Some("\'->\'"), Some("\'<\'"), Some("\'>\'"), Some("\'?\'"), Some("\'*\'"), Some("\'+=\'"), Some("\'+\'"), Some("\'|\'"), Some("\'$\'"), Some("\'..\'"), Some("\'.\'"), Some("\'@\'"), Some("\'#\'"), Some("\'~\'"), None, None, None, None, None],
+    &[None, None, None, None, Some("ACTION"), Some("ARG_ACTION"), Some("ARG_OR_CHARSET"), Some("ASSIGN"), Some("LEXER_CHAR_SET"), Some("RULE_REF"), Some("SEMPRED"), Some("STRING_LITERAL"), Some("TOKEN_REF"), Some("UNICODE_ESC"), Some("UNICODE_EXTENDED_ESC"), Some("WS"), Some("ALT"), Some("BLOCK"), Some("CLOSURE"), Some("ELEMENT_OPTIONS"), Some("EPSILON"), Some("LEXER_ACTION_CALL"), Some("LEXER_ALT_ACTION"), Some("OPTIONAL"), Some("POSITIVE_CLOSURE"), Some("RULE"), Some("RULEMODIFIERS"), Some("RULES"), Some("SET"), Some("WILDCARD"), Some("DOC_COMMENT"), Some("BLOCK_COMMENT"), Some("LINE_COMMENT"), Some("INT"), Some("UNTERMINATED_STRING_LITERAL"), Some("BEGIN_ARGUMENT"), Some("OPTIONS"), Some("TOKENS"), Some("CHANNELS"), Some("IMPORT"), Some("FRAGMENT"), Some("LEXER"), Some("PARSER"), Some("GRAMMAR"), Some("PROTECTED"), Some("PUBLIC"), Some("PRIVATE"), Some("RETURNS"), Some("LOCALS"), Some("THROWS"), Some("CATCH"), Some("FINALLY"), Some("MODE"), Some("COLON"), Some("COLONCOLON"), Some("COMMA"), Some("SEMI"), Some("LPAREN"), Some("RPAREN"), Some("RBRACE"), Some("RARROW"), Some("LT"), Some("GT"), Some("QUESTION"), Some("STAR"), Some("PLUS_ASSIGN"), Some("PLUS"), Some("OR"), Some("DOLLAR"), Some("RANGE"), Some("DOT"), Some("AT"), Some("POUND"), Some("NOT"), Some("ID"), Some("END_ARGUMENT"), Some("UNTERMINATED_ARGUMENT"), Some("ARGUMENT_CONTENT"), Some("UNTERMINATED_CHAR_SET")],
+    &[None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None],
     &[],
     &[],
     &[],
@@ -188,6 +192,9695 @@ fn parser_semantics() -> &'static antlr4_runtime::ParserSemantics {
 }
 
 
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs0 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs1 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs2 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs3 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs4 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs5 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs6 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs7 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs8 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs9 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs10 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs11 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs12 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs13 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs14 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs15 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs16 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs17 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs18 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs19 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs20 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs21 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs22 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs23 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs24 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs25 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs26 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs27 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs28 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs29 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs30 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs31 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs32 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs33 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs34 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs35 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs36 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs37 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs38 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs39 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs40 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs41 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs42 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs43 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs44 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs45 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs46 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs47 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs48 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs49 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs50 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs51 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs52 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs53 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs54 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs55 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs56 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs57 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs58 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs59 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs60 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs61 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs62 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs63 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs64 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs65 {
+}
+
+#[derive(Clone, Debug, Default)]
+#[allow(non_snake_case, dead_code)]
+pub struct __RuleAttrs66 {
+}
+
+
+
+#[allow(dead_code)]
+pub struct __GeneratedInput<'a, L: TokenSource>(&'a mut CommonTokenStream<L>);
+
+#[allow(dead_code)]
+impl<L: TokenSource> __GeneratedInput<'_, L> {
+    pub fn text(&mut self) -> String {
+        self.0.text_all()
+    }
+
+    pub fn la(&mut self, offset: isize) -> i32 {
+        antlr4_runtime::IntStream::la(self.0, offset)
+    }
+
+    pub fn lt(&mut self, offset: isize) -> __GeneratedTokenView {
+        __GeneratedTokenView {
+            text: self
+                .0
+                .lt(offset)
+                .map(|token| token.text().to_owned())
+                .unwrap_or_default(),
+        }
+    }
+}
+
+#[allow(dead_code)]
+pub struct __GeneratedTokenView {
+    text: String,
+}
+
+#[allow(dead_code)]
+impl __GeneratedTokenView {
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+}
+#[allow(dead_code)]
+#[derive(Clone)]
+pub struct TerminalNode<'a> {
+    __node: RuntimeTerminalNode<'a>,
+}
+
+#[allow(dead_code)]
+impl<'a> TerminalNode<'a> {
+    fn new(node: RuntimeTerminalNode<'a>) -> Self {
+        Self { __node: node }
+    }
+
+    pub fn symbol(&self) -> antlr4_runtime::TokenView<'a> {
+        self.__node.symbol()
+    }
+}
+
+impl std::fmt::Display for TerminalNode<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.__node.text())
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Clone)]
+pub struct ErrorNode<'a> {
+    __node: RuntimeErrorNode<'a>,
+}
+
+#[allow(dead_code)]
+impl<'a> ErrorNode<'a> {
+    fn new(node: RuntimeErrorNode<'a>) -> Self {
+        Self { __node: node }
+    }
+
+    pub fn symbol(&self) -> antlr4_runtime::TokenView<'a> {
+        self.__node.symbol()
+    }
+}
+
+impl std::fmt::Display for ErrorNode<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.__node.text())
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Clone)]
+enum __GeneratedRuleContext<'a> {
+    Stored(RuleNodeView<'a>),
+    Active {
+        context: &'a antlr4_runtime::ParserRuleContext,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    },
+}
+
+#[allow(dead_code)]
+trait __FromActiveRuleContext<'a>: Sized {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self>;
+}
+
+#[allow(dead_code)]
+fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
+    context: &'a antlr4_runtime::ParserRuleContext,
+    invocation_states: Vec<isize>,
+    storage: &'a antlr4_runtime::ParseTreeStorage,
+    tokens: &'a antlr4_runtime::TokenStore,
+) -> Option<T> {
+    T::__from_active(context, invocation_states, storage, tokens)
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct GrammarSpecContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for GrammarSpecContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 0 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for GrammarSpecContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 0 { return None; }
+        let __default = __RuleAttrs0::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs0>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> GrammarSpecContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs0::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs0>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn grammar_decl(&self, index: usize) -> GrammarDeclContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(1).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 1).nth(index),
+        }.expect("missing rule child");
+        GrammarDeclContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn grammar_decl_all(&self) -> Vec<GrammarDeclContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(1).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 1).collect(),
+        };
+        nodes.into_iter().map(|node| GrammarDeclContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn prequel_construct(&self, index: usize) -> PrequelConstructContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(3).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 3).nth(index),
+        }.expect("missing rule child");
+        PrequelConstructContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn prequel_construct_all(&self) -> Vec<PrequelConstructContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(3).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 3).collect(),
+        };
+        nodes.into_iter().map(|node| PrequelConstructContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn mode_spec(&self, index: usize) -> ModeSpecContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(16).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 16).nth(index),
+        }.expect("missing rule child");
+        ModeSpecContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn mode_spec_all(&self) -> Vec<ModeSpecContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(16).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 16).collect(),
+        };
+        nodes.into_iter().map(|node| ModeSpecContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn rules(&self, index: usize) -> RulesContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(17).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 17).nth(index),
+        }.expect("missing rule child");
+        RulesContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn rules_all(&self) -> Vec<RulesContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(17).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 17).collect(),
+        };
+        nodes.into_iter().map(|node| RulesContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+}
+
+impl std::fmt::Display for GrammarSpecContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct GrammarDeclContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for GrammarDeclContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 1 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for GrammarDeclContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 1 { return None; }
+        let __default = __RuleAttrs1::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs1>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> GrammarDeclContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs1::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs1>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn grammar_type(&self, index: usize) -> GrammarTypeContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(2).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 2).nth(index),
+        }.expect("missing rule child");
+        GrammarTypeContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn grammar_type_all(&self) -> Vec<GrammarTypeContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(2).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 2).collect(),
+        };
+        nodes.into_iter().map(|node| GrammarTypeContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn identifier(&self, index: usize) -> IdentifierContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).nth(index),
+        }.expect("missing rule child");
+        IdentifierContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn identifier_all(&self) -> Vec<IdentifierContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).collect(),
+        };
+        nodes.into_iter().map(|node| IdentifierContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn SEMI(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(56).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 56).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn SEMI_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(56).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 56).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for GrammarDeclContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct GrammarTypeContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for GrammarTypeContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 2 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for GrammarTypeContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 2 { return None; }
+        let __default = __RuleAttrs2::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs2>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> GrammarTypeContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs2::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs2>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    #[allow(non_snake_case)]
+    pub fn LEXER(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(41).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 41).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn LEXER_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(41).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 41).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn PARSER(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(42).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 42).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn PARSER_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(42).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 42).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn GRAMMAR(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(43).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 43).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn GRAMMAR_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(43).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 43).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for GrammarTypeContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct PrequelConstructContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for PrequelConstructContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 3 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for PrequelConstructContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 3 { return None; }
+        let __default = __RuleAttrs3::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs3>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> PrequelConstructContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs3::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs3>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn options_spec(&self, index: usize) -> OptionsSpecContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(4).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 4).nth(index),
+        }.expect("missing rule child");
+        OptionsSpecContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn options_spec_all(&self) -> Vec<OptionsSpecContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(4).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 4).collect(),
+        };
+        nodes.into_iter().map(|node| OptionsSpecContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn delegate_grammars(&self, index: usize) -> DelegateGrammarsContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(7).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 7).nth(index),
+        }.expect("missing rule child");
+        DelegateGrammarsContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn delegate_grammars_all(&self) -> Vec<DelegateGrammarsContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(7).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 7).collect(),
+        };
+        nodes.into_iter().map(|node| DelegateGrammarsContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn tokens_spec(&self, index: usize) -> TokensSpecContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(9).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 9).nth(index),
+        }.expect("missing rule child");
+        TokensSpecContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn tokens_spec_all(&self) -> Vec<TokensSpecContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(9).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 9).collect(),
+        };
+        nodes.into_iter().map(|node| TokensSpecContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn channels_spec(&self, index: usize) -> ChannelsSpecContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(10).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 10).nth(index),
+        }.expect("missing rule child");
+        ChannelsSpecContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn channels_spec_all(&self) -> Vec<ChannelsSpecContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(10).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 10).collect(),
+        };
+        nodes.into_iter().map(|node| ChannelsSpecContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn action(&self, index: usize) -> ActionContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(12).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 12).nth(index),
+        }.expect("missing rule child");
+        ActionContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn action_all(&self) -> Vec<ActionContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(12).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 12).collect(),
+        };
+        nodes.into_iter().map(|node| ActionContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+}
+
+impl std::fmt::Display for PrequelConstructContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct OptionsSpecContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for OptionsSpecContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 4 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for OptionsSpecContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 4 { return None; }
+        let __default = __RuleAttrs4::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs4>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> OptionsSpecContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs4::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs4>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn option(&self, index: usize) -> OptionContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(5).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 5).nth(index),
+        }.expect("missing rule child");
+        OptionContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn option_all(&self) -> Vec<OptionContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(5).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 5).collect(),
+        };
+        nodes.into_iter().map(|node| OptionContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn OPTIONS(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(36).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 36).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn OPTIONS_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(36).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 36).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn SEMI(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(56).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 56).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn SEMI_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(56).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 56).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn RBRACE(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(59).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 59).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn RBRACE_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(59).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 59).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for OptionsSpecContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct OptionContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for OptionContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 5 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for OptionContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 5 { return None; }
+        let __default = __RuleAttrs5::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs5>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> OptionContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs5::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs5>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn option_value(&self, index: usize) -> OptionValueContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(6).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 6).nth(index),
+        }.expect("missing rule child");
+        OptionValueContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn option_value_all(&self) -> Vec<OptionValueContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(6).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 6).collect(),
+        };
+        nodes.into_iter().map(|node| OptionValueContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn identifier(&self, index: usize) -> IdentifierContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).nth(index),
+        }.expect("missing rule child");
+        IdentifierContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn identifier_all(&self) -> Vec<IdentifierContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).collect(),
+        };
+        nodes.into_iter().map(|node| IdentifierContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn ASSIGN(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(7).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 7).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn ASSIGN_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(7).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 7).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for OptionContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct OptionValueContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for OptionValueContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 6 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for OptionValueContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 6 { return None; }
+        let __default = __RuleAttrs6::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs6>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> OptionValueContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs6::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs6>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn action_block(&self, index: usize) -> ActionBlockContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(14).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 14).nth(index),
+        }.expect("missing rule child");
+        ActionBlockContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn action_block_all(&self) -> Vec<ActionBlockContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(14).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 14).collect(),
+        };
+        nodes.into_iter().map(|node| ActionBlockContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn identifier(&self, index: usize) -> IdentifierContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).nth(index),
+        }.expect("missing rule child");
+        IdentifierContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn identifier_all(&self) -> Vec<IdentifierContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).collect(),
+        };
+        nodes.into_iter().map(|node| IdentifierContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn STRING_LITERAL(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(11).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 11).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn STRING_LITERAL_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(11).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 11).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn INT(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(33).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 33).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn INT_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(33).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 33).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn DOT(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(70).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 70).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn DOT_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(70).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 70).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for OptionValueContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct DelegateGrammarsContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for DelegateGrammarsContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 7 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for DelegateGrammarsContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 7 { return None; }
+        let __default = __RuleAttrs7::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs7>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> DelegateGrammarsContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs7::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs7>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn delegate_grammar(&self, index: usize) -> DelegateGrammarContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(8).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 8).nth(index),
+        }.expect("missing rule child");
+        DelegateGrammarContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn delegate_grammar_all(&self) -> Vec<DelegateGrammarContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(8).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 8).collect(),
+        };
+        nodes.into_iter().map(|node| DelegateGrammarContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn IMPORT(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(39).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 39).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn IMPORT_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(39).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 39).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn COMMA(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(55).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 55).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn COMMA_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(55).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 55).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn SEMI(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(56).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 56).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn SEMI_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(56).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 56).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for DelegateGrammarsContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct DelegateGrammarContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for DelegateGrammarContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 8 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for DelegateGrammarContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 8 { return None; }
+        let __default = __RuleAttrs8::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs8>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> DelegateGrammarContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs8::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs8>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn identifier(&self, index: usize) -> IdentifierContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).nth(index),
+        }.expect("missing rule child");
+        IdentifierContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn identifier_all(&self) -> Vec<IdentifierContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).collect(),
+        };
+        nodes.into_iter().map(|node| IdentifierContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn ASSIGN(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(7).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 7).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn ASSIGN_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(7).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 7).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for DelegateGrammarContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct TokensSpecContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for TokensSpecContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 9 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for TokensSpecContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 9 { return None; }
+        let __default = __RuleAttrs9::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs9>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> TokensSpecContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs9::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs9>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn id_list(&self, index: usize) -> IdListContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(11).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 11).nth(index),
+        }.expect("missing rule child");
+        IdListContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn id_list_all(&self) -> Vec<IdListContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(11).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 11).collect(),
+        };
+        nodes.into_iter().map(|node| IdListContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn TOKENS(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(37).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 37).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn TOKENS_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(37).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 37).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn RBRACE(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(59).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 59).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn RBRACE_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(59).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 59).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for TokensSpecContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct ChannelsSpecContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for ChannelsSpecContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 10 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for ChannelsSpecContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 10 { return None; }
+        let __default = __RuleAttrs10::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs10>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> ChannelsSpecContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs10::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs10>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn id_list(&self, index: usize) -> IdListContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(11).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 11).nth(index),
+        }.expect("missing rule child");
+        IdListContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn id_list_all(&self) -> Vec<IdListContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(11).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 11).collect(),
+        };
+        nodes.into_iter().map(|node| IdListContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn CHANNELS(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(38).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 38).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn CHANNELS_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(38).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 38).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn RBRACE(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(59).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 59).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn RBRACE_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(59).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 59).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for ChannelsSpecContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct IdListContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for IdListContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 11 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for IdListContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 11 { return None; }
+        let __default = __RuleAttrs11::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs11>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> IdListContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs11::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs11>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn identifier(&self, index: usize) -> IdentifierContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).nth(index),
+        }.expect("missing rule child");
+        IdentifierContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn identifier_all(&self) -> Vec<IdentifierContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).collect(),
+        };
+        nodes.into_iter().map(|node| IdentifierContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn COMMA(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(55).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 55).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn COMMA_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(55).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 55).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for IdListContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct ActionContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for ActionContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 12 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for ActionContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 12 { return None; }
+        let __default = __RuleAttrs12::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs12>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> ActionContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs12::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs12>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn action_scope_name(&self, index: usize) -> ActionScopeNameContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(13).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 13).nth(index),
+        }.expect("missing rule child");
+        ActionScopeNameContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn action_scope_name_all(&self) -> Vec<ActionScopeNameContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(13).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 13).collect(),
+        };
+        nodes.into_iter().map(|node| ActionScopeNameContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn action_block(&self, index: usize) -> ActionBlockContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(14).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 14).nth(index),
+        }.expect("missing rule child");
+        ActionBlockContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn action_block_all(&self) -> Vec<ActionBlockContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(14).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 14).collect(),
+        };
+        nodes.into_iter().map(|node| ActionBlockContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn identifier(&self, index: usize) -> IdentifierContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).nth(index),
+        }.expect("missing rule child");
+        IdentifierContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn identifier_all(&self) -> Vec<IdentifierContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).collect(),
+        };
+        nodes.into_iter().map(|node| IdentifierContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn COLONCOLON(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(54).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 54).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn COLONCOLON_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(54).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 54).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn AT(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(71).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 71).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn AT_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(71).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 71).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for ActionContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct ActionScopeNameContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for ActionScopeNameContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 13 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for ActionScopeNameContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 13 { return None; }
+        let __default = __RuleAttrs13::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs13>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> ActionScopeNameContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs13::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs13>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn identifier(&self, index: usize) -> IdentifierContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).nth(index),
+        }.expect("missing rule child");
+        IdentifierContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn identifier_all(&self) -> Vec<IdentifierContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).collect(),
+        };
+        nodes.into_iter().map(|node| IdentifierContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn LEXER(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(41).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 41).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn LEXER_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(41).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 41).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn PARSER(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(42).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 42).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn PARSER_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(42).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 42).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for ActionScopeNameContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct ActionBlockContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for ActionBlockContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 14 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for ActionBlockContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 14 { return None; }
+        let __default = __RuleAttrs14::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs14>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> ActionBlockContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs14::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs14>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    #[allow(non_snake_case)]
+    pub fn ACTION(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(4).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 4).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn ACTION_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(4).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 4).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for ActionBlockContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct ArgActionBlockContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for ArgActionBlockContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 15 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for ArgActionBlockContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 15 { return None; }
+        let __default = __RuleAttrs15::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs15>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> ArgActionBlockContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs15::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs15>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    #[allow(non_snake_case)]
+    pub fn BEGIN_ARGUMENT(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(35).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 35).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn BEGIN_ARGUMENT_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(35).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 35).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn END_ARGUMENT(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(75).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 75).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn END_ARGUMENT_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(75).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 75).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn ARGUMENT_CONTENT(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(77).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 77).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn ARGUMENT_CONTENT_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(77).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 77).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for ArgActionBlockContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct ModeSpecContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for ModeSpecContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 16 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for ModeSpecContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 16 { return None; }
+        let __default = __RuleAttrs16::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs16>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> ModeSpecContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs16::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs16>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn lexer_rule_spec(&self, index: usize) -> LexerRuleSpecContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(33).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 33).nth(index),
+        }.expect("missing rule child");
+        LexerRuleSpecContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn lexer_rule_spec_all(&self) -> Vec<LexerRuleSpecContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(33).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 33).collect(),
+        };
+        nodes.into_iter().map(|node| LexerRuleSpecContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn identifier(&self, index: usize) -> IdentifierContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).nth(index),
+        }.expect("missing rule child");
+        IdentifierContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn identifier_all(&self) -> Vec<IdentifierContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).collect(),
+        };
+        nodes.into_iter().map(|node| IdentifierContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn MODE(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(52).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 52).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn MODE_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(52).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 52).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn SEMI(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(56).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 56).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn SEMI_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(56).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 56).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for ModeSpecContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct RulesContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for RulesContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 17 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for RulesContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 17 { return None; }
+        let __default = __RuleAttrs17::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs17>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> RulesContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs17::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs17>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn rule_spec(&self, index: usize) -> RuleSpecContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(18).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 18).nth(index),
+        }.expect("missing rule child");
+        RuleSpecContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn rule_spec_all(&self) -> Vec<RuleSpecContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(18).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 18).collect(),
+        };
+        nodes.into_iter().map(|node| RuleSpecContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+}
+
+impl std::fmt::Display for RulesContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct RuleSpecContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for RuleSpecContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 18 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for RuleSpecContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 18 { return None; }
+        let __default = __RuleAttrs18::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs18>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> RuleSpecContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs18::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs18>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn parser_rule_spec(&self, index: usize) -> ParserRuleSpecContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(19).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 19).nth(index),
+        }.expect("missing rule child");
+        ParserRuleSpecContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn parser_rule_spec_all(&self) -> Vec<ParserRuleSpecContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(19).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 19).collect(),
+        };
+        nodes.into_iter().map(|node| ParserRuleSpecContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn lexer_rule_spec(&self, index: usize) -> LexerRuleSpecContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(33).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 33).nth(index),
+        }.expect("missing rule child");
+        LexerRuleSpecContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn lexer_rule_spec_all(&self) -> Vec<LexerRuleSpecContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(33).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 33).collect(),
+        };
+        nodes.into_iter().map(|node| LexerRuleSpecContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+}
+
+impl std::fmt::Display for RuleSpecContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct ParserRuleSpecContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for ParserRuleSpecContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 19 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for ParserRuleSpecContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 19 { return None; }
+        let __default = __RuleAttrs19::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs19>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> ParserRuleSpecContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs19::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs19>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn arg_action_block(&self, index: usize) -> ArgActionBlockContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(15).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 15).nth(index),
+        }.expect("missing rule child");
+        ArgActionBlockContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn arg_action_block_all(&self) -> Vec<ArgActionBlockContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(15).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 15).collect(),
+        };
+        nodes.into_iter().map(|node| ArgActionBlockContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn exception_group(&self, index: usize) -> ExceptionGroupContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(20).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 20).nth(index),
+        }.expect("missing rule child");
+        ExceptionGroupContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn exception_group_all(&self) -> Vec<ExceptionGroupContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(20).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 20).collect(),
+        };
+        nodes.into_iter().map(|node| ExceptionGroupContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn rule_prequel(&self, index: usize) -> RulePrequelContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(23).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 23).nth(index),
+        }.expect("missing rule child");
+        RulePrequelContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn rule_prequel_all(&self) -> Vec<RulePrequelContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(23).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 23).collect(),
+        };
+        nodes.into_iter().map(|node| RulePrequelContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn rule_returns(&self, index: usize) -> RuleReturnsContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(24).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 24).nth(index),
+        }.expect("missing rule child");
+        RuleReturnsContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn rule_returns_all(&self) -> Vec<RuleReturnsContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(24).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 24).collect(),
+        };
+        nodes.into_iter().map(|node| RuleReturnsContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn throws_spec(&self, index: usize) -> ThrowsSpecContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(25).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 25).nth(index),
+        }.expect("missing rule child");
+        ThrowsSpecContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn throws_spec_all(&self) -> Vec<ThrowsSpecContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(25).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 25).collect(),
+        };
+        nodes.into_iter().map(|node| ThrowsSpecContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn locals_spec(&self, index: usize) -> LocalsSpecContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(26).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 26).nth(index),
+        }.expect("missing rule child");
+        LocalsSpecContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn locals_spec_all(&self) -> Vec<LocalsSpecContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(26).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 26).collect(),
+        };
+        nodes.into_iter().map(|node| LocalsSpecContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn rule_modifiers(&self, index: usize) -> RuleModifiersContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(28).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 28).nth(index),
+        }.expect("missing rule child");
+        RuleModifiersContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn rule_modifiers_all(&self) -> Vec<RuleModifiersContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(28).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 28).collect(),
+        };
+        nodes.into_iter().map(|node| RuleModifiersContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn rule_block(&self, index: usize) -> RuleBlockContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(30).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 30).nth(index),
+        }.expect("missing rule child");
+        RuleBlockContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn rule_block_all(&self) -> Vec<RuleBlockContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(30).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 30).collect(),
+        };
+        nodes.into_iter().map(|node| RuleBlockContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn RULE_REF(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(9).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 9).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn RULE_REF_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(9).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 9).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn COLON(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(53).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 53).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn COLON_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(53).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 53).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn SEMI(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(56).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 56).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn SEMI_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(56).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 56).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for ParserRuleSpecContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct ExceptionGroupContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for ExceptionGroupContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 20 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for ExceptionGroupContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 20 { return None; }
+        let __default = __RuleAttrs20::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs20>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> ExceptionGroupContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs20::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs20>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn exception_handler(&self, index: usize) -> ExceptionHandlerContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(21).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 21).nth(index),
+        }.expect("missing rule child");
+        ExceptionHandlerContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn exception_handler_all(&self) -> Vec<ExceptionHandlerContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(21).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 21).collect(),
+        };
+        nodes.into_iter().map(|node| ExceptionHandlerContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn finally_clause(&self, index: usize) -> FinallyClauseContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(22).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 22).nth(index),
+        }.expect("missing rule child");
+        FinallyClauseContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn finally_clause_all(&self) -> Vec<FinallyClauseContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(22).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 22).collect(),
+        };
+        nodes.into_iter().map(|node| FinallyClauseContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+}
+
+impl std::fmt::Display for ExceptionGroupContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct ExceptionHandlerContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for ExceptionHandlerContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 21 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for ExceptionHandlerContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 21 { return None; }
+        let __default = __RuleAttrs21::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs21>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> ExceptionHandlerContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs21::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs21>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn action_block(&self, index: usize) -> ActionBlockContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(14).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 14).nth(index),
+        }.expect("missing rule child");
+        ActionBlockContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn action_block_all(&self) -> Vec<ActionBlockContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(14).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 14).collect(),
+        };
+        nodes.into_iter().map(|node| ActionBlockContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn arg_action_block(&self, index: usize) -> ArgActionBlockContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(15).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 15).nth(index),
+        }.expect("missing rule child");
+        ArgActionBlockContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn arg_action_block_all(&self) -> Vec<ArgActionBlockContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(15).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 15).collect(),
+        };
+        nodes.into_iter().map(|node| ArgActionBlockContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn CATCH(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(50).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 50).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn CATCH_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(50).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 50).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for ExceptionHandlerContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct FinallyClauseContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for FinallyClauseContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 22 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for FinallyClauseContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 22 { return None; }
+        let __default = __RuleAttrs22::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs22>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> FinallyClauseContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs22::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs22>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn action_block(&self, index: usize) -> ActionBlockContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(14).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 14).nth(index),
+        }.expect("missing rule child");
+        ActionBlockContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn action_block_all(&self) -> Vec<ActionBlockContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(14).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 14).collect(),
+        };
+        nodes.into_iter().map(|node| ActionBlockContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn FINALLY(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(51).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 51).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn FINALLY_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(51).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 51).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for FinallyClauseContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct RulePrequelContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for RulePrequelContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 23 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for RulePrequelContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 23 { return None; }
+        let __default = __RuleAttrs23::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs23>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> RulePrequelContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs23::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs23>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn options_spec(&self, index: usize) -> OptionsSpecContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(4).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 4).nth(index),
+        }.expect("missing rule child");
+        OptionsSpecContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn options_spec_all(&self) -> Vec<OptionsSpecContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(4).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 4).collect(),
+        };
+        nodes.into_iter().map(|node| OptionsSpecContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn rule_action(&self, index: usize) -> RuleActionContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(27).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 27).nth(index),
+        }.expect("missing rule child");
+        RuleActionContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn rule_action_all(&self) -> Vec<RuleActionContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(27).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 27).collect(),
+        };
+        nodes.into_iter().map(|node| RuleActionContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+}
+
+impl std::fmt::Display for RulePrequelContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct RuleReturnsContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for RuleReturnsContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 24 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for RuleReturnsContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 24 { return None; }
+        let __default = __RuleAttrs24::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs24>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> RuleReturnsContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs24::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs24>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn arg_action_block(&self, index: usize) -> ArgActionBlockContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(15).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 15).nth(index),
+        }.expect("missing rule child");
+        ArgActionBlockContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn arg_action_block_all(&self) -> Vec<ArgActionBlockContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(15).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 15).collect(),
+        };
+        nodes.into_iter().map(|node| ArgActionBlockContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn RETURNS(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(47).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 47).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn RETURNS_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(47).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 47).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for RuleReturnsContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct ThrowsSpecContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for ThrowsSpecContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 25 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for ThrowsSpecContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 25 { return None; }
+        let __default = __RuleAttrs25::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs25>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> ThrowsSpecContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs25::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs25>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn qualified_identifier(&self, index: usize) -> QualifiedIdentifierContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(66).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 66).nth(index),
+        }.expect("missing rule child");
+        QualifiedIdentifierContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn qualified_identifier_all(&self) -> Vec<QualifiedIdentifierContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(66).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 66).collect(),
+        };
+        nodes.into_iter().map(|node| QualifiedIdentifierContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn THROWS(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(49).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 49).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn THROWS_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(49).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 49).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn COMMA(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(55).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 55).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn COMMA_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(55).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 55).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for ThrowsSpecContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct LocalsSpecContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for LocalsSpecContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 26 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for LocalsSpecContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 26 { return None; }
+        let __default = __RuleAttrs26::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs26>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> LocalsSpecContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs26::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs26>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn arg_action_block(&self, index: usize) -> ArgActionBlockContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(15).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 15).nth(index),
+        }.expect("missing rule child");
+        ArgActionBlockContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn arg_action_block_all(&self) -> Vec<ArgActionBlockContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(15).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 15).collect(),
+        };
+        nodes.into_iter().map(|node| ArgActionBlockContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn LOCALS(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(48).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 48).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn LOCALS_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(48).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 48).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for LocalsSpecContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct RuleActionContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for RuleActionContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 27 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for RuleActionContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 27 { return None; }
+        let __default = __RuleAttrs27::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs27>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> RuleActionContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs27::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs27>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn action_block(&self, index: usize) -> ActionBlockContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(14).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 14).nth(index),
+        }.expect("missing rule child");
+        ActionBlockContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn action_block_all(&self) -> Vec<ActionBlockContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(14).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 14).collect(),
+        };
+        nodes.into_iter().map(|node| ActionBlockContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn identifier(&self, index: usize) -> IdentifierContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).nth(index),
+        }.expect("missing rule child");
+        IdentifierContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn identifier_all(&self) -> Vec<IdentifierContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).collect(),
+        };
+        nodes.into_iter().map(|node| IdentifierContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn AT(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(71).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 71).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn AT_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(71).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 71).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for RuleActionContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct RuleModifiersContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for RuleModifiersContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 28 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for RuleModifiersContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 28 { return None; }
+        let __default = __RuleAttrs28::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs28>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> RuleModifiersContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs28::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs28>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn rule_modifier(&self, index: usize) -> RuleModifierContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(29).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 29).nth(index),
+        }.expect("missing rule child");
+        RuleModifierContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn rule_modifier_all(&self) -> Vec<RuleModifierContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(29).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 29).collect(),
+        };
+        nodes.into_iter().map(|node| RuleModifierContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+}
+
+impl std::fmt::Display for RuleModifiersContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct RuleModifierContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for RuleModifierContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 29 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for RuleModifierContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 29 { return None; }
+        let __default = __RuleAttrs29::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs29>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> RuleModifierContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs29::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs29>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+}
+
+impl std::fmt::Display for RuleModifierContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct RuleBlockContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for RuleBlockContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 30 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for RuleBlockContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 30 { return None; }
+        let __default = __RuleAttrs30::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs30>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> RuleBlockContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs30::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs30>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn rule_alt_list(&self, index: usize) -> RuleAltListContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(31).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 31).nth(index),
+        }.expect("missing rule child");
+        RuleAltListContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn rule_alt_list_all(&self) -> Vec<RuleAltListContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(31).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 31).collect(),
+        };
+        nodes.into_iter().map(|node| RuleAltListContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+}
+
+impl std::fmt::Display for RuleBlockContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct RuleAltListContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for RuleAltListContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 31 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for RuleAltListContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 31 { return None; }
+        let __default = __RuleAttrs31::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs31>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> RuleAltListContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs31::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs31>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn labeled_alt(&self, index: usize) -> LabeledAltContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(32).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 32).nth(index),
+        }.expect("missing rule child");
+        LabeledAltContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn labeled_alt_all(&self) -> Vec<LabeledAltContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(32).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 32).collect(),
+        };
+        nodes.into_iter().map(|node| LabeledAltContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn OR(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(67).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 67).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn OR_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(67).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 67).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for RuleAltListContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct LabeledAltContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for LabeledAltContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 32 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for LabeledAltContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 32 { return None; }
+        let __default = __RuleAttrs32::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs32>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> LabeledAltContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs32::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs32>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn alternative(&self, index: usize) -> AlternativeContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(45).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 45).nth(index),
+        }.expect("missing rule child");
+        AlternativeContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn alternative_all(&self) -> Vec<AlternativeContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(45).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 45).collect(),
+        };
+        nodes.into_iter().map(|node| AlternativeContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn identifier(&self, index: usize) -> IdentifierContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).nth(index),
+        }.expect("missing rule child");
+        IdentifierContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn identifier_all(&self) -> Vec<IdentifierContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).collect(),
+        };
+        nodes.into_iter().map(|node| IdentifierContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn POUND(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(72).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 72).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn POUND_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(72).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 72).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for LabeledAltContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct LexerRuleSpecContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for LexerRuleSpecContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 33 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for LexerRuleSpecContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 33 { return None; }
+        let __default = __RuleAttrs33::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs33>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> LexerRuleSpecContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs33::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs33>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn options_spec(&self, index: usize) -> OptionsSpecContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(4).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 4).nth(index),
+        }.expect("missing rule child");
+        OptionsSpecContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn options_spec_all(&self) -> Vec<OptionsSpecContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(4).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 4).collect(),
+        };
+        nodes.into_iter().map(|node| OptionsSpecContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn lexer_rule_block(&self, index: usize) -> LexerRuleBlockContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(34).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 34).nth(index),
+        }.expect("missing rule child");
+        LexerRuleBlockContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn lexer_rule_block_all(&self) -> Vec<LexerRuleBlockContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(34).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 34).collect(),
+        };
+        nodes.into_iter().map(|node| LexerRuleBlockContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn TOKEN_REF(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(12).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 12).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn TOKEN_REF_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(12).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 12).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn FRAGMENT(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(40).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 40).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn FRAGMENT_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(40).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 40).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn COLON(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(53).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 53).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn COLON_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(53).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 53).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn SEMI(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(56).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 56).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn SEMI_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(56).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 56).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for LexerRuleSpecContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct LexerRuleBlockContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for LexerRuleBlockContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 34 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for LexerRuleBlockContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 34 { return None; }
+        let __default = __RuleAttrs34::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs34>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> LexerRuleBlockContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs34::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs34>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn lexer_alt_list(&self, index: usize) -> LexerAltListContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(35).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 35).nth(index),
+        }.expect("missing rule child");
+        LexerAltListContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn lexer_alt_list_all(&self) -> Vec<LexerAltListContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(35).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 35).collect(),
+        };
+        nodes.into_iter().map(|node| LexerAltListContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+}
+
+impl std::fmt::Display for LexerRuleBlockContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct LexerAltListContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for LexerAltListContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 35 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for LexerAltListContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 35 { return None; }
+        let __default = __RuleAttrs35::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs35>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> LexerAltListContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs35::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs35>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn lexer_alt(&self, index: usize) -> LexerAltContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(36).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 36).nth(index),
+        }.expect("missing rule child");
+        LexerAltContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn lexer_alt_all(&self) -> Vec<LexerAltContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(36).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 36).collect(),
+        };
+        nodes.into_iter().map(|node| LexerAltContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn OR(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(67).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 67).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn OR_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(67).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 67).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for LexerAltListContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct LexerAltContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for LexerAltContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 36 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for LexerAltContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 36 { return None; }
+        let __default = __RuleAttrs36::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs36>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> LexerAltContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs36::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs36>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn lexer_elements(&self, index: usize) -> LexerElementsContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(37).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 37).nth(index),
+        }.expect("missing rule child");
+        LexerElementsContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn lexer_elements_all(&self) -> Vec<LexerElementsContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(37).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 37).collect(),
+        };
+        nodes.into_iter().map(|node| LexerElementsContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn lexer_commands(&self, index: usize) -> LexerCommandsContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(40).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 40).nth(index),
+        }.expect("missing rule child");
+        LexerCommandsContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn lexer_commands_all(&self) -> Vec<LexerCommandsContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(40).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 40).collect(),
+        };
+        nodes.into_iter().map(|node| LexerCommandsContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+}
+
+impl std::fmt::Display for LexerAltContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct LexerElementsContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for LexerElementsContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 37 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for LexerElementsContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 37 { return None; }
+        let __default = __RuleAttrs37::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs37>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> LexerElementsContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs37::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs37>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn lexer_element(&self, index: usize) -> LexerElementContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(38).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 38).nth(index),
+        }.expect("missing rule child");
+        LexerElementContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn lexer_element_all(&self) -> Vec<LexerElementContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(38).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 38).collect(),
+        };
+        nodes.into_iter().map(|node| LexerElementContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+}
+
+impl std::fmt::Display for LexerElementsContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct LexerElementContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for LexerElementContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 38 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for LexerElementContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 38 { return None; }
+        let __default = __RuleAttrs38::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs38>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> LexerElementContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs38::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs38>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn action_block(&self, index: usize) -> ActionBlockContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(14).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 14).nth(index),
+        }.expect("missing rule child");
+        ActionBlockContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn action_block_all(&self) -> Vec<ActionBlockContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(14).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 14).collect(),
+        };
+        nodes.into_iter().map(|node| ActionBlockContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn lexer_block(&self, index: usize) -> LexerBlockContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(39).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 39).nth(index),
+        }.expect("missing rule child");
+        LexerBlockContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn lexer_block_all(&self) -> Vec<LexerBlockContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(39).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 39).collect(),
+        };
+        nodes.into_iter().map(|node| LexerBlockContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn ebnf_suffix(&self, index: usize) -> EbnfSuffixContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(52).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 52).nth(index),
+        }.expect("missing rule child");
+        EbnfSuffixContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn ebnf_suffix_all(&self) -> Vec<EbnfSuffixContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(52).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 52).collect(),
+        };
+        nodes.into_iter().map(|node| EbnfSuffixContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn lexer_atom(&self, index: usize) -> LexerAtomContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(53).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 53).nth(index),
+        }.expect("missing rule child");
+        LexerAtomContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn lexer_atom_all(&self) -> Vec<LexerAtomContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(53).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 53).collect(),
+        };
+        nodes.into_iter().map(|node| LexerAtomContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn QUESTION(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(63).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 63).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn QUESTION_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(63).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 63).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for LexerElementContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct LexerBlockContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for LexerBlockContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 39 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for LexerBlockContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 39 { return None; }
+        let __default = __RuleAttrs39::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs39>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> LexerBlockContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs39::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs39>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn lexer_alt_list(&self, index: usize) -> LexerAltListContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(35).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 35).nth(index),
+        }.expect("missing rule child");
+        LexerAltListContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn lexer_alt_list_all(&self) -> Vec<LexerAltListContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(35).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 35).collect(),
+        };
+        nodes.into_iter().map(|node| LexerAltListContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn LPAREN(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(57).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 57).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn LPAREN_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(57).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 57).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn RPAREN(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(58).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 58).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn RPAREN_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(58).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 58).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for LexerBlockContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct LexerCommandsContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for LexerCommandsContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 40 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for LexerCommandsContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 40 { return None; }
+        let __default = __RuleAttrs40::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs40>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> LexerCommandsContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs40::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs40>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn lexer_command(&self, index: usize) -> LexerCommandContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(41).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 41).nth(index),
+        }.expect("missing rule child");
+        LexerCommandContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn lexer_command_all(&self) -> Vec<LexerCommandContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(41).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 41).collect(),
+        };
+        nodes.into_iter().map(|node| LexerCommandContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn COMMA(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(55).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 55).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn COMMA_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(55).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 55).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn RARROW(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(60).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 60).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn RARROW_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(60).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 60).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for LexerCommandsContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct LexerCommandContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for LexerCommandContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 41 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for LexerCommandContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 41 { return None; }
+        let __default = __RuleAttrs41::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs41>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> LexerCommandContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs41::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs41>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn lexer_command_name(&self, index: usize) -> LexerCommandNameContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(42).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 42).nth(index),
+        }.expect("missing rule child");
+        LexerCommandNameContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn lexer_command_name_all(&self) -> Vec<LexerCommandNameContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(42).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 42).collect(),
+        };
+        nodes.into_iter().map(|node| LexerCommandNameContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn lexer_command_expr(&self, index: usize) -> LexerCommandExprContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(43).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 43).nth(index),
+        }.expect("missing rule child");
+        LexerCommandExprContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn lexer_command_expr_all(&self) -> Vec<LexerCommandExprContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(43).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 43).collect(),
+        };
+        nodes.into_iter().map(|node| LexerCommandExprContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn LPAREN(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(57).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 57).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn LPAREN_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(57).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 57).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn RPAREN(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(58).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 58).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn RPAREN_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(58).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 58).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for LexerCommandContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct LexerCommandNameContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for LexerCommandNameContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 42 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for LexerCommandNameContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 42 { return None; }
+        let __default = __RuleAttrs42::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs42>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> LexerCommandNameContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs42::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs42>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn identifier(&self, index: usize) -> IdentifierContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).nth(index),
+        }.expect("missing rule child");
+        IdentifierContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn identifier_all(&self) -> Vec<IdentifierContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).collect(),
+        };
+        nodes.into_iter().map(|node| IdentifierContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn MODE(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(52).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 52).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn MODE_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(52).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 52).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for LexerCommandNameContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct LexerCommandExprContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for LexerCommandExprContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 43 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for LexerCommandExprContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 43 { return None; }
+        let __default = __RuleAttrs43::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs43>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> LexerCommandExprContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs43::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs43>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn identifier(&self, index: usize) -> IdentifierContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).nth(index),
+        }.expect("missing rule child");
+        IdentifierContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn identifier_all(&self) -> Vec<IdentifierContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).collect(),
+        };
+        nodes.into_iter().map(|node| IdentifierContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn INT(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(33).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 33).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn INT_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(33).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 33).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for LexerCommandExprContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct AltListContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for AltListContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 44 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for AltListContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 44 { return None; }
+        let __default = __RuleAttrs44::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs44>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> AltListContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs44::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs44>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn alternative(&self, index: usize) -> AlternativeContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(45).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 45).nth(index),
+        }.expect("missing rule child");
+        AlternativeContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn alternative_all(&self) -> Vec<AlternativeContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(45).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 45).collect(),
+        };
+        nodes.into_iter().map(|node| AlternativeContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn OR(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(67).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 67).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn OR_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(67).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 67).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for AltListContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct AlternativeContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for AlternativeContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 45 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for AlternativeContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 45 { return None; }
+        let __default = __RuleAttrs45::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs45>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> AlternativeContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs45::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs45>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn element(&self, index: usize) -> ElementContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(46).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 46).nth(index),
+        }.expect("missing rule child");
+        ElementContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn element_all(&self) -> Vec<ElementContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(46).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 46).collect(),
+        };
+        nodes.into_iter().map(|node| ElementContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn element_options(&self, index: usize) -> ElementOptionsContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(63).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 63).nth(index),
+        }.expect("missing rule child");
+        ElementOptionsContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn element_options_all(&self) -> Vec<ElementOptionsContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(63).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 63).collect(),
+        };
+        nodes.into_iter().map(|node| ElementOptionsContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+}
+
+impl std::fmt::Display for AlternativeContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct ElementContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for ElementContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 46 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for ElementContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 46 { return None; }
+        let __default = __RuleAttrs46::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs46>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> ElementContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs46::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs46>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn action_block(&self, index: usize) -> ActionBlockContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(14).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 14).nth(index),
+        }.expect("missing rule child");
+        ActionBlockContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn action_block_all(&self) -> Vec<ActionBlockContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(14).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 14).collect(),
+        };
+        nodes.into_iter().map(|node| ActionBlockContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn predicate_options(&self, index: usize) -> PredicateOptionsContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(47).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 47).nth(index),
+        }.expect("missing rule child");
+        PredicateOptionsContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn predicate_options_all(&self) -> Vec<PredicateOptionsContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(47).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 47).collect(),
+        };
+        nodes.into_iter().map(|node| PredicateOptionsContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn labeled_element(&self, index: usize) -> LabeledElementContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(49).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 49).nth(index),
+        }.expect("missing rule child");
+        LabeledElementContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn labeled_element_all(&self) -> Vec<LabeledElementContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(49).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 49).collect(),
+        };
+        nodes.into_iter().map(|node| LabeledElementContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn ebnf(&self, index: usize) -> EbnfContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(50).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 50).nth(index),
+        }.expect("missing rule child");
+        EbnfContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn ebnf_all(&self) -> Vec<EbnfContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(50).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 50).collect(),
+        };
+        nodes.into_iter().map(|node| EbnfContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn ebnf_suffix(&self, index: usize) -> EbnfSuffixContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(52).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 52).nth(index),
+        }.expect("missing rule child");
+        EbnfSuffixContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn ebnf_suffix_all(&self) -> Vec<EbnfSuffixContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(52).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 52).collect(),
+        };
+        nodes.into_iter().map(|node| EbnfSuffixContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn atom(&self, index: usize) -> AtomContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(54).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 54).nth(index),
+        }.expect("missing rule child");
+        AtomContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn atom_all(&self) -> Vec<AtomContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(54).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 54).collect(),
+        };
+        nodes.into_iter().map(|node| AtomContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn QUESTION(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(63).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 63).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn QUESTION_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(63).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 63).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for ElementContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct PredicateOptionsContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for PredicateOptionsContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 47 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for PredicateOptionsContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 47 { return None; }
+        let __default = __RuleAttrs47::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs47>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> PredicateOptionsContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs47::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs47>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn predicate_option(&self, index: usize) -> PredicateOptionContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(48).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 48).nth(index),
+        }.expect("missing rule child");
+        PredicateOptionContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn predicate_option_all(&self) -> Vec<PredicateOptionContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(48).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 48).collect(),
+        };
+        nodes.into_iter().map(|node| PredicateOptionContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn COMMA(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(55).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 55).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn COMMA_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(55).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 55).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn LT(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(61).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 61).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn LT_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(61).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 61).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn GT(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(62).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 62).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn GT_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(62).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 62).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for PredicateOptionsContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct PredicateOptionContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for PredicateOptionContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 48 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for PredicateOptionContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 48 { return None; }
+        let __default = __RuleAttrs48::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs48>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> PredicateOptionContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs48::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs48>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn action_block(&self, index: usize) -> ActionBlockContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(14).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 14).nth(index),
+        }.expect("missing rule child");
+        ActionBlockContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn action_block_all(&self) -> Vec<ActionBlockContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(14).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 14).collect(),
+        };
+        nodes.into_iter().map(|node| ActionBlockContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn element_option(&self, index: usize) -> ElementOptionContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(64).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 64).nth(index),
+        }.expect("missing rule child");
+        ElementOptionContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn element_option_all(&self) -> Vec<ElementOptionContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(64).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 64).collect(),
+        };
+        nodes.into_iter().map(|node| ElementOptionContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn identifier(&self, index: usize) -> IdentifierContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).nth(index),
+        }.expect("missing rule child");
+        IdentifierContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn identifier_all(&self) -> Vec<IdentifierContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).collect(),
+        };
+        nodes.into_iter().map(|node| IdentifierContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn ASSIGN(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(7).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 7).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn ASSIGN_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(7).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 7).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn STRING_LITERAL(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(11).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 11).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn STRING_LITERAL_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(11).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 11).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn INT(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(33).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 33).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn INT_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(33).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 33).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for PredicateOptionContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct LabeledElementContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for LabeledElementContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 49 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for LabeledElementContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 49 { return None; }
+        let __default = __RuleAttrs49::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs49>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> LabeledElementContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs49::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs49>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn atom(&self, index: usize) -> AtomContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(54).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 54).nth(index),
+        }.expect("missing rule child");
+        AtomContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn atom_all(&self) -> Vec<AtomContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(54).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 54).collect(),
+        };
+        nodes.into_iter().map(|node| AtomContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn block(&self, index: usize) -> BlockContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(59).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 59).nth(index),
+        }.expect("missing rule child");
+        BlockContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn block_all(&self) -> Vec<BlockContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(59).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 59).collect(),
+        };
+        nodes.into_iter().map(|node| BlockContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn identifier(&self, index: usize) -> IdentifierContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).nth(index),
+        }.expect("missing rule child");
+        IdentifierContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn identifier_all(&self) -> Vec<IdentifierContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).collect(),
+        };
+        nodes.into_iter().map(|node| IdentifierContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+}
+
+impl std::fmt::Display for LabeledElementContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct EbnfContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for EbnfContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 50 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for EbnfContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 50 { return None; }
+        let __default = __RuleAttrs50::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs50>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> EbnfContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs50::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs50>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn block_suffix(&self, index: usize) -> BlockSuffixContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(51).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 51).nth(index),
+        }.expect("missing rule child");
+        BlockSuffixContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn block_suffix_all(&self) -> Vec<BlockSuffixContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(51).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 51).collect(),
+        };
+        nodes.into_iter().map(|node| BlockSuffixContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn block(&self, index: usize) -> BlockContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(59).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 59).nth(index),
+        }.expect("missing rule child");
+        BlockContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn block_all(&self) -> Vec<BlockContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(59).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 59).collect(),
+        };
+        nodes.into_iter().map(|node| BlockContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+}
+
+impl std::fmt::Display for EbnfContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct BlockSuffixContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for BlockSuffixContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 51 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for BlockSuffixContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 51 { return None; }
+        let __default = __RuleAttrs51::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs51>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> BlockSuffixContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs51::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs51>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn ebnf_suffix(&self, index: usize) -> EbnfSuffixContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(52).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 52).nth(index),
+        }.expect("missing rule child");
+        EbnfSuffixContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn ebnf_suffix_all(&self) -> Vec<EbnfSuffixContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(52).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 52).collect(),
+        };
+        nodes.into_iter().map(|node| EbnfSuffixContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+}
+
+impl std::fmt::Display for BlockSuffixContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct EbnfSuffixContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for EbnfSuffixContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 52 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for EbnfSuffixContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 52 { return None; }
+        let __default = __RuleAttrs52::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs52>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> EbnfSuffixContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs52::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs52>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    #[allow(non_snake_case)]
+    pub fn QUESTION(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(63).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 63).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn QUESTION_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(63).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 63).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn STAR(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(64).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 64).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn STAR_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(64).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 64).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn PLUS(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(66).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 66).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn PLUS_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(66).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 66).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for EbnfSuffixContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct LexerAtomContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for LexerAtomContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 53 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for LexerAtomContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 53 { return None; }
+        let __default = __RuleAttrs53::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs53>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> LexerAtomContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs53::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs53>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn wildcard(&self, index: usize) -> WildcardContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(55).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 55).nth(index),
+        }.expect("missing rule child");
+        WildcardContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn wildcard_all(&self) -> Vec<WildcardContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(55).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 55).collect(),
+        };
+        nodes.into_iter().map(|node| WildcardContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn not_set(&self, index: usize) -> NotSetContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(56).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 56).nth(index),
+        }.expect("missing rule child");
+        NotSetContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn not_set_all(&self) -> Vec<NotSetContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(56).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 56).collect(),
+        };
+        nodes.into_iter().map(|node| NotSetContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn character_range(&self, index: usize) -> CharacterRangeContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(61).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 61).nth(index),
+        }.expect("missing rule child");
+        CharacterRangeContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn character_range_all(&self) -> Vec<CharacterRangeContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(61).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 61).collect(),
+        };
+        nodes.into_iter().map(|node| CharacterRangeContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn terminal_def(&self, index: usize) -> TerminalDefContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(62).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 62).nth(index),
+        }.expect("missing rule child");
+        TerminalDefContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn terminal_def_all(&self) -> Vec<TerminalDefContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(62).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 62).collect(),
+        };
+        nodes.into_iter().map(|node| TerminalDefContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn LEXER_CHAR_SET(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(8).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 8).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn LEXER_CHAR_SET_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(8).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 8).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn RULE_REF(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(9).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 9).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn RULE_REF_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(9).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 9).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for LexerAtomContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct AtomContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for AtomContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 54 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for AtomContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 54 { return None; }
+        let __default = __RuleAttrs54::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs54>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> AtomContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs54::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs54>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn wildcard(&self, index: usize) -> WildcardContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(55).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 55).nth(index),
+        }.expect("missing rule child");
+        WildcardContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn wildcard_all(&self) -> Vec<WildcardContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(55).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 55).collect(),
+        };
+        nodes.into_iter().map(|node| WildcardContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn not_set(&self, index: usize) -> NotSetContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(56).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 56).nth(index),
+        }.expect("missing rule child");
+        NotSetContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn not_set_all(&self) -> Vec<NotSetContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(56).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 56).collect(),
+        };
+        nodes.into_iter().map(|node| NotSetContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn ruleref(&self, index: usize) -> RulerefContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(60).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 60).nth(index),
+        }.expect("missing rule child");
+        RulerefContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn ruleref_all(&self) -> Vec<RulerefContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(60).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 60).collect(),
+        };
+        nodes.into_iter().map(|node| RulerefContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn terminal_def(&self, index: usize) -> TerminalDefContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(62).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 62).nth(index),
+        }.expect("missing rule child");
+        TerminalDefContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn terminal_def_all(&self) -> Vec<TerminalDefContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(62).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 62).collect(),
+        };
+        nodes.into_iter().map(|node| TerminalDefContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+}
+
+impl std::fmt::Display for AtomContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct WildcardContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for WildcardContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 55 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for WildcardContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 55 { return None; }
+        let __default = __RuleAttrs55::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs55>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> WildcardContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs55::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs55>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn element_options(&self, index: usize) -> ElementOptionsContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(63).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 63).nth(index),
+        }.expect("missing rule child");
+        ElementOptionsContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn element_options_all(&self) -> Vec<ElementOptionsContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(63).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 63).collect(),
+        };
+        nodes.into_iter().map(|node| ElementOptionsContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn DOT(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(70).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 70).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn DOT_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(70).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 70).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for WildcardContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct NotSetContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for NotSetContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 56 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for NotSetContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 56 { return None; }
+        let __default = __RuleAttrs56::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs56>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> NotSetContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs56::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs56>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn block_set(&self, index: usize) -> BlockSetContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(57).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 57).nth(index),
+        }.expect("missing rule child");
+        BlockSetContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn block_set_all(&self) -> Vec<BlockSetContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(57).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 57).collect(),
+        };
+        nodes.into_iter().map(|node| BlockSetContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn set_element(&self, index: usize) -> SetElementContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(58).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 58).nth(index),
+        }.expect("missing rule child");
+        SetElementContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn set_element_all(&self) -> Vec<SetElementContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(58).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 58).collect(),
+        };
+        nodes.into_iter().map(|node| SetElementContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn NOT(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(73).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 73).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn NOT_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(73).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 73).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for NotSetContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct BlockSetContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for BlockSetContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 57 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for BlockSetContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 57 { return None; }
+        let __default = __RuleAttrs57::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs57>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> BlockSetContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs57::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs57>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn set_element(&self, index: usize) -> SetElementContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(58).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 58).nth(index),
+        }.expect("missing rule child");
+        SetElementContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn set_element_all(&self) -> Vec<SetElementContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(58).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 58).collect(),
+        };
+        nodes.into_iter().map(|node| SetElementContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn LPAREN(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(57).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 57).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn LPAREN_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(57).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 57).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn RPAREN(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(58).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 58).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn RPAREN_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(58).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 58).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn OR(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(67).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 67).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn OR_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(67).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 67).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for BlockSetContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct SetElementContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for SetElementContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 58 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for SetElementContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 58 { return None; }
+        let __default = __RuleAttrs58::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs58>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> SetElementContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs58::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs58>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn character_range(&self, index: usize) -> CharacterRangeContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(61).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 61).nth(index),
+        }.expect("missing rule child");
+        CharacterRangeContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn character_range_all(&self) -> Vec<CharacterRangeContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(61).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 61).collect(),
+        };
+        nodes.into_iter().map(|node| CharacterRangeContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn element_options(&self, index: usize) -> ElementOptionsContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(63).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 63).nth(index),
+        }.expect("missing rule child");
+        ElementOptionsContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn element_options_all(&self) -> Vec<ElementOptionsContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(63).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 63).collect(),
+        };
+        nodes.into_iter().map(|node| ElementOptionsContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn LEXER_CHAR_SET(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(8).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 8).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn LEXER_CHAR_SET_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(8).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 8).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn STRING_LITERAL(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(11).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 11).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn STRING_LITERAL_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(11).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 11).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn TOKEN_REF(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(12).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 12).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn TOKEN_REF_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(12).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 12).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for SetElementContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct BlockContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for BlockContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 59 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for BlockContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 59 { return None; }
+        let __default = __RuleAttrs59::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs59>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> BlockContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs59::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs59>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn options_spec(&self, index: usize) -> OptionsSpecContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(4).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 4).nth(index),
+        }.expect("missing rule child");
+        OptionsSpecContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn options_spec_all(&self) -> Vec<OptionsSpecContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(4).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 4).collect(),
+        };
+        nodes.into_iter().map(|node| OptionsSpecContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn rule_action(&self, index: usize) -> RuleActionContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(27).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 27).nth(index),
+        }.expect("missing rule child");
+        RuleActionContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn rule_action_all(&self) -> Vec<RuleActionContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(27).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 27).collect(),
+        };
+        nodes.into_iter().map(|node| RuleActionContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn alt_list(&self, index: usize) -> AltListContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(44).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 44).nth(index),
+        }.expect("missing rule child");
+        AltListContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn alt_list_all(&self) -> Vec<AltListContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(44).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 44).collect(),
+        };
+        nodes.into_iter().map(|node| AltListContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn COLON(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(53).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 53).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn COLON_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(53).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 53).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn LPAREN(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(57).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 57).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn LPAREN_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(57).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 57).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn RPAREN(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(58).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 58).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn RPAREN_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(58).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 58).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for BlockContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct RulerefContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for RulerefContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 60 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for RulerefContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 60 { return None; }
+        let __default = __RuleAttrs60::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs60>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> RulerefContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs60::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs60>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn arg_action_block(&self, index: usize) -> ArgActionBlockContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(15).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 15).nth(index),
+        }.expect("missing rule child");
+        ArgActionBlockContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn arg_action_block_all(&self) -> Vec<ArgActionBlockContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(15).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 15).collect(),
+        };
+        nodes.into_iter().map(|node| ArgActionBlockContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn element_options(&self, index: usize) -> ElementOptionsContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(63).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 63).nth(index),
+        }.expect("missing rule child");
+        ElementOptionsContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn element_options_all(&self) -> Vec<ElementOptionsContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(63).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 63).collect(),
+        };
+        nodes.into_iter().map(|node| ElementOptionsContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn RULE_REF(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(9).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 9).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn RULE_REF_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(9).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 9).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for RulerefContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct CharacterRangeContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for CharacterRangeContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 61 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for CharacterRangeContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 61 { return None; }
+        let __default = __RuleAttrs61::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs61>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> CharacterRangeContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs61::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs61>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    #[allow(non_snake_case)]
+    pub fn STRING_LITERAL(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(11).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 11).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn STRING_LITERAL_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(11).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 11).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn RANGE(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(69).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 69).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn RANGE_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(69).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 69).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for CharacterRangeContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct TerminalDefContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for TerminalDefContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 62 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for TerminalDefContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 62 { return None; }
+        let __default = __RuleAttrs62::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs62>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> TerminalDefContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs62::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs62>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn element_options(&self, index: usize) -> ElementOptionsContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(63).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 63).nth(index),
+        }.expect("missing rule child");
+        ElementOptionsContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn element_options_all(&self) -> Vec<ElementOptionsContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(63).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 63).collect(),
+        };
+        nodes.into_iter().map(|node| ElementOptionsContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn STRING_LITERAL(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(11).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 11).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn STRING_LITERAL_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(11).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 11).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn TOKEN_REF(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(12).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 12).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn TOKEN_REF_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(12).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 12).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for TerminalDefContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct ElementOptionsContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for ElementOptionsContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 63 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for ElementOptionsContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 63 { return None; }
+        let __default = __RuleAttrs63::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs63>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> ElementOptionsContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs63::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs63>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn element_option(&self, index: usize) -> ElementOptionContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(64).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 64).nth(index),
+        }.expect("missing rule child");
+        ElementOptionContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn element_option_all(&self) -> Vec<ElementOptionContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(64).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 64).collect(),
+        };
+        nodes.into_iter().map(|node| ElementOptionContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn COMMA(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(55).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 55).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn COMMA_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(55).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 55).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn LT(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(61).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 61).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn LT_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(61).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 61).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn GT(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(62).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 62).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn GT_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(62).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 62).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for ElementOptionsContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct ElementOptionContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for ElementOptionContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 64 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for ElementOptionContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 64 { return None; }
+        let __default = __RuleAttrs64::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs64>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> ElementOptionContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs64::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs64>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn identifier(&self, index: usize) -> IdentifierContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).nth(index),
+        }.expect("missing rule child");
+        IdentifierContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn identifier_all(&self) -> Vec<IdentifierContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).collect(),
+        };
+        nodes.into_iter().map(|node| IdentifierContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    pub fn qualified_identifier(&self, index: usize) -> QualifiedIdentifierContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(66).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 66).nth(index),
+        }.expect("missing rule child");
+        QualifiedIdentifierContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn qualified_identifier_all(&self) -> Vec<QualifiedIdentifierContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(66).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 66).collect(),
+        };
+        nodes.into_iter().map(|node| QualifiedIdentifierContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn ASSIGN(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(7).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 7).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn ASSIGN_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(7).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 7).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn STRING_LITERAL(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(11).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 11).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn STRING_LITERAL_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(11).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 11).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn INT(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(33).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 33).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn INT_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(33).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 33).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for ElementOptionContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct IdentifierContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for IdentifierContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 65 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for IdentifierContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 65 { return None; }
+        let __default = __RuleAttrs65::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs65>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> IdentifierContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs65::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs65>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+}
+
+impl std::fmt::Display for IdentifierContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(non_camel_case_types, dead_code)]
+#[derive(Clone)]
+pub struct QualifiedIdentifierContext<'a> {
+    __node: __GeneratedRuleContext<'a>,
+    __invocation_states: Vec<isize>,
+}
+
+impl<'a> FromRuleNode<'a> for QualifiedIdentifierContext<'a> {
+    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {
+        if node.rule_index() != 66 { return None; }
+        Some(Self::__from_node(node))
+    }
+}
+
+impl<'a> __FromActiveRuleContext<'a> for QualifiedIdentifierContext<'a> {
+    fn __from_active(
+        context: &'a antlr4_runtime::ParserRuleContext,
+        invocation_states: Vec<isize>,
+        storage: &'a antlr4_runtime::ParseTreeStorage,
+        tokens: &'a antlr4_runtime::TokenStore,
+    ) -> Option<Self> {
+        if context.rule_index() != 66 { return None; }
+        let __default = __RuleAttrs66::default();
+        let __attrs = context.generated_attrs::<__RuleAttrs66>().unwrap_or(&__default);
+        Some(Self {
+            __node: __GeneratedRuleContext::Active { context, storage, tokens },
+            __invocation_states: invocation_states,
+        })
+    }
+}
+
+#[allow(dead_code, clippy::all)]
+impl<'a> QualifiedIdentifierContext<'a> {
+    fn __from_node(node: RuleNodeView<'a>) -> Self {
+        let invocation_states = node.invocation_states().collect();
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {
+        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);
+        invocation_states.push(node.invoking_state());
+        invocation_states.extend_from_slice(parent_invocation_states);
+        Self::__from_node_with_invocation_states(node, invocation_states)
+    }
+
+    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {
+        invocation_states.map_or_else(
+            || Self::__from_node(node),
+            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),
+        )
+    }
+
+    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {
+        let __default = __RuleAttrs66::default();
+        let __attrs = node.generated_attrs::<__RuleAttrs66>().unwrap_or(&__default);
+        Self {
+            __node: __GeneratedRuleContext::Stored(node),
+            __invocation_states: invocation_states,
+        }
+    }
+
+    pub fn child_count(&self) -> usize {
+        match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_count(),
+            __GeneratedRuleContext::Active { context, .. } => context.child_count(),
+        }
+    }
+    pub fn start(&self) -> __GeneratedTokenView {
+        let token = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.start(),
+            __GeneratedRuleContext::Active { context, tokens, .. } => context.start(tokens),
+        };
+        __GeneratedTokenView { text: token.map(|token| token.text().to_owned()).unwrap_or_default() }
+    }
+    pub fn identifier(&self, index: usize) -> IdentifierContext<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).nth(index),
+        }.expect("missing rule child");
+        IdentifierContext::__from_child_node(node, &self.__invocation_states)
+    }
+    pub fn identifier_all(&self) -> Vec<IdentifierContext<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_rules(65).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_rules(storage, tokens, 65).collect(),
+        };
+        nodes.into_iter().map(|node| IdentifierContext::__from_child_node(node, &self.__invocation_states)).collect()
+    }
+    #[allow(non_snake_case)]
+    pub fn DOT(&self, index: usize) -> TerminalNode<'a> {
+        let node = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(70).nth(index),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 70).nth(index),
+        }.expect("missing token child");
+        TerminalNode::new(node)
+    }
+    #[allow(non_snake_case)]
+    pub fn DOT_all(&self) -> Vec<TerminalNode<'a>> {
+        let nodes: Vec<_> = match &self.__node {
+            __GeneratedRuleContext::Stored(node) => node.child_tokens(70).collect(),
+            __GeneratedRuleContext::Active { context, storage, tokens, .. } => context.child_tokens(storage, tokens, 70).collect(),
+        };
+        nodes.into_iter().map(TerminalNode::new).collect()
+    }
+}
+
+impl std::fmt::Display for QualifiedIdentifierContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();
+        write!(f, "[{}]", chain.join(" "))
+    }
+}
+
+#[allow(dead_code, unused_variables)]
+pub trait ANTLRv4Listener {
+    fn enter_grammar_spec(&mut self, _ctx: &GrammarSpecContext) {}
+    fn exit_grammar_spec(&mut self, _ctx: &GrammarSpecContext) {}
+    fn enter_grammar_decl(&mut self, _ctx: &GrammarDeclContext) {}
+    fn exit_grammar_decl(&mut self, _ctx: &GrammarDeclContext) {}
+    fn enter_grammar_type(&mut self, _ctx: &GrammarTypeContext) {}
+    fn exit_grammar_type(&mut self, _ctx: &GrammarTypeContext) {}
+    fn enter_prequel_construct(&mut self, _ctx: &PrequelConstructContext) {}
+    fn exit_prequel_construct(&mut self, _ctx: &PrequelConstructContext) {}
+    fn enter_options_spec(&mut self, _ctx: &OptionsSpecContext) {}
+    fn exit_options_spec(&mut self, _ctx: &OptionsSpecContext) {}
+    fn enter_option(&mut self, _ctx: &OptionContext) {}
+    fn exit_option(&mut self, _ctx: &OptionContext) {}
+    fn enter_option_value(&mut self, _ctx: &OptionValueContext) {}
+    fn exit_option_value(&mut self, _ctx: &OptionValueContext) {}
+    fn enter_delegate_grammars(&mut self, _ctx: &DelegateGrammarsContext) {}
+    fn exit_delegate_grammars(&mut self, _ctx: &DelegateGrammarsContext) {}
+    fn enter_delegate_grammar(&mut self, _ctx: &DelegateGrammarContext) {}
+    fn exit_delegate_grammar(&mut self, _ctx: &DelegateGrammarContext) {}
+    fn enter_tokens_spec(&mut self, _ctx: &TokensSpecContext) {}
+    fn exit_tokens_spec(&mut self, _ctx: &TokensSpecContext) {}
+    fn enter_channels_spec(&mut self, _ctx: &ChannelsSpecContext) {}
+    fn exit_channels_spec(&mut self, _ctx: &ChannelsSpecContext) {}
+    fn enter_id_list(&mut self, _ctx: &IdListContext) {}
+    fn exit_id_list(&mut self, _ctx: &IdListContext) {}
+    fn enter_action(&mut self, _ctx: &ActionContext) {}
+    fn exit_action(&mut self, _ctx: &ActionContext) {}
+    fn enter_action_scope_name(&mut self, _ctx: &ActionScopeNameContext) {}
+    fn exit_action_scope_name(&mut self, _ctx: &ActionScopeNameContext) {}
+    fn enter_action_block(&mut self, _ctx: &ActionBlockContext) {}
+    fn exit_action_block(&mut self, _ctx: &ActionBlockContext) {}
+    fn enter_arg_action_block(&mut self, _ctx: &ArgActionBlockContext) {}
+    fn exit_arg_action_block(&mut self, _ctx: &ArgActionBlockContext) {}
+    fn enter_mode_spec(&mut self, _ctx: &ModeSpecContext) {}
+    fn exit_mode_spec(&mut self, _ctx: &ModeSpecContext) {}
+    fn enter_rules(&mut self, _ctx: &RulesContext) {}
+    fn exit_rules(&mut self, _ctx: &RulesContext) {}
+    fn enter_rule_spec(&mut self, _ctx: &RuleSpecContext) {}
+    fn exit_rule_spec(&mut self, _ctx: &RuleSpecContext) {}
+    fn enter_parser_rule_spec(&mut self, _ctx: &ParserRuleSpecContext) {}
+    fn exit_parser_rule_spec(&mut self, _ctx: &ParserRuleSpecContext) {}
+    fn enter_exception_group(&mut self, _ctx: &ExceptionGroupContext) {}
+    fn exit_exception_group(&mut self, _ctx: &ExceptionGroupContext) {}
+    fn enter_exception_handler(&mut self, _ctx: &ExceptionHandlerContext) {}
+    fn exit_exception_handler(&mut self, _ctx: &ExceptionHandlerContext) {}
+    fn enter_finally_clause(&mut self, _ctx: &FinallyClauseContext) {}
+    fn exit_finally_clause(&mut self, _ctx: &FinallyClauseContext) {}
+    fn enter_rule_prequel(&mut self, _ctx: &RulePrequelContext) {}
+    fn exit_rule_prequel(&mut self, _ctx: &RulePrequelContext) {}
+    fn enter_rule_returns(&mut self, _ctx: &RuleReturnsContext) {}
+    fn exit_rule_returns(&mut self, _ctx: &RuleReturnsContext) {}
+    fn enter_throws_spec(&mut self, _ctx: &ThrowsSpecContext) {}
+    fn exit_throws_spec(&mut self, _ctx: &ThrowsSpecContext) {}
+    fn enter_locals_spec(&mut self, _ctx: &LocalsSpecContext) {}
+    fn exit_locals_spec(&mut self, _ctx: &LocalsSpecContext) {}
+    fn enter_rule_action(&mut self, _ctx: &RuleActionContext) {}
+    fn exit_rule_action(&mut self, _ctx: &RuleActionContext) {}
+    fn enter_rule_modifiers(&mut self, _ctx: &RuleModifiersContext) {}
+    fn exit_rule_modifiers(&mut self, _ctx: &RuleModifiersContext) {}
+    fn enter_rule_modifier(&mut self, _ctx: &RuleModifierContext) {}
+    fn exit_rule_modifier(&mut self, _ctx: &RuleModifierContext) {}
+    fn enter_rule_block(&mut self, _ctx: &RuleBlockContext) {}
+    fn exit_rule_block(&mut self, _ctx: &RuleBlockContext) {}
+    fn enter_rule_alt_list(&mut self, _ctx: &RuleAltListContext) {}
+    fn exit_rule_alt_list(&mut self, _ctx: &RuleAltListContext) {}
+    fn enter_labeled_alt(&mut self, _ctx: &LabeledAltContext) {}
+    fn exit_labeled_alt(&mut self, _ctx: &LabeledAltContext) {}
+    fn enter_lexer_rule_spec(&mut self, _ctx: &LexerRuleSpecContext) {}
+    fn exit_lexer_rule_spec(&mut self, _ctx: &LexerRuleSpecContext) {}
+    fn enter_lexer_rule_block(&mut self, _ctx: &LexerRuleBlockContext) {}
+    fn exit_lexer_rule_block(&mut self, _ctx: &LexerRuleBlockContext) {}
+    fn enter_lexer_alt_list(&mut self, _ctx: &LexerAltListContext) {}
+    fn exit_lexer_alt_list(&mut self, _ctx: &LexerAltListContext) {}
+    fn enter_lexer_alt(&mut self, _ctx: &LexerAltContext) {}
+    fn exit_lexer_alt(&mut self, _ctx: &LexerAltContext) {}
+    fn enter_lexer_elements(&mut self, _ctx: &LexerElementsContext) {}
+    fn exit_lexer_elements(&mut self, _ctx: &LexerElementsContext) {}
+    fn enter_lexer_element(&mut self, _ctx: &LexerElementContext) {}
+    fn exit_lexer_element(&mut self, _ctx: &LexerElementContext) {}
+    fn enter_lexer_block(&mut self, _ctx: &LexerBlockContext) {}
+    fn exit_lexer_block(&mut self, _ctx: &LexerBlockContext) {}
+    fn enter_lexer_commands(&mut self, _ctx: &LexerCommandsContext) {}
+    fn exit_lexer_commands(&mut self, _ctx: &LexerCommandsContext) {}
+    fn enter_lexer_command(&mut self, _ctx: &LexerCommandContext) {}
+    fn exit_lexer_command(&mut self, _ctx: &LexerCommandContext) {}
+    fn enter_lexer_command_name(&mut self, _ctx: &LexerCommandNameContext) {}
+    fn exit_lexer_command_name(&mut self, _ctx: &LexerCommandNameContext) {}
+    fn enter_lexer_command_expr(&mut self, _ctx: &LexerCommandExprContext) {}
+    fn exit_lexer_command_expr(&mut self, _ctx: &LexerCommandExprContext) {}
+    fn enter_alt_list(&mut self, _ctx: &AltListContext) {}
+    fn exit_alt_list(&mut self, _ctx: &AltListContext) {}
+    fn enter_alternative(&mut self, _ctx: &AlternativeContext) {}
+    fn exit_alternative(&mut self, _ctx: &AlternativeContext) {}
+    fn enter_element(&mut self, _ctx: &ElementContext) {}
+    fn exit_element(&mut self, _ctx: &ElementContext) {}
+    fn enter_predicate_options(&mut self, _ctx: &PredicateOptionsContext) {}
+    fn exit_predicate_options(&mut self, _ctx: &PredicateOptionsContext) {}
+    fn enter_predicate_option(&mut self, _ctx: &PredicateOptionContext) {}
+    fn exit_predicate_option(&mut self, _ctx: &PredicateOptionContext) {}
+    fn enter_labeled_element(&mut self, _ctx: &LabeledElementContext) {}
+    fn exit_labeled_element(&mut self, _ctx: &LabeledElementContext) {}
+    fn enter_ebnf(&mut self, _ctx: &EbnfContext) {}
+    fn exit_ebnf(&mut self, _ctx: &EbnfContext) {}
+    fn enter_block_suffix(&mut self, _ctx: &BlockSuffixContext) {}
+    fn exit_block_suffix(&mut self, _ctx: &BlockSuffixContext) {}
+    fn enter_ebnf_suffix(&mut self, _ctx: &EbnfSuffixContext) {}
+    fn exit_ebnf_suffix(&mut self, _ctx: &EbnfSuffixContext) {}
+    fn enter_lexer_atom(&mut self, _ctx: &LexerAtomContext) {}
+    fn exit_lexer_atom(&mut self, _ctx: &LexerAtomContext) {}
+    fn enter_atom(&mut self, _ctx: &AtomContext) {}
+    fn exit_atom(&mut self, _ctx: &AtomContext) {}
+    fn enter_wildcard(&mut self, _ctx: &WildcardContext) {}
+    fn exit_wildcard(&mut self, _ctx: &WildcardContext) {}
+    fn enter_not_set(&mut self, _ctx: &NotSetContext) {}
+    fn exit_not_set(&mut self, _ctx: &NotSetContext) {}
+    fn enter_block_set(&mut self, _ctx: &BlockSetContext) {}
+    fn exit_block_set(&mut self, _ctx: &BlockSetContext) {}
+    fn enter_set_element(&mut self, _ctx: &SetElementContext) {}
+    fn exit_set_element(&mut self, _ctx: &SetElementContext) {}
+    fn enter_block(&mut self, _ctx: &BlockContext) {}
+    fn exit_block(&mut self, _ctx: &BlockContext) {}
+    fn enter_ruleref(&mut self, _ctx: &RulerefContext) {}
+    fn exit_ruleref(&mut self, _ctx: &RulerefContext) {}
+    fn enter_character_range(&mut self, _ctx: &CharacterRangeContext) {}
+    fn exit_character_range(&mut self, _ctx: &CharacterRangeContext) {}
+    fn enter_terminal_def(&mut self, _ctx: &TerminalDefContext) {}
+    fn exit_terminal_def(&mut self, _ctx: &TerminalDefContext) {}
+    fn enter_element_options(&mut self, _ctx: &ElementOptionsContext) {}
+    fn exit_element_options(&mut self, _ctx: &ElementOptionsContext) {}
+    fn enter_element_option(&mut self, _ctx: &ElementOptionContext) {}
+    fn exit_element_option(&mut self, _ctx: &ElementOptionContext) {}
+    fn enter_identifier(&mut self, _ctx: &IdentifierContext) {}
+    fn exit_identifier(&mut self, _ctx: &IdentifierContext) {}
+    fn enter_qualified_identifier(&mut self, _ctx: &QualifiedIdentifierContext) {}
+    fn exit_qualified_identifier(&mut self, _ctx: &QualifiedIdentifierContext) {}
+    fn visit_terminal(&mut self, _node: &TerminalNode) {}
+    fn visit_error_node(&mut self, _node: &ErrorNode) {}
+    fn output(&mut self) -> std::io::Stdout { std::io::stdout() }
+}
+
+#[allow(dead_code)]
+struct __ListenerBridge<'a, T: ANTLRv4Listener>(&'a mut T, Option<Vec<isize>>);
+
+impl<T: ANTLRv4Listener> antlr4_runtime::ParseTreeListener for __ListenerBridge<'_, T> {
+    fn enter_every_rule(&mut self, context: RuleNodeView<'_>) -> Result<(), antlr4_runtime::AntlrError> {
+        if let Some(invocation_states) = &mut self.1 {
+            invocation_states.insert(0, context.invoking_state());
+        }
+        match context.rule_index() {
+            0 => {
+                self.0.enter_grammar_spec(&GrammarSpecContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            1 => {
+                self.0.enter_grammar_decl(&GrammarDeclContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            2 => {
+                self.0.enter_grammar_type(&GrammarTypeContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            3 => {
+                self.0.enter_prequel_construct(&PrequelConstructContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            4 => {
+                self.0.enter_options_spec(&OptionsSpecContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            5 => {
+                self.0.enter_option(&OptionContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            6 => {
+                self.0.enter_option_value(&OptionValueContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            7 => {
+                self.0.enter_delegate_grammars(&DelegateGrammarsContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            8 => {
+                self.0.enter_delegate_grammar(&DelegateGrammarContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            9 => {
+                self.0.enter_tokens_spec(&TokensSpecContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            10 => {
+                self.0.enter_channels_spec(&ChannelsSpecContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            11 => {
+                self.0.enter_id_list(&IdListContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            12 => {
+                self.0.enter_action(&ActionContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            13 => {
+                self.0.enter_action_scope_name(&ActionScopeNameContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            14 => {
+                self.0.enter_action_block(&ActionBlockContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            15 => {
+                self.0.enter_arg_action_block(&ArgActionBlockContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            16 => {
+                self.0.enter_mode_spec(&ModeSpecContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            17 => {
+                self.0.enter_rules(&RulesContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            18 => {
+                self.0.enter_rule_spec(&RuleSpecContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            19 => {
+                self.0.enter_parser_rule_spec(&ParserRuleSpecContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            20 => {
+                self.0.enter_exception_group(&ExceptionGroupContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            21 => {
+                self.0.enter_exception_handler(&ExceptionHandlerContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            22 => {
+                self.0.enter_finally_clause(&FinallyClauseContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            23 => {
+                self.0.enter_rule_prequel(&RulePrequelContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            24 => {
+                self.0.enter_rule_returns(&RuleReturnsContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            25 => {
+                self.0.enter_throws_spec(&ThrowsSpecContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            26 => {
+                self.0.enter_locals_spec(&LocalsSpecContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            27 => {
+                self.0.enter_rule_action(&RuleActionContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            28 => {
+                self.0.enter_rule_modifiers(&RuleModifiersContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            29 => {
+                self.0.enter_rule_modifier(&RuleModifierContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            30 => {
+                self.0.enter_rule_block(&RuleBlockContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            31 => {
+                self.0.enter_rule_alt_list(&RuleAltListContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            32 => {
+                self.0.enter_labeled_alt(&LabeledAltContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            33 => {
+                self.0.enter_lexer_rule_spec(&LexerRuleSpecContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            34 => {
+                self.0.enter_lexer_rule_block(&LexerRuleBlockContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            35 => {
+                self.0.enter_lexer_alt_list(&LexerAltListContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            36 => {
+                self.0.enter_lexer_alt(&LexerAltContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            37 => {
+                self.0.enter_lexer_elements(&LexerElementsContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            38 => {
+                self.0.enter_lexer_element(&LexerElementContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            39 => {
+                self.0.enter_lexer_block(&LexerBlockContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            40 => {
+                self.0.enter_lexer_commands(&LexerCommandsContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            41 => {
+                self.0.enter_lexer_command(&LexerCommandContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            42 => {
+                self.0.enter_lexer_command_name(&LexerCommandNameContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            43 => {
+                self.0.enter_lexer_command_expr(&LexerCommandExprContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            44 => {
+                self.0.enter_alt_list(&AltListContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            45 => {
+                self.0.enter_alternative(&AlternativeContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            46 => {
+                self.0.enter_element(&ElementContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            47 => {
+                self.0.enter_predicate_options(&PredicateOptionsContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            48 => {
+                self.0.enter_predicate_option(&PredicateOptionContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            49 => {
+                self.0.enter_labeled_element(&LabeledElementContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            50 => {
+                self.0.enter_ebnf(&EbnfContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            51 => {
+                self.0.enter_block_suffix(&BlockSuffixContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            52 => {
+                self.0.enter_ebnf_suffix(&EbnfSuffixContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            53 => {
+                self.0.enter_lexer_atom(&LexerAtomContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            54 => {
+                self.0.enter_atom(&AtomContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            55 => {
+                self.0.enter_wildcard(&WildcardContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            56 => {
+                self.0.enter_not_set(&NotSetContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            57 => {
+                self.0.enter_block_set(&BlockSetContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            58 => {
+                self.0.enter_set_element(&SetElementContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            59 => {
+                self.0.enter_block(&BlockContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            60 => {
+                self.0.enter_ruleref(&RulerefContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            61 => {
+                self.0.enter_character_range(&CharacterRangeContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            62 => {
+                self.0.enter_terminal_def(&TerminalDefContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            63 => {
+                self.0.enter_element_options(&ElementOptionsContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            64 => {
+                self.0.enter_element_option(&ElementOptionContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            65 => {
+                self.0.enter_identifier(&IdentifierContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            66 => {
+                self.0.enter_qualified_identifier(&QualifiedIdentifierContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn exit_every_rule(&mut self, context: RuleNodeView<'_>) -> Result<(), antlr4_runtime::AntlrError> {
+        match context.rule_index() {
+            0 => {
+                self.0.exit_grammar_spec(&GrammarSpecContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            1 => {
+                self.0.exit_grammar_decl(&GrammarDeclContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            2 => {
+                self.0.exit_grammar_type(&GrammarTypeContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            3 => {
+                self.0.exit_prequel_construct(&PrequelConstructContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            4 => {
+                self.0.exit_options_spec(&OptionsSpecContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            5 => {
+                self.0.exit_option(&OptionContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            6 => {
+                self.0.exit_option_value(&OptionValueContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            7 => {
+                self.0.exit_delegate_grammars(&DelegateGrammarsContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            8 => {
+                self.0.exit_delegate_grammar(&DelegateGrammarContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            9 => {
+                self.0.exit_tokens_spec(&TokensSpecContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            10 => {
+                self.0.exit_channels_spec(&ChannelsSpecContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            11 => {
+                self.0.exit_id_list(&IdListContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            12 => {
+                self.0.exit_action(&ActionContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            13 => {
+                self.0.exit_action_scope_name(&ActionScopeNameContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            14 => {
+                self.0.exit_action_block(&ActionBlockContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            15 => {
+                self.0.exit_arg_action_block(&ArgActionBlockContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            16 => {
+                self.0.exit_mode_spec(&ModeSpecContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            17 => {
+                self.0.exit_rules(&RulesContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            18 => {
+                self.0.exit_rule_spec(&RuleSpecContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            19 => {
+                self.0.exit_parser_rule_spec(&ParserRuleSpecContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            20 => {
+                self.0.exit_exception_group(&ExceptionGroupContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            21 => {
+                self.0.exit_exception_handler(&ExceptionHandlerContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            22 => {
+                self.0.exit_finally_clause(&FinallyClauseContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            23 => {
+                self.0.exit_rule_prequel(&RulePrequelContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            24 => {
+                self.0.exit_rule_returns(&RuleReturnsContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            25 => {
+                self.0.exit_throws_spec(&ThrowsSpecContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            26 => {
+                self.0.exit_locals_spec(&LocalsSpecContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            27 => {
+                self.0.exit_rule_action(&RuleActionContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            28 => {
+                self.0.exit_rule_modifiers(&RuleModifiersContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            29 => {
+                self.0.exit_rule_modifier(&RuleModifierContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            30 => {
+                self.0.exit_rule_block(&RuleBlockContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            31 => {
+                self.0.exit_rule_alt_list(&RuleAltListContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            32 => {
+                self.0.exit_labeled_alt(&LabeledAltContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            33 => {
+                self.0.exit_lexer_rule_spec(&LexerRuleSpecContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            34 => {
+                self.0.exit_lexer_rule_block(&LexerRuleBlockContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            35 => {
+                self.0.exit_lexer_alt_list(&LexerAltListContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            36 => {
+                self.0.exit_lexer_alt(&LexerAltContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            37 => {
+                self.0.exit_lexer_elements(&LexerElementsContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            38 => {
+                self.0.exit_lexer_element(&LexerElementContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            39 => {
+                self.0.exit_lexer_block(&LexerBlockContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            40 => {
+                self.0.exit_lexer_commands(&LexerCommandsContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            41 => {
+                self.0.exit_lexer_command(&LexerCommandContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            42 => {
+                self.0.exit_lexer_command_name(&LexerCommandNameContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            43 => {
+                self.0.exit_lexer_command_expr(&LexerCommandExprContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            44 => {
+                self.0.exit_alt_list(&AltListContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            45 => {
+                self.0.exit_alternative(&AlternativeContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            46 => {
+                self.0.exit_element(&ElementContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            47 => {
+                self.0.exit_predicate_options(&PredicateOptionsContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            48 => {
+                self.0.exit_predicate_option(&PredicateOptionContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            49 => {
+                self.0.exit_labeled_element(&LabeledElementContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            50 => {
+                self.0.exit_ebnf(&EbnfContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            51 => {
+                self.0.exit_block_suffix(&BlockSuffixContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            52 => {
+                self.0.exit_ebnf_suffix(&EbnfSuffixContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            53 => {
+                self.0.exit_lexer_atom(&LexerAtomContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            54 => {
+                self.0.exit_atom(&AtomContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            55 => {
+                self.0.exit_wildcard(&WildcardContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            56 => {
+                self.0.exit_not_set(&NotSetContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            57 => {
+                self.0.exit_block_set(&BlockSetContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            58 => {
+                self.0.exit_set_element(&SetElementContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            59 => {
+                self.0.exit_block(&BlockContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            60 => {
+                self.0.exit_ruleref(&RulerefContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            61 => {
+                self.0.exit_character_range(&CharacterRangeContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            62 => {
+                self.0.exit_terminal_def(&TerminalDefContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            63 => {
+                self.0.exit_element_options(&ElementOptionsContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            64 => {
+                self.0.exit_element_option(&ElementOptionContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            65 => {
+                self.0.exit_identifier(&IdentifierContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            66 => {
+                self.0.exit_qualified_identifier(&QualifiedIdentifierContext::__from_listener_node(context, self.1.as_deref()));
+            }
+            _ => {}
+        }
+        if let Some(invocation_states) = &mut self.1 {
+            invocation_states.remove(0);
+        }
+        Ok(())
+    }
+
+    fn visit_terminal(&mut self, node: RuntimeTerminalNode<'_>) -> Result<(), antlr4_runtime::AntlrError> {
+        self.0.visit_terminal(&TerminalNode::new(node));
+        Ok(())
+    }
+
+    fn visit_error_node(&mut self, node: RuntimeErrorNode<'_>) -> Result<(), antlr4_runtime::AntlrError> {
+        self.0.visit_error_node(&ErrorNode::new(node));
+        Ok(())
+    }
+}
+
+#[allow(dead_code)]
+pub struct ParseTreeWalker;
+
+#[allow(dead_code)]
+impl ParseTreeWalker {
+    pub fn walk<T: ANTLRv4Listener>(listener: &mut T, tree: antlr4_runtime::Node<'_>) {
+        let mut bridge = __ListenerBridge(listener, None);
+        let _ = antlr4_runtime::ParseTreeWalker::walk(&mut bridge, tree);
+    }
+
+    pub fn walk_with_invocation_states<T: ANTLRv4Listener>(
+        listener: &mut T,
+        tree: antlr4_runtime::Node<'_>,
+        parent_invocation_states: Vec<isize>,
+    ) {
+        let mut bridge = __ListenerBridge(listener, Some(parent_invocation_states));
+        let _ = antlr4_runtime::ParseTreeWalker::walk(&mut bridge, tree);
+    }
+}
 
 
 

@@ -1,0 +1,28 @@
+---
+source: src/bin_support/grammar/semantics.rs
+expression: error.diagnostics()
+---
+[
+    Diagnostic {
+        code: "G4S013",
+        severity: Error,
+        message: "alternative label shared is redefined",
+        primary: SourceSpan {
+            source: SourceId(
+                0,
+            ),
+            bytes: 95..101,
+        },
+        related: [
+            RelatedDiagnostic {
+                span: SourceSpan {
+                    source: SourceId(
+                        0,
+                    ),
+                    bytes: 62..68,
+                },
+                message: "first label is here",
+            },
+        ],
+    },
+]

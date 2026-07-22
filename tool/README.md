@@ -16,6 +16,8 @@ The target implementation lives under:
 - `tool/src/org/antlr/v4/codegen/target/RustTarget.java`
 - `tool/resources/org/antlr/v4/tool/templates/codegen/Rust/Rust.stg`
 
-The runtime ATN simulator is now present in Rust. The current working generator is `src/bin/antlr4-rust-gen.rs`, which consumes official ANTLR `.interp` metadata and emits Rust modules using the same runtime shape intended for the direct target.
+The runtime ATN simulator is present in Rust. The production generator is
+`src/bin/antlr4-rust-gen.rs`, which compiles `.g4` roots and their dependency
+graph directly into Rust modules.
 
 The checked-in Java target files remain intentionally small while the direct `-Dlanguage=Rust` templates are expanded. They should emit the same artifacts as `antlr4-rust-gen`: constants, metadata, serialized ATN arrays, lexer/parser wrappers, and semantic action/predicate dispatch hooks.

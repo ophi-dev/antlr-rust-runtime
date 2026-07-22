@@ -3,7 +3,8 @@ use std::collections::BTreeSet;
 use super::diagnostic::Diagnostic;
 use super::model::{
     Alternative, AlternativeId, Block, Element, ElementKind, GrammarUnit, LeftRecursionInfo,
-    LeftRecursiveAlternativeKind, ModelIdAllocator, ModelNodeId, Quantifier, Rule, RuleId,
+    LeftRecursiveAlternativeKind, ModelIdAllocator, ModelNodeId, Quantifier,
+    RemovedLeftRecursiveLabel, Rule, RuleId,
 };
 use super::provenance::{LeftRecursionRole, Origin, ProvenanceIndex, Tombstone};
 
@@ -176,7 +177,17 @@ fn rewrite_rule(
             }
             AlternativeClass::Binary | AlternativeClass::Suffix => {
                 if let Some(label) = source.elements[0].label.as_ref() {
-                    info.deleted_labels.insert(label.id, source.id);
+                    let ElementKind::RuleCall(call) = &source.elements[0].kind else {
+                        unreachable!("left-recursive operator starts with a rule call");
+                    };
+                    info.deleted_labels.insert(
+                        label.id,
+                        RemovedLeftRecursiveLabel {
+                            original_alternative: source.id,
+                            label: label.clone(),
+                            target: call.name.clone(),
+                        },
+                    );
                     provenance.tombstone(
                         label.syntax,
                         Tombstone {

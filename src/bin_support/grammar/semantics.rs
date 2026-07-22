@@ -1,16 +1,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 
-use crate::embedded::parse_scope_decls;
-
 use super::action::{ActionReference, ActionReferenceKind, action_references};
 use super::char_support::decode_string_literal;
 use super::diagnostic::{CompilationError, Diagnostic, Severity};
 use super::frontend::{SourceId, SourceSpan};
 use super::left_recursion::rewrite_immediate_left_recursion;
 use super::model::{
-    ActionBinding, ActionId, Alternative, AttributeClause, AttributeSymbol, Block, Element,
-    ElementKind, GrammarId, GrammarKind, GrammarPrequel, GrammarUnit, Label, LabelBinding,
+    ActionBinding, ActionId, Alternative, AlternativeId, AttributeClause, AttributeSymbol, Block,
+    Element, ElementKind, GrammarId, GrammarKind, GrammarPrequel, GrammarUnit, Label, LabelBinding,
     LabelKind, LexerCommandBinding, ModelIdAllocator, PredicateBinding, Quantifier,
     RecognizerModel, ResolvedLexerCommand, Rule, RuleAttributes, RuleCallBinding, RuleId, RuleKind,
     SemanticBindings, SemanticGrammar, SetElement, Terminal, TerminalBinding, TokenDeclaration,
@@ -262,6 +260,7 @@ fn check_unit_basics(sources: &SourceSet, unit: &GrammarUnit, diagnostics: &mut 
     check_source_prequels(unit, diagnostics);
 
     let rule_names = rules.keys().copied().collect::<BTreeSet<_>>();
+    let mut alternative_label_owners = BTreeMap::new();
     for rule in &unit.rules {
         check_rule_options(unit, rule, diagnostics);
         check_block_options(&rule.block, &rule.name, diagnostics);
@@ -295,7 +294,7 @@ fn check_unit_basics(sources: &SourceSet, unit: &GrammarUnit, diagnostics: &mut 
                 ));
             }
         });
-        check_alt_labels(rule, &rules, diagnostics);
+        check_alt_labels(rule, &rules, &mut alternative_label_owners, diagnostics);
         if rule.fragment {
             visit_elements(&rule.block, &mut |_, _, element| {
                 if matches!(element.kind, ElementKind::Action { .. }) {
@@ -332,7 +331,12 @@ fn check_unit_basics(sources: &SourceSet, unit: &GrammarUnit, diagnostics: &mut 
     check_channel_declarations(unit, diagnostics);
 }
 
-fn check_alt_labels(rule: &Rule, rules: &BTreeMap<&str, &Rule>, diagnostics: &mut Vec<Diagnostic>) {
+fn check_alt_labels(
+    rule: &Rule,
+    rules: &BTreeMap<&str, &Rule>,
+    owners: &mut BTreeMap<String, (String, SourceSpan)>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
     let labeled = rule
         .block
         .alternatives
@@ -346,7 +350,6 @@ fn check_alt_labels(rule: &Rule, rules: &BTreeMap<&str, &Rule>, diagnostics: &mu
             format!("rule {} must label all alternatives or none", rule.name),
         ));
     }
-    let mut labels = BTreeMap::new();
     for alternative in &rule.block.alternatives {
         let Some(label) = &alternative.label else {
             continue;
@@ -365,15 +368,22 @@ fn check_alt_labels(rule: &Rule, rules: &BTreeMap<&str, &Rule>, diagnostics: &mu
                 .with_related(conflict.span.clone(), "conflicting rule is here"),
             );
         }
-        if let Some(previous) = labels.insert(ascii_lowercase(&label.value), label) {
+        let normalized = ascii_lowercase(&label.value);
+        if let Some((owner, previous_span)) = owners.get(&normalized)
+            && owner != &rule.name
+        {
             diagnostics.push(
                 Diagnostic::error(
                     "G4S013",
                     label.span.clone(),
                     format!("alternative label {} is redefined", label.value),
                 )
-                .with_related(previous.span.clone(), "first label is here"),
+                .with_related(previous_span.clone(), "first label is here"),
             );
+        } else {
+            owners
+                .entry(normalized)
+                .or_insert_with(|| (rule.name.clone(), label.span.clone()));
         }
     }
 }
@@ -1588,7 +1598,7 @@ fn report_literal_overlaps(
 }
 
 fn attribute_symbols(clause: &AttributeClause) -> Vec<AttributeSymbol> {
-    parse_scope_decls(&clause.text)
+    parse_attribute_declarations(&clause.text)
         .into_iter()
         .map(|declaration| {
             let offset =
@@ -1617,6 +1627,162 @@ fn attribute_symbols(clause: &AttributeClause) -> Vec<AttributeSymbol> {
         .collect()
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ParsedAttributeDeclaration {
+    pub(crate) name: String,
+    pub(crate) ty: Option<String>,
+    pub(crate) initializer: Option<String>,
+    pub(crate) name_offset: usize,
+}
+
+pub(crate) fn parse_attribute_declarations(clause: &str) -> Vec<ParsedAttributeDeclaration> {
+    split_top_level(clause, ',')
+        .into_iter()
+        .filter_map(|(raw_offset, raw_part)| {
+            let leading = raw_part.len() - raw_part.trim_start().len();
+            let part_offset = raw_offset + leading;
+            let part = raw_part.trim();
+            if part.is_empty() {
+                return None;
+            }
+
+            let (declarator, initializer) =
+                part.find('=')
+                    .filter(|index| *index > 0)
+                    .map_or((part, None), |equals| {
+                        (
+                            part[..equals].trim_end(),
+                            Some(part[equals + 1..].trim().to_owned()),
+                        )
+                    });
+            let (name, ty, name_offset) = if let Some(colon) = postfix_type_colon(declarator) {
+                parse_postfix_attribute_declaration(declarator, colon)?
+            } else {
+                parse_prefix_attribute_declaration(declarator)?
+            };
+            Some(ParsedAttributeDeclaration {
+                name,
+                ty,
+                initializer,
+                name_offset: part_offset + name_offset,
+            })
+        })
+        .collect()
+}
+
+fn postfix_type_colon(declarator: &str) -> Option<usize> {
+    declarator
+        .char_indices()
+        .find(|(index, character)| {
+            *character == ':'
+                && !declarator[..*index].ends_with(':')
+                && !declarator[*index + 1..].starts_with(':')
+        })
+        .map(|(index, _)| index)
+}
+
+fn parse_prefix_attribute_declaration(declarator: &str) -> Option<(String, Option<String>, usize)> {
+    let mut in_identifier = false;
+    let mut start = None;
+    for (index, character) in declarator.char_indices().rev() {
+        if !in_identifier && is_identifier_character(character) {
+            in_identifier = true;
+        } else if in_identifier && !is_identifier_character(character) {
+            start = Some(index + character.len_utf8());
+            break;
+        }
+    }
+    let start = start.or_else(|| in_identifier.then_some(0))?;
+    let stop = declarator[start..]
+        .char_indices()
+        .find(|(_, character)| !is_identifier_character(*character))
+        .map_or(declarator.len(), |(offset, _)| start + offset);
+    let name = declarator[start..stop].to_owned();
+    let ty = format!("{}{}", &declarator[..start], &declarator[stop..]);
+    Some((name, nonempty_trimmed(&ty), start))
+}
+
+fn parse_postfix_attribute_declaration(
+    declarator: &str,
+    colon: usize,
+) -> Option<(String, Option<String>, usize)> {
+    let name_part = &declarator[..colon];
+    let start = name_part
+        .char_indices()
+        .find(|(_, character)| is_identifier_character(*character))
+        .map(|(index, _)| index)?;
+    let stop = name_part[start..]
+        .char_indices()
+        .find(|(_, character)| !is_identifier_character(*character))
+        .map_or(name_part.len(), |(offset, _)| start + offset);
+    let name = name_part[start..stop].to_owned();
+    let ty = nonempty_trimmed(&declarator[colon + 1..]);
+    Some((name, ty, start))
+}
+
+fn split_top_level(text: &str, separator: char) -> Vec<(usize, &str)> {
+    let mut parts = Vec::new();
+    let mut delimiter_depth = 0_usize;
+    let mut angle_depth = 0_usize;
+    let mut start = 0;
+    let mut quoted = false;
+    let mut escaped = false;
+    let mut in_initializer = false;
+    for (index, character) in text.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match character {
+            '\\' if quoted => escaped = true,
+            '"' => quoted = !quoted,
+            '(' | '[' | '{' if !quoted => delimiter_depth += 1,
+            ')' | ']' | '}' if !quoted => {
+                delimiter_depth = delimiter_depth.saturating_sub(1);
+            }
+            '<' if !quoted && !in_initializer => angle_depth += 1,
+            '>' if !quoted && !in_initializer => {
+                angle_depth = angle_depth.saturating_sub(1);
+            }
+            '=' if !quoted
+                && delimiter_depth == 0
+                && angle_depth == 0
+                && is_assignment_operator(text, index) =>
+            {
+                in_initializer = true;
+            }
+            _ if character == separator
+                && !quoted
+                && delimiter_depth == 0
+                && (in_initializer || angle_depth == 0) =>
+            {
+                parts.push((start, &text[start..index]));
+                start = index + character.len_utf8();
+                angle_depth = 0;
+                in_initializer = false;
+            }
+            _ => {}
+        }
+    }
+    parts.push((start, &text[start..]));
+    parts
+}
+
+fn is_assignment_operator(text: &str, index: usize) -> bool {
+    let previous = text[..index].chars().next_back();
+    let next = text[index + '='.len_utf8()..].chars().next();
+    !matches!(previous, Some('=' | '!' | '<' | '>')) && next != Some('=')
+}
+
+fn nonempty_trimmed(value: &str) -> Option<String> {
+    let value = value.trim();
+    (!value.is_empty()).then(|| value.to_owned())
+}
+
+fn is_identifier_character(character: char) -> bool {
+    character == '_' || character.is_alphanumeric()
+}
+
 struct BindingCollection {
     bindings: SemanticBindings,
     call_graph: BTreeMap<RuleId, Vec<RuleId>>,
@@ -1631,6 +1797,7 @@ enum ActionScope<'a> {
     Alternative {
         rule: &'a Rule,
         alternative: &'a Alternative,
+        owner: &'a Alternative,
     },
 }
 
@@ -1829,6 +1996,7 @@ impl<'a> BindingCollector<'a> {
                     ActionScope::Alternative {
                         rule,
                         alternative: scope,
+                        owner: alternative,
                     },
                     body,
                     &element.span,
@@ -1857,6 +2025,7 @@ impl<'a> BindingCollector<'a> {
                     ActionScope::Alternative {
                         rule,
                         alternative: scope,
+                        owner: alternative,
                     },
                     body,
                     &element.span,
@@ -2158,29 +2327,72 @@ impl<'a> BindingCollector<'a> {
     }
 
     fn label_target(&self, scope: ActionScope<'_>, name: &str) -> Option<ResolvedLabel> {
-        let (label, element) = match scope {
-            ActionScope::Grammar => return None,
-            ActionScope::Rule(rule) => find_label_in_block(&rule.block, name)?,
+        if let ActionScope::Alternative { rule, owner, .. } = scope
+            && let Some(target) = self.removed_left_recursive_label_target(rule, Some(owner), name)
+        {
+            return Some(target);
+        }
+        let resolved = match scope {
+            ActionScope::Grammar => None,
+            ActionScope::Rule(rule) => find_label_in_block(&rule.block, name),
             ActionScope::Alternative { alternative, .. } => {
-                find_label_in_alternative(alternative, name)?
+                find_label_in_alternative(alternative, name)
             }
         };
-        let target = match &element.kind {
-            ElementKind::RuleCall(call) => self
-                .rules_by_name
-                .get(call.name.as_str())
-                .copied()
-                .map_or(ActionTarget::Other, ActionTarget::Rule),
-            ElementKind::Terminal(_) | ElementKind::Range(..) | ElementKind::Set { .. } => {
-                ActionTarget::Token
-            }
-            ElementKind::Block(_)
-            | ElementKind::Action { .. }
-            | ElementKind::Predicate { .. }
-            | ElementKind::Epsilon => ActionTarget::Other,
-        };
+        resolved.map_or_else(
+            || {
+                scope
+                    .rule()
+                    .and_then(|rule| self.removed_left_recursive_label_target(rule, None, name))
+            },
+            |(label, element)| {
+                let target = match &element.kind {
+                    ElementKind::RuleCall(call) => self
+                        .rules_by_name
+                        .get(call.name.as_str())
+                        .copied()
+                        .map_or(ActionTarget::Other, ActionTarget::Rule),
+                    ElementKind::Terminal(_) | ElementKind::Range(..) | ElementKind::Set { .. } => {
+                        ActionTarget::Token
+                    }
+                    ElementKind::Block(_)
+                    | ElementKind::Action { .. }
+                    | ElementKind::Predicate { .. }
+                    | ElementKind::Epsilon => ActionTarget::Other,
+                };
+                Some(ResolvedLabel {
+                    kind: label.kind,
+                    target,
+                })
+            },
+        )
+    }
+
+    fn removed_left_recursive_label_target(
+        &self,
+        rule: &Rule,
+        owner: Option<&Alternative>,
+        name: &str,
+    ) -> Option<ResolvedLabel> {
+        let left_recursion = rule.left_recursion.as_ref()?;
+        let removed = left_recursion.deleted_labels.values().find(|removed| {
+            removed.label.name == name
+                && owner.is_none_or(|owner| {
+                    left_recursion
+                        .original_to_rewritten
+                        .get(&removed.original_alternative)
+                        .is_some_and(|rewritten| {
+                            alternative_contains(&rule.block, *rewritten, owner.id)
+                        })
+                })
+        })?;
+        let target = self
+            .rules_by_name
+            .get(removed.target.as_str())
+            .copied()
+            .map_or(ActionTarget::Other, ActionTarget::Rule);
         Some(ResolvedLabel {
-            kind: label.kind,
+            kind: removed.label.kind,
             target,
         })
     }
@@ -2427,6 +2639,35 @@ fn find_label_in_alternative<'a>(
         }
     }
     None
+}
+
+fn alternative_contains(block: &Block, root: AlternativeId, candidate: AlternativeId) -> bool {
+    for alternative in &block.alternatives {
+        if alternative.id == root {
+            return alternative_tree_contains(alternative, candidate);
+        }
+        for element in &alternative.elements {
+            if let ElementKind::Block(nested) = &element.kind
+                && alternative_contains(nested, root, candidate)
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn alternative_tree_contains(alternative: &Alternative, candidate: AlternativeId) -> bool {
+    alternative.id == candidate
+        || alternative.elements.iter().any(|element| {
+            let ElementKind::Block(block) = &element.kind else {
+                return false;
+            };
+            block
+                .alternatives
+                .iter()
+                .any(|nested| alternative_tree_contains(nested, candidate))
+        })
 }
 
 fn alternative_rule_reference<'a>(alternative: &'a Alternative, name: &str) -> Option<&'a str> {
@@ -2816,6 +3057,7 @@ fn ascii_lowercase(value: &str) -> String {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // `insta` assertion macros unwrap internal I/O.
 mod tests {
     use std::path::PathBuf;
 
@@ -2907,6 +3149,30 @@ WS : [ \t]+ -> skip;
     }
 
     #[test]
+    fn repeated_alternative_label_within_one_rule_is_allowed() {
+        compile_committed_fixture("common-alternative-label/Labels.g4")
+            .expect("ANTLR permits a common alternative label within one rule");
+    }
+
+    #[test]
+    fn alternative_label_reused_by_another_rule_is_rejected() {
+        let error = compile_committed_fixture("cross-rule-alternative-label/Labels.g4")
+            .expect_err("alternative label ownership is rule-scoped");
+        insta::assert_debug_snapshot!(
+            "cross_rule_alternative_label_diagnostic",
+            error.diagnostics()
+        );
+        assert_eq!(
+            error
+                .diagnostics()
+                .iter()
+                .filter(|diagnostic| diagnostic.code == "G4S013")
+                .count(),
+            1
+        );
+    }
+
+    #[test]
     fn actions_predicates_labels_and_attributes_keep_structural_owners() {
         let fixture = Fixture::new("bindings");
         fixture.write(
@@ -2935,6 +3201,90 @@ entry[int x] returns [int y] locals [boolean seen]
                 .predicates
                 .values()
                 .all(|binding| binding.rule == rule.id && binding.context_dependent)
+        );
+    }
+
+    #[test]
+    fn attribute_declarations_support_target_type_syntax() {
+        let cases = [
+            ("int[] i, int j[]", [("i", "int[]"), ("j", "int []")]),
+            (
+                "Map<A,List<B>>[] value, int count = other[3]",
+                [("value", "Map<A,List<B>>[]"), ("count", "int")],
+            ),
+            (
+                "x:T?, f:func(array[3] of int)",
+                [("x", "T?"), ("f", "func(array[3] of int)")],
+            ),
+            (
+                "std::vector<std::string> values, map[string]int lookup",
+                [
+                    ("values", "std::vector<std::string>"),
+                    ("lookup", "map[string]int"),
+                ],
+            ),
+        ];
+
+        for (input, expected) in cases {
+            let actual = parse_attribute_declarations(input)
+                .into_iter()
+                .map(|declaration| (declaration.name, declaration.ty.unwrap_or_default()))
+                .collect::<Vec<_>>();
+            let expected = expected
+                .into_iter()
+                .map(|(name, ty)| (name.to_owned(), ty.to_owned()))
+                .collect::<Vec<_>>();
+            assert_eq!(actual, expected, "input {input:?}");
+        }
+    }
+
+    #[test]
+    fn attribute_initializers_allow_comparison_operators() {
+        let actual = parse_attribute_declarations(
+            "Map<A,List<B>> values = defaults, boolean less = other < 0, \
+             boolean greater = other > 0, boolean atMost = other <= 0, \
+             boolean atLeast = other >= 0, int count",
+        )
+        .into_iter()
+        .map(|declaration| {
+            (
+                declaration.name,
+                declaration.ty.unwrap_or_default(),
+                declaration.initializer,
+            )
+        })
+        .collect::<Vec<_>>();
+
+        assert_eq!(
+            actual,
+            [
+                (
+                    "values".to_owned(),
+                    "Map<A,List<B>>".to_owned(),
+                    Some("defaults".to_owned()),
+                ),
+                (
+                    "less".to_owned(),
+                    "boolean".to_owned(),
+                    Some("other < 0".to_owned()),
+                ),
+                (
+                    "greater".to_owned(),
+                    "boolean".to_owned(),
+                    Some("other > 0".to_owned()),
+                ),
+                (
+                    "atMost".to_owned(),
+                    "boolean".to_owned(),
+                    Some("other <= 0".to_owned()),
+                ),
+                (
+                    "atLeast".to_owned(),
+                    "boolean".to_owned(),
+                    Some("other >= 0".to_owned()),
+                ),
+                ("count".to_owned(), "int".to_owned(), None),
+            ]
         );
     }
 
@@ -2987,8 +3337,20 @@ A : 'a' -> channel(COMMENTS);
     }
 
     fn compile(fixture: &Fixture, root: &str) -> Result<SemanticGrammarSet, CompilationError> {
+        compile_root(fixture.path(root))
+    }
+
+    fn compile_committed_fixture(relative: &str) -> Result<SemanticGrammarSet, CompilationError> {
+        compile_root(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/grammar-semantics")
+                .join(relative),
+        )
+    }
+
+    fn compile_root(root: PathBuf) -> Result<SemanticGrammarSet, CompilationError> {
         let loaded = load(LoadOptions {
-            roots: vec![fixture.path(root)],
+            roots: vec![root],
             library_directories: Vec::new(),
         })?;
         analyze(&loaded.sources, integrate_loaded(&loaded)?)

@@ -37,6 +37,7 @@ stacker = "0.1.24"
 thiserror = "2"
 
 [dev-dependencies]
+insta = { version = "1", default-features = false }
 pretty_assertions = "1"
 sha2 = "0.10"
 

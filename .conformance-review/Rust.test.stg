@@ -55,7 +55,15 @@ Not(v) ::= "!<v>"
 // target that renders a real assertion receives uncompilable Java syntax.
 Assert(s) ::= ""
 
-Cast(t,v) ::= "__active_context_view::\<<t>>(<v>, self.base.active_invocation_states(), self.base.parse_tree_storage(), self.base.token_store()).unwrap()"
+// The neutral descriptors use Java's unsuffixed labeled-alt context names.
+// Rust namespaces every labeled-alt context with `Label`.
+rustLabelContextType ::= [
+    "BinaryContext": "BinaryLabelContext",
+    "UnaryContext": "UnaryLabelContext",
+    default: key
+]
+
+Cast(t,v) ::= "__active_context_view::\<<rustLabelContextType.(t)>>(<v>, self.base.active_invocation_states(), self.base.parse_tree_storage(), self.base.token_store()).unwrap()"
 
 // Rust has no `&str + &str` operator, and descriptors chain Append/AppendStr
 // with bare string literals on the left (`"(" + $ID.text + …` in Java terms),
@@ -269,10 +277,10 @@ LRWithLabelsListener(X) ::= <<
 struct LeafListener;
 
 impl TListener for LeafListener {
-    fn exit_call(&mut self, ctx: &CallContext) {
+    fn exit_call_label(&mut self, ctx: &CallLabelContext) {
         writeln!(self.output(), "{} {}", ctx.e(0).start().text(), ctx.e_list(0));
     }
-    fn exit_int(&mut self, ctx: &IntContext) {
+    fn exit_int_label(&mut self, ctx: &IntLabelContext) {
         writeln!(self.output(), "{}", ctx.INT(0).symbol().text());
     }
 }

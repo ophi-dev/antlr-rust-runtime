@@ -1870,10 +1870,8 @@ mod tests {
             .iter()
             .find(|grammar| grammar.unit.name == "P")
             .expect("fixture parser grammar");
-        let (graph, _) = super::super::parser::build_graph_for_test(
-            grammar,
-            semantics.provenance.clone(),
-        );
+        let (graph, _) =
+            super::super::parser::build_graph_for_test(grammar, semantics.provenance.clone());
         let oracles = graph_oracles(fixture_name);
         let [oracle] = oracles.as_slice() else {
             panic!("{fixture_name} should have one graph oracle");
@@ -1958,11 +1956,7 @@ mod tests {
                         .map(|(index, _)| index)
                         .expect("mode start exists");
                     assert_eq!(
-                        direct_atn_string(
-                            &compiled.semantic.recognizer,
-                            &compiled.graph,
-                            start,
-                        ),
+                        direct_atn_string(&compiled.semantic.recognizer, &compiled.graph, start,),
                         oracle.expected,
                         "{fixture_name} mode {}",
                         oracle.selector,
@@ -2048,12 +2042,8 @@ mod tests {
                 match &transition.kind {
                     FinalizedTransitionKind::Epsilon => output.push_str("->"),
                     FinalizedTransitionKind::Rule { rule_index, .. } => {
-                        write!(
-                            output,
-                            "-{}->",
-                            recognizer.rule_names[*rule_index]
-                        )
-                        .expect("writing to String cannot fail");
+                        write!(output, "-{}->", recognizer.rule_names[*rule_index])
+                            .expect("writing to String cannot fail");
                     }
                     FinalizedTransitionKind::Predicate {
                         rule_index,
@@ -2116,11 +2106,13 @@ mod tests {
             AtnStateKind::BlockEnd => format!("BlockEnd_{state_number}"),
             AtnStateKind::RuleStart => format!(
                 "RuleStart_{}_{}",
-                recognizer.rule_names[state.rule_index.expect("rule-start index")], state_number
+                recognizer.rule_names[state.rule_index.expect("rule-start index")],
+                state_number
             ),
             AtnStateKind::RuleStop => format!(
                 "RuleStop_{}_{}",
-                recognizer.rule_names[state.rule_index.expect("rule-stop index")], state_number
+                recognizer.rule_names[state.rule_index.expect("rule-stop index")],
+                state_number
             ),
             AtnStateKind::PlusLoopBack => format!("PlusLoopBack_{state_number}"),
             AtnStateKind::StarLoopBack => format!("StarLoopBack_{state_number}"),
@@ -2141,7 +2133,11 @@ mod tests {
         if recognizer.kind == GrammarKind::Lexer {
             format!("'{}'..'{}'", raw_code_point(start), raw_code_point(stop))
         } else {
-            format!("{}..{}", token_name(recognizer, start), token_name(recognizer, stop))
+            format!(
+                "{}..{}",
+                token_name(recognizer, start),
+                token_name(recognizer, stop)
+            )
         }
     }
 
@@ -2293,11 +2289,7 @@ mod tests {
         );
     }
 
-    fn state_in_rule(
-        graph: &FinalizedAtnGraph,
-        rule: usize,
-        kind: AtnStateKind,
-    ) -> usize {
+    fn state_in_rule(graph: &FinalizedAtnGraph, rule: usize, kind: AtnStateKind) -> usize {
         graph
             .states
             .iter()
@@ -3517,16 +3509,13 @@ mod tests {
                 "{fixture_name}: wrong Java source binding",
             );
 
-            let oracle = std::fs::read_to_string(
-                fixture(fixture_name).join("oracle/java-error-types.tsv"),
-            )
-            .expect("Java ErrorType oracle");
+            let oracle =
+                std::fs::read_to_string(fixture(fixture_name).join("oracle/java-error-types.tsv"))
+                    .expect("Java ErrorType oracle");
             let oracle_entries = oracle
                 .lines()
                 .map(|line| {
-                    let (code, name) = line
-                        .split_once('\t')
-                        .expect("Java ErrorType oracle record");
+                    let (code, name) = line.split_once('\t').expect("Java ErrorType oracle record");
                     (
                         code.parse::<u32>()
                             .expect("Java ErrorType oracle numeric code"),

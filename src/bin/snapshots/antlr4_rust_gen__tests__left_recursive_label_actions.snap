@@ -1,0 +1,11 @@
+---
+source: src/bin/antlr4-rust-gen.rs
+expression: embedded.inline_actions
+---
+{
+    5: " let _ = __ctx.child_rules(self.base.parse_tree_storage(), self.base.token_store(), 1).nth(0).and_then(|__c| __c.generated_attrs::<__RuleAttrs1>()).map(|__a| __a.v.clone()).unwrap_or_default(); ",
+    7: "",
+    9: " __attrs.v = __ctx.child_tokens(self.base.parse_tree_storage(), self.base.token_store(), 1).last().map(|__t| __t.text().parse::<i32>().unwrap_or_default()).unwrap_or_default(); ",
+    14: " __attrs.v = __ctx.child_rules(self.base.parse_tree_storage(), self.base.token_store(), 1).nth(0).and_then(|__c| __c.generated_attrs::<__RuleAttrs1>()).map(|__a| __a.v.clone()).unwrap_or_default() * __ctx.child_rules(self.base.parse_tree_storage(), self.base.token_store(), 1).nth(1).and_then(|__c| __c.generated_attrs::<__RuleAttrs1>()).map(|__a| __a.v.clone()).unwrap_or_default(); ",
+    19: " __attrs.v = __ctx.child_rules(self.base.parse_tree_storage(), self.base.token_store(), 1).nth(0).and_then(|__c| __c.generated_attrs::<__RuleAttrs1>()).map(|__a| __a.v.clone()).unwrap_or_default() + __ctx.child_rules(self.base.parse_tree_storage(), self.base.token_store(), 1).nth(1).and_then(|__c| __c.generated_attrs::<__RuleAttrs1>()).map(|__a| __a.v.clone()).unwrap_or_default(); ",
+}

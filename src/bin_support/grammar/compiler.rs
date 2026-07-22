@@ -57,11 +57,16 @@ fn compile_with_transforms(
 ) -> Result<Compilation, CompilationError> {
     let loaded = load_recovering(options);
     let root_order = loaded.grammars.roots.clone();
-    let mut integrated = integrate_loaded(&loaded)?;
-    let transform_report = transforms
-        .run(&mut integrated.grammar, false)
-        .map_err(|diagnostic| CompilationError::new(vec![diagnostic]))?;
-    let semantics = analyze(&loaded.sources, integrated)?;
+    let mut integrated =
+        integrate_loaded(&loaded).map_err(|error| error.with_sources(&loaded.sources))?;
+    let transform_report =
+        transforms
+            .run(&mut integrated.grammar, false)
+            .map_err(|diagnostic| {
+                CompilationError::new(vec![diagnostic]).with_sources(&loaded.sources)
+            })?;
+    let semantics = analyze(&loaded.sources, integrated)
+        .map_err(|error| error.with_sources(&loaded.sources))?;
     let LoadedSources { sources, .. } = loaded;
     compile_semantics(sources, root_order, semantics, transform_report)
 }
@@ -96,12 +101,14 @@ fn compile_semantics(
         let grammar_id = grammar.unit.id;
         match grammar.unit.kind {
             GrammarKind::Lexer => {
-                let compiled = compile_lexer(grammar, provenance.clone())?;
+                let compiled = compile_lexer(grammar, provenance.clone())
+                    .map_err(|error| error.with_sources(&sources))?;
                 all_diagnostics.extend(compiled.analysis.diagnostics.iter().cloned());
                 lexers.insert(grammar_id, compiled);
             }
             GrammarKind::Parser => {
-                let compiled = compile_parser(grammar, provenance.clone())?;
+                let compiled = compile_parser(grammar, provenance.clone())
+                    .map_err(|error| error.with_sources(&sources))?;
                 all_diagnostics.extend(compiled.analysis.diagnostics.iter().cloned());
                 parsers.insert(grammar_id, compiled);
             }

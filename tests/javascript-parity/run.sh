@@ -33,18 +33,13 @@ fi
 
 UPSTREAM="$GRAMMARS_V4/javascript/javascript"
 mkdir -p "$WORK_DIR/grammar" "$WORK_DIR/python-grammar" "$WORK_DIR/py-gen" \
-    "$WORK_DIR/interp" "$WORK_DIR/rust-lexer" "$WORK_DIR/rust-parser"
+    "$WORK_DIR/rust-gen"
 cp "$UPSTREAM/JavaScriptLexer.g4" "$UPSTREAM/JavaScriptParser.g4" "$WORK_DIR/grammar/"
 cp "$UPSTREAM/JavaScriptLexer.g4" "$UPSTREAM/JavaScriptParser.g4" \
     "$UPSTREAM/Python3/JavaScriptLexerBase.py" \
     "$UPSTREAM/Python3/JavaScriptParserBase.py" \
     "$UPSTREAM/Python3/transformGrammar.py" "$WORK_DIR/python-grammar/"
 
-(
-    cd "$WORK_DIR/grammar"
-    java -jar "$ANTLR4_JAR" -o "$WORK_DIR/interp" -Xexact-output-dir \
-        JavaScriptLexer.g4 JavaScriptParser.g4
-)
 (
     cd "$WORK_DIR/python-grammar"
     "$PYTHON" transformGrammar.py
@@ -56,26 +51,19 @@ cp "$UPSTREAM/JavaScriptLexer.g4" "$UPSTREAM/JavaScriptParser.g4" \
 cargo run --quiet --locked --release --manifest-path "$REPO_ROOT/Cargo.toml" \
     --features codegen \
     --bin antlr4-rust-gen -- \
-    --lexer "$WORK_DIR/interp/JavaScriptLexer.interp" \
-    --grammar "$WORK_DIR/grammar/JavaScriptLexer.g4" \
+    "$WORK_DIR/grammar/JavaScriptLexer.g4" \
+    "$WORK_DIR/grammar/JavaScriptParser.g4" \
+    --lib "$WORK_DIR/grammar" \
     --sem-patterns "$REPO_ROOT/patterns/javascript.toml" \
     --option-hook superClass=JavaScriptLexerBase \
-    --sem-unknown error --require-full-semantics \
-    --out-dir "$WORK_DIR/rust-lexer"
-cargo run --quiet --locked --release --manifest-path "$REPO_ROOT/Cargo.toml" \
-    --features codegen \
-    --bin antlr4-rust-gen -- \
-    --parser "$WORK_DIR/interp/JavaScriptParser.interp" \
-    --grammar "$WORK_DIR/grammar/JavaScriptParser.g4" \
-    --sem-patterns "$REPO_ROOT/patterns/javascript.toml" \
     --option-hook superClass=JavaScriptParserBase \
     --sem-unknown error --require-full-semantics \
-    --out-dir "$WORK_DIR/rust-parser"
+    --out-dir "$WORK_DIR/rust-gen"
 
 GEN_DIR="$SCRIPT_DIR/dumper/src/generated"
 mkdir -p "$GEN_DIR"
-cp "$WORK_DIR/rust-lexer/java_script_lexer.rs" \
-    "$WORK_DIR/rust-parser/java_script_parser.rs" "$GEN_DIR/"
+cp "$WORK_DIR/rust-gen/java_script_lexer.rs" \
+    "$WORK_DIR/rust-gen/java_script_parser.rs" "$GEN_DIR/"
 cargo build --quiet --release --manifest-path "$SCRIPT_DIR/dumper/Cargo.toml"
 DUMPER="$SCRIPT_DIR/dumper/target/release/javascript-parity-dumper"
 

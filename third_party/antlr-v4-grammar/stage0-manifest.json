@@ -1,6 +1,6 @@
 {
-  "schema_version": 1,
-  "stage": "stage0",
+  "schema_version": 2,
+  "stage": "initial-stage0-seed",
   "bootstrap_only": true,
   "antlr_tool": {
     "repository": "https://github.com/antlr/antlr4.git",
@@ -99,15 +99,13 @@
       "sha256": "b36dd7cd2f6c425dd837376a9f73cf4e6450b7a1be2dac3290db1ca2c93fcaa6"
     }
   ],
-  "outputs": [
+  "initial_seed_outputs": [
     {
       "seed_path": "generated/antl_rv4_lexer.rs",
-      "checked_in_path": "src/bin_support/grammar/generated/antlr_v4_lexer.rs",
       "sha256": "d5d023df0f1c9dc0d13b83ee0546c36d553bc9b30f165e8b178767d8e05c9a30"
     },
     {
       "seed_path": "generated/antl_rv4_parser.rs",
-      "checked_in_path": "src/bin_support/grammar/generated/antlr_v4_parser.rs",
       "sha256": "87f4dc3c1962204a7f9d99368c2be3377a5508b3d32be74d8dcee29d99a0890c"
     }
   ]

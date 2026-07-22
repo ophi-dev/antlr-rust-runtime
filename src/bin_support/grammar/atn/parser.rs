@@ -700,7 +700,7 @@ impl<'a> ParserFactory<'a> {
         owner: ModelNodeId,
     ) {
         let origins = self.provenance.origins(owner).to_vec();
-        self.graph.add_transition(
+        let transition = self.graph.add_transition(
             BuildTransitionSpec {
                 source,
                 target,
@@ -710,6 +710,7 @@ impl<'a> ParserFactory<'a> {
             origins,
             self.provenance,
         );
+        self.graph.record_model_transition(owner, transition);
     }
 
     fn synthetic_epsilon(

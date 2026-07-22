@@ -9,18 +9,16 @@
 //! `ActionTranslator`): `$text`, `$ctx`, `$_p`, rule/token/label references,
 //! and rule attribute (`args`/`returns`/`locals`) reads and writes.
 //!
-//! This module owns the grammar source model needed for that translation:
-//! per-rule attribute declarations, per-alternative element references with
-//! labels (for `$label.attr` occurrence resolution), and `@members` blocks
-//! split into struct fields, impl items, and module items.
+//! This module consumes the structural grammar model needed for that
+//! translation: per-rule attribute declarations, per-alternative element
+//! references with labels (for `$label.attr` occurrence resolution), and
+//! `@members` bodies split into struct fields, impl items, and module items.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::io;
 
-use crate::templates::{
-    GrammarSourceCursor, matching_action_brace, next_parser_action_block, skip_ascii_whitespace,
-};
+use crate::templates::{matching_action_brace, skip_ascii_whitespace};
 
 /// One `name: type` attribute declared in a rule's `[...]` args clause or
 /// `returns [...]` / `locals [...]` clauses.
@@ -29,20 +27,6 @@ pub(crate) struct AttrDecl {
     pub(crate) name: String,
     /// Rust type after mapping (Java `int` -> `i32`, `boolean` -> `bool`, …).
     pub(crate) ty: String,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct LocatedAttrDecl {
-    pub(crate) declaration: AttrDecl,
-    pub(crate) name_offset: usize,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct ScopeDecl {
-    pub(crate) name: String,
-    pub(crate) ty: Option<String>,
-    pub(crate) initializer: Option<String>,
-    pub(crate) name_offset: usize,
 }
 
 /// One element reference inside an alternative: a rule ref, token ref, or a
@@ -82,7 +66,7 @@ impl AltModel {
     }
 }
 
-/// Parsed model of one parser rule from the rendered grammar source.
+/// Structural model of one compiled parser rule.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct RuleModel {
     pub(crate) name: String,
@@ -96,8 +80,6 @@ pub(crate) struct RuleModel {
     pub(crate) arg_names: Vec<String>,
     pub(crate) init_body: Option<String>,
     pub(crate) after_body: Option<String>,
-    /// Byte span of the rule body (between `:` and `;`).
-    pub(crate) body_span: (usize, usize),
     pub(crate) alts: Vec<AltModel>,
 }
 
@@ -162,167 +144,13 @@ pub(crate) enum ActionSite {
 /// Maps a grammar attribute type (possibly Java-flavored, possibly already
 /// Rust from the rendered templates) onto the Rust type the generated attrs
 /// struct uses.
-fn map_attr_type(raw: &str) -> String {
+pub(crate) fn map_attr_type(raw: &str) -> String {
     match raw.trim() {
         "int" => "i32".to_owned(),
         "boolean" => "bool".to_owned(),
         "float" | "double" => "f64".to_owned(),
         other => other.to_owned(),
     }
-}
-
-/// Parses `[a: i32, int b, String s]`-style attribute declarations, accepting
-/// both the rendered Rust `name: type` form and raw `type name` descriptors.
-pub(crate) fn parse_attr_decls(clause: &str) -> Vec<AttrDecl> {
-    parse_attr_decls_with_offsets(clause)
-        .into_iter()
-        .map(|located| located.declaration)
-        .collect()
-}
-
-pub(crate) fn parse_attr_decls_with_offsets(clause: &str) -> Vec<LocatedAttrDecl> {
-    parse_scope_decls(clause)
-        .into_iter()
-        .map(|declaration| LocatedAttrDecl {
-            name_offset: declaration.name_offset,
-            declaration: AttrDecl {
-                name: declaration.name,
-                ty: declaration
-                    .ty
-                    .as_deref()
-                    .map_or_else(String::new, map_attr_type),
-            },
-        })
-        .collect()
-}
-
-pub(crate) fn parse_scope_decls(clause: &str) -> Vec<ScopeDecl> {
-    split_top_level(clause, ',')
-        .into_iter()
-        .filter_map(|(raw_offset, raw_part)| {
-            let leading = raw_part.len() - raw_part.trim_start().len();
-            let part_offset = raw_offset + leading;
-            let part = raw_part.trim();
-            if part.is_empty() {
-                return None;
-            }
-
-            let (declarator, initializer) =
-                part.find('=')
-                    .filter(|index| *index > 0)
-                    .map_or((part, None), |equals| {
-                        (
-                            part[..equals].trim_end(),
-                            Some(part[equals + 1..].trim().to_owned()),
-                        )
-                    });
-            let (name, ty, name_offset) = if let Some(colon) = postfix_type_colon(declarator) {
-                parse_postfix_scope_decl(declarator, colon)?
-            } else {
-                parse_prefix_scope_decl(declarator)?
-            };
-            Some(ScopeDecl {
-                name,
-                ty,
-                initializer,
-                name_offset: part_offset + name_offset,
-            })
-        })
-        .collect()
-}
-
-fn postfix_type_colon(declarator: &str) -> Option<usize> {
-    declarator
-        .char_indices()
-        .find(|(index, character)| {
-            if *character != ':' {
-                return false;
-            }
-            !declarator[..*index].ends_with(':') && !declarator[*index + 1..].starts_with(':')
-        })
-        .map(|(index, _)| index)
-}
-
-fn parse_prefix_scope_decl(declarator: &str) -> Option<(String, Option<String>, usize)> {
-    let mut in_identifier = false;
-    let mut start = None;
-    for (index, character) in declarator.char_indices().rev() {
-        if !in_identifier && character.is_alphanumeric() {
-            in_identifier = true;
-        } else if in_identifier && !is_identifier_character(character) {
-            start = Some(index + character.len_utf8());
-            break;
-        }
-    }
-    let start = start.or_else(|| in_identifier.then_some(0))?;
-    let stop = declarator[start..]
-        .char_indices()
-        .find(|(_, character)| !is_identifier_character(*character))
-        .map_or(declarator.len(), |(offset, _)| start + offset);
-    let name = declarator[start..stop].to_owned();
-    let ty = format!("{}{}", &declarator[..start], &declarator[stop..]);
-    let ty = nonempty_trimmed(&ty);
-    Some((name, ty, start))
-}
-
-fn parse_postfix_scope_decl(
-    declarator: &str,
-    colon: usize,
-) -> Option<(String, Option<String>, usize)> {
-    let name_part = &declarator[..colon];
-    let start = name_part
-        .char_indices()
-        .find(|(_, character)| is_identifier_character(*character))
-        .map(|(index, _)| index)?;
-    let stop = name_part[start..]
-        .char_indices()
-        .find(|(_, character)| !is_identifier_character(*character))
-        .map_or(name_part.len(), |(offset, _)| start + offset);
-    let name = name_part[start..stop].to_owned();
-    let ty = nonempty_trimmed(&declarator[colon + 1..]);
-    Some((name, ty, start))
-}
-
-fn nonempty_trimmed(value: &str) -> Option<String> {
-    let value = value.trim();
-    (!value.is_empty()).then(|| value.to_owned())
-}
-
-fn is_identifier_character(character: char) -> bool {
-    character == '_' || character.is_alphanumeric()
-}
-
-/// Removes a raw grammar initializer when it is the type's Rust `Default`.
-///
-/// Embedded attrs are initialized through `Default::default()`, so retaining
-/// explicit `false` / zero initializers would only prevent the declaration
-/// parser from recognizing otherwise portable ANTLR rule locals.
-#[cfg(test)]
-fn strip_default_initializer(part: &str) -> &str {
-    let Some(index) = part
-        .as_bytes()
-        .iter()
-        .enumerate()
-        .find_map(|(index, byte)| {
-            if *byte != b'='
-                || part.as_bytes().get(index + 1) == Some(&b'=')
-                || part
-                    .as_bytes()
-                    .get(index.wrapping_sub(1))
-                    .is_some_and(|byte| matches!(*byte, b'!' | b'<' | b'>' | b'='))
-            {
-                return None;
-            }
-            Some(index)
-        })
-    else {
-        return part;
-    };
-    let (declaration, value) = part.split_at(index);
-    let value = &value[1..];
-    matches!(value.trim(), "false" | "0")
-        .then_some(declaration.trim_end())
-        .unwrap_or(part)
 }
 
 /// Splits `name: type`, tolerating generic types containing `:` (`Vec<T>` has
@@ -337,35 +165,6 @@ fn split_name_colon_type(part: &str) -> Option<(&str, &str)> {
     (is_identifier(name) && !ty.is_empty()).then_some((name, ty))
 }
 
-/// Splits on `separator` at zero bracket/paren/angle/brace depth outside
-/// string literals.
-fn split_top_level(text: &str, separator: char) -> Vec<(usize, &str)> {
-    let mut parts = Vec::new();
-    let mut depth = 0_i32;
-    let mut start = 0;
-    let mut quoted = false;
-    let mut escaped = false;
-    for (index, ch) in text.char_indices() {
-        if escaped {
-            escaped = false;
-            continue;
-        }
-        match ch {
-            '\\' if quoted => escaped = true,
-            '"' => quoted = !quoted,
-            '(' | '[' | '{' | '<' if !quoted => depth += 1,
-            ')' | ']' | '}' | '>' if !quoted => depth -= 1,
-            _ if ch == separator && !quoted && depth == 0 => {
-                parts.push((start, &text[start..index]));
-                start = index + ch.len_utf8();
-            }
-            _ => {}
-        }
-    }
-    parts.push((start, &text[start..]));
-    parts
-}
-
 fn is_identifier(value: &str) -> bool {
     let mut chars = value.chars();
     chars
@@ -374,495 +173,9 @@ fn is_identifier(value: &str) -> bool {
         && chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
 }
 
-/// Parses the rendered grammar into the embedded model.
-///
-/// `parser_rule_names` come from the parser `.interp` metadata and define
-/// both which rules matter and their indices.
-pub(crate) fn parse_embedded_model(
-    source: &str,
-    parser_rule_names: &[String],
-) -> io::Result<EmbeddedModel> {
-    let mut model = parse_embedded_rules_model(source, parser_rule_names);
-    model.parser_members = parse_members_blocks(source, &["@parser::members", "@members"])?;
-    Ok(model)
-}
-
-/// Parses only parser rule structure from the rendered grammar.
-///
-/// This is enough for action-state attribution in non-embedded generation,
-/// where target-specific `@members` bodies are irrelevant and may be Java,
-/// Python, or another runtime's syntax.
-pub(crate) fn parse_embedded_rules_model(
-    source: &str,
-    parser_rule_names: &[String],
-) -> EmbeddedModel {
-    let mut rules: Vec<RuleModel> = parser_rule_names
-        .iter()
-        .map(|name| RuleModel {
-            name: name.clone(),
-            ..RuleModel::default()
-        })
-        .collect();
-
-    for (name, header_start, colon, semicolon) in rule_definitions(source) {
-        let Some(rule_index) = parser_rule_names.iter().position(|rule| *rule == name) else {
-            continue;
-        };
-        let rule = &mut rules[rule_index];
-        // Composite grammars can override an imported rule; the first
-        // (delegator) definition wins, matching ANTLR's import semantics.
-        if rule.body_span != (0, 0) {
-            continue;
-        }
-        parse_rule_header_clauses(source, header_start, colon, rule);
-        rule.body_span = (colon + 1, semicolon);
-        rule.alts = parse_alternatives(source, colon + 1, semicolon);
-    }
-
-    EmbeddedModel {
-        rules,
-        parser_members: MembersModel::default(),
-    }
-}
-
-/// Yields `(rule_name, header_start, colon_offset, semicolon_offset)` for
-/// each rule definition in the grammar.
-fn rule_definitions(source: &str) -> Vec<(String, usize, usize, usize)> {
-    let mut definitions = Vec::new();
-    let mut cursor = GrammarSourceCursor::new(source, 0);
-    let mut statement_start: Option<usize> = None;
-    let mut first_identifier: Option<(usize, usize)> = None;
-    while let Some((index, ch)) = cursor.next_significant() {
-        match ch {
-            '@' => {
-                // A named action (`@parser::members {...}` at grammar level,
-                // `@init`/`@after` inside a rule header): skip its brace
-                // block wholesale so its `::`, `;` and `:` never reach the
-                // statement scan. Rule-header state is preserved, so a rule's
-                // own `@init` keeps the pending rule identifier.
-                if let Some(brace) = source[index..].find('{').map(|found| index + found) {
-                    if let Some(close) = matching_action_brace(source, brace + 1) {
-                        cursor.seek(close + 1);
-                    }
-                }
-            }
-            '{' | '[' => {
-                // Skip named-action bodies / arg clauses wholesale so `;` and
-                // `:` inside them cannot desynchronize the statement scan.
-                let close = if ch == '{' {
-                    matching_action_brace(source, index + 1)
-                } else {
-                    matching_arg_bracket(source, index + 1)
-                };
-                if let Some(close) = close {
-                    cursor.seek(close + 1);
-                }
-                // A grammar-level `options {...}` / `tokens {...}` statement
-                // ends with its block; clear it so the next rule's name is
-                // not mistaken for a continuation of this statement.
-                if matches!(
-                    first_identifier.map(|(start, end)| &source[start..end]),
-                    Some("options" | "tokens")
-                ) {
-                    statement_start = None;
-                    first_identifier = None;
-                }
-            }
-            ':' if first_identifier.is_some() => {
-                // `::` inside e.g. `@parser::members` never reaches here (the
-                // brace skip above consumes those blocks before their colon).
-                let (id_start, id_end) = first_identifier.expect("checked above");
-                let name = &source[id_start..id_end];
-                let header_start = statement_start.unwrap_or(id_start);
-                // Find the closing `;` from here, skipping action braces.
-                let mut end_cursor = GrammarSourceCursor::new(source, index + 1);
-                let mut semicolon = None;
-                while let Some((end_index, end_ch)) = end_cursor.next_significant() {
-                    match end_ch {
-                        '{' => {
-                            if let Some(close) = matching_action_brace(source, end_index + 1) {
-                                end_cursor.seek(close + 1);
-                            }
-                        }
-                        '[' => {
-                            if let Some(close) = matching_arg_bracket(source, end_index + 1) {
-                                end_cursor.seek(close + 1);
-                            }
-                        }
-                        ';' => {
-                            semicolon = Some(end_index);
-                            break;
-                        }
-                        _ => {}
-                    }
-                }
-                if let Some(semicolon) = semicolon {
-                    definitions.push((name.to_owned(), header_start, index, semicolon));
-                    cursor.seek(semicolon + 1);
-                }
-                statement_start = None;
-                first_identifier = None;
-            }
-            ';' => {
-                statement_start = None;
-                first_identifier = None;
-            }
-            _ if ch == '_' || ch.is_ascii_alphanumeric() => {
-                if statement_start.is_none() {
-                    statement_start = Some(index);
-                }
-                if first_identifier.is_none() {
-                    let mut end = index + ch.len_utf8();
-                    while source[end..]
-                        .chars()
-                        .next()
-                        .is_some_and(|next| next == '_' || next.is_ascii_alphanumeric())
-                    {
-                        end += 1;
-                    }
-                    // `grammar X;`, `import Y;`, `mode M;` headers and option
-                    // keywords are filtered by the parser-rule-name lookup in
-                    // the caller; here we just record the identifier.
-                    first_identifier = Some((index, end));
-                    cursor.seek(end);
-                }
-            }
-            _ => {}
-        }
-    }
-    definitions
-}
-
-/// `[` matcher for arg clauses: unlike lexer char sets these nest `[...]`
-/// rarely, but strings may contain `]`.
-fn matching_arg_bracket(source: &str, mut index: usize) -> Option<usize> {
-    let mut nested = 0_usize;
-    let mut quoted = false;
-    let mut escaped = false;
-    while let Some(ch) = source[index..].chars().next() {
-        if escaped {
-            escaped = false;
-            index += ch.len_utf8();
-            continue;
-        }
-        match ch {
-            '\\' => escaped = true,
-            '"' => quoted = !quoted,
-            '[' if !quoted => nested += 1,
-            ']' if !quoted && nested == 0 => return Some(index),
-            ']' if !quoted => nested -= 1,
-            _ => {}
-        }
-        index += ch.len_utf8();
-    }
-    None
-}
-
-/// Parses the clauses between a rule's name and its `:`: args `[...]`,
-/// `returns [...]`, `locals [...]`, `@init {...}`, `@after {...}`.
-fn parse_rule_header_clauses(
-    source: &str,
-    header_start: usize,
-    colon: usize,
-    rule: &mut RuleModel,
-) {
-    let header = &source[header_start..colon];
-    let mut offset = 0;
-    // The rule name itself.
-    offset = skip_ascii_whitespace(header, offset);
-    while offset < header.len()
-        && header[offset..]
-            .chars()
-            .next()
-            .is_some_and(|ch| ch == '_' || ch.is_ascii_alphanumeric())
-    {
-        offset += 1;
-    }
-    let mut pending_keyword: Option<&str> = None;
-    while offset < header.len() {
-        offset = skip_ascii_whitespace(header, offset);
-        if offset >= header.len() {
-            break;
-        }
-        let rest = &header[offset..];
-        if rest.starts_with('[') {
-            let Some(close) = matching_arg_bracket(header, offset + 1) else {
-                break;
-            };
-            let clause = &header[offset + 1..close];
-            let decls = parse_attr_decls(clause);
-            match pending_keyword.take() {
-                Some("locals") => {
-                    rule.local_names
-                        .extend(decls.iter().map(|decl| decl.name.clone()));
-                    rule.attrs.extend(decls);
-                }
-                Some("returns") => rule.attrs.extend(decls),
-                _ => {
-                    for decl in &decls {
-                        rule.arg_names.push(decl.name.clone());
-                    }
-                    rule.attrs.extend(decls);
-                }
-            }
-            offset = close + 1;
-        } else if rest.starts_with("returns") {
-            pending_keyword = Some("returns");
-            offset += "returns".len();
-        } else if rest.starts_with("locals") {
-            pending_keyword = Some("locals");
-            offset += "locals".len();
-        } else if rest.starts_with("@init") || rest.starts_with("@after") {
-            let is_init = rest.starts_with("@init");
-            let Some(brace) = header[offset..].find('{').map(|found| offset + found) else {
-                break;
-            };
-            let Some(close) = matching_action_brace(header, brace + 1) else {
-                break;
-            };
-            let body = header[brace + 1..close].trim().to_owned();
-            if !body.is_empty() {
-                if is_init {
-                    rule.init_body = Some(body);
-                } else {
-                    rule.after_body = Some(body);
-                }
-            }
-            offset = close + 1;
-        } else if rest.starts_with("options") {
-            let Some(brace) = header[offset..].find('{').map(|found| offset + found) else {
-                break;
-            };
-            let Some(close) = matching_action_brace(header, brace + 1) else {
-                break;
-            };
-            offset = close + 1;
-        } else {
-            offset += rest.chars().next().map_or(1, char::len_utf8);
-        }
-    }
-}
-
-/// Splits a rule body into top-level alternatives and scans each one's
-/// element references (labels, rule refs, token refs) in source order.
-fn parse_alternatives(source: &str, body_start: usize, body_end: usize) -> Vec<AltModel> {
-    let mut alts = Vec::new();
-    let mut alt_start = body_start;
-    let mut cursor = GrammarSourceCursor::new(source, body_start);
-    let mut depth = 0_i32;
-    while let Some((index, ch)) = cursor.next_significant() {
-        if index >= body_end {
-            break;
-        }
-        match ch {
-            '{' => {
-                if let Some(close) = matching_action_brace(source, index + 1) {
-                    cursor.seek(close + 1);
-                }
-            }
-            '[' => {
-                if let Some(close) = matching_arg_bracket(source, index + 1) {
-                    cursor.seek(close + 1);
-                }
-            }
-            '(' => depth += 1,
-            ')' => depth -= 1,
-            '|' if depth == 0 => {
-                alts.push(parse_alt(source, alt_start, index));
-                alt_start = index + 1;
-            }
-            _ => {}
-        }
-    }
-    alts.push(parse_alt(source, alt_start, body_end));
-    alts
-}
-
-/// Scans one alternative's labels and references.
-fn parse_alt(source: &str, start: usize, end: usize) -> AltModel {
-    let mut refs = Vec::new();
-    let mut label: Option<String> = None;
-    let mut pending_label: Option<String> = None;
-    let mut pending_list = false;
-    let mut cursor = GrammarSourceCursor::new(source, start);
-    while let Some((index, ch)) = cursor.next_significant() {
-        if index >= end {
-            break;
-        }
-        match ch {
-            '{' => {
-                if let Some(close) = matching_action_brace(source, index + 1) {
-                    cursor.seek(close + 1);
-                }
-            }
-            '[' => {
-                if let Some(close) = matching_arg_bracket(source, index + 1) {
-                    cursor.seek(close + 1);
-                }
-            }
-            '<' => {
-                // Element options such as `<assoc=right>`.
-                if let Some(close) = source[index..end].find('>') {
-                    cursor.seek(index + close + 1);
-                }
-            }
-            '#' => {
-                // Alternative label.
-                let rest = source[index + 1..end].trim();
-                let name: String = rest
-                    .chars()
-                    .take_while(|ch| *ch == '_' || ch.is_ascii_alphanumeric())
-                    .collect();
-                if !name.is_empty() {
-                    label = Some(name);
-                }
-                // Nothing after the label matters for refs.
-                break;
-            }
-            '(' | '~' => {
-                if let Some(block_label) = pending_label.take() {
-                    refs.push(ElementRef {
-                        label: Some(block_label),
-                        target: String::new(),
-                        is_block: true,
-                        is_list: std::mem::take(&mut pending_list),
-                    });
-                }
-            }
-            _ if ch == '_' || ch.is_ascii_alphabetic() => {
-                let mut word_end = index + ch.len_utf8();
-                while source[word_end..]
-                    .chars()
-                    .next()
-                    .is_some_and(|next| next == '_' || next.is_ascii_alphanumeric())
-                {
-                    word_end += 1;
-                }
-                let word = &source[index..word_end];
-                cursor.seek(word_end);
-                // Label assignment? `x=ref` / `x+=ref` (but not `==`).
-                let after = skip_ascii_whitespace(source, word_end);
-                let bytes = source.as_bytes();
-                let is_label = match bytes.get(after) {
-                    Some(b'=') => bytes.get(after + 1) != Some(&b'='),
-                    Some(b'+') => bytes.get(after + 1) == Some(&b'='),
-                    _ => false,
-                };
-                if is_label {
-                    pending_label = Some(word.to_owned());
-                    pending_list = bytes.get(after) == Some(&b'+');
-                    let skip = if pending_list { 2 } else { 1 };
-                    let value_start = skip_ascii_whitespace(source, after + skip);
-                    // A label directly on a string literal (`label='y'`): the
-                    // cursor skips quoted text, so record the ref here.
-                    if bytes.get(value_start) == Some(&b'\'') {
-                        refs.push(ElementRef {
-                            label: pending_label.take(),
-                            target: String::new(),
-                            is_block: true,
-                            is_list: std::mem::take(&mut pending_list),
-                        });
-                    }
-                    cursor.seek(after + skip);
-                } else if word == "EOF" {
-                    pending_label = None;
-                } else {
-                    refs.push(ElementRef {
-                        label: pending_label.take(),
-                        target: word.to_owned(),
-                        is_block: false,
-                        is_list: std::mem::take(&mut pending_list),
-                    });
-                }
-            }
-            _ => {}
-        }
-    }
-    AltModel {
-        label,
-        span: (start, end),
-        refs,
-        leading_target: leading_element_target(source, start, end),
-    }
-}
-
-/// Scans the raw alternative text for its first syntactic element and
-/// returns the referenced name when that element is a bare identifier,
-/// allowing `label=` / `label+=` prefixes and `<assoc=right>`-style element
-/// options before it. Anything else — a string literal, `(...)` block,
-/// `~set`, or `{action}` — yields `None`.
-fn leading_element_target(source: &str, start: usize, end: usize) -> Option<String> {
-    let bytes = source.as_bytes();
-    let mut index = start;
-    loop {
-        index = skip_ascii_whitespace(source, index);
-        if index >= end {
-            return None;
-        }
-        match bytes[index] {
-            b'<' => {
-                let close = source[index..end].find('>')?;
-                index += close + 1;
-            }
-            b'/' if bytes.get(index + 1) == Some(&b'/') => {
-                let newline = source[index..end].find('\n')?;
-                index += newline + 1;
-            }
-            b'/' if bytes.get(index + 1) == Some(&b'*') => {
-                let close = source[index..end].find("*/")?;
-                index += close + 2;
-            }
-            byte if byte == b'_' || byte.is_ascii_alphabetic() => {
-                let mut word_end = index + 1;
-                while word_end < end
-                    && (bytes[word_end] == b'_' || bytes[word_end].is_ascii_alphanumeric())
-                {
-                    word_end += 1;
-                }
-                let word = &source[index..word_end];
-                let after = skip_ascii_whitespace(source, word_end);
-                let is_label = match bytes.get(after) {
-                    Some(b'=') => bytes.get(after + 1) != Some(&b'='),
-                    Some(b'+') => bytes.get(after + 1) == Some(&b'='),
-                    _ => false,
-                };
-                if is_label {
-                    // The labeled element follows; keep scanning.
-                    index = after + if bytes[after] == b'+' { 2 } else { 1 };
-                    continue;
-                }
-                return Some(word.to_owned());
-            }
-            _ => return None,
-        }
-    }
-}
-
-/// Parses `@parser::members {...}` / `@members {...}` blocks into the
-/// members model. Multiple blocks accumulate.
-fn parse_members_blocks(source: &str, markers: &[&str]) -> io::Result<MembersModel> {
-    let mut members = MembersModel::default();
-    let mut offset = 0;
-    while let Some(block) = next_parser_action_block(source, offset, |_| true) {
-        offset = block.after_brace;
-        let prefix = source[..block.open_brace].trim_end();
-        if !markers.iter().any(|marker| prefix.ends_with(marker)) {
-            continue;
-        }
-        // `@lexer::members` also ends with `@members`? No — markers are
-        // matched exactly against the trailing token, and `@lexer::members`
-        // ends with `members`, not `@members`.
-        if prefix.ends_with("@lexer::members") && !markers.contains(&"@lexer::members") {
-            continue;
-        }
-        classify_members(block.body, &mut members)?;
-    }
-    Ok(members)
-}
-
 /// Splits a members body into field declarations, impl items, and module
 /// items.
-fn classify_members(body: &str, members: &mut MembersModel) -> io::Result<()> {
+pub(crate) fn classify_members(body: &str, members: &mut MembersModel) -> io::Result<()> {
     let mut offset = 0;
     let mut pending_attrs = String::new();
     while offset < body.len() {
@@ -981,7 +294,7 @@ pub(crate) struct TranslationCtx<'a> {
     /// `@after` bodies (labels resolve across all alternatives there).
     pub(crate) body_offset: Option<usize>,
     pub(crate) site: ActionSite,
-    /// Token name -> token type, from the `.interp` metadata.
+    /// Token name -> token type, from the compiled recognizer metadata.
     pub(crate) token_types: &'a BTreeMap<String, i32>,
 }
 
@@ -1328,13 +641,20 @@ pub(crate) fn escape_keyword(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::grammar::{ScopeDecl, parse_scope_decls};
 
-    fn model(source: &str, rules: &[&str]) -> EmbeddedModel {
-        parse_embedded_model(
-            source,
-            &rules.iter().map(|&r| r.to_owned()).collect::<Vec<_>>(),
-        )
-        .expect("model parses")
+    fn model(rules: Vec<RuleModel>) -> EmbeddedModel {
+        EmbeddedModel {
+            rules,
+            parser_members: MembersModel::default(),
+        }
+    }
+
+    fn rule(name: &str) -> RuleModel {
+        RuleModel {
+            name: name.to_owned(),
+            ..RuleModel::default()
+        }
     }
 
     fn tokens(pairs: &[(&str, i32)]) -> BTreeMap<String, i32> {
@@ -1345,102 +665,10 @@ mod tests {
     }
 
     #[test]
-    fn parses_rule_attrs_and_alts() {
-        let source = "grammar T;\n\
-            s : e {writeln!(self.output(), \"{}\", $e.v);} ;\n\
-            e returns [v: i32] : a=e '*' b=e {$v = 1;} | INT {$v = 2;} ;\n\
-            INT : [0-9]+ ;\n";
-        let m = model(source, &["s", "e"]);
-        assert_eq!(
-            m.rules[1].attrs,
-            vec![AttrDecl {
-                name: "v".into(),
-                ty: "i32".into()
-            }]
-        );
-        assert_eq!(m.rules[1].alts.len(), 2);
-        assert_eq!(m.rules[1].alts[0].refs.len(), 2);
-        assert_eq!(m.rules[1].alts[0].refs[0].label.as_deref(), Some("a"));
-        assert_eq!(m.rules[1].alts[0].refs[1].label.as_deref(), Some("b"));
-    }
-
-    #[test]
-    fn parses_raw_default_valued_rule_locals() {
-        let model = parse_embedded_rules_model(
-            "parser grammar T;\ns locals [boolean seen=false, int count = 0] : ;",
-            &["s".to_owned()],
-        );
-
-        assert_eq!(
-            model.rules[0].attrs,
-            [
-                AttrDecl {
-                    name: "seen".to_owned(),
-                    ty: "bool".to_owned(),
-                },
-                AttrDecl {
-                    name: "count".to_owned(),
-                    ty: "i32".to_owned(),
-                },
-            ]
-        );
-        assert_eq!(model.rules[0].local_names, ["seen", "count"]);
-    }
-
-    #[test]
-    fn preserves_non_default_local_comparison_initializers() {
-        assert_eq!(
-            strip_default_initializer("boolean seen = other == false"),
-            "boolean seen = other == false"
-        );
-        assert_eq!(
-            strip_default_initializer("int count = other == 0"),
-            "int count = other == 0"
-        );
-        assert_eq!(
-            strip_default_initializer("boolean seen=false"),
-            "boolean seen"
-        );
-        assert_eq!(strip_default_initializer("int count = 0"), "int count");
-    }
-
-    #[test]
-    fn parses_java_style_attr_decls() {
-        let decls = parse_attr_decls("int v, String s");
-        assert_eq!(
-            decls[0],
-            AttrDecl {
-                name: "v".into(),
-                ty: "i32".into()
-            }
-        );
-        assert_eq!(
-            decls[1],
-            AttrDecl {
-                name: "s".into(),
-                ty: "String".into()
-            }
-        );
-    }
-
-    #[test]
-    fn locates_rust_and_java_style_attr_names() {
-        let clause = "  value: i32, int expr, String name";
-        let declarations = parse_attr_decls_with_offsets(clause);
-        assert_eq!(
-            declarations
-                .iter()
-                .map(|declaration| (
-                    declaration.declaration.name.as_str(),
-                    declaration.name_offset
-                ))
-                .collect::<Vec<_>>(),
-            [
-                ("value", clause.find("value").expect("value offset")),
-                ("expr", clause.find("expr").expect("expr offset")),
-                ("name", clause.find("name").expect("name offset")),
-            ],
-        );
+    fn maps_attribute_types_for_generated_rust() {
+        assert_eq!(map_attr_type("int"), "i32");
+        assert_eq!(map_attr_type("boolean"), "bool");
+        assert_eq!(map_attr_type("std::string::String"), "std::string::String");
     }
 
     mod upstream_scope_parsing {
@@ -1508,10 +736,12 @@ mod tests {
 
     #[test]
     fn translates_attr_and_rule_reads() {
-        let source = "grammar T;\n\
-            s : e {writeln!(self.output(), \"{}\", $e.v);} ;\n\
-            e returns [v: i32] : INT {$v = $INT.int;} ;\n";
-        let m = model(source, &["s", "e"]);
+        let mut expression = rule("e");
+        expression.attrs.push(AttrDecl {
+            name: "v".to_owned(),
+            ty: "i32".to_owned(),
+        });
+        let m = model(vec![rule("s"), expression]);
         let toks = tokens(&[("INT", 1)]);
         let ctx = TranslationCtx {
             model: &m,
@@ -1542,9 +772,53 @@ mod tests {
     }
 
     #[test]
+    fn resolves_structural_labels_within_the_owning_alternative() {
+        let mut statement = rule("s");
+        statement.alts.push(AltModel {
+            label: None,
+            span: (10, 20),
+            refs: vec![
+                ElementRef {
+                    label: Some("left".to_owned()),
+                    target: "e".to_owned(),
+                    is_block: false,
+                    is_list: false,
+                },
+                ElementRef {
+                    label: Some("right".to_owned()),
+                    target: "e".to_owned(),
+                    is_block: false,
+                    is_list: false,
+                },
+            ],
+            leading_target: Some("e".to_owned()),
+        });
+        let mut expression = rule("e");
+        expression.attrs.push(AttrDecl {
+            name: "v".to_owned(),
+            ty: "i32".to_owned(),
+        });
+        let m = model(vec![statement, expression]);
+        let toks = tokens(&[]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: Some(15),
+            site: ActionSite::Body,
+            token_types: &toks,
+        };
+
+        let translated = translate_body("$right.v", &ctx).expect("translates");
+        assert!(translated.contains(".nth(1)"), "{translated}");
+        assert!(
+            translated.contains("generated_attrs::<__RuleAttrs1>"),
+            "{translated}"
+        );
+    }
+
+    #[test]
     fn translates_ctx_and_text() {
-        let source = "grammar T;\ns : ID {writeln!(self.output(), \"{}\", $text);} ;\n";
-        let m = model(source, &["s"]);
+        let m = model(vec![rule("s")]);
         let toks = tokens(&[("ID", 1)]);
         let ctx = TranslationCtx {
             model: &m,
@@ -1564,27 +838,24 @@ mod tests {
 
     #[test]
     fn classifies_member_blocks() {
-        let source = "grammar T;\n\
-            @parser::members {\n\
-            i: i32 = 0;\n\
+        let body = "i: i32 = 0;\n\
             #[allow(non_snake_case)]\n\
             fn Property(&self) -> bool {\n    true\n}\n\
-            struct LeafListener;\n\
-            }\n\
-            s : ID ;\n";
-        let m = model(source, &["s"]);
-        assert_eq!(m.parser_members.fields.len(), 1);
-        assert_eq!(m.parser_members.fields[0].name, "i");
-        assert_eq!(m.parser_members.fields[0].init, "0");
-        assert_eq!(m.parser_members.impl_items.len(), 1);
-        assert!(m.parser_members.impl_items[0].contains("fn Property"));
-        assert_eq!(m.parser_members.module_items.len(), 1);
+            struct LeafListener;\n";
+        let mut members = MembersModel::default();
+        classify_members(body, &mut members).expect("members classify");
+
+        assert_eq!(members.fields.len(), 1);
+        assert_eq!(members.fields[0].name, "i");
+        assert_eq!(members.fields[0].init, "0");
+        assert_eq!(members.impl_items.len(), 1);
+        assert!(members.impl_items[0].contains("fn Property"));
+        assert_eq!(members.module_items.len(), 1);
     }
 
     #[test]
     fn dollar_inside_strings_is_left_alone() {
-        let source = "grammar T;\ns : ID ;\n";
-        let m = model(source, &["s"]);
+        let m = model(vec![rule("s")]);
         let toks = tokens(&[("ID", 1)]);
         let ctx = TranslationCtx {
             model: &m,

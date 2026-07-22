@@ -1,0 +1,19 @@
+---
+source: src/bin/antlr4-rust-gen.rs
+expression: manifest
+---
+{
+  "version": 2,
+  "policy": "assume-true",
+  "note": "unknown coordinates currently default to assume-true; a future minor release changes the default to error",
+  "options": [],
+  "grammars": [
+    {
+      "kind": "parser",
+      "name": "SParser",
+      "coordinates": [
+        {"kind": "parser-predicate", "rule": "s", "rule_index": 0, "index": 0, "atn_state": null, "line": 4, "column": 6, "body": "isTypeName()", "disposition": "assume-true", "template": null}
+      ]
+    }
+  ]
+}

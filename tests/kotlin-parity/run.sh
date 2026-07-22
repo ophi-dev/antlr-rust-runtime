@@ -53,7 +53,7 @@ if [ -z "$WORK_DIR" ]; then
     WORK_DIR="$(mktemp -d -t kotlin-parity.XXXXXX)"
     trap 'rm -rf "$WORK_DIR"' EXIT
 fi
-mkdir -p "$WORK_DIR/grammar" "$WORK_DIR/py-gen" "$WORK_DIR/interp"
+mkdir -p "$WORK_DIR/grammar" "$WORK_DIR/py-gen" "$WORK_DIR/rust-gen"
 
 KOTLIN_DIR="$GRAMMARS_V4/kotlin/kotlin"
 for grammar in KotlinLexer.g4 KotlinParser.g4 UnicodeClasses.g4; do
@@ -70,8 +70,6 @@ done
     cd "$WORK_DIR/grammar"
     java -jar "$ANTLR4_JAR" -Dlanguage=Python3 -o "$WORK_DIR/py-gen" \
         KotlinLexer.g4 KotlinParser.g4
-    java -jar "$ANTLR4_JAR" -o "$WORK_DIR/interp" -Xexact-output-dir \
-        KotlinLexer.g4 KotlinParser.g4
 )
 DUMPER_DIR="$SCRIPT_DIR/dumper"
 DUMPER_GEN="$DUMPER_DIR/src/generated"
@@ -79,14 +77,9 @@ mkdir -p "$DUMPER_GEN"
 cargo run --quiet --release --manifest-path "$REPO_ROOT/Cargo.toml" \
     --features codegen \
     --bin antlr4-rust-gen -- \
-    --lexer  "$WORK_DIR/interp/KotlinLexer.interp" \
-    --grammar "$WORK_DIR/grammar/KotlinLexer.g4" \
-    --out-dir "$WORK_DIR/rust-gen"
-cargo run --quiet --release --manifest-path "$REPO_ROOT/Cargo.toml" \
-    --features codegen \
-    --bin antlr4-rust-gen -- \
-    --parser "$WORK_DIR/interp/KotlinParser.interp" \
-    --grammar "$WORK_DIR/grammar/KotlinParser.g4" \
+    "$WORK_DIR/grammar/KotlinLexer.g4" \
+    "$WORK_DIR/grammar/KotlinParser.g4" \
+    --lib "$WORK_DIR/grammar" \
     --require-generated-parser \
     --out-dir "$WORK_DIR/rust-gen"
 cp "$WORK_DIR/rust-gen/kotlin_lexer.rs" "$WORK_DIR/rust-gen/kotlin_parser.rs" "$DUMPER_GEN/"

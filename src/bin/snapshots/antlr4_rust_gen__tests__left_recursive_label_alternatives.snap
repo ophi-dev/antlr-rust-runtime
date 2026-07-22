@@ -1,0 +1,90 @@
+---
+source: src/bin/antlr4-rust-gen.rs
+expression: "model.rules[1].alts"
+---
+[
+    AltModel {
+        label: None,
+        span: (
+            128,
+            176,
+        ),
+        refs: [
+            ElementRef {
+                label: Some(
+                    "left",
+                ),
+                target: "e",
+                is_block: false,
+                is_list: false,
+            },
+            ElementRef {
+                label: None,
+                target: "STAR",
+                is_block: false,
+                is_list: false,
+            },
+            ElementRef {
+                label: Some(
+                    "right",
+                ),
+                target: "e",
+                is_block: false,
+                is_list: false,
+            },
+        ],
+        leading_target: Some(
+            "e",
+        ),
+    },
+    AltModel {
+        label: None,
+        span: (
+            183,
+            231,
+        ),
+        refs: [
+            ElementRef {
+                label: Some(
+                    "left",
+                ),
+                target: "e",
+                is_block: false,
+                is_list: false,
+            },
+            ElementRef {
+                label: None,
+                target: "PLUS",
+                is_block: false,
+                is_list: false,
+            },
+            ElementRef {
+                label: Some(
+                    "right",
+                ),
+                target: "e",
+                is_block: false,
+                is_list: false,
+            },
+        ],
+        leading_target: Some(
+            "e",
+        ),
+    },
+    AltModel {
+        label: None,
+        span: (
+            238,
+            260,
+        ),
+        refs: [
+            ElementRef {
+                label: None,
+                target: "INT",
+                is_block: false,
+                is_list: false,
+            },
+        ],
+        leading_target: None,
+    },
+]

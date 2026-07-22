@@ -1,6 +1,8 @@
 use std::fmt;
+use std::path::PathBuf;
 
 use super::frontend::SourceSpan;
+use super::source::SourceSet;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Severity {
@@ -65,6 +67,13 @@ impl Diagnostic {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct CompilationError {
     diagnostics: Vec<Diagnostic>,
+    locations: Vec<Option<DiagnosticLocation>>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct DiagnosticLocation {
+    pub(crate) path: PathBuf,
+    pub(crate) position: Option<(usize, usize)>,
 }
 
 impl CompilationError {
@@ -74,11 +83,36 @@ impl CompilationError {
                 .iter()
                 .any(|diagnostic| diagnostic.severity == Severity::Error)
         );
-        Self { diagnostics }
+        let locations = vec![None; diagnostics.len()];
+        Self {
+            diagnostics,
+            locations,
+        }
+    }
+
+    pub(crate) fn with_sources(mut self, sources: &SourceSet) -> Self {
+        for (diagnostic, location) in self.diagnostics.iter().zip(&mut self.locations) {
+            if location.is_some() {
+                continue;
+            }
+            let source = diagnostic.primary.source;
+            let Some(path) = sources.logical_path(source) else {
+                continue;
+            };
+            *location = Some(DiagnosticLocation {
+                path: path.to_path_buf(),
+                position: sources.line_column(source, diagnostic.primary.bytes.start),
+            });
+        }
+        self
     }
 
     pub(crate) fn diagnostics(&self) -> &[Diagnostic] {
         &self.diagnostics
+    }
+
+    pub(crate) fn location(&self, index: usize) -> Option<&DiagnosticLocation> {
+        self.locations.get(index).and_then(Option::as_ref)
     }
 }
 

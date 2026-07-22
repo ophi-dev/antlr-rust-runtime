@@ -59,12 +59,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         summary.passed, summary.failed, summary.skipped, summary.ran
     );
 
-    if summary.failed == 0 {
+    if summary.failed == 0 && summary.skipped == 0 {
         Ok(())
     } else {
         Err(io::Error::other(format!(
-            "{} runtime-testsuite case(s) failed",
-            summary.failed
+            "{} runtime-testsuite case(s) failed and {} were skipped",
+            summary.failed, summary.skipped
         ))
         .into())
     }
@@ -503,13 +503,6 @@ impl Descriptor {
     fn is_lexer(&self) -> bool {
         matches!(self.test_type.as_str(), "Lexer" | "CompositeLexer")
     }
-
-    fn is_composite(&self) -> bool {
-        matches!(
-            self.test_type.as_str(),
-            "CompositeParser" | "CompositeLexer"
-        )
-    }
 }
 
 #[derive(Debug)]
@@ -749,22 +742,17 @@ fn grammar_name(grammar: &str) -> io::Result<String> {
     Ok(first_line[start + "grammar ".len()..stop].to_owned())
 }
 
-/// Classifies descriptors that the current metadata-first harness cannot run
-/// yet while keeping them visible in summaries.
+/// Classifies descriptor runtime modes that the Rust smoke harness does not
+/// implement. Any classified descriptor fails the sweep through the zero-skip
+/// gate in `main`.
 fn unsupported_reason(descriptor: &Descriptor) -> Option<&'static str> {
-    if !descriptor.slave_grammar_templates.is_empty() && !descriptor.is_composite() {
-        return Some("composite grammars are not wired into the metadata harness yet");
-    }
-    if descriptor.is_composite() && !composite_grammar_supported(descriptor) {
-        return Some("composite grammar shape is not wired into the metadata harness yet");
-    }
     if !descriptor.flags.is_empty() && !runtime_flags_supported(descriptor) {
         return Some("diagnostic/profile/DFA flags are not implemented in the Rust harness yet");
     }
     if descriptor.is_parser() || descriptor.is_lexer() {
         return None;
     }
-    Some("descriptor type is not supported by the metadata harness yet")
+    Some("descriptor type is not supported by the Rust harness yet")
 }
 
 /// Identifies descriptor runtime flags whose behavior is already represented by
@@ -793,63 +781,6 @@ fn runtime_flags_supported(descriptor: &Descriptor) -> bool {
             && descriptor.group == "FullContextParsing")
 }
 
-/// Whitelists composite descriptors whose import and action shapes are modeled by
-/// the current metadata harness.
-fn composite_grammar_supported(descriptor: &Descriptor) -> bool {
-    matches!(
-        descriptor.id().as_str(),
-        "CompositeLexers/LexerDelegatorInvokesDelegateRule"
-            | "CompositeLexers/LexerDelegatorRuleOverridesDelegate"
-            | "CompositeParsers/BringInLiteralsFromDelegate"
-            | "CompositeParsers/CombinedImportsCombined"
-            | "CompositeParsers/DelegatesSeeSameTokenType"
-            | "CompositeParsers/DelegatorAccessesDelegateMembers"
-            | "CompositeParsers/DelegatorInvokesDelegateRule"
-            | "CompositeParsers/DelegatorInvokesDelegateRuleWithArgs"
-            | "CompositeParsers/DelegatorInvokesDelegateRuleWithReturnStruct"
-            | "CompositeParsers/DelegatorInvokesFirstVersionOfDelegateRule"
-            | "CompositeParsers/DelegatorRuleOverridesDelegate"
-            | "CompositeParsers/DelegatorRuleOverridesDelegates"
-            | "CompositeParsers/DelegatorRuleOverridesLookaheadInDelegate"
-            | "CompositeParsers/ImportedGrammarWithEmptyOptions"
-            | "CompositeParsers/ImportedRuleWithAction"
-            | "CompositeParsers/ImportLexerWithOnlyFragmentRules"
-            | "CompositeParsers/KeywordVSIDOrder"
-    )
-}
-
-fn push_grammar_source(out: &mut String, grammar: &str) {
-    if !out.is_empty() && !out.ends_with('\n') {
-        out.push('\n');
-    }
-    out.push_str(grammar);
-    if !out.ends_with('\n') {
-        out.push('\n');
-    }
-}
-
-/// Extracts direct `import A, B;` dependencies from a grammar header.
-fn imported_grammar_names(grammar: &str) -> Vec<String> {
-    let mut names = Vec::new();
-    for line in grammar.lines() {
-        let line = line.split("//").next().unwrap_or_default().trim();
-        let Some(imports) = line
-            .strip_prefix("import ")
-            .and_then(|value| value.strip_suffix(';'))
-        else {
-            continue;
-        };
-        names.extend(
-            imports
-                .split(',')
-                .map(str::trim)
-                .filter(|name| !name.is_empty())
-                .map(ToOwned::to_owned),
-        );
-    }
-    names
-}
-
 /// Renders one grammar template through the target `.test.stg` group using
 /// the `StringTemplate` engine bundled in the ANTLR jar (driver precompiled
 /// once per sweep), mirroring upstream `RuntimeTests`.
@@ -876,18 +807,8 @@ fn render_grammar_through_stg(
     fs::read_to_string(&rendered_path)
 }
 
-/// Concatenates rendered grammars (delegator first) for the generator's
-/// `--grammar` action extraction.
-fn combined_rendered_grammar_source(rendered: &[String]) -> String {
-    let mut out = String::new();
-    for grammar in rendered {
-        push_grammar_source(&mut out, grammar);
-    }
-    out
-}
-
-/// Runs one descriptor through ANTLR metadata generation, Rust code generation,
-/// a temporary Cargo crate, and process output capture.
+/// Runs one rendered descriptor through direct Rust code generation, a
+/// temporary Cargo crate, and process output capture.
 fn run_descriptor(
     args: &Args,
     context: &SweepContext<'_>,
@@ -900,64 +821,22 @@ fn run_descriptor(
     }
     fs::create_dir_all(&case_dir)?;
 
-    let source_grammar_path = case_dir.join(format!("{}.source.g4", descriptor.grammar_name));
     let grammar_path = case_dir.join(format!("{}.g4", descriptor.grammar_name));
     // Render the descriptor grammar (and slaves) through the target
     // `.test.stg` with the real StringTemplate engine, exactly like the
-    // upstream harness. The rendered grammar feeds BOTH the ANTLR tool
-    // and the embedded-actions Rust generator.
+    // upstream harness. The rendered source graph then feeds the direct Rust
+    // compiler.
     let rendered =
         render_grammar_through_stg(context, &case_dir, "main", &descriptor.grammar_template)?;
     fs::write(&grammar_path, &rendered)?;
-    let mut rendered_slaves = Vec::new();
     for (index, slave) in descriptor.slave_grammar_templates.iter().enumerate() {
         let rendered_slave =
             render_grammar_through_stg(context, &case_dir, &format!("slave{index}"), slave)?;
         let slave_path = case_dir.join(format!("{}.g4", grammar_name(&rendered_slave)?));
         fs::write(&slave_path, &rendered_slave)?;
-        rendered_slaves.push(rendered_slave);
     }
-    // Delegates must follow the delegator's `import` clause order so an
-    // overridden rule keeps the same first definition ANTLR keeps.
-    let mut combined_rendered = vec![rendered.clone()];
-    let mut remaining: Vec<Option<String>> = rendered_slaves.into_iter().map(Some).collect();
-    for import in imported_grammar_names(&rendered) {
-        for slot in &mut remaining {
-            if slot
-                .as_deref()
-                .and_then(|slave| grammar_name(slave).ok())
-                .is_some_and(|name| name == import)
-            {
-                combined_rendered.extend(slot.take());
-            }
-        }
-    }
-    combined_rendered.extend(remaining.into_iter().flatten());
-    fs::write(
-        &source_grammar_path,
-        combined_rendered_grammar_source(&combined_rendered),
-    )?;
 
-    let java_dir = case_dir.join("antlr");
-    fs::create_dir_all(&java_dir)?;
-    run_checked(
-        Command::new("java")
-            .arg("-jar")
-            .arg(&args.antlr_jar)
-            .arg("-o")
-            .arg(&java_dir)
-            .arg("-Xexact-output-dir")
-            .arg(&grammar_path),
-        "ANTLR tool",
-    )?;
-
-    let rust_dir = generate_rust_modules(
-        context,
-        descriptor,
-        &java_dir,
-        &case_dir,
-        &source_grammar_path,
-    )?;
+    let rust_dir = generate_rust_modules(context, &case_dir, &grammar_path)?;
 
     let smoke_dir = case_dir.join("rust");
     create_smoke_crate(args, descriptor, &rust_dir, &smoke_dir)?;
@@ -990,38 +869,25 @@ fn remove_descriptor_work_dir(args: &Args, descriptor: &Descriptor) -> io::Resul
     fs::remove_dir_all(descriptor_work_dir(args, descriptor))
 }
 
-/// Runs the prebuilt `antlr4-rust-gen` for either a lexer descriptor or a
-/// combined parser descriptor.
+/// Runs the prebuilt source-only generator on the rendered root and lets its
+/// loader resolve delegate grammars from the case directory.
 fn generate_rust_modules(
     context: &SweepContext<'_>,
-    descriptor: &Descriptor,
-    java_dir: &Path,
     case_dir: &Path,
-    source_grammar_path: &Path,
+    grammar_path: &Path,
 ) -> io::Result<PathBuf> {
     let rust_dir = case_dir.join("generated");
     fs::create_dir_all(&rust_dir)?;
 
     let mut command = Command::new(&context.generator);
-    if descriptor.is_parser() {
-        command
-            .arg("--lexer")
-            .arg(java_dir.join(format!("{}Lexer.interp", descriptor.grammar_name)))
-            .arg("--parser")
-            .arg(java_dir.join(format!("{}.interp", descriptor.grammar_name)))
-            .arg("--grammar")
-            .arg(source_grammar_path)
-            .arg("--parser-name")
-            .arg(format!("{}Parser", descriptor.grammar_name));
-    } else {
-        command
-            .arg("--lexer")
-            .arg(java_dir.join(format!("{}.interp", descriptor.grammar_name)))
-            .arg("--grammar")
-            .arg(source_grammar_path);
-    }
-    command.arg("--out-dir").arg(&rust_dir);
-    command.arg("--actions").arg("embedded");
+    command
+        .arg(grammar_path)
+        .arg("--lib")
+        .arg(case_dir)
+        .arg("--out-dir")
+        .arg(&rust_dir)
+        .arg("--actions")
+        .arg("embedded");
     run_checked(&mut command, "Rust metadata generator")?;
     Ok(rust_dir)
 }
