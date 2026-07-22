@@ -84,10 +84,23 @@ jobs:
           track_progress: true
           claude_args: |
             --effort max
-            --model "global.anthropic.claude-opus-4-8[1m]"
+            --model "claude-opus-4-8[1m]"
             --no-chrome
             --dangerously-skip-permissions
           plugins: "code-review@claude-code-plugins"
           prompt: "/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
+
+      # On failure, preserve the raw Claude execution JSON (the action logs it to
+      # ${{ runner.temp }}/claude-execution-output.json) so the run can be diagnosed
+      # without re-triggering. Uploaded by path — the step output can be empty when
+      # the first API turn errors out.
+      - name: Upload Claude execution log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-review-log-${{ github.event.pull_request.number }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/claude-execution-output.json
+          if-no-files-found: warn
+          retention-days: 14
