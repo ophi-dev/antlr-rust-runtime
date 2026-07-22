@@ -641,6 +641,20 @@ fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
     T::__from_active(context, invocation_states, storage, tokens)
 }
 
+#[allow(dead_code)]
+fn __context_kind(context: RuleNodeView<'_>) -> usize {
+    context.rule_index()
+}
+
+#[allow(dead_code)]
+fn __active_context_kind(
+    context: &antlr4_runtime::ParserRuleContext,
+    _storage: &antlr4_runtime::ParseTreeStorage,
+    _tokens: &antlr4_runtime::TokenStore,
+) -> usize {
+    context.rule_index()
+}
+
 #[allow(non_camel_case_types, dead_code)]
 #[derive(Clone)]
 pub struct GrammarSpecContext<'a> {
@@ -9286,6 +9300,13 @@ impl std::fmt::Display for QualifiedIdentifierContext<'_> {
 
 #[allow(dead_code, unused_variables)]
 pub trait ANTLRv4Listener {
+    fn walk(&mut self, tree: antlr4_runtime::Node<'_>) -> Result<(), antlr4_runtime::AntlrError>
+    where
+        Self: Sized,
+    {
+        ANTLRv4TreeWalker::walk(self, tree)
+    }
+
     fn enter_grammar_spec(&mut self, _ctx: &GrammarSpecContext) {}
     fn exit_grammar_spec(&mut self, _ctx: &GrammarSpecContext) {}
     fn enter_grammar_decl(&mut self, _ctx: &GrammarDeclContext) {}
@@ -9433,416 +9454,148 @@ impl<T: ANTLRv4Listener> antlr4_runtime::ParseTreeListener for __ListenerBridge<
         if let Some(invocation_states) = &mut self.1 {
             invocation_states.insert(0, context.invoking_state());
         }
-        match context.rule_index() {
-            0 => {
-                self.0.enter_grammar_spec(&GrammarSpecContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            1 => {
-                self.0.enter_grammar_decl(&GrammarDeclContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            2 => {
-                self.0.enter_grammar_type(&GrammarTypeContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            3 => {
-                self.0.enter_prequel_construct(&PrequelConstructContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            4 => {
-                self.0.enter_options_spec(&OptionsSpecContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            5 => {
-                self.0.enter_option(&OptionContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            6 => {
-                self.0.enter_option_value(&OptionValueContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            7 => {
-                self.0.enter_delegate_grammars(&DelegateGrammarsContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            8 => {
-                self.0.enter_delegate_grammar(&DelegateGrammarContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            9 => {
-                self.0.enter_tokens_spec(&TokensSpecContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            10 => {
-                self.0.enter_channels_spec(&ChannelsSpecContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            11 => {
-                self.0.enter_id_list(&IdListContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            12 => {
-                self.0.enter_action(&ActionContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            13 => {
-                self.0.enter_action_scope_name(&ActionScopeNameContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            14 => {
-                self.0.enter_action_block(&ActionBlockContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            15 => {
-                self.0.enter_arg_action_block(&ArgActionBlockContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            16 => {
-                self.0.enter_mode_spec(&ModeSpecContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            17 => {
-                self.0.enter_rules(&RulesContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            18 => {
-                self.0.enter_rule_spec(&RuleSpecContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            19 => {
-                self.0.enter_parser_rule_spec(&ParserRuleSpecContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            20 => {
-                self.0.enter_exception_group(&ExceptionGroupContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            21 => {
-                self.0.enter_exception_handler(&ExceptionHandlerContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            22 => {
-                self.0.enter_finally_clause(&FinallyClauseContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            23 => {
-                self.0.enter_rule_prequel(&RulePrequelContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            24 => {
-                self.0.enter_rule_returns(&RuleReturnsContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            25 => {
-                self.0.enter_throws_spec(&ThrowsSpecContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            26 => {
-                self.0.enter_locals_spec(&LocalsSpecContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            27 => {
-                self.0.enter_rule_action(&RuleActionContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            28 => {
-                self.0.enter_rule_modifiers(&RuleModifiersContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            29 => {
-                self.0.enter_rule_modifier(&RuleModifierContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            30 => {
-                self.0.enter_rule_block(&RuleBlockContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            31 => {
-                self.0.enter_rule_alt_list(&RuleAltListContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            32 => {
-                self.0.enter_labeled_alt(&LabeledAltContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            33 => {
-                self.0.enter_lexer_rule_spec(&LexerRuleSpecContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            34 => {
-                self.0.enter_lexer_rule_block(&LexerRuleBlockContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            35 => {
-                self.0.enter_lexer_alt_list(&LexerAltListContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            36 => {
-                self.0.enter_lexer_alt(&LexerAltContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            37 => {
-                self.0.enter_lexer_elements(&LexerElementsContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            38 => {
-                self.0.enter_lexer_element(&LexerElementContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            39 => {
-                self.0.enter_lexer_block(&LexerBlockContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            40 => {
-                self.0.enter_lexer_commands(&LexerCommandsContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            41 => {
-                self.0.enter_lexer_command(&LexerCommandContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            42 => {
-                self.0.enter_lexer_command_name(&LexerCommandNameContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            43 => {
-                self.0.enter_lexer_command_expr(&LexerCommandExprContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            44 => {
-                self.0.enter_alt_list(&AltListContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            45 => {
-                self.0.enter_alternative(&AlternativeContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            46 => {
-                self.0.enter_element(&ElementContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            47 => {
-                self.0.enter_predicate_options(&PredicateOptionsContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            48 => {
-                self.0.enter_predicate_option(&PredicateOptionContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            49 => {
-                self.0.enter_labeled_element(&LabeledElementContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            50 => {
-                self.0.enter_ebnf(&EbnfContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            51 => {
-                self.0.enter_block_suffix(&BlockSuffixContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            52 => {
-                self.0.enter_ebnf_suffix(&EbnfSuffixContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            53 => {
-                self.0.enter_lexer_atom(&LexerAtomContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            54 => {
-                self.0.enter_atom(&AtomContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            55 => {
-                self.0.enter_wildcard(&WildcardContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            56 => {
-                self.0.enter_not_set(&NotSetContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            57 => {
-                self.0.enter_block_set(&BlockSetContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            58 => {
-                self.0.enter_set_element(&SetElementContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            59 => {
-                self.0.enter_block(&BlockContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            60 => {
-                self.0.enter_ruleref(&RulerefContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            61 => {
-                self.0.enter_character_range(&CharacterRangeContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            62 => {
-                self.0.enter_terminal_def(&TerminalDefContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            63 => {
-                self.0.enter_element_options(&ElementOptionsContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            64 => {
-                self.0.enter_element_option(&ElementOptionContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            65 => {
-                self.0.enter_identifier(&IdentifierContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            66 => {
-                self.0.enter_qualified_identifier(&QualifiedIdentifierContext::__from_listener_node(context, self.1.as_deref()));
-            }
+        match __context_kind(context) {
+            0 => self.0.enter_grammar_spec(&GrammarSpecContext::__from_listener_node(context, self.1.as_deref())),
+            1 => self.0.enter_grammar_decl(&GrammarDeclContext::__from_listener_node(context, self.1.as_deref())),
+            2 => self.0.enter_grammar_type(&GrammarTypeContext::__from_listener_node(context, self.1.as_deref())),
+            3 => self.0.enter_prequel_construct(&PrequelConstructContext::__from_listener_node(context, self.1.as_deref())),
+            4 => self.0.enter_options_spec(&OptionsSpecContext::__from_listener_node(context, self.1.as_deref())),
+            5 => self.0.enter_option(&OptionContext::__from_listener_node(context, self.1.as_deref())),
+            6 => self.0.enter_option_value(&OptionValueContext::__from_listener_node(context, self.1.as_deref())),
+            7 => self.0.enter_delegate_grammars(&DelegateGrammarsContext::__from_listener_node(context, self.1.as_deref())),
+            8 => self.0.enter_delegate_grammar(&DelegateGrammarContext::__from_listener_node(context, self.1.as_deref())),
+            9 => self.0.enter_tokens_spec(&TokensSpecContext::__from_listener_node(context, self.1.as_deref())),
+            10 => self.0.enter_channels_spec(&ChannelsSpecContext::__from_listener_node(context, self.1.as_deref())),
+            11 => self.0.enter_id_list(&IdListContext::__from_listener_node(context, self.1.as_deref())),
+            12 => self.0.enter_action(&ActionContext::__from_listener_node(context, self.1.as_deref())),
+            13 => self.0.enter_action_scope_name(&ActionScopeNameContext::__from_listener_node(context, self.1.as_deref())),
+            14 => self.0.enter_action_block(&ActionBlockContext::__from_listener_node(context, self.1.as_deref())),
+            15 => self.0.enter_arg_action_block(&ArgActionBlockContext::__from_listener_node(context, self.1.as_deref())),
+            16 => self.0.enter_mode_spec(&ModeSpecContext::__from_listener_node(context, self.1.as_deref())),
+            17 => self.0.enter_rules(&RulesContext::__from_listener_node(context, self.1.as_deref())),
+            18 => self.0.enter_rule_spec(&RuleSpecContext::__from_listener_node(context, self.1.as_deref())),
+            19 => self.0.enter_parser_rule_spec(&ParserRuleSpecContext::__from_listener_node(context, self.1.as_deref())),
+            20 => self.0.enter_exception_group(&ExceptionGroupContext::__from_listener_node(context, self.1.as_deref())),
+            21 => self.0.enter_exception_handler(&ExceptionHandlerContext::__from_listener_node(context, self.1.as_deref())),
+            22 => self.0.enter_finally_clause(&FinallyClauseContext::__from_listener_node(context, self.1.as_deref())),
+            23 => self.0.enter_rule_prequel(&RulePrequelContext::__from_listener_node(context, self.1.as_deref())),
+            24 => self.0.enter_rule_returns(&RuleReturnsContext::__from_listener_node(context, self.1.as_deref())),
+            25 => self.0.enter_throws_spec(&ThrowsSpecContext::__from_listener_node(context, self.1.as_deref())),
+            26 => self.0.enter_locals_spec(&LocalsSpecContext::__from_listener_node(context, self.1.as_deref())),
+            27 => self.0.enter_rule_action(&RuleActionContext::__from_listener_node(context, self.1.as_deref())),
+            28 => self.0.enter_rule_modifiers(&RuleModifiersContext::__from_listener_node(context, self.1.as_deref())),
+            29 => self.0.enter_rule_modifier(&RuleModifierContext::__from_listener_node(context, self.1.as_deref())),
+            30 => self.0.enter_rule_block(&RuleBlockContext::__from_listener_node(context, self.1.as_deref())),
+            31 => self.0.enter_rule_alt_list(&RuleAltListContext::__from_listener_node(context, self.1.as_deref())),
+            32 => self.0.enter_labeled_alt(&LabeledAltContext::__from_listener_node(context, self.1.as_deref())),
+            33 => self.0.enter_lexer_rule_spec(&LexerRuleSpecContext::__from_listener_node(context, self.1.as_deref())),
+            34 => self.0.enter_lexer_rule_block(&LexerRuleBlockContext::__from_listener_node(context, self.1.as_deref())),
+            35 => self.0.enter_lexer_alt_list(&LexerAltListContext::__from_listener_node(context, self.1.as_deref())),
+            36 => self.0.enter_lexer_alt(&LexerAltContext::__from_listener_node(context, self.1.as_deref())),
+            37 => self.0.enter_lexer_elements(&LexerElementsContext::__from_listener_node(context, self.1.as_deref())),
+            38 => self.0.enter_lexer_element(&LexerElementContext::__from_listener_node(context, self.1.as_deref())),
+            39 => self.0.enter_lexer_block(&LexerBlockContext::__from_listener_node(context, self.1.as_deref())),
+            40 => self.0.enter_lexer_commands(&LexerCommandsContext::__from_listener_node(context, self.1.as_deref())),
+            41 => self.0.enter_lexer_command(&LexerCommandContext::__from_listener_node(context, self.1.as_deref())),
+            42 => self.0.enter_lexer_command_name(&LexerCommandNameContext::__from_listener_node(context, self.1.as_deref())),
+            43 => self.0.enter_lexer_command_expr(&LexerCommandExprContext::__from_listener_node(context, self.1.as_deref())),
+            44 => self.0.enter_alt_list(&AltListContext::__from_listener_node(context, self.1.as_deref())),
+            45 => self.0.enter_alternative(&AlternativeContext::__from_listener_node(context, self.1.as_deref())),
+            46 => self.0.enter_element(&ElementContext::__from_listener_node(context, self.1.as_deref())),
+            47 => self.0.enter_predicate_options(&PredicateOptionsContext::__from_listener_node(context, self.1.as_deref())),
+            48 => self.0.enter_predicate_option(&PredicateOptionContext::__from_listener_node(context, self.1.as_deref())),
+            49 => self.0.enter_labeled_element(&LabeledElementContext::__from_listener_node(context, self.1.as_deref())),
+            50 => self.0.enter_ebnf(&EbnfContext::__from_listener_node(context, self.1.as_deref())),
+            51 => self.0.enter_block_suffix(&BlockSuffixContext::__from_listener_node(context, self.1.as_deref())),
+            52 => self.0.enter_ebnf_suffix(&EbnfSuffixContext::__from_listener_node(context, self.1.as_deref())),
+            53 => self.0.enter_lexer_atom(&LexerAtomContext::__from_listener_node(context, self.1.as_deref())),
+            54 => self.0.enter_atom(&AtomContext::__from_listener_node(context, self.1.as_deref())),
+            55 => self.0.enter_wildcard(&WildcardContext::__from_listener_node(context, self.1.as_deref())),
+            56 => self.0.enter_not_set(&NotSetContext::__from_listener_node(context, self.1.as_deref())),
+            57 => self.0.enter_block_set(&BlockSetContext::__from_listener_node(context, self.1.as_deref())),
+            58 => self.0.enter_set_element(&SetElementContext::__from_listener_node(context, self.1.as_deref())),
+            59 => self.0.enter_block(&BlockContext::__from_listener_node(context, self.1.as_deref())),
+            60 => self.0.enter_ruleref(&RulerefContext::__from_listener_node(context, self.1.as_deref())),
+            61 => self.0.enter_character_range(&CharacterRangeContext::__from_listener_node(context, self.1.as_deref())),
+            62 => self.0.enter_terminal_def(&TerminalDefContext::__from_listener_node(context, self.1.as_deref())),
+            63 => self.0.enter_element_options(&ElementOptionsContext::__from_listener_node(context, self.1.as_deref())),
+            64 => self.0.enter_element_option(&ElementOptionContext::__from_listener_node(context, self.1.as_deref())),
+            65 => self.0.enter_identifier(&IdentifierContext::__from_listener_node(context, self.1.as_deref())),
+            66 => self.0.enter_qualified_identifier(&QualifiedIdentifierContext::__from_listener_node(context, self.1.as_deref())),
             _ => {}
         }
         Ok(())
     }
 
     fn exit_every_rule(&mut self, context: RuleNodeView<'_>) -> Result<(), antlr4_runtime::AntlrError> {
-        match context.rule_index() {
-            0 => {
-                self.0.exit_grammar_spec(&GrammarSpecContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            1 => {
-                self.0.exit_grammar_decl(&GrammarDeclContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            2 => {
-                self.0.exit_grammar_type(&GrammarTypeContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            3 => {
-                self.0.exit_prequel_construct(&PrequelConstructContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            4 => {
-                self.0.exit_options_spec(&OptionsSpecContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            5 => {
-                self.0.exit_option(&OptionContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            6 => {
-                self.0.exit_option_value(&OptionValueContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            7 => {
-                self.0.exit_delegate_grammars(&DelegateGrammarsContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            8 => {
-                self.0.exit_delegate_grammar(&DelegateGrammarContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            9 => {
-                self.0.exit_tokens_spec(&TokensSpecContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            10 => {
-                self.0.exit_channels_spec(&ChannelsSpecContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            11 => {
-                self.0.exit_id_list(&IdListContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            12 => {
-                self.0.exit_action(&ActionContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            13 => {
-                self.0.exit_action_scope_name(&ActionScopeNameContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            14 => {
-                self.0.exit_action_block(&ActionBlockContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            15 => {
-                self.0.exit_arg_action_block(&ArgActionBlockContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            16 => {
-                self.0.exit_mode_spec(&ModeSpecContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            17 => {
-                self.0.exit_rules(&RulesContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            18 => {
-                self.0.exit_rule_spec(&RuleSpecContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            19 => {
-                self.0.exit_parser_rule_spec(&ParserRuleSpecContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            20 => {
-                self.0.exit_exception_group(&ExceptionGroupContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            21 => {
-                self.0.exit_exception_handler(&ExceptionHandlerContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            22 => {
-                self.0.exit_finally_clause(&FinallyClauseContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            23 => {
-                self.0.exit_rule_prequel(&RulePrequelContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            24 => {
-                self.0.exit_rule_returns(&RuleReturnsContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            25 => {
-                self.0.exit_throws_spec(&ThrowsSpecContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            26 => {
-                self.0.exit_locals_spec(&LocalsSpecContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            27 => {
-                self.0.exit_rule_action(&RuleActionContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            28 => {
-                self.0.exit_rule_modifiers(&RuleModifiersContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            29 => {
-                self.0.exit_rule_modifier(&RuleModifierContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            30 => {
-                self.0.exit_rule_block(&RuleBlockContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            31 => {
-                self.0.exit_rule_alt_list(&RuleAltListContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            32 => {
-                self.0.exit_labeled_alt(&LabeledAltContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            33 => {
-                self.0.exit_lexer_rule_spec(&LexerRuleSpecContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            34 => {
-                self.0.exit_lexer_rule_block(&LexerRuleBlockContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            35 => {
-                self.0.exit_lexer_alt_list(&LexerAltListContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            36 => {
-                self.0.exit_lexer_alt(&LexerAltContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            37 => {
-                self.0.exit_lexer_elements(&LexerElementsContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            38 => {
-                self.0.exit_lexer_element(&LexerElementContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            39 => {
-                self.0.exit_lexer_block(&LexerBlockContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            40 => {
-                self.0.exit_lexer_commands(&LexerCommandsContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            41 => {
-                self.0.exit_lexer_command(&LexerCommandContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            42 => {
-                self.0.exit_lexer_command_name(&LexerCommandNameContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            43 => {
-                self.0.exit_lexer_command_expr(&LexerCommandExprContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            44 => {
-                self.0.exit_alt_list(&AltListContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            45 => {
-                self.0.exit_alternative(&AlternativeContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            46 => {
-                self.0.exit_element(&ElementContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            47 => {
-                self.0.exit_predicate_options(&PredicateOptionsContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            48 => {
-                self.0.exit_predicate_option(&PredicateOptionContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            49 => {
-                self.0.exit_labeled_element(&LabeledElementContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            50 => {
-                self.0.exit_ebnf(&EbnfContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            51 => {
-                self.0.exit_block_suffix(&BlockSuffixContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            52 => {
-                self.0.exit_ebnf_suffix(&EbnfSuffixContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            53 => {
-                self.0.exit_lexer_atom(&LexerAtomContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            54 => {
-                self.0.exit_atom(&AtomContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            55 => {
-                self.0.exit_wildcard(&WildcardContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            56 => {
-                self.0.exit_not_set(&NotSetContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            57 => {
-                self.0.exit_block_set(&BlockSetContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            58 => {
-                self.0.exit_set_element(&SetElementContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            59 => {
-                self.0.exit_block(&BlockContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            60 => {
-                self.0.exit_ruleref(&RulerefContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            61 => {
-                self.0.exit_character_range(&CharacterRangeContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            62 => {
-                self.0.exit_terminal_def(&TerminalDefContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            63 => {
-                self.0.exit_element_options(&ElementOptionsContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            64 => {
-                self.0.exit_element_option(&ElementOptionContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            65 => {
-                self.0.exit_identifier(&IdentifierContext::__from_listener_node(context, self.1.as_deref()));
-            }
-            66 => {
-                self.0.exit_qualified_identifier(&QualifiedIdentifierContext::__from_listener_node(context, self.1.as_deref()));
-            }
+        match __context_kind(context) {
+            0 => self.0.exit_grammar_spec(&GrammarSpecContext::__from_listener_node(context, self.1.as_deref())),
+            1 => self.0.exit_grammar_decl(&GrammarDeclContext::__from_listener_node(context, self.1.as_deref())),
+            2 => self.0.exit_grammar_type(&GrammarTypeContext::__from_listener_node(context, self.1.as_deref())),
+            3 => self.0.exit_prequel_construct(&PrequelConstructContext::__from_listener_node(context, self.1.as_deref())),
+            4 => self.0.exit_options_spec(&OptionsSpecContext::__from_listener_node(context, self.1.as_deref())),
+            5 => self.0.exit_option(&OptionContext::__from_listener_node(context, self.1.as_deref())),
+            6 => self.0.exit_option_value(&OptionValueContext::__from_listener_node(context, self.1.as_deref())),
+            7 => self.0.exit_delegate_grammars(&DelegateGrammarsContext::__from_listener_node(context, self.1.as_deref())),
+            8 => self.0.exit_delegate_grammar(&DelegateGrammarContext::__from_listener_node(context, self.1.as_deref())),
+            9 => self.0.exit_tokens_spec(&TokensSpecContext::__from_listener_node(context, self.1.as_deref())),
+            10 => self.0.exit_channels_spec(&ChannelsSpecContext::__from_listener_node(context, self.1.as_deref())),
+            11 => self.0.exit_id_list(&IdListContext::__from_listener_node(context, self.1.as_deref())),
+            12 => self.0.exit_action(&ActionContext::__from_listener_node(context, self.1.as_deref())),
+            13 => self.0.exit_action_scope_name(&ActionScopeNameContext::__from_listener_node(context, self.1.as_deref())),
+            14 => self.0.exit_action_block(&ActionBlockContext::__from_listener_node(context, self.1.as_deref())),
+            15 => self.0.exit_arg_action_block(&ArgActionBlockContext::__from_listener_node(context, self.1.as_deref())),
+            16 => self.0.exit_mode_spec(&ModeSpecContext::__from_listener_node(context, self.1.as_deref())),
+            17 => self.0.exit_rules(&RulesContext::__from_listener_node(context, self.1.as_deref())),
+            18 => self.0.exit_rule_spec(&RuleSpecContext::__from_listener_node(context, self.1.as_deref())),
+            19 => self.0.exit_parser_rule_spec(&ParserRuleSpecContext::__from_listener_node(context, self.1.as_deref())),
+            20 => self.0.exit_exception_group(&ExceptionGroupContext::__from_listener_node(context, self.1.as_deref())),
+            21 => self.0.exit_exception_handler(&ExceptionHandlerContext::__from_listener_node(context, self.1.as_deref())),
+            22 => self.0.exit_finally_clause(&FinallyClauseContext::__from_listener_node(context, self.1.as_deref())),
+            23 => self.0.exit_rule_prequel(&RulePrequelContext::__from_listener_node(context, self.1.as_deref())),
+            24 => self.0.exit_rule_returns(&RuleReturnsContext::__from_listener_node(context, self.1.as_deref())),
+            25 => self.0.exit_throws_spec(&ThrowsSpecContext::__from_listener_node(context, self.1.as_deref())),
+            26 => self.0.exit_locals_spec(&LocalsSpecContext::__from_listener_node(context, self.1.as_deref())),
+            27 => self.0.exit_rule_action(&RuleActionContext::__from_listener_node(context, self.1.as_deref())),
+            28 => self.0.exit_rule_modifiers(&RuleModifiersContext::__from_listener_node(context, self.1.as_deref())),
+            29 => self.0.exit_rule_modifier(&RuleModifierContext::__from_listener_node(context, self.1.as_deref())),
+            30 => self.0.exit_rule_block(&RuleBlockContext::__from_listener_node(context, self.1.as_deref())),
+            31 => self.0.exit_rule_alt_list(&RuleAltListContext::__from_listener_node(context, self.1.as_deref())),
+            32 => self.0.exit_labeled_alt(&LabeledAltContext::__from_listener_node(context, self.1.as_deref())),
+            33 => self.0.exit_lexer_rule_spec(&LexerRuleSpecContext::__from_listener_node(context, self.1.as_deref())),
+            34 => self.0.exit_lexer_rule_block(&LexerRuleBlockContext::__from_listener_node(context, self.1.as_deref())),
+            35 => self.0.exit_lexer_alt_list(&LexerAltListContext::__from_listener_node(context, self.1.as_deref())),
+            36 => self.0.exit_lexer_alt(&LexerAltContext::__from_listener_node(context, self.1.as_deref())),
+            37 => self.0.exit_lexer_elements(&LexerElementsContext::__from_listener_node(context, self.1.as_deref())),
+            38 => self.0.exit_lexer_element(&LexerElementContext::__from_listener_node(context, self.1.as_deref())),
+            39 => self.0.exit_lexer_block(&LexerBlockContext::__from_listener_node(context, self.1.as_deref())),
+            40 => self.0.exit_lexer_commands(&LexerCommandsContext::__from_listener_node(context, self.1.as_deref())),
+            41 => self.0.exit_lexer_command(&LexerCommandContext::__from_listener_node(context, self.1.as_deref())),
+            42 => self.0.exit_lexer_command_name(&LexerCommandNameContext::__from_listener_node(context, self.1.as_deref())),
+            43 => self.0.exit_lexer_command_expr(&LexerCommandExprContext::__from_listener_node(context, self.1.as_deref())),
+            44 => self.0.exit_alt_list(&AltListContext::__from_listener_node(context, self.1.as_deref())),
+            45 => self.0.exit_alternative(&AlternativeContext::__from_listener_node(context, self.1.as_deref())),
+            46 => self.0.exit_element(&ElementContext::__from_listener_node(context, self.1.as_deref())),
+            47 => self.0.exit_predicate_options(&PredicateOptionsContext::__from_listener_node(context, self.1.as_deref())),
+            48 => self.0.exit_predicate_option(&PredicateOptionContext::__from_listener_node(context, self.1.as_deref())),
+            49 => self.0.exit_labeled_element(&LabeledElementContext::__from_listener_node(context, self.1.as_deref())),
+            50 => self.0.exit_ebnf(&EbnfContext::__from_listener_node(context, self.1.as_deref())),
+            51 => self.0.exit_block_suffix(&BlockSuffixContext::__from_listener_node(context, self.1.as_deref())),
+            52 => self.0.exit_ebnf_suffix(&EbnfSuffixContext::__from_listener_node(context, self.1.as_deref())),
+            53 => self.0.exit_lexer_atom(&LexerAtomContext::__from_listener_node(context, self.1.as_deref())),
+            54 => self.0.exit_atom(&AtomContext::__from_listener_node(context, self.1.as_deref())),
+            55 => self.0.exit_wildcard(&WildcardContext::__from_listener_node(context, self.1.as_deref())),
+            56 => self.0.exit_not_set(&NotSetContext::__from_listener_node(context, self.1.as_deref())),
+            57 => self.0.exit_block_set(&BlockSetContext::__from_listener_node(context, self.1.as_deref())),
+            58 => self.0.exit_set_element(&SetElementContext::__from_listener_node(context, self.1.as_deref())),
+            59 => self.0.exit_block(&BlockContext::__from_listener_node(context, self.1.as_deref())),
+            60 => self.0.exit_ruleref(&RulerefContext::__from_listener_node(context, self.1.as_deref())),
+            61 => self.0.exit_character_range(&CharacterRangeContext::__from_listener_node(context, self.1.as_deref())),
+            62 => self.0.exit_terminal_def(&TerminalDefContext::__from_listener_node(context, self.1.as_deref())),
+            63 => self.0.exit_element_options(&ElementOptionsContext::__from_listener_node(context, self.1.as_deref())),
+            64 => self.0.exit_element_option(&ElementOptionContext::__from_listener_node(context, self.1.as_deref())),
+            65 => self.0.exit_identifier(&IdentifierContext::__from_listener_node(context, self.1.as_deref())),
+            66 => self.0.exit_qualified_identifier(&QualifiedIdentifierContext::__from_listener_node(context, self.1.as_deref())),
             _ => {}
         }
         if let Some(invocation_states) = &mut self.1 {
@@ -9863,24 +9616,29 @@ impl<T: ANTLRv4Listener> antlr4_runtime::ParseTreeListener for __ListenerBridge<
 }
 
 #[allow(dead_code)]
-pub struct ParseTreeWalker;
+pub struct ANTLRv4TreeWalker;
 
 #[allow(dead_code)]
-impl ParseTreeWalker {
-    pub fn walk<T: ANTLRv4Listener>(listener: &mut T, tree: antlr4_runtime::Node<'_>) {
+impl ANTLRv4TreeWalker {
+    pub fn walk<T: ANTLRv4Listener>(
+        listener: &mut T,
+        tree: antlr4_runtime::Node<'_>,
+    ) -> Result<(), antlr4_runtime::AntlrError> {
         let mut bridge = __ListenerBridge(listener, None);
-        let _ = antlr4_runtime::ParseTreeWalker::walk(&mut bridge, tree);
+        antlr4_runtime::ParseTreeWalker::walk(&mut bridge, tree)
     }
 
     pub fn walk_with_invocation_states<T: ANTLRv4Listener>(
         listener: &mut T,
         tree: antlr4_runtime::Node<'_>,
         parent_invocation_states: Vec<isize>,
-    ) {
+    ) -> Result<(), antlr4_runtime::AntlrError> {
         let mut bridge = __ListenerBridge(listener, Some(parent_invocation_states));
-        let _ = antlr4_runtime::ParseTreeWalker::walk(&mut bridge, tree);
+        antlr4_runtime::ParseTreeWalker::walk(&mut bridge, tree)
     }
 }
+
+pub type ParseTreeWalker = ANTLRv4TreeWalker;
 
 
 
@@ -10280,7 +10038,7 @@ where
             self.base
                 .parse_atn_rule_adaptive_or_fallback(atn(), simulator, rule_index)
         } else {
-        let (tree, actions) = self.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence, antlr4_runtime::ParserRuntimeOptions { track_alt_numbers: false, predicates: &[], semantics: Some(parser_semantics()), rule_args: &[], member_actions: &[], return_actions: &[], unknown_predicate_policy: antlr4_runtime::UnknownSemanticPolicy::Error , ..antlr4_runtime::ParserRuntimeOptions::default() })?;
+        let (tree, actions) = self.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence, antlr4_runtime::ParserRuntimeOptions { track_alt_numbers: false, track_context_alt_numbers: false, predicates: &[], semantics: Some(parser_semantics()), rule_args: &[], member_actions: &[], return_actions: &[], unknown_predicate_policy: antlr4_runtime::UnknownSemanticPolicy::Error , ..antlr4_runtime::ParserRuntimeOptions::default() })?;
         let _ = actions;
         Ok(tree)
         }

@@ -70,6 +70,7 @@ pub struct ParseTreeStorage {
     starts: Vec<u32>,
     stops: Vec<u32>,
     alt_numbers: Vec<u32>,
+    context_alt_numbers: Vec<u32>,
     extra_ids: Vec<u32>,
     parents: Vec<u32>,
     flags: Vec<u8>,
@@ -107,6 +108,7 @@ impl ParseTreeStorage {
             starts: Vec::new(),
             stops: Vec::new(),
             alt_numbers: Vec::new(),
+            context_alt_numbers: Vec::new(),
             extra_ids: Vec::new(),
             parents: Vec::new(),
             flags: Vec::new(),
@@ -146,6 +148,7 @@ impl ParseTreeStorage {
                 + self.starts.capacity() * size_of::<u32>()
                 + self.stops.capacity() * size_of::<u32>()
                 + self.alt_numbers.capacity() * size_of::<u32>()
+                + self.context_alt_numbers.capacity() * size_of::<u32>()
                 + self.extra_ids.capacity() * size_of::<u32>()
                 + self.parents.capacity() * size_of::<u32>()
                 + self.flags.capacity() * size_of::<u8>()
@@ -164,6 +167,7 @@ impl ParseTreeStorage {
         self.starts.clear();
         self.stops.clear();
         self.alt_numbers.clear();
+        self.context_alt_numbers.clear();
         self.extra_ids.clear();
         self.parents.clear();
         self.flags.clear();
@@ -198,6 +202,7 @@ impl ParseTreeStorage {
         self.starts.truncate(checkpoint.nodes);
         self.stops.truncate(checkpoint.nodes);
         self.alt_numbers.truncate(checkpoint.nodes);
+        self.context_alt_numbers.truncate(checkpoint.nodes);
         self.extra_ids.truncate(checkpoint.nodes);
         self.parents.truncate(checkpoint.nodes);
         self.flags.truncate(checkpoint.nodes);
@@ -278,6 +283,8 @@ impl ParseTreeStorage {
             start: context.start.map_or(NONE, |token| token.index() as u32),
             stop: context.stop.map_or(NONE, |token| token.index() as u32),
             alt_number: u32::try_from(context.alt_number).expect("alternative number exceeds u32"),
+            context_alt_number: u32::try_from(context.context_alt_number)
+                .expect("context alternative number exceeds u32"),
             extra_id,
             flags: (u8::from(context.matched_child) * FLAG_MATCHED_CHILD)
                 | (u8::from(context.start.is_some()) * FLAG_START_PRESENT)
@@ -295,6 +302,16 @@ impl ParseTreeStorage {
         self.starts.push(record.start);
         self.stops.push(record.stop);
         self.alt_numbers.push(record.alt_number);
+        if record.context_alt_number == 0 {
+            if !self.context_alt_numbers.is_empty() {
+                self.context_alt_numbers.push(0);
+            }
+        } else {
+            if self.context_alt_numbers.is_empty() {
+                self.context_alt_numbers.resize(id.index(), 0);
+            }
+            self.context_alt_numbers.push(record.context_alt_number);
+        }
         self.extra_ids.push(record.extra_id);
         self.parents.push(NONE);
         self.flags.push(record.flags);
@@ -362,6 +379,7 @@ struct NodeRecord {
     start: u32,
     stop: u32,
     alt_number: u32,
+    context_alt_number: u32,
     extra_id: u32,
     flags: u8,
 }
@@ -377,6 +395,7 @@ impl Default for NodeRecord {
             start: NONE,
             stop: NONE,
             alt_number: 0,
+            context_alt_number: 0,
             extra_id: NONE,
             flags: 0,
         }
@@ -671,6 +690,17 @@ impl<'tree> RuleNodeView<'tree> {
         self.node.storage.alt_numbers[self.node.id.index()] as usize
     }
 
+    #[doc(hidden)]
+    #[must_use]
+    pub fn context_alt_number(self) -> usize {
+        self.node
+            .storage
+            .context_alt_numbers
+            .get(self.node.id.index())
+            .copied()
+            .unwrap_or_default() as usize
+    }
+
     #[must_use]
     pub fn start(self) -> Option<TokenView<'tree>> {
         self.start_id().and_then(|id| self.node.tokens.view(id))
@@ -935,6 +965,7 @@ pub struct ParserRuleContext {
     rule_index: usize,
     invoking_state: isize,
     alt_number: usize,
+    context_alt_number: usize,
     start: Option<TokenId>,
     stop: Option<TokenId>,
     int_returns: BTreeMap<String, i64>,
@@ -953,6 +984,7 @@ impl ParserRuleContext {
             rule_index,
             invoking_state,
             alt_number: 0,
+            context_alt_number: 0,
             start: None,
             stop: None,
             int_returns: BTreeMap::new(),
@@ -990,6 +1022,17 @@ impl ParserRuleContext {
 
     pub const fn set_alt_number(&mut self, alt_number: usize) {
         self.alt_number = alt_number;
+    }
+
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn context_alt_number(&self) -> usize {
+        self.context_alt_number
+    }
+
+    #[doc(hidden)]
+    pub const fn set_context_alt_number(&mut self, alt_number: usize) {
+        self.context_alt_number = alt_number;
     }
 
     pub fn start<'a>(&self, tokens: &'a TokenStore) -> Option<TokenView<'a>> {
@@ -1208,6 +1251,71 @@ pub trait ParseTreeListener {
     }
 }
 
+/// Value-returning, caller-directed traversal over a completed parse tree.
+///
+/// Generated grammar visitors adapt typed rule and alternative callbacks to
+/// this runtime contract. The default traversal returns the latest child's
+/// result, matching ANTLR's base visitor behavior.
+pub trait ParseTreeVisitor {
+    type Result: Default;
+
+    fn visit(&mut self, tree: Node<'_>) -> Self::Result {
+        match tree.kind() {
+            NodeKind::Rule => self.visit_rule(tree.as_rule().expect("rule node kind checked")),
+            NodeKind::Terminal => {
+                self.visit_terminal(tree.as_terminal().expect("terminal node kind checked"))
+            }
+            NodeKind::Error => {
+                self.visit_error_node(tree.as_error().expect("error node kind checked"))
+            }
+        }
+    }
+
+    fn visit_rule(&mut self, node: RuleNodeView<'_>) -> Self::Result {
+        self.visit_children(node)
+    }
+
+    fn visit_children(&mut self, node: RuleNodeView<'_>) -> Self::Result {
+        let mut result = self.default_result();
+        for child in node.children() {
+            if !self.should_visit_next_child(node, &result) {
+                break;
+            }
+            let child_result = self.visit(child);
+            result = self.aggregate_result(result, child_result);
+        }
+        result
+    }
+
+    fn visit_terminal(&mut self, _node: TerminalNodeView<'_>) -> Self::Result {
+        self.default_result()
+    }
+
+    fn visit_error_node(&mut self, _node: ErrorNodeView<'_>) -> Self::Result {
+        self.default_result()
+    }
+
+    fn default_result(&mut self) -> Self::Result {
+        Self::Result::default()
+    }
+
+    fn aggregate_result(
+        &mut self,
+        _aggregate: Self::Result,
+        next_result: Self::Result,
+    ) -> Self::Result {
+        next_result
+    }
+
+    fn should_visit_next_child(
+        &mut self,
+        _node: RuleNodeView<'_>,
+        _current_result: &Self::Result,
+    ) -> bool {
+        true
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct ParseTreeWalker;
 
@@ -1364,6 +1472,28 @@ mod tests {
     }
 
     #[test]
+    fn context_alt_number_does_not_change_public_tree_rendering() {
+        let tokens = TokenStore::new(None, "");
+        let mut storage = ParseTreeStorage::new();
+        let mut context = ParserRuleContext::new(0, -1);
+        context.set_context_alt_number(2);
+
+        assert_eq!(context.alt_number(), 0);
+        assert_eq!(context.context_alt_number(), 2);
+        assert_eq!(
+            context.to_string_tree_with_names(&storage, &tokens, &["root"]),
+            "root"
+        );
+
+        let root = storage.finish_rule(context);
+        let parsed = ParsedFile::new(tokens, storage, root);
+        let rule = parsed.tree().as_rule().expect("root rule");
+        assert_eq!(rule.alt_number(), 0);
+        assert_eq!(rule.context_alt_number(), 2);
+        assert_eq!(parsed.tree().to_string_tree_with_names(&["root"]), "root");
+    }
+
+    #[test]
     fn descendants_and_walker_preserve_antlr_order() {
         let mut tokens = TokenStore::new(None, "");
         let a = token(&mut tokens, 1, "a");
@@ -1424,6 +1554,139 @@ mod tests {
         ParseTreeWalker::walk(&mut listener, parsed.tree())
             .expect("test listener should accept every node");
         assert_eq!(listener.0, ["enter0", "a", "enter1", "b", "exit1", "exit0"]);
+    }
+
+    fn visitor_test_tree() -> ParsedFile {
+        let mut tokens = TokenStore::new(None, "");
+        let a = token(&mut tokens, 1, "a");
+        let b = token(&mut tokens, 2, "b");
+        let error = token(&mut tokens, 3, "!");
+        let mut storage = ParseTreeStorage::new();
+        let a = storage.terminal(a);
+        let b = storage.terminal(b);
+        let error = storage.error(error);
+        let mut child = ParserRuleContext::new(1, 7);
+        storage.add_child(&mut child, b);
+        let child = storage.finish_rule(child);
+        let mut root = ParserRuleContext::new(0, -1);
+        storage.add_child(&mut root, a);
+        storage.add_child(&mut root, child);
+        storage.add_child(&mut root, error);
+        let root = storage.finish_rule(root);
+        ParsedFile::new(tokens, storage, root)
+    }
+
+    #[test]
+    fn visitor_dispatches_and_aggregates_all_node_kinds() {
+        #[derive(Default)]
+        struct Visitor(Vec<String>);
+
+        impl ParseTreeVisitor for Visitor {
+            type Result = Vec<String>;
+
+            fn visit_rule(&mut self, node: RuleNodeView<'_>) -> Self::Result {
+                self.0.push(format!("rule{}", node.rule_index()));
+                self.visit_children(node)
+            }
+
+            fn visit_terminal(&mut self, node: TerminalNodeView<'_>) -> Self::Result {
+                vec![format!("terminal:{}", node.text())]
+            }
+
+            fn visit_error_node(&mut self, node: ErrorNodeView<'_>) -> Self::Result {
+                vec![format!("error:{}", node.text())]
+            }
+
+            fn aggregate_result(
+                &mut self,
+                mut aggregate: Self::Result,
+                next_result: Self::Result,
+            ) -> Self::Result {
+                aggregate.extend(next_result);
+                aggregate
+            }
+        }
+
+        let parsed = visitor_test_tree();
+        let mut visitor = Visitor::default();
+        assert_eq!(
+            visitor.visit(parsed.tree()),
+            ["terminal:a", "terminal:b", "error:!"]
+        );
+        assert_eq!(visitor.0, ["rule0", "rule1"]);
+    }
+
+    #[test]
+    fn visitor_default_aggregation_returns_the_latest_child() {
+        struct Visitor;
+
+        impl ParseTreeVisitor for Visitor {
+            type Result = String;
+
+            fn visit_terminal(&mut self, node: TerminalNodeView<'_>) -> Self::Result {
+                node.text().to_owned()
+            }
+
+            fn visit_error_node(&mut self, node: ErrorNodeView<'_>) -> Self::Result {
+                node.text().to_owned()
+            }
+        }
+
+        let parsed = visitor_test_tree();
+        assert_eq!(Visitor.visit(parsed.tree()), "!");
+    }
+
+    #[test]
+    fn visitor_can_short_circuit_before_any_or_later_children() {
+        struct Visitor {
+            limit: usize,
+            visited: usize,
+        }
+
+        impl ParseTreeVisitor for Visitor {
+            type Result = usize;
+
+            fn visit_terminal(&mut self, _node: TerminalNodeView<'_>) -> Self::Result {
+                self.visited += 1;
+                1
+            }
+
+            fn visit_error_node(&mut self, _node: ErrorNodeView<'_>) -> Self::Result {
+                self.visited += 1;
+                1
+            }
+
+            fn aggregate_result(
+                &mut self,
+                aggregate: Self::Result,
+                next_result: Self::Result,
+            ) -> Self::Result {
+                aggregate + next_result
+            }
+
+            fn should_visit_next_child(
+                &mut self,
+                _node: RuleNodeView<'_>,
+                current_result: &Self::Result,
+            ) -> bool {
+                *current_result < self.limit
+            }
+        }
+
+        let parsed = visitor_test_tree();
+        let mut none = Visitor {
+            limit: 0,
+            visited: 0,
+        };
+        assert_eq!(none.visit(parsed.tree()), 0);
+        assert_eq!(none.visited, 0);
+
+        let mut one = Visitor {
+            limit: 1,
+            visited: 0,
+        };
+        assert_eq!(one.visit(parsed.tree()), 1);
+        assert_eq!(one.visited, 1);
     }
 
     #[test]

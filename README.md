@@ -91,6 +91,31 @@ mod generated {
 }
 ```
 
+### Typed listeners and visitors
+
+Parser generation emits a typed `<Grammar>Listener` and
+`<Grammar>TreeWalker` by default. A listener can start a grammar-typed walk
+directly:
+
+```rust
+listener.walk(parsed.tree())?;
+```
+
+Use `--no-listener` to omit that surface. Add `--visitor` to emit a typed
+`<Grammar>Visitor`; visitors choose an associated `Result: Default` type and
+drive recursion explicitly from overridden rule or labeled-alternative
+methods:
+
+```rust
+fn visit_add_label(&mut self, ctx: &AddLabelContext) -> Self::Result {
+    self.visit(ctx.expression(0)) + self.visit(ctx.expression(1))
+}
+```
+
+`--no-visitor` disables visitor generation. The generator also accepts ANTLR's
+single-dash spellings (`-listener`, `-no-listener`, `-visitor`,
+`-no-visitor`).
+
 Call the generated parser helper for the compact path:
 
 ```rust

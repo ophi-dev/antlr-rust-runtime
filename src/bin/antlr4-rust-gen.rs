@@ -146,6 +146,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ParserRenderOptions {
                     require_generated_parser: args.require_generated_parser,
                     embedded: args.embedded_actions,
+                    generate_listener: args.generate_listener,
+                    generate_visitor: args.generate_visitor,
                     sem_unknown: args.sem_unknown,
                     patterns: Some(&args.sem_patterns),
                 },
@@ -1817,6 +1819,8 @@ struct Args {
     sem_patterns: SemPatternFile,
     require_full_semantics: bool,
     option_hooks: BTreeSet<String>,
+    generate_listener: bool,
+    generate_visitor: bool,
     /// `--actions embedded`: the grammar contains real Rust action/predicate
     /// bodies (rendered through a `.test.stg`); splice them verbatim after
     /// `$`-attribute translation instead of recognizing template markup.
@@ -1835,6 +1839,8 @@ impl Args {
         let mut sem_patterns = SemPatternFile::default();
         let mut require_full_semantics = false;
         let mut option_hooks = BTreeSet::new();
+        let mut generate_listener = true;
+        let mut generate_visitor = false;
         let mut positional_only = false;
 
         let mut iter = env::args().skip(1);
@@ -1851,6 +1857,10 @@ impl Args {
                 "--out-dir" => out_dir = Some(PathBuf::from(next_arg(&mut iter, "--out-dir")?)),
                 "--require-generated-parser" => require_generated_parser = true,
                 "--allow-unsupported-lexer-actions" => allow_unsupported_lexer_actions = true,
+                "-listener" | "--listener" => generate_listener = true,
+                "-no-listener" | "--no-listener" => generate_listener = false,
+                "-visitor" | "--visitor" => generate_visitor = true,
+                "-no-visitor" | "--no-visitor" => generate_visitor = false,
                 "--sem-patterns" => {
                     sem_patterns =
                         load_sem_patterns(&PathBuf::from(next_arg(&mut iter, "--sem-patterns")?))
@@ -1905,6 +1915,8 @@ impl Args {
             sem_patterns,
             require_full_semantics,
             option_hooks,
+            generate_listener,
+            generate_visitor,
             embedded_actions,
         }))
     }
@@ -1926,6 +1938,10 @@ Options:
   --require-generated-parser       Require generated bodies for every parser rule
   --allow-unsupported-lexer-actions
                                    Ignore unsupported lexer actions
+  -listener, --listener            Generate the typed listener and walker (default)
+  -no-listener, --no-listener      Do not generate the typed listener or walker
+  -visitor, --visitor              Generate the typed visitor
+  -no-visitor, --no-visitor        Do not generate the typed visitor (default)
   --sem-unknown error|hook|assume-true|assume-false
                                    Choose unsupported semantic predicate policy
   --sem-patterns FILE              Load semantic helper patterns
@@ -3146,6 +3162,7 @@ struct GeneratedStepRenderContext<'a> {
     portable_locals: Option<PortableLocalStepRender<'a>>,
     inline_action_statements: &'a BTreeMap<usize, String>,
     track_alt_numbers: bool,
+    track_context_alt_numbers: bool,
     direct_generated_rule_calls: &'a [bool],
     atn_preferred_rule_calls: &'a [bool],
 }
@@ -3184,14 +3201,29 @@ struct LexerTypedHookMapping {
     call: SemanticHelperCall,
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug)]
 struct ParserRenderOptions<'a> {
     require_generated_parser: bool,
     /// Splice verbatim Rust action/predicate bodies from the grammar
     /// (`--actions embedded`).
     embedded: bool,
+    generate_listener: bool,
+    generate_visitor: bool,
     sem_unknown: SemUnknownPolicy,
     patterns: Option<&'a SemPatternFile>,
+}
+
+impl Default for ParserRenderOptions<'_> {
+    fn default() -> Self {
+        Self {
+            require_generated_parser: false,
+            embedded: false,
+            generate_listener: true,
+            generate_visitor: false,
+            sem_unknown: SemUnknownPolicy::default(),
+            patterns: None,
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -4704,6 +4736,7 @@ fn render_generated_rule_dispatch(
         &[],
         inline_action_statements,
         track_alt_numbers,
+        false,
         None,
         None,
     )
@@ -4716,6 +4749,7 @@ fn render_generated_rule_dispatch_with_rule_names(
     rule_names: &[String],
     inline_action_statements: &BTreeMap<usize, String>,
     track_alt_numbers: bool,
+    track_context_alt_numbers: bool,
     embedded: Option<EmbeddedStepRender<'_>>,
     portable_locals: Option<PortableLocalStepRender<'_>>,
 ) -> String {
@@ -4765,6 +4799,7 @@ fn render_generated_rule_dispatch_with_rule_names(
         portable_locals,
         inline_action_statements,
         track_alt_numbers,
+        track_context_alt_numbers,
         direct_generated_rule_calls,
         atn_preferred_rule_calls: &atn_preferred_rule_calls,
     };
@@ -5614,11 +5649,12 @@ fn render_generated_decision(
     for (index, steps) in alts.iter().enumerate() {
         let alt = index + 1;
         writeln!(out, "{pad}    {alt} => {{").expect("writing to a string cannot fail");
-        render_generated_alt_number_assignment(
+        render_generated_alt_number_assignments(
             out,
             &format!("{pad}        "),
             alt,
             render_context.track_alt_numbers && track_alt_number,
+            render_context.track_context_alt_numbers && track_alt_number,
         );
         render_generated_steps(out, steps, indent + 2, render_context);
         writeln!(out, "{pad}    }}").expect("writing to a string cannot fail");
@@ -6042,14 +6078,27 @@ fn intervals_condition(symbol: &str, intervals: &[(i32, i32)]) -> String {
         .join(" || ")
 }
 
-fn render_generated_alt_number_assignment(out: &mut String, pad: &str, alt: usize, enabled: bool) {
-    if !enabled {
-        return;
+fn render_generated_alt_number_assignments(
+    out: &mut String,
+    pad: &str,
+    alt: usize,
+    track_alt_number: bool,
+    track_context_alt_number: bool,
+) {
+    if track_alt_number {
+        writeln!(out, "{pad}if __ctx.alt_number() == 0 {{")
+            .expect("writing to a string cannot fail");
+        writeln!(out, "{pad}    __ctx.set_alt_number({alt});")
+            .expect("writing to a string cannot fail");
+        writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
     }
-    writeln!(out, "{pad}if __ctx.alt_number() == 0 {{").expect("writing to a string cannot fail");
-    writeln!(out, "{pad}    __ctx.set_alt_number({alt});")
-        .expect("writing to a string cannot fail");
-    writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
+    if track_context_alt_number {
+        writeln!(out, "{pad}if __ctx.context_alt_number() == 0 {{")
+            .expect("writing to a string cannot fail");
+        writeln!(out, "{pad}    __ctx.set_context_alt_number({alt});")
+            .expect("writing to a string cannot fail");
+        writeln!(out, "{pad}}}").expect("writing to a string cannot fail");
+    }
 }
 
 fn render_generated_sync_decision(out: &mut String, pad: &str, state: usize, loop_back_expr: &str) {
@@ -6269,20 +6318,22 @@ fn render_generated_star_loop(
     writeln!(out, "{pad}        {enter_alt} => {{").expect("writing to a string cannot fail");
     // Once an iteration is taken, every subsequent sync is a loop-back.
     writeln!(out, "{pad}            {loop_iter} = true;").expect("writing to a string cannot fail");
-    render_generated_alt_number_assignment(
+    render_generated_alt_number_assignments(
         out,
         &format!("{pad}            "),
         enter_alt,
         render_context.track_alt_numbers && track_alt_number,
+        render_context.track_context_alt_numbers && track_alt_number,
     );
     render_generated_steps(out, body, indent + 3, render_context);
     writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
     writeln!(out, "{pad}        {exit_alt} => {{").expect("writing to a string cannot fail");
-    render_generated_alt_number_assignment(
+    render_generated_alt_number_assignments(
         out,
         &format!("{pad}            "),
         exit_alt,
         render_context.track_alt_numbers && track_alt_number,
+        render_context.track_context_alt_numbers && track_alt_number,
     );
     writeln!(out, "{pad}            break;").expect("writing to a string cannot fail");
     writeln!(out, "{pad}        }}").expect("writing to a string cannot fail");
@@ -6560,7 +6611,7 @@ fn loop_entry_condition(
 #[allow(clippy::fn_params_excessive_bools)]
 fn render_parser_parse_rule_fallback(
     track_alt_numbers: bool,
-    _predicates: &[((usize, usize), PredicateTemplate)],
+    track_context_alt_numbers: bool,
     rule_args: &[(usize, usize, RuleArgTemplate)],
     has_action_dispatch: bool,
     has_predicate_dispatch: bool,
@@ -6570,16 +6621,16 @@ fn render_parser_parse_rule_fallback(
     if has_predicate_dispatch || unknown_policy_literal.is_some() {
         writeln!(
             out,
-            "let (tree, actions) = self.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence, antlr4_runtime::ParserRuntimeOptions {{ track_alt_numbers: {track_alt_numbers}, predicates: &[], semantics: Some(parser_semantics()), rule_args: &{}, member_actions: &[], return_actions: &[], unknown_predicate_policy: {} , ..antlr4_runtime::ParserRuntimeOptions::default() }})?;",
+            "let (tree, actions) = self.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence, antlr4_runtime::ParserRuntimeOptions {{ track_alt_numbers: {track_alt_numbers}, track_context_alt_numbers: {track_context_alt_numbers}, predicates: &[], semantics: Some(parser_semantics()), rule_args: &{}, member_actions: &[], return_actions: &[], unknown_predicate_policy: {} , ..antlr4_runtime::ParserRuntimeOptions::default() }})?;",
             render_parser_rule_arg_array(rule_args),
             unknown_policy_literal
                 .unwrap_or("antlr4_runtime::UnknownSemanticPolicy::AssumeTrue")
         )
         .expect("writing to a string cannot fail");
-    } else if track_alt_numbers {
+    } else if track_alt_numbers || track_context_alt_numbers {
         writeln!(
             out,
-            "let (tree, actions) = self.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence, antlr4_runtime::ParserRuntimeOptions {{ track_alt_numbers: true, ..antlr4_runtime::ParserRuntimeOptions::default() }})?;"
+            "let (tree, actions) = self.base.parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence, antlr4_runtime::ParserRuntimeOptions {{ track_alt_numbers: {track_alt_numbers}, track_context_alt_numbers: {track_context_alt_numbers}, ..antlr4_runtime::ParserRuntimeOptions::default() }})?;"
         )
         .expect("writing to a string cannot fail");
     } else if has_action_dispatch {
@@ -7050,6 +7101,7 @@ fn build_embedded_parser_data(
     data: &CodegenData<'_>,
     type_name: &str,
     grammar_name: &str,
+    options: ParserRenderOptions<'_>,
 ) -> io::Result<EmbeddedParserData> {
     let model = structural_embedded_model(data, true)?;
     let token_types: BTreeMap<String, i32> = data
@@ -7219,14 +7271,19 @@ fn build_embedded_parser_data(
     // Recognizer-surface facades the rendered bodies call.
     out.impl_items.push_str(&embedded_parser_facades());
     out.module_items.push_str(EMBEDDED_INPUT_FACADE);
-    out.module_items
-        .push_str(&render_embedded_context_types(grammar_name, data, &model));
+    out.module_items.push_str(&render_embedded_context_types(
+        grammar_name,
+        data,
+        &model,
+        options,
+    ));
     Ok(out)
 }
 
 fn build_structural_parser_surface(
     data: &CodegenData<'_>,
     grammar_name: &str,
+    options: ParserRenderOptions<'_>,
 ) -> io::Result<EmbeddedParserData> {
     let model = structural_embedded_model(data, false)?;
     let mut out = EmbeddedParserData {
@@ -7254,8 +7311,12 @@ fn build_structural_parser_surface(
         );
     }
     out.module_items.push_str(EMBEDDED_INPUT_FACADE);
-    out.module_items
-        .push_str(&render_embedded_context_types(grammar_name, data, &model));
+    out.module_items.push_str(&render_embedded_context_types(
+        grammar_name,
+        data,
+        &model,
+        options,
+    ));
     Ok(out)
 }
 
@@ -7297,6 +7358,7 @@ fn embedded_rule_call_expression(value: &str) -> Option<String> {
 struct ContextSurfaceName {
     context_type: String,
     listener_method: String,
+    visitor_method: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -7309,15 +7371,18 @@ struct ContextViewName {
 #[derive(Debug, Eq, PartialEq)]
 struct ContextSurfaceNames {
     rules: Vec<ContextSurfaceName>,
-    alternatives: Vec<BTreeMap<String, ContextSurfaceName>>,
     views: Vec<ContextViewName>,
 }
 
 impl ContextSurfaceNames {
-    fn alternative(&self, rule_index: usize, label: &str) -> &ContextSurfaceName {
-        self.alternatives[rule_index]
-            .get(label)
-            .expect("alternative label has an allocated context name")
+    fn kind_id(&self, rule_index: usize, alternative_label: Option<&str>) -> usize {
+        self.views
+            .iter()
+            .position(|view| {
+                view.rule_index == rule_index
+                    && view.alternative_label.as_deref() == alternative_label
+            })
+            .expect("context view has an allocated dispatch identity")
     }
 }
 
@@ -7327,12 +7392,18 @@ impl ContextSurfaceNames {
 fn context_surface_names(model: &embedded::EmbeddedModel) -> ContextSurfaceNames {
     let mut used_context_types = BTreeSet::new();
     let mut used_listener_methods = BTreeSet::new();
+    let mut used_visitor_methods = BTreeSet::from([
+        "children".to_owned(),
+        "error_node".to_owned(),
+        "terminal".to_owned(),
+    ]);
     let rules = model
         .rules
         .iter()
         .map(|rule| ContextSurfaceName {
             context_type: allocate_rule_context_type(&rule.name, &mut used_context_types),
             listener_method: allocate_rule_listener_method(&rule.name, &mut used_listener_methods),
+            visitor_method: allocate_rule_listener_method(&rule.name, &mut used_visitor_methods),
         })
         .collect::<Vec<_>>();
 
@@ -7357,6 +7428,10 @@ fn context_surface_names(model: &embedded::EmbeddedModel) -> ContextSurfaceNames
                         label,
                         &mut used_listener_methods,
                     ),
+                    visitor_method: allocate_label_listener_method(
+                        label,
+                        &mut used_visitor_methods,
+                    ),
                 };
                 entry.insert(surface.clone());
                 views.push(ContextViewName {
@@ -7368,11 +7443,7 @@ fn context_surface_names(model: &embedded::EmbeddedModel) -> ContextSurfaceNames
         }
     }
 
-    ContextSurfaceNames {
-        rules,
-        alternatives,
-        views,
-    }
+    ContextSurfaceNames { rules, views }
 }
 
 fn allocate_rule_context_type(source_name: &str, used: &mut BTreeSet<String>) -> String {
@@ -7426,6 +7497,184 @@ fn allocate_numbered_listener_method(stem: &str, used: &mut BTreeSet<String>) ->
     candidate
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ContextAlternativeDispatch {
+    runtime_alt_number: usize,
+    kind_id: usize,
+    operator: bool,
+}
+
+fn context_alternative_dispatch(
+    rule_index: usize,
+    rule: &embedded::RuleModel,
+    names: &ContextSurfaceNames,
+) -> (bool, Vec<ContextAlternativeDispatch>) {
+    let left_recursive = rule
+        .alts
+        .iter()
+        .any(|alternative| alternative.is_lr_operator(&rule.name));
+    let mut primary_alt_number = 0;
+    let mut operator_alt_number = 0;
+    let alternatives = rule
+        .alts
+        .iter()
+        .enumerate()
+        .map(|(authored_alt_index, alternative)| {
+            let operator = left_recursive && alternative.is_lr_operator(&rule.name);
+            let runtime_alt_number = if operator {
+                operator_alt_number += 1;
+                operator_alt_number
+            } else if left_recursive {
+                primary_alt_number += 1;
+                primary_alt_number
+            } else {
+                authored_alt_index + 1
+            };
+            ContextAlternativeDispatch {
+                runtime_alt_number,
+                kind_id: names.kind_id(rule_index, alternative.label.as_deref()),
+                operator,
+            }
+        })
+        .collect();
+    (left_recursive, alternatives)
+}
+
+fn render_context_alt_kind_match(
+    alternatives: &[ContextAlternativeDispatch],
+    fallback_kind: usize,
+    alt_number: &str,
+) -> String {
+    if alternatives.is_empty()
+        || alternatives
+            .iter()
+            .all(|alternative| alternative.kind_id == fallback_kind)
+    {
+        return fallback_kind.to_string();
+    }
+    let mut arms = String::new();
+    for alternative in alternatives {
+        let _ = writeln!(
+            arms,
+            "                    {} => {},",
+            alternative.runtime_alt_number, alternative.kind_id
+        );
+    }
+    let distinct_kinds = alternatives
+        .iter()
+        .map(|alternative| alternative.kind_id)
+        .collect::<BTreeSet<_>>();
+    if distinct_kinds.len() == 1 {
+        let only_kind = distinct_kinds
+            .first()
+            .copied()
+            .expect("non-empty alternatives have one context kind");
+        let _ = writeln!(arms, "                    0 => {only_kind},");
+    }
+    format!(
+        "match {alt_number} {{\n{arms}                    _ => {fallback_kind},\n                }}"
+    )
+}
+
+fn render_context_kind_functions(
+    model: &embedded::EmbeddedModel,
+    names: &ContextSurfaceNames,
+) -> String {
+    if names
+        .views
+        .iter()
+        .all(|view| view.alternative_label.is_none())
+    {
+        return r#"#[allow(dead_code)]
+fn __context_kind(context: RuleNodeView<'_>) -> usize {
+    context.rule_index()
+}
+
+#[allow(dead_code)]
+fn __active_context_kind(
+    context: &antlr4_runtime::ParserRuleContext,
+    _storage: &antlr4_runtime::ParseTreeStorage,
+    _tokens: &antlr4_runtime::TokenStore,
+) -> usize {
+    context.rule_index()
+}
+
+"#
+        .to_owned();
+    }
+
+    let mut stored_arms = String::new();
+    let mut active_arms = String::new();
+    for (rule_index, rule) in model.rules.iter().enumerate() {
+        let fallback_kind = names.kind_id(rule_index, None);
+        let (left_recursive, alternatives) = context_alternative_dispatch(rule_index, rule, names);
+        if !left_recursive {
+            let matcher = render_context_alt_kind_match(
+                &alternatives,
+                fallback_kind,
+                "context.context_alt_number()",
+            );
+            let _ = writeln!(
+                stored_arms,
+                "        {rule_index} => {{\n            {matcher}\n        }},"
+            );
+            let _ = writeln!(
+                active_arms,
+                "        {rule_index} => {{\n            {matcher}\n        }},"
+            );
+            continue;
+        }
+
+        let primary = alternatives
+            .iter()
+            .copied()
+            .filter(|alternative| !alternative.operator)
+            .collect::<Vec<_>>();
+        let operators = alternatives
+            .iter()
+            .copied()
+            .filter(|alternative| alternative.operator)
+            .collect::<Vec<_>>();
+        let primary_match =
+            render_context_alt_kind_match(&primary, fallback_kind, "context.context_alt_number()");
+        let operator_match = render_context_alt_kind_match(
+            &operators,
+            fallback_kind,
+            "context.context_alt_number()",
+        );
+        let _ = writeln!(
+            stored_arms,
+            "        {rule_index} => {{\n            let operator = context.children().next().and_then(antlr4_runtime::Node::as_rule).is_some_and(|child| child.rule_index() == {rule_index});\n            if operator {{\n                {operator_match}\n            }} else {{\n                {primary_match}\n            }}\n        }},"
+        );
+        let _ = writeln!(
+            active_arms,
+            "        {rule_index} => {{\n            let operator = context.child_nodes(storage, tokens).next().and_then(antlr4_runtime::Node::as_rule).is_some_and(|child| child.rule_index() == {rule_index});\n            if operator {{\n                {operator_match}\n            }} else {{\n                {primary_match}\n            }}\n        }},"
+        );
+    }
+
+    format!(
+        r#"#[allow(dead_code)]
+fn __context_kind(context: RuleNodeView<'_>) -> usize {{
+    match context.rule_index() {{
+{stored_arms}        _ => usize::MAX,
+    }}
+}}
+
+#[allow(dead_code)]
+fn __active_context_kind(
+    context: &antlr4_runtime::ParserRuleContext,
+    storage: &antlr4_runtime::ParseTreeStorage,
+    tokens: &antlr4_runtime::TokenStore,
+) -> usize {{
+    match context.rule_index() {{
+{active_arms}        _ => usize::MAX,
+    }}
+}}
+
+"#
+    )
+}
+
 /// Generates the typed context views, listener trait, and walker for the
 /// embedded `.test.stg` surface:
 ///
@@ -7443,13 +7692,15 @@ fn render_embedded_context_types(
     grammar_name: &str,
     data: &CodegenData<'_>,
     model: &embedded::EmbeddedModel,
+    options: ParserRenderOptions<'_>,
 ) -> String {
     let mut out = String::new();
     let context_names = context_surface_names(model);
-    let listener_trait = format!(
-        "{}Listener",
-        grammar_name.strip_suffix("Parser").unwrap_or(grammar_name)
-    );
+    let surface_name = grammar_name.strip_suffix("Parser").unwrap_or(grammar_name);
+    let listener_trait = format!("{surface_name}Listener");
+    let visitor_trait = format!("{surface_name}Visitor");
+    let visitable_trait = format!("{surface_name}Visitable");
+    let tree_walker = format!("{surface_name}TreeWalker");
     let token_accessors: Vec<(String, i32)> = data
         .symbolic_names
         .iter()
@@ -7459,6 +7710,13 @@ fn render_embedded_context_types(
             i32::try_from(token_type).ok().map(|ty| (name.clone(), ty))
         })
         .collect();
+
+    if options.generate_visitor {
+        let _ = writeln!(
+            out,
+            "#[allow(dead_code)]\npub trait {visitable_trait}<'a> {{\n    fn into_parse_tree_node(self) -> antlr4_runtime::Node<'a>;\n}}\n\nimpl<'a> {visitable_trait}<'a> for antlr4_runtime::Node<'a> {{\n    fn into_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self }}\n}}\n\nimpl<'a> {visitable_trait}<'a> for RuleNodeView<'a> {{\n    fn into_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.node() }}\n}}\n"
+        );
+    }
 
     out.push_str(
         r#"#[allow(dead_code)]
@@ -7540,6 +7798,13 @@ fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
 
 "#,
     );
+    if options.generate_visitor {
+        let _ = writeln!(
+            out,
+            "impl<'a> {visitable_trait}<'a> for TerminalNode<'a> {{\n    fn into_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.__node.node() }}\n}}\n\nimpl<'a> {visitable_trait}<'a> for &TerminalNode<'a> {{\n    fn into_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.__node.node() }}\n}}\n\nimpl<'a> {visitable_trait}<'a> for ErrorNode<'a> {{\n    fn into_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.__node.node() }}\n}}\n\nimpl<'a> {visitable_trait}<'a> for &ErrorNode<'a> {{\n    fn into_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.__node.node() }}\n}}\n"
+        );
+    }
+    out.push_str(&render_context_kind_functions(model, &context_names));
 
     for ContextViewName {
         surface,
@@ -7549,6 +7814,13 @@ fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
     {
         let view_name = &surface.context_type;
         let rule = &model.rules[*rule_index];
+        let context_kind = context_names.kind_id(*rule_index, alternative_label.as_deref());
+        let stored_kind_guard = alternative_label.as_ref().map_or(String::new(), |_| {
+            format!(" || __context_kind(node) != {context_kind}")
+        });
+        let active_kind_guard = alternative_label.as_ref().map_or(String::new(), |_| {
+            format!(" || __active_context_kind(context, storage, tokens) != {context_kind}")
+        });
         let referenced_targets: BTreeSet<&str> = rule
             .alts
             .iter()
@@ -7575,9 +7847,15 @@ fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
         );
         let _ = writeln!(
             out,
-            "impl<'a> FromRuleNode<'a> for {view_name}<'a> {{\n    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {{\n        if node.rule_index() != {rule_index} {{ return None; }}\n        Some(Self::__from_node(node))\n    }}\n}}\n\nimpl<'a> __FromActiveRuleContext<'a> for {view_name}<'a> {{\n    fn __from_active(\n        context: &'a antlr4_runtime::ParserRuleContext,\n        invocation_states: Vec<isize>,\n        storage: &'a antlr4_runtime::ParseTreeStorage,\n        tokens: &'a antlr4_runtime::TokenStore,\n    ) -> Option<Self> {{\n        if context.rule_index() != {rule_index} {{ return None; }}\n        let __default = {attrs_struct}::default();\n        let __attrs = context.generated_attrs::<{attrs_struct}>().unwrap_or(&__default);\n        Some(Self {{\n            __node: __GeneratedRuleContext::Active {{ context, storage, tokens }},\n            __invocation_states: invocation_states,\n{field_inits}        }})\n    }}\n}}\n"
+            "impl<'a> FromRuleNode<'a> for {view_name}<'a> {{\n    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {{\n        if node.rule_index() != {rule_index}{stored_kind_guard} {{ return None; }}\n        Some(Self::__from_node(node))\n    }}\n}}\n\nimpl<'a> __FromActiveRuleContext<'a> for {view_name}<'a> {{\n    fn __from_active(\n        context: &'a antlr4_runtime::ParserRuleContext,\n        invocation_states: Vec<isize>,\n        storage: &'a antlr4_runtime::ParseTreeStorage,\n        tokens: &'a antlr4_runtime::TokenStore,\n    ) -> Option<Self> {{\n        if context.rule_index() != {rule_index}{active_kind_guard} {{ return None; }}\n        let __default = {attrs_struct}::default();\n        let __attrs = context.generated_attrs::<{attrs_struct}>().unwrap_or(&__default);\n        Some(Self {{\n            __node: __GeneratedRuleContext::Active {{ context, storage, tokens }},\n            __invocation_states: invocation_states,\n{field_inits}        }})\n    }}\n}}\n"
         );
         let mut accessors = String::new();
+        if options.generate_visitor {
+            let _ = writeln!(
+                accessors,
+                "    fn __parse_tree_node(&self) -> antlr4_runtime::Node<'a> {{\n        match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.node(),\n            __GeneratedRuleContext::Active {{ .. }} => panic!(\"active parser contexts cannot be visited before the rule is stored\"),\n        }}\n    }}"
+            );
+        }
         let _ = writeln!(
             accessors,
             "    fn __from_node(node: RuleNodeView<'a>) -> Self {{\n        let invocation_states = node.invocation_states().collect();\n        Self::__from_node_with_invocation_states(node, invocation_states)\n    }}\n\n    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {{\n        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);\n        invocation_states.push(node.invoking_state());\n        invocation_states.extend_from_slice(parent_invocation_states);\n        Self::__from_node_with_invocation_states(node, invocation_states)\n    }}\n\n    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {{\n        invocation_states.map_or_else(\n            || Self::__from_node(node),\n            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),\n        )\n    }}\n\n    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {{\n        let __default = {attrs_struct}::default();\n        let __attrs = node.generated_attrs::<{attrs_struct}>().unwrap_or(&__default);\n        Self {{\n            __node: __GeneratedRuleContext::Stored(node),\n            __invocation_states: invocation_states,\n{field_inits}        }}\n    }}\n"
@@ -7628,6 +7906,12 @@ fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
             out,
             "#[allow(dead_code, clippy::all)]\nimpl<'a> {view_name}<'a> {{\n{accessors}}}\n"
         );
+        if options.generate_visitor {
+            let _ = writeln!(
+                out,
+                "impl<'a> {visitable_trait}<'a> for {view_name}<'a> {{\n    fn into_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.__parse_tree_node() }}\n}}\n\nimpl<'a> {visitable_trait}<'a> for &{view_name}<'a> {{\n    fn into_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.__parse_tree_node() }}\n}}\n"
+            );
+        }
         // Java's RuleContext.toString(): bracketed invoking-state chain from
         // this context to the root, the root's sentinel excluded.
         let _ = writeln!(
@@ -7636,117 +7920,37 @@ fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
         );
     }
 
-    // Listener trait with defaulted callbacks.
-    let mut trait_methods = String::new();
-    let mut enter_arms = String::new();
-    let mut exit_arms = String::new();
-    for (rule_index, rule) in model.rules.iter().enumerate() {
-        let mut names = vec![context_names.rules[rule_index].clone()];
-        for alt in &rule.alts {
-            if let Some(label) = &alt.label {
-                let surface = context_names.alternative(rule_index, label);
-                if !names.contains(surface) {
-                    names.push(surface.clone());
-                }
-            }
-        }
-        for ContextSurfaceName {
-            context_type: view,
-            listener_method: method,
-        } in &names
-        {
+    if options.generate_listener {
+        let mut trait_methods = String::new();
+        let mut enter_arms = String::new();
+        let mut exit_arms = String::new();
+        for (kind_id, view) in context_names.views.iter().enumerate() {
+            let ContextSurfaceName {
+                context_type,
+                listener_method,
+                ..
+            } = &view.surface;
             let _ = writeln!(
                 trait_methods,
-                "    fn enter_{method}(&mut self, _ctx: &{view}) {{}}\n    fn exit_{method}(&mut self, _ctx: &{view}) {{}}"
+                "    fn enter_{listener_method}(&mut self, _ctx: &{context_type}) {{}}\n    fn exit_{listener_method}(&mut self, _ctx: &{context_type}) {{}}"
+            );
+            let _ = writeln!(
+                enter_arms,
+                "            {kind_id} => self.0.enter_{listener_method}(&{context_type}::__from_listener_node(context, self.1.as_deref())),"
+            );
+            let _ = writeln!(
+                exit_arms,
+                "            {kind_id} => self.0.exit_{listener_method}(&{context_type}::__from_listener_node(context, self.1.as_deref())),"
             );
         }
-        // Dispatch: an unlabeled rule fires its plain callbacks; a rule with
-        // labeled alternatives fires the callback of the alternative that
-        // matched. Left-recursive operator alternatives are identified
-        // structurally (their first child is the rule itself), matching
-        // ANTLR's per-alternative context classes.
-        let op_labels: Vec<String> = rule
-            .alts
-            .iter()
-            .filter(|alt| alt.is_lr_operator(&rule.name))
-            .filter_map(|alt| alt.label.clone())
-            .collect();
-        let primary_labels: Vec<String> = rule
-            .alts
-            .iter()
-            .filter(|alt| !alt.is_lr_operator(&rule.name))
-            .filter_map(|alt| alt.label.clone())
-            .collect();
-        let has_labels = names.len() > 1;
-        let dispatch = |phase: &str| -> String {
-            if !has_labels {
-                let ContextSurfaceName {
-                    context_type: view,
-                    listener_method: method,
-                } = &names[0];
-                return format!(
-                    "                self.0.{phase}_{method}(&{view}::__from_listener_node(context, self.1.as_deref()));\n"
-                );
-            }
-            let mut out = String::new();
-            let op = op_labels
-                .first()
-                .filter(|_| op_labels.iter().collect::<BTreeSet<_>>().len() == 1);
-            let primary = primary_labels
-                .first()
-                .filter(|_| primary_labels.iter().collect::<BTreeSet<_>>().len() == 1);
-            match (op, primary) {
-                (Some(op), Some(primary)) => {
-                    let ContextSurfaceName {
-                        context_type: op_view,
-                        listener_method: op_method,
-                    } = context_names.alternative(rule_index, op);
-                    let ContextSurfaceName {
-                        context_type: primary_view,
-                        listener_method: primary_method,
-                    } = context_names.alternative(rule_index, primary);
-                    let _ = writeln!(
-                        out,
-                        "                if context.child_rule_trees({rule_index}).next().is_some() {{ self.0.{phase}_{op_method}(&{op_view}::__from_listener_node(context, self.1.as_deref())); }} else {{ self.0.{phase}_{primary_method}(&{primary_view}::__from_listener_node(context, self.1.as_deref())); }}"
-                    );
-                }
-                _ => {
-                    // No unambiguous per-alternative identity available; fire
-                    // the rule-level callback only.
-                    let ContextSurfaceName {
-                        context_type: view,
-                        listener_method: method,
-                    } = &names[0];
-                    let _ = writeln!(
-                        out,
-                        "                self.0.{phase}_{method}(&{view}::__from_listener_node(context, self.1.as_deref()));"
-                    );
-                }
-            }
-            out
-        };
-        let enter_calls = dispatch("enter");
-        let exit_calls = dispatch("exit");
         let _ = writeln!(
-            enter_arms,
-            "            {rule_index} => {{\n{enter_calls}            }}"
+            out,
+            "#[allow(dead_code, unused_variables)]\npub trait {listener_trait} {{\n    fn walk(&mut self, tree: antlr4_runtime::Node<'_>) -> Result<(), antlr4_runtime::AntlrError>\n    where\n        Self: Sized,\n    {{\n        {tree_walker}::walk(self, tree)\n    }}\n\n{trait_methods}    fn visit_terminal(&mut self, _node: &TerminalNode) {{}}\n    fn visit_error_node(&mut self, _node: &ErrorNode) {{}}\n    fn output(&mut self) -> std::io::Stdout {{ std::io::stdout() }}\n}}\n"
         );
-        let _ = writeln!(
-            exit_arms,
-            "            {rule_index} => {{\n{exit_calls}            }}"
-        );
-    }
-    let _ = writeln!(
-        out,
-        "#[allow(dead_code, unused_variables)]\npub trait {listener_trait} {{\n{trait_methods}    fn visit_terminal(&mut self, _node: &TerminalNode) {{}}\n    fn visit_error_node(&mut self, _node: &ErrorNode) {{}}\n    fn output(&mut self) -> std::io::Stdout {{ std::io::stdout() }}\n}}\n"
-    );
 
-    // Bridge + module-local walker (shadows the runtime walker so rendered
-    // `ParseTreeWalker::walk(&mut listener, tree)` dispatches typed
-    // callbacks.
-    let _ = writeln!(
-        out,
-        r#"#[allow(dead_code)]
+        let _ = writeln!(
+            out,
+            r#"#[allow(dead_code)]
 struct __ListenerBridge<'a, T: {listener_trait}>(&'a mut T, Option<Vec<isize>>);
 
 impl<T: {listener_trait}> antlr4_runtime::ParseTreeListener for __ListenerBridge<'_, T> {{
@@ -7754,14 +7958,14 @@ impl<T: {listener_trait}> antlr4_runtime::ParseTreeListener for __ListenerBridge
         if let Some(invocation_states) = &mut self.1 {{
             invocation_states.insert(0, context.invoking_state());
         }}
-        match context.rule_index() {{
+        match __context_kind(context) {{
 {enter_arms}            _ => {{}}
         }}
         Ok(())
     }}
 
     fn exit_every_rule(&mut self, context: RuleNodeView<'_>) -> Result<(), antlr4_runtime::AntlrError> {{
-        match context.rule_index() {{
+        match __context_kind(context) {{
 {exit_arms}            _ => {{}}
         }}
         if let Some(invocation_states) = &mut self.1 {{
@@ -7782,26 +7986,149 @@ impl<T: {listener_trait}> antlr4_runtime::ParseTreeListener for __ListenerBridge
 }}
 
 #[allow(dead_code)]
-pub struct ParseTreeWalker;
+pub struct {tree_walker};
 
 #[allow(dead_code)]
-impl ParseTreeWalker {{
-    pub fn walk<T: {listener_trait}>(listener: &mut T, tree: antlr4_runtime::Node<'_>) {{
+impl {tree_walker} {{
+    pub fn walk<T: {listener_trait}>(
+        listener: &mut T,
+        tree: antlr4_runtime::Node<'_>,
+    ) -> Result<(), antlr4_runtime::AntlrError> {{
         let mut bridge = __ListenerBridge(listener, None);
-        let _ = antlr4_runtime::ParseTreeWalker::walk(&mut bridge, tree);
+        antlr4_runtime::ParseTreeWalker::walk(&mut bridge, tree)
     }}
 
     pub fn walk_with_invocation_states<T: {listener_trait}>(
         listener: &mut T,
         tree: antlr4_runtime::Node<'_>,
         parent_invocation_states: Vec<isize>,
-    ) {{
+    ) -> Result<(), antlr4_runtime::AntlrError> {{
         let mut bridge = __ListenerBridge(listener, Some(parent_invocation_states));
-        let _ = antlr4_runtime::ParseTreeWalker::walk(&mut bridge, tree);
+        antlr4_runtime::ParseTreeWalker::walk(&mut bridge, tree)
+    }}
+}}
+
+pub type ParseTreeWalker = {tree_walker};
+"#
+        );
+    }
+
+    if options.generate_visitor {
+        let mut visitor_methods = String::new();
+        let mut visitor_arms = String::new();
+        for (kind_id, view) in context_names.views.iter().enumerate() {
+            let ContextSurfaceName {
+                context_type,
+                visitor_method,
+                ..
+            } = &view.surface;
+            let _ = writeln!(
+                visitor_methods,
+                "    fn visit_{visitor_method}(&mut self, ctx: &{context_type}) -> Self::Result {{\n        self.visit_children(ctx)\n    }}"
+            );
+            let _ = writeln!(
+                visitor_arms,
+                "            {kind_id} => {visitor_trait}::visit_{visitor_method}(self.0, &{context_type}::__from_listener_node(context, None)),"
+            );
+        }
+        let _ = writeln!(
+            out,
+            r#"#[allow(dead_code, unused_variables)]
+pub trait {visitor_trait}: Sized {{
+    type Result: Default;
+
+    fn visit<'tree, T>(&mut self, tree: T) -> Self::Result
+    where
+        T: {visitable_trait}<'tree>,
+    {{
+        let tree = {visitable_trait}::into_parse_tree_node(tree);
+        let mut bridge = __VisitorBridge(self);
+        antlr4_runtime::ParseTreeVisitor::visit(&mut bridge, tree)
+    }}
+
+    fn visit_children<'tree, T>(&mut self, context: T) -> Self::Result
+    where
+        T: {visitable_trait}<'tree>,
+    {{
+        let tree = {visitable_trait}::into_parse_tree_node(context);
+        let context = tree.as_rule().expect("visit_children requires a rule context");
+        let mut bridge = __VisitorBridge(self);
+        antlr4_runtime::ParseTreeVisitor::visit_children(&mut bridge, context)
+    }}
+
+    fn default_result(&mut self) -> Self::Result {{
+        Self::Result::default()
+    }}
+
+    fn aggregate_result(
+        &mut self,
+        _aggregate: Self::Result,
+        next_result: Self::Result,
+    ) -> Self::Result {{
+        next_result
+    }}
+
+    fn should_visit_next_child(
+        &mut self,
+        _context: RuleNodeView<'_>,
+        _current_result: &Self::Result,
+    ) -> bool {{
+        true
+    }}
+
+    fn visit_terminal(&mut self, _node: &TerminalNode) -> Self::Result {{
+        self.default_result()
+    }}
+
+    fn visit_error_node(&mut self, _node: &ErrorNode) -> Self::Result {{
+        self.default_result()
+    }}
+
+{visitor_methods}}}
+
+#[allow(dead_code)]
+struct __VisitorBridge<'a, T: {visitor_trait}>(&'a mut T);
+
+impl<T: {visitor_trait}> antlr4_runtime::ParseTreeVisitor for __VisitorBridge<'_, T> {{
+    type Result = T::Result;
+
+    fn visit_rule(&mut self, context: RuleNodeView<'_>) -> Self::Result {{
+        match __context_kind(context) {{
+{visitor_arms}            _ => {visitor_trait}::default_result(self.0),
+        }}
+    }}
+
+    fn visit_terminal(&mut self, node: RuntimeTerminalNode<'_>) -> Self::Result {{
+        {visitor_trait}::visit_terminal(self.0, &TerminalNode::new(node))
+    }}
+
+    fn visit_error_node(&mut self, node: RuntimeErrorNode<'_>) -> Self::Result {{
+        {visitor_trait}::visit_error_node(self.0, &ErrorNode::new(node))
+    }}
+
+    fn default_result(&mut self) -> Self::Result {{
+        {visitor_trait}::default_result(self.0)
+    }}
+
+    fn aggregate_result(
+        &mut self,
+        aggregate: Self::Result,
+        next_result: Self::Result,
+    ) -> Self::Result {{
+        {visitor_trait}::aggregate_result(self.0, aggregate, next_result)
+    }}
+
+    fn should_visit_next_child(
+        &mut self,
+        context: RuleNodeView<'_>,
+        current_result: &Self::Result,
+    ) -> bool {{
+        {visitor_trait}::should_visit_next_child(self.0, context, current_result)
     }}
 }}
 "#
-    );
+        );
+    }
     out
 }
 
@@ -8012,14 +8339,23 @@ fn render_parser_with_options(
     // (rendered through the target `.test.stg`); translate and splice them
     // instead of recognizing template markup.
     let embedded_data = if options.embedded {
-        Some(build_embedded_parser_data(data, &type_name, grammar_name)?)
+        Some(build_embedded_parser_data(
+            data,
+            &type_name,
+            grammar_name,
+            options,
+        )?)
     } else {
         None
     };
     let structural_surface = if options.embedded {
         None
     } else {
-        Some(build_structural_parser_surface(data, grammar_name)?)
+        Some(build_structural_parser_surface(
+            data,
+            grammar_name,
+            options,
+        )?)
     };
     let embedded_step_render = embedded_data.as_ref().map(embedded_step_render);
     let mut portable_local_data = if options.embedded {
@@ -8099,7 +8435,8 @@ fn render_parser_with_options(
     generated_predicate_coordinates.extend(portable_local_data.predicates.keys().copied());
     let has_action_dispatch = !action_states.is_empty();
     let has_predicate_dispatch = !predicates.is_empty();
-    let track_alt_numbers = uses_structural_alt_number_contexts(data);
+    let track_alt_numbers = uses_alt_number_contexts(data);
+    let track_context_alt_numbers = uses_structural_context_alt_numbers(data)?;
     let generated_rule_enabled = vec![true; data.rule_names.len()];
     let generated_rules = parser_generated_rules(
         data,
@@ -8137,6 +8474,7 @@ fn render_parser_with_options(
         &data.rule_names,
         &inline_action_statements,
         track_alt_numbers,
+        track_context_alt_numbers,
         embedded_step_render,
         portable_local_data.step_render(),
     );
@@ -8159,7 +8497,7 @@ fn render_parser_with_options(
     };
     let parse_rule_fallback = render_parser_parse_rule_fallback(
         track_alt_numbers,
-        &predicates,
+        track_context_alt_numbers,
         &rule_args,
         has_action_dispatch,
         has_predicate_dispatch,
@@ -8185,6 +8523,7 @@ fn render_parser_with_options(
     // configured fail/assume-false behavior.
     let adaptive_direct_allowed = !has_action_dispatch
         && !track_alt_numbers
+        && !track_context_alt_numbers
         && !has_predicate_dispatch
         && unknown_policy_literal.is_none();
     let embedded_noop_states = BTreeSet::new();
@@ -8877,7 +9216,7 @@ fn is_unsupported_string_template_body(body: &str) -> bool {
     single_template_body(body).is_some() || template_sequence_bodies(body).is_some()
 }
 
-fn uses_structural_alt_number_contexts(data: &CodegenData<'_>) -> bool {
+fn uses_alt_number_contexts(data: &CodegenData<'_>) -> bool {
     let Some(semantic) = data.semantic else {
         return false;
     };
@@ -8886,6 +9225,38 @@ fn uses_structural_alt_number_contexts(data: &CodegenData<'_>) -> bool {
         .options
         .iter()
         .any(|option| option.name.value == "contextSuperClass")
+}
+
+fn uses_structural_context_alt_numbers(data: &CodegenData<'_>) -> io::Result<bool> {
+    if data.semantic.is_none() {
+        return Ok(false);
+    }
+    let model = structural_embedded_model(data, false)?;
+    Ok(model.rules.iter().any(|rule| {
+        let left_recursive = rule
+            .alts
+            .iter()
+            .any(|alternative| alternative.is_lr_operator(&rule.name));
+        if !left_recursive {
+            return rule
+                .alts
+                .iter()
+                .map(|alternative| alternative.label.as_deref())
+                .collect::<BTreeSet<_>>()
+                .len()
+                > 1;
+        }
+
+        [false, true].into_iter().any(|operator| {
+            rule.alts
+                .iter()
+                .filter(|alternative| alternative.is_lr_operator(&rule.name) == operator)
+                .map(|alternative| alternative.label.as_deref())
+                .collect::<BTreeSet<_>>()
+                .len()
+                > 1
+        })
+    }))
 }
 
 fn parse_predicate_template(body: &str) -> Option<PredicateTemplate> {
@@ -11206,6 +11577,7 @@ mod tests {
             &rule_names,
             &BTreeMap::new(),
             true,
+            false,
             None,
             None,
         );
@@ -11243,6 +11615,7 @@ mod tests {
             &rule_names,
             &BTreeMap::new(),
             true,
+            false,
             None,
             None,
         );
@@ -11286,6 +11659,7 @@ mod tests {
             &[],
             &BTreeMap::new(),
             true,
+            false,
             Some(EmbeddedStepRender {
                 force_adaptive: false,
                 adaptive_decisions: &adaptive_decisions,
@@ -11682,6 +12056,7 @@ mod tests {
                 portable_locals: None,
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
+                track_context_alt_numbers: false,
                 direct_generated_rule_calls: &[],
                 atn_preferred_rule_calls: &[],
             },
@@ -11714,6 +12089,7 @@ mod tests {
                 portable_locals: None,
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
+                track_context_alt_numbers: false,
                 direct_generated_rule_calls,
                 atn_preferred_rule_calls,
             },
@@ -11782,7 +12158,7 @@ mod tests {
 
     #[test]
     fn parse_rule_fallback_runs_parser_actions() {
-        let fallback = render_parser_parse_rule_fallback(false, &[], &[], true, false, None);
+        let fallback = render_parser_parse_rule_fallback(false, false, &[], true, false, None);
 
         assert!(fallback.contains(
             "parse_atn_rule_with_runtime_options_and_precedence(atn(), rule_index, precedence"
@@ -11881,8 +12257,9 @@ mod tests {
             structural_embedded_model(&data, false).expect("structural model should resolve");
         insta::assert_debug_snapshot!("left_recursive_label_alternatives", model.rules[1].alts);
 
-        let embedded = build_embedded_parser_data(&data, "TParser", "T")
-            .expect("embedded actions should resolve deleted left-recursive labels");
+        let embedded =
+            build_embedded_parser_data(&data, "TParser", "T", ParserRenderOptions::default())
+                .expect("embedded actions should resolve deleted left-recursive labels");
         insta::assert_debug_snapshot!("left_recursive_label_actions", embedded.inline_actions);
     }
 
@@ -12343,6 +12720,7 @@ mod tests {
                 portable_locals: None,
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
+                track_context_alt_numbers: false,
                 direct_generated_rule_calls: &[],
                 atn_preferred_rule_calls: &[],
             },
@@ -12391,6 +12769,7 @@ mod tests {
                 portable_locals: None,
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
+                track_context_alt_numbers: false,
                 direct_generated_rule_calls: &[],
                 atn_preferred_rule_calls: &[],
             },
@@ -12458,6 +12837,7 @@ mod tests {
                 }),
                 inline_action_statements: &inline_actions,
                 track_alt_numbers: false,
+                track_context_alt_numbers: false,
                 direct_generated_rule_calls: &[],
                 atn_preferred_rule_calls: &[],
             },
@@ -12496,6 +12876,7 @@ mod tests {
                 portable_locals: None,
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
+                track_context_alt_numbers: false,
                 direct_generated_rule_calls: &[],
                 atn_preferred_rule_calls: &[],
             },
@@ -12539,6 +12920,7 @@ mod tests {
                 portable_locals: None,
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
+                track_context_alt_numbers: false,
                 direct_generated_rule_calls: &[],
                 atn_preferred_rule_calls: &[],
             },
@@ -12584,6 +12966,7 @@ mod tests {
                 portable_locals: None,
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
+                track_context_alt_numbers: false,
                 direct_generated_rule_calls: &[],
                 atn_preferred_rule_calls: &[],
             },
@@ -12637,6 +13020,7 @@ mod tests {
                 }),
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
+                track_context_alt_numbers: false,
                 direct_generated_rule_calls: &[],
                 atn_preferred_rule_calls: &[],
             },
@@ -12691,6 +13075,7 @@ mod tests {
                 portable_locals: None,
                 inline_action_statements: &BTreeMap::new(),
                 track_alt_numbers: false,
+                track_context_alt_numbers: false,
                 direct_generated_rule_calls: &[],
                 atn_preferred_rule_calls: &[],
             },
@@ -14302,6 +14687,7 @@ dispose = "hook"
                 embedded: false,
                 sem_unknown: SemUnknownPolicy::Error,
                 patterns: None,
+                ..ParserRenderOptions::default()
             },
         )
         .expect("empty action should not block generated parser output");
@@ -14485,6 +14871,7 @@ dispose = "hook"
                 embedded: false,
                 sem_unknown: SemUnknownPolicy::AssumeFalse,
                 patterns: None,
+                ..ParserRenderOptions::default()
             },
         )
         .expect("parser should render");
@@ -14508,6 +14895,7 @@ dispose = "hook"
                 embedded: false,
                 sem_unknown: SemUnknownPolicy::AssumeFalse,
                 patterns: None,
+                ..ParserRenderOptions::default()
             },
         )
         .expect("parser should render");
@@ -14542,6 +14930,7 @@ dispose = "hook"
                 embedded: false,
                 sem_unknown: SemUnknownPolicy::Hook,
                 patterns: None,
+                ..ParserRenderOptions::default()
             },
         )
         .expect("parser should render");
@@ -14589,6 +14978,7 @@ dispose = "hook"
                 embedded: false,
                 sem_unknown: SemUnknownPolicy::Hook,
                 patterns: None,
+                ..ParserRenderOptions::default()
             },
         )
         .expect("parser should render");
@@ -14638,6 +15028,7 @@ dispose = "hook"
                 embedded: false,
                 sem_unknown: SemUnknownPolicy::AssumeTrue,
                 patterns: Some(&patterns),
+                ..ParserRenderOptions::default()
             },
         )
         .expect("parser should render");
@@ -14673,6 +15064,7 @@ dispose = "hook"
                     embedded: false,
                     sem_unknown: policy,
                     patterns: None,
+                    ..ParserRenderOptions::default()
                 },
             )
             .expect("parser should render");
@@ -14730,6 +15122,7 @@ dispose = "hook"
                     embedded: false,
                     sem_unknown: policy,
                     patterns: None,
+                    ..ParserRenderOptions::default()
                 },
             )
             .expect("parser should render under a non-default policy");

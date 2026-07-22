@@ -1067,6 +1067,12 @@ pub struct ParserRuntimeOptions<'a> {
     pub init_action_rules: &'a [usize],
     /// Whether generated parse-tree contexts should retain alternative numbers.
     pub track_alt_numbers: bool,
+    /// Whether generated typed contexts should retain private dispatch alternatives.
+    ///
+    /// Unlike `track_alt_numbers`, this metadata does not affect the public
+    /// alternative number or parse-tree rendering.
+    #[doc(hidden)]
+    pub track_context_alt_numbers: bool,
     /// Semantic predicate table keyed by serialized `(rule_index, pred_index)`.
     pub predicates: &'a [(usize, usize, ParserPredicate)],
     /// `SemIR` predicate/action table emitted by newer generated parsers.
@@ -3946,6 +3952,7 @@ fn atn_has_predicate_transitions(atn: &Atn) -> bool {
 fn can_use_fast_predicate_recognizer(atn: &Atn, options: &ParserRuntimeOptions<'_>) -> bool {
     options.init_action_rules.is_empty()
         && !options.track_alt_numbers
+        && !options.track_context_alt_numbers
         && options
             .predicates
             .iter()
@@ -6745,7 +6752,7 @@ where
             {
                 let mut cursor = live_root;
                 while let Some(link) = self.recognition_arena.link(cursor) {
-                    let child = self.arena_recognized_node_tree(link.head, false)?;
+                    let child = self.arena_recognized_node_tree(link.head, false, false)?;
                     self.tree.add_child(&mut context, child);
                     cursor = link.tail;
                 }
@@ -6867,6 +6874,7 @@ where
         &mut self,
         node_id: RecognizedNodeId,
         track_alt_numbers: bool,
+        track_context_alt_numbers: bool,
     ) -> Result<ParseTree, AntlrError> {
         let node = self.recognition_arena.node(node_id);
         match node {
@@ -6906,6 +6914,9 @@ where
                 if track_alt_numbers {
                     context.set_alt_number(alt_number as usize);
                 }
+                if track_context_alt_numbers {
+                    context.set_context_alt_number(alt_number as usize);
+                }
                 if let Some(extra) = return_values {
                     let RecognitionExtra::ReturnValues(values) =
                         self.recognition_arena.extra(extra)
@@ -6926,7 +6937,11 @@ where
                     .recognition_arena
                     .fold_left_recursive_boundaries(children);
                 while let Some(link) = self.recognition_arena.link(cursor) {
-                    let child = self.arena_recognized_node_tree(link.head, track_alt_numbers)?;
+                    let child = self.arena_recognized_node_tree(
+                        link.head,
+                        track_alt_numbers,
+                        track_context_alt_numbers,
+                    )?;
                     self.tree.add_child(&mut context, child);
                     cursor = link.tail;
                 }
@@ -6976,7 +6991,7 @@ where
                 )?;
                 Ok(self.rule_node(context))
             }
-            _ => self.arena_recognized_node_tree(node_id, false),
+            _ => self.arena_recognized_node_tree(node_id, false, false),
         }
     }
 
@@ -7136,6 +7151,7 @@ where
         let ParserRuntimeOptions {
             init_action_rules,
             track_alt_numbers,
+            track_context_alt_numbers,
             predicates,
             semantics,
             rule_args,
@@ -7143,8 +7159,9 @@ where
             return_actions,
             unknown_predicate_policy,
         } = options;
+        let capture_alt_numbers = track_alt_numbers || track_context_alt_numbers;
         if init_action_rules.is_empty()
-            && !track_alt_numbers
+            && !capture_alt_numbers
             && predicates.is_empty()
             && semantics.is_none()
             && rule_args.is_empty()
@@ -7234,7 +7251,7 @@ where
                 member_values,
                 return_values,
                 rule_alt_number: 0,
-                track_alt_numbers,
+                track_alt_numbers: capture_alt_numbers,
                 consumed_eof: false,
                 committed_decision: false,
                 precedence,
@@ -7286,6 +7303,9 @@ where
         if track_alt_numbers {
             context.set_alt_number(outcome.alt_number);
         }
+        if track_context_alt_numbers {
+            context.set_context_alt_number(outcome.alt_number);
+        }
         for (name, value) in outcome.return_values {
             context.set_int_return(name, value);
         }
@@ -7304,7 +7324,11 @@ where
         if self.build_parse_trees {
             let mut nodes = live_root;
             while let Some(link) = self.recognition_arena.link(nodes) {
-                let child = self.arena_recognized_node_tree(link.head, track_alt_numbers)?;
+                let child = self.arena_recognized_node_tree(
+                    link.head,
+                    track_alt_numbers,
+                    track_context_alt_numbers,
+                )?;
                 self.tree.add_child(&mut context, child);
                 nodes = link.tail;
             }

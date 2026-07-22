@@ -12,6 +12,10 @@ fn run_antlr4_rust_gen(args: &[impl AsRef<OsStr>]) -> Output {
 }
 
 fn assert_generated_modules_compile(temp_dir: &Path, modules: &[&str]) {
+    assert_generated_project(temp_dir, modules, "");
+}
+
+fn assert_generated_project(temp_dir: &Path, modules: &[&str], test_source: &str) {
     let project = temp_dir.join("compile-generated");
     let source = project.join("src");
     fs::create_dir_all(&source).expect("generated-module check should be writable");
@@ -37,8 +41,11 @@ fn assert_generated_modules_compile(temp_dir: &Path, modules: &[&str]) {
         })
         .collect::<Vec<_>>()
         .join("\n");
-    fs::write(source.join("lib.rs"), declarations)
-        .expect("generated-module crate root should be writable");
+    fs::write(
+        source.join("lib.rs"),
+        format!("{declarations}\n{test_source}"),
+    )
+    .expect("generated-module crate root should be writable");
     for module in modules {
         fs::copy(temp_dir.join("generated").join(module), source.join(module))
             .expect("generated module should be copied into the check crate");
@@ -46,7 +53,11 @@ fn assert_generated_modules_compile(temp_dir: &Path, modules: &[&str]) {
 
     let output = Command::new(env!("CARGO"))
         .args([
-            "check",
+            if test_source.is_empty() {
+                "check"
+            } else {
+                "test"
+            },
             "--quiet",
             "--offline",
             "--manifest-path",
@@ -60,7 +71,7 @@ fn assert_generated_modules_compile(temp_dir: &Path, modules: &[&str]) {
         .expect("cargo check should run");
     assert!(
         output.status.success(),
-        "generated modules did not compile\nstdout: {}\nstderr: {}",
+        "generated project failed\nstdout: {}\nstderr: {}",
         utf8(&output.stdout),
         utf8(&output.stderr)
     );
@@ -116,6 +127,10 @@ fn long_help_describes_source_only_cli() {
     );
     assert!(stdout.contains("  -I, --lib DIR"), "{stdout}");
     assert!(stdout.contains("  --option-hook KEY=VALUE"), "{stdout}");
+    assert!(stdout.contains("  -listener, --listener"), "{stdout}");
+    assert!(stdout.contains("  -no-listener, --no-listener"), "{stdout}");
+    assert!(stdout.contains("  -visitor, --visitor"), "{stdout}");
+    assert!(stdout.contains("  -no-visitor, --no-visitor"), "{stdout}");
     assert!(!stdout.contains("--lexer "), "{stdout}");
     assert!(!stdout.contains("--parser "), "{stdout}");
     assert!(!stdout.contains("--grammar "), "{stdout}");
@@ -249,6 +264,8 @@ fn combined_root_suffixes_alternative_contexts_and_listener_methods() {
         "pub struct SingleLabelContext<'a>",
         "pub struct ManyLabelContext<'a>",
         "pub trait ShapesListener",
+        "pub struct ShapesTreeWalker",
+        "pub type ParseTreeWalker = ShapesTreeWalker",
         "fn enter_single_label(&mut self",
         "fn enter_many_label(&mut self",
     ] {
@@ -258,7 +275,220 @@ fn combined_root_suffixes_alternative_contexts_and_listener_methods() {
         !parser.contains("antlr4_runtime::{{"),
         "generated imports must not contain redundant nested braces\n{parser}"
     );
+    assert!(
+        !parser.contains("pub trait ShapesVisitor"),
+        "visitor generation must remain opt-in\n{parser}"
+    );
     assert_generated_modules_compile(temp.path(), &["shapes_lexer.rs", "shapes_parser.rs"]);
+}
+
+#[test]
+fn visitor_and_typed_walk_dispatch_labeled_left_recursion() {
+    let temp = temporary_directory("typed-tree-walkers");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/typed-tree-walkers/Calculator.g4");
+    let out = temp.path().join("generated");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--visitor"),
+        OsStr::new("--out-dir"),
+        out.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    let parser =
+        fs::read_to_string(out.join("calculator_parser.rs")).expect("parser should be emitted");
+    for expected in [
+        "pub trait CalculatorVisitor",
+        "pub trait CalculatorVisitable",
+        "pub trait CalculatorListener",
+        "pub struct CalculatorTreeWalker",
+        "fn visit_multiply_label(&mut self",
+        "fn visit_add_label(&mut self",
+        "fn visit_number_label(&mut self",
+        "track_context_alt_numbers: true",
+    ] {
+        assert!(parser.contains(expected), "missing {expected:?}\n{parser}");
+    }
+
+    assert_generated_project(
+        temp.path(),
+        &["calculator_lexer.rs", "calculator_parser.rs"],
+        r#"
+#[cfg(test)]
+mod typed_tree_tests {
+    use super::calculator_lexer::CalculatorLexer;
+    use super::calculator_parser::*;
+    use antlr4_runtime::{CommonTokenStream, InputStream, Parser as _};
+
+    struct Eval;
+
+    impl CalculatorVisitor for Eval {
+        type Result = i64;
+
+        fn visit_start(&mut self, ctx: &StartContext) -> Self::Result {
+            self.visit(ctx.expression(0))
+        }
+
+        fn visit_number_label(&mut self, ctx: &NumberLabelContext) -> Self::Result {
+            ctx.INT(0).to_string().parse().expect("integer token")
+        }
+
+        fn visit_multiply_label(&mut self, ctx: &MultiplyLabelContext) -> Self::Result {
+            let left = self.visit(ctx.expression(0));
+            let right = self.visit(ctx.expression(1));
+            if ctx.STAR_all().is_empty() {
+                left / right
+            } else {
+                left * right
+            }
+        }
+
+        fn visit_add_label(&mut self, ctx: &AddLabelContext) -> Self::Result {
+            let left = self.visit(ctx.expression(0));
+            let right = self.visit(ctx.expression(1));
+            if ctx.PLUS_all().is_empty() {
+                left - right
+            } else {
+                left + right
+            }
+        }
+    }
+
+    #[derive(Default)]
+    struct Trace(Vec<&'static str>);
+
+    impl CalculatorListener for Trace {
+        fn enter_multiply_label(&mut self, _ctx: &MultiplyLabelContext) {
+            self.0.push("enter:multiply");
+        }
+
+        fn exit_multiply_label(&mut self, _ctx: &MultiplyLabelContext) {
+            self.0.push("exit:multiply");
+        }
+
+        fn enter_add_label(&mut self, _ctx: &AddLabelContext) {
+            self.0.push("enter:add");
+        }
+
+        fn exit_add_label(&mut self, _ctx: &AddLabelContext) {
+            self.0.push("exit:add");
+        }
+
+        fn enter_number_label(&mut self, _ctx: &NumberLabelContext) {
+            self.0.push("enter:number");
+        }
+
+        fn exit_number_label(&mut self, _ctx: &NumberLabelContext) {
+            self.0.push("exit:number");
+        }
+    }
+
+    #[test]
+    fn evaluates_and_walks_exact_typed_alternatives() {
+        let lexer = CalculatorLexer::new(InputStream::new("2 + 8 / 2"));
+        let tokens = CommonTokenStream::new(lexer);
+        let mut parser = CalculatorParser::new(tokens);
+        let root = parser.start().expect("calculator input should parse");
+        assert_eq!(parser.number_of_syntax_errors(), 0);
+        let parsed = parser.into_parsed_file(root);
+        assert!(
+            parsed
+                .tree()
+                .descendants()
+                .filter_map(antlr4_runtime::Node::as_rule)
+                .all(|rule| rule.alt_number() == 0),
+            "typed dispatch metadata must not become display-visible alt numbers"
+        );
+
+        assert_eq!(Eval.visit(parsed.tree()), 6);
+
+        let mut trace = Trace::default();
+        trace.walk(parsed.tree()).expect("typed listener walk");
+        assert_eq!(
+            trace.0,
+            [
+                "enter:add",
+                "enter:number",
+                "exit:number",
+                "enter:multiply",
+                "enter:number",
+                "exit:number",
+                "enter:number",
+                "exit:number",
+                "exit:multiply",
+                "exit:add",
+            ]
+        );
+
+        let start = parsed.tree().as_rule().expect("start rule");
+        let expression = start.child_rule(1).expect("top-level expression");
+        assert!(expression.downcast_ref::<AddLabelContext>().is_some());
+        assert!(expression.downcast_ref::<MultiplyLabelContext>().is_none());
+
+        let right = expression
+            .child_rules(1)
+            .nth(1)
+            .expect("right expression");
+        assert!(right.downcast_ref::<MultiplyLabelContext>().is_some());
+        assert!(right.downcast_ref::<AddLabelContext>().is_none());
+    }
+}
+"#,
+    );
+}
+
+#[test]
+fn listener_and_visitor_generation_can_be_disabled_independently() {
+    let temp = temporary_directory("tree-walker-flags");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/combined-contexts/Shapes.g4");
+    let visitor_only = temp.path().join("visitor-only");
+
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("-no-listener"),
+        OsStr::new("-visitor"),
+        OsStr::new("--out-dir"),
+        visitor_only.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    let parser = fs::read_to_string(visitor_only.join("shapes_parser.rs"))
+        .expect("parser should be emitted");
+    assert!(parser.contains("pub trait ShapesVisitor"), "{parser}");
+    assert!(!parser.contains("pub trait ShapesListener"), "{parser}");
+    assert!(!parser.contains("pub struct ShapesTreeWalker"), "{parser}");
+    assert!(!parser.contains("pub type ParseTreeWalker"), "{parser}");
+
+    let neither = temp.path().join("neither");
+    let output = run_antlr4_rust_gen(&[
+        grammar.as_os_str(),
+        OsStr::new("--no-listener"),
+        OsStr::new("--visitor"),
+        OsStr::new("--no-visitor"),
+        OsStr::new("--out-dir"),
+        neither.as_os_str(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+    let parser =
+        fs::read_to_string(neither.join("shapes_parser.rs")).expect("parser should be emitted");
+    assert!(!parser.contains("pub trait ShapesVisitor"), "{parser}");
+    assert!(!parser.contains("pub trait ShapesListener"), "{parser}");
 }
 
 #[test]
