@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92",
+  "active_revision_id": "testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92-r1",
+  "revisions": [
+    {
+      "revision_id": "testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92/revisions/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92-r1/manifest.json",
+      "closure_sha256": "01e58488ec38b829c518fe30fc20c90f4a97d824bfd915684fe60755836f9b19"
+    }
+  ]
+}

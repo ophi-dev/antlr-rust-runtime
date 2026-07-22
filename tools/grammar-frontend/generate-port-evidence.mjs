@@ -34,6 +34,11 @@ import {
     FRONTEND_SYNTAX_TEST_PARENT,
     IMPLEMENTATION_COMMIT,
     JAVA_COMMIT,
+    LEFT_RECURSION_BASE_COMMIT,
+    LEFT_RECURSION_BASE_PARENT_COMMIT,
+    LEFT_RECURSION_FIXTURE_COMMIT,
+    LEFT_RECURSION_IMPLEMENTATION_COMMIT,
+    LEFT_RECURSION_TEST_COMMIT,
     NESTED_ACTION_BASE_COMMIT,
     NESTED_ACTION_IMPLEMENTATION_COMMIT,
     NESTED_ACTION_TEST_COMMIT,
@@ -152,6 +157,12 @@ const TOKEN_ASSIGNMENT_TEST_START =
     "    mod upstream_token_type_assignment {";
 const TOKEN_ASSIGNMENT_TEST_END =
     "\n    fn assert_lexer_interp";
+const LEFT_RECURSION_TEST_PATH =
+    "src/bin_support/grammar/atn/interp_test.rs";
+const LEFT_RECURSION_TEST_START =
+    "    mod upstream_left_recursion_tool_issues {";
+const LEFT_RECURSION_TEST_END =
+    "\n    mod upstream_atn_construction {";
 const EMPTY_VOCABULARY_LOGICAL_ID =
     "testvocabulary-testemptyvocabulary-66d31ad014";
 const SYMBOL_INFO_SHA256 =
@@ -1082,6 +1093,53 @@ const tokenAssignmentLockedSections = [
         sha256: digest(checkedInTokenAssignmentTests),
     },
 ];
+const checkedInLeftRecursionTests = sectionBetweenMarkers(
+    await readFile(resolve(repoRoot, LEFT_RECURSION_TEST_PATH), "utf8"),
+    LEFT_RECURSION_TEST_START,
+    LEFT_RECURSION_TEST_END,
+);
+const recordedLeftRecursionTests = gitShowOptional(
+    repoRoot,
+    LEFT_RECURSION_TEST_COMMIT,
+    LEFT_RECURSION_TEST_PATH,
+);
+const implementedLeftRecursionTests = gitShowOptional(
+    repoRoot,
+    LEFT_RECURSION_IMPLEMENTATION_COMMIT,
+    LEFT_RECURSION_TEST_PATH,
+);
+if (
+    recordedLeftRecursionTests === null ||
+    sectionBetweenMarkers(
+        recordedLeftRecursionTests,
+        LEFT_RECURSION_TEST_START,
+        LEFT_RECURSION_TEST_END,
+    ) !== checkedInLeftRecursionTests
+) {
+    throw new Error(
+        "checked-in left-recursion issue ports differ from their test commit",
+    );
+}
+if (
+    implementedLeftRecursionTests === null ||
+    sectionBetweenMarkers(
+        implementedLeftRecursionTests,
+        LEFT_RECURSION_TEST_START,
+        LEFT_RECURSION_TEST_END,
+    ) !== checkedInLeftRecursionTests
+) {
+    throw new Error(
+        "left-recursion implementation changed the locked test ports",
+    );
+}
+const leftRecursionLockedSections = [
+    {
+        path: LEFT_RECURSION_TEST_PATH,
+        marker: LEFT_RECURSION_TEST_START,
+        end_marker: LEFT_RECURSION_TEST_END,
+        sha256: digest(checkedInLeftRecursionTests),
+    },
+];
 
 const upstreamByLogicalId = new Map(
     testMap.rows.map((row) => [row.logical_id, row]),
@@ -1217,6 +1275,9 @@ for (const row of completedRows) {
     const phaseBTokenAssignment = row.logical_id.startsWith(
         "testtokentypeassignment-",
     );
+    const phaseBLeftRecursion = row.logical_id.startsWith(
+        "testleftrecursiontoolissues-",
+    );
     if (
         row.owner_phase === "B" &&
         !phaseBAtnSerialization &&
@@ -1233,7 +1294,8 @@ for (const row of completedRows) {
         !phaseBUnicodeEscape &&
         !phaseBUnicodeData &&
         !phaseBUnicodeGrammar &&
-        !phaseBTokenAssignment
+        !phaseBTokenAssignment &&
+        !phaseBLeftRecursion
     ) {
         throw new Error(`missing Phase B evidence profile for ${row.logical_id}`);
     }
@@ -1428,6 +1490,22 @@ for (const row of completedRows) {
                                               ? "the case-specific .interp and .tokens test passed against the direct compiler implementation already present at the batch base"
                                               : "the insertion-order implementation commit is directly based on the locked red token-assignment representation test",
                                       }
+                                    : phaseBLeftRecursion
+                                      ? {
+                                            lockedSections:
+                                                leftRecursionLockedSections,
+                                            scaffoldCommit:
+                                                LEFT_RECURSION_BASE_COMMIT,
+                                            testParent:
+                                                LEFT_RECURSION_FIXTURE_COMMIT,
+                                            implementationParent:
+                                                coveredExisting
+                                                    ? LEFT_RECURSION_BASE_PARENT_COMMIT
+                                                    : LEFT_RECURSION_TEST_COMMIT,
+                                            reachability: coveredExisting
+                                                ? "the accepted primary-rule-argument .interp test passed against the direct compiler implementation already present at the batch base"
+                                                : "the left-recursion implementation commit is directly based on the locked red diagnostic tests",
+                                        }
           : null;
     await addEvidence({
         logicalId: row.logical_id,
@@ -1573,6 +1651,15 @@ for (const row of completedRows) {
                                               java_compatibility_verdict:
                                                   "exact Java 4.13.2 token numbering, aliases, insertion order, recognizer metadata, and serialized ATN equality",
                                           }
+                                        : phaseBLeftRecursion
+                                          ? {
+                                                primary:
+                                                    "the direct Rust compiler matches the immutable Java 4.13.2 left-recursion diagnostic or complete accepted parser and lexer .interp",
+                                                alternate:
+                                                    "the pinned antlr-ng TestLeftRecursionToolIssues case uses the same grammar and expected outcome",
+                                                java_compatibility_verdict:
+                                                    "exact Java 4.13.2 diagnostic severity, position, and message equality or complete accepted recognizer metadata and serialized ATN equality",
+                                            }
             : {
                   primary: coveredExisting
                       ? "the case-specific Rust port matches the pinned accepted and rejected syntax outcomes"
@@ -1623,7 +1710,8 @@ for (const row of completedRows) {
             phaseBUnicodeEscape ||
             (phaseBUnicodeGrammar && !coveredExisting) ||
             (phaseBTokenAssignment && !coveredExisting) ||
-            (phaseBTokenPosition && !coveredExisting)
+            (phaseBTokenPosition && !coveredExisting) ||
+            (phaseBLeftRecursion && !coveredExisting)
             ? row.demonstrated_red
             : undefined,
     });

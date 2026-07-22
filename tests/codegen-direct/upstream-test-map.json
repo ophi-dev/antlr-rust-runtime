@@ -20446,8 +20446,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::argument_on_primary_rule::matches_java_interps",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -20468,8 +20469,21 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestLeftRecursionToolIssues.testArgOnPrimaryRuleInLeftRecursiveRule behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust left-recursion diagnostics and accepted serialization match Java 4.13.2 for TestLeftRecursionToolIssues.testArgOnPrimaryRuleInLeftRecursiveRule",
+      "scaffold_commit": "649695efd10c978034c597ed96dc7c43221e9433",
+      "primary_test_commit": "4338380064180acf5da3e2414bd5837c21266d65",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::argument_on_primary_rule::matches_java_interps -- --exact",
+        "commit": "4338380064180acf5da3e2414bd5837c21266d65",
+        "exit_code": 0,
+        "result": "1 passed; 0 failed"
+      },
+      "primary_implementation_commit": "649695efd10c978034c597ed96dc7c43221e9433",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::argument_on_primary_rule::matches_java_interps -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22",
         "source_case_ids": [
@@ -20477,14 +20491,29 @@
           "java-antlr:testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule@3a66c06aa95d"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22/T.g4",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22/T.interp",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22/T.tokens",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22/TLexer.interp",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22/TLexer.tokens",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22/fixture.json",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::argument_on_primary_rule::matches_java_interps",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestLeftRecursionToolIssues.testArgOnPrimaryRuleInLeftRecursiveRule behavior"
+        "observable": "direct Rust left-recursion diagnostics and accepted serialization match Java 4.13.2 for TestLeftRecursionToolIssues.testArgOnPrimaryRuleInLeftRecursiveRule",
+        "scaffold_commit": "649695efd10c978034c597ed96dc7c43221e9433",
+        "primary_test_commit": "4338380064180acf5da3e2414bd5837c21266d65",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "b9a44871ea55f58c09d397afc5190ffded122ceaddf62aa949be34825cc9247f",
-      "evidence_path": null
+      "closure_sha256": "2074358e6d77a7434a5c4aab3536344e751337f5075c2ea2f11580ef6a1d99bf",
+      "evidence_path": "tests/codegen-direct/port-evidence/testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22"
     },
     {
       "logical_id": "testleftrecursiontoolissues-testcheckforleftrecursiveemptyfollow-558283d55a",
@@ -20496,8 +20525,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testleftrecursiontoolissues-testcheckforleftrecursiveemptyfollow-558283d55a-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testleftrecursiontoolissues-testcheckforleftrecursiveemptyfollow-558283d55a",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::empty_left_recursive_follow::matches_java_diagnostic",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -20518,8 +20547,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestLeftRecursionToolIssues.testCheckForLeftRecursiveEmptyFollow behavior",
+      "expected_red_failure_fingerprint": "G4A002 used closure terminology instead of Java's left-recursive alternative diagnostic",
+      "observable_equivalence": "direct Rust left-recursion diagnostics and accepted serialization match Java 4.13.2 for TestLeftRecursionToolIssues.testCheckForLeftRecursiveEmptyFollow",
+      "scaffold_commit": "649695efd10c978034c597ed96dc7c43221e9433",
+      "primary_test_commit": "4338380064180acf5da3e2414bd5837c21266d65",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::empty_left_recursive_follow::matches_java_diagnostic -- --exact",
+        "exit_code": 101,
+        "fingerprint": "G4A002 used closure terminology instead of Java's left-recursive alternative diagnostic"
+      },
+      "primary_implementation_commit": "a5f1269a026f5a40f59071cadf8a6c60f8fe1b09",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::empty_left_recursive_follow::matches_java_diagnostic -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testleftrecursiontoolissues-testcheckforleftrecursiveemptyfollow-558283d55a",
         "source_case_ids": [
@@ -20527,14 +20568,27 @@
           "java-antlr:testleftrecursiontoolissues-testcheckforleftrecursiveemptyfollow@39293157fb7a"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testcheckforleftrecursiveemptyfollow-558283d55a/T.g4",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testcheckforleftrecursiveemptyfollow-558283d55a/TLexer.interp",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testcheckforleftrecursiveemptyfollow-558283d55a/TLexer.tokens",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testcheckforleftrecursiveemptyfollow-558283d55a/diagnostics.json",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testcheckforleftrecursiveemptyfollow-558283d55a/fixture.json",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testcheckforleftrecursiveemptyfollow-558283d55a/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testcheckforleftrecursiveemptyfollow-558283d55a/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testcheckforleftrecursiveemptyfollow-558283d55a/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testcheckforleftrecursiveemptyfollow-558283d55a/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testleftrecursiontoolissues-testcheckforleftrecursiveemptyfollow-558283d55a",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::empty_left_recursive_follow::matches_java_diagnostic",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestLeftRecursionToolIssues.testCheckForLeftRecursiveEmptyFollow behavior"
+        "observable": "direct Rust left-recursion diagnostics and accepted serialization match Java 4.13.2 for TestLeftRecursionToolIssues.testCheckForLeftRecursiveEmptyFollow",
+        "scaffold_commit": "649695efd10c978034c597ed96dc7c43221e9433",
+        "primary_test_commit": "4338380064180acf5da3e2414bd5837c21266d65"
       },
-      "closure_sha256": "1865c10ea48d6d33a8a15d8c0c249043211e9c44ebe4f29aa8c4bc4f9654f3f0",
-      "evidence_path": null
+      "closure_sha256": "e51712121e06766e90aa8eb6407c7a27fa712767c6c8c7e2d07a7d28e7f1d5a2",
+      "evidence_path": "tests/codegen-direct/port-evidence/testleftrecursiontoolissues-testcheckforleftrecursiveemptyfollow-558283d55a"
     },
     {
       "logical_id": "testleftrecursiontoolissues-testcheckfornonleftrecursiverule-477f42142e",
@@ -20546,8 +20600,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testleftrecursiontoolissues-testcheckfornonleftrecursiverule-477f42142e-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testleftrecursiontoolissues-testcheckfornonleftrecursiverule-477f42142e",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::no_non_left_recursive_alternative::matches_java_diagnostic",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -20568,8 +20622,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestLeftRecursionToolIssues.testCheckForNonLeftRecursiveRule behavior",
+      "expected_red_failure_fingerprint": "G4R002 used non-left-recursive terminology instead of Java's exact diagnostic",
+      "observable_equivalence": "direct Rust left-recursion diagnostics and accepted serialization match Java 4.13.2 for TestLeftRecursionToolIssues.testCheckForNonLeftRecursiveRule",
+      "scaffold_commit": "649695efd10c978034c597ed96dc7c43221e9433",
+      "primary_test_commit": "4338380064180acf5da3e2414bd5837c21266d65",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::no_non_left_recursive_alternative::matches_java_diagnostic -- --exact",
+        "exit_code": 101,
+        "fingerprint": "G4R002 used non-left-recursive terminology instead of Java's exact diagnostic"
+      },
+      "primary_implementation_commit": "a5f1269a026f5a40f59071cadf8a6c60f8fe1b09",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::no_non_left_recursive_alternative::matches_java_diagnostic -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testleftrecursiontoolissues-testcheckfornonleftrecursiverule-477f42142e",
         "source_case_ids": [
@@ -20577,14 +20643,27 @@
           "java-antlr:testleftrecursiontoolissues-testcheckfornonleftrecursiverule@222c12104e78"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testcheckfornonleftrecursiverule-477f42142e/T.g4",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testcheckfornonleftrecursiverule-477f42142e/TLexer.interp",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testcheckfornonleftrecursiverule-477f42142e/TLexer.tokens",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testcheckfornonleftrecursiverule-477f42142e/diagnostics.json",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testcheckfornonleftrecursiverule-477f42142e/fixture.json",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testcheckfornonleftrecursiverule-477f42142e/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testcheckfornonleftrecursiverule-477f42142e/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testcheckfornonleftrecursiverule-477f42142e/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testcheckfornonleftrecursiverule-477f42142e/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testleftrecursiontoolissues-testcheckfornonleftrecursiverule-477f42142e",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::no_non_left_recursive_alternative::matches_java_diagnostic",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestLeftRecursionToolIssues.testCheckForNonLeftRecursiveRule behavior"
+        "observable": "direct Rust left-recursion diagnostics and accepted serialization match Java 4.13.2 for TestLeftRecursionToolIssues.testCheckForNonLeftRecursiveRule",
+        "scaffold_commit": "649695efd10c978034c597ed96dc7c43221e9433",
+        "primary_test_commit": "4338380064180acf5da3e2414bd5837c21266d65"
       },
-      "closure_sha256": "7eddd917cbffd84a4f3f1890384b8cc54af8de02d8a5da17dc358a9a91870fca",
-      "evidence_path": null
+      "closure_sha256": "30f8ba342a03d290e090aac035cd5e5d0669fd9f01106bf13c74f8c0473eda1c",
+      "evidence_path": "tests/codegen-direct/port-evidence/testleftrecursiontoolissues-testcheckfornonleftrecursiverule-477f42142e"
     },
     {
       "logical_id": "testleftrecursiontoolissues-testisolatedleftrecursiveruleref-43f8252e7d",
@@ -20596,8 +20675,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testleftrecursiontoolissues-testisolatedleftrecursiveruleref-43f8252e7d-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testleftrecursiontoolissues-testisolatedleftrecursiveruleref-43f8252e7d",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::isolated_left_recursive_rule_reference::matches_java_diagnostic",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -20618,8 +20697,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestLeftRecursionToolIssues.testIsolatedLeftRecursiveRuleRef behavior",
+      "expected_red_failure_fingerprint": "G4R001 used the Rust implementation-pattern message instead of Java's exact diagnostic",
+      "observable_equivalence": "direct Rust left-recursion diagnostics and accepted serialization match Java 4.13.2 for TestLeftRecursionToolIssues.testIsolatedLeftRecursiveRuleRef",
+      "scaffold_commit": "649695efd10c978034c597ed96dc7c43221e9433",
+      "primary_test_commit": "4338380064180acf5da3e2414bd5837c21266d65",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::isolated_left_recursive_rule_reference::matches_java_diagnostic -- --exact",
+        "exit_code": 101,
+        "fingerprint": "G4R001 used the Rust implementation-pattern message instead of Java's exact diagnostic"
+      },
+      "primary_implementation_commit": "a5f1269a026f5a40f59071cadf8a6c60f8fe1b09",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::isolated_left_recursive_rule_reference::matches_java_diagnostic -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testleftrecursiontoolissues-testisolatedleftrecursiveruleref-43f8252e7d",
         "source_case_ids": [
@@ -20627,14 +20718,27 @@
           "java-antlr:testleftrecursiontoolissues-testisolatedleftrecursiveruleref@9cf21fca38ce"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testisolatedleftrecursiveruleref-43f8252e7d/T.g4",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testisolatedleftrecursiveruleref-43f8252e7d/TLexer.interp",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testisolatedleftrecursiveruleref-43f8252e7d/TLexer.tokens",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testisolatedleftrecursiveruleref-43f8252e7d/diagnostics.json",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testisolatedleftrecursiveruleref-43f8252e7d/fixture.json",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testisolatedleftrecursiveruleref-43f8252e7d/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testisolatedleftrecursiveruleref-43f8252e7d/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testisolatedleftrecursiveruleref-43f8252e7d/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testisolatedleftrecursiveruleref-43f8252e7d/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testleftrecursiontoolissues-testisolatedleftrecursiveruleref-43f8252e7d",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::isolated_left_recursive_rule_reference::matches_java_diagnostic",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestLeftRecursionToolIssues.testIsolatedLeftRecursiveRuleRef behavior"
+        "observable": "direct Rust left-recursion diagnostics and accepted serialization match Java 4.13.2 for TestLeftRecursionToolIssues.testIsolatedLeftRecursiveRuleRef",
+        "scaffold_commit": "649695efd10c978034c597ed96dc7c43221e9433",
+        "primary_test_commit": "4338380064180acf5da3e2414bd5837c21266d65"
       },
-      "closure_sha256": "7e2ea467b3244814e9ce5a39859d4c7091543521ed6114257442280991bfbd91",
-      "evidence_path": null
+      "closure_sha256": "7be876dccc6dff3954d9d6377aaac28df18d072b865677486054db7e15efcf9c",
+      "evidence_path": "tests/codegen-direct/port-evidence/testleftrecursiontoolissues-testisolatedleftrecursiveruleref-43f8252e7d"
     },
     {
       "logical_id": "testleftrecursiontoolissues-testleftrecursiverulerefwitharg-40cd52608d",
@@ -20646,8 +20750,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testleftrecursiontoolissues-testleftrecursiverulerefwitharg-40cd52608d-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg-40cd52608d",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::recursive_rule_reference_with_argument::matches_java_diagnostic",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -20668,8 +20772,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestLeftRecursionToolIssues.testLeftRecursiveRuleRefWithArg behavior",
+      "expected_red_failure_fingerprint": "the direct compiler accepted a left-recursive rule reference carrying arguments",
+      "observable_equivalence": "direct Rust left-recursion diagnostics and accepted serialization match Java 4.13.2 for TestLeftRecursionToolIssues.testLeftRecursiveRuleRefWithArg",
+      "scaffold_commit": "649695efd10c978034c597ed96dc7c43221e9433",
+      "primary_test_commit": "4338380064180acf5da3e2414bd5837c21266d65",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::recursive_rule_reference_with_argument::matches_java_diagnostic -- --exact",
+        "exit_code": 101,
+        "fingerprint": "the direct compiler accepted a left-recursive rule reference carrying arguments"
+      },
+      "primary_implementation_commit": "a5f1269a026f5a40f59071cadf8a6c60f8fe1b09",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::recursive_rule_reference_with_argument::matches_java_diagnostic -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testleftrecursiontoolissues-testleftrecursiverulerefwitharg-40cd52608d",
         "source_case_ids": [
@@ -20677,14 +20793,27 @@
           "java-antlr:testleftrecursiontoolissues-testleftrecursiverulerefwitharg@9814f83d9f72"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg-40cd52608d/T.g4",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg-40cd52608d/TLexer.interp",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg-40cd52608d/TLexer.tokens",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg-40cd52608d/diagnostics.json",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg-40cd52608d/fixture.json",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg-40cd52608d/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg-40cd52608d/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg-40cd52608d/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg-40cd52608d/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg-40cd52608d",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::recursive_rule_reference_with_argument::matches_java_diagnostic",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestLeftRecursionToolIssues.testLeftRecursiveRuleRefWithArg behavior"
+        "observable": "direct Rust left-recursion diagnostics and accepted serialization match Java 4.13.2 for TestLeftRecursionToolIssues.testLeftRecursiveRuleRefWithArg",
+        "scaffold_commit": "649695efd10c978034c597ed96dc7c43221e9433",
+        "primary_test_commit": "4338380064180acf5da3e2414bd5837c21266d65"
       },
-      "closure_sha256": "384ed632f6b689fda5e469f125140510c264d1ab777687f94303cd82f490b041",
-      "evidence_path": null
+      "closure_sha256": "d772e1ff29a76a5109b394b32c3243aa6433b8ce837505902ff03828ee3078e4",
+      "evidence_path": "tests/codegen-direct/port-evidence/testleftrecursiontoolissues-testleftrecursiverulerefwitharg-40cd52608d"
     },
     {
       "logical_id": "testleftrecursiontoolissues-testleftrecursiverulerefwitharg2-7332bdbd4f",
@@ -20696,8 +20825,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testleftrecursiontoolissues-testleftrecursiverulerefwitharg2-7332bdbd4f-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg2-7332bdbd4f",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::recursive_rule_reference_with_argument_and_parameter::matches_java_diagnostic",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -20718,8 +20847,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestLeftRecursionToolIssues.testLeftRecursiveRuleRefWithArg2 behavior",
+      "expected_red_failure_fingerprint": "the direct compiler accepted a parameterized left-recursive rule reference carrying arguments",
+      "observable_equivalence": "direct Rust left-recursion diagnostics and accepted serialization match Java 4.13.2 for TestLeftRecursionToolIssues.testLeftRecursiveRuleRefWithArg2",
+      "scaffold_commit": "649695efd10c978034c597ed96dc7c43221e9433",
+      "primary_test_commit": "4338380064180acf5da3e2414bd5837c21266d65",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::recursive_rule_reference_with_argument_and_parameter::matches_java_diagnostic -- --exact",
+        "exit_code": 101,
+        "fingerprint": "the direct compiler accepted a parameterized left-recursive rule reference carrying arguments"
+      },
+      "primary_implementation_commit": "a5f1269a026f5a40f59071cadf8a6c60f8fe1b09",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::recursive_rule_reference_with_argument_and_parameter::matches_java_diagnostic -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testleftrecursiontoolissues-testleftrecursiverulerefwitharg2-7332bdbd4f",
         "source_case_ids": [
@@ -20727,14 +20868,27 @@
           "java-antlr:testleftrecursiontoolissues-testleftrecursiverulerefwitharg2@50704a1f9893"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg2-7332bdbd4f/T.g4",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg2-7332bdbd4f/TLexer.interp",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg2-7332bdbd4f/TLexer.tokens",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg2-7332bdbd4f/diagnostics.json",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg2-7332bdbd4f/fixture.json",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg2-7332bdbd4f/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg2-7332bdbd4f/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg2-7332bdbd4f/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg2-7332bdbd4f/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg2-7332bdbd4f",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::recursive_rule_reference_with_argument_and_parameter::matches_java_diagnostic",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestLeftRecursionToolIssues.testLeftRecursiveRuleRefWithArg2 behavior"
+        "observable": "direct Rust left-recursion diagnostics and accepted serialization match Java 4.13.2 for TestLeftRecursionToolIssues.testLeftRecursiveRuleRefWithArg2",
+        "scaffold_commit": "649695efd10c978034c597ed96dc7c43221e9433",
+        "primary_test_commit": "4338380064180acf5da3e2414bd5837c21266d65"
       },
-      "closure_sha256": "251bafe7eb3103e0c70cf7b339ef371b065541e9e4818f885b17602625a78da1",
-      "evidence_path": null
+      "closure_sha256": "d0a0d91ead189976287d42462cf7110aa0cc15f9baa6eceb55b6ec9c1527f8a2",
+      "evidence_path": "tests/codegen-direct/port-evidence/testleftrecursiontoolissues-testleftrecursiverulerefwitharg2-7332bdbd4f"
     },
     {
       "logical_id": "testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92",
@@ -20746,8 +20900,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::recursive_rule_reference_with_argument_without_parameter::matches_java_diagnostic",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -20768,8 +20922,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestLeftRecursionToolIssues.testLeftRecursiveRuleRefWithArg3 behavior",
+      "expected_red_failure_fingerprint": "the direct compiler accepted an argument on a left-recursive rule without parameters",
+      "observable_equivalence": "direct Rust left-recursion diagnostics and accepted serialization match Java 4.13.2 for TestLeftRecursionToolIssues.testLeftRecursiveRuleRefWithArg3",
+      "scaffold_commit": "649695efd10c978034c597ed96dc7c43221e9433",
+      "primary_test_commit": "4338380064180acf5da3e2414bd5837c21266d65",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::recursive_rule_reference_with_argument_without_parameter::matches_java_diagnostic -- --exact",
+        "exit_code": 101,
+        "fingerprint": "the direct compiler accepted an argument on a left-recursive rule without parameters"
+      },
+      "primary_implementation_commit": "a5f1269a026f5a40f59071cadf8a6c60f8fe1b09",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::recursive_rule_reference_with_argument_without_parameter::matches_java_diagnostic -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92",
         "source_case_ids": [
@@ -20777,14 +20943,27 @@
           "java-antlr:testleftrecursiontoolissues-testleftrecursiverulerefwitharg3@2a0e1f238fdb"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92/T.g4",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92/TLexer.interp",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92/TLexer.tokens",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92/diagnostics.json",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92/fixture.json",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::recursive_rule_reference_with_argument_without_parameter::matches_java_diagnostic",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestLeftRecursionToolIssues.testLeftRecursiveRuleRefWithArg3 behavior"
+        "observable": "direct Rust left-recursion diagnostics and accepted serialization match Java 4.13.2 for TestLeftRecursionToolIssues.testLeftRecursiveRuleRefWithArg3",
+        "scaffold_commit": "649695efd10c978034c597ed96dc7c43221e9433",
+        "primary_test_commit": "4338380064180acf5da3e2414bd5837c21266d65"
       },
-      "closure_sha256": "3d1742c773db1b2d527c49befbd7891adae761dd41621de6c4d14e42909e0a10",
-      "evidence_path": null
+      "closure_sha256": "01e58488ec38b829c518fe30fc20c90f4a97d824bfd915684fe60755836f9b19",
+      "evidence_path": "tests/codegen-direct/port-evidence/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92"
     },
     {
       "logical_id": "testlexeractions-nested-actions-3d175db5e5",

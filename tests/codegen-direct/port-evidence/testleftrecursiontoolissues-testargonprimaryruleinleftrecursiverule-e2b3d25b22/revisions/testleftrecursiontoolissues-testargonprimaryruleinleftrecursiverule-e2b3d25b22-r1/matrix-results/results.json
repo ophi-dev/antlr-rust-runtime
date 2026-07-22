@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22",
+  "revision_id": "testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22-r1",
+  "cells": [
+    {
+      "test_port": "coverage-extension",
+      "test_commit": "4338380064180acf5da3e2414bd5837c21266d65",
+      "implementation_port": "existing-primary-antlr-ng",
+      "implementation_commit": "649695efd10c978034c597ed96dc7c43221e9433",
+      "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::argument_on_primary_rule::matches_java_interps -- --exact",
+      "result": "green: 1 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the case-specific test passed against the existing Phase B implementation"
+}

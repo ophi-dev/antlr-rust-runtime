@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "logical_id": "testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92",
+  "revision_id": "testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "closure": {
+    "logical_id": "testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92",
+    "source_case_ids": [
+      "antlr-ng:testleftrecursiontoolissues-testleftrecursiverulerefwitharg3@2a0e1f238fdb",
+      "java-antlr:testleftrecursiontoolissues-testleftrecursiverulerefwitharg3@2a0e1f238fdb"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92/T.g4",
+      "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92/TLexer.interp",
+      "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92/TLexer.tokens",
+      "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92/diagnostics.json",
+      "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92/fixture.json",
+      "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92/oracle/java-unicode-data.stdout"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::recursive_rule_reference_with_argument_without_parameter::matches_java_diagnostic",
+    "unit_under_test": "direct grammar semantic pipeline and ATN construction",
+    "observable": "direct Rust left-recursion diagnostics and accepted serialization match Java 4.13.2 for TestLeftRecursionToolIssues.testLeftRecursiveRuleRefWithArg3",
+    "scaffold_commit": "649695efd10c978034c597ed96dc7c43221e9433",
+    "primary_test_commit": "4338380064180acf5da3e2414bd5837c21266d65"
+  },
+  "closure_sha256": "01e58488ec38b829c518fe30fc20c90f4a97d824bfd915684fe60755836f9b19",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testleftrecursiontoolissues-testleftrecursiverulerefwitharg3@2a0e1f238fdb",
+      "path": "tests/TestLeftRecursionToolIssues.spec.ts",
+      "sha256": "edaa6f09333eddf1527618fe2a6e1567ff80116bb4c5d9ec7660a7b809a31aca"
+    },
+    {
+      "source_case_id": "java-antlr:testleftrecursiontoolissues-testleftrecursiverulerefwitharg3@2a0e1f238fdb",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestLeftRecursionToolIssues.java",
+      "sha256": "bfa8575d870cdc2a66abe8bf9bf6f17ba4e33e98d76bf5d70ada32bcc27260cd"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92/T.g4",
+      "sha256": "94126e038107d2b897727b7913f8ce09014689d185d30a9125bb838f70857ccb"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92/TLexer.interp",
+      "sha256": "5d9fe3ac0f302e146583f89621b5d7cc7e2d290250cf62ceee8ba21680da83e9"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92/TLexer.tokens",
+      "sha256": "d5ed862c3047593c7b755b0fdbea74f9a316af05814fb27d0fcb914cd3a25d35"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92/diagnostics.json",
+      "sha256": "561ca18fd72c27e23fffe95e06996244ef7837d5d156c1be37502d1276465279"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92/fixture.json",
+      "sha256": "ee3b91e93e86ec1969b3d3db7f320442f2462d631b00d8cf9adcfaeab27b9f95"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92/oracle/java-antlr.stderr",
+      "sha256": "5e5c53aba702390587432f6b0fafd303526e192618943f798a83da98ad38e448"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    }
+  ],
+  "commits": {
+    "scaffold": "649695efd10c978034c597ed96dc7c43221e9433",
+    "primary_test": "4338380064180acf5da3e2414bd5837c21266d65",
+    "primary_implementation": "a5f1269a026f5a40f59071cadf8a6c60f8fe1b09"
+  },
+  "ancestry": {
+    "primary_test_parent": "39fc73d38147966bc753a6e36600cb48a6d4056c",
+    "primary_implementation_parent": "4338380064180acf5da3e2414bd5837c21266d65",
+    "reachability": "the left-recursion implementation commit is directly based on the locked red diagnostic tests"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_left_recursion_tool_issues {",
+      "end_marker": "\n    mod upstream_atn_construction {",
+      "sha256": "7e7fa3cb7e3c939bbffdcc0aaa8cd26b8e628a6591c82216ef1e12d44fe702b0"
+    }
+  ],
+  "demonstrated_red": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::recursive_rule_reference_with_argument_without_parameter::matches_java_diagnostic -- --exact",
+    "commit": "4338380064180acf5da3e2414bd5837c21266d65",
+    "exit_code": 101,
+    "fingerprint": "the direct compiler accepted an argument on a left-recursive rule without parameters"
+  },
+  "green_result": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::recursive_rule_reference_with_argument_without_parameter::matches_java_diagnostic -- --exact",
+    "commit": "a5f1269a026f5a40f59071cadf8a6c60f8fe1b09",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92/revisions/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92-r1/oracle-results/declared-sources.json",
+      "sha256": "85522912e45933ac1077750caf2ccb5c8d331fe3ace357521bbd3812dd8ba82d"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92/revisions/testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92-r1/matrix-results/results.json",
+      "sha256": "7b29609788579ce968266d2814c4c494245195f89d81ba58857425f643249be5"
+    }
+  ]
+}

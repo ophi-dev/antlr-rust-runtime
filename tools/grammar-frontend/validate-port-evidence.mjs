@@ -31,6 +31,11 @@ import {
     FRONTEND_SYNTAX_TEST_PARENT,
     IMPLEMENTATION_COMMIT,
     JAVA_COMMIT,
+    LEFT_RECURSION_BASE_COMMIT,
+    LEFT_RECURSION_BASE_PARENT_COMMIT,
+    LEFT_RECURSION_FIXTURE_COMMIT,
+    LEFT_RECURSION_IMPLEMENTATION_COMMIT,
+    LEFT_RECURSION_TEST_COMMIT,
     NESTED_ACTION_BASE_COMMIT,
     NESTED_ACTION_IMPLEMENTATION_COMMIT,
     NESTED_ACTION_TEST_COMMIT,
@@ -319,6 +324,9 @@ for (const [logicalId, record] of records) {
         const tokenAssignment = logicalId.startsWith(
             "testtokentypeassignment-",
         );
+        const leftRecursion = logicalId.startsWith(
+            "testleftrecursiontoolissues-",
+        );
         if (resolution === "verified-covered-existing") {
             if (atnSerialization) {
                 expect(
@@ -454,6 +462,23 @@ for (const [logicalId, record] of records) {
                         manifest.ancestry.primary_implementation_parent ===
                             TOKEN_ASSIGNMENT_BASE_PARENT_COMMIT,
                     `${logicalId} token assignment covered-existing ancestry differs`,
+                );
+            } else if (leftRecursion) {
+                expect(
+                    manifest.commits.scaffold ===
+                            LEFT_RECURSION_BASE_COMMIT &&
+                        manifest.commits.primary_test ===
+                            LEFT_RECURSION_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            LEFT_RECURSION_BASE_COMMIT,
+                    `${logicalId} left recursion covered-existing commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            LEFT_RECURSION_FIXTURE_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            LEFT_RECURSION_BASE_PARENT_COMMIT,
+                    `${logicalId} left recursion covered-existing ancestry differs`,
                 );
             } else {
                 expect(
@@ -694,6 +719,23 @@ for (const [logicalId, record] of records) {
                         manifest.ancestry.primary_implementation_parent ===
                             TOKEN_ASSIGNMENT_TEST_COMMIT,
                     `${logicalId} token assignment recorded ancestry differs`,
+                );
+            } else if (leftRecursion) {
+                expect(
+                    manifest.commits.scaffold ===
+                            LEFT_RECURSION_BASE_COMMIT &&
+                        manifest.commits.primary_test ===
+                            LEFT_RECURSION_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            LEFT_RECURSION_IMPLEMENTATION_COMMIT,
+                    `${logicalId} left recursion evidence commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            LEFT_RECURSION_FIXTURE_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            LEFT_RECURSION_TEST_COMMIT,
+                    `${logicalId} left recursion recorded ancestry differs`,
                 );
             } else {
                 expect(
@@ -1107,6 +1149,48 @@ if (tokenAssignmentImplementationParent !== null) {
         tokenAssignmentImplementationParent.trim() ===
             TOKEN_ASSIGNMENT_TEST_COMMIT,
         "token assignment implementation commit is not based on its locked tests",
+    );
+}
+const leftRecursionBaseParent = gitOptional([
+    "rev-parse",
+    `${LEFT_RECURSION_BASE_COMMIT}^`,
+]);
+if (leftRecursionBaseParent !== null) {
+    expect(
+        leftRecursionBaseParent.trim() ===
+            LEFT_RECURSION_BASE_PARENT_COMMIT,
+        "left recursion base commit has an unexpected parent",
+    );
+}
+const leftRecursionFixtureParent = gitOptional([
+    "rev-parse",
+    `${LEFT_RECURSION_FIXTURE_COMMIT}^`,
+]);
+if (leftRecursionFixtureParent !== null) {
+    expect(
+        leftRecursionFixtureParent.trim() === LEFT_RECURSION_BASE_COMMIT,
+        "left recursion fixture commit is not based on its recorded base",
+    );
+}
+const leftRecursionTestParent = gitOptional([
+    "rev-parse",
+    `${LEFT_RECURSION_TEST_COMMIT}^`,
+]);
+if (leftRecursionTestParent !== null) {
+    expect(
+        leftRecursionTestParent.trim() === LEFT_RECURSION_FIXTURE_COMMIT,
+        "left recursion test commit is not based on its fixture port",
+    );
+}
+const leftRecursionImplementationParent = gitOptional([
+    "rev-parse",
+    `${LEFT_RECURSION_IMPLEMENTATION_COMMIT}^`,
+]);
+if (leftRecursionImplementationParent !== null) {
+    expect(
+        leftRecursionImplementationParent.trim() ===
+            LEFT_RECURSION_TEST_COMMIT,
+        "left recursion implementation commit is not based on its locked tests",
     );
 }
 

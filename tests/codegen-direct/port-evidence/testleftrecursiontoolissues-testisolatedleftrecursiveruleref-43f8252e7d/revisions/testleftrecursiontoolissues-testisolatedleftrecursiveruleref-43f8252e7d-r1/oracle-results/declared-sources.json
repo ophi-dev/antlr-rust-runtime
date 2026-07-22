@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "logical_id": "testleftrecursiontoolissues-testisolatedleftrecursiveruleref-43f8252e7d",
+  "revision_id": "testleftrecursiontoolissues-testisolatedleftrecursiveruleref-43f8252e7d-r1",
+  "primary_test_source": {
+    "implementation": "java-antlr",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "source_case_ids": [
+      "java-antlr:testleftrecursiontoolissues-testisolatedleftrecursiveruleref@9cf21fca38ce"
+    ]
+  },
+  "alternate_test_source": {
+    "implementation": "antlr-ng",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "source_case_ids": [
+      "antlr-ng:testleftrecursiontoolissues-testisolatedleftrecursiveruleref@9cf21fca38ce"
+    ]
+  },
+  "outcomes": {
+    "primary": "the direct Rust compiler matches the immutable Java 4.13.2 left-recursion diagnostic or complete accepted parser and lexer .interp",
+    "alternate": "the pinned antlr-ng TestLeftRecursionToolIssues case uses the same grammar and expected outcome",
+    "java_compatibility_verdict": "exact Java 4.13.2 diagnostic severity, position, and message equality or complete accepted recognizer metadata and serialized ATN equality"
+  }
+}

@@ -28,6 +28,9 @@ import {
     FRONTEND_SYNTAX_TEST_COMMIT,
     IMPLEMENTATION_COMMIT,
     JAVA_COMMIT,
+    LEFT_RECURSION_BASE_COMMIT,
+    LEFT_RECURSION_IMPLEMENTATION_COMMIT,
+    LEFT_RECURSION_TEST_COMMIT,
     NESTED_ACTION_BASE_COMMIT,
     NESTED_ACTION_IMPLEMENTATION_COMMIT,
     NESTED_ACTION_TEST_COMMIT,
@@ -463,6 +466,80 @@ const TOKEN_ASSIGNMENT_PORTS = new Map([
         {
             testName: "set_does_not_miss_token_aliases",
             resolution: "verified-covered-existing",
+        },
+    ],
+]);
+const LEFT_RECURSION_TEST_PREFIX =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::";
+const LEFT_RECURSION_PORTS = new Map([
+    [
+        "testleftrecursiontoolissues-testargonprimaryruleinleftrecursiverule-e2b3d25b22",
+        {
+            testName: "argument_on_primary_rule",
+            testFunction: "matches_java_interps",
+            resolution: "verified-covered-existing",
+        },
+    ],
+    [
+        "testleftrecursiontoolissues-testcheckforleftrecursiveemptyfollow-558283d55a",
+        {
+            testName: "empty_left_recursive_follow",
+            testFunction: "matches_java_diagnostic",
+            resolution: "ported",
+            redFingerprint:
+                "G4A002 used closure terminology instead of Java's left-recursive alternative diagnostic",
+        },
+    ],
+    [
+        "testleftrecursiontoolissues-testcheckfornonleftrecursiverule-477f42142e",
+        {
+            testName: "no_non_left_recursive_alternative",
+            testFunction: "matches_java_diagnostic",
+            resolution: "ported",
+            redFingerprint:
+                "G4R002 used non-left-recursive terminology instead of Java's exact diagnostic",
+        },
+    ],
+    [
+        "testleftrecursiontoolissues-testisolatedleftrecursiveruleref-43f8252e7d",
+        {
+            testName: "isolated_left_recursive_rule_reference",
+            testFunction: "matches_java_diagnostic",
+            resolution: "ported",
+            redFingerprint:
+                "G4R001 used the Rust implementation-pattern message instead of Java's exact diagnostic",
+        },
+    ],
+    [
+        "testleftrecursiontoolissues-testleftrecursiverulerefwitharg-40cd52608d",
+        {
+            testName: "recursive_rule_reference_with_argument",
+            testFunction: "matches_java_diagnostic",
+            resolution: "ported",
+            redFingerprint:
+                "the direct compiler accepted a left-recursive rule reference carrying arguments",
+        },
+    ],
+    [
+        "testleftrecursiontoolissues-testleftrecursiverulerefwitharg2-7332bdbd4f",
+        {
+            testName:
+                "recursive_rule_reference_with_argument_and_parameter",
+            testFunction: "matches_java_diagnostic",
+            resolution: "ported",
+            redFingerprint:
+                "the direct compiler accepted a parameterized left-recursive rule reference carrying arguments",
+        },
+    ],
+    [
+        "testleftrecursiontoolissues-testleftrecursiverulerefwitharg3-719e121a92",
+        {
+            testName:
+                "recursive_rule_reference_with_argument_without_parameter",
+            testFunction: "matches_java_diagnostic",
+            resolution: "ported",
+            redFingerprint:
+                "the direct compiler accepted an argument on a left-recursive rule without parameters",
         },
     ],
 ]);
@@ -1039,6 +1116,10 @@ function completedPhaseBRow(
                                     : completed.kind === "token-type-assignment"
                                       ? `direct Rust recognizer metadata and token vocabulary text match ` +
                                         `Java 4.13.2 exactly for ${cases[0].suite}.${cases[0].name}`
+                                      : completed.kind ===
+                                          "left-recursion-tool-issues"
+                                        ? `direct Rust left-recursion diagnostics and accepted serialization match ` +
+                                          `Java 4.13.2 for ${cases[0].suite}.${cases[0].name}`
                         : `direct Rust semantic diagnostics match Java 4.13.2 exactly ` +
                           `for ${cases[0].suite}.${cases[0].name}`;
     const coveredExisting =
@@ -1472,6 +1553,32 @@ async function loadCompletedPhaseBPorts() {
             `expected 11 completed TestTokenTypeAssignment ports, found ${TOKEN_ASSIGNMENT_PORTS.size}`,
         );
     }
+    for (const [logicalId, definition] of LEFT_RECURSION_PORTS) {
+        ports.set(logicalId, {
+            fixturePaths: await fixturePaths(logicalId),
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_left_recursion_tool_issues::" +
+                `${definition.testName}::${definition.testFunction}`,
+            kind: "left-recursion-tool-issues",
+            resolution: definition.resolution,
+            scaffoldCommit: LEFT_RECURSION_BASE_COMMIT,
+            testCommit: LEFT_RECURSION_TEST_COMMIT,
+            implementationCommit:
+                definition.resolution === "ported"
+                    ? LEFT_RECURSION_IMPLEMENTATION_COMMIT
+                    : LEFT_RECURSION_BASE_COMMIT,
+            testCommand:
+                `${LEFT_RECURSION_TEST_PREFIX}${definition.testName}::` +
+                `${definition.testFunction} -- --exact`,
+            greenResult: "1 passed; 0 failed",
+            redFingerprint: definition.redFingerprint,
+        });
+    }
+    if (LEFT_RECURSION_PORTS.size !== 7) {
+        throw new Error(
+            `expected 7 completed TestLeftRecursionToolIssues ports, found ${LEFT_RECURSION_PORTS.size}`,
+        );
+    }
     const scopeGroups = new Map();
     for (const testCase of inventory.cases) {
         if (testCase.suite !== "TestScopeParsing") {
@@ -1510,8 +1617,8 @@ async function loadCompletedPhaseBPorts() {
             `expected 47 completed TestScopeParsing ports, found ${scopeGroups.size}`,
         );
     }
-    if (ports.size !== 208) {
-        throw new Error(`expected 208 completed Phase B ports, found ${ports.size}`);
+    if (ports.size !== 215) {
+        throw new Error(`expected 215 completed Phase B ports, found ${ports.size}`);
     }
     return ports;
 }
