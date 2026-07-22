@@ -130,7 +130,7 @@ fn epsilon_diagnostics(
                 (
                     "G4A002",
                     format!(
-                        "left-recursive rule {} contains a closure whose body can match an empty string",
+                        "left recursive rule {} contains a left recursive alternative which can be followed by the empty string",
                         rule.name
                     ),
                 )

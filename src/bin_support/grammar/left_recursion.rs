@@ -75,6 +75,14 @@ fn classify_alternative(alternative: &Alternative, rule_name: &str) -> Alternati
     let Some(first) = alternative.elements.first() else {
         return AlternativeClass::Primary;
     };
+    if alternative
+        .elements
+        .iter()
+        .filter_map(|element| self_call(element, rule_name))
+        .any(|call| call.arguments.is_some())
+    {
+        return AlternativeClass::Nonconforming;
+    }
     let first_recursive = is_self_call(first, rule_name);
     let last_significant = alternative
         .elements
@@ -115,7 +123,7 @@ fn rewrite_rule(
             "G4R001",
             rule.span.clone(),
             format!(
-                "left-recursive rule {} does not conform to the supported immediate-recursion pattern",
+                "rule {} is left recursive but doesn't conform to a pattern ANTLR can handle",
                 rule.name
             ),
         ));
@@ -128,7 +136,7 @@ fn rewrite_rule(
             "G4R002",
             rule.span.clone(),
             format!(
-                "left-recursive rule {} must contain a non-left-recursive alternative",
+                "left recursive rule {} must contain an alternative which is not left recursive",
                 rule.name
             ),
         ));
@@ -447,11 +455,18 @@ fn update_external_calls(block: &mut Block, rewritten_names: &BTreeSet<String>) 
 }
 
 fn is_self_call(element: &Element, rule_name: &str) -> bool {
-    element.quantifier == Quantifier::One
-        && matches!(
-            &element.kind,
-            ElementKind::RuleCall(call) if call.name == rule_name
-        )
+    self_call(element, rule_name).is_some()
+}
+
+fn self_call<'a>(element: &'a Element, rule_name: &str) -> Option<&'a super::model::RuleCall> {
+    match &element.kind {
+        ElementKind::RuleCall(call)
+            if element.quantifier == Quantifier::One && call.name == rule_name =>
+        {
+            Some(call)
+        }
+        _ => None,
+    }
 }
 
 const fn is_epsilon_element(element: &Element) -> bool {
