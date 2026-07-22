@@ -11,6 +11,58 @@ fn run_antlr4_rust_gen(args: &[impl AsRef<OsStr>]) -> Output {
         .expect("antlr4-rust-gen should run")
 }
 
+fn assert_generated_modules_compile(temp: &Path, modules: &[&str]) {
+    let project = temp.join("compile-generated");
+    let source = project.join("src");
+    fs::create_dir_all(&source).expect("generated-module check should be writable");
+    fs::write(
+        project.join("Cargo.toml"),
+        format!(
+            "[package]\n\
+             name = \"compile-generated\"\n\
+             version = \"0.0.0\"\n\
+             edition = \"2024\"\n\
+             \n\
+             [dependencies]\n\
+             antlr-rust-runtime = {{ path = {:?} }}\n",
+            env!("CARGO_MANIFEST_DIR")
+        ),
+    )
+    .expect("generated-module manifest should be writable");
+    let declarations = modules
+        .iter()
+        .map(|module| format!("#[path = {module:?}]\nmod {};", module.replace(".rs", "")))
+        .collect::<Vec<_>>()
+        .join("\n");
+    fs::write(source.join("lib.rs"), declarations)
+        .expect("generated-module crate root should be writable");
+    for module in modules {
+        fs::copy(temp.join("generated").join(module), source.join(module))
+            .expect("generated module should be copied into the check crate");
+    }
+
+    let output = Command::new(env!("CARGO"))
+        .args([
+            "check",
+            "--quiet",
+            "--offline",
+            "--manifest-path",
+            project
+                .join("Cargo.toml")
+                .to_str()
+                .expect("temporary path should be UTF-8"),
+        ])
+        .env("CARGO_TARGET_DIR", project.join("target"))
+        .output()
+        .expect("cargo check should run");
+    assert!(
+        output.status.success(),
+        "generated modules did not compile\nstdout: {}\nstderr: {}",
+        utf8(&output.stdout),
+        utf8(&output.stderr)
+    );
+}
+
 fn utf8(bytes: &[u8]) -> &str {
     std::str::from_utf8(bytes).expect("process output should be UTF-8")
 }
@@ -207,6 +259,14 @@ fn combined_root_emits_standard_typed_contexts_and_listener() {
     ] {
         assert!(parser.contains(expected), "missing {expected:?}\n{parser}");
     }
+    assert!(
+        !parser.contains("antlr4_runtime::{{"),
+        "generated imports must not contain redundant nested braces\n{parser}"
+    );
+    assert_generated_modules_compile(
+        temp.path(),
+        &["shapes_lexer.rs", "shapes_parser.rs"],
+    );
 }
 
 #[test]
