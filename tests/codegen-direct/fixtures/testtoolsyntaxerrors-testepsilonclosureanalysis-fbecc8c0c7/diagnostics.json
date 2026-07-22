@@ -1,0 +1,25 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 153,
+      "line": 3,
+      "column": 0,
+      "message": "rule y1 contains a closure with at least one alternative that can match an empty string"
+    },
+    {
+      "severity": "error",
+      "code": 153,
+      "line": 4,
+      "column": 0,
+      "message": "rule y2 contains a closure with at least one alternative that can match an empty string"
+    },
+    {
+      "severity": "error",
+      "code": 153,
+      "line": 5,
+      "column": 0,
+      "message": "rule z1 contains a closure with at least one alternative that can match an empty string"
+    }
+  ]
+}

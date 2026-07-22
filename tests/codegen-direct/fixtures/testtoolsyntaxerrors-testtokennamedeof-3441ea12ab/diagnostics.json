@@ -1,0 +1,11 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 159,
+      "line": 3,
+      "column": 1,
+      "message": "cannot declare a rule with reserved name EOF"
+    }
+  ]
+}

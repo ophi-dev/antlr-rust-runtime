@@ -1,0 +1,3 @@
+error(153): A.g4:3:0: rule y1 contains a closure with at least one alternative that can match an empty string
+error(153): A.g4:4:0: rule y2 contains a closure with at least one alternative that can match an empty string
+error(153): A.g4:5:0: rule z1 contains a closure with at least one alternative that can match an empty string

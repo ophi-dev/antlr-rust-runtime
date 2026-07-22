@@ -1,0 +1,25 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 177,
+      "line": 10,
+      "column": 35,
+      "message": "COMMENT_CHANNEL is not a recognized channel name"
+    },
+    {
+      "severity": "error",
+      "code": 177,
+      "line": 11,
+      "column": 35,
+      "message": "WHITESPACE_CHANNEL is not a recognized channel name"
+    },
+    {
+      "severity": "error",
+      "code": 164,
+      "line": 3,
+      "column": 0,
+      "message": "custom channels are not supported in combined grammars"
+    }
+  ]
+}

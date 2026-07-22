@@ -1,0 +1,18 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 151,
+      "line": 4,
+      "column": 14,
+      "message": "lexer command popMode does not take any arguments"
+    },
+    {
+      "severity": "error",
+      "code": 150,
+      "line": 5,
+      "column": 14,
+      "message": "missing argument for lexer command type"
+    }
+  ]
+}

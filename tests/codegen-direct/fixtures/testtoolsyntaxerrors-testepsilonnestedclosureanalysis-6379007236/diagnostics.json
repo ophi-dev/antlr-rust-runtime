@@ -1,0 +1,11 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 153,
+      "line": 2,
+      "column": 0,
+      "message": "rule s contains a closure with at least one alternative that can match an empty string"
+    }
+  ]
+}

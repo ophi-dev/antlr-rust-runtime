@@ -1,0 +1,3 @@
+error(177): T.g4:10:35: COMMENT_CHANNEL is not a recognized channel name
+error(177): T.g4:11:35: WHITESPACE_CHANNEL is not a recognized channel name
+error(164): T.g4:3:0: custom channels are not supported in combined grammars

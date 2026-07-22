@@ -1,0 +1,102 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 50,
+      "line": 2,
+      "column": 14,
+      "message": "syntax error: '\"' came as a complete surprise to me"
+    },
+    {
+      "severity": "error",
+      "code": 50,
+      "line": 2,
+      "column": 16,
+      "message": "syntax error: '\"' came as a complete surprise to me"
+    },
+    {
+      "severity": "error",
+      "code": 50,
+      "line": 2,
+      "column": 20,
+      "message": "syntax error: '\"' came as a complete surprise to me"
+    },
+    {
+      "severity": "error",
+      "code": 50,
+      "line": 2,
+      "column": 21,
+      "message": "syntax error: '\\' came as a complete surprise to me"
+    },
+    {
+      "severity": "error",
+      "code": 50,
+      "line": 2,
+      "column": 23,
+      "message": "syntax error: '\"' came as a complete surprise to me"
+    },
+    {
+      "severity": "error",
+      "code": 50,
+      "line": 2,
+      "column": 27,
+      "message": "syntax error: '\"' came as a complete surprise to me"
+    },
+    {
+      "severity": "error",
+      "code": 50,
+      "line": 2,
+      "column": 28,
+      "message": "syntax error: '\\' came as a complete surprise to me"
+    },
+    {
+      "severity": "error",
+      "code": 50,
+      "line": 2,
+      "column": 30,
+      "message": "syntax error: '\"' came as a complete surprise to me"
+    },
+    {
+      "severity": "error",
+      "code": 50,
+      "line": 2,
+      "column": 34,
+      "message": "syntax error: '\"' came as a complete surprise to me"
+    },
+    {
+      "severity": "error",
+      "code": 50,
+      "line": 2,
+      "column": 35,
+      "message": "syntax error: '\\' came as a complete surprise to me"
+    },
+    {
+      "severity": "error",
+      "code": 50,
+      "line": 2,
+      "column": 37,
+      "message": "syntax error: '\"' came as a complete surprise to me"
+    },
+    {
+      "severity": "error",
+      "code": 50,
+      "line": 2,
+      "column": 41,
+      "message": "syntax error: '\"' came as a complete surprise to me"
+    },
+    {
+      "severity": "error",
+      "code": 50,
+      "line": 2,
+      "column": 42,
+      "message": "syntax error: '\\' came as a complete surprise to me"
+    },
+    {
+      "severity": "error",
+      "code": 50,
+      "line": 2,
+      "column": 44,
+      "message": "syntax error: '\"' came as a complete surprise to me"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 31,
+      "message": " ANTLR cannot generate Foo code as of version 4.13.2"
+    }
+  ]
+}

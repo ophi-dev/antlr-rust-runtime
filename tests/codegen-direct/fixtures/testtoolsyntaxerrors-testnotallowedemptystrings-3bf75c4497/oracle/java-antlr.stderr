@@ -1,0 +1,5 @@
+error(174): T.g4:2:8: string literals and sets cannot be empty: ''
+error(174): T.g4:2:16: string literals and sets cannot be empty: ''
+error(174): T.g4:3:8: string literals and sets cannot be empty: ''
+error(174): T.g4:4:15: string literals and sets cannot be empty: ''
+error(174): T.g4:5:8: string literals and sets cannot be empty: ''

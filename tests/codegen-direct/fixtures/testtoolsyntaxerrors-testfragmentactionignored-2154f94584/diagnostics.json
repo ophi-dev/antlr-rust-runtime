@@ -1,0 +1,18 @@
+{
+  "java_antlr": [
+    {
+      "severity": "warning",
+      "code": 158,
+      "line": 7,
+      "column": 12,
+      "message": "fragment rule X2 contains an action or command which can never be executed"
+    },
+    {
+      "severity": "warning",
+      "code": 158,
+      "line": 10,
+      "column": 9,
+      "message": "fragment rule Y2 contains an action or command which can never be executed"
+    }
+  ]
+}

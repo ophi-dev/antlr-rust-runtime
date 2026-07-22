@@ -3075,6 +3075,282 @@ mod tests {
         }
     }
 
+    mod upstream_tool_syntax_errors {
+        use super::*;
+        use crate::grammar::diagnostic::Severity::{Error, Warning};
+
+        #[derive(Clone, Copy)]
+        enum FixtureKind {
+            Combined,
+            Lexer,
+            Parser,
+        }
+
+        macro_rules! meta_case {
+            (
+                $name:ident,
+                $fixture:literal,
+                [$($expected:expr),* $(,)?]
+            ) => {
+                mod $name {
+                    use super::*;
+
+                    #[test]
+                    fn matches_java() {
+                        assert_distinct_diagnostic_codes($fixture, &[$($expected),*]);
+                    }
+                }
+            };
+        }
+
+        macro_rules! case {
+            (
+                $name:ident,
+                $fixture:literal,
+                $root:literal,
+                $kind:ident,
+                $expects_error:literal,
+                [$($expected:expr),* $(,)?]
+            ) => {
+                mod $name {
+                    use super::*;
+
+                    #[test]
+                    fn matches_java() {
+                        assert_tool_syntax_fixture(
+                            $fixture,
+                            $root,
+                            FixtureKind::$kind,
+                            $expects_error,
+                            &[$($expected),*],
+                        );
+                    }
+                }
+            };
+        }
+
+        include!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/codegen-direct/generated/tool-syntax-errors-cases.inc.rs"
+        ));
+
+        #[derive(Clone, Copy)]
+        struct ExpectedDiagnostic {
+            java_code: u32,
+            severity: crate::grammar::diagnostic::Severity,
+            position: Option<(usize, usize)>,
+        }
+
+        const fn at(
+            java_code: u32,
+            severity: crate::grammar::diagnostic::Severity,
+            line: usize,
+            column: usize,
+        ) -> ExpectedDiagnostic {
+            ExpectedDiagnostic {
+                java_code,
+                severity,
+                position: Some((line, column)),
+            }
+        }
+
+        const fn unlocated(
+            java_code: u32,
+            severity: crate::grammar::diagnostic::Severity,
+        ) -> ExpectedDiagnostic {
+            ExpectedDiagnostic {
+                java_code,
+                severity,
+                position: None,
+            }
+        }
+
+        fn assert_tool_syntax_fixture(
+            fixture_name: &str,
+            root: &str,
+            kind: FixtureKind,
+            expects_error: bool,
+            expected: &[ExpectedDiagnostic],
+        ) {
+            match compile_fixture(fixture_name, &[root]) {
+                Ok(compilation) => {
+                    assert!(
+                        !expects_error,
+                        "{fixture_name}: expected compilation failure"
+                    );
+                    assert_diagnostics(fixture_name, root, &compilation.diagnostics, expected);
+                    assert_artifacts(fixture_name, root, kind, &compilation);
+                }
+                Err(error) => {
+                    assert!(expects_error, "{fixture_name}: {error:#?}");
+                    assert_diagnostics(fixture_name, root, error.diagnostics(), expected);
+                }
+            }
+        }
+
+        fn assert_diagnostics(
+            fixture_name: &str,
+            root: &str,
+            actual: &[crate::grammar::diagnostic::Diagnostic],
+            expected: &[ExpectedDiagnostic],
+        ) {
+            assert_eq!(actual.len(), expected.len(), "{fixture_name}: {actual:#?}");
+            let source = std::fs::read_to_string(fixture(fixture_name).join(root))
+                .expect("tool syntax fixture source");
+            for (actual, expected) in actual.iter().zip(expected) {
+                assert!(
+                    rust_code_matches(expected.java_code, actual.code),
+                    "{fixture_name}: Java error({}) does not match Rust code {}: {actual:#?}",
+                    expected.java_code,
+                    actual.code,
+                );
+                assert_eq!(
+                    actual.severity, expected.severity,
+                    "{fixture_name}: {actual:#?}",
+                );
+                if let Some((line, column)) = expected.position {
+                    assert_eq!(
+                        actual.primary.bytes.start,
+                        fixture_byte_offset(&source, line, column),
+                        "{fixture_name}: expected {line}:{column} for {actual:#?}",
+                    );
+                }
+            }
+        }
+
+        fn rust_code_matches(java_code: u32, rust_code: &str) -> bool {
+            match java_code {
+                31 | 157 => rust_code == "G4S014",
+                50 => matches!(rust_code, "G4F001" | "G4F002" | "G4F003"),
+                51 => rust_code == "G4S002",
+                144 => matches!(rust_code, "G4L002" | "G4S066"),
+                149 => rust_code == "G4S049",
+                150 => rust_code == "G4S050",
+                151 => rust_code == "G4S048",
+                153 => rust_code == "G4A001",
+                154 => rust_code == "G4A004",
+                156 | 182 => rust_code == "G4L002",
+                158 => rust_code == "G4S010",
+                159 => rust_code == "G4S003",
+                163 | 164 => rust_code == "G4S020",
+                174 => matches!(rust_code, "G4L001" | "G4L002"),
+                177 => rust_code == "G4S053",
+                181 => rust_code == "G4S009",
+                186 => rust_code == "G4A003",
+                _ => false,
+            }
+        }
+
+        const fn java_error(code: u32, name: &'static str) -> (u32, &'static str) {
+            (code, name)
+        }
+
+        fn assert_distinct_diagnostic_codes(fixture_name: &str, expected: &[(u32, &'static str)]) {
+            let manifest = std::fs::read_to_string(fixture(fixture_name).join("fixture.json"))
+                .expect("tool syntax meta fixture");
+            assert!(
+                manifest.contains("\"AllErrorCodesDistinct\""),
+                "{fixture_name}: wrong Java source binding",
+            );
+
+            let oracle = std::fs::read_to_string(
+                fixture(fixture_name).join("oracle/java-error-types.tsv"),
+            )
+            .expect("Java ErrorType oracle");
+            let oracle_entries = oracle
+                .lines()
+                .map(|line| {
+                    let (code, name) = line
+                        .split_once('\t')
+                        .expect("Java ErrorType oracle record");
+                    (
+                        code.parse::<u32>()
+                            .expect("Java ErrorType oracle numeric code"),
+                        name,
+                    )
+                })
+                .collect::<std::collections::HashSet<_>>();
+            assert_eq!(expected.len(), oracle_entries.len(), "{fixture_name}");
+            let mut codes = std::collections::HashSet::new();
+            let mut names = std::collections::HashSet::new();
+            for &(code, name) in expected {
+                assert!(
+                    oracle_entries.contains(&(code, name)),
+                    "{fixture_name}: missing Java error type {name}={code}",
+                );
+                assert!(
+                    codes.insert(code),
+                    "{fixture_name}: duplicate Java code {code}"
+                );
+                assert!(
+                    names.insert(name),
+                    "{fixture_name}: duplicate Java error type {name}"
+                );
+            }
+        }
+
+        fn assert_artifacts(
+            fixture_name: &str,
+            root: &str,
+            kind: FixtureKind,
+            compilation: &Compilation,
+        ) {
+            let directory = fixture(fixture_name);
+            let grammar_name = root
+                .strip_suffix(".g4")
+                .expect("tool syntax fixture root ends in .g4");
+            match kind {
+                FixtureKind::Lexer => {
+                    let lexer = lexer_named(compilation, grammar_name);
+                    assert_lexer_interp(lexer, &directory.join(format!("{grammar_name}.interp")));
+                    assert_tokens(
+                        &lexer.semantic.recognizer,
+                        &directory.join(format!("{grammar_name}.tokens")),
+                    );
+                }
+                FixtureKind::Parser => {
+                    let parser = parser_named(compilation, grammar_name);
+                    assert_parser_interp(parser, &directory.join(format!("{grammar_name}.interp")));
+                    assert_tokens(
+                        &parser.semantic.recognizer,
+                        &directory.join(format!("{grammar_name}.tokens")),
+                    );
+                }
+                FixtureKind::Combined => {
+                    let parser = parser_named(compilation, &format!("{grammar_name}Parser"));
+                    assert_parser_interp(parser, &directory.join(format!("{grammar_name}.interp")));
+                    assert_tokens(
+                        &parser.semantic.recognizer,
+                        &directory.join(format!("{grammar_name}.tokens")),
+                    );
+                    let lexer_interp = directory.join(format!("{grammar_name}Lexer.interp"));
+                    if lexer_interp.is_file() {
+                        let lexer = lexer_named(compilation, &format!("{grammar_name}Lexer"));
+                        assert_lexer_interp(lexer, &lexer_interp);
+                        assert_tokens(
+                            &lexer.semantic.recognizer,
+                            &directory.join(format!("{grammar_name}Lexer.tokens")),
+                        );
+                    }
+                }
+            }
+        }
+
+        fn assert_tokens(recognizer: &RecognizerModel, expected_path: &Path) {
+            let expected = std::fs::read_to_string(expected_path).expect("fixture tokens");
+            let mut actual = String::new();
+            for name in &recognizer.vocabulary.name_order {
+                let number = recognizer.vocabulary.by_name[name];
+                writeln!(actual, "{name}={number}").expect("writing to String cannot fail");
+            }
+            for literal in &recognizer.vocabulary.literal_order {
+                let number = recognizer.vocabulary.by_literal[literal];
+                writeln!(actual, "{literal}={number}").expect("writing to String cannot fail");
+            }
+            assert_eq!(actual, expected, "{}", expected_path.display());
+        }
+    }
+
     mod upstream_token_position_options {
         use super::*;
         use crate::grammar::model::{Block, ElementKind, SetElement, Terminal};

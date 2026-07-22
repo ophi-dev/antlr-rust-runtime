@@ -1,0 +1,2 @@
+error(151): A.g4:4:14: lexer command popMode does not take any arguments
+error(150): A.g4:5:14: missing argument for lexer command type

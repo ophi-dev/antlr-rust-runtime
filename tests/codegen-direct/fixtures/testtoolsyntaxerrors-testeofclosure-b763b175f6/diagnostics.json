@@ -1,0 +1,11 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 186,
+      "line": 2,
+      "column": 0,
+      "message": "rule EofClosure contains a closure with at least one alternative that can match EOF"
+    }
+  ]
+}

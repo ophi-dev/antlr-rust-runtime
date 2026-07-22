@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "logical_ids": [
+    "testtoolsyntaxerrors-testdoublequotedstringliteral-188f16bab7"
+  ],
+  "upstream_tests": [
+    {
+      "source_case_id": "java-antlr:testtoolsyntaxerrors-testdoublequotedstringliteral@e3d82eb81b00",
+      "repository": "https://github.com/antlr/antlr4.git",
+      "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestToolSyntaxErrors.java",
+      "case": "testDoubleQuotedStringLiteral",
+      "source_sha256": "d20fdd17605ec4419dea95b8734f6768d54b6a3a13c3f592e75653690b5808e0"
+    }
+  ],
+  "java_antlr_test": {
+    "source_case_id": "java-antlr:testtoolsyntaxerrors-testdoublequotedstringliteral@e3d82eb81b00",
+    "repository": "https://github.com/antlr/antlr4.git",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestToolSyntaxErrors.java",
+    "case": "testDoubleQuotedStringLiteral",
+    "source_sha256": "d20fdd17605ec4419dea95b8734f6768d54b6a3a13c3f592e75653690b5808e0"
+  },
+  "fixture_binding": {
+    "method": "testDoubleQuotedStringLiteral",
+    "source": "pinned Java TestToolSyntaxErrors.java"
+  },
+  "roots": [
+    "A.g4"
+  ],
+  "expected": "error",
+  "tool_syntax_errors_oracle": {
+    "artifacts": [
+      "diagnostics"
+    ],
+    "diagnostic_types": [
+      "SYNTAX_ERROR",
+      "SYNTAX_ERROR",
+      "SYNTAX_ERROR",
+      "SYNTAX_ERROR",
+      "SYNTAX_ERROR",
+      "SYNTAX_ERROR",
+      "SYNTAX_ERROR",
+      "SYNTAX_ERROR",
+      "SYNTAX_ERROR",
+      "SYNTAX_ERROR",
+      "SYNTAX_ERROR",
+      "SYNTAX_ERROR",
+      "SYNTAX_ERROR",
+      "SYNTAX_ERROR"
+    ],
+    "compatibility_verdict": "Java ANTLR 4.13.2"
+  },
+  "java_antlr": {
+    "version": "4.13.2",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "unicode_data": {
+      "generator": "org.antlr.v4.unicode.UnicodeDataTemplateController",
+      "helper": "tools/grammar-frontend/oracle/GenerateUnicodeData.java",
+      "helper_sha256": "9adec4f06cb31c7c7e408336e8fe935741f6d4ec5e8113e76450551ec1e3967f",
+      "icu4j_version": "78.1.0.0",
+      "icu4j_jar_sha256": "bbb70d3be23110d7295823eee0c2e896ac3b619b3c0f26168f65eb972df51d2a",
+      "unicode_version": "17.0.0.0"
+    },
+    "exit_status": 1
+  },
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh testtoolsyntaxerrors-testdoublequotedstringliteral-188f16bab7 --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar --icu-jar /tmp/antlr-cleanroom/tools/icu4j-78.1.jar",
+  "files": {
+    "A.g4": "30fd0955e54e83d5683b0686b56587bd2ed4d232062c31e5ee940c452179ad15",
+    "diagnostics.json": "a00c195eda8933f9ccea90a5ce32333b0a6da08407b74bb2ffb8f9e8f5f8ffcd",
+    "oracle/java-antlr.stderr": "87288dba43ae0db86854ee291295393328df3986229e158c04b7fff1091cf93c",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stdout": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+  }
+}

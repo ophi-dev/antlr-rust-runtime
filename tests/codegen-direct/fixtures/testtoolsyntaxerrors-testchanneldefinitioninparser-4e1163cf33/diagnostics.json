@@ -1,0 +1,11 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 163,
+      "line": 3,
+      "column": 0,
+      "message": "custom channels are not supported in parser grammars"
+    }
+  ]
+}

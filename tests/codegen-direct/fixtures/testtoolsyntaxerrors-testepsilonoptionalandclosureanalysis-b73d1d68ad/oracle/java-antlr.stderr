@@ -1,0 +1,1 @@
+warning(154): T.g4:2:0: rule s contains an optional block with at least one alternative that can match an empty string

@@ -1,0 +1,95 @@
+{
+  "java_antlr": [
+    {
+      "severity": "error",
+      "code": 156,
+      "line": 2,
+      "column": 32,
+      "message": "invalid escape sequence \\u{}"
+    },
+    {
+      "severity": "error",
+      "code": 156,
+      "line": 3,
+      "column": 41,
+      "message": "invalid escape sequence \\u{"
+    },
+    {
+      "severity": "error",
+      "code": 156,
+      "line": 4,
+      "column": 35,
+      "message": "invalid escape sequence \\u{110"
+    },
+    {
+      "severity": "error",
+      "code": 156,
+      "line": 5,
+      "column": 32,
+      "message": "invalid escape sequence \\p{}"
+    },
+    {
+      "severity": "error",
+      "code": 156,
+      "line": 6,
+      "column": 41,
+      "message": "invalid escape sequence \\p{"
+    },
+    {
+      "severity": "error",
+      "code": 156,
+      "line": 7,
+      "column": 41,
+      "message": "invalid escape sequence \\P{}"
+    },
+    {
+      "severity": "error",
+      "code": 156,
+      "line": 8,
+      "column": 34,
+      "message": "invalid escape sequence \\p{NotAProperty}"
+    },
+    {
+      "severity": "error",
+      "code": 156,
+      "line": 9,
+      "column": 43,
+      "message": "invalid escape sequence \\P{NotAProperty}"
+    },
+    {
+      "severity": "error",
+      "code": 182,
+      "line": 10,
+      "column": 39,
+      "message": "unicode property escapes not allowed in lexer charset range: [\\p{Uppercase_Letter}-\\p{Lowercase_Letter}]"
+    },
+    {
+      "severity": "error",
+      "code": 182,
+      "line": 11,
+      "column": 41,
+      "message": "unicode property escapes not allowed in lexer charset range: [\\p{Letter}-Z]"
+    },
+    {
+      "severity": "error",
+      "code": 182,
+      "line": 12,
+      "column": 41,
+      "message": "unicode property escapes not allowed in lexer charset range: [A-\\p{Number}]"
+    },
+    {
+      "severity": "error",
+      "code": 182,
+      "line": 13,
+      "column": 48,
+      "message": "unicode property escapes not allowed in lexer charset range: [\\P{Uppercase_Letter}-\\P{Number}]"
+    },
+    {
+      "severity": "error",
+      "code": 156,
+      "line": 14,
+      "column": 16,
+      "message": "invalid escape sequence \\p{Grapheme_Cluster_Break=E_Base}"
+    }
+  ]
+}

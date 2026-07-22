@@ -1,0 +1,13 @@
+error(156): Test.g4:2:32: invalid escape sequence \u{}
+error(156): Test.g4:3:41: invalid escape sequence \u{
+error(156): Test.g4:4:35: invalid escape sequence \u{110
+error(156): Test.g4:5:32: invalid escape sequence \p{}
+error(156): Test.g4:6:41: invalid escape sequence \p{
+error(156): Test.g4:7:41: invalid escape sequence \P{}
+error(156): Test.g4:8:34: invalid escape sequence \p{NotAProperty}
+error(156): Test.g4:9:43: invalid escape sequence \P{NotAProperty}
+error(182): Test.g4:10:39: unicode property escapes not allowed in lexer charset range: [\p{Uppercase_Letter}-\p{Lowercase_Letter}]
+error(182): Test.g4:11:41: unicode property escapes not allowed in lexer charset range: [\p{Letter}-Z]
+error(182): Test.g4:12:41: unicode property escapes not allowed in lexer charset range: [A-\p{Number}]
+error(182): Test.g4:13:48: unicode property escapes not allowed in lexer charset range: [\P{Uppercase_Letter}-\P{Number}]
+error(156): Test.g4:14:16: invalid escape sequence \p{Grapheme_Cluster_Break=E_Base}
