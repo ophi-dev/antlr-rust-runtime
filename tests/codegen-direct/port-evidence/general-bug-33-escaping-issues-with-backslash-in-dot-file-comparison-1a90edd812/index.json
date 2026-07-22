@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812",
+  "active_revision_id": "general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812-r1",
+  "revisions": [
+    {
+      "revision_id": "general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/revisions/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812-r1/manifest.json",
+      "closure_sha256": "2df7d28b648b81610677453c3bd31d4d7094fd465118fd0a35cee7ae29e1bac8"
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "logical_id": "general-bug-35-tool-crashes-with-atn-4bd74f316f",
+  "revision_id": "general-bug-35-tool-crashes-with-atn-4bd74f316f-r1",
+  "primary_test_source": {
+    "implementation": "independent-generated-oracle",
+    "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
+    "source_case_ids": [],
+    "reason": "no java-antlr source case exposes this exact observable"
+  },
+  "alternate_test_source": {
+    "implementation": "antlr-ng",
+    "commit": "1f68422ae4bfc62f93343769e144d01f305487b1",
+    "source_case_ids": [
+      "antlr-ng:general-bug-35-tool-crashes-with-atn@4876a7c623f9"
+    ]
+  },
+  "outcomes": {
+    "primary": "the complete direct Rust .interp and .tokens match the immutable Java 4.13.2 fixtures and the selected ATN DOT edge matches the pinned upstream oracle",
+    "alternate": "the pinned antlr-ng General case supplies the ATN DOT edge and no-crash observable",
+    "java_compatibility_verdict": "exact Java 4.13.2 recognizer metadata and serialized ATN equality, with pinned antlr-ng supplying the EOF DOT oracle where Java 4.13.2 crashes"
+  }
+}

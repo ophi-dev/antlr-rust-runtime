@@ -1,0 +1,159 @@
+{
+  "schema_version": 1,
+  "logical_id": "general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812",
+  "revision_id": "general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "resolution": "verified-covered-existing",
+  "closure": {
+    "logical_id": "general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812",
+    "source_case_ids": [
+      "antlr-ng:general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison@ac9d9ddd56f1"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/abbLexer.g4",
+      "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/abbLexer.interp",
+      "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/abbLexer.tokens",
+      "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/fixture.json",
+      "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/antlr-ng-abbLexer.EscapeSequence.dot",
+      "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/antlr-ng-atn.stderr",
+      "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/antlr-ng-atn.stdout",
+      "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/expected-dot-edge.txt",
+      "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/java-abbLexer.EscapeSequence.dot",
+      "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/java-atn.stderr",
+      "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/java-atn.stdout",
+      "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/java-unicode-data.stdout"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::general_bug_test::bug_33_backslash_dot_edge_matches_upstream",
+    "unit_under_test": "semantic checks or post-parse compiler diagnostics",
+    "observable": "direct Rust recognizer metadata matches Java 4.13.2 and the selected ATN DOT edge matches the pinned upstream oracle for General.Bug #33 Escaping issues with backslash in .dot file comparison",
+    "scaffold_commit": "4b8cf8598ed1ce18df901b34fc5beba5a8a458dc",
+    "primary_test_commit": "827ea806215b2547d2c049d1ae25775a4c6eeea2",
+    "resolution": "verified-covered-existing"
+  },
+  "closure_sha256": "2df7d28b648b81610677453c3bd31d4d7094fd465118fd0a35cee7ae29e1bac8",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison@ac9d9ddd56f1",
+      "path": "tests/bugs/General.spec.ts",
+      "sha256": "d10ecdc3a8bf65568eb74e94dedd8186c5be2f6cb8ff568c47bbf54093296eec"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/abbLexer.g4",
+      "sha256": "d68b644ea95a62264050b9e2770d9047ae0e87b4831b52c1687f87f2dba47411"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/abbLexer.interp",
+      "sha256": "543f4fe2e4b71def8c25c2b3cd536f5bc2c56ed3a9eaec3e5ec55446ec88eb57"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/abbLexer.tokens",
+      "sha256": "da51e1692c33b45e746e832a87267db30ea672257d90ffcc11120a60897ffe1a"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/fixture.json",
+      "sha256": "88a52fc6d79c5c07315e6822fa5618fc788a2accfaa0df8fa8c321a0fadb5f93"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/antlr-ng-abbLexer.EscapeSequence.dot",
+      "sha256": "984cb6f5a4a1be3fc156e9aeab9ead1fd135897bc3e73aef0f7519b3216973ed"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/antlr-ng-atn.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/antlr-ng-atn.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/expected-dot-edge.txt",
+      "sha256": "9d53fe4ed446bf55b6a5407b6ac470da56d53c03987a118cd1541099e5e88b03"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/java-abbLexer.EscapeSequence.dot",
+      "sha256": "1742ccd8f506c6160fb54021fb5634f88240eb32631c10f739608a7ac21571b1"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/java-antlr.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/java-atn.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/java-atn.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    }
+  ],
+  "commits": {
+    "scaffold": "4b8cf8598ed1ce18df901b34fc5beba5a8a458dc",
+    "primary_test": "827ea806215b2547d2c049d1ae25775a4c6eeea2",
+    "primary_implementation": "4b8cf8598ed1ce18df901b34fc5beba5a8a458dc"
+  },
+  "ancestry": {
+    "primary_test_parent": "4b8cf8598ed1ce18df901b34fc5beba5a8a458dc",
+    "primary_implementation_parent": "d1789bf340290d37dd8d444cabadd7bb111906d9",
+    "reachability": "the case-specific .interp, .tokens, and DOT assertions passed against the direct compiler implementation already present at the batch base"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/general_bug_test.rs",
+      "marker": "use std::collections::{BTreeMap, BTreeSet, VecDeque};",
+      "sha256": "18cf037412317e46a06b121e82d60251b00c059e9ff27a9871f01b033530e1ac"
+    },
+    {
+      "path": "src/bin_support/grammar/atn/mod.rs",
+      "marker": "#[cfg(test)]\nmod general_bug_test;",
+      "end_marker": "\n#[cfg(test)]\nmod interp_test;",
+      "sha256": "08614a35e50fa7f68efd847dcee8a95efaedb2913d831117a11081b1215ef23a"
+    }
+  ],
+  "verified_covered_existing": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::general_bug_test",
+    "commit": "827ea806215b2547d2c049d1ae25775a4c6eeea2",
+    "exit_code": 0,
+    "result": "2 passed; 0 failed",
+    "covering_implementation_commit": "4b8cf8598ed1ce18df901b34fc5beba5a8a458dc"
+  },
+  "green_result": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::general_bug_test",
+    "commit": "827ea806215b2547d2c049d1ae25775a4c6eeea2",
+    "exit_code": 0,
+    "result": "2 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/revisions/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812-r1/oracle-results/declared-sources.json",
+      "sha256": "e96b96898dc6cd3f85c1259d1731837e8f235be64cffc37751fe55f88be2bcd9"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/revisions/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812-r1/matrix-results/results.json",
+      "sha256": "f001f18fbde648a66dca364423f466346f129a9fab7e653c05d492015e36fc92"
+    }
+  ]
+}

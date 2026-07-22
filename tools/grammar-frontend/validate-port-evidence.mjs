@@ -38,6 +38,9 @@ import {
     ESCAPE_SEQUENCE_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_PARENT,
+    GENERAL_ATN_DOT_BASE_COMMIT,
+    GENERAL_ATN_DOT_BASE_PARENT_COMMIT,
+    GENERAL_ATN_DOT_TEST_COMMIT,
     GRAPH_NODES_BASE_COMMIT,
     GRAPH_NODES_BASE_PARENT_COMMIT,
     GRAPH_NODES_IMPLEMENTATION_COMMIT,
@@ -105,6 +108,10 @@ const EMPTY_VOCABULARY_LOGICAL_ID =
     "testvocabulary-testemptyvocabulary-66d31ad014";
 const NESTED_ACTION_LOGICAL_ID =
     "testlexeractions-nested-actions-3d175db5e5";
+const GENERAL_ATN_DOT_LOGICAL_IDS = new Set([
+    "general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812",
+    "general-bug-35-tool-crashes-with-atn-4bd74f316f",
+]);
 const evidenceRoot = resolve(
     repoRoot,
     "tests/codegen-direct/port-evidence",
@@ -369,6 +376,8 @@ for (const [logicalId, record] of records) {
         const compositeGrammars = logicalId.startsWith(
             "testcompositegrammars-",
         );
+        const generalAtnDot =
+            GENERAL_ATN_DOT_LOGICAL_IDS.has(logicalId);
         if (resolution === "verified-covered-existing") {
             if (atnSerialization) {
                 expect(
@@ -606,6 +615,23 @@ for (const [logicalId, record] of records) {
                         manifest.ancestry.primary_implementation_parent ===
                             COMPOSITE_GRAMMARS_BASE_PARENT_COMMIT,
                     `${logicalId} composite grammar covered-existing ancestry differs`,
+                );
+            } else if (generalAtnDot) {
+                expect(
+                    manifest.commits.scaffold ===
+                            GENERAL_ATN_DOT_BASE_COMMIT &&
+                        manifest.commits.primary_test ===
+                            GENERAL_ATN_DOT_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            GENERAL_ATN_DOT_BASE_COMMIT,
+                    `${logicalId} General ATN DOT covered-existing commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            GENERAL_ATN_DOT_BASE_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            GENERAL_ATN_DOT_BASE_PARENT_COMMIT,
+                    `${logicalId} General ATN DOT covered-existing ancestry differs`,
                 );
             } else {
                 expect(
@@ -1593,6 +1619,28 @@ if (compositeGrammarsImplementationParent !== null) {
         compositeGrammarsImplementationParent.trim() ===
             COMPOSITE_GRAMMARS_IMPLEMENTATION_PARENT_COMMIT,
         "final composite grammar implementation has an unexpected parent",
+    );
+}
+const generalAtnDotBaseParent = gitOptional([
+    "rev-parse",
+    `${GENERAL_ATN_DOT_BASE_COMMIT}^`,
+]);
+if (generalAtnDotBaseParent !== null) {
+    expect(
+        generalAtnDotBaseParent.trim() ===
+            GENERAL_ATN_DOT_BASE_PARENT_COMMIT,
+        "General ATN DOT base commit has an unexpected parent",
+    );
+}
+const generalAtnDotTestParent = gitOptional([
+    "rev-parse",
+    `${GENERAL_ATN_DOT_TEST_COMMIT}^`,
+]);
+if (generalAtnDotTestParent !== null) {
+    expect(
+        generalAtnDotTestParent.trim() ===
+            GENERAL_ATN_DOT_BASE_COMMIT,
+        "General ATN DOT test commit is not based on its recorded base",
     );
 }
 

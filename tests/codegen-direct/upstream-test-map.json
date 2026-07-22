@@ -721,8 +721,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::general_bug_test::bug_33_backslash_dot_edge_matches_upstream",
       "primary_test_source": {
         "implementation": "independent-generated-oracle",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -742,22 +743,55 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "semantic checks or post-parse compiler diagnostics",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned General.Bug #33 Escaping issues with backslash in .dot file comparison behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust recognizer metadata matches Java 4.13.2 and the selected ATN DOT edge matches the pinned upstream oracle for General.Bug #33 Escaping issues with backslash in .dot file comparison",
+      "scaffold_commit": "4b8cf8598ed1ce18df901b34fc5beba5a8a458dc",
+      "primary_test_commit": "827ea806215b2547d2c049d1ae25775a4c6eeea2",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::general_bug_test",
+        "commit": "827ea806215b2547d2c049d1ae25775a4c6eeea2",
+        "exit_code": 0,
+        "result": "2 passed; 0 failed"
+      },
+      "primary_implementation_commit": "4b8cf8598ed1ce18df901b34fc5beba5a8a458dc",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::general_bug_test",
+        "result": "2 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812",
         "source_case_ids": [
           "antlr-ng:general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison@ac9d9ddd56f1"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/abbLexer.g4",
+          "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/abbLexer.interp",
+          "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/abbLexer.tokens",
+          "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/fixture.json",
+          "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/antlr-ng-abbLexer.EscapeSequence.dot",
+          "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/antlr-ng-atn.stderr",
+          "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/antlr-ng-atn.stdout",
+          "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/expected-dot-edge.txt",
+          "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/java-abbLexer.EscapeSequence.dot",
+          "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/java-atn.stderr",
+          "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/java-atn.stdout",
+          "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812",
+        "rust_test": "grammar::atn::general_bug_test::bug_33_backslash_dot_edge_matches_upstream",
         "unit_under_test": "semantic checks or post-parse compiler diagnostics",
-        "observable": "pinned General.Bug #33 Escaping issues with backslash in .dot file comparison behavior"
+        "observable": "direct Rust recognizer metadata matches Java 4.13.2 and the selected ATN DOT edge matches the pinned upstream oracle for General.Bug #33 Escaping issues with backslash in .dot file comparison",
+        "scaffold_commit": "4b8cf8598ed1ce18df901b34fc5beba5a8a458dc",
+        "primary_test_commit": "827ea806215b2547d2c049d1ae25775a4c6eeea2",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "f64eb8849a445526901e444dfd747d49c9c57dfa1ae2bfaa65136b636bf23d06",
-      "evidence_path": null
+      "closure_sha256": "2df7d28b648b81610677453c3bd31d4d7094fd465118fd0a35cee7ae29e1bac8",
+      "evidence_path": "tests/codegen-direct/port-evidence/general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812"
     },
     {
       "logical_id": "general-bug-35-tool-crashes-with-atn-4bd74f316f",
@@ -768,8 +802,9 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "general-bug-35-tool-crashes-with-atn-4bd74f316f-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f",
+      "tdd_state": "done",
+      "resolution": "verified-covered-existing",
+      "rust_test": "grammar::atn::general_bug_test::bug_35_eof_dot_edge_does_not_crash",
       "primary_test_source": {
         "implementation": "independent-generated-oracle",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -789,22 +824,55 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "semantic checks or post-parse compiler diagnostics",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned General.Bug #35 Tool crashes with --atn behavior",
+      "expected_red_failure_fingerprint": "not applicable: the case-specific port passed against the existing Phase B compiler",
+      "observable_equivalence": "direct Rust recognizer metadata matches Java 4.13.2 and the selected ATN DOT edge matches the pinned upstream oracle for General.Bug #35 Tool crashes with --atn",
+      "scaffold_commit": "4b8cf8598ed1ce18df901b34fc5beba5a8a458dc",
+      "primary_test_commit": "827ea806215b2547d2c049d1ae25775a4c6eeea2",
+      "verified_covered_existing": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::general_bug_test",
+        "commit": "827ea806215b2547d2c049d1ae25775a4c6eeea2",
+        "exit_code": 0,
+        "result": "2 passed; 0 failed"
+      },
+      "primary_implementation_commit": "4b8cf8598ed1ce18df901b34fc5beba5a8a458dc",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::general_bug_test",
+        "result": "2 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "general-bug-35-tool-crashes-with-atn-4bd74f316f",
         "source_case_ids": [
           "antlr-ng:general-bug-35-tool-crashes-with-atn@4876a7c623f9"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/GoLexer.g4",
+          "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/GoLexer.interp",
+          "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/GoLexer.tokens",
+          "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/diagnostics.json",
+          "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/fixture.json",
+          "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/antlr-ng-GoLexer.EOS.dot",
+          "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/antlr-ng-atn.stderr",
+          "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/antlr-ng-atn.stdout",
+          "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/expected-dot-edge.txt",
+          "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/java-atn.stderr",
+          "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/java-atn.stdout",
+          "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/general-bug-35-tool-crashes-with-atn-4bd74f316f",
+        "rust_test": "grammar::atn::general_bug_test::bug_35_eof_dot_edge_does_not_crash",
         "unit_under_test": "semantic checks or post-parse compiler diagnostics",
-        "observable": "pinned General.Bug #35 Tool crashes with --atn behavior"
+        "observable": "direct Rust recognizer metadata matches Java 4.13.2 and the selected ATN DOT edge matches the pinned upstream oracle for General.Bug #35 Tool crashes with --atn",
+        "scaffold_commit": "4b8cf8598ed1ce18df901b34fc5beba5a8a458dc",
+        "primary_test_commit": "827ea806215b2547d2c049d1ae25775a4c6eeea2",
+        "resolution": "verified-covered-existing"
       },
-      "closure_sha256": "3dae52a7e27bef1c27f63ccd28600a7cec1a338694bbb669d72ec88227514c6e",
-      "evidence_path": null
+      "closure_sha256": "6808854b9cafc727e58c2f867288a5d7eff38d9158a54003cb62360addad3fb9",
+      "evidence_path": "tests/codegen-direct/port-evidence/general-bug-35-tool-crashes-with-atn-4bd74f316f"
     },
     {
       "logical_id": "testactionsplitter-input-a-line-b-line-0e86b4fcea",

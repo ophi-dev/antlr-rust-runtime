@@ -32,6 +32,8 @@ import {
     ESCAPE_SEQUENCE_SCAFFOLD_COMMIT,
     ESCAPE_SEQUENCE_TEST_COMMIT,
     FRONTEND_SYNTAX_TEST_COMMIT,
+    GENERAL_ATN_DOT_BASE_COMMIT,
+    GENERAL_ATN_DOT_TEST_COMMIT,
     GRAPH_NODES_BASE_COMMIT,
     GRAPH_NODES_IMPLEMENTATION_COMMIT,
     GRAPH_NODES_TEST_COMMIT,
@@ -161,6 +163,19 @@ const COMPOSITE_GRAMMARS_CASES =
 const COMPOSITE_GRAMMARS_TEST_PREFIX =
     "cargo test --locked --features codegen --bin antlr4-rust-gen " +
     "grammar::atn::interp_test::tests::upstream_composite_grammars::";
+const GENERAL_ATN_DOT_TEST_COMMAND =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen " +
+    "grammar::atn::general_bug_test";
+const GENERAL_ATN_DOT_PORTS = new Map([
+    [
+        "general-bug-33-escaping-issues-with-backslash-in-dot-file-comparison-1a90edd812",
+        "bug_33_backslash_dot_edge_matches_upstream",
+    ],
+    [
+        "general-bug-35-tool-crashes-with-atn-4bd74f316f",
+        "bug_35_eof_dot_edge_does_not_crash",
+    ],
+]);
 const COMPOSITE_GRAMMARS_RED_CASES = new Map([
     [
         "testcompositegrammars-testcirculargrammarinclusion-fa7d054f70",
@@ -1392,6 +1407,9 @@ function completedPhaseBRow(
                                               "composite-grammars"
                                             ? `direct Rust import integration, diagnostics, and artifacts match ` +
                                               `Java 4.13.2 for ${cases[0].suite}.${cases[0].name}`
+                                        : completed.kind === "general-atn-dot"
+                                          ? `direct Rust recognizer metadata matches Java 4.13.2 and the selected ` +
+                                            `ATN DOT edge matches the pinned upstream oracle for ${cases[0].suite}.${cases[0].name}`
                                         : completed.kind === "graph-nodes"
                                           ? `Rust prediction-context merging matches the Java 4.13.2 DOT graph ` +
                                             `for ${cases[0].suite}.${cases[0].name}`
@@ -2141,6 +2159,24 @@ async function loadCompletedPhaseBPorts() {
             "expected 26 completed TestCompositeGrammars ports with all recorded red cases",
         );
     }
+    for (const [logicalId, testName] of GENERAL_ATN_DOT_PORTS) {
+        ports.set(logicalId, {
+            fixturePaths: await fixturePaths(logicalId),
+            rustTest: `grammar::atn::general_bug_test::${testName}`,
+            kind: "general-atn-dot",
+            resolution: "verified-covered-existing",
+            scaffoldCommit: GENERAL_ATN_DOT_BASE_COMMIT,
+            testCommit: GENERAL_ATN_DOT_TEST_COMMIT,
+            implementationCommit: GENERAL_ATN_DOT_BASE_COMMIT,
+            testCommand: GENERAL_ATN_DOT_TEST_COMMAND,
+            greenResult: "2 passed; 0 failed",
+        });
+    }
+    if (GENERAL_ATN_DOT_PORTS.size !== 2) {
+        throw new Error(
+            `expected 2 completed General ATN DOT ports, found ${GENERAL_ATN_DOT_PORTS.size}`,
+        );
+    }
     for (const [logicalId, definition] of LOOKAHEAD_TREE_PORTS) {
         ports.set(logicalId, {
             fixturePaths: await fixturePaths(logicalId),
@@ -2201,8 +2237,8 @@ async function loadCompletedPhaseBPorts() {
             `expected 47 completed TestScopeParsing ports, found ${scopeGroups.size}`,
         );
     }
-    if (ports.size !== 382) {
-        throw new Error(`expected 382 completed Phase B ports, found ${ports.size}`);
+    if (ports.size !== 384) {
+        throw new Error(`expected 384 completed Phase B ports, found ${ports.size}`);
     }
     return ports;
 }
