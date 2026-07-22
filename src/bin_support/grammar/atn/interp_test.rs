@@ -817,6 +817,69 @@ mod tests {
         );
     }
 
+    mod upstream_unicode_grammar {
+        use super::*;
+
+        macro_rules! case {
+            ($name:ident, $fixture:literal, $grammar:literal) => {
+                mod $name {
+                    use super::*;
+
+                    #[test]
+                    fn matches_java_interps() {
+                        assert_combined_fixture($fixture, $grammar);
+                    }
+                }
+            };
+        }
+
+        case!(
+            bmp_literal,
+            "testunicodegrammar-unicodebmpliteralingrammar-4e3b8e43e6",
+            "Unicode"
+        );
+        case!(
+            disabled_surrogate_pair_literal,
+            "testunicodegrammar-unicodesurrogatepairliteralingrammar-d1ada97cc5",
+            "Unicode"
+        );
+        case!(
+            smp_literal,
+            "testunicodegrammar-unicodesmpliteralingrammar-b41d70815f",
+            "Unicode"
+        );
+        case!(
+            smp_range,
+            "testunicodegrammar-unicodesmprangeingrammar-69d43e47cb",
+            "Unicode"
+        );
+        case!(
+            dangling_surrogate,
+            "testunicodegrammar-matchingdanglingsurrogateininput-8b7976ab4f",
+            "Unicode"
+        );
+        case!(
+            binary,
+            "testunicodegrammar-binarygrammar-611ebe1d6f",
+            "Binary"
+        );
+    }
+
+    fn assert_combined_fixture(fixture_name: &str, grammar_name: &str) -> Compilation {
+        let compilation = compile_fixture(fixture_name, &[&format!("{grammar_name}.g4")])
+            .expect("combined grammar should compile");
+        let directory = fixture(fixture_name);
+        assert_lexer_interp(
+            lexer_named(&compilation, &format!("{grammar_name}Lexer")),
+            &directory.join(format!("{grammar_name}Lexer.interp")),
+        );
+        assert_parser_interp(
+            parser_named(&compilation, &format!("{grammar_name}Parser")),
+            &directory.join(format!("{grammar_name}.interp")),
+        );
+        compilation
+    }
+
     fn assert_lexer_fixture(fixture_name: &str, grammar_name: &str) -> Compilation {
         let compilation =
             compile_lexer_fixture(fixture_name, grammar_name).expect("lexer ATN should compile");
