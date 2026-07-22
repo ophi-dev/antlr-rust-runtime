@@ -88,6 +88,9 @@ jobs:
           # - Updates progress as the review proceeds
           # - Marks as completed when done
           track_progress: true
+          # Deliver the review through a single reused comment instead of a new one
+          # each run.
+          use_sticky_comment: true
           claude_args: |
             --effort max
             --model "claude-opus-4-8[1m]"
@@ -98,12 +101,14 @@ jobs:
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
 
-      # On failure, preserve the raw Claude execution JSON (the action logs it to
-      # ${{ runner.temp }}/claude-execution-output.json) so the run can be diagnosed
-      # without re-triggering. Uploaded by path — the step output can be empty when
-      # the first API turn errors out.
+      # Always preserve the raw Claude execution JSON (the action logs it to
+      # ${{ runner.temp }}/claude-execution-output.json) so any run can be diagnosed
+      # without re-triggering — including "completed but didn't post the review"
+      # cases that exit 0. Uploaded by path — the step output can be empty when the
+      # first API turn errors out. if-no-files-found: warn covers the validation-skip
+      # path, which exits before the log file is written.
       - name: Upload Claude execution log
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: claude-review-log-${{ github.event.pull_request.number }}-${{ github.run_attempt }}
