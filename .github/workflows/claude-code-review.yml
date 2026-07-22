@@ -25,11 +25,15 @@ jobs:
       issues: write
       id-token: write
 
+    concurrency:
+      group: code-review-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
       - name: Install Dependencies
         run: |
@@ -46,23 +50,44 @@ jobs:
 
       - name: Install Flamegraph
         run: |
-          cargo binstall -y flamegraph  
+          cargo binstall -y flamegraph
           echo "-1" | sudo tee /proc/sys/kernel/perf_event_paranoid
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: "temurin"
+          java-version: "25"
+
+      - name: Install uv with
+        uses: astral-sh/setup-uv@v9.0.0
+        with:
+          python-version: 3.12
+          github-token: ${{ github.token }}
+          ignore-nothing-to-cache: "true"
+          activate-environment: "true"
 
       - name: Run Claude Code Review
         id: claude-review
         uses: anthropics/claude-code-action@v1
+        env:
+          # Exposed to the skill's Bash steps for `gh pr comment` / `gh pr view`.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
+          plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
+          # When track_progress is enabled:
+          # - Creates a tracking comment with progress checkboxes
+          # - Includes all PR context (comments, attachments, images)
+          # - Updates progress as the review proceeds
+          # - Marks as completed when done
+          track_progress: true
           claude_args: |
             --effort max
-            --model opus
-            --no-session-persistence
+            --model "global.anthropic.claude-opus-4-8[1m]"
             --no-chrome
             --dangerously-skip-permissions
-          plugins: 'code-review@claude-code-plugins'
-          prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
+          plugins: "code-review@claude-code-plugins"
+          prompt: "/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
-
