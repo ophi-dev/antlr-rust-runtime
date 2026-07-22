@@ -1003,17 +1003,13 @@ mod tests {
 
         fn serialize_tokens(recognizer: &RecognizerModel) -> String {
             let mut output = String::new();
-            for token in &recognizer.vocabulary.tokens {
-                if let Some(name) = &token.name {
-                    writeln!(output, "{name}={}", token.number)
-                        .expect("writing to String cannot fail");
-                }
+            for name in &recognizer.vocabulary.name_order {
+                let number = recognizer.vocabulary.by_name[name];
+                writeln!(output, "{name}={number}").expect("writing to String cannot fail");
             }
-            for token in &recognizer.vocabulary.tokens {
-                if let Some(literal) = &token.literal {
-                    writeln!(output, "{literal}={}", token.number)
-                        .expect("writing to String cannot fail");
-                }
+            for literal in &recognizer.vocabulary.literal_order {
+                let number = recognizer.vocabulary.by_literal[literal];
+                writeln!(output, "{literal}={number}").expect("writing to String cannot fail");
             }
             output
         }

@@ -578,6 +578,8 @@ pub(crate) struct Vocabulary {
     pub(crate) tokens: Vec<TokenSymbol>,
     pub(crate) by_name: BTreeMap<String, i32>,
     pub(crate) by_literal: BTreeMap<String, i32>,
+    pub(crate) name_order: Vec<String>,
+    pub(crate) literal_order: Vec<String>,
 }
 
 impl Vocabulary {

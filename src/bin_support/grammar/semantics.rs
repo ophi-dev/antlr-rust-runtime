@@ -1696,19 +1696,30 @@ impl VocabularyBuilder {
     }
 
     fn finish(self) -> Vocabulary {
+        let tokens = self
+            .by_number
+            .into_values()
+            .map(|token| TokenSymbol {
+                id: token.id,
+                number: token.number,
+                name: token.name,
+                literal: token.literal,
+            })
+            .collect::<Vec<_>>();
+        let name_order = tokens
+            .iter()
+            .filter_map(|token| token.name.clone())
+            .collect();
+        let literal_order = tokens
+            .iter()
+            .filter_map(|token| token.literal.clone())
+            .collect();
         Vocabulary {
-            tokens: self
-                .by_number
-                .into_values()
-                .map(|token| TokenSymbol {
-                    id: token.id,
-                    number: token.number,
-                    name: token.name,
-                    literal: token.literal,
-                })
-                .collect(),
+            tokens,
             by_name: self.by_name,
             by_literal: self.by_literal,
+            name_order,
+            literal_order,
         }
     }
 }
