@@ -7321,8 +7321,9 @@ impl ContextSurfaceNames {
     }
 }
 
-/// Reserves canonical rule names before allocating labels. A label only gains
-/// a `Label`/`_label` suffix when Rust normalization would otherwise collide.
+/// Reserves canonical rule names before allocating labels. Alternative labels
+/// always use a `Label`/`_label` suffix so their generated surfaces cannot be
+/// confused with rule surfaces.
 fn context_surface_names(model: &embedded::EmbeddedModel) -> ContextSurfaceNames {
     let mut used_context_types = BTreeSet::new();
     let mut used_listener_methods = BTreeSet::new();
@@ -7330,12 +7331,8 @@ fn context_surface_names(model: &embedded::EmbeddedModel) -> ContextSurfaceNames
         .rules
         .iter()
         .map(|rule| ContextSurfaceName {
-            context_type: allocate_context_type(&rule.name, "Rule", &mut used_context_types),
-            listener_method: allocate_listener_method(
-                &rule.name,
-                "rule",
-                &mut used_listener_methods,
-            ),
+            context_type: allocate_rule_context_type(&rule.name, &mut used_context_types),
+            listener_method: allocate_rule_listener_method(&rule.name, &mut used_listener_methods),
         })
         .collect::<Vec<_>>();
 
@@ -7355,10 +7352,9 @@ fn context_surface_names(model: &embedded::EmbeddedModel) -> ContextSurfaceNames
             };
             if let Entry::Vacant(entry) = alternatives[rule_index].entry(label.clone()) {
                 let surface = ContextSurfaceName {
-                    context_type: allocate_context_type(label, "Label", &mut used_context_types),
-                    listener_method: allocate_listener_method(
+                    context_type: allocate_label_context_type(label, &mut used_context_types),
+                    listener_method: allocate_label_listener_method(
                         label,
-                        "label",
                         &mut used_listener_methods,
                     ),
                 };
@@ -7379,18 +7375,21 @@ fn context_surface_names(model: &embedded::EmbeddedModel) -> ContextSurfaceNames
     }
 }
 
-fn allocate_context_type(
-    source_name: &str,
-    collision_suffix: &str,
-    used: &mut BTreeSet<String>,
-) -> String {
+fn allocate_rule_context_type(source_name: &str, used: &mut BTreeSet<String>) -> String {
     let base = rust_type_name(source_name);
     let canonical = format!("{base}Context");
     if used.insert(canonical.clone()) {
         return canonical;
     }
 
-    let stem = format!("{base}{collision_suffix}");
+    allocate_numbered_context_type(&format!("{base}Rule"), used)
+}
+
+fn allocate_label_context_type(source_name: &str, used: &mut BTreeSet<String>) -> String {
+    allocate_numbered_context_type(&format!("{}Label", rust_type_name(source_name)), used)
+}
+
+fn allocate_numbered_context_type(stem: &str, used: &mut BTreeSet<String>) -> String {
     let mut candidate = format!("{stem}Context");
     let mut suffix = 2;
     while !used.insert(candidate.clone()) {
@@ -7400,11 +7399,7 @@ fn allocate_context_type(
     candidate
 }
 
-fn allocate_listener_method(
-    source_name: &str,
-    collision_suffix: &str,
-    used: &mut BTreeSet<String>,
-) -> String {
+fn allocate_rule_listener_method(source_name: &str, used: &mut BTreeSet<String>) -> String {
     let canonical = rust_function_name(source_name)
         .trim_start_matches("r#")
         .to_owned();
@@ -7412,8 +7407,17 @@ fn allocate_listener_method(
         return canonical;
     }
 
-    let stem = format!("{canonical}_{collision_suffix}");
-    let mut candidate = stem.clone();
+    allocate_numbered_listener_method(&format!("{canonical}_rule"), used)
+}
+
+fn allocate_label_listener_method(source_name: &str, used: &mut BTreeSet<String>) -> String {
+    let canonical = rust_function_name(source_name);
+    let stem = format!("{}_label", canonical.trim_start_matches("r#"));
+    allocate_numbered_listener_method(&stem, used)
+}
+
+fn allocate_numbered_listener_method(stem: &str, used: &mut BTreeSet<String>) -> String {
+    let mut candidate = stem.to_owned();
     let mut suffix = 2;
     while !used.insert(candidate.clone()) {
         candidate = format!("{stem}_{suffix}");

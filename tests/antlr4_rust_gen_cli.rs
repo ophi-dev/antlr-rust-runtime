@@ -224,19 +224,11 @@ fn positional_lexer_root_emits_rust_and_manifest() {
 }
 
 #[test]
-fn combined_root_emits_standard_typed_contexts_and_listener() {
+fn combined_root_suffixes_alternative_contexts_and_listener_methods() {
     let temp = temporary_directory("combined-contexts");
-    let grammar = temp.path().join("Shapes.g4");
+    let grammar = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/antlr4-rust-gen/combined-contexts/Shapes.g4");
     let out = temp.path().join("generated");
-    fs::write(
-        &grammar,
-        "grammar Shapes;\n\
-         start: first=atom # Single | rest+=atom+ # Many;\n\
-         atom: ID;\n\
-         ID: [a-z]+;\n\
-         WS: [ \\t\\r\\n]+ -> skip;\n",
-    )
-    .expect("grammar should be writable");
 
     let output = run_antlr4_rust_gen(&[
         grammar.as_os_str(),
@@ -254,11 +246,11 @@ fn combined_root_emits_standard_typed_contexts_and_listener() {
         fs::read_to_string(out.join("shapes_parser.rs")).expect("parser should be emitted");
     for expected in [
         "pub struct StartContext<'a>",
-        "pub struct SingleContext<'a>",
-        "pub struct ManyContext<'a>",
+        "pub struct SingleLabelContext<'a>",
+        "pub struct ManyLabelContext<'a>",
         "pub trait ShapesListener",
-        "fn enter_single(&mut self",
-        "fn enter_many(&mut self",
+        "fn enter_single_label(&mut self",
+        "fn enter_many_label(&mut self",
     ] {
         assert!(parser.contains(expected), "missing {expected:?}\n{parser}");
     }
@@ -291,8 +283,10 @@ fn colliding_rule_and_alternative_label_context_names_compile() {
     for expected in [
         "pub struct ObjectCreationExpressionContext<'a>",
         "pub struct ObjectCreationExpressionLabelContext<'a>",
+        "pub struct ParenthesizedLabelContext<'a>",
         "fn enter_object_creation_expression(&mut self",
         "fn enter_object_creation_expression_label(&mut self",
+        "fn enter_parenthesized_label(&mut self",
     ] {
         assert!(parser.contains(expected), "missing {expected:?}\n{parser}");
     }

@@ -19,6 +19,10 @@ ContextSurfaceNames {
                 context_type: "ObjectCreationExpressionLabelContext",
                 listener_method: "object_creation_expression_label",
             },
+            "parenthesized": ContextSurfaceName {
+                context_type: "ParenthesizedLabelContext",
+                listener_method: "parenthesized_label",
+            },
         },
         {},
     ],
@@ -39,6 +43,16 @@ ContextSurfaceNames {
             rule_index: 0,
             alternative_label: Some(
                 "objectCreationExpression",
+            ),
+        },
+        ContextViewName {
+            surface: ContextSurfaceName {
+                context_type: "ParenthesizedLabelContext",
+                listener_method: "parenthesized_label",
+            },
+            rule_index: 0,
+            alternative_label: Some(
+                "parenthesized",
             ),
         },
         ContextViewName {
