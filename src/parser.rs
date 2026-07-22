@@ -1132,6 +1132,7 @@ pub struct BaseParser<S, H = NoSemanticHooks> {
     tree: ParseTreeStorage,
     data: RecognizerData,
     semantic_hooks: H,
+    decision_override_generation: usize,
     build_parse_trees: bool,
     syntax_errors: usize,
     report_diagnostic_errors: bool,
@@ -3981,6 +3982,7 @@ struct RecognizeRequest<'a> {
     rule_alt_number: usize,
     track_alt_numbers: bool,
     consumed_eof: bool,
+    committed_decision: bool,
     /// Current left-recursive precedence threshold, matching ANTLR's
     /// `precpred(_ctx, k)` check for generated precedence rules.
     precedence: i32,
@@ -4002,6 +4004,7 @@ struct RecognizeKey {
     rule_alt_number: usize,
     track_alt_numbers: bool,
     consumed_eof: bool,
+    committed_decision: bool,
     precedence: i32,
     recovery_symbols: BTreeSet<i32>,
     recovery_state: Option<usize>,
@@ -4698,6 +4701,7 @@ where
             tree: ParseTreeStorage::new(),
             data,
             semantic_hooks,
+            decision_override_generation: 0,
             build_parse_trees: true,
             syntax_errors: 0,
             report_diagnostic_errors: false,
@@ -4771,6 +4775,7 @@ where
         self.precedence_stack.clear();
         self.precedence_stack.push(0);
         self.invoked_predicates.clear();
+        self.decision_override_generation = 0;
         self.unknown_predicate_hits.clear();
         self.unhandled_action_hits.clear();
         self.reset_per_parse_caches();
@@ -7147,6 +7152,7 @@ where
             && return_actions.is_empty()
             && unknown_predicate_policy == UnknownSemanticPolicy::AssumeTrue
             && !atn_has_observable_action_transitions(atn)
+            && !self.semantic_hooks.observes_parser_decisions()
             && (!self.semantic_hooks.observes_parser_predicates()
                 || !atn_has_predicate_transitions(atn))
         {
@@ -7154,7 +7160,9 @@ where
                 .parse_atn_rule_with_precedence(atn, rule_index, precedence)
                 .map(|tree| (tree, Vec::new()));
         }
-        if can_use_fast_predicate_recognizer(atn, &options) {
+        if !self.semantic_hooks.observes_parser_decisions()
+            && can_use_fast_predicate_recognizer(atn, &options)
+        {
             self.unknown_predicate_policy = unknown_predicate_policy;
             let prior_unknown_predicate_hits = std::mem::take(&mut self.unknown_predicate_hits);
             let member_values = self.int_members.clone();
@@ -7228,6 +7236,7 @@ where
                 rule_alt_number: 0,
                 track_alt_numbers,
                 consumed_eof: false,
+                committed_decision: false,
                 precedence,
                 depth: 0,
                 recovery_symbols: BTreeSet::new(),
@@ -9100,6 +9109,7 @@ where
                 rule_alt_number,
                 track_alt_numbers,
                 consumed_eof: consumed_eof || next_symbol == TOKEN_EOF,
+                committed_decision: false,
                 precedence,
                 depth: depth + 1,
                 recovery_symbols: BTreeSet::new(),
@@ -9149,6 +9159,7 @@ where
         };
         request.state_number = request.recovery_state.unwrap_or(request.state_number);
         request.index = next_index;
+        request.committed_decision = false;
         request.depth += 1;
         request.recovery_state = None;
         self.recognize_state(atn, request, visiting, memo, expected)
@@ -9226,6 +9237,7 @@ where
                 rule_alt_number: request.rule_alt_number,
                 track_alt_numbers: request.track_alt_numbers,
                 consumed_eof: request.consumed_eof,
+                committed_decision: false,
                 precedence: request.precedence,
                 depth: request.depth + 1,
                 recovery_symbols: BTreeSet::new(),
@@ -9344,6 +9356,7 @@ where
                 rule_alt_number,
                 track_alt_numbers,
                 consumed_eof,
+                committed_decision: false,
                 precedence,
                 depth: depth + 1,
                 recovery_symbols: BTreeSet::new(),
@@ -9395,6 +9408,7 @@ where
             rule_alt_number,
             track_alt_numbers,
             consumed_eof,
+            committed_decision,
             precedence,
             depth,
             recovery_symbols,
@@ -9424,6 +9438,7 @@ where
             rule_alt_number,
             track_alt_numbers,
             consumed_eof,
+            committed_decision,
             precedence,
             recovery_symbols: recovery_symbols.clone(),
             recovery_state,
@@ -9441,8 +9456,27 @@ where
             visiting.remove(&visit_key);
             return Vec::new();
         };
+        let decision_override_generation = self.decision_override_generation;
         let transitions = state.transitions();
         let transition_count = transitions.len();
+        let overridden_transition = if transition_count > 1
+            && self.semantic_hooks.observes_parser_decisions()
+        {
+            atn.decision_to_state()
+                .iter()
+                .position(|candidate| candidate == state_number)
+                .and_then(|decision| {
+                    self.semantic_hooks
+                        .parser_decision_override(decision, index, transition_count)
+                })
+                .and_then(|alternative| alternative.checked_sub(1))
+                .filter(|alternative| *alternative < transition_count)
+        } else {
+            None
+        };
+        if overridden_transition.is_some() {
+            self.decision_override_generation = self.decision_override_generation.wrapping_add(1);
+        }
         let next_decision_start_index = if starts_prediction_decision(state, transition_count) {
             Some(index)
         } else {
@@ -9452,6 +9486,13 @@ where
             next_recovery_context(atn, state, &recovery_symbols, recovery_state);
         let mut outcomes = Vec::new();
         for (transition_index, transition) in transitions.iter().enumerate() {
+            if overridden_transition.is_some_and(|forced| forced != transition_index) {
+                continue;
+            }
+            let transition_committed =
+                committed_decision || overridden_transition == Some(transition_index);
+            let mut transition_request = request_template.clone();
+            transition_request.committed_decision = transition_committed;
             let decision =
                 transition_decision(atn, state, transition_count, transition_index, predicates);
             let next_alt_number = next_alt_number(
@@ -9470,7 +9511,7 @@ where
                     };
                     outcomes.extend(self.recognize_epsilon_or_action_step(
                         atn,
-                        &request_template,
+                        &transition_request,
                         EpsilonActionStep {
                             source_state: state_number,
                             target: *target,
@@ -9528,6 +9569,7 @@ where
                                     rule_alt_number: next_alt_number,
                                     track_alt_numbers,
                                     consumed_eof,
+                                    committed_decision: transition_committed,
                                     precedence,
                                     depth: depth + 1,
                                     recovery_symbols: epsilon_recovery_symbols.clone(),
@@ -9601,6 +9643,7 @@ where
                                     rule_alt_number: next_alt_number,
                                     track_alt_numbers,
                                     consumed_eof,
+                                    committed_decision: transition_committed,
                                     precedence,
                                     depth: depth + 1,
                                     recovery_symbols: epsilon_recovery_symbols.clone(),
@@ -9651,6 +9694,7 @@ where
                             rule_alt_number: 0,
                             track_alt_numbers,
                             consumed_eof: false,
+                            committed_decision: transition_committed,
                             precedence: *rule_precedence,
                             depth: depth + 1,
                             recovery_symbols: epsilon_recovery_symbols.clone(),
@@ -9718,6 +9762,8 @@ where
                                     rule_alt_number,
                                     track_alt_numbers,
                                     consumed_eof: consumed_eof || child.consumed_eof,
+                                    committed_decision: transition_committed
+                                        && child.index == index,
                                     precedence,
                                     depth: depth + 1,
                                     recovery_symbols: BTreeSet::new(),
@@ -9785,6 +9831,7 @@ where
                                     rule_alt_number: next_alt_number,
                                     track_alt_numbers,
                                     consumed_eof: consumed_eof || symbol == TOKEN_EOF,
+                                    committed_decision: false,
                                     precedence,
                                     depth: depth + 1,
                                     recovery_symbols: BTreeSet::new(),
@@ -9806,13 +9853,30 @@ where
                     } else {
                         let expected_symbols =
                             recovery_expected_symbols(atn, state.state_number(), &recovery_symbols);
-                        if expected_symbols.contains(&symbol) {
+                        if expected_symbols.contains(&symbol) && !transition_committed {
                             continue;
                         }
                         expected.record_transition(index, transition, atn.max_token_type());
                         record_no_viable_if_ambiguous(expected, next_decision_start_index, index);
                         let before_recovery = outcomes.len();
-                        let recovery_request = request_template.clone();
+                        let recovery_request = transition_request.clone();
+                        if transition_committed {
+                            outcomes.extend(self.consuming_failure_fallback(
+                                ConsumingFailureFallback {
+                                    atn,
+                                    target: *target,
+                                    request: recovery_request,
+                                    symbol,
+                                    expected_symbols,
+                                    decision_start_index: next_decision_start_index,
+                                    decision,
+                                },
+                                visiting,
+                                memo,
+                                expected,
+                            ));
+                            break;
+                        }
                         outcomes.extend(
                             self.single_token_deletion_recovery(RecoveryRequest {
                                 atn,
@@ -9877,6 +9941,9 @@ where
                         }
                     }
                 }
+            }
+            if self.decision_override_generation != decision_override_generation {
+                break;
             }
         }
 
@@ -9955,9 +10022,14 @@ where
                 local_int_arg: request.local_int_arg,
                 member_values: next_member_values,
                 return_values: next_return_values,
-                rule_alt_number: step.alt_number,
+                rule_alt_number: if step.left_recursive_boundary.is_some() {
+                    0
+                } else {
+                    step.alt_number
+                },
                 track_alt_numbers: request.track_alt_numbers,
                 consumed_eof: request.consumed_eof,
+                committed_decision: request.committed_decision,
                 precedence: request.precedence,
                 depth: request.depth + 1,
                 recovery_symbols: step.recovery_symbols,
