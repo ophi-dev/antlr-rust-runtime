@@ -125,6 +125,12 @@ export const LEFT_RECURSION_TEST_COMMIT =
     "4338380064180acf5da3e2414bd5837c21266d65";
 export const LEFT_RECURSION_IMPLEMENTATION_COMMIT =
     "a5f1269a026f5a40f59071cadf8a6c60f8fe1b09";
+export const LOOKAHEAD_TREE_FIXTURE_COMMIT =
+    "c429fbd96902b2320ea82df94afea3fa3df6d177";
+export const LOOKAHEAD_TREE_TEST_COMMIT =
+    "b1b0728572764a335519762e5e7125a25fe3f118";
+export const LOOKAHEAD_TREE_IMPLEMENTATION_COMMIT =
+    "e2046ea128583ecf578a82b901ee495e0c503c47";
 
 export function stableStringify(value) {
     if (Array.isArray(value)) {

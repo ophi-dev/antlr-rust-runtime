@@ -31,6 +31,9 @@ import {
     LEFT_RECURSION_BASE_COMMIT,
     LEFT_RECURSION_IMPLEMENTATION_COMMIT,
     LEFT_RECURSION_TEST_COMMIT,
+    LOOKAHEAD_TREE_FIXTURE_COMMIT,
+    LOOKAHEAD_TREE_IMPLEMENTATION_COMMIT,
+    LOOKAHEAD_TREE_TEST_COMMIT,
     NESTED_ACTION_BASE_COMMIT,
     NESTED_ACTION_IMPLEMENTATION_COMMIT,
     NESTED_ACTION_TEST_COMMIT,
@@ -540,6 +543,42 @@ const LEFT_RECURSION_PORTS = new Map([
             resolution: "ported",
             redFingerprint:
                 "the direct compiler accepted an argument on a left-recursive rule without parameters",
+        },
+    ],
+]);
+const LOOKAHEAD_TREE_TEST_PREFIX =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_lookahead_trees::";
+const LOOKAHEAD_TREE_PORTS = new Map([
+    [
+        "testlookaheadtrees-testalts-ea8f84416c",
+        {
+            testName: "alternatives_match_java",
+            redFingerprint:
+                'decision 0, alternative 2 produced "(e:1 a . b)" instead of "(e:2 a <error .>)"',
+        },
+    ],
+    [
+        "testlookaheadtrees-testalts2-4e81c43326",
+        {
+            testName: "left_recursive_loop_match_java",
+            redFingerprint:
+                'decision 1, alternative 1 produced "(e:1 a)" instead of "(e:2 (e:1 a) <error ;>)"',
+        },
+    ],
+    [
+        "testlookaheadtrees-testcallleftrecursiverule-410ec32fb8",
+        {
+            testName: "calls_left_recursive_rule_match_java",
+            redFingerprint:
+                'decision 0, alternative 2 produced "(a:1 (e:4 x) ;)" instead of "(a:2 x ;)"',
+        },
+    ],
+    [
+        "testlookaheadtrees-testincludeeof-41ef07554a",
+        {
+            testName: "include_eof_matches_java",
+            redFingerprint:
+                'decision 0, alternative 2 produced "(e:1 a . b <EOF>)" instead of "(e:2 a . b <EOF>)"',
         },
     ],
 ]);
@@ -1120,6 +1159,9 @@ function completedPhaseBRow(
                                           "left-recursion-tool-issues"
                                         ? `direct Rust left-recursion diagnostics and accepted serialization match ` +
                                           `Java 4.13.2 for ${cases[0].suite}.${cases[0].name}`
+                                        : completed.kind === "lookahead-trees"
+                                          ? `direct Rust forced-alternative parse trees and complete serialization match ` +
+                                            `Java 4.13.2 for ${cases[0].suite}.${cases[0].name}`
                         : `direct Rust semantic diagnostics match Java 4.13.2 exactly ` +
                           `for ${cases[0].suite}.${cases[0].name}`;
     const coveredExisting =
@@ -1579,6 +1621,28 @@ async function loadCompletedPhaseBPorts() {
             `expected 7 completed TestLeftRecursionToolIssues ports, found ${LEFT_RECURSION_PORTS.size}`,
         );
     }
+    for (const [logicalId, definition] of LOOKAHEAD_TREE_PORTS) {
+        ports.set(logicalId, {
+            fixturePaths: await fixturePaths(logicalId),
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_lookahead_trees::" +
+                definition.testName,
+            kind: "lookahead-trees",
+            resolution: "ported",
+            scaffoldCommit: LOOKAHEAD_TREE_FIXTURE_COMMIT,
+            testCommit: LOOKAHEAD_TREE_TEST_COMMIT,
+            implementationCommit: LOOKAHEAD_TREE_IMPLEMENTATION_COMMIT,
+            testCommand:
+                `${LOOKAHEAD_TREE_TEST_PREFIX}${definition.testName} -- --exact`,
+            greenResult: "1 passed; 0 failed",
+            redFingerprint: definition.redFingerprint,
+        });
+    }
+    if (LOOKAHEAD_TREE_PORTS.size !== 4) {
+        throw new Error(
+            `expected 4 completed TestLookaheadTrees ports, found ${LOOKAHEAD_TREE_PORTS.size}`,
+        );
+    }
     const scopeGroups = new Map();
     for (const testCase of inventory.cases) {
         if (testCase.suite !== "TestScopeParsing") {
@@ -1617,8 +1681,8 @@ async function loadCompletedPhaseBPorts() {
             `expected 47 completed TestScopeParsing ports, found ${scopeGroups.size}`,
         );
     }
-    if (ports.size !== 215) {
-        throw new Error(`expected 215 completed Phase B ports, found ${ports.size}`);
+    if (ports.size !== 219) {
+        throw new Error(`expected 219 completed Phase B ports, found ${ports.size}`);
     }
     return ports;
 }

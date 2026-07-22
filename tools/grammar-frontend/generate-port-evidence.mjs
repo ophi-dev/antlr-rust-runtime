@@ -39,6 +39,9 @@ import {
     LEFT_RECURSION_FIXTURE_COMMIT,
     LEFT_RECURSION_IMPLEMENTATION_COMMIT,
     LEFT_RECURSION_TEST_COMMIT,
+    LOOKAHEAD_TREE_FIXTURE_COMMIT,
+    LOOKAHEAD_TREE_IMPLEMENTATION_COMMIT,
+    LOOKAHEAD_TREE_TEST_COMMIT,
     NESTED_ACTION_BASE_COMMIT,
     NESTED_ACTION_IMPLEMENTATION_COMMIT,
     NESTED_ACTION_TEST_COMMIT,
@@ -163,6 +166,12 @@ const LEFT_RECURSION_TEST_START =
     "    mod upstream_left_recursion_tool_issues {";
 const LEFT_RECURSION_TEST_END =
     "\n    mod upstream_atn_construction {";
+const LOOKAHEAD_TREE_TEST_PATH =
+    "src/bin_support/grammar/atn/interp_test.rs";
+const LOOKAHEAD_TREE_TEST_START =
+    "    mod upstream_lookahead_trees {";
+const LOOKAHEAD_TREE_TEST_END =
+    "\n    mod upstream_left_recursion_tool_issues {";
 const EMPTY_VOCABULARY_LOGICAL_ID =
     "testvocabulary-testemptyvocabulary-66d31ad014";
 const SYMBOL_INFO_SHA256 =
@@ -1140,6 +1149,53 @@ const leftRecursionLockedSections = [
         sha256: digest(checkedInLeftRecursionTests),
     },
 ];
+const checkedInLookaheadTreeTests = sectionBetweenMarkers(
+    await readFile(resolve(repoRoot, LOOKAHEAD_TREE_TEST_PATH), "utf8"),
+    LOOKAHEAD_TREE_TEST_START,
+    LOOKAHEAD_TREE_TEST_END,
+);
+const recordedLookaheadTreeTests = gitShowOptional(
+    repoRoot,
+    LOOKAHEAD_TREE_TEST_COMMIT,
+    LOOKAHEAD_TREE_TEST_PATH,
+);
+const implementedLookaheadTreeTests = gitShowOptional(
+    repoRoot,
+    LOOKAHEAD_TREE_IMPLEMENTATION_COMMIT,
+    LOOKAHEAD_TREE_TEST_PATH,
+);
+if (
+    recordedLookaheadTreeTests === null ||
+    sectionBetweenMarkers(
+        recordedLookaheadTreeTests,
+        LOOKAHEAD_TREE_TEST_START,
+        LOOKAHEAD_TREE_TEST_END,
+    ) !== checkedInLookaheadTreeTests
+) {
+    throw new Error(
+        "checked-in lookahead tree ports differ from their test commit",
+    );
+}
+if (
+    implementedLookaheadTreeTests === null ||
+    sectionBetweenMarkers(
+        implementedLookaheadTreeTests,
+        LOOKAHEAD_TREE_TEST_START,
+        LOOKAHEAD_TREE_TEST_END,
+    ) !== checkedInLookaheadTreeTests
+) {
+    throw new Error(
+        "lookahead tree implementation changed the locked test ports",
+    );
+}
+const lookaheadTreeLockedSections = [
+    {
+        path: LOOKAHEAD_TREE_TEST_PATH,
+        marker: LOOKAHEAD_TREE_TEST_START,
+        end_marker: LOOKAHEAD_TREE_TEST_END,
+        sha256: digest(checkedInLookaheadTreeTests),
+    },
+];
 
 const upstreamByLogicalId = new Map(
     testMap.rows.map((row) => [row.logical_id, row]),
@@ -1278,6 +1334,9 @@ for (const row of completedRows) {
     const phaseBLeftRecursion = row.logical_id.startsWith(
         "testleftrecursiontoolissues-",
     );
+    const phaseBLookaheadTree = row.logical_id.startsWith(
+        "testlookaheadtrees-",
+    );
     if (
         row.owner_phase === "B" &&
         !phaseBAtnSerialization &&
@@ -1295,7 +1354,8 @@ for (const row of completedRows) {
         !phaseBUnicodeData &&
         !phaseBUnicodeGrammar &&
         !phaseBTokenAssignment &&
-        !phaseBLeftRecursion
+        !phaseBLeftRecursion &&
+        !phaseBLookaheadTree
     ) {
         throw new Error(`missing Phase B evidence profile for ${row.logical_id}`);
     }
@@ -1506,6 +1566,19 @@ for (const row of completedRows) {
                                                 ? "the accepted primary-rule-argument .interp test passed against the direct compiler implementation already present at the batch base"
                                                 : "the left-recursion implementation commit is directly based on the locked red diagnostic tests",
                                         }
+                                      : phaseBLookaheadTree
+                                        ? {
+                                              lockedSections:
+                                                  lookaheadTreeLockedSections,
+                                              scaffoldCommit:
+                                                  LOOKAHEAD_TREE_FIXTURE_COMMIT,
+                                              testParent:
+                                                  LOOKAHEAD_TREE_FIXTURE_COMMIT,
+                                              implementationParent:
+                                                  LOOKAHEAD_TREE_TEST_COMMIT,
+                                              reachability:
+                                                  "the lookahead tree implementation commit is directly based on the locked red forced-alternative tests",
+                                          }
           : null;
     await addEvidence({
         logicalId: row.logical_id,
@@ -1660,6 +1733,15 @@ for (const row of completedRows) {
                                                 java_compatibility_verdict:
                                                     "exact Java 4.13.2 diagnostic severity, position, and message equality or complete accepted recognizer metadata and serialized ATN equality",
                                             }
+                                          : phaseBLookaheadTree
+                                            ? {
+                                                  primary:
+                                                      "the complete direct Rust lexer and parser .interp plus every forced-alternative parse tree match the immutable Java 4.13.2 oracles",
+                                                  alternate:
+                                                      "the pinned antlr-ng TestLookaheadTrees case uses the same grammar, decision, input index, and expected parse trees",
+                                                  java_compatibility_verdict:
+                                                      "exact Java 4.13.2 recognizer metadata, serialized ATN, and forced-alternative parse-tree equality",
+                                              }
             : {
                   primary: coveredExisting
                       ? "the case-specific Rust port matches the pinned accepted and rejected syntax outcomes"
@@ -1711,7 +1793,8 @@ for (const row of completedRows) {
             (phaseBUnicodeGrammar && !coveredExisting) ||
             (phaseBTokenAssignment && !coveredExisting) ||
             (phaseBTokenPosition && !coveredExisting) ||
-            (phaseBLeftRecursion && !coveredExisting)
+            (phaseBLeftRecursion && !coveredExisting) ||
+            phaseBLookaheadTree
             ? row.demonstrated_red
             : undefined,
     });

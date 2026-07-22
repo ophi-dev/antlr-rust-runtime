@@ -36,6 +36,9 @@ import {
     LEFT_RECURSION_FIXTURE_COMMIT,
     LEFT_RECURSION_IMPLEMENTATION_COMMIT,
     LEFT_RECURSION_TEST_COMMIT,
+    LOOKAHEAD_TREE_FIXTURE_COMMIT,
+    LOOKAHEAD_TREE_IMPLEMENTATION_COMMIT,
+    LOOKAHEAD_TREE_TEST_COMMIT,
     NESTED_ACTION_BASE_COMMIT,
     NESTED_ACTION_IMPLEMENTATION_COMMIT,
     NESTED_ACTION_TEST_COMMIT,
@@ -326,6 +329,9 @@ for (const [logicalId, record] of records) {
         );
         const leftRecursion = logicalId.startsWith(
             "testleftrecursiontoolissues-",
+        );
+        const lookaheadTree = logicalId.startsWith(
+            "testlookaheadtrees-",
         );
         if (resolution === "verified-covered-existing") {
             if (atnSerialization) {
@@ -736,6 +742,23 @@ for (const [logicalId, record] of records) {
                         manifest.ancestry.primary_implementation_parent ===
                             LEFT_RECURSION_TEST_COMMIT,
                     `${logicalId} left recursion recorded ancestry differs`,
+                );
+            } else if (lookaheadTree) {
+                expect(
+                    manifest.commits.scaffold ===
+                            LOOKAHEAD_TREE_FIXTURE_COMMIT &&
+                        manifest.commits.primary_test ===
+                            LOOKAHEAD_TREE_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            LOOKAHEAD_TREE_IMPLEMENTATION_COMMIT,
+                    `${logicalId} lookahead tree evidence commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            LOOKAHEAD_TREE_FIXTURE_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            LOOKAHEAD_TREE_TEST_COMMIT,
+                    `${logicalId} lookahead tree recorded ancestry differs`,
                 );
             } else {
                 expect(

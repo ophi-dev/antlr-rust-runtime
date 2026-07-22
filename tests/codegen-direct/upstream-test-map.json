@@ -21737,8 +21737,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testlookaheadtrees-testalts-ea8f84416c-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testlookaheadtrees-testalts-ea8f84416c",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_lookahead_trees::alternatives_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -21759,8 +21759,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestLookaheadTrees.testAlts behavior",
+      "expected_red_failure_fingerprint": "decision 0, alternative 2 produced \"(e:1 a . b)\" instead of \"(e:2 a <error .>)\"",
+      "observable_equivalence": "direct Rust forced-alternative parse trees and complete serialization match Java 4.13.2 for TestLookaheadTrees.testAlts",
+      "scaffold_commit": "c429fbd96902b2320ea82df94afea3fa3df6d177",
+      "primary_test_commit": "b1b0728572764a335519762e5e7125a25fe3f118",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_lookahead_trees::alternatives_match_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "decision 0, alternative 2 produced \"(e:1 a . b)\" instead of \"(e:2 a <error .>)\""
+      },
+      "primary_implementation_commit": "e2046ea128583ecf578a82b901ee495e0c503c47",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_lookahead_trees::alternatives_match_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testlookaheadtrees-testalts-ea8f84416c",
         "source_case_ids": [
@@ -21768,14 +21780,29 @@
           "java-antlr:testlookaheadtrees-testalts@bd827730fc58"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testalts-ea8f84416c/L.g4",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testalts-ea8f84416c/L.interp",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testalts-ea8f84416c/L.tokens",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testalts-ea8f84416c/T.g4",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testalts-ea8f84416c/T.interp",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testalts-ea8f84416c/T.tokens",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testalts-ea8f84416c/fixture.json",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testalts-ea8f84416c/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testalts-ea8f84416c/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testalts-ea8f84416c/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testalts-ea8f84416c/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testlookaheadtrees-testalts-ea8f84416c",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_lookahead_trees::alternatives_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestLookaheadTrees.testAlts behavior"
+        "observable": "direct Rust forced-alternative parse trees and complete serialization match Java 4.13.2 for TestLookaheadTrees.testAlts",
+        "scaffold_commit": "c429fbd96902b2320ea82df94afea3fa3df6d177",
+        "primary_test_commit": "b1b0728572764a335519762e5e7125a25fe3f118"
       },
-      "closure_sha256": "05afc7c1eeecb27d62ea571e5e43767865ff833fd24a51df82bbb0201cc5b072",
-      "evidence_path": null
+      "closure_sha256": "9b18948ffdec2ae4e5d0258e319ba6df2473997c2c750a0c7b7aca26e086be68",
+      "evidence_path": "tests/codegen-direct/port-evidence/testlookaheadtrees-testalts-ea8f84416c"
     },
     {
       "logical_id": "testlookaheadtrees-testalts2-4e81c43326",
@@ -21787,8 +21814,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testlookaheadtrees-testalts2-4e81c43326-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testlookaheadtrees-testalts2-4e81c43326",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_lookahead_trees::left_recursive_loop_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -21809,8 +21836,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestLookaheadTrees.testAlts2 behavior",
+      "expected_red_failure_fingerprint": "decision 1, alternative 1 produced \"(e:1 a)\" instead of \"(e:2 (e:1 a) <error ;>)\"",
+      "observable_equivalence": "direct Rust forced-alternative parse trees and complete serialization match Java 4.13.2 for TestLookaheadTrees.testAlts2",
+      "scaffold_commit": "c429fbd96902b2320ea82df94afea3fa3df6d177",
+      "primary_test_commit": "b1b0728572764a335519762e5e7125a25fe3f118",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_lookahead_trees::left_recursive_loop_match_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "decision 1, alternative 1 produced \"(e:1 a)\" instead of \"(e:2 (e:1 a) <error ;>)\""
+      },
+      "primary_implementation_commit": "e2046ea128583ecf578a82b901ee495e0c503c47",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_lookahead_trees::left_recursive_loop_match_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testlookaheadtrees-testalts2-4e81c43326",
         "source_case_ids": [
@@ -21818,14 +21857,29 @@
           "java-antlr:testlookaheadtrees-testalts2@12257528ce73"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testalts2-4e81c43326/L.g4",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testalts2-4e81c43326/L.interp",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testalts2-4e81c43326/L.tokens",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testalts2-4e81c43326/T.g4",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testalts2-4e81c43326/T.interp",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testalts2-4e81c43326/T.tokens",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testalts2-4e81c43326/fixture.json",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testalts2-4e81c43326/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testalts2-4e81c43326/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testalts2-4e81c43326/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testalts2-4e81c43326/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testlookaheadtrees-testalts2-4e81c43326",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_lookahead_trees::left_recursive_loop_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestLookaheadTrees.testAlts2 behavior"
+        "observable": "direct Rust forced-alternative parse trees and complete serialization match Java 4.13.2 for TestLookaheadTrees.testAlts2",
+        "scaffold_commit": "c429fbd96902b2320ea82df94afea3fa3df6d177",
+        "primary_test_commit": "b1b0728572764a335519762e5e7125a25fe3f118"
       },
-      "closure_sha256": "b5a5fb7666663cb5c298d948f6090d457ef7fe1fc797e9adc9d4b5851658e295",
-      "evidence_path": null
+      "closure_sha256": "256a2ec0d5bde63485c08f099fad95575e36ffc7dd8c1ae4a00b10a1db3a8d6a",
+      "evidence_path": "tests/codegen-direct/port-evidence/testlookaheadtrees-testalts2-4e81c43326"
     },
     {
       "logical_id": "testlookaheadtrees-testcallleftrecursiverule-410ec32fb8",
@@ -21837,8 +21891,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testlookaheadtrees-testcallleftrecursiverule-410ec32fb8-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_lookahead_trees::calls_left_recursive_rule_match_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -21859,8 +21913,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestLookaheadTrees.testCallLeftRecursiveRule behavior",
+      "expected_red_failure_fingerprint": "decision 0, alternative 2 produced \"(a:1 (e:4 x) ;)\" instead of \"(a:2 x ;)\"",
+      "observable_equivalence": "direct Rust forced-alternative parse trees and complete serialization match Java 4.13.2 for TestLookaheadTrees.testCallLeftRecursiveRule",
+      "scaffold_commit": "c429fbd96902b2320ea82df94afea3fa3df6d177",
+      "primary_test_commit": "b1b0728572764a335519762e5e7125a25fe3f118",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_lookahead_trees::calls_left_recursive_rule_match_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "decision 0, alternative 2 produced \"(a:1 (e:4 x) ;)\" instead of \"(a:2 x ;)\""
+      },
+      "primary_implementation_commit": "e2046ea128583ecf578a82b901ee495e0c503c47",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_lookahead_trees::calls_left_recursive_rule_match_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testlookaheadtrees-testcallleftrecursiverule-410ec32fb8",
         "source_case_ids": [
@@ -21868,14 +21934,29 @@
           "java-antlr:testlookaheadtrees-testcallleftrecursiverule@c8038b861c1d"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/L.g4",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/L.interp",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/L.tokens",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/T.g4",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/T.interp",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/T.tokens",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/fixture.json",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_lookahead_trees::calls_left_recursive_rule_match_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestLookaheadTrees.testCallLeftRecursiveRule behavior"
+        "observable": "direct Rust forced-alternative parse trees and complete serialization match Java 4.13.2 for TestLookaheadTrees.testCallLeftRecursiveRule",
+        "scaffold_commit": "c429fbd96902b2320ea82df94afea3fa3df6d177",
+        "primary_test_commit": "b1b0728572764a335519762e5e7125a25fe3f118"
       },
-      "closure_sha256": "a29d1f270ffac1869ac6aa8d735920f909967e883a6fba3337ba8e3ff87d3e20",
-      "evidence_path": null
+      "closure_sha256": "bee9ab0d6cfd6f37b2a8fd7f9f0ad7c14d52a8ad07071c2a688a144271244461",
+      "evidence_path": "tests/codegen-direct/port-evidence/testlookaheadtrees-testcallleftrecursiverule-410ec32fb8"
     },
     {
       "logical_id": "testlookaheadtrees-testincludeeof-41ef07554a",
@@ -21887,8 +21968,8 @@
       "owner_phase": "B",
       "disposition": "port",
       "active_revision_id": "testlookaheadtrees-testincludeeof-41ef07554a-r1",
-      "tdd_state": "mapped",
-      "rust_test": "planned:tests/codegen-direct/fixtures/testlookaheadtrees-testincludeeof-41ef07554a",
+      "tdd_state": "done",
+      "rust_test": "grammar::atn::interp_test::tests::upstream_lookahead_trees::include_eof_matches_java",
       "primary_test_source": {
         "implementation": "java-antlr",
         "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
@@ -21909,8 +21990,20 @@
         "Phase B compiler boundary"
       ],
       "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-      "expected_red_failure_fingerprint": "not demonstrated while state is mapped",
-      "observable_equivalence": "pinned TestLookaheadTrees.testIncludeEOF behavior",
+      "expected_red_failure_fingerprint": "decision 0, alternative 2 produced \"(e:1 a . b <EOF>)\" instead of \"(e:2 a . b <EOF>)\"",
+      "observable_equivalence": "direct Rust forced-alternative parse trees and complete serialization match Java 4.13.2 for TestLookaheadTrees.testIncludeEOF",
+      "scaffold_commit": "c429fbd96902b2320ea82df94afea3fa3df6d177",
+      "primary_test_commit": "b1b0728572764a335519762e5e7125a25fe3f118",
+      "demonstrated_red": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_lookahead_trees::include_eof_matches_java -- --exact",
+        "exit_code": 101,
+        "fingerprint": "decision 0, alternative 2 produced \"(e:1 a . b <EOF>)\" instead of \"(e:2 a . b <EOF>)\""
+      },
+      "primary_implementation_commit": "e2046ea128583ecf578a82b901ee495e0c503c47",
+      "green_result": {
+        "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_lookahead_trees::include_eof_matches_java -- --exact",
+        "result": "1 passed; 0 failed"
+      },
       "closure": {
         "logical_id": "testlookaheadtrees-testincludeeof-41ef07554a",
         "source_case_ids": [
@@ -21918,14 +22011,29 @@
           "java-antlr:testlookaheadtrees-testincludeeof@eadf4bd12093"
         ],
         "external_assertion_ids": [],
+        "fixture_paths": [
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testincludeeof-41ef07554a/L.g4",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testincludeeof-41ef07554a/L.interp",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testincludeeof-41ef07554a/L.tokens",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testincludeeof-41ef07554a/T.g4",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testincludeeof-41ef07554a/T.interp",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testincludeeof-41ef07554a/T.tokens",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testincludeeof-41ef07554a/fixture.json",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testincludeeof-41ef07554a/oracle/java-antlr.stderr",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testincludeeof-41ef07554a/oracle/java-antlr.stdout",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testincludeeof-41ef07554a/oracle/java-unicode-data.stderr",
+          "tests/codegen-direct/fixtures/testlookaheadtrees-testincludeeof-41ef07554a/oracle/java-unicode-data.stdout"
+        ],
         "owner_phase": "B",
         "disposition": "port",
-        "rust_test": "planned:tests/codegen-direct/fixtures/testlookaheadtrees-testincludeeof-41ef07554a",
+        "rust_test": "grammar::atn::interp_test::tests::upstream_lookahead_trees::include_eof_matches_java",
         "unit_under_test": "direct grammar semantic pipeline and ATN construction",
-        "observable": "pinned TestLookaheadTrees.testIncludeEOF behavior"
+        "observable": "direct Rust forced-alternative parse trees and complete serialization match Java 4.13.2 for TestLookaheadTrees.testIncludeEOF",
+        "scaffold_commit": "c429fbd96902b2320ea82df94afea3fa3df6d177",
+        "primary_test_commit": "b1b0728572764a335519762e5e7125a25fe3f118"
       },
-      "closure_sha256": "5dea55646d013fd52a61fc0aad0640f9c7de4ee992ad15f20069eac97c9cee58",
-      "evidence_path": null
+      "closure_sha256": "8b1635f17d7f67baf9a61c563e078f5d1dc898893e8cab4ea29867c6490922b6",
+      "evidence_path": "tests/codegen-direct/port-evidence/testlookaheadtrees-testincludeeof-41ef07554a"
     },
     {
       "logical_id": "testparserexec-fail-element-option-5aa5efff9b",
