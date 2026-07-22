@@ -52,13 +52,13 @@
     }
   ],
   "demonstrated_red": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::char_support::tests::",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::char_support::tests::",
     "commit": "8970016dbac6705533db4d9ad55d996b61bed026",
     "exit_code": 101,
     "fingerprint": "E0425: cannot find function `get_antlr_char_literal_for_char` in this scope"
   },
   "green_result": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::char_support::tests::",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::char_support::tests::",
     "commit": "28b8fe8bf72608dc19752d8cb39feab7ecb21fc3",
     "exit_code": 0,
     "result": "8 passed; 0 failed"
@@ -74,7 +74,7 @@
     },
     {
       "path": "tests/codegen-direct/port-evidence/testcharsupport-testgetantlrcharliteralforchar-5f81e9b4e6/revisions/testcharsupport-testgetantlrcharliteralforchar-5f81e9b4e6-r1/matrix-results/results.json",
-      "sha256": "0707e1171f77c7e980b305c09526afd31aa592f02beca29156329f42e877c4ca"
+      "sha256": "617ceb56412bfa2e941436fa48c945ba83e12b1fa2b9e66c8efdf2b29deb709e"
     }
   ]
 }

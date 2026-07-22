@@ -55,14 +55,14 @@
     }
   ],
   "verified_covered_existing": {
-    "command": "cargo test --locked --bin antlr4-rust-gen upstream_topological_sort -- --test-threads=1",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_topological_sort -- --test-threads=1",
     "commit": "738ada36e551037733b02e556809b03b8c2c73ea",
     "exit_code": 0,
     "result": "5 passed; 0 failed",
     "covering_implementation_commit": "6b1c62d0e8d6c06e07a39a773354044cf92b47b4"
   },
   "green_result": {
-    "command": "cargo test --locked --bin antlr4-rust-gen upstream_topological_sort -- --test-threads=1",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_topological_sort -- --test-threads=1",
     "commit": "738ada36e551037733b02e556809b03b8c2c73ea",
     "exit_code": 0,
     "result": "5 passed; 0 failed"
@@ -78,7 +78,7 @@
     },
     {
       "path": "tests/codegen-direct/port-evidence/testtopologicalsort-testsimpletokendependence-02d55e6f25/revisions/testtopologicalsort-testsimpletokendependence-02d55e6f25-r1/matrix-results/results.json",
-      "sha256": "ef71f33b3684399094bed8096cd9947f9813a0592c79c4688bb166257e55ce91"
+      "sha256": "1cbc14508c5530c56ee176638506eb31902c4a09923b227f56586184ad28e492"
     }
   ]
 }

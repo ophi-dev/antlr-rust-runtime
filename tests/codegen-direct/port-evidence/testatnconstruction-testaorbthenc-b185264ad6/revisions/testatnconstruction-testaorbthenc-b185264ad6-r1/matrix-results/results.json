@@ -8,7 +8,7 @@
       "test_commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
       "implementation_port": "existing-primary-antlr-ng",
       "implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad",
-      "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+      "command": "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
       "result": "green: 38 passed; 0 failed"
     }
   ],

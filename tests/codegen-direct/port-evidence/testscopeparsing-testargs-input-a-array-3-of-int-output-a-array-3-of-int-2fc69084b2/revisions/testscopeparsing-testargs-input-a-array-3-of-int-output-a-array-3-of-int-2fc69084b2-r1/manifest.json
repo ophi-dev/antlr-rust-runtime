@@ -47,13 +47,13 @@
     }
   ],
   "demonstrated_red": {
-    "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
     "commit": "dfb3d07d4536f91094931dcc4884567530f78b11",
     "exit_code": 101,
     "fingerprint": "E0425: cannot find function `parse_scope_decls` in this scope"
   },
   "green_result": {
-    "command": "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java",
     "commit": "9bef3f59a6e29b5319e25807a2af6702e2d387a5",
     "exit_code": 0,
     "result": "1 passed; 0 failed"
@@ -69,7 +69,7 @@
     },
     {
       "path": "tests/codegen-direct/port-evidence/testscopeparsing-testargs-input-a-array-3-of-int-output-a-array-3-of-int-2fc69084b2/revisions/testscopeparsing-testargs-input-a-array-3-of-int-output-a-array-3-of-int-2fc69084b2-r1/matrix-results/results.json",
-      "sha256": "a8becdc05d2e3cdea3f3547fc0076ea00beb334b428b23940afb6876221523c9"
+      "sha256": "1fabd902722243530ba78a9304a0ecc5937543f055b68d8f933808b4a61b6fc3"
     }
   ]
 }

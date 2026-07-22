@@ -6,10 +6,28 @@
   "java_antlr": {
     "version": "4.13.2",
     "commit": "cc82115a4e7f53d71d9d905caa2c2dfa4da58899",
-    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76"
+    "jar_sha256": "eae2dfa119a64327444672aff63e9ec35a20180dc5b8090b7a6ab85125df4d76",
+    "jdk": "Homebrew OpenJDK 26.0.1",
+    "java_runtime_version": "26.0.1",
+    "java_vm_version": "26.0.1",
+    "unicode_data": {
+      "generator": "org.antlr.v4.unicode.UnicodeDataTemplateController",
+      "helper": "tools/grammar-frontend/oracle/GenerateUnicodeData.java",
+      "helper_sha256": "9adec4f06cb31c7c7e408336e8fe935741f6d4ec5e8113e76450551ec1e3967f",
+      "icu4j_version": "78.1.0.0",
+      "icu4j_jar_sha256": "bbb70d3be23110d7295823eee0c2e896ac3b619b3c0f26168f65eb972df51d2a",
+      "unicode_version": "17.0.0.0"
+    },
+    "exit_status": 0
   },
   "files": {
     "ParserBasic.g4": "5331a0aab81c010c2c1b5c1583bb885344cdd8128ec399448a3faf0162612840",
-    "ParserBasic.interp": "d504a8864ea06f6b71a481f04fa9d9b148ec99217e90d0eb001181dbcb068c02"
-  }
+    "ParserBasic.interp": "d504a8864ea06f6b71a481f04fa9d9b148ec99217e90d0eb001181dbcb068c02",
+    "ParserBasic.tokens": "beb5f2519a8d4a22ff19d6b4ba05806c75710dc1ad7e2ef37ee1d1a950d4b074",
+    "oracle/java-antlr.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stdout": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+  },
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh parser-basic --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar --icu-jar /tmp/antlr-cleanroom/tools/icu4j-78.1.jar"
 }

@@ -54,6 +54,7 @@ cp "$UPSTREAM/JavaScriptLexer.g4" "$UPSTREAM/JavaScriptParser.g4" \
 )
 
 cargo run --quiet --locked --release --manifest-path "$REPO_ROOT/Cargo.toml" \
+    --features codegen \
     --bin antlr4-rust-gen -- \
     --lexer "$WORK_DIR/interp/JavaScriptLexer.interp" \
     --grammar "$WORK_DIR/grammar/JavaScriptLexer.g4" \
@@ -62,6 +63,7 @@ cargo run --quiet --locked --release --manifest-path "$REPO_ROOT/Cargo.toml" \
     --sem-unknown error --require-full-semantics \
     --out-dir "$WORK_DIR/rust-lexer"
 cargo run --quiet --locked --release --manifest-path "$REPO_ROOT/Cargo.toml" \
+    --features codegen \
     --bin antlr4-rust-gen -- \
     --parser "$WORK_DIR/interp/JavaScriptParser.interp" \
     --grammar "$WORK_DIR/grammar/JavaScriptParser.g4" \

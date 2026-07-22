@@ -89,13 +89,13 @@
     }
   ],
   "demonstrated_red": {
-    "command": "cargo test --locked --bin antlr4-rust-gen upstream_basic_semantic_errors -- --test-threads=1",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_basic_semantic_errors -- --test-threads=1",
     "commit": "d133e49cebf5b149b9cdf0dff70171128cd8ded5",
     "exit_code": 101,
     "fingerprint": "the invalid label on a non-set block compiled successfully"
   },
   "green_result": {
-    "command": "cargo test --locked --bin antlr4-rust-gen upstream_basic_semantic_errors -- --test-threads=1",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_basic_semantic_errors -- --test-threads=1",
     "commit": "1733fa4e06a1b97951592da68689a9bff27ba86c",
     "exit_code": 0,
     "result": "3 passed; 0 failed"
@@ -111,7 +111,7 @@
     },
     {
       "path": "tests/codegen-direct/port-evidence/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902/revisions/testbasicsemanticerrors-testillegalnonsetlabel-5c18487902-r1/matrix-results/results.json",
-      "sha256": "6a2ee76c6664c25a155375c40d79e1c21774681801719781e588b356a49db886"
+      "sha256": "edf2015e1cfbeb2f406e3f8d2455e15df758565cdb13c8b5077053c1ded899f1"
     }
   ]
 }

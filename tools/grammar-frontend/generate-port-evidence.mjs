@@ -66,7 +66,7 @@ import {
 } from "./evidence-common.mjs";
 
 const TEST_COMMAND =
-    "cargo test --locked --bin antlr4-rust-gen grammar::frontend::tests::";
+    "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::frontend::tests::";
 const TEST_MODULE_PATH = "src/bin_support/grammar/frontend.rs";
 const TEST_MODULE_MARKER = "#[cfg(test)]";
 const FRONTEND_SYNTAX_TEST_PATH =

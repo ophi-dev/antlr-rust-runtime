@@ -52,13 +52,13 @@
     }
   ],
   "demonstrated_red": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode_escape::tests::latin_python_escape_matches_java -- --exact",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::unicode_escape::tests::latin_python_escape_matches_java -- --exact",
     "commit": "602ef46199b845536abdf339f9507c82fff99c1c",
     "exit_code": 101,
     "fingerprint": "left empty string, right \"\\\\u0061\""
   },
   "green_result": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode_escape::tests::latin_python_escape_matches_java -- --exact",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::unicode_escape::tests::latin_python_escape_matches_java -- --exact",
     "commit": "247896246d88bfca50208b84e271dc907da220f7",
     "exit_code": 0,
     "result": "1 passed; 0 failed"
@@ -74,7 +74,7 @@
     },
     {
       "path": "tests/codegen-direct/port-evidence/testunicodeescapes-latinpythonescape-5943a4d6ed/revisions/testunicodeescapes-latinpythonescape-5943a4d6ed-r1/matrix-results/results.json",
-      "sha256": "044b8aad203d198fb744492563a3aa1b946054e469307e997f63f8581701aad2"
+      "sha256": "d454eafdaa0b9438064eaffea9e4dda6c0b33d8488441563f35c314b493df071"
     }
   ]
 }

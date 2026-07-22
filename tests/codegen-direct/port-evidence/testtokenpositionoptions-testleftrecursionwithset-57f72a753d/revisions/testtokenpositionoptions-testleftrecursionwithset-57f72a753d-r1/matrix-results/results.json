@@ -8,7 +8,7 @@
       "test_commit": "a82df4a391d4bec1c355569f3e94dedafe4f0e2e",
       "implementation_port": "existing-primary-antlr-ng",
       "implementation_commit": "7e83b079daa595ee26314b14d3d1bffa7924771f",
-      "command": "cargo test --locked --bin antlr4-rust-gen upstream_token_position_options::left_recursion_with_set_matches_java -- --test-threads=1",
+      "command": "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_token_position_options::left_recursion_with_set_matches_java -- --test-threads=1",
       "result": "green: 1 passed; 0 failed"
     }
   ],

@@ -111,14 +111,14 @@
     }
   ],
   "verified_covered_existing": {
-    "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
     "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
     "exit_code": 0,
     "result": "38 passed; 0 failed",
     "covering_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad"
   },
   "green_result": {
-    "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
     "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
     "exit_code": 0,
     "result": "38 passed; 0 failed"
@@ -134,7 +134,7 @@
     },
     {
       "path": "tests/codegen-direct/port-evidence/testatnconstruction-testaborcd-b267bf19a6/revisions/testatnconstruction-testaborcd-b267bf19a6-r1/matrix-results/results.json",
-      "sha256": "0e2aa5ed0515114083341820ac085f0c595e5eb200dc8f760ee302ddab032335"
+      "sha256": "d31528a39cdb45272d940eea7ad2126bce376b9e74520bca6895bb9f68674331"
     }
   ]
 }

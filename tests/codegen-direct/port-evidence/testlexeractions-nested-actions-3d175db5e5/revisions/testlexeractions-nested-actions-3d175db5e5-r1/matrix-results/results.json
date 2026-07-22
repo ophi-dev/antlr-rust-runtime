@@ -8,7 +8,7 @@
       "test_commit": "8ab5c20ff8a99514d51672268b632f6b2bac7678",
       "implementation_port": "primary-antlr-ng",
       "implementation_commit": "78c6d271b6379fa230bb9de133307785a6877587",
-      "command": "cargo test --locked --bin antlr4-rust-gen grammar::syntax::tests::nested_actions_match_upstream -- --exact",
+      "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::syntax::tests::nested_actions_match_upstream -- --exact",
       "result": "green: 1 passed; 0 failed"
     }
   ],

@@ -91,14 +91,14 @@
     }
   ],
   "verified_covered_existing": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
     "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
     "exit_code": 0,
     "result": "36 passed; 0 failed",
     "covering_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad"
   },
   "green_result": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::",
     "commit": "5c5c82fb7879bce9d99d684855bfd07dd6405850",
     "exit_code": 0,
     "result": "36 passed; 0 failed"
@@ -114,7 +114,7 @@
     },
     {
       "path": "tests/codegen-direct/port-evidence/testatnserialization-testruleref-2d16d8280e/revisions/testatnserialization-testruleref-2d16d8280e-r1/matrix-results/results.json",
-      "sha256": "d78ef0510bc6a2348be8cd97e4ad42fa845041e3303158b6cd212865b486b53f"
+      "sha256": "a2967ed5f1b871c24d5a5a5ced4cb7b8579423536342d64926e4dd6757d3200c"
     }
   ]
 }

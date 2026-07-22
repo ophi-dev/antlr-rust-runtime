@@ -8,7 +8,7 @@
       "test_commit": "602ef46199b845536abdf339f9507c82fff99c1c",
       "implementation_port": "primary-antlr-ng",
       "implementation_commit": "247896246d88bfca50208b84e271dc907da220f7",
-      "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode_escape::tests::bmp_java_escape_matches_java -- --exact",
+      "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::unicode_escape::tests::bmp_java_escape_matches_java -- --exact",
       "result": "green: 1 passed; 0 failed"
     }
   ],

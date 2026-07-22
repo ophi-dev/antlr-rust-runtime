@@ -55,14 +55,14 @@
     }
   ],
   "verified_covered_existing": {
-    "command": "cargo test --locked --bin antlr4-rust-gen upstream_topological_sort -- --test-threads=1",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_topological_sort -- --test-threads=1",
     "commit": "738ada36e551037733b02e556809b03b8c2c73ea",
     "exit_code": 0,
     "result": "5 passed; 0 failed",
     "covering_implementation_commit": "6b1c62d0e8d6c06e07a39a773354044cf92b47b4"
   },
   "green_result": {
-    "command": "cargo test --locked --bin antlr4-rust-gen upstream_topological_sort -- --test-threads=1",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_topological_sort -- --test-threads=1",
     "commit": "738ada36e551037733b02e556809b03b8c2c73ea",
     "exit_code": 0,
     "result": "5 passed; 0 failed"
@@ -78,7 +78,7 @@
     },
     {
       "path": "tests/codegen-direct/port-evidence/testtopologicalsort-testfairlylargegraph-a5f1fbf809/revisions/testtopologicalsort-testfairlylargegraph-a5f1fbf809-r1/matrix-results/results.json",
-      "sha256": "224b9c5c68c1b78701112db329f7aa9d610c330e512a6e71a4942463f02e9969"
+      "sha256": "6e919227531f4b5d9275e9aded3de73a3a4b58cdcc0e25dd2220dc0d96da7e2b"
     }
   ]
 }

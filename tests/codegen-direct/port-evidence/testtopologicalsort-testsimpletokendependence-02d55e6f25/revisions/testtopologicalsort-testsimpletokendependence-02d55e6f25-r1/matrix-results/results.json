@@ -8,7 +8,7 @@
       "test_commit": "738ada36e551037733b02e556809b03b8c2c73ea",
       "implementation_port": "existing-primary-antlr-ng",
       "implementation_commit": "6b1c62d0e8d6c06e07a39a773354044cf92b47b4",
-      "command": "cargo test --locked --bin antlr4-rust-gen upstream_topological_sort -- --test-threads=1",
+      "command": "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_topological_sort -- --test-threads=1",
       "result": "green: 5 passed; 0 failed"
     }
   ],

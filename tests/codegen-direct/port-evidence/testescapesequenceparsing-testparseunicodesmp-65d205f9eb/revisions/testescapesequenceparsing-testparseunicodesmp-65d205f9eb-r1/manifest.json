@@ -52,13 +52,13 @@
     }
   ],
   "demonstrated_red": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_smp_matches_java -- --exact",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_smp_matches_java -- --exact",
     "commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
     "exit_code": 101,
     "fingerprint": "left Invalid, right CodePoint { value: 1092557, start: 0, stop: 10 }"
   },
   "green_result": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_smp_matches_java -- --exact",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_smp_matches_java -- --exact",
     "commit": "56d2ac6a31671f9d786f2c3fa6323fffa6474375",
     "exit_code": 0,
     "result": "1 passed; 0 failed"
@@ -74,7 +74,7 @@
     },
     {
       "path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparseunicodesmp-65d205f9eb/revisions/testescapesequenceparsing-testparseunicodesmp-65d205f9eb-r1/matrix-results/results.json",
-      "sha256": "fed0037492c107522b126c799efaf7ebcb44c693469e386377f31d0b26b9bc24"
+      "sha256": "b3d93ccf8d970f763c8dc0bac821cf7702db90cafa3851ba8bc9d54d0e6b60ea"
     }
   ]
 }

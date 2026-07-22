@@ -54,14 +54,14 @@
     }
   ],
   "verified_covered_existing": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::unicode_general_categories_bmp_matches_java -- --exact",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::unicode::tests::unicode_general_categories_bmp_matches_java -- --exact",
     "commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
     "exit_code": 0,
     "result": "1 passed; 0 failed",
     "covering_implementation_commit": "adb9780e25a8145cff258d641231c3fcea04f710"
   },
   "green_result": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::unicode_general_categories_bmp_matches_java -- --exact",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::unicode::tests::unicode_general_categories_bmp_matches_java -- --exact",
     "commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
     "exit_code": 0,
     "result": "1 passed; 0 failed"
@@ -77,7 +77,7 @@
     },
     {
       "path": "tests/codegen-direct/port-evidence/testunicodedata-testunicodegeneralcategoriesbmp-f1a726438e/revisions/testunicodedata-testunicodegeneralcategoriesbmp-f1a726438e-r1/matrix-results/results.json",
-      "sha256": "7e4d31ad6cfa710e7cc3496d2311b8ff0ec0b05044e98438fcdeb722568881e7"
+      "sha256": "966fe6f27d4344be09e6cd733c84d6cdf2f738fdcbfeb6e9a84664b6ea0d5d2c"
     }
   ]
 }

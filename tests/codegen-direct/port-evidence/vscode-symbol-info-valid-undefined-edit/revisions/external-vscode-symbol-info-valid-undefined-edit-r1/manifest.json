@@ -61,13 +61,13 @@
     }
   ],
   "demonstrated_red": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::frontend::tests::",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::frontend::tests::",
     "commit": "a4258562c44818e2ba97d206587c64d4c38408d0",
     "exit_code": 101,
     "fingerprint": "G4F000: the Stage 0 grammar frontend is not installed"
   },
   "green_result": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::frontend::tests::",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::frontend::tests::",
     "commit": "8a00a3d6496779b969a42511d7e29c0d102d62d7",
     "exit_code": 0,
     "result": "5 passed; 0 failed"
@@ -83,7 +83,7 @@
     },
     {
       "path": "tests/codegen-direct/port-evidence/vscode-symbol-info-valid-undefined-edit/revisions/external-vscode-symbol-info-valid-undefined-edit-r1/matrix-results/results.json",
-      "sha256": "d33b22f543b696a9604210bae58b7c78310b2f36a8281cc36bed4caab418af68"
+      "sha256": "095520934f9dc223f529debb368c0c71423e85444fbad700a94bd7cf82cb4521"
     }
   ]
 }

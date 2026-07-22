@@ -54,14 +54,14 @@
     }
   ],
   "verified_covered_existing": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_smp_too_short_matches_java -- --exact",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_smp_too_short_matches_java -- --exact",
     "commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
     "exit_code": 0,
     "result": "1 passed; 0 failed",
     "covering_implementation_commit": "ce366e7033cff879abe0d23cd5f896c577e42358"
   },
   "green_result": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_smp_too_short_matches_java -- --exact",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_smp_too_short_matches_java -- --exact",
     "commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
     "exit_code": 0,
     "result": "1 passed; 0 failed"
@@ -77,7 +77,7 @@
     },
     {
       "path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparseunicodesmptooshort-f9630e6fe2/revisions/testescapesequenceparsing-testparseunicodesmptooshort-f9630e6fe2-r1/matrix-results/results.json",
-      "sha256": "dd675d21c5d17d6a517da5b72496da387c59619de0b5223bfa4e12297dd57239"
+      "sha256": "54a073a239a485072d23d4e4d707e29bdee7ab485f6351df922972dc2bf8591c"
     }
   ]
 }

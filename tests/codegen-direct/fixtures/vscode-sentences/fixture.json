@@ -19,16 +19,26 @@
     "jdk": "Homebrew OpenJDK 26.0.1",
     "java_runtime_version": "26.0.1",
     "java_vm_version": "26.0.1",
-    "exit_status": 0
+    "exit_status": 0,
+    "unicode_data": {
+      "generator": "org.antlr.v4.unicode.UnicodeDataTemplateController",
+      "helper": "tools/grammar-frontend/oracle/GenerateUnicodeData.java",
+      "helper_sha256": "9adec4f06cb31c7c7e408336e8fe935741f6d4ec5e8113e76450551ec1e3967f",
+      "icu4j_version": "78.1.0.0",
+      "icu4j_jar_sha256": "bbb70d3be23110d7295823eee0c2e896ac3b619b3c0f26168f65eb972df51d2a",
+      "unicode_version": "17.0.0.0"
+    }
   },
-  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh vscode-sentences --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar",
+  "regeneration_command": "tools/grammar-frontend/update-interp-fixtures.sh vscode-sentences --antlr-jar /tmp/antlr-cleanroom/tools/antlr-4.13.2-complete.jar --icu-jar /tmp/antlr-cleanroom/tools/icu4j-78.1.jar",
   "files": {
     "oracle/java-antlr.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "oracle/java-antlr.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle/java-unicode-data.stdout": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3",
     "sentences.g4": "48bb9c7fbc1f199d908c80b4c162447974673eae400660d10858ef14d5e7b3f7",
     "sentences.interp": "45b0e21468560f1d5b5dc0e3df6d9ba3456bfdbcb209e3edf4095d0a10912e9e",
     "sentences.tokens": "a93133e4d37116b6e83f6c9a2856619c801c477ae2e68d0e5df7d435e8335135",
-    "sentencesLexer.interp": "1aec25373e1d8bac3ca44de5333b4da53f678ebd7c12e4235b98fa7bf5d777c9",
+    "sentencesLexer.interp": "9d5070ce8e9ef8db34385b85db69ba9ce613bf6b663b6830ab1b145458e30c66",
     "sentencesLexer.tokens": "a93133e4d37116b6e83f6c9a2856619c801c477ae2e68d0e5df7d435e8335135"
   }
 }

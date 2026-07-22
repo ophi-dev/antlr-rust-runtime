@@ -96,14 +96,14 @@
     }
   ],
   "verified_covered_existing": {
-    "command": "cargo test --locked --bin antlr4-rust-gen upstream_token_position_options::left_recursion_rewrite_matches_java -- --test-threads=1",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_token_position_options::left_recursion_rewrite_matches_java -- --test-threads=1",
     "commit": "a82df4a391d4bec1c355569f3e94dedafe4f0e2e",
     "exit_code": 0,
     "result": "1 passed; 0 failed",
     "covering_implementation_commit": "7e83b079daa595ee26314b14d3d1bffa7924771f"
   },
   "green_result": {
-    "command": "cargo test --locked --bin antlr4-rust-gen upstream_token_position_options::left_recursion_rewrite_matches_java -- --test-threads=1",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_token_position_options::left_recursion_rewrite_matches_java -- --test-threads=1",
     "commit": "a82df4a391d4bec1c355569f3e94dedafe4f0e2e",
     "exit_code": 0,
     "result": "1 passed; 0 failed"
@@ -119,7 +119,7 @@
     },
     {
       "path": "tests/codegen-direct/port-evidence/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91/revisions/testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91-r1/matrix-results/results.json",
-      "sha256": "b154dada3ddd7fe73dac4f9f91022160161977e6b3d4495eeda0da089eb517ec"
+      "sha256": "edb992279c1d73fef53e17c22b02074d3d0a100adf64b08b6923921b5b474bd7"
     }
   ]
 }

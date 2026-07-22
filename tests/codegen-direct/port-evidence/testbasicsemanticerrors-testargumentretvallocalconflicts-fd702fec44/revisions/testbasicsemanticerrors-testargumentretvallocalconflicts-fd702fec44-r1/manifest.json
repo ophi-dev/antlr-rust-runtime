@@ -89,13 +89,13 @@
     }
   ],
   "demonstrated_red": {
-    "command": "cargo test --locked --bin antlr4-rust-gen upstream_basic_semantic_errors -- --test-threads=1",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_basic_semantic_errors -- --test-threads=1",
     "commit": "d133e49cebf5b149b9cdf0dff70171128cd8ded5",
     "exit_code": 101,
     "fingerprint": "expected 10 ordered diagnostics, but the direct compiler emitted 7 generic rule-wide diagnostics"
   },
   "green_result": {
-    "command": "cargo test --locked --bin antlr4-rust-gen upstream_basic_semantic_errors -- --test-threads=1",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_basic_semantic_errors -- --test-threads=1",
     "commit": "1733fa4e06a1b97951592da68689a9bff27ba86c",
     "exit_code": 0,
     "result": "3 passed; 0 failed"
@@ -111,7 +111,7 @@
     },
     {
       "path": "tests/codegen-direct/port-evidence/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44/revisions/testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44-r1/matrix-results/results.json",
-      "sha256": "51d23691d4d8166edc11534323a3d19eac86b111f79d7163ca2bb9ab45ac6a35"
+      "sha256": "003f444f646aef23043d02d623d5e9145c859293f96dfda3ad6507ae78073a61"
     }
   ]
 }

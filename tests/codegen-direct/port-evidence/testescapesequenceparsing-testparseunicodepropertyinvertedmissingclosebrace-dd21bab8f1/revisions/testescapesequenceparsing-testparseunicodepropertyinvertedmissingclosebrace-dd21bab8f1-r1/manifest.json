@@ -54,14 +54,14 @@
     }
   ],
   "verified_covered_existing": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_property_inverted_missing_close_brace_matches_java -- --exact",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_property_inverted_missing_close_brace_matches_java -- --exact",
     "commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
     "exit_code": 0,
     "result": "1 passed; 0 failed",
     "covering_implementation_commit": "ce366e7033cff879abe0d23cd5f896c577e42358"
   },
   "green_result": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_property_inverted_missing_close_brace_matches_java -- --exact",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_unicode_property_inverted_missing_close_brace_matches_java -- --exact",
     "commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
     "exit_code": 0,
     "result": "1 passed; 0 failed"
@@ -77,7 +77,7 @@
     },
     {
       "path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparseunicodepropertyinvertedmissingclosebrace-dd21bab8f1/revisions/testescapesequenceparsing-testparseunicodepropertyinvertedmissingclosebrace-dd21bab8f1-r1/matrix-results/results.json",
-      "sha256": "ccfc4a250f774028732d5c9ba73daba6a380e47007d216b7673b1f14f5352fee"
+      "sha256": "76e44e38265073a8dd774732e0e41021d3729ea5338b23e581a64831459bac29"
     }
   ]
 }

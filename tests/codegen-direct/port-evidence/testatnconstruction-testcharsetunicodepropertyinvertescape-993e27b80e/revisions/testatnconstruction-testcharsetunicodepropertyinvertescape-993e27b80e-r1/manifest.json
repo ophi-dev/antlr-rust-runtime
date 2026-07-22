@@ -106,14 +106,14 @@
     }
   ],
   "verified_covered_existing": {
-    "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
     "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
     "exit_code": 0,
     "result": "38 passed; 0 failed",
     "covering_implementation_commit": "91359e85a4b2c8563edd40a7495eb2a05ad7a5ad"
   },
   "green_result": {
-    "command": "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state",
     "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
     "exit_code": 0,
     "result": "38 passed; 0 failed"
@@ -129,7 +129,7 @@
     },
     {
       "path": "tests/codegen-direct/port-evidence/testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e/revisions/testatnconstruction-testcharsetunicodepropertyinvertescape-993e27b80e-r1/matrix-results/results.json",
-      "sha256": "745d0fe99170aafc292d68b577a1f40f0ab399a1adc9904e6aebfd5af29bba87"
+      "sha256": "7e5dc1e5db5bfc2693d1170b6d97e09f0b4894bf8d548c7ae2c1720aff70bc45"
     }
   ]
 }

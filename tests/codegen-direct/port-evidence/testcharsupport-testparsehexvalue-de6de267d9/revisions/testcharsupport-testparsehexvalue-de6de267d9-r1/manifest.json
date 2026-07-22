@@ -52,13 +52,13 @@
     }
   ],
   "demonstrated_red": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::char_support::tests::",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::char_support::tests::",
     "commit": "8970016dbac6705533db4d9ad55d996b61bed026",
     "exit_code": 101,
     "fingerprint": "E0425: cannot find function `parse_hex_value` in this scope"
   },
   "green_result": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::char_support::tests::",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::char_support::tests::",
     "commit": "28b8fe8bf72608dc19752d8cb39feab7ecb21fc3",
     "exit_code": 0,
     "result": "8 passed; 0 failed"
@@ -74,7 +74,7 @@
     },
     {
       "path": "tests/codegen-direct/port-evidence/testcharsupport-testparsehexvalue-de6de267d9/revisions/testcharsupport-testparsehexvalue-de6de267d9-r1/matrix-results/results.json",
-      "sha256": "a7254f3bae445ebaf8d685e8ce6294d352bbdba5eaa8a568a7aed4f190fb3f4d"
+      "sha256": "8abc8dfa87a06cf5ccecb89d25bb0d4f5a245e3430328e5275c761b237c97697"
     }
   ]
 }

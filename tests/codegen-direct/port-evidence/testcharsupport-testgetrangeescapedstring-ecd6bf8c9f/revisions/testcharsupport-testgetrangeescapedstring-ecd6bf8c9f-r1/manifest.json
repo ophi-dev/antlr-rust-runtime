@@ -52,13 +52,13 @@
     }
   ],
   "demonstrated_red": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::char_support::tests::",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::char_support::tests::",
     "commit": "8970016dbac6705533db4d9ad55d996b61bed026",
     "exit_code": 101,
     "fingerprint": "E0425: cannot find function `get_range_escaped_string` in this scope"
   },
   "green_result": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::char_support::tests::",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::char_support::tests::",
     "commit": "28b8fe8bf72608dc19752d8cb39feab7ecb21fc3",
     "exit_code": 0,
     "result": "8 passed; 0 failed"
@@ -74,7 +74,7 @@
     },
     {
       "path": "tests/codegen-direct/port-evidence/testcharsupport-testgetrangeescapedstring-ecd6bf8c9f/revisions/testcharsupport-testgetrangeescapedstring-ecd6bf8c9f-r1/matrix-results/results.json",
-      "sha256": "66815d5962a5a5f51304a30d09e026a53a77ca5c3d832e078f3f86bfabf1ce77"
+      "sha256": "53ed70c5679f6b25ac5dbc3ea2a0003bf78d841b0263df7c7cdb945793b2bdfa"
     }
   ]
 }

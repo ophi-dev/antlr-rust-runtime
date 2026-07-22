@@ -23,7 +23,7 @@ Evidence:
   still contains the arithmetic/string evaluator.
 - `src/bin/antlr4-rust-gen.rs:13075` still has
   `parses_rule_value_print_template`, which expects `RuleValue`.
-- `cargo test --bin antlr4-rust-gen parses_rule_value_print_template` fails in
+- `cargo test --features codegen --bin antlr4-rust-gen parses_rule_value_print_template` fails in
   this working tree because that expectation is stale.
 
 Concern: the baseline direction is right, but leaving the dead evaluator around

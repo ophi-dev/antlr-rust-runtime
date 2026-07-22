@@ -94,13 +94,13 @@
     }
   ],
   "demonstrated_red": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_construction::parser_rule_ref_in_lexer_rule",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_construction::parser_rule_ref_in_lexer_rule",
     "commit": "62111d633ccc4bddcc85ab7126591febbeb18690",
     "exit_code": 101,
     "fingerprint": "missing G4S008 diagnostic; Stage 0 reported G4F003 no viable alternative at input 'a'"
   },
   "green_result": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_construction::parser_rule_ref_in_lexer_rule",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_construction::parser_rule_ref_in_lexer_rule",
     "commit": "5d0729a84eac4b89012e31819eb00f5acb654c3a",
     "exit_code": 0,
     "result": "1 passed; 0 failed"
@@ -116,7 +116,7 @@
     },
     {
       "path": "tests/codegen-direct/port-evidence/testatnconstruction-testparserrulerefinlexerrule-34f2000a35/revisions/testatnconstruction-testparserrulerefinlexerrule-34f2000a35-r1/matrix-results/results.json",
-      "sha256": "50d54b6b235573aeea8f2206a05a63843cde24ba64cdc6a10165c1c1e3a2c665"
+      "sha256": "954a6a06d018e644a4c8f7aa9e82cbf11328567724c9a6769b31dcfcfd1c71e0"
     }
   ]
 }

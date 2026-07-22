@@ -58,17 +58,17 @@ import {
 
 const APPROVING_REVIEW = "merged implementation plan PR #149, section 11.5";
 const FRONTEND_TEST_COMMAND =
-    "cargo test --locked --bin antlr4-rust-gen grammar::frontend::tests::";
+    "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::frontend::tests::";
 const FRONTEND_SYNTAX_TEST_COMMAND =
-    "cargo test --locked --bin antlr4-rust-gen grammar::ported_tests::frontend_tool_syntax_cases_match_upstream_outcomes";
+    "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::ported_tests::frontend_tool_syntax_cases_match_upstream_outcomes";
 const ATN_SERIALIZATION_TEST_COMMAND =
-    "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::";
+    "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_serialization::";
 const ATN_SERIALIZATION_TEST_MODULE =
     "src/bin_support/grammar/atn/interp_test.rs";
 const ATN_CONSTRUCTION_TEST_COMMAND =
-    "cargo test --locked --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_construction::";
+    "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_construction::";
 const ATN_CONSTRUCTION_COVERED_COMMAND =
-    "cargo test --locked --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state";
+    "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_atn_construction -- --test-threads=1 --skip parser_rule_ref_in_lexer_rule --skip repeated_transitions_to_stop_state";
 const ATN_CONSTRUCTION_RED_CASES = new Map([
     [
         "testatnconstruction-testforrepeatedtransitionstostopstate-a6e224cf58",
@@ -80,7 +80,7 @@ const ATN_CONSTRUCTION_RED_CASES = new Map([
     ],
 ]);
 const BASIC_SEMANTIC_TEST_COMMAND =
-    "cargo test --locked --bin antlr4-rust-gen upstream_basic_semantic_errors -- --test-threads=1";
+    "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_basic_semantic_errors -- --test-threads=1";
 const BASIC_SEMANTIC_PORTS = new Map([
     [
         "testbasicsemanticerrors-testargumentretvallocalconflicts-fd702fec44",
@@ -111,7 +111,7 @@ const BASIC_SEMANTIC_PORTS = new Map([
     ],
 ]);
 const ERROR_SETS_TEST_COMMAND =
-    "cargo test --locked --bin antlr4-rust-gen upstream_error_sets -- --test-threads=1";
+    "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_error_sets -- --test-threads=1";
 const ERROR_SETS_PORTS = new Map([
     [
         "testerrorsets-testnotcharsetwithruleref-9d8ec8db7a",
@@ -133,7 +133,7 @@ const ERROR_SETS_PORTS = new Map([
     ],
 ]);
 const TOKEN_POSITION_TEST_COMMAND =
-    "cargo test --locked --bin antlr4-rust-gen upstream_token_position_options -- --test-threads=1";
+    "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_token_position_options -- --test-threads=1";
 const TOKEN_POSITION_PORTS = new Map([
     [
         "testtokenpositionoptions-testleftrecursionrewrite-0a7598fa91",
@@ -143,7 +143,7 @@ const TOKEN_POSITION_PORTS = new Map([
             resolution: "verified-covered-existing",
             implementationCommit: TOKEN_POSITION_BASE_COMMIT,
             testCommand:
-                "cargo test --locked --bin antlr4-rust-gen upstream_token_position_options::left_recursion_rewrite_matches_java -- --test-threads=1",
+                "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_token_position_options::left_recursion_rewrite_matches_java -- --test-threads=1",
             greenResult: "1 passed; 0 failed",
         },
     ],
@@ -168,13 +168,13 @@ const TOKEN_POSITION_PORTS = new Map([
             resolution: "verified-covered-existing",
             implementationCommit: TOKEN_POSITION_BASE_COMMIT,
             testCommand:
-                "cargo test --locked --bin antlr4-rust-gen upstream_token_position_options::left_recursion_with_set_matches_java -- --test-threads=1",
+                "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_token_position_options::left_recursion_with_set_matches_java -- --test-threads=1",
             greenResult: "1 passed; 0 failed",
         },
     ],
 ]);
 const TOPOLOGICAL_SORT_TEST_COMMAND =
-    "cargo test --locked --bin antlr4-rust-gen upstream_topological_sort -- --test-threads=1";
+    "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_topological_sort -- --test-threads=1";
 const TOPOLOGICAL_SORT_PORTS = new Map([
     [
         "testtopologicalsort-testcyclicgraph-94f1aecafb",
@@ -232,15 +232,15 @@ const VOCABULARY_PORTS = new Map([
     ],
 ]);
 const SCOPE_PARSING_TEST_COMMAND =
-    "cargo test --locked --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java";
+    "cargo test --locked --features codegen --bin antlr4-rust-gen embedded::tests::upstream_scope_parsing::argument_declarations_match_java";
 const CHAR_SUPPORT_TEST_COMMAND =
-    "cargo test --locked --bin antlr4-rust-gen grammar::char_support::tests::";
+    "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::char_support::tests::";
 const NESTED_ACTION_LOGICAL_ID =
     "testlexeractions-nested-actions-3d175db5e5";
 const NESTED_ACTION_TEST_COMMAND =
-    "cargo test --locked --bin antlr4-rust-gen grammar::syntax::tests::nested_actions_match_upstream -- --exact";
+    "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::syntax::tests::nested_actions_match_upstream -- --exact";
 const ESCAPE_SEQUENCE_TEST_PREFIX =
-    "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::";
+    "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::escape_sequence::tests::";
 const ESCAPE_SEQUENCE_RED_CASES = new Map([
     [
         "testParseNewline",
@@ -279,9 +279,9 @@ const UNICODE_ESCAPE_EXPECTED = new Map([
     ["smpSwiftEscape", "\\u{1F4A9}"],
 ]);
 const UNICODE_ESCAPE_TEST_PREFIX =
-    "cargo test --locked --bin antlr4-rust-gen grammar::unicode_escape::tests::";
+    "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::unicode_escape::tests::";
 const UNICODE_DATA_TEST_PREFIX =
-    "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::";
+    "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::unicode::tests::";
 const UNICODE_DATA_TEST_NAMES = new Map([
     [
         "testUnicodeGeneralCategoriesLatin",

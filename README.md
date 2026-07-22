@@ -38,7 +38,7 @@ use antlr4_runtime::{CommonTokenStream, InputStream};
 Install the companion generator binary:
 
 ```bash
-cargo install antlr-rust-runtime
+cargo install antlr-rust-runtime --features codegen --bin antlr4-rust-gen
 ```
 
 This installs `antlr4-rust-gen`, which turns ANTLR `.interp` metadata into Rust

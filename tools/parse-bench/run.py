@@ -338,6 +338,8 @@ def generate_rust_modules(
         "--release",
         "--manifest-path",
         str(runtime_root / "Cargo.toml"),
+        "--features",
+        "codegen",
         "--bin",
         "antlr4-rust-gen",
         "--",

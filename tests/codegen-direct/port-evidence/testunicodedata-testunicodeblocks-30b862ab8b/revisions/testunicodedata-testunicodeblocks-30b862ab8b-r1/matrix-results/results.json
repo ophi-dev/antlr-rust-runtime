@@ -8,7 +8,7 @@
       "test_commit": "cd65be4f29e8d710f4d20ee9538e57f863e767d1",
       "implementation_port": "existing-primary-antlr-ng",
       "implementation_commit": "adb9780e25a8145cff258d641231c3fcea04f710",
-      "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode::tests::unicode_blocks_match_java -- --exact",
+      "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::unicode::tests::unicode_blocks_match_java -- --exact",
       "result": "green: 1 passed; 0 failed"
     }
   ],

@@ -52,13 +52,13 @@
     }
   ],
   "demonstrated_red": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::char_support::tests::",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::char_support::tests::",
     "commit": "8970016dbac6705533db4d9ad55d996b61bed026",
     "exit_code": 101,
     "fingerprint": "E0425: cannot find function `capitalize` in this scope"
   },
   "green_result": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::char_support::tests::",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::char_support::tests::",
     "commit": "28b8fe8bf72608dc19752d8cb39feab7ecb21fc3",
     "exit_code": 0,
     "result": "8 passed; 0 failed"
@@ -74,7 +74,7 @@
     },
     {
       "path": "tests/codegen-direct/port-evidence/testcharsupport-testcapitalize-25cbf55e21/revisions/testcharsupport-testcapitalize-25cbf55e21-r1/matrix-results/results.json",
-      "sha256": "90fec8099a5e1257706c9354ca5efe748b3300be3ff3ef4b342596787959e9cc"
+      "sha256": "067dfee6c7d4714c9c253e3a88ae54d9f8f5b13b4f2400ad9d6b6e26073eccdd"
     }
   ]
 }

@@ -52,13 +52,13 @@
     }
   ],
   "demonstrated_red": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_tab_matches_java -- --exact",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_tab_matches_java -- --exact",
     "commit": "ed8396cd044c5e9893f7076f0fddf92c2e77d16e",
     "exit_code": 101,
     "fingerprint": "left Invalid, right CodePoint { value: 9, start: 0, stop: 2 }"
   },
   "green_result": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_tab_matches_java -- --exact",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::escape_sequence::tests::parse_tab_matches_java -- --exact",
     "commit": "56d2ac6a31671f9d786f2c3fa6323fffa6474375",
     "exit_code": 0,
     "result": "1 passed; 0 failed"
@@ -74,7 +74,7 @@
     },
     {
       "path": "tests/codegen-direct/port-evidence/testescapesequenceparsing-testparsetab-6eeb9f3559/revisions/testescapesequenceparsing-testparsetab-6eeb9f3559-r1/matrix-results/results.json",
-      "sha256": "75aa70d0759143666423ea1e9d27dbc5444ffe6692966439b32551c645b7e42a"
+      "sha256": "9d035a7ed76c60a2b99f26668a5488ed61df3d33988c142bb10a55f9d4e2d13a"
     }
   ]
 }

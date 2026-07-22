@@ -46,13 +46,13 @@
     }
   ],
   "demonstrated_red": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::syntax::tests::nested_actions_match_upstream -- --exact",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::syntax::tests::nested_actions_match_upstream -- --exact",
     "commit": "8ab5c20ff8a99514d51672268b632f6b2bac7678",
     "exit_code": 101,
     "fingerprint": "predicate fail message retained grammar quotes: left Some(\"'custom message'\"), right Some(\"custom message\")"
   },
   "green_result": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::syntax::tests::nested_actions_match_upstream -- --exact",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::syntax::tests::nested_actions_match_upstream -- --exact",
     "commit": "78c6d271b6379fa230bb9de133307785a6877587",
     "exit_code": 0,
     "result": "1 passed; 0 failed"
@@ -68,7 +68,7 @@
     },
     {
       "path": "tests/codegen-direct/port-evidence/testlexeractions-nested-actions-3d175db5e5/revisions/testlexeractions-nested-actions-3d175db5e5-r1/matrix-results/results.json",
-      "sha256": "488703e06a358da924de7301cdff3e58b76aed5ac4f4e04bdafa1ddc91db70cf"
+      "sha256": "20a6cf7cc3c003487fb6cca21ab1860c1027799a5965c9b6c375ad68fc85fdc9"
     }
   ]
 }

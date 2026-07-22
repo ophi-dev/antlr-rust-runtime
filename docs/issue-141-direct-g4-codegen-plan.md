@@ -1633,6 +1633,7 @@ tools/grammar-frontend/
   validate-upstream-test-map
   update-vscode-antlr4-fixtures
   validate-external-fixture-map
+  validate-interp-fixtures
   oracle/               pinned fixture regeneration, never production
 ```
 
@@ -1658,6 +1659,23 @@ Primary existing-file changes:
 
 Java ANTLR 4.13.2 under the exact recorded JDK is normative for grammar
 semantics, numbering, ATN shape, Unicode behavior, and diagnostic severity.
+Unicode fixtures additionally regenerate ANTLR 4.13.2's own `UnicodeData`
+class from its bundled controller and template using pinned ICU4J 78.1
+(Unicode 17.0). The generated Java table exists only in the updater's temporary
+directory; the repository records the ICU jar hash and reported data versions
+instead of checking in another generated Unicode table.
+The small compatibility-decomposition supplement is reproducible from the
+Unicode 17 UCD source:
+
+```bash
+curl -fsSL \
+  https://www.unicode.org/Public/17.0.0/ucd/extracted/DerivedDecompositionType.txt \
+  -o /tmp/DerivedDecompositionType-17.0.0.txt
+node tools/grammar-frontend/generate-unicode-decomposition-data.mjs \
+  /tmp/DerivedDecompositionType-17.0.0.txt \
+  src/bin_support/grammar/unicode_decomposition.bin
+```
+
 `tools/grammar-frontend/update-interp-fixtures.sh` regenerates a named fixture
 directory from its `.g4` roots, writes `.tokens`/`.interp` outputs and expected
 diagnostics, and updates `fixture.json` with:
@@ -1665,6 +1683,7 @@ diagnostics, and updates `fixture.json` with:
 - root arguments and library paths;
 - logical IDs from `upstream-test-map.json`;
 - ANTLR jar SHA-256 and release commit;
+- ICU4J jar SHA-256 and Unicode data version;
 - JDK vendor/full build;
 - source and generated-file hashes;
 - external source repository/commit/path, applicable license, and source hash;
@@ -1673,8 +1692,10 @@ diagnostics, and updates `fixture.json` with:
 - the exact regeneration command.
 
 Generated fixtures are reviewed like source. CI never regenerates them and
-does not need Java for Phase B unit tests. Pinned antlr-ng remains a readable
-implementation reference and the Phase A token/tree oracle.
+does not need Java for Phase B unit tests.
+`tools/grammar-frontend/validate-interp-fixtures.mjs` verifies every recorded
+fixture artifact hash and any pinned Unicode helper hash. Pinned antlr-ng
+remains a readable implementation reference and the Phase A token/tree oracle.
 
 ### 10.2 Test-only serializer contract
 

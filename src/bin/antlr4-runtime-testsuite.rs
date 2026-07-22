@@ -24,6 +24,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse()?;
     let descriptor_root = resolve_descriptor_root(&args.descriptors)?;
     let descriptors = load_descriptors(&descriptor_root, &args)?;
+    ensure_descriptors_loaded(&descriptors, &descriptor_root)?;
     let mut summary = Summary::default();
 
     if args.work_dir.exists() && !args.keep {
@@ -193,6 +194,8 @@ fn prebuild_generator(args: &Args) -> io::Result<PathBuf> {
             .arg(args.runtime_crate.join("Cargo.toml"))
             .arg("--bin")
             .arg("antlr4-rust-gen")
+            .arg("--features")
+            .arg("codegen")
             .arg("--message-format=json"),
     )?;
     if !output.status.success() {
@@ -247,7 +250,10 @@ fn json_string_value(line: &str, key: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::json_string_value;
+    use std::io;
+    use std::path::Path;
+
+    use super::{ensure_descriptors_loaded, json_string_value};
 
     #[test]
     fn json_string_value_unescapes_windows_paths() {
@@ -273,6 +279,14 @@ mod tests {
             None
         );
         assert_eq!(json_string_value("{}", "executable"), None);
+    }
+
+    #[test]
+    fn empty_descriptor_selection_is_rejected() {
+        let error = ensure_descriptors_loaded(&[], Path::new("/tmp/descriptors"))
+            .expect_err("an empty runtime-suite selection must not pass");
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("/tmp/descriptors"));
     }
 }
 
@@ -551,6 +565,20 @@ fn load_descriptors(root: &Path, args: &Args) -> io::Result<Vec<Descriptor>> {
         }
     }
     Ok(descriptors)
+}
+
+fn ensure_descriptors_loaded(descriptors: &[Descriptor], root: &Path) -> io::Result<()> {
+    if descriptors.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "no runtime-testsuite descriptors selected under {}; \
+                 the checkout may be incomplete or the requested filters matched no cases",
+                root.display()
+            ),
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Debug)]

@@ -52,13 +52,13 @@
     }
   ],
   "demonstrated_red": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode_escape::tests::bmp_swift_escape_matches_java -- --exact",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::unicode_escape::tests::bmp_swift_escape_matches_java -- --exact",
     "commit": "602ef46199b845536abdf339f9507c82fff99c1c",
     "exit_code": 101,
     "fingerprint": "left empty string, right \"\\\\u{ABCD}\""
   },
   "green_result": {
-    "command": "cargo test --locked --bin antlr4-rust-gen grammar::unicode_escape::tests::bmp_swift_escape_matches_java -- --exact",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::unicode_escape::tests::bmp_swift_escape_matches_java -- --exact",
     "commit": "247896246d88bfca50208b84e271dc907da220f7",
     "exit_code": 0,
     "result": "1 passed; 0 failed"
@@ -74,7 +74,7 @@
     },
     {
       "path": "tests/codegen-direct/port-evidence/testunicodeescapes-bmpswiftescape-e6754132b6/revisions/testunicodeescapes-bmpswiftescape-e6754132b6-r1/matrix-results/results.json",
-      "sha256": "b712dea395f044dd40caf7599ae3aa030a6040c9fd7254d5cd25e99363ca6203"
+      "sha256": "2a9c614256209df428d7a35690f37960398b0df666e44c793dfbe347734d783a"
     }
   ]
 }

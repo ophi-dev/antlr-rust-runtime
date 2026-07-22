@@ -45,6 +45,7 @@ javac --release 17 -cp "$ANTLR4_JAR" -d "$WORK_DIR/java-classes" \
     "$WORK_DIR/java-gen/"*.java "$SCRIPT_DIR/TypeScriptParityDumper.java"
 
 cargo run --quiet --locked --release --manifest-path "$REPO_ROOT/Cargo.toml" \
+    --features codegen \
     --bin antlr4-rust-gen -- \
     --lexer "$WORK_DIR/java-gen/TypeScriptLexer.interp" \
     --grammar "$WORK_DIR/grammar/TypeScriptLexer.g4" \
@@ -53,6 +54,7 @@ cargo run --quiet --locked --release --manifest-path "$REPO_ROOT/Cargo.toml" \
     --sem-unknown error --require-full-semantics \
     --out-dir "$WORK_DIR/rust-lexer"
 cargo run --quiet --locked --release --manifest-path "$REPO_ROOT/Cargo.toml" \
+    --features codegen \
     --bin antlr4-rust-gen -- \
     --parser "$WORK_DIR/java-gen/TypeScriptParser.interp" \
     --grammar "$WORK_DIR/grammar/TypeScriptParser.g4" \

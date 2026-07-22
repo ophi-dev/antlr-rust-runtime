@@ -105,13 +105,13 @@
     }
   ],
   "demonstrated_red": {
-    "command": "cargo test --locked --bin antlr4-rust-gen upstream_token_position_options -- --test-threads=1",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_token_position_options -- --test-threads=1",
     "commit": "a82df4a391d4bec1c355569f3e94dedafe4f0e2e",
     "exit_code": 101,
     "fingerprint": "labeled rule and token references retained the label starts 33 and 59 instead of the Java target starts 35 and 61"
   },
   "green_result": {
-    "command": "cargo test --locked --bin antlr4-rust-gen upstream_token_position_options -- --test-threads=1",
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen upstream_token_position_options -- --test-threads=1",
     "commit": "b058502fd73d34776cf53afd2bcff3cbb2517c3f",
     "exit_code": 0,
     "result": "3 passed; 0 failed"
@@ -127,7 +127,7 @@
     },
     {
       "path": "tests/codegen-direct/port-evidence/testtokenpositionoptions-testleftrecursionwithlabels-6e604809f0/revisions/testtokenpositionoptions-testleftrecursionwithlabels-6e604809f0-r1/matrix-results/results.json",
-      "sha256": "da12b2b6116cf1cebfef3743c42b279d114fe73811ed73ec49db73b817bf996d"
+      "sha256": "c935fc3b5ea1de47a8a04b60fd112de8c3dc7fa9dee17ecc35a1c32ee71f5f34"
     }
   ]
 }
