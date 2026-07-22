@@ -2,11 +2,19 @@ grammar Shapes;
 
 start
     : first = atom # Single
-    | rest += atom+ # Many
+    | rest += atom (COMMA rest += atom)* # Many
+    ;
+
+latest
+    : value = atom+
     ;
 
 atom
     : ID
+    ;
+
+COMMA
+    : ','
     ;
 
 ID

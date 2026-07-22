@@ -17,7 +17,7 @@ use grammar::frontend::SourceSpan;
 use grammar::loader::LoadOptions;
 use grammar::model::{
     Alternative, AlternativeId, AttributeSymbol, Block, Element, ElementKind, LabelKind,
-    LeftRecursiveAlternativeKind, ModelNodeId, Rule, SemanticGrammar, Terminal,
+    LeftRecursiveAlternativeKind, ModelNodeId, Quantifier, Rule, SemanticGrammar, Terminal,
 };
 use grammar::provenance::{Origin, ProvenanceIndex};
 use grammar::source::SourceSet;
@@ -2371,6 +2371,8 @@ fn structural_rule_alternatives(rule: &Rule) -> Vec<embedded::AltModel> {
                         is_block: false,
                         is_list: removed
                             .is_some_and(|removed| removed.label.kind == LabelKind::List),
+                        cardinality: embedded::ChildCardinality::ONE,
+                        stable_accessor: true,
                     }
                 });
             Some(structural_alt_model(alternative, leading_ref))
@@ -2401,8 +2403,16 @@ fn structural_alt_model(
     let leading_target = removed_leading_ref
         .as_ref()
         .map(|element| element.target.clone());
+    let mut children = structural_context_children(&alternative.elements);
+    if let Some(leading) = &removed_leading_ref {
+        add_child_cardinality(
+            &mut children,
+            &leading.target,
+            embedded::ChildCardinality::ONE,
+        );
+    }
     let mut refs = removed_leading_ref.into_iter().collect();
-    collect_structural_context_refs(&alternative.elements, &mut refs);
+    collect_structural_context_refs(&alternative.elements, &mut refs, true);
     embedded::AltModel {
         label: alternative.label.as_ref().map(|label| label.value.clone()),
         span: (
@@ -2410,6 +2420,7 @@ fn structural_alt_model(
             usize::try_from(alternative.span.bytes.end).expect("source offset exceeds usize"),
         ),
         refs,
+        children,
         leading_target: leading_target.or_else(|| {
             alternative
                 .elements
@@ -2419,19 +2430,43 @@ fn structural_alt_model(
     }
 }
 
-fn collect_structural_context_refs(elements: &[Element], refs: &mut Vec<embedded::ElementRef>) {
+fn collect_structural_context_refs(
+    elements: &[Element],
+    refs: &mut Vec<embedded::ElementRef>,
+    stable_accessor: bool,
+) {
+    collect_structural_context_refs_with_cardinality(
+        elements,
+        refs,
+        stable_accessor,
+        embedded::ChildCardinality::ONE,
+    );
+}
+
+fn collect_structural_context_refs_with_cardinality(
+    elements: &[Element],
+    refs: &mut Vec<embedded::ElementRef>,
+    stable_accessor: bool,
+    enclosing_cardinality: embedded::ChildCardinality,
+) {
     for element in elements {
         let label = element.label.as_ref().map(|label| label.name.clone());
         let is_list = element
             .label
             .as_ref()
             .is_some_and(|label| label.kind == LabelKind::List);
+        let cardinality = multiply_child_cardinalities(
+            enclosing_cardinality,
+            quantified_cardinality(embedded::ChildCardinality::ONE, element.quantifier),
+        );
         match &element.kind {
             ElementKind::RuleCall(call) => refs.push(embedded::ElementRef {
                 label,
                 target: call.name.clone(),
                 is_block: false,
                 is_list,
+                cardinality,
+                stable_accessor,
             }),
             ElementKind::Terminal(Terminal::Token(name)) => {
                 refs.push(embedded::ElementRef {
@@ -2439,6 +2474,8 @@ fn collect_structural_context_refs(elements: &[Element], refs: &mut Vec<embedded
                     target: name.clone(),
                     is_block: false,
                     is_list,
+                    cardinality,
+                    stable_accessor,
                 });
             }
             ElementKind::Block(block) => {
@@ -2448,10 +2485,18 @@ fn collect_structural_context_refs(elements: &[Element], refs: &mut Vec<embedded
                         target: String::new(),
                         is_block: true,
                         is_list,
+                        cardinality,
+                        stable_accessor: false,
                     });
                 }
+                let nested_stable = stable_accessor && block.alternatives.len() == 1;
                 for alternative in &block.alternatives {
-                    collect_structural_context_refs(&alternative.elements, refs);
+                    collect_structural_context_refs_with_cardinality(
+                        &alternative.elements,
+                        refs,
+                        nested_stable,
+                        cardinality,
+                    );
                 }
             }
             ElementKind::Terminal(_) | ElementKind::Range(..) | ElementKind::Set { .. }
@@ -2462,6 +2507,8 @@ fn collect_structural_context_refs(elements: &[Element], refs: &mut Vec<embedded
                     target: String::new(),
                     is_block: true,
                     is_list,
+                    cardinality,
+                    stable_accessor: false,
                 });
             }
             ElementKind::Terminal(_)
@@ -2471,6 +2518,131 @@ fn collect_structural_context_refs(elements: &[Element], refs: &mut Vec<embedded
             | ElementKind::Predicate { .. }
             | ElementKind::Epsilon => {}
         }
+    }
+}
+
+fn structural_context_children(
+    elements: &[Element],
+) -> BTreeMap<String, embedded::ChildCardinality> {
+    let mut children = BTreeMap::new();
+    for element in elements {
+        let mut element_children = match &element.kind {
+            ElementKind::RuleCall(call) => {
+                BTreeMap::from([(call.name.clone(), embedded::ChildCardinality::ONE)])
+            }
+            ElementKind::Terminal(Terminal::Token(name)) => {
+                BTreeMap::from([(name.clone(), embedded::ChildCardinality::ONE)])
+            }
+            ElementKind::Block(block) => structural_block_children(block),
+            ElementKind::Terminal(_)
+            | ElementKind::Range(..)
+            | ElementKind::Set { .. }
+            | ElementKind::Action { .. }
+            | ElementKind::Predicate { .. }
+            | ElementKind::Epsilon => BTreeMap::new(),
+        };
+        for cardinality in element_children.values_mut() {
+            *cardinality = quantified_cardinality(*cardinality, element.quantifier);
+        }
+        for (target, cardinality) in element_children {
+            add_child_cardinality(&mut children, &target, cardinality);
+        }
+    }
+    children
+}
+
+fn structural_block_children(block: &Block) -> BTreeMap<String, embedded::ChildCardinality> {
+    choice_child_cardinalities(
+        block
+            .alternatives
+            .iter()
+            .map(|alternative| structural_context_children(&alternative.elements)),
+    )
+}
+
+fn choice_child_cardinalities(
+    alternatives: impl IntoIterator<Item = BTreeMap<String, embedded::ChildCardinality>>,
+) -> BTreeMap<String, embedded::ChildCardinality> {
+    let alternatives = alternatives.into_iter().collect::<Vec<_>>();
+    let targets = alternatives
+        .iter()
+        .flat_map(|alternative| alternative.keys().cloned())
+        .collect::<BTreeSet<_>>();
+    targets
+        .into_iter()
+        .map(|target| {
+            let mut min = usize::MAX;
+            let mut max = Some(0_usize);
+            for alternative in &alternatives {
+                let cardinality = alternative
+                    .get(&target)
+                    .copied()
+                    .unwrap_or(embedded::ChildCardinality::ZERO);
+                min = min.min(cardinality.min);
+                max = match (max, cardinality.max) {
+                    (Some(current), Some(next)) => Some(current.max(next)),
+                    _ => None,
+                };
+            }
+            (
+                target,
+                embedded::ChildCardinality {
+                    min: if min == usize::MAX { 0 } else { min },
+                    max,
+                },
+            )
+        })
+        .collect()
+}
+
+fn add_child_cardinality(
+    children: &mut BTreeMap<String, embedded::ChildCardinality>,
+    target: &str,
+    cardinality: embedded::ChildCardinality,
+) {
+    let total = children
+        .entry(target.to_owned())
+        .or_insert(embedded::ChildCardinality::ZERO);
+    total.min = total.min.saturating_add(cardinality.min);
+    total.max = match (total.max, cardinality.max) {
+        (Some(current), Some(next)) => Some(current.saturating_add(next)),
+        _ => None,
+    };
+}
+
+fn quantified_cardinality(
+    cardinality: embedded::ChildCardinality,
+    quantifier: Quantifier,
+) -> embedded::ChildCardinality {
+    match quantifier {
+        Quantifier::One => cardinality,
+        Quantifier::Optional { .. } => embedded::ChildCardinality {
+            min: 0,
+            max: cardinality.max,
+        },
+        Quantifier::ZeroOrMore { .. } => embedded::ChildCardinality {
+            min: 0,
+            max: (cardinality.max == Some(0)).then_some(0),
+        },
+        Quantifier::OneOrMore { .. } => embedded::ChildCardinality {
+            min: cardinality.min,
+            max: (cardinality.max == Some(0)).then_some(0),
+        },
+    }
+}
+
+const fn multiply_child_cardinalities(
+    left: embedded::ChildCardinality,
+    right: embedded::ChildCardinality,
+) -> embedded::ChildCardinality {
+    let max = match (left.max, right.max) {
+        (Some(0), _) | (_, Some(0)) => Some(0),
+        (Some(left), Some(right)) => Some(left.saturating_mul(right)),
+        _ => None,
+    };
+    embedded::ChildCardinality {
+        min: left.min.saturating_mul(right.min),
+        max,
     }
 }
 
@@ -7675,14 +7847,415 @@ fn __active_context_kind(
     )
 }
 
+fn context_alternatives<'a>(
+    rule: &'a embedded::RuleModel,
+    alternative_label: Option<&str>,
+) -> Vec<&'a embedded::AltModel> {
+    rule.alts
+        .iter()
+        .filter(|alternative| {
+            alternative_label.is_none_or(|label| alternative.label.as_deref() == Some(label))
+        })
+        .collect()
+}
+
+fn context_child_cardinalities(
+    rule: &embedded::RuleModel,
+    alternative_label: Option<&str>,
+) -> BTreeMap<String, embedded::ChildCardinality> {
+    choice_child_cardinalities(
+        context_alternatives(rule, alternative_label)
+            .into_iter()
+            .map(|alternative| alternative.children.clone()),
+    )
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ContextLabelAccessor {
+    source_name: String,
+    target: String,
+    cardinality: embedded::ChildCardinality,
+    selector: ContextLabelSelector,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ContextLabelSelector {
+    Nth(usize),
+    LastAfter(usize),
+    AllAfter(usize),
+}
+
+fn context_label_accessors(
+    rule: &embedded::RuleModel,
+    alternative_label: Option<&str>,
+) -> Vec<ContextLabelAccessor> {
+    let alternatives = context_alternatives(rule, alternative_label);
+    let labels = alternatives
+        .iter()
+        .flat_map(|alternative| {
+            alternative
+                .refs
+                .iter()
+                .filter_map(|element| element.label.clone())
+        })
+        .collect::<BTreeSet<_>>();
+    labels
+        .into_iter()
+        .filter_map(|label| context_label_accessor(&alternatives, label))
+        .collect()
+}
+
+fn context_label_accessor(
+    alternatives: &[&embedded::AltModel],
+    label: String,
+) -> Option<ContextLabelAccessor> {
+    let declarations = alternatives
+        .iter()
+        .flat_map(|alternative| alternative.refs.iter())
+        .filter(|element| element.label.as_deref() == Some(label.as_str()))
+        .collect::<Vec<_>>();
+    let first = declarations.first()?;
+    if first.target.is_empty()
+        || declarations.iter().any(|element| {
+            !element.stable_accessor
+                || element.target != first.target
+                || element.is_list != first.is_list
+        })
+    {
+        return None;
+    }
+
+    let target = first.target.clone();
+    let is_list = first.is_list;
+    let mut selector = None;
+    let mut cardinalities = Vec::with_capacity(alternatives.len());
+    for alternative in alternatives {
+        let matching = alternative
+            .refs
+            .iter()
+            .enumerate()
+            .filter(|(_, element)| element.label.as_deref() == Some(label.as_str()))
+            .collect::<Vec<_>>();
+        if matching.is_empty() {
+            let target_cardinality = alternative
+                .children
+                .get(&target)
+                .copied()
+                .unwrap_or(embedded::ChildCardinality::ZERO);
+            if target_cardinality.max != Some(0) {
+                return None;
+            }
+            cardinalities.push(embedded::ChildCardinality::ZERO);
+            continue;
+        }
+
+        let alternative_selector =
+            context_label_selector(alternative, &matching, &label, &target, is_list)?;
+        if selector.is_some_and(|existing| existing != alternative_selector) {
+            return None;
+        }
+        selector = Some(alternative_selector);
+        cardinalities.push(if is_list {
+            sum_child_cardinalities(matching.iter().map(|(_, element)| element.cardinality))
+        } else {
+            matching[0].1.cardinality
+        });
+    }
+
+    let mut cardinality = choice_cardinality(&cardinalities);
+    if !is_list {
+        cardinality = embedded::ChildCardinality {
+            min: usize::from(cardinality.min > 0),
+            max: Some(usize::from(cardinality.max != Some(0))),
+        };
+    }
+    Some(ContextLabelAccessor {
+        source_name: label,
+        target,
+        cardinality,
+        selector: selector?,
+    })
+}
+
+fn context_label_selector(
+    alternative: &embedded::AltModel,
+    matching: &[(usize, &embedded::ElementRef)],
+    label: &str,
+    target: &str,
+    is_list: bool,
+) -> Option<ContextLabelSelector> {
+    let first_position = matching[0].0;
+    let start = exact_target_cardinality(&alternative.refs[..first_position], target)?;
+    if is_list {
+        let has_unlabeled_target = alternative.refs[first_position..].iter().any(|element| {
+            element.target == target
+                && element.cardinality.max != Some(0)
+                && element.label.as_deref() != Some(label)
+        });
+        return (!has_unlabeled_target).then_some(ContextLabelSelector::AllAfter(start));
+    }
+    if matching.len() != 1 {
+        return None;
+    }
+    let element = matching[0].1;
+    if !element.cardinality.is_repeated() {
+        return Some(ContextLabelSelector::Nth(start));
+    }
+    let has_following_target = alternative.refs[first_position + 1..]
+        .iter()
+        .any(|following| following.target == target && following.cardinality.max != Some(0));
+    (!has_following_target).then_some(ContextLabelSelector::LastAfter(start))
+}
+
+fn exact_target_cardinality(refs: &[embedded::ElementRef], target: &str) -> Option<usize> {
+    refs.iter()
+        .filter(|element| element.target == target)
+        .try_fold(0_usize, |total, element| {
+            let exact = element.cardinality.max?;
+            (element.cardinality.min == exact).then(|| total.saturating_add(exact))
+        })
+}
+
+fn sum_child_cardinalities(
+    cardinalities: impl IntoIterator<Item = embedded::ChildCardinality>,
+) -> embedded::ChildCardinality {
+    cardinalities.into_iter().fold(
+        embedded::ChildCardinality::ZERO,
+        |mut total, cardinality| {
+            total.min = total.min.saturating_add(cardinality.min);
+            total.max = match (total.max, cardinality.max) {
+                (Some(current), Some(next)) => Some(current.saturating_add(next)),
+                _ => None,
+            };
+            total
+        },
+    )
+}
+
+fn choice_cardinality(alternatives: &[embedded::ChildCardinality]) -> embedded::ChildCardinality {
+    let mut min = usize::MAX;
+    let mut max = Some(0_usize);
+    for cardinality in alternatives {
+        min = min.min(cardinality.min);
+        max = match (max, cardinality.max) {
+            (Some(current), Some(next)) => Some(current.max(next)),
+            _ => None,
+        };
+    }
+    embedded::ChildCardinality {
+        min: if min == usize::MAX { 0 } else { min },
+        max,
+    }
+}
+
+fn allocate_context_method(
+    preferred: String,
+    fallback_stem: &str,
+    used: &mut BTreeSet<String>,
+) -> String {
+    if used.insert(preferred.clone()) {
+        return preferred;
+    }
+    allocate_numbered_listener_method(fallback_stem, used)
+}
+
+fn accessor_stem(name: &str) -> String {
+    rust_function_name(name).trim_start_matches("r#").to_owned()
+}
+
+fn render_rule_label_accessor(
+    out: &mut String,
+    method: &str,
+    view_name: &str,
+    child_view: &str,
+    child_index: usize,
+    label: &ContextLabelAccessor,
+) {
+    if let ContextLabelSelector::AllAfter(skip) = label.selector {
+        let _ = writeln!(
+            out,
+            "    pub fn {method}(&self) -> impl Iterator<Item = {child_view}<'a>> + '_ {{\n        __rule_children(self.__node, {child_index})\n            .skip({skip})\n            .map(move |node| {child_view}::__from_child_node(node, &self.__invocation_states))\n    }}"
+        );
+        return;
+    }
+    let lookup = match label.selector {
+        ContextLabelSelector::Nth(occurrence) => format!(".nth({occurrence})"),
+        ContextLabelSelector::LastAfter(skip) => format!(".skip({skip}).last()"),
+        ContextLabelSelector::AllAfter(_) => unreachable!("handled above"),
+    };
+    if label.cardinality.is_required_single() {
+        let _ = writeln!(
+            out,
+            "    pub fn {method}(&self) -> Result<{child_view}<'a>, MissingChildError> {{\n        __rule_children(self.__node, {child_index})\n            {lookup}\n            .map(|node| {child_view}::__from_child_node(node, &self.__invocation_states))\n            .ok_or_else(|| MissingChildError::new(\"{view_name}\", \"{}\"))\n    }}",
+            label.source_name
+        );
+    } else {
+        let _ = writeln!(
+            out,
+            "    pub fn {method}(&self) -> Option<{child_view}<'a>> {{\n        __rule_children(self.__node, {child_index})\n            {lookup}\n            .map(|node| {child_view}::__from_child_node(node, &self.__invocation_states))\n    }}"
+        );
+    }
+}
+
+fn render_token_label_accessor(
+    out: &mut String,
+    method: &str,
+    view_name: &str,
+    token_type: i32,
+    label: &ContextLabelAccessor,
+) {
+    if let ContextLabelSelector::AllAfter(skip) = label.selector {
+        let _ = writeln!(
+            out,
+            "    pub fn {method}(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {{\n        __token_children(self.__node, {token_type})\n            .skip({skip})\n            .map(TerminalNode::new)\n    }}"
+        );
+        return;
+    }
+    let lookup = match label.selector {
+        ContextLabelSelector::Nth(occurrence) => format!(".nth({occurrence})"),
+        ContextLabelSelector::LastAfter(skip) => format!(".skip({skip}).last()"),
+        ContextLabelSelector::AllAfter(_) => unreachable!("handled above"),
+    };
+    if label.cardinality.is_required_single() {
+        let _ = writeln!(
+            out,
+            "    pub fn {method}(&self) -> Result<TerminalNode<'a>, MissingChildError> {{\n        __token_children(self.__node, {token_type})\n            {lookup}\n            .map(TerminalNode::new)\n            .ok_or_else(|| MissingChildError::new(\"{view_name}\", \"{}\"))\n    }}",
+            label.source_name
+        );
+    } else {
+        let _ = writeln!(
+            out,
+            "    pub fn {method}(&self) -> Option<TerminalNode<'a>> {{\n        __token_children(self.__node, {token_type})\n            {lookup}\n            .map(TerminalNode::new)\n    }}"
+        );
+    }
+}
+
+fn render_context_child_accessors(
+    view_name: &str,
+    model: &embedded::EmbeddedModel,
+    context_names: &ContextSurfaceNames,
+    token_accessors: &[(String, i32)],
+    child_cardinalities: &BTreeMap<String, embedded::ChildCardinality>,
+    label_accessors: &[ContextLabelAccessor],
+) -> String {
+    let mut out = String::new();
+    let _ = writeln!(
+        out,
+        "    pub fn child_count(&self) -> usize {{\n        match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.child_count(),\n            __GeneratedRuleContext::Active {{ context, .. }} => context.child_count(),\n        }}\n    }}\n\n    pub fn start(&self) -> __GeneratedTokenView {{\n        let token = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.start(),\n            __GeneratedRuleContext::Active {{ context, tokens, .. }} => context.start(tokens),\n        }};\n        __GeneratedTokenView {{ text: token.map(|token| token.text().to_owned()).unwrap_or_default() }}\n    }}"
+    );
+    let mut used_methods = BTreeSet::from([
+        "child_count".to_owned(),
+        "rule_node".to_owned(),
+        "start".to_owned(),
+    ]);
+    for (child_index, child) in model
+        .rules
+        .iter()
+        .enumerate()
+        .filter(|(_, child)| child_cardinalities.contains_key(child.name.as_str()))
+    {
+        let cardinality = child_cardinalities[child.name.as_str()];
+        let stem = accessor_stem(&child.name);
+        let preferred = if cardinality.is_repeated() {
+            format!("{stem}_children")
+        } else {
+            rust_function_name(&child.name)
+        };
+        let method =
+            allocate_context_method(preferred, &format!("{stem}_rule_child"), &mut used_methods);
+        let child_view = &context_names.rules[child_index].context_type;
+        if cardinality.is_repeated() {
+            let _ = writeln!(
+                out,
+                "    pub fn {method}(&self) -> impl Iterator<Item = {child_view}<'a>> + '_ {{\n        __rule_children(self.__node, {child_index})\n            .map(move |node| {child_view}::__from_child_node(node, &self.__invocation_states))\n    }}"
+            );
+        } else if cardinality.is_required_single() {
+            let _ = writeln!(
+                out,
+                "    pub fn {method}(&self) -> Result<{child_view}<'a>, MissingChildError> {{\n        __rule_children(self.__node, {child_index})\n            .next()\n            .map(|node| {child_view}::__from_child_node(node, &self.__invocation_states))\n            .ok_or_else(|| MissingChildError::new(\"{view_name}\", \"{}\"))\n    }}",
+                child.name
+            );
+        } else {
+            let _ = writeln!(
+                out,
+                "    pub fn {method}(&self) -> Option<{child_view}<'a>> {{\n        __rule_children(self.__node, {child_index})\n            .next()\n            .map(|node| {child_view}::__from_child_node(node, &self.__invocation_states))\n    }}"
+            );
+        }
+    }
+    for (token_name, token_type) in token_accessors
+        .iter()
+        .filter(|(token_name, _)| child_cardinalities.contains_key(token_name.as_str()))
+    {
+        let cardinality = child_cardinalities[token_name.as_str()];
+        let stem = accessor_stem(token_name);
+        let preferred = if cardinality.is_repeated() {
+            format!("{stem}_tokens")
+        } else {
+            format!("{stem}_token")
+        };
+        let method = allocate_context_method(
+            preferred,
+            &format!("{stem}_terminal_child"),
+            &mut used_methods,
+        );
+        if cardinality.is_repeated() {
+            let _ = writeln!(
+                out,
+                "    pub fn {method}(&self) -> impl Iterator<Item = TerminalNode<'a>> + '_ {{\n        __token_children(self.__node, {token_type}).map(TerminalNode::new)\n    }}"
+            );
+        } else if cardinality.is_required_single() {
+            let _ = writeln!(
+                out,
+                "    pub fn {method}(&self) -> Result<TerminalNode<'a>, MissingChildError> {{\n        __token_children(self.__node, {token_type})\n            .next()\n            .map(TerminalNode::new)\n            .ok_or_else(|| MissingChildError::new(\"{view_name}\", \"{token_name}\"))\n    }}"
+            );
+        } else {
+            let _ = writeln!(
+                out,
+                "    pub fn {method}(&self) -> Option<TerminalNode<'a>> {{\n        __token_children(self.__node, {token_type})\n            .next()\n            .map(TerminalNode::new)\n    }}"
+            );
+        }
+    }
+    for label in label_accessors {
+        let stem = accessor_stem(&label.source_name);
+        let method = allocate_context_method(
+            rust_function_name(&label.source_name),
+            &format!("{stem}_label"),
+            &mut used_methods,
+        );
+        if let Some(child_index) = model
+            .rules
+            .iter()
+            .position(|child| child.name == label.target)
+        {
+            let child_view = &context_names.rules[child_index].context_type;
+            render_rule_label_accessor(
+                &mut out,
+                &method,
+                view_name,
+                child_view,
+                child_index,
+                label,
+            );
+            continue;
+        }
+        let Some((_, token_type)) = token_accessors
+            .iter()
+            .find(|(token_name, _)| token_name == &label.target)
+        else {
+            continue;
+        };
+        render_token_label_accessor(&mut out, &method, view_name, *token_type, label);
+    }
+    out
+}
+
 /// Generates the typed context views, listener trait, and walker for the
 /// embedded `.test.stg` surface:
 ///
 /// * one `<Rule>Context` view per parser rule (plus one per labeled
-///   alternative) with positional child accessors (`ctx.e(0)` /
-///   `ctx.e_all()`, `ctx.INT(0)` / `ctx.INT_all()`), `child_count()`,
-///   `start()`, public attribute fields, and a `FromRuleNode` impl backing
-///   `ctx.downcast_ref::<XContext>()`;
+///   alternative) with cardinality-aware rule, token, and label accessors,
+///   `child_count()`, `start()`, public attribute fields, and a `FromRuleNode`
+///   impl backing `ctx.downcast_ref::<XContext>()`;
 /// * the `<Grammar>Listener` trait with defaulted `enter_/exit_<rule>` (and
 ///   per-labeled-alternative) callbacks plus terminal/error-node visitors;
 /// * a module-local `ParseTreeWalker` whose bridge dispatches the runtime
@@ -7766,7 +8339,7 @@ impl std::fmt::Display for ErrorNode<'_> {
 }
 
 #[allow(dead_code)]
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 enum __GeneratedRuleContext<'a> {
     Stored(RuleNodeView<'a>),
     Active {
@@ -7774,6 +8347,65 @@ enum __GeneratedRuleContext<'a> {
         storage: &'a antlr4_runtime::ParseTreeStorage,
         tokens: &'a antlr4_runtime::TokenStore,
     },
+}
+
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug)]
+pub struct StoredTreeContext;
+
+#[derive(Clone, Copy, Debug)]
+struct __ActiveParserContext;
+
+#[allow(dead_code)]
+fn __context_children<'a>(
+    source: __GeneratedRuleContext<'a>,
+) -> impl Iterator<Item = antlr4_runtime::Node<'a>> + 'a {
+    let mut stored = match source {
+        __GeneratedRuleContext::Stored(node) => Some(node.children()),
+        __GeneratedRuleContext::Active { .. } => None,
+    };
+    let mut active = match source {
+        __GeneratedRuleContext::Stored(_) => None,
+        __GeneratedRuleContext::Active {
+            context,
+            storage,
+            tokens,
+        } => Some(context.child_nodes(storage, tokens)),
+    };
+    std::iter::from_fn(move || {
+        stored
+            .as_mut()
+            .and_then(Iterator::next)
+            .or_else(|| active.as_mut().and_then(Iterator::next))
+    })
+}
+
+#[allow(dead_code)]
+fn __rule_children<'a>(
+    source: __GeneratedRuleContext<'a>,
+    rule_index: usize,
+) -> impl Iterator<Item = RuleNodeView<'a>> + 'a {
+    __context_children(source).filter_map(move |child| {
+        let rule = child.as_rule()?;
+        (rule.rule_index() == rule_index).then_some(rule)
+    })
+}
+
+#[allow(dead_code)]
+fn __token_children<'a>(
+    source: __GeneratedRuleContext<'a>,
+    token_type: i32,
+) -> impl Iterator<Item = RuntimeTerminalNode<'a>> + 'a {
+    __context_children(source).filter_map(move |child| {
+        let terminal = match child.kind() {
+            antlr4_runtime::NodeKind::Terminal => child.as_terminal(),
+            antlr4_runtime::NodeKind::Error => {
+                child.as_error().map(antlr4_runtime::ErrorNodeView::terminal)
+            }
+            antlr4_runtime::NodeKind::Rule => None,
+        }?;
+        (terminal.symbol().token_type() == token_type).then_some(terminal)
+    })
 }
 
 #[allow(dead_code)]
@@ -7821,18 +8453,8 @@ fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
         let active_kind_guard = alternative_label.as_ref().map_or(String::new(), |_| {
             format!(" || __active_context_kind(context, storage, tokens) != {context_kind}")
         });
-        let referenced_targets: BTreeSet<&str> = rule
-            .alts
-            .iter()
-            .filter(|alt| {
-                alternative_label
-                    .as_ref()
-                    .is_none_or(|label| alt.label.as_ref() == Some(label))
-            })
-            .flat_map(|alt| alt.refs.iter())
-            .map(|element| element.target.as_str())
-            .filter(|target| !target.is_empty())
-            .collect();
+        let child_cardinalities = context_child_cardinalities(rule, alternative_label.as_deref());
+        let label_accessors = context_label_accessors(rule, alternative_label.as_deref());
         let attrs_struct = embedded::attrs_struct_name(*rule_index);
         let mut fields = String::new();
         let mut field_inits = String::new();
@@ -7843,80 +8465,40 @@ fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
         }
         let _ = writeln!(
             out,
-            "#[allow(non_camel_case_types, dead_code)]\n#[derive(Clone)]\npub struct {view_name}<'a> {{\n    __node: __GeneratedRuleContext<'a>,\n    __invocation_states: Vec<isize>,\n{fields}}}\n"
+            "#[allow(non_camel_case_types, dead_code)]\n#[derive(Clone)]\npub struct {view_name}<'a, State = StoredTreeContext> {{\n    __node: __GeneratedRuleContext<'a>,\n    __invocation_states: Vec<isize>,\n    __state: std::marker::PhantomData<State>,\n{fields}}}\n"
         );
         let _ = writeln!(
             out,
-            "impl<'a> FromRuleNode<'a> for {view_name}<'a> {{\n    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {{\n        if node.rule_index() != {rule_index}{stored_kind_guard} {{ return None; }}\n        Some(Self::__from_node(node))\n    }}\n}}\n\nimpl<'a> AsRuleNode<'a> for {view_name}<'a> {{\n    fn as_rule_node(&self) -> Option<RuleNodeView<'a>> {{\n        match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => Some(*node),\n            __GeneratedRuleContext::Active {{ .. }} => None,\n        }}\n    }}\n}}\n\nimpl<'a> __FromActiveRuleContext<'a> for {view_name}<'a> {{\n    fn __from_active(\n        context: &'a antlr4_runtime::ParserRuleContext,\n        invocation_states: Vec<isize>,\n        storage: &'a antlr4_runtime::ParseTreeStorage,\n        tokens: &'a antlr4_runtime::TokenStore,\n    ) -> Option<Self> {{\n        if context.rule_index() != {rule_index}{active_kind_guard} {{ return None; }}\n        let __default = {attrs_struct}::default();\n        let __attrs = context.generated_attrs::<{attrs_struct}>().unwrap_or(&__default);\n        Some(Self {{\n            __node: __GeneratedRuleContext::Active {{ context, storage, tokens }},\n            __invocation_states: invocation_states,\n{field_inits}        }})\n    }}\n}}\n"
+            "impl<'a> FromRuleNode<'a> for {view_name}<'a> {{\n    fn from_rule_node(node: RuleNodeView<'a>) -> Option<Self> {{\n        if node.rule_index() != {rule_index}{stored_kind_guard} {{ return None; }}\n        Some(Self::__from_node(node))\n    }}\n}}\n\nimpl<'a> AsRuleNode<'a> for {view_name}<'a> {{\n    fn as_rule_node(&self) -> RuleNodeView<'a> {{ self.rule_node() }}\n}}\n\nimpl<'a> {view_name}<'a> {{\n    pub fn rule_node(&self) -> RuleNodeView<'a> {{\n        match self.__node {{\n            __GeneratedRuleContext::Stored(node) => node,\n            __GeneratedRuleContext::Active {{ .. }} => unreachable!(\"stored context type contains an active parser context\"),\n        }}\n    }}\n}}\n\nimpl<'a> __FromActiveRuleContext<'a> for {view_name}<'a, __ActiveParserContext> {{\n    fn __from_active(\n        context: &'a antlr4_runtime::ParserRuleContext,\n        invocation_states: Vec<isize>,\n        storage: &'a antlr4_runtime::ParseTreeStorage,\n        tokens: &'a antlr4_runtime::TokenStore,\n    ) -> Option<Self> {{\n        if context.rule_index() != {rule_index}{active_kind_guard} {{ return None; }}\n        let __default = {attrs_struct}::default();\n        let __attrs = context.generated_attrs::<{attrs_struct}>().unwrap_or(&__default);\n        Some(Self {{\n            __node: __GeneratedRuleContext::Active {{ context, storage, tokens }},\n            __invocation_states: invocation_states,\n            __state: std::marker::PhantomData,\n{field_inits}        }})\n    }}\n}}\n"
         );
         let mut accessors = String::new();
-        if options.generate_visitor {
-            let _ = writeln!(
-                accessors,
-                "    fn __parse_tree_node(&self) -> antlr4_runtime::Node<'a> {{\n        match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.node(),\n            __GeneratedRuleContext::Active {{ .. }} => panic!(\"active parser contexts cannot be visited before the rule is stored\"),\n        }}\n    }}"
-            );
-        }
         let _ = writeln!(
             accessors,
-            "    fn __from_node(node: RuleNodeView<'a>) -> Self {{\n        let invocation_states = node.invocation_states().collect();\n        Self::__from_node_with_invocation_states(node, invocation_states)\n    }}\n\n    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {{\n        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);\n        invocation_states.push(node.invoking_state());\n        invocation_states.extend_from_slice(parent_invocation_states);\n        Self::__from_node_with_invocation_states(node, invocation_states)\n    }}\n\n    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {{\n        invocation_states.map_or_else(\n            || Self::__from_node(node),\n            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),\n        )\n    }}\n\n    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {{\n        let __default = {attrs_struct}::default();\n        let __attrs = node.generated_attrs::<{attrs_struct}>().unwrap_or(&__default);\n        Self {{\n            __node: __GeneratedRuleContext::Stored(node),\n            __invocation_states: invocation_states,\n{field_inits}        }}\n    }}\n"
+            "    fn __from_node(node: RuleNodeView<'a>) -> Self {{\n        let invocation_states = node.invocation_states().collect();\n        Self::__from_node_with_invocation_states(node, invocation_states)\n    }}\n\n    fn __from_child_node(node: RuleNodeView<'a>, parent_invocation_states: &[isize]) -> Self {{\n        let mut invocation_states = Vec::with_capacity(parent_invocation_states.len() + 1);\n        invocation_states.push(node.invoking_state());\n        invocation_states.extend_from_slice(parent_invocation_states);\n        Self::__from_node_with_invocation_states(node, invocation_states)\n    }}\n\n    fn __from_listener_node(node: RuleNodeView<'a>, invocation_states: Option<&[isize]>) -> Self {{\n        invocation_states.map_or_else(\n            || Self::__from_node(node),\n            |states| Self::__from_node_with_invocation_states(node, states.to_vec()),\n        )\n    }}\n\n    fn __from_node_with_invocation_states(node: RuleNodeView<'a>, invocation_states: Vec<isize>) -> Self {{\n        let __default = {attrs_struct}::default();\n        let __attrs = node.generated_attrs::<{attrs_struct}>().unwrap_or(&__default);\n        Self {{\n            __node: __GeneratedRuleContext::Stored(node),\n            __invocation_states: invocation_states,\n            __state: std::marker::PhantomData,\n{field_inits}        }}\n    }}\n"
         );
-        // A grammar rule claiming a built-in helper's name (`start`,
-        // `child_count`) takes the accessor slot; the built-in yields.
-        let rule_claims = |name: &str| {
-            model
-                .rules
-                .iter()
-                .any(|rule| rust_function_name(&rule.name) == name)
-        };
-        if !rule_claims("child_count") {
-            let _ = writeln!(
-                accessors,
-                "    pub fn child_count(&self) -> usize {{\n        match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.child_count(),\n            __GeneratedRuleContext::Active {{ context, .. }} => context.child_count(),\n        }}\n    }}"
-            );
-        }
-        if !rule_claims("start") {
-            let _ = writeln!(
-                accessors,
-                "    pub fn start(&self) -> __GeneratedTokenView {{\n        let token = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.start(),\n            __GeneratedRuleContext::Active {{ context, tokens, .. }} => context.start(tokens),\n        }};\n        __GeneratedTokenView {{ text: token.map(|token| token.text().to_owned()).unwrap_or_default() }}\n    }}"
-            );
-        }
-        for (child_index, child) in model
-            .rules
-            .iter()
-            .enumerate()
-            .filter(|(_, child)| referenced_targets.contains(child.name.as_str()))
-        {
-            let method = rust_function_name(&child.name);
-            let child_view = &context_names.rules[child_index].context_type;
-            let _ = writeln!(
-                accessors,
-                "    pub fn {method}(&self, index: usize) -> {child_view}<'a> {{\n        let node = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.child_rules({child_index}).nth(index),\n            __GeneratedRuleContext::Active {{ context, storage, tokens, .. }} => context.child_rules(storage, tokens, {child_index}).nth(index),\n        }}.expect(\"missing rule child\");\n        {child_view}::__from_child_node(node, &self.__invocation_states)\n    }}\n    pub fn {method}_all(&self) -> Vec<{child_view}<'a>> {{\n        let nodes: Vec<_> = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.child_rules({child_index}).collect(),\n            __GeneratedRuleContext::Active {{ context, storage, tokens, .. }} => context.child_rules(storage, tokens, {child_index}).collect(),\n        }};\n        nodes.into_iter().map(|node| {child_view}::__from_child_node(node, &self.__invocation_states)).collect()\n    }}"
-            );
-        }
-        for (token_name, token_type) in token_accessors
-            .iter()
-            .filter(|(token_name, _)| referenced_targets.contains(token_name.as_str()))
-        {
-            let _ = writeln!(
-                accessors,
-                "    #[allow(non_snake_case)]\n    pub fn {token_name}(&self, index: usize) -> TerminalNode<'a> {{\n        let node = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.child_tokens({token_type}).nth(index),\n            __GeneratedRuleContext::Active {{ context, storage, tokens, .. }} => context.child_tokens(storage, tokens, {token_type}).nth(index),\n        }}.expect(\"missing token child\");\n        TerminalNode::new(node)\n    }}\n    #[allow(non_snake_case)]\n    pub fn {token_name}_all(&self) -> Vec<TerminalNode<'a>> {{\n        let nodes: Vec<_> = match &self.__node {{\n            __GeneratedRuleContext::Stored(node) => node.child_tokens({token_type}).collect(),\n            __GeneratedRuleContext::Active {{ context, storage, tokens, .. }} => context.child_tokens(storage, tokens, {token_type}).collect(),\n        }};\n        nodes.into_iter().map(TerminalNode::new).collect()\n    }}"
-            );
-        }
+        let common_accessors = render_context_child_accessors(
+            view_name,
+            model,
+            &context_names,
+            &token_accessors,
+            &child_cardinalities,
+            &label_accessors,
+        );
         let _ = writeln!(
             out,
-            "#[allow(dead_code, clippy::all)]\nimpl<'a> {view_name}<'a> {{\n{accessors}}}\n"
+            "#[allow(dead_code, clippy::all)]\nimpl<'a> {view_name}<'a> {{\n{accessors}}}\n\n#[allow(dead_code, clippy::all)]\nimpl<'a, State> {view_name}<'a, State> {{\n{common_accessors}}}\n"
         );
         if options.generate_visitor {
             let _ = writeln!(
                 out,
-                "impl<'a> {visitable_trait}<'a> for {view_name}<'a> {{\n    fn into_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.__parse_tree_node() }}\n}}\n\nimpl<'a> {visitable_trait}<'a> for &{view_name}<'a> {{\n    fn into_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.__parse_tree_node() }}\n}}\n"
+                "impl<'a> {visitable_trait}<'a> for {view_name}<'a> {{\n    fn into_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.rule_node().node() }}\n}}\n\nimpl<'a> {visitable_trait}<'a> for &{view_name}<'a> {{\n    fn into_parse_tree_node(self) -> antlr4_runtime::Node<'a> {{ self.rule_node().node() }}\n}}\n"
             );
         }
         // Java's RuleContext.toString(): bracketed invoking-state chain from
         // this context to the root, the root's sentinel excluded.
         let _ = writeln!(
             out,
-            "impl std::fmt::Display for {view_name}<'_> {{\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{\n        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();\n        write!(f, \"[{{}}]\", chain.join(\" \"))\n    }}\n}}\n"
+            "impl<State> std::fmt::Display for {view_name}<'_, State> {{\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{\n        let chain: Vec<String> = self.__invocation_states.iter().map(|state| state.to_string()).collect();\n        write!(f, \"[{{}}]\", chain.join(\" \"))\n    }}\n}}\n"
         );
     }
 
@@ -7932,79 +8514,93 @@ fn __active_context_view<'a, T: __FromActiveRuleContext<'a>>(
             } = &view.surface;
             let _ = writeln!(
                 trait_methods,
-                "    fn enter_{listener_method}(&mut self, _ctx: &{context_type}) {{}}\n    fn exit_{listener_method}(&mut self, _ctx: &{context_type}) {{}}"
+                "    fn enter_{listener_method}(&mut self, _ctx: &{context_type}) -> Result<(), E> {{ Ok(()) }}\n    fn exit_{listener_method}(&mut self, _ctx: &{context_type}) -> Result<(), E> {{ Ok(()) }}"
             );
             let _ = writeln!(
                 enter_arms,
-                "            {kind_id} => self.0.enter_{listener_method}(&{context_type}::__from_listener_node(context, self.1.as_deref())),"
+                "                        {kind_id} => listener.enter_{listener_method}(&{context_type}::__from_listener_node(context, invocation_states.as_deref()))?,"
             );
             let _ = writeln!(
                 exit_arms,
-                "            {kind_id} => self.0.exit_{listener_method}(&{context_type}::__from_listener_node(context, self.1.as_deref())),"
+                "                    {kind_id} => listener.exit_{listener_method}(&{context_type}::__from_listener_node(context, invocation_states.as_deref()))?,"
             );
         }
         let _ = writeln!(
             out,
-            "#[allow(dead_code, unused_variables)]\npub trait {listener_trait} {{\n    fn walk(&mut self, tree: antlr4_runtime::Node<'_>) -> Result<(), antlr4_runtime::AntlrError>\n    where\n        Self: Sized,\n    {{\n        {tree_walker}::walk(self, tree)\n    }}\n\n{trait_methods}    fn visit_terminal(&mut self, _node: &TerminalNode) {{}}\n    fn visit_error_node(&mut self, _node: &ErrorNode) {{}}\n    fn output(&mut self) -> std::io::Stdout {{ std::io::stdout() }}\n}}\n"
+            "#[allow(dead_code, unused_variables)]\npub trait {listener_trait}<E = std::convert::Infallible> {{\n    fn walk(&mut self, tree: antlr4_runtime::Node<'_>) -> Result<(), E>\n    where\n        Self: Sized,\n    {{\n        {tree_walker}::walk(self, tree)\n    }}\n\n    fn enter_every_rule(&mut self, _ctx: RuleNodeView<'_>) -> Result<(), E> {{ Ok(()) }}\n    fn exit_every_rule(&mut self, _ctx: RuleNodeView<'_>) -> Result<(), E> {{ Ok(()) }}\n\n{trait_methods}    fn visit_terminal(&mut self, _node: &TerminalNode) -> Result<(), E> {{ Ok(()) }}\n    fn visit_error_node(&mut self, _node: &ErrorNode) -> Result<(), E> {{ Ok(()) }}\n    fn output(&mut self) -> std::io::Stdout {{ std::io::stdout() }}\n}}\n"
         );
 
         let _ = writeln!(
             out,
             r#"#[allow(dead_code)]
-struct __ListenerBridge<'a, T: {listener_trait}>(&'a mut T, Option<Vec<isize>>);
-
-impl<T: {listener_trait}> antlr4_runtime::ParseTreeListener for __ListenerBridge<'_, T> {{
-    fn enter_every_rule(&mut self, context: RuleNodeView<'_>) -> Result<(), antlr4_runtime::AntlrError> {{
-        if let Some(invocation_states) = &mut self.1 {{
-            invocation_states.insert(0, context.invoking_state());
-        }}
-        match __context_kind(context) {{
-{enter_arms}            _ => {{}}
-        }}
-        Ok(())
-    }}
-
-    fn exit_every_rule(&mut self, context: RuleNodeView<'_>) -> Result<(), antlr4_runtime::AntlrError> {{
-        match __context_kind(context) {{
-{exit_arms}            _ => {{}}
-        }}
-        if let Some(invocation_states) = &mut self.1 {{
-            invocation_states.remove(0);
-        }}
-        Ok(())
-    }}
-
-    fn visit_terminal(&mut self, node: RuntimeTerminalNode<'_>) -> Result<(), antlr4_runtime::AntlrError> {{
-        self.0.visit_terminal(&TerminalNode::new(node));
-        Ok(())
-    }}
-
-    fn visit_error_node(&mut self, node: RuntimeErrorNode<'_>) -> Result<(), antlr4_runtime::AntlrError> {{
-        self.0.visit_error_node(&ErrorNode::new(node));
-        Ok(())
-    }}
-}}
-
-#[allow(dead_code)]
 pub struct {tree_walker};
 
 #[allow(dead_code)]
 impl {tree_walker} {{
-    pub fn walk<T: {listener_trait}>(
+    pub fn walk<E, T: {listener_trait}<E>>(
         listener: &mut T,
         tree: antlr4_runtime::Node<'_>,
-    ) -> Result<(), antlr4_runtime::AntlrError> {{
-        let mut bridge = __ListenerBridge(listener, None);
-        antlr4_runtime::ParseTreeWalker::walk(&mut bridge, tree)
+    ) -> Result<(), E> {{
+        Self::__walk(listener, tree, None)
     }}
 
-    pub fn walk_with_invocation_states<T: {listener_trait}>(
+    pub fn walk_with_invocation_states<E, T: {listener_trait}<E>>(
         listener: &mut T,
         tree: antlr4_runtime::Node<'_>,
         parent_invocation_states: Vec<isize>,
-    ) -> Result<(), antlr4_runtime::AntlrError> {{
-        let mut bridge = __ListenerBridge(listener, Some(parent_invocation_states));
-        antlr4_runtime::ParseTreeWalker::walk(&mut bridge, tree)
+    ) -> Result<(), E> {{
+        Self::__walk(listener, tree, Some(parent_invocation_states))
+    }}
+
+    fn __walk<E, T: {listener_trait}<E>>(
+        listener: &mut T,
+        tree: antlr4_runtime::Node<'_>,
+        mut invocation_states: Option<Vec<isize>>,
+    ) -> Result<(), E> {{
+        enum Event<'tree> {{
+            Enter(antlr4_runtime::Node<'tree>),
+            Exit(RuleNodeView<'tree>),
+        }}
+
+        let mut stack = vec![Event::Enter(tree)];
+        while let Some(event) = stack.pop() {{
+            match event {{
+                Event::Enter(node) => match node.kind() {{
+                    antlr4_runtime::NodeKind::Rule => {{
+                        let context = node.as_rule().expect("rule node kind checked");
+                        if let Some(states) = &mut invocation_states {{
+                            states.insert(0, context.invoking_state());
+                        }}
+                        listener.enter_every_rule(context)?;
+                        match __context_kind(context) {{
+{enter_arms}                            _ => {{}}
+                        }}
+                        stack.push(Event::Exit(context));
+                        stack.extend(context.children().rev().map(Event::Enter));
+                    }}
+                    antlr4_runtime::NodeKind::Terminal => {{
+                        listener.visit_terminal(&TerminalNode::new(
+                            node.as_terminal().expect("terminal node kind checked"),
+                        ))?;
+                    }}
+                    antlr4_runtime::NodeKind::Error => {{
+                        listener.visit_error_node(&ErrorNode::new(
+                            node.as_error().expect("error node kind checked"),
+                        ))?;
+                    }}
+                }},
+                Event::Exit(context) => {{
+                    match __context_kind(context) {{
+{exit_arms}                        _ => {{}}
+                    }}
+                    listener.exit_every_rule(context)?;
+                    if let Some(states) = &mut invocation_states {{
+                        states.remove(0);
+                    }}
+                }}
+            }}
+        }}
+        Ok(())
     }}
 }}
 
@@ -8035,7 +8631,9 @@ pub type ParseTreeWalker = {tree_walker};
             out,
             r#"#[allow(dead_code, unused_variables)]
 pub trait {visitor_trait}: Sized {{
-    type Result: Default;
+    type Result;
+
+    fn default_result(&mut self) -> Self::Result;
 
     fn visit<'tree, T>(&mut self, tree: T) -> Self::Result
     where
@@ -8054,10 +8652,6 @@ pub trait {visitor_trait}: Sized {{
         let context = tree.as_rule().expect("visit_children requires a rule context");
         let mut bridge = __VisitorBridge(self);
         antlr4_runtime::ParseTreeVisitor::visit_children(&mut bridge, context)
-    }}
-
-    fn default_result(&mut self) -> Self::Result {{
-        Self::Result::default()
     }}
 
     fn aggregate_result(
@@ -8552,7 +9146,7 @@ fn render_parser_with_options(
     let generated_footer = GENERATED_MODULE_FOOTER;
 
     let embedded_imports = if embedded_data.is_some() || structural_surface.is_some() {
-        "#[allow(unused_imports)]\nuse std::io::Write as _;\n#[allow(unused_imports)]\nuse antlr4_runtime::{java_style_list, PredictionMode, BailErrorStrategy, TerminalNodeView as RuntimeTerminalNode, ErrorNodeView as RuntimeErrorNode, RuleNodeView, AsRuleNode, FromRuleNode, Token as _};\n"
+        "#[allow(unused_imports)]\nuse std::io::Write as _;\n#[allow(unused_imports)]\nuse antlr4_runtime::{java_style_list, PredictionMode, BailErrorStrategy, TerminalNodeView as RuntimeTerminalNode, ErrorNodeView as RuntimeErrorNode, RuleNodeView, AsRuleNode, FromRuleNode, MissingChildError, Token as _};\n"
     } else {
         ""
     };
@@ -12277,12 +12871,10 @@ mod tests {
 
         assert!(rendered.contains("ErrorNodeView as RuntimeErrorNode"));
         assert!(rendered.contains("pub struct ErrorNode<'a>"));
-        assert!(rendered.contains("fn visit_error_node(&mut self, _node: &ErrorNode)"));
         assert!(
-            rendered
-                .contains("fn visit_error_node(&mut self, node: RuntimeErrorNode<'_>) -> Result<")
+            rendered.contains("fn visit_error_node(&mut self, _node: &ErrorNode) -> Result<(), E>")
         );
-        assert!(rendered.contains("self.0.visit_error_node(&ErrorNode::new(node));"));
+        assert!(rendered.contains("listener.visit_error_node(&ErrorNode::new("));
     }
 
     #[test]
@@ -12300,7 +12892,7 @@ mod tests {
         assert!(rendered.contains("invocation_states: Vec<isize>"));
         assert!(rendered.contains("__invocation_states: invocation_states"));
         assert!(rendered.contains("::__from_child_node(node, &self.__invocation_states)"));
-        assert!(rendered.contains("::__from_listener_node(context, self.1.as_deref())"));
+        assert!(rendered.contains("::__from_listener_node(context, invocation_states.as_deref())"));
         assert!(rendered.contains("pub fn walk_with_invocation_states"));
         assert!(
             !rendered.contains("__GeneratedRuleContext::Active { .. } => Vec::new()"),
@@ -12321,35 +12913,95 @@ mod tests {
     }
 
     #[test]
-    fn typed_context_accessors_are_scoped_to_structural_children() {
+    fn typed_context_accessors_are_cardinality_aware_and_rust_shaped() {
         let rendered = render_parser(
             "TParser",
             &parser_fixture_data("left-recursive-labels/T.g4"),
         )
         .expect("parser should render");
         let s_context = rendered
-            .split_once("impl<'a> SContext<'a> {")
+            .split_once("impl<'a, State> SContext<'a, State> {")
             .expect("s context impl")
             .1
-            .split_once("impl std::fmt::Display for SContext")
+            .split_once("impl<State> std::fmt::Display for SContext")
             .expect("s context display impl")
             .0;
-        assert!(s_context.contains("pub fn e(&self"));
+        assert!(s_context.contains("pub fn e(&self) -> Result<EContext<'a>, MissingChildError>"));
         assert!(!s_context.contains("pub fn s(&self"));
-        assert!(!s_context.contains("pub fn INT(&self"));
+        assert!(!s_context.contains("_all(&self)"));
 
         let e_context = rendered
-            .split_once("impl<'a> EContext<'a> {")
+            .split_once("impl<'a, State> EContext<'a, State> {")
             .expect("e context impl")
             .1
-            .split_once("impl std::fmt::Display for EContext")
+            .split_once("impl<State> std::fmt::Display for EContext")
             .expect("e context display impl")
             .0;
-        assert!(e_context.contains("pub fn e(&self"));
-        assert!(e_context.contains("pub fn INT(&self"));
-        assert!(e_context.contains("pub fn STAR(&self"));
-        assert!(e_context.contains("pub fn PLUS(&self"));
+        assert!(
+            e_context.contains("pub fn e_children(&self) -> impl Iterator<Item = EContext<'a>>")
+        );
+        assert!(e_context.contains("pub fn int_token(&self) -> Option<TerminalNode<'a>>"));
+        assert!(e_context.contains("pub fn star_token(&self) -> Option<TerminalNode<'a>>"));
+        assert!(e_context.contains("pub fn plus_token(&self) -> Option<TerminalNode<'a>>"));
+        assert!(e_context.contains("pub fn left(&self) -> Option<EContext<'a>>"));
+        assert!(e_context.contains("pub fn right(&self) -> Option<EContext<'a>>"));
         assert!(!e_context.contains("pub fn s(&self"));
+        assert!(!e_context.contains("pub fn INT(&self"));
+        assert!(!e_context.contains("_all(&self)"));
+    }
+
+    #[test]
+    fn typed_context_accessors_preserve_ebnf_list_and_single_labels() {
+        let data = parser_fixture_data("combined-contexts/Shapes.g4");
+        let model =
+            structural_embedded_model(&data, false).expect("structural model should resolve");
+        let start = model
+            .rules
+            .iter()
+            .find(|rule| rule.name == "start")
+            .expect("start rule");
+        let many = start
+            .alts
+            .iter()
+            .find(|alternative| alternative.label.as_deref() == Some("Many"))
+            .expect("many alternative");
+        let rest = many
+            .refs
+            .iter()
+            .filter(|element| element.label.as_deref() == Some("rest"))
+            .collect::<Vec<_>>();
+        assert_eq!(rest.len(), 2);
+        assert!(rest.iter().all(|element| element.stable_accessor));
+        assert_eq!(rest[0].cardinality, embedded::ChildCardinality::ONE);
+        assert_eq!(
+            rest[1].cardinality,
+            embedded::ChildCardinality { min: 0, max: None }
+        );
+
+        let rendered = render_parser("ShapesParser", &data).expect("parser should render");
+        let many_context = rendered
+            .split_once("impl<'a, State> ManyLabelContext<'a, State> {")
+            .expect("many context impl")
+            .1
+            .split_once("impl<State> std::fmt::Display for ManyLabelContext")
+            .expect("many context display impl")
+            .0;
+        assert!(
+            many_context.contains("pub fn rest(&self) -> impl Iterator<Item = AtomContext<'a>>")
+        );
+
+        let latest_context = rendered
+            .split_once("impl<'a, State> LatestContext<'a, State> {")
+            .expect("latest context impl")
+            .1
+            .split_once("impl<State> std::fmt::Display for LatestContext")
+            .expect("latest context display impl")
+            .0;
+        assert!(
+            latest_context
+                .contains("pub fn value(&self) -> Result<AtomContext<'a>, MissingChildError>")
+        );
+        assert!(latest_context.contains(".skip(0).last()"));
     }
 
     #[test]

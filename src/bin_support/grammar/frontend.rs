@@ -633,9 +633,7 @@ fn copy_cst(
     root: Node<'_>,
 ) -> Result<Cst, FrontendError> {
     let mut builder = TypedCstBuilder::new(source, tokens);
-    builder
-        .walk(root)
-        .map_err(|error| invalid_span(source, &format!("typed CST traversal failed: {error}")))?;
+    builder.walk(root)?;
     builder.finish()
 }
 
@@ -653,7 +651,6 @@ struct TypedCstBuilder<'tokens> {
     children: Vec<SyntaxId>,
     open_rules: Vec<OpenRule>,
     root: Option<SyntaxId>,
-    error: Option<FrontendError>,
 }
 
 impl<'tokens> TypedCstBuilder<'tokens> {
@@ -665,14 +662,10 @@ impl<'tokens> TypedCstBuilder<'tokens> {
             children: Vec::new(),
             open_rules: Vec::new(),
             root: None,
-            error: None,
         }
     }
 
     fn finish(self) -> Result<Cst, FrontendError> {
-        if let Some(error) = self.error {
-            return Err(error);
-        }
         if !self.open_rules.is_empty() {
             return Err(invalid_span(
                 self.source,
@@ -693,98 +686,82 @@ impl<'tokens> TypedCstBuilder<'tokens> {
         &mut self,
         context: &impl AsRuleNode<'tree>,
         expected_rule_index: usize,
-    ) {
-        if self.error.is_some() {
-            return;
-        }
-        let Some(rule) = context.as_rule_node() else {
-            self.fail("typed listener received an active parser context");
-            return;
-        };
+    ) -> Result<(), FrontendError> {
+        let rule = context.as_rule_node();
         if rule.rule_index() != expected_rule_index {
-            self.fail(format!(
-                "typed listener dispatched rule {} as {expected_rule_index}",
-                rule.rule_index()
+            return Err(invalid_span(
+                self.source,
+                &format!(
+                    "typed listener dispatched rule {} as {expected_rule_index}",
+                    rule.rule_index()
+                ),
             ));
-            return;
         }
         let node = rule.node();
-        let span = match node_span(self.source, self.tokens, node) {
-            Ok(span) => span,
-            Err(error) => {
-                self.error = Some(error);
-                return;
-            }
-        };
-        let Some(syntax) = self.push_node(
+        let span = node_span(self.source, self.tokens, node)?;
+        let syntax = self.push_node(
             SyntaxNodeKind::Rule {
                 rule_index: expected_rule_index,
             },
             span,
-        ) else {
-            return;
-        };
+        )?;
         self.open_rules.push(OpenRule {
             syntax,
             runtime: node.id(),
             rule_index: expected_rule_index,
             children: Vec::new(),
         });
+        Ok(())
     }
 
     fn exit_rule_context<'tree>(
         &mut self,
         context: &impl AsRuleNode<'tree>,
         expected_rule_index: usize,
-    ) {
-        if self.error.is_some() {
-            return;
-        }
-        let Some(rule) = context.as_rule_node() else {
-            self.fail("typed listener exited an active parser context");
-            return;
-        };
-        let Some(frame) = self.open_rules.pop() else {
-            self.fail("typed CST traversal exited a rule that was not entered");
-            return;
-        };
+    ) -> Result<(), FrontendError> {
+        let rule = context.as_rule_node();
+        let frame = self.open_rules.pop().ok_or_else(|| {
+            invalid_span(
+                self.source,
+                "typed CST traversal exited a rule that was not entered",
+            )
+        })?;
         if frame.runtime != rule.node().id() || frame.rule_index != expected_rule_index {
-            self.fail("typed CST traversal exited parser rules out of order");
-            return;
+            return Err(invalid_span(
+                self.source,
+                "typed CST traversal exited parser rules out of order",
+            ));
         }
-        let Ok(child_start) = u32::try_from(self.children.len()) else {
-            self.fail("CST exceeds 2^32 edges");
-            return;
-        };
+        let child_start = u32::try_from(self.children.len())
+            .map_err(|_| invalid_span(self.source, "CST exceeds 2^32 edges"))?;
         self.children.extend(frame.children);
-        let Ok(child_end) = u32::try_from(self.children.len()) else {
-            self.fail("CST exceeds 2^32 edges");
-            return;
-        };
+        let child_end = u32::try_from(self.children.len())
+            .map_err(|_| invalid_span(self.source, "CST exceeds 2^32 edges"))?;
         self.nodes[frame.syntax.index()].child_ids = child_start..child_end;
+        Ok(())
     }
 
-    fn push_token(&mut self, token_index: usize, error: bool) {
-        if self.error.is_some() {
-            return;
-        }
-        let Some(token) = self.tokens.get(token_index) else {
-            self.fail("CST references a missing token");
-            return;
-        };
+    fn push_token(&mut self, token_index: usize, error: bool) -> Result<(), FrontendError> {
+        let token = self
+            .tokens
+            .get(token_index)
+            .ok_or_else(|| invalid_span(self.source, "CST references a missing token"))?;
         let kind = if error {
             SyntaxNodeKind::Error { token_index }
         } else {
             SyntaxNodeKind::Terminal { token_index }
         };
-        let _ = self.push_node(kind, token.span.clone());
+        self.push_node(kind, token.span.clone())?;
+        Ok(())
     }
 
-    fn push_node(&mut self, kind: SyntaxNodeKind, span: SourceSpan) -> Option<SyntaxId> {
-        let Ok(node_index) = u32::try_from(self.nodes.len()) else {
-            self.fail("CST exceeds 2^32 nodes");
-            return None;
-        };
+    fn push_node(
+        &mut self,
+        kind: SyntaxNodeKind,
+        span: SourceSpan,
+    ) -> Result<SyntaxId, FrontendError> {
+        let node_index = u32::try_from(self.nodes.len())
+            .map_err(|_| invalid_span(self.source, "CST exceeds 2^32 nodes"))?;
         let syntax = SyntaxId::for_source(self.source, node_index);
         self.nodes.push(SyntaxNode {
             kind,
@@ -796,36 +773,36 @@ impl<'tokens> TypedCstBuilder<'tokens> {
         } else if self.root.is_none() {
             self.root = Some(syntax);
         } else {
-            self.fail("typed CST traversal produced multiple roots");
-            return None;
+            return Err(invalid_span(
+                self.source,
+                "typed CST traversal produced multiple roots",
+            ));
         }
-        Some(syntax)
-    }
-
-    fn fail(&mut self, message: impl Into<String>) {
-        if self.error.is_some() {
-            return;
-        }
-        let message = message.into();
-        self.error = Some(invalid_span(self.source, &message));
+        Ok(syntax)
     }
 }
 
 macro_rules! typed_cst_rule_callbacks {
     ($( $enter:ident, $exit:ident => $context:ident, $rule:ident; )+) => {
         $(
-            fn $enter(&mut self, context: &grammar_parser::$context<'_>) {
-                self.enter_rule_context(context, grammar_parser::$rule);
+            fn $enter(
+                &mut self,
+                context: &grammar_parser::$context<'_>,
+            ) -> Result<(), FrontendError> {
+                self.enter_rule_context(context, grammar_parser::$rule)
             }
 
-            fn $exit(&mut self, context: &grammar_parser::$context<'_>) {
-                self.exit_rule_context(context, grammar_parser::$rule);
+            fn $exit(
+                &mut self,
+                context: &grammar_parser::$context<'_>,
+            ) -> Result<(), FrontendError> {
+                self.exit_rule_context(context, grammar_parser::$rule)
             }
         )+
     };
 }
 
-impl ANTLRv4Listener for TypedCstBuilder<'_> {
+impl ANTLRv4Listener<FrontendError> for TypedCstBuilder<'_> {
     typed_cst_rule_callbacks! {
         enter_grammar_spec, exit_grammar_spec => GrammarSpecContext, RULE_GRAMMAR_SPEC;
         enter_grammar_decl, exit_grammar_decl => GrammarDeclContext, RULE_GRAMMAR_DECL;
@@ -896,12 +873,18 @@ impl ANTLRv4Listener for TypedCstBuilder<'_> {
         enter_qualified_identifier, exit_qualified_identifier => QualifiedIdentifierContext, RULE_QUALIFIED_IDENTIFIER;
     }
 
-    fn visit_terminal(&mut self, node: &grammar_parser::TerminalNode<'_>) {
-        self.push_token(node.symbol().token_id().index(), false);
+    fn visit_terminal(
+        &mut self,
+        node: &grammar_parser::TerminalNode<'_>,
+    ) -> Result<(), FrontendError> {
+        self.push_token(node.symbol().token_id().index(), false)
     }
 
-    fn visit_error_node(&mut self, node: &grammar_parser::ErrorNode<'_>) {
-        self.push_token(node.symbol().token_id().index(), true);
+    fn visit_error_node(
+        &mut self,
+        node: &grammar_parser::ErrorNode<'_>,
+    ) -> Result<(), FrontendError> {
+        self.push_token(node.symbol().token_id().index(), true)
     }
 }
 

@@ -17,12 +17,26 @@ expression: "model.rules[1].alts"
                 target: "e",
                 is_block: false,
                 is_list: false,
+                cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
+                stable_accessor: true,
             },
             ElementRef {
                 label: None,
                 target: "STAR",
                 is_block: false,
                 is_list: false,
+                cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
+                stable_accessor: true,
             },
             ElementRef {
                 label: Some(
@@ -31,8 +45,29 @@ expression: "model.rules[1].alts"
                 target: "e",
                 is_block: false,
                 is_list: false,
+                cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
+                stable_accessor: true,
             },
         ],
+        children: {
+            "STAR": ChildCardinality {
+                min: 1,
+                max: Some(
+                    1,
+                ),
+            },
+            "e": ChildCardinality {
+                min: 2,
+                max: Some(
+                    2,
+                ),
+            },
+        },
         leading_target: Some(
             "e",
         ),
@@ -51,12 +86,26 @@ expression: "model.rules[1].alts"
                 target: "e",
                 is_block: false,
                 is_list: false,
+                cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
+                stable_accessor: true,
             },
             ElementRef {
                 label: None,
                 target: "PLUS",
                 is_block: false,
                 is_list: false,
+                cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
+                stable_accessor: true,
             },
             ElementRef {
                 label: Some(
@@ -65,8 +114,29 @@ expression: "model.rules[1].alts"
                 target: "e",
                 is_block: false,
                 is_list: false,
+                cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
+                stable_accessor: true,
             },
         ],
+        children: {
+            "PLUS": ChildCardinality {
+                min: 1,
+                max: Some(
+                    1,
+                ),
+            },
+            "e": ChildCardinality {
+                min: 2,
+                max: Some(
+                    2,
+                ),
+            },
+        },
         leading_target: Some(
             "e",
         ),
@@ -83,8 +153,23 @@ expression: "model.rules[1].alts"
                 target: "INT",
                 is_block: false,
                 is_list: false,
+                cardinality: ChildCardinality {
+                    min: 1,
+                    max: Some(
+                        1,
+                    ),
+                },
+                stable_accessor: true,
             },
         ],
+        children: {
+            "INT": ChildCardinality {
+                min: 1,
+                max: Some(
+                    1,
+                ),
+            },
+        },
         leading_target: None,
     },
 ]

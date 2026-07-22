@@ -21,18 +21,18 @@
  *     exposes over a `&mut dyn std::io::Write` sink the test harness captures;
  *     `writeln!`/`write!` against it never surface a `io::Result` into
  *     action/predicate position (the handle swallows/records it).
- *   - Generated contexts are typed structs. Child accessors follow Rust
- *     snake_case for rule refs (`ctx.e(0)`, list `ctx.e_all()`) and keep
- *     ANTLR's uppercase for token refs (`ctx.INT(0)`, list `ctx.INT_all()`),
- *     mirroring Go's `E(0)`/`AllE()` split but in Rust casing.
+ *   - Generated contexts are typed structs. Child accessors use snake_case
+ *     Rust names and reflect grammar cardinality: required children return
+ *     `Result`, optional children return `Option`, and repeated children are
+ *     lazy iterators (`ctx.e_children()`, `ctx.int_tokens()`).
  *   - Rule return attributes are public fields on the returns/context value,
  *     so `Result(r)`/`Production(p)` pass through as `<r>`/`<p>` (no getter
  *     wrapper — the ideal Rust target exposes them directly, unlike Go).
  *   - Parser "members" are injected as an `impl` block on the generated parser
  *     via `@parser::members`; helpers are called `self.foo()` / `self.pred(v)`.
  *   - The generated listener trait is `TListener` with snake_case
- *     `enter_x`/`exit_x` and defaulted terminal/error-node visitors; a test
- *     listener is a unit struct implementing it, walked by `ParseTreeWalker::walk`.
+ *     `enter_x`/`exit_x` and defaulted terminal/error-node visitors. Callbacks
+ *     are fallible and a test listener is walked by `ParseTreeWalker::walk`.
  *   - Casts from an active `ParserRuleContext` to a labeled-alt / concrete
  *     borrowing view use the generated `__active_context_view` adapter.
  */
@@ -63,7 +63,7 @@ rustLabelContextType ::= [
     default: key
 ]
 
-Cast(t,v) ::= "__active_context_view::\<<rustLabelContextType.(t)>>(<v>, self.base.active_invocation_states(), self.base.parse_tree_storage(), self.base.token_store()).unwrap()"
+Cast(t,v) ::= "__active_context_view::\<<rustLabelContextType.(t)>\<'_, __ActiveParserContext>>(<v>, self.base.active_invocation_states(), self.base.parse_tree_storage(), self.base.token_store()).unwrap()"
 
 // Rust has no `&str + &str` operator, and descriptors chain Append/AppendStr
 // with bare string literals on the left (`"(" + $ID.text + …` in Java terms),
@@ -74,7 +74,7 @@ AppendStr(a,b) ::= <%format!("{}{}", <a>, <b>)%>
 
 Concat(a,b) ::= "<a><b>"
 
-AssertIsList(v) ::= "let __ttt__: &[_] = &<v>;" // just use the static type system
+AssertIsList(v) ::= "let _: Vec\<_> = <v>.collect();" // just use the static type system
 
 AssignLocal(s,v) ::= "<s> = <v>;"
 
@@ -181,8 +181,12 @@ BasicListener(X) ::= <<
 struct LeafListener;
 
 impl TListener for LeafListener {
-    fn visit_terminal(&mut self, node: &TerminalNode) {
+    fn visit_terminal(
+        &mut self,
+        node: &TerminalNode,
+    ) -> Result\<(), std::convert::Infallible> {
         writeln!(self.output(), "{}", node.symbol().text());
+        Ok(())
     }
 }
 }
@@ -190,7 +194,11 @@ impl TListener for LeafListener {
 
 WalkListener(s) ::= <<
 let mut listener = LeafListener::default();
-ParseTreeWalker::walk_with_invocation_states(&mut listener, <s>, self.base.active_invocation_states());
+ParseTreeWalker::walk_with_invocation_states(
+    &mut listener,
+    <s>,
+    self.base.active_invocation_states(),
+).unwrap();
 >>
 
 // Java needs a custom context superclass because its default RuleContext does
@@ -207,18 +215,27 @@ TokenGetterListener(X) ::= <<
 struct LeafListener;
 
 impl TListener for LeafListener {
-    fn exit_a(&mut self, ctx: &AContext) {
+    fn exit_a(
+        &mut self,
+        ctx: &AContext,
+    ) -> Result\<(), std::convert::Infallible> {
         if ctx.child_count() == 2 {
+            let tokens: Vec\<_> = ctx.int_tokens().collect();
             writeln!(
                 self.output(),
                 "{} {} {}",
-                ctx.INT(0).symbol().text(),
-                ctx.INT(1).symbol().text(),
-                java_style_list(&ctx.INT_all())
+                tokens[0].symbol().text(),
+                tokens[1].symbol().text(),
+                java_style_list(&tokens)
             );
         } else {
-            writeln!(self.output(), "{}", ctx.ID(0).symbol());
+            writeln!(
+                self.output(),
+                "{}",
+                ctx.id_token().expect("ID alternative").symbol()
+            );
         }
+        Ok(())
     }
 }
 }
@@ -230,18 +247,23 @@ RuleGetterListener(X) ::= <<
 struct LeafListener;
 
 impl TListener for LeafListener {
-    fn exit_a(&mut self, ctx: &AContext) {
+    fn exit_a(
+        &mut self,
+        ctx: &AContext,
+    ) -> Result\<(), std::convert::Infallible> {
+        let children: Vec\<_> = ctx.b_children().collect();
         if ctx.child_count() == 2 {
             writeln!(
                 self.output(),
                 "{} {} {}",
-                ctx.b(0).start().text(),
-                ctx.b(1).start().text(),
-                ctx.b_all()[0].start().text()
+                children[0].start().text(),
+                children[1].start().text(),
+                children[0].start().text()
             );
         } else {
-            writeln!(self.output(), "{}", ctx.b(0).start().text());
+            writeln!(self.output(), "{}", children[0].start().text());
         }
+        Ok(())
     }
 }
 }
@@ -254,18 +276,27 @@ LRListener(X) ::= <<
 struct LeafListener;
 
 impl TListener for LeafListener {
-    fn exit_e(&mut self, ctx: &EContext) {
+    fn exit_e(
+        &mut self,
+        ctx: &EContext,
+    ) -> Result\<(), std::convert::Infallible> {
         if ctx.child_count() == 3 {
+            let children: Vec\<_> = ctx.e_children().collect();
             writeln!(
                 self.output(),
                 "{} {} {}",
-                ctx.e(0).start().text(),
-                ctx.e(1).start().text(),
-                ctx.e_all()[0].start().text()
+                children[0].start().text(),
+                children[1].start().text(),
+                children[0].start().text()
             );
         } else {
-            writeln!(self.output(), "{}", ctx.INT(0).symbol().text());
+            writeln!(
+                self.output(),
+                "{}",
+                ctx.int_token().expect("INT alternative").symbol().text()
+            );
         }
+        Ok(())
     }
 }
 }
@@ -277,11 +308,28 @@ LRWithLabelsListener(X) ::= <<
 struct LeafListener;
 
 impl TListener for LeafListener {
-    fn exit_call_label(&mut self, ctx: &CallLabelContext) {
-        writeln!(self.output(), "{} {}", ctx.e(0).start().text(), ctx.e_list(0));
+    fn exit_call_label(
+        &mut self,
+        ctx: &CallLabelContext,
+    ) -> Result\<(), std::convert::Infallible> {
+        writeln!(
+            self.output(),
+            "{} {}",
+            ctx.e().expect("call target").start().text(),
+            ctx.e_list().expect("call arguments")
+        );
+        Ok(())
     }
-    fn exit_int_label(&mut self, ctx: &IntLabelContext) {
-        writeln!(self.output(), "{}", ctx.INT(0).symbol().text());
+    fn exit_int_label(
+        &mut self,
+        ctx: &IntLabelContext,
+    ) -> Result\<(), std::convert::Infallible> {
+        writeln!(
+            self.output(),
+            "{}",
+            ctx.int_token().expect("INT alternative").symbol().text()
+        );
+        Ok(())
     }
 }
 }
@@ -290,8 +338,8 @@ impl TListener for LeafListener {
 DeclareContextListGettersFunction() ::= <<
 fn foo() {
     let s: Option\<SContext\> = None;
-    let _a: Vec\<AContext\> = s.as_ref().unwrap().a_all();
-    let _b: Vec\<BContext\> = s.as_ref().unwrap().b_all();
+    let _a: Vec\<AContext\> = s.as_ref().unwrap().a_children().collect();
+    let _b: Vec\<BContext\> = s.as_ref().unwrap().b_children().collect();
 }
 >>
 
@@ -311,8 +359,13 @@ Invoke_pred(v) ::= <<self.pred(<v>)>>
 
 ParserTokenType(t) ::= "Parser::<t>"
 ContextRuleFunction(ctx, rule) ::= "<ctx>.<rule>"
-ContextListFunction(ctx, rule) ::= "<ctx>.<rule>_all()"
+ContextListFunction(ctx, rule) ::= "<ctx>.<rule>_children()"
 StringType() ::= "String"
 ContextMember(ctx, member) ::= "<ctx>.<member>"
-SubContextLocal(ctx, subctx, local) ::= "<ctx>.<subctx>.<local>"
-SubContextMember(ctx, subctx, member) ::= "<ctx>.<subctx>.<member>"
+rustSubcontextAccessor ::= [
+    "e(0)": "e_children().next().unwrap()",
+    "e(1)": "e_children().nth(1).unwrap()",
+    default: key
+]
+SubContextLocal(ctx, subctx, local) ::= "<ctx>.<rustSubcontextAccessor.(subctx)>.<local>"
+SubContextMember(ctx, subctx, member) ::= "<ctx>.<rustSubcontextAccessor.(subctx)>.<member>"

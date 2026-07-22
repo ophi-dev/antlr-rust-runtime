@@ -1233,19 +1233,52 @@ pub trait FromRuleNode<'tree>: Sized {
     fn from_rule_node(node: RuleNodeView<'tree>) -> Option<Self>;
 }
 
-/// Exposes the stored rule node behind a generated typed context.
-///
-/// Contexts used while a parser rule is still active do not have a completed
-/// tree node yet and return `None`.
+/// Exposes the stored rule node behind a completed generated context.
 pub trait AsRuleNode<'tree> {
-    fn as_rule_node(&self) -> Option<RuleNodeView<'tree>>;
+    fn as_rule_node(&self) -> RuleNodeView<'tree>;
 }
 
 impl<'tree> AsRuleNode<'tree> for RuleNodeView<'tree> {
-    fn as_rule_node(&self) -> Option<Self> {
-        Some(*self)
+    fn as_rule_node(&self) -> Self {
+        *self
     }
 }
+
+/// A required grammar child was absent from a recovered parse tree.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MissingChildError {
+    context: &'static str,
+    child: &'static str,
+}
+
+impl MissingChildError {
+    #[must_use]
+    pub const fn new(context: &'static str, child: &'static str) -> Self {
+        Self { context, child }
+    }
+
+    #[must_use]
+    pub const fn context(self) -> &'static str {
+        self.context
+    }
+
+    #[must_use]
+    pub const fn child(self) -> &'static str {
+        self.child
+    }
+}
+
+impl fmt::Display for MissingChildError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "required child {} is missing from {}",
+            self.child, self.context
+        )
+    }
+}
+
+impl std::error::Error for MissingChildError {}
 
 pub trait ParseTreeListener {
     fn enter_every_rule(&mut self, _ctx: RuleNodeView<'_>) -> Result<(), AntlrError> {
@@ -1271,7 +1304,9 @@ pub trait ParseTreeListener {
 /// this runtime contract. The default traversal returns the latest child's
 /// result, matching ANTLR's base visitor behavior.
 pub trait ParseTreeVisitor {
-    type Result: Default;
+    type Result;
+
+    fn default_result(&mut self) -> Self::Result;
 
     fn visit(&mut self, tree: Node<'_>) -> Self::Result {
         match tree.kind() {
@@ -1307,10 +1342,6 @@ pub trait ParseTreeVisitor {
 
     fn visit_error_node(&mut self, _node: ErrorNodeView<'_>) -> Self::Result {
         self.default_result()
-    }
-
-    fn default_result(&mut self) -> Self::Result {
-        Self::Result::default()
     }
 
     fn aggregate_result(
@@ -1598,6 +1629,10 @@ mod tests {
         impl ParseTreeVisitor for Visitor {
             type Result = Vec<String>;
 
+            fn default_result(&mut self) -> Self::Result {
+                Vec::new()
+            }
+
             fn visit_rule(&mut self, node: RuleNodeView<'_>) -> Self::Result {
                 self.0.push(format!("rule{}", node.rule_index()));
                 self.visit_children(node)
@@ -1637,6 +1672,10 @@ mod tests {
         impl ParseTreeVisitor for Visitor {
             type Result = String;
 
+            fn default_result(&mut self) -> Self::Result {
+                String::new()
+            }
+
             fn visit_terminal(&mut self, node: TerminalNodeView<'_>) -> Self::Result {
                 node.text().to_owned()
             }
@@ -1659,6 +1698,10 @@ mod tests {
 
         impl ParseTreeVisitor for Visitor {
             type Result = usize;
+
+            fn default_result(&mut self) -> Self::Result {
+                0
+            }
 
             fn visit_terminal(&mut self, _node: TerminalNodeView<'_>) -> Self::Result {
                 self.visited += 1;

@@ -29,6 +29,36 @@ pub(crate) struct AttrDecl {
     pub(crate) ty: String,
 }
 
+/// Number of children with one grammar target that an alternative can emit.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct ChildCardinality {
+    pub(crate) min: usize,
+    /// `None` denotes an unbounded maximum.
+    pub(crate) max: Option<usize>,
+}
+
+impl ChildCardinality {
+    pub(crate) const ZERO: Self = Self {
+        min: 0,
+        max: Some(0),
+    };
+    pub(crate) const ONE: Self = Self {
+        min: 1,
+        max: Some(1),
+    };
+
+    pub(crate) const fn is_required_single(self) -> bool {
+        self.min == 1 && matches!(self.max, Some(1))
+    }
+
+    pub(crate) const fn is_repeated(self) -> bool {
+        match self.max {
+            Some(max) => max > 1,
+            None => true,
+        }
+    }
+}
+
 /// One element reference inside an alternative: a rule ref, token ref, or a
 /// labeled sub-block, in source order.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -40,6 +70,12 @@ pub(crate) struct ElementRef {
     pub(crate) is_block: bool,
     /// `label+=ref` list label.
     pub(crate) is_list: bool,
+    /// Cardinality of this element after its direct EBNF suffix.
+    pub(crate) cardinality: ChildCardinality,
+    /// Whether source-order occurrence lookup is unambiguous for a generated
+    /// label accessor. Single-alternative EBNF groups preserve it; choices opt
+    /// out because their flattened CST children do not retain the chosen path.
+    pub(crate) stable_accessor: bool,
 }
 
 /// One top-level alternative of a parser rule.
@@ -50,6 +86,8 @@ pub(crate) struct AltModel {
     /// Byte span of the alternative inside the grammar source.
     pub(crate) span: (usize, usize),
     pub(crate) refs: Vec<ElementRef>,
+    /// Aggregate child cardinality by referenced rule or symbolic token.
+    pub(crate) children: BTreeMap<String, ChildCardinality>,
     /// Target of the first syntactic element when it is a bare (possibly
     /// labeled) rule/token reference; `None` for a leading literal, set,
     /// block, or action. ANTLR's left-recursion transformer only treats an
@@ -370,11 +408,13 @@ pub(crate) fn translate_body(body: &str, ctx: &TranslationCtx<'_>) -> io::Result
                     suffix = Some(&suffix_text[..suffix_len]);
                     consumed = name_len + 1 + suffix_len;
                 } else if name == "ctx"
-                    && suffix_text[..suffix_len].ends_with("_all")
+                    && (suffix_text[..suffix_len].ends_with("_children")
+                        || suffix_text[..suffix_len].ends_with("_all"))
                     && after_suffix.starts_with("()")
                 {
-                    // `$ctx.<rule>_all()` — a generated list accessor call;
-                    // consume the empty parens along with the suffix.
+                    // `$ctx.<rule>_children()` (or the legacy `_all()` form) is
+                    // an active-context collection read. Consume the empty
+                    // parens along with the suffix.
                     suffix = Some(&suffix_text[..suffix_len]);
                     let call_end = suffix_text[suffix_len..]
                         .find(')')
@@ -446,6 +486,8 @@ fn translate_reference(
             target: name.to_owned(),
             is_block: false,
             is_list: false,
+            cardinality: ChildCardinality::ONE,
+            stable_accessor: false,
         };
         let _ = target_rule;
         return translate_element_read(&element, usize::MAX, suffix, ctx, body);
@@ -456,6 +498,8 @@ fn translate_reference(
             target: name.to_owned(),
             is_block: false,
             is_list: false,
+            cardinality: ChildCardinality::ONE,
+            stable_accessor: false,
         };
         return translate_element_read(&element, usize::MAX, suffix, ctx, body);
     }
@@ -478,13 +522,20 @@ fn text_expression(ctx: &TranslationCtx<'_>) -> String {
     }
 }
 
-/// `$ctx.member` — a labeled element read (`$ctx.r`) or a generated list
-/// accessor (`$ctx.elseIfStatement_all`).
+/// `$ctx.member` — a labeled element read (`$ctx.r`) or a generated child
+/// iterator (`$ctx.elseIfStatement_children()`).
 fn translate_ctx_member(member: &str, ctx: &TranslationCtx<'_>, body: &str) -> io::Result<String> {
     if let Some((element, occurrence)) = ctx.resolve_label(member) {
         // `$ctx.r` denotes the labeled child's subtree (Java field of the
         // context); translate like `$r.ctx`.
         return translate_element_read(&element, occurrence, Some("ctx"), ctx, body);
+    }
+    if let Some(rule_name) = member.strip_suffix("_children") {
+        if let Some(rule_index) = ctx.rule_index_by_name(rule_name) {
+            return Ok(format!(
+                "__ctx.child_rules(self.base.parse_tree_storage(), self.base.token_store(), {rule_index})"
+            ));
+        }
     }
     if let Some(rule_name) = member.strip_suffix("_all") {
         if let Some(rule_index) = ctx.rule_index_by_name(rule_name) {
@@ -514,11 +565,11 @@ fn translate_element_read(
     body: &str,
 ) -> io::Result<String> {
     if element.is_list {
-        // `label+=x`: the label denotes the list of every `x` child.
+        // `label+=x`: expose the matching children as a lazy Rust iterator.
         if let Some(rule_index) = ctx.rule_index_by_name(&element.target) {
             return match suffix {
                 None | Some("ctx") => Ok(format!(
-                    "__ctx.child_rule_trees(self.base.parse_tree_storage(), self.base.token_store(), {rule_index}).collect::<Vec<_>>()"
+                    "__ctx.child_rule_trees(self.base.parse_tree_storage(), self.base.token_store(), {rule_index})"
                 )),
                 Some(other) => Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -528,7 +579,7 @@ fn translate_element_read(
         }
         if let Some(token_type) = ctx.token_types.get(&element.target) {
             return Ok(format!(
-                "__ctx.child_tokens(self.base.parse_tree_storage(), self.base.token_store(), {token_type}).collect::<Vec<_>>()"
+                "__ctx.child_tokens(self.base.parse_tree_storage(), self.base.token_store(), {token_type})"
             ));
         }
     }
@@ -783,14 +834,25 @@ mod tests {
                     target: "e".to_owned(),
                     is_block: false,
                     is_list: false,
+                    cardinality: ChildCardinality::ONE,
+                    stable_accessor: true,
                 },
                 ElementRef {
                     label: Some("right".to_owned()),
                     target: "e".to_owned(),
                     is_block: false,
                     is_list: false,
+                    cardinality: ChildCardinality::ONE,
+                    stable_accessor: true,
                 },
             ],
+            children: BTreeMap::from([(
+                "e".to_owned(),
+                ChildCardinality {
+                    min: 2,
+                    max: Some(2),
+                },
+            )]),
             leading_target: Some("e".to_owned()),
         });
         let mut expression = rule("e");
@@ -834,6 +896,72 @@ mod tests {
         );
         let tree = translate_body("$ctx.to_string_tree(Some(self))", &ctx).expect("translates");
         assert_eq!(tree, "(&__ctx).to_string_tree(Some(self))");
+    }
+
+    #[test]
+    fn translates_active_context_child_iterators() {
+        let m = model(vec![rule("s"), rule("elseIfStatement")]);
+        let toks = tokens(&[]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: None,
+            site: ActionSite::Body,
+            token_types: &toks,
+        };
+
+        let translated =
+            translate_body("$ctx.elseIfStatement_children()", &ctx).expect("translates");
+        assert_eq!(
+            translated,
+            "__ctx.child_rules(self.base.parse_tree_storage(), self.base.token_store(), 1)"
+        );
+    }
+
+    #[test]
+    fn translates_list_labels_as_lazy_iterators() {
+        let mut start = rule("s");
+        start.alts.push(AltModel {
+            label: None,
+            span: (0, 10),
+            refs: vec![
+                ElementRef {
+                    label: Some("args".to_owned()),
+                    target: "e".to_owned(),
+                    is_block: false,
+                    is_list: true,
+                    cardinality: ChildCardinality { min: 1, max: None },
+                    stable_accessor: true,
+                },
+                ElementRef {
+                    label: Some("ids".to_owned()),
+                    target: "ID".to_owned(),
+                    is_block: false,
+                    is_list: true,
+                    cardinality: ChildCardinality { min: 1, max: None },
+                    stable_accessor: true,
+                },
+            ],
+            children: BTreeMap::new(),
+            leading_target: Some("e".to_owned()),
+        });
+        let m = model(vec![start, rule("e")]);
+        let toks = tokens(&[("ID", 1)]);
+        let ctx = TranslationCtx {
+            model: &m,
+            rule_index: 0,
+            body_offset: None,
+            site: ActionSite::After,
+            token_types: &toks,
+        };
+
+        let rules = translate_body("let _: Vec<_> = $args.collect();", &ctx).expect("rule list");
+        assert_eq!(rules.matches(".collect()").count(), 1, "{rules}");
+        assert!(rules.contains("__ctx.child_rule_trees("), "{rules}");
+
+        let tokens = translate_body("let _: Vec<_> = $ids.collect();", &ctx).expect("token list");
+        assert_eq!(tokens.matches(".collect()").count(), 1, "{tokens}");
+        assert!(tokens.contains("__ctx.child_tokens("), "{tokens}");
     }
 
     #[test]

@@ -37,9 +37,16 @@ runtime:
    `PrintArrayJavaStyle`, Python `str_list`), exactly as the "least certain"
    section predicted. Same for `TokenGetterListener`'s list print.
 7. **`LRWithLabelsListener`'s `ctx.eList()` is a rule-child accessor** (rule
-   `eList`), not a list getter: rendered `ctx.e_list(0)`. Listener accessors
-   were aligned to the positional convention (`ctx.INT(0)`, `ctx.e(0)`)
-   declared in the header comment.
+   `eList`), not a list getter. It now renders
+   `ctx.e_list().expect("call arguments")`.
+8. **Dogfooding replaced positional Java-style getters with a Rust API.**
+   Generated accessors now encode grammar cardinality as `Result`, `Option`, or
+   a lazy iterator; token methods are snake_case; listener callbacks propagate
+   a generic error; and active parser contexts use a hidden type-state marker.
+   The neutral left-recursion descriptors still pass literal `e(0)` / `e(1)`
+   fragments to `SubContextLocal`; the test template maps those fragments to
+   `e_children().next()` / `.nth(1)` instead of adding compatibility methods to
+   generated contexts.
 
 Companion to `Rust.test.stg`. This file explains the non-trivial renderings and,
 critically, enumerates the **generated-code / runtime API surface** the templates
@@ -76,16 +83,14 @@ yields a sink whose `write!`/`writeln!` are used in statement position only (all
 three `write*` templates end in `;`), so the discarded `io::Result` is acceptable
 exactly as `outStream.println(...)`'s `void` is in Java.
 
-### Typed contexts + child accessors (Go-style split, Rust casing)
-`ctx.e(0)` / `ctx.e_all()` for rule children; `ctx.INT(0)` / `ctx.INT_all()` for
-token children. This mirrors Go's `E(0)`/`AllE()` "single-vs-list getter" split,
-but in Rust naming: rule refs are snake_case identifiers so they stay lowercase;
-token refs are ANTLR token *names* (conventionally uppercase) so they stay
-uppercase. I chose the `_all()` suffix (over Go's `All*` prefix or Python/TS
-`*_list()`) because `ContextListFunction` in the neutral tests renders `<rule>()` in
-Java but Python/TS already diverge to `<rule>_list()`; a suffix reads most naturally
-in snake_case Rust and keeps the single-child getter (`e`) and list getter (`e_all`)
-lexically adjacent. **`ContextListFunction` is rendered `<ctx>.<rule>_all()` to match.**
+### Typed contexts + cardinality-aware child accessors
+The grammar determines the Rust return type. A required singular child returns
+`Result<T, MissingChildError>` because error recovery can still omit it; an
+optional singular child returns `Option<T>`; and a repeated child returns a lazy
+iterator. Rule labels keep their source names (`left()`), repeated rule methods
+use `_children()`, and token methods use snake_case `_token()` / `_tokens()`
+suffixes. `ContextListFunction` therefore renders
+`<ctx>.<rule>_children()`.
 
 ### Rule return attributes as fields — `Result`/`Production` pass through
 Java/C#/Python/Swift/Dart render `Result(r)`/`Production(p)` as a bare `<r>`/`<p>`
@@ -103,18 +108,18 @@ write to the output sink). Predicates `{...}?` and actions `{...}` are assumed t
 execute in a scope where `self` is the parser (or lexer) recognizer.
 
 ### Listener trait `TListener`
-Generated trait `TListener` with snake_case `enter_<rule>` / `exit_<rule>` and a
-defaulted `visit_terminal(&mut self, node: &TerminalNode)`. Test listeners are unit
-structs (`#[derive(Default)] struct LeafListener;`) implementing it, walked by a
-`ParseTreeWalker::walk(&mut listener, tree)`. Grammar name `T` ⇒ trait `TListener`,
-matching the neutral `<X>Listener`/`TBaseListener` convention (Rust has default
-trait methods, so there is no separate "base" class — the trait *is* the base).
+Generated trait `TListener<E = Infallible>` has snake_case `enter_<rule>` /
+`exit_<rule>`, `enter_every_rule` / `exit_every_rule`, and defaulted terminal
+and error-node methods. Every callback returns `Result<(), E>`, and the typed
+walker stops on the first error. Grammar name `T` gives trait `TListener`;
+default trait methods replace a separate base-listener class.
 
 ### Downcast to concrete/labeled-alt context
-`Cast(t,v)` ⇒ `(<v>).downcast_ref::<<t>>().unwrap()` — the Rust analog of Java's
-`((BinaryContext)$ctx)`. Assumes contexts are `dyn`-compatible / carry an `Any`-like
-downcast (`downcast_ref::<T>()`), which is how a trait-object context tree in Rust
-would expose labeled-alternative subtypes.
+Stored trees use `RuleNodeView::downcast_ref::<T>()`. Embedded actions execute
+before the stored rule exists, so `Cast(t,v)` uses `__active_context_view` and
+the generated `Context<'_, __ActiveParserContext>` type. The default
+`Context<'_>` type represents completed trees and alone exposes total
+`rule_node()`.
 
 ## Per-template notes (non-trivial only)
 
@@ -131,10 +136,9 @@ would expose labeled-alternative subtypes.
 - **Append** — `<a> + &(<b>).to_string()`: `String + &str`. `AppendStr` is
   `String + &str` where `<b>` is already a string, so no `.to_string()`. `Concat`
   is raw token juxtaposition (no operator) exactly as every target.
-- **AssertIsList** — `let __ttt__: &[_] = &<v>;`. Pure static-type assertion (like
-  Java's `List<?> __ttt__ = <v>;` / C#'s cast): if `<v>` is not sliceable it won't
-  compile. Chose a slice coercion over a `Vec` binding so it works whether the getter
-  returns `Vec<_>` or `&[_]`.
+- **AssertIsList** — `let _: Vec<_> = <v>.collect();`. Pure static-type assertion
+  for Rust's lazy repeated-child contract: if `<v>` is not an iterator it will
+  not compile. The `Vec` exists only inside this conformance action.
 - **InitIntMember / InitBooleanMember / InitIntVar** — `let mut <n>: T = <v>; let _ = <n>;`.
   The `let _ = <n>;` suppresses an `unused_variables`/`unused_assignment` warning
   (which, under the repo's `-D warnings`, would be a hard error), mirroring Go's
@@ -189,18 +193,17 @@ would expose labeled-alternative subtypes.
   base via `base_next_token()`/`base_emit()` (Rust has no `super`), and that the
   interpreter slot is a swappable `Box<dyn …>`.
 - **BasicListener / TokenGetterListener / RuleGetterListener / LRListener /
-  LRWithLabelsListener** — unit-struct listeners implementing `TListener`. Note the
-  `TokenGetterListener` prints `ctx.INT_all()` via `{:?}` (Java printed the raw list
-  `ctx.INT()`); like `RuleInvocationStack` the exact debug formatting is unlikely to
-  byte-match Java's list rendering without a helper — flagged.
+  LRWithLabelsListener** — unit-struct listeners implementing the fallible
+  `TListener` contract. Repeated getters are collected only where the
+  descriptor needs indexing or Java-compatible list formatting.
 - **TreeNodeWithAltNumField** — a `MyRuleNode` struct wrapping
   `BaseParserRuleContext` with an `alt_num` field and a `ParserRuleContext` impl
   overriding `alt_number`/`set_alt_number`. Assumes contexts compose over a
   `BaseParserRuleContext` and that `alt_number` is an overridable trait method.
-- **WalkListener** — `let mut listener = LeafListener::default(); ParseTreeWalker::walk(&mut listener, <s>);`.
+- **WalkListener** — creates `LeafListener`, then unwraps the typed walk's
+  `Result<(), Infallible>`.
 - **DeclareContextListGettersFunction** — a compile-only shape check using the list
-  getters (`a_all()`/`b_all()`) returning `Vec<Rc<…Context>>`. `Rc` because a parse
-  tree in Rust is most naturally reference-counted shared nodes.
+  iterators (`a_children()` / `b_children()`) and collects them into `Vec`s.
 - **Declare_foo / Invoke_foo / Declare_pred / Invoke_pred** — helper fns on the
   recognizer (`&mut self` so they can write output); `pred` prints `eval={v}` and
   returns `v`. Invoked `self.foo()` / `self.pred(<v>)`.
@@ -232,24 +235,24 @@ Grouped so each can be checked against a real Rust runtime.
 ### Generated context types
 7. Per-rule context struct named `<Rule;cap>Context` (e.g. `AContext`, `EContext`,
    `CallContext`, `IntContext`, `SContext`, `BinaryContext`).
-8. Positional child accessors: rule child `ctx.<rule>(i)` (single) + `ctx.<rule>_all()`
-   (`Vec` of children); token child `ctx.<TOKEN>(i)` + `ctx.<TOKEN>_all()`.
+8. Cardinality-aware accessors: required singular `Result<T,
+   MissingChildError>`, optional singular `Option<T>`, and repeated
+   `impl Iterator<Item = T>`. Tokens use snake_case `_token` / `_tokens`
+   methods, and stable grammar labels get named methods.
 9. `ctx.child_count()`, `ctx.start()` (→ token with `.text()`), and terminal nodes
    exposing `.symbol()` (→ token with `.text()`), plus `TerminalNode`.
 10. Rule **return attributes exposed as public fields** on the returns/context value
     (`ctx.v`, bare `r`/`p`) — *not* getters. (Divergence from Go.)
-11. Base-context downcast: `(<ctx>).downcast_ref::<ConcreteContext>()` (an `Any`-style
-    facility on the context trait object) for labeled-alt access.
-12. Contexts compose over a `BaseParserRuleContext`, and `ParserRuleContext` is a
-    trait with overridable `alt_number()`/`set_alt_number()`; a
-    `ParserRuleContextRef` (shared, e.g. `Rc`) type for parent links; trees are
-    `Rc<…Context>`.
+11. Stored-context downcast through `RuleNodeView::downcast_ref::<T>()`, plus
+    `__active_context_view::<T<'_, __ActiveParserContext>>()` inside parser
+    actions.
+12. A default stored-context type state with total `rule_node()`; the hidden
+    active state does not implement `AsRuleNode`.
 
 ### Listener / walker
-13. Generated listener trait `<Grammar>Listener` (e.g. `TListener`) with **defaulted**
-    `enter_<rule>`/`exit_<rule>(&mut self, ctx: &<Rule>Context)` and a defaulted
-    `visit_terminal(&mut self, &TerminalNode)`.
-14. `ParseTreeWalker::walk(&mut impl TListener, tree)` free function / assoc fn.
+13. Generated `<Grammar>Listener<E = Infallible>` with defaulted typed,
+    every-rule, terminal, and error-node callbacks returning `Result<(), E>`.
+14. `ParseTreeWalker::walk` and `walk_with_invocation_states` propagate `E`.
 
 ### Lexer override / ATN-simulator plumbing (heaviest assumptions)
 15. Ability to override `next_token`/`emit` on the generated lexer and call the base
