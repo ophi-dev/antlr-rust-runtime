@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtoolsyntaxerrors-testdoublequoteintwostringliterals-ffb6aa0def",
+  "active_revision_id": "testtoolsyntaxerrors-testdoublequoteintwostringliterals-ffb6aa0def-r1",
+  "revisions": [
+    {
+      "revision_id": "testtoolsyntaxerrors-testdoublequoteintwostringliterals-ffb6aa0def-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testtoolsyntaxerrors-testdoublequoteintwostringliterals-ffb6aa0def/revisions/testtoolsyntaxerrors-testdoublequoteintwostringliterals-ffb6aa0def-r1/manifest.json",
+      "closure_sha256": "30e7ad66bcf61b30e9176ccefb0f380f5e9369f60ec83b4206b6929e2bdb005e"
+    }
+  ]
+}

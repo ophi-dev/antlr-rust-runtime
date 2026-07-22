@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtoolsyntaxerrors-testchanneldefinitions-096eb07b69",
+  "active_revision_id": "testtoolsyntaxerrors-testchanneldefinitions-096eb07b69-r1",
+  "revisions": [
+    {
+      "revision_id": "testtoolsyntaxerrors-testchanneldefinitions-096eb07b69-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testtoolsyntaxerrors-testchanneldefinitions-096eb07b69/revisions/testtoolsyntaxerrors-testchanneldefinitions-096eb07b69-r1/manifest.json",
+      "closure_sha256": "f22fb71f0e3fce7c15caae023d126fe8ffbdb3770940252704b59722a9111aba"
+    }
+  ]
+}

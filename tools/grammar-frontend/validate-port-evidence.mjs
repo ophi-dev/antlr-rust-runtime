@@ -69,6 +69,10 @@ import {
     TOKEN_POSITION_BASE_COMMIT,
     TOKEN_POSITION_IMPLEMENTATION_COMMIT,
     TOKEN_POSITION_TEST_COMMIT,
+    TOOL_SYNTAX_ERRORS_BASE_COMMIT,
+    TOOL_SYNTAX_ERRORS_BASE_PARENT_COMMIT,
+    TOOL_SYNTAX_ERRORS_IMPLEMENTATION_COMMIT,
+    TOOL_SYNTAX_ERRORS_TEST_COMMIT,
     TOPOLOGICAL_SORT_BASE_COMMIT,
     TOPOLOGICAL_SORT_TEST_COMMIT,
     UNICODE_DATA_BASE_COMMIT,
@@ -354,6 +358,9 @@ for (const [logicalId, record] of records) {
         const attributeChecks = logicalId.startsWith(
             "testattributechecks-",
         );
+        const toolSyntaxErrors = logicalId.startsWith(
+            "testtoolsyntaxerrors-",
+        );
         if (resolution === "verified-covered-existing") {
             if (atnSerialization) {
                 expect(
@@ -556,7 +563,24 @@ for (const [logicalId, record] of records) {
                             ATTRIBUTE_CHECKS_BASE_COMMIT &&
                         manifest.ancestry.primary_implementation_parent ===
                             ATTRIBUTE_CHECKS_BASE_PARENT_COMMIT,
-                    `${logicalId} attribute checks covered-existing ancestry differs`,
+                        `${logicalId} attribute checks covered-existing ancestry differs`,
+                );
+            } else if (toolSyntaxErrors) {
+                expect(
+                    manifest.commits.scaffold ===
+                            TOOL_SYNTAX_ERRORS_BASE_COMMIT &&
+                        manifest.commits.primary_test ===
+                            TOOL_SYNTAX_ERRORS_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            TOOL_SYNTAX_ERRORS_BASE_COMMIT,
+                    `${logicalId} tool syntax covered-existing commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            TOOL_SYNTAX_ERRORS_BASE_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            TOOL_SYNTAX_ERRORS_BASE_PARENT_COMMIT,
+                    `${logicalId} tool syntax covered-existing ancestry differs`,
                 );
             } else {
                 expect(
@@ -864,7 +888,24 @@ for (const [logicalId, record] of records) {
                             ATTRIBUTE_CHECKS_BASE_COMMIT &&
                         manifest.ancestry.primary_implementation_parent ===
                             ATTRIBUTE_CHECKS_TEST_COMMIT,
-                    `${logicalId} attribute checks recorded ancestry differs`,
+                        `${logicalId} attribute checks recorded ancestry differs`,
+                );
+            } else if (toolSyntaxErrors) {
+                expect(
+                    manifest.commits.scaffold ===
+                            TOOL_SYNTAX_ERRORS_BASE_COMMIT &&
+                        manifest.commits.primary_test ===
+                            TOOL_SYNTAX_ERRORS_TEST_COMMIT &&
+                        manifest.commits.primary_implementation ===
+                            TOOL_SYNTAX_ERRORS_IMPLEMENTATION_COMMIT,
+                    `${logicalId} tool syntax evidence commit identities differ`,
+                );
+                expect(
+                    manifest.ancestry.primary_test_parent ===
+                            TOOL_SYNTAX_ERRORS_BASE_COMMIT &&
+                        manifest.ancestry.primary_implementation_parent ===
+                            TOOL_SYNTAX_ERRORS_TEST_COMMIT,
+                    `${logicalId} tool syntax recorded ancestry differs`,
                 );
             } else if (lookaheadTree) {
                 expect(
@@ -1435,6 +1476,39 @@ if (attributeChecksImplementationParent !== null) {
         "attribute checks implementation commit is not based on its locked tests",
     );
 }
+const toolSyntaxErrorsBaseParent = gitOptional([
+    "rev-parse",
+    `${TOOL_SYNTAX_ERRORS_BASE_COMMIT}^`,
+]);
+if (toolSyntaxErrorsBaseParent !== null) {
+    expect(
+        toolSyntaxErrorsBaseParent.trim() ===
+            TOOL_SYNTAX_ERRORS_BASE_PARENT_COMMIT,
+        "tool syntax base commit has an unexpected parent",
+    );
+}
+const toolSyntaxErrorsTestParent = gitOptional([
+    "rev-parse",
+    `${TOOL_SYNTAX_ERRORS_TEST_COMMIT}^`,
+]);
+if (toolSyntaxErrorsTestParent !== null) {
+    expect(
+        toolSyntaxErrorsTestParent.trim() ===
+            TOOL_SYNTAX_ERRORS_BASE_COMMIT,
+        "tool syntax test commit is not based on its recorded base",
+    );
+}
+const toolSyntaxErrorsImplementationParent = gitOptional([
+    "rev-parse",
+    `${TOOL_SYNTAX_ERRORS_IMPLEMENTATION_COMMIT}^`,
+]);
+if (toolSyntaxErrorsImplementationParent !== null) {
+    expect(
+        toolSyntaxErrorsImplementationParent.trim() ===
+            TOOL_SYNTAX_ERRORS_TEST_COMMIT,
+        "tool syntax implementation commit is not based on its locked tests",
+    );
+}
 
 expect(
     differences.java_antlr_commit === JAVA_COMMIT,
@@ -1591,7 +1665,10 @@ function lockedSection(text, section) {
     if (offset < 0) {
         throw new Error(`cannot find locked section marker ${section.marker}`);
     }
-    const end = text.indexOf(section.end_marker, offset);
+    let end = text.indexOf(section.end_marker, offset);
+    if (end < 0 && section.historical_end_marker) {
+        end = text.indexOf(section.historical_end_marker, offset);
+    }
     if (end < 0) {
         throw new Error(
             `cannot find locked section end marker ${section.end_marker}`,

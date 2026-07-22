@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtoolsyntaxerrors-testepsilonclosureanalysis-fbecc8c0c7",
+  "revision_id": "testtoolsyntaxerrors-testepsilonclosureanalysis-fbecc8c0c7-r1",
+  "cells": [
+    {
+      "test_port": "coverage-extension",
+      "test_commit": "e50d7e1e7aad6b6322e839af86c3933fa5a2792a",
+      "implementation_port": "existing-primary-antlr-ng",
+      "implementation_commit": "68f088b7b61d64b9c92fb102c69a53f0a8e54e0b",
+      "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_tool_syntax_errors::testtoolsyntaxerrors_testepsilonclosureanalysis_fbecc8c0c7::matches_java -- --exact",
+      "result": "green: 1 passed; 0 failed"
+    }
+  ],
+  "escalation": "not required because the case-specific test passed against the existing Phase B implementation"
+}

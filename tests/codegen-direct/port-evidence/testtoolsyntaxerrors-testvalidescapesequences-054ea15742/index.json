@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtoolsyntaxerrors-testvalidescapesequences-054ea15742",
+  "active_revision_id": "testtoolsyntaxerrors-testvalidescapesequences-054ea15742-r1",
+  "revisions": [
+    {
+      "revision_id": "testtoolsyntaxerrors-testvalidescapesequences-054ea15742-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testtoolsyntaxerrors-testvalidescapesequences-054ea15742/revisions/testtoolsyntaxerrors-testvalidescapesequences-054ea15742-r1/manifest.json",
+      "closure_sha256": "cd5b1e33ce432326ac1efdef42ec54efa754ec197c48bf7e5755283a53055732"
+    }
+  ]
+}

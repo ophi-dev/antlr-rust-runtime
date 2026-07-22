@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtoolsyntaxerrors-testinvalidcharsetsandstringliterals-e5f43238b4",
+  "active_revision_id": "testtoolsyntaxerrors-testinvalidcharsetsandstringliterals-e5f43238b4-r1",
+  "revisions": [
+    {
+      "revision_id": "testtoolsyntaxerrors-testinvalidcharsetsandstringliterals-e5f43238b4-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testtoolsyntaxerrors-testinvalidcharsetsandstringliterals-e5f43238b4/revisions/testtoolsyntaxerrors-testinvalidcharsetsandstringliterals-e5f43238b4-r1/manifest.json",
+      "closure_sha256": "ff693e12764bf58d4e2a6cfed26157f2017e02e96515a74b9f10fa85830dee57"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtoolsyntaxerrors-testeofclosure-b763b175f6",
+  "active_revision_id": "testtoolsyntaxerrors-testeofclosure-b763b175f6-r1",
+  "revisions": [
+    {
+      "revision_id": "testtoolsyntaxerrors-testeofclosure-b763b175f6-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testtoolsyntaxerrors-testeofclosure-b763b175f6/revisions/testtoolsyntaxerrors-testeofclosure-b763b175f6-r1/manifest.json",
+      "closure_sha256": "93fea1d3db78a1d4413c4537b46136a0f69543da10c795034f14f85b75684e88"
+    }
+  ]
+}

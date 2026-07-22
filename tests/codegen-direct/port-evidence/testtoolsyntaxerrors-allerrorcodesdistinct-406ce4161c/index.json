@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtoolsyntaxerrors-allerrorcodesdistinct-406ce4161c",
+  "active_revision_id": "testtoolsyntaxerrors-allerrorcodesdistinct-406ce4161c-r1",
+  "revisions": [
+    {
+      "revision_id": "testtoolsyntaxerrors-allerrorcodesdistinct-406ce4161c-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testtoolsyntaxerrors-allerrorcodesdistinct-406ce4161c/revisions/testtoolsyntaxerrors-allerrorcodesdistinct-406ce4161c-r1/manifest.json",
+      "closure_sha256": "a7cacc86009e007087606c778b139b9ac8ecb893b7921d5171b6419eebb0a73f"
+    }
+  ]
+}

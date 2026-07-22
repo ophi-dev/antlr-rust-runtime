@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtoolsyntaxerrors-testfragmentactionignored-2154f94584",
+  "active_revision_id": "testtoolsyntaxerrors-testfragmentactionignored-2154f94584-r1",
+  "revisions": [
+    {
+      "revision_id": "testtoolsyntaxerrors-testfragmentactionignored-2154f94584-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testtoolsyntaxerrors-testfragmentactionignored-2154f94584/revisions/testtoolsyntaxerrors-testfragmentactionignored-2154f94584-r1/manifest.json",
+      "closure_sha256": "5331b1d4d3fb1cd7653cb376f0a437715afa62f5fb71a7246d59698dd8a34362"
+    }
+  ]
+}

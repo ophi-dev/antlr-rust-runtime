@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtoolsyntaxerrors-testepsilonclosureinlexer-e76e483430",
+  "active_revision_id": "testtoolsyntaxerrors-testepsilonclosureinlexer-e76e483430-r1",
+  "revisions": [
+    {
+      "revision_id": "testtoolsyntaxerrors-testepsilonclosureinlexer-e76e483430-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testtoolsyntaxerrors-testepsilonclosureinlexer-e76e483430/revisions/testtoolsyntaxerrors-testepsilonclosureinlexer-e76e483430-r1/manifest.json",
+      "closure_sha256": "50a72cd4b63e643b679deeb55e4a7a4f66ed404f8c605183ac828e52409f16ff"
+    }
+  ]
+}

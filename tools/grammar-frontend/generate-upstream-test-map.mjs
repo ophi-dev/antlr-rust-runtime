@@ -59,6 +59,9 @@ import {
     TOKEN_POSITION_BASE_COMMIT,
     TOKEN_POSITION_IMPLEMENTATION_COMMIT,
     TOKEN_POSITION_TEST_COMMIT,
+    TOOL_SYNTAX_ERRORS_BASE_COMMIT,
+    TOOL_SYNTAX_ERRORS_IMPLEMENTATION_COMMIT,
+    TOOL_SYNTAX_ERRORS_TEST_COMMIT,
     TOPOLOGICAL_SORT_BASE_COMMIT,
     TOPOLOGICAL_SORT_TEST_COMMIT,
     UNICODE_DATA_BASE_COMMIT,
@@ -91,6 +94,65 @@ const ATTRIBUTE_CHECKS_CASES =
 const ATTRIBUTE_CHECKS_TEST_COMMAND =
     "cargo test --locked --features codegen --bin antlr4-rust-gen " +
     "grammar::atn::interp_test::tests::upstream_attribute_checks";
+const TOOL_SYNTAX_ERRORS_CASES =
+    "tests/codegen-direct/generated/tool-syntax-errors-cases.inc.rs";
+const TOOL_SYNTAX_ERRORS_TEST_PREFIX =
+    "cargo test --locked --features codegen --bin antlr4-rust-gen " +
+    "grammar::atn::interp_test::tests::upstream_tool_syntax_errors::";
+const TOOL_SYNTAX_ERRORS_RED_CASES = new Map([
+    [
+        "testtoolsyntaxerrors-testchanneldefinitionincombined-c0331a41a6",
+        "expected 3 Java diagnostics, but the direct compiler emitted 2 channel-placement diagnostics",
+    ],
+    [
+        "testtoolsyntaxerrors-testchanneldefinitioninparser-4e1163cf33",
+        "expected 1 Java diagnostic, but the direct compiler emitted 2 channel-placement diagnostics",
+    ],
+    [
+        "testtoolsyntaxerrors-testdoublequoteintwostringliterals-ffb6aa0def",
+        "invalid escape diagnostic started at byte 26 instead of Java byte 27",
+    ],
+    [
+        "testtoolsyntaxerrors-testeofclosure-b763b175f6",
+        "the EOF closure compiled successfully instead of reporting Java error 186",
+    ],
+    [
+        "testtoolsyntaxerrors-testepsilonclosureinlexer-e76e483430",
+        "epsilon-closure diagnostic started at byte 44 instead of Java byte 53",
+    ],
+    [
+        "testtoolsyntaxerrors-testfragmentactionignored-2154f94584",
+        "fragment-action warning started at byte 79 instead of Java byte 100",
+    ],
+    [
+        "testtoolsyntaxerrors-testinvalidcharsetsandstringliterals-e5f43238b4",
+        "expected 8 Java diagnostics, but the direct compiler emitted 6 imprecise lexer diagnostics",
+    ],
+    [
+        "testtoolsyntaxerrors-testinvalidescapesequences-aa140e5e05",
+        "expected 3 Java invalid-escape diagnostics, but the direct compiler emitted 1",
+    ],
+    [
+        "testtoolsyntaxerrors-testinvalidlanguageingrammar-4e78a7faa1",
+        "the unsupported target language compiled successfully instead of reporting Java error 31",
+    ],
+    [
+        "testtoolsyntaxerrors-testinvalidlanguageingrammarwithlexercommand-606074f05f",
+        "expected Java error 31 first, but the direct compiler reported only unknown channel G4S053",
+    ],
+    [
+        "testtoolsyntaxerrors-testmodeinparser-287a67d82e",
+        "expected 2 Java parser diagnostics, but recovery emitted 1",
+    ],
+    [
+        "testtoolsyntaxerrors-testrangeinparsergrammar-873f937daf",
+        "expected Java token-range error 181, but the frontend emitted generic parser diagnostic G4F003",
+    ],
+    [
+        "testtoolsyntaxerrors-testunrecognizedassocoption-5eb7b9d825",
+        "expected Java warning 157, but the direct compiler emitted no diagnostic",
+    ],
+]);
 const ATN_CONSTRUCTION_TEST_COMMAND =
     "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_atn_construction::";
 const ATN_CONSTRUCTION_COVERED_COMMAND =
@@ -1268,6 +1330,10 @@ function completedPhaseBRow(
                                         : completed.kind === "attribute-checks"
                                           ? `direct Rust action attribute diagnostics and accepted serialization match ` +
                                             `Java 4.13.2 for ${cases[0].suite}.${cases[0].name}`
+                                        : completed.kind ===
+                                            "tool-syntax-errors"
+                                          ? `direct Rust tool diagnostics and accepted artifacts match ` +
+                                            `Java 4.13.2 for ${cases[0].suite}.${cases[0].name}`
                                         : completed.kind === "graph-nodes"
                                           ? `Rust prediction-context merging matches the Java 4.13.2 DOT graph ` +
                                             `for ${cases[0].suite}.${cases[0].name}`
@@ -1925,6 +1991,52 @@ async function loadCompletedPhaseBPorts() {
             "expected 121 TestAttributeChecks fixtures with 87 errors covering 44 completed ports",
         );
     }
+    const toolSyntaxCasesSource = await readFile(
+        resolve(repoRoot, TOOL_SYNTAX_ERRORS_CASES),
+        "utf8",
+    );
+    const toolSyntaxPattern =
+        /(?:meta_case|case)!\(\s*(\w+),\s*"([^"]+)"/gu;
+    const remainingToolSyntaxRedIds = new Set(
+        TOOL_SYNTAX_ERRORS_RED_CASES.keys(),
+    );
+    let toolSyntaxCount = 0;
+    for (const match of toolSyntaxCasesSource.matchAll(toolSyntaxPattern)) {
+        const [, testName, logicalId] = match;
+        const redFingerprint =
+            TOOL_SYNTAX_ERRORS_RED_CASES.get(logicalId);
+        const ported = redFingerprint !== undefined;
+        remainingToolSyntaxRedIds.delete(logicalId);
+        ports.set(logicalId, {
+            fixturePaths: await fixturePaths(logicalId),
+            rustTest:
+                "grammar::atn::interp_test::tests::upstream_tool_syntax_errors::" +
+                `${testName}::matches_java`,
+            kind: "tool-syntax-errors",
+            resolution: ported
+                ? "ported"
+                : "verified-covered-existing",
+            scaffoldCommit: TOOL_SYNTAX_ERRORS_BASE_COMMIT,
+            testCommit: TOOL_SYNTAX_ERRORS_TEST_COMMIT,
+            implementationCommit: ported
+                ? TOOL_SYNTAX_ERRORS_IMPLEMENTATION_COMMIT
+                : TOOL_SYNTAX_ERRORS_BASE_COMMIT,
+            testCommand:
+                `${TOOL_SYNTAX_ERRORS_TEST_PREFIX}${testName}` +
+                "::matches_java -- --exact",
+            greenResult: "1 passed; 0 failed",
+            redFingerprint,
+        });
+        toolSyntaxCount += 1;
+    }
+    if (
+        toolSyntaxCount !== 31 ||
+        remainingToolSyntaxRedIds.size !== 0
+    ) {
+        throw new Error(
+            "expected 31 completed TestToolSyntaxErrors ports with all recorded red cases",
+        );
+    }
     for (const [logicalId, definition] of LOOKAHEAD_TREE_PORTS) {
         ports.set(logicalId, {
             fixturePaths: await fixturePaths(logicalId),
@@ -1985,8 +2097,8 @@ async function loadCompletedPhaseBPorts() {
             `expected 47 completed TestScopeParsing ports, found ${scopeGroups.size}`,
         );
     }
-    if (ports.size !== 325) {
-        throw new Error(`expected 325 completed Phase B ports, found ${ports.size}`);
+    if (ports.size !== 356) {
+        throw new Error(`expected 356 completed Phase B ports, found ${ports.size}`);
     }
     return ports;
 }

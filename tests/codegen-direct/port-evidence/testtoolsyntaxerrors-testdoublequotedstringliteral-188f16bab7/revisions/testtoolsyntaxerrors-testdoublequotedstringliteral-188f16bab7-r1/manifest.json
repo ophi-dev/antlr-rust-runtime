@@ -1,0 +1,125 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtoolsyntaxerrors-testdoublequotedstringliteral-188f16bab7",
+  "revision_id": "testtoolsyntaxerrors-testdoublequotedstringliteral-188f16bab7-r1",
+  "supersedes_revision_id": null,
+  "owner_phase": "B",
+  "state": "done",
+  "resolution": "verified-covered-existing",
+  "closure": {
+    "logical_id": "testtoolsyntaxerrors-testdoublequotedstringliteral-188f16bab7",
+    "source_case_ids": [
+      "antlr-ng:testtoolsyntaxerrors-testdoublequotedstringliteral@e3d82eb81b00",
+      "java-antlr:testtoolsyntaxerrors-testdoublequotedstringliteral@e3d82eb81b00"
+    ],
+    "external_assertion_ids": [],
+    "fixture_paths": [
+      "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testdoublequotedstringliteral-188f16bab7/A.g4",
+      "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testdoublequotedstringliteral-188f16bab7/diagnostics.json",
+      "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testdoublequotedstringliteral-188f16bab7/fixture.json",
+      "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testdoublequotedstringliteral-188f16bab7/oracle/java-antlr.stderr",
+      "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testdoublequotedstringliteral-188f16bab7/oracle/java-antlr.stdout",
+      "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testdoublequotedstringliteral-188f16bab7/oracle/java-unicode-data.stderr",
+      "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testdoublequotedstringliteral-188f16bab7/oracle/java-unicode-data.stdout"
+    ],
+    "owner_phase": "B",
+    "disposition": "port",
+    "rust_test": "grammar::atn::interp_test::tests::upstream_tool_syntax_errors::testtoolsyntaxerrors_testdoublequotedstringliteral_188f16bab7::matches_java",
+    "unit_under_test": "semantic checks or post-parse compiler diagnostics",
+    "observable": "direct Rust tool diagnostics and accepted artifacts match Java 4.13.2 for TestToolSyntaxErrors.testDoubleQuotedStringLiteral",
+    "scaffold_commit": "68f088b7b61d64b9c92fb102c69a53f0a8e54e0b",
+    "primary_test_commit": "e50d7e1e7aad6b6322e839af86c3933fa5a2792a",
+    "resolution": "verified-covered-existing"
+  },
+  "closure_sha256": "01be34897c3265c1c75e6d43b2677d6db21a501d24e58c6ef2446c364ee0473f",
+  "allowed_inputs": [
+    {
+      "source_case_id": "antlr-ng:testtoolsyntaxerrors-testdoublequotedstringliteral@e3d82eb81b00",
+      "path": "tests/TestToolSyntaxErrors.spec.ts",
+      "sha256": "5c9ad90476e381cb1658e11568bb5282258ab04da3a0d56e04db46f995d54e85"
+    },
+    {
+      "source_case_id": "java-antlr:testtoolsyntaxerrors-testdoublequotedstringliteral@e3d82eb81b00",
+      "path": "tool-testsuite/test/org/antlr/v4/test/tool/TestToolSyntaxErrors.java",
+      "sha256": "d20fdd17605ec4419dea95b8734f6768d54b6a3a13c3f592e75653690b5808e0"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testdoublequotedstringliteral-188f16bab7/A.g4",
+      "sha256": "30fd0955e54e83d5683b0686b56587bd2ed4d232062c31e5ee940c452179ad15"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testdoublequotedstringliteral-188f16bab7/diagnostics.json",
+      "sha256": "a00c195eda8933f9ccea90a5ce32333b0a6da08407b74bb2ffb8f9e8f5f8ffcd"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testdoublequotedstringliteral-188f16bab7/fixture.json",
+      "sha256": "f039c3bc1b58040797896ba2d8b219a2213a492f45f1036268469dce33371c0f"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testdoublequotedstringliteral-188f16bab7/oracle/java-antlr.stderr",
+      "sha256": "87288dba43ae0db86854ee291295393328df3986229e158c04b7fff1091cf93c"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testdoublequotedstringliteral-188f16bab7/oracle/java-antlr.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testdoublequotedstringliteral-188f16bab7/oracle/java-unicode-data.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/codegen-direct/fixtures/testtoolsyntaxerrors-testdoublequotedstringliteral-188f16bab7/oracle/java-unicode-data.stdout",
+      "sha256": "99a5d04aa60fda9083b5eb837cf5dd7f52433c458898cc86d1540a604ff204d3"
+    }
+  ],
+  "commits": {
+    "scaffold": "68f088b7b61d64b9c92fb102c69a53f0a8e54e0b",
+    "primary_test": "e50d7e1e7aad6b6322e839af86c3933fa5a2792a",
+    "primary_implementation": "68f088b7b61d64b9c92fb102c69a53f0a8e54e0b"
+  },
+  "ancestry": {
+    "primary_test_parent": "68f088b7b61d64b9c92fb102c69a53f0a8e54e0b",
+    "primary_implementation_parent": "ede783206bb4dfc3d8f5d031fdfea9feab507763",
+    "reachability": "the case-specific tool diagnostic or artifact assertion passed against the direct compiler implementation already present at the batch base"
+  },
+  "locked_oracle_sections": [
+    {
+      "path": "src/bin_support/grammar/atn/interp_test.rs",
+      "marker": "    mod upstream_tool_syntax_errors {",
+      "end_marker": "\n    mod upstream_token_position_options {",
+      "sha256": "7b8cc97f2e78edfd22563d77ce3d75abcf7e7b5c4563e1993548a4ab3424d6aa"
+    },
+    {
+      "path": "tests/codegen-direct/generated/tool-syntax-errors-cases.inc.rs",
+      "marker": "// Generated by tools/grammar-frontend/generate-tool-syntax-errors-fixtures.mjs.",
+      "sha256": "d615d9f51927ce54db20c4565fca5b540eedb0a3487c43c100eb78c480458400"
+    }
+  ],
+  "verified_covered_existing": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_tool_syntax_errors::testtoolsyntaxerrors_testdoublequotedstringliteral_188f16bab7::matches_java -- --exact",
+    "commit": "e50d7e1e7aad6b6322e839af86c3933fa5a2792a",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed",
+    "covering_implementation_commit": "68f088b7b61d64b9c92fb102c69a53f0a8e54e0b"
+  },
+  "green_result": {
+    "command": "cargo test --locked --features codegen --bin antlr4-rust-gen grammar::atn::interp_test::tests::upstream_tool_syntax_errors::testtoolsyntaxerrors_testdoublequotedstringliteral_188f16bab7::matches_java -- --exact",
+    "commit": "e50d7e1e7aad6b6322e839af86c3933fa5a2792a",
+    "exit_code": 0,
+    "result": "1 passed; 0 failed"
+  },
+  "implementation_sources": {
+    "primary": "antlr-ng@1f68422ae4bfc62f93343769e144d01f305487b1",
+    "alternate": "java-antlr@cc82115a4e7f53d71d9d905caa2c2dfa4da58899"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/codegen-direct/port-evidence/testtoolsyntaxerrors-testdoublequotedstringliteral-188f16bab7/revisions/testtoolsyntaxerrors-testdoublequotedstringliteral-188f16bab7-r1/oracle-results/declared-sources.json",
+      "sha256": "8ff7519ecd0f44b8ddddbf5f49a62f9a14af439770d6da5c5c0ed6829696a379"
+    },
+    {
+      "path": "tests/codegen-direct/port-evidence/testtoolsyntaxerrors-testdoublequotedstringliteral-188f16bab7/revisions/testtoolsyntaxerrors-testdoublequotedstringliteral-188f16bab7-r1/matrix-results/results.json",
+      "sha256": "2860523558962fa369f41b82dd32efb122819e3d11ba49fa4d7e5fe190adda29"
+    }
+  ]
+}

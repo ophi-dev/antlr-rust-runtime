@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "logical_id": "testtoolsyntaxerrors-testlexercommandargumentvalidation-10edd51813",
+  "active_revision_id": "testtoolsyntaxerrors-testlexercommandargumentvalidation-10edd51813-r1",
+  "revisions": [
+    {
+      "revision_id": "testtoolsyntaxerrors-testlexercommandargumentvalidation-10edd51813-r1",
+      "supersedes_revision_id": null,
+      "state": "done",
+      "manifest_path": "tests/codegen-direct/port-evidence/testtoolsyntaxerrors-testlexercommandargumentvalidation-10edd51813/revisions/testtoolsyntaxerrors-testlexercommandargumentvalidation-10edd51813-r1/manifest.json",
+      "closure_sha256": "a5f1d83250b928e452b908cfe5643e1367f10497225f2d27f9ec85e31f4ac3c6"
+    }
+  ]
+}

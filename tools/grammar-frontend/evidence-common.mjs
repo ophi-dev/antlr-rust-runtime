@@ -155,6 +155,14 @@ export const ATTRIBUTE_CHECKS_TEST_COMMIT =
     "6f7ab4b7f7829f0e5a7bd80542fb394831e5ffe1";
 export const ATTRIBUTE_CHECKS_IMPLEMENTATION_COMMIT =
     "ede783206bb4dfc3d8f5d031fdfea9feab507763";
+export const TOOL_SYNTAX_ERRORS_BASE_PARENT_COMMIT =
+    ATTRIBUTE_CHECKS_IMPLEMENTATION_COMMIT;
+export const TOOL_SYNTAX_ERRORS_BASE_COMMIT =
+    "68f088b7b61d64b9c92fb102c69a53f0a8e54e0b";
+export const TOOL_SYNTAX_ERRORS_TEST_COMMIT =
+    "e50d7e1e7aad6b6322e839af86c3933fa5a2792a";
+export const TOOL_SYNTAX_ERRORS_IMPLEMENTATION_COMMIT =
+    "10c384d8431953e0de596eb64ccaca46d230b3f4";
 
 export function stableStringify(value) {
     if (Array.isArray(value)) {
